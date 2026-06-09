@@ -8,6 +8,8 @@
   "icon": "icon.png",
   "largeIcon": "icon.png",
   "iconColor": "#1d232a",
+  "splashBackground": "splash.png",
+  "splashColor": "#1d232a",
   "appDescription": "Fliks media app for LG webOS Smart TV",
   "uiRevision": 2,
   "disableBackHistoryAPI": true,

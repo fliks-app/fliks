@@ -14,8 +14,9 @@
  *
  * Conventions baked in here:
  *   - brand base #1d232a (manifest theme, Android adaptive bg, maskable bg)
- *   - opaque icons are flattened with NO alpha channel (App Store rejects alpha)
- *   - transparent contexts (PWA "any", launcher foreground, Tizen/webOS, the
+ *   - opaque icons are flattened with NO alpha channel (App Store + webOS store
+ *     reject alpha; webOS also needs the bg to match the appinfo tile colour)
+ *   - transparent contexts (PWA "any", launcher foreground, Tizen, the
  *     in-app mark) keep alpha
  *   - safe zones: adaptive foreground inside the 66% circle, maskable inside
  *     the 80% circle, app icons ~14% padding
@@ -164,9 +165,15 @@ for (const [d, s] of Object.entries(FG)) {
 }
 await write(await icon(iconSvg, 1024, { pad: 0.14 }), `${AND_RES}/drawable/fliks_logo.png`); // android splash drawable
 
-// Tizen / webOS
+// Tizen — transparent mark; the platform composites it on its own tile.
 await write(await icon(iconSvg, 1024, { pad: 0.04 }), 'client/tizen/icon.png');
-await write(await icon(iconSvg, 1024, { pad: 0.04 }), 'client/webos/icon.png');
+// webOS — 400x400 store App Icon: opaque, flattened onto the tile colour
+// (solid bg, no alpha) matching appinfo.json `iconColor` (#1d232a). The store
+// replaces the appinfo icon/largeIcon (80x80 / 130x130 test icons) with this.
+await write(await icon(iconSvg, 400, { bg: DARK, pad: 0.14 }), 'client/webos/icon.png');
+// webOS — 1920x1080 loading splash (appinfo `splashBackground`): the mark on
+// the brand base, same treatment as the iOS/Android splashes.
+await write(await splash(iconSvg, 1920, 1080, 0.25), 'client/webos/splash.png');
 
 // Chromecast receiver splash mark — transparent, composited over the
 // #1d232a splash; shown at 192 CSS px so 384 covers 2× displays.
