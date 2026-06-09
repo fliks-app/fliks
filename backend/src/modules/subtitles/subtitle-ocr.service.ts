@@ -19,6 +19,7 @@ import { cleanSubtitle } from './subtitle-cleaner';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codecs';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
+import { normalizeLanguageCode } from '../../common/constants/app-languages';
 
 const execFileAsync = promisify(execFile);
 
@@ -85,7 +86,7 @@ export class SubtitleOcrService {
     // Caller-chosen language wins (used when the track is untagged 'und' and
     // the language can't be inferred from metadata). It tags the result and
     // drives the OCR engine's language pack.
-    if (language?.trim()) source.language = language.trim().toLowerCase();
+    if (language?.trim()) source.language = normalizeLanguageCode(language);
 
     this.log.log(
       `OCR start — sub #${subtitleId} "${source.media?.title ?? '?'}" [${source.language}] codec=${source.codec} stream=${source.streamIndex}`,

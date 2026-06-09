@@ -9,15 +9,7 @@ import { FfprobeService } from './ffprobe.service';
 import { SettingsService } from '../settings/settings.service';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 
-import { ISO_639_2_TO_1 } from '../../common/constants/app-languages';
-
-function normalizeLanguage(lang: string): string {
-  const lower = lang.toLowerCase();
-  // Already ISO 639-1 (2 chars)?
-  if (lower.length === 2) return lower;
-  // Map from ISO 639-2
-  return ISO_639_2_TO_1[lower] ?? lower;
-}
+import { normalizeLanguageCode } from '../../common/constants/app-languages';
 
 @Injectable()
 export class EmbeddedSubtitleService {
@@ -84,7 +76,7 @@ export class EmbeddedSubtitleService {
       media: { id: mediaId },
       mediaFile: { id: mediaFileId },
       episode: episodeId ? { id: episodeId } : null,
-      language: normalizeLanguage(stream.language),
+      language: normalizeLanguageCode(stream.language),
       forced: stream.forced,
       hearingImpaired: stream.hearingImpaired,
       providerType: SubtitleProviderType.EMBEDDED,

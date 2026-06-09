@@ -41,7 +41,9 @@ export class SubtitleSchedulerService {
     private readonly mediaServers: MediaServersService,
   ) {}
 
-  /** Check every minute if it's time to run search or upgrade */
+  /** Every 6 hours, run the search/upgrade passes whose configured interval
+   *  has elapsed (intervals shorter than the tick are effectively floored to
+   *  6 hours). */
   @Cron(CronExpression.EVERY_6_HOURS)
   async tick(): Promise<void> {
     const now = Date.now();
@@ -245,6 +247,7 @@ export class SubtitleSchedulerService {
     const threshold = Number(
       (await this.settings.get('subtitle_upgrade_threshold')) ?? '90',
     );
+    const opts = await this.resolveSearchOpts();
 
     const lowScoreSubs = await this.subtitleFileRepo
       .createQueryBuilder('sf')
@@ -314,7 +317,17 @@ export class SubtitleSchedulerService {
         const better = candidates.find((r) => r.score > sub.score);
         if (!better) continue;
 
-        await this.subtitlesService.upgradeSubtitle(sub.id, better);
+        const upgraded = await this.subtitlesService.upgradeSubtitle(
+          sub.id,
+          better,
+        );
+
+        if (opts.encodeUtf8) {
+          await this.subtitleSync.reencodeToUtf8(upgraded.id);
+        }
+        if (opts.autoSyncEnabled) {
+          await this.subtitleSync.syncSubtitle(upgraded.id);
+        }
 
         void this.notifications.dispatch('subtitle.upgraded', {
           title: sub.media?.title,

@@ -30,6 +30,7 @@ import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import {
   APP_LANGUAGES,
   ISO_639_2_TO_1,
+  normalizeLanguageCode,
 } from '../../common/constants/app-languages';
 import {
   SubtitleScore,
@@ -246,11 +247,12 @@ export class SubtitlesService {
       );
     }
 
+    const lang = normalizeLanguageCode(searchResult.language);
     const langSuffix = searchResult.forced
-      ? `${searchResult.language}.forced`
+      ? `${lang}.forced`
       : searchResult.hearingImpaired
-        ? `${searchResult.language}.hi`
-        : searchResult.language;
+        ? `${lang}.hi`
+        : lang;
 
     const parsed = path.parse(absolutePath);
     let subtitlePath = path.join(
@@ -316,7 +318,7 @@ export class SubtitlesService {
       media: { id: mediaId },
       mediaFile: { id: mediaFileId },
       episode: episodeId ? { id: episodeId } : null,
-      language: searchResult.language,
+      language: lang,
       forced: searchResult.forced,
       hearingImpaired: searchResult.hearingImpaired,
       providerType: provider.type,
@@ -384,9 +386,8 @@ export class SubtitlesService {
   async setLanguage(subtitleId: number, language: string): Promise<SubtitleFile> {
     const sub = await this.repo.findOne({ where: { id: subtitleId } });
     if (!sub) throw new NotFoundException(`Subtitle #${subtitleId} not found`);
-    const lang = (language ?? '').trim().toLowerCase();
-    if (!lang) throw new BadRequestException('Language is required');
-    sub.language = lang;
+    if (!language?.trim()) throw new BadRequestException('Language is required');
+    sub.language = normalizeLanguageCode(language);
     return this.repo.save(sub);
   }
 
@@ -707,7 +708,25 @@ export class SubtitlesService {
     if (existing.providerType === SubtitleProviderType.EMBEDDED) {
       throw new BadRequestException('Cannot upgrade an embedded subtitle');
     }
+    if (existing.providerType === SubtitleProviderType.OCR) {
+      throw new BadRequestException('Cannot upgrade an OCR subtitle');
+    }
 
+    // Download the replacement BEFORE removing the existing file/row, so a
+    // failed download leaves the working subtitle untouched (atomic swap).
+    const updated = await this.downloadSubtitle(
+      existing.mediaId,
+      existing.mediaFileId,
+      existing.episodeId,
+      newResult,
+    );
+    updated.status = SubtitleStatus.UPGRADED;
+    // Carry over attributes that should survive a file replacement.
+    updated.locked = existing.locked;
+    updated.tags = existing.tags ?? [];
+    await this.repo.save(updated);
+
+    // Replacement is persisted — now drop the old file and row.
     const oldAbs = await this.resolveSubtitleAbsolute(existing);
     if (oldAbs) {
       try {
@@ -716,16 +735,6 @@ export class SubtitlesService {
         this.logger.warn(`Could not delete old file: ${oldAbs}`);
       }
     }
-
-    const updated = await this.downloadSubtitle(
-      existing.mediaId,
-      existing.mediaFileId,
-      existing.episodeId,
-      newResult,
-    );
-    updated.status = SubtitleStatus.UPGRADED;
-    await this.repo.save(updated);
-
     await this.repo.remove(existing);
     return updated;
   }
