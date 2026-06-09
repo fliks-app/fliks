@@ -13,10 +13,11 @@ import {
   SubtitlesApiService,
   SubtitleHistoryEntry,
 } from '../../../core/services/api/subtitles-api.service';
+import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 
 @Component({
   selector: 'app-activity-subtitles',
-  imports: [TranslateModule, DatePipe, NgClass, RouterLink, FormsModule],
+  imports: [TranslateModule, DatePipe, NgClass, RouterLink, FormsModule, PaginationComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitles.html',
 })
