@@ -129,6 +129,11 @@ export class SubtitlesModalComponent {
    *  resolves the active row's data inside the popover template. */
   readonly actionsOpenForId = signal<number | null>(null);
   readonly actionsAnchor = signal<HTMLElement | null>(null);
+  /** Drives the actions popover's `[open]`. Kept separate from
+   *  `actionsOpenForId` so the content stays rendered through the slide-down
+   *  exit — the row id (content source) is cleared only once `(closed)` fires
+   *  after the animation, so the menu's buttons don't flip mid-slide. */
+  readonly actionsMenuOpen = signal(false);
   readonly actionsSub = computed(() => {
     const id = this.actionsOpenForId();
     return id == null ? null : this.subtitles().find((s) => s.id === id) ?? null;
@@ -152,15 +157,21 @@ export class SubtitlesModalComponent {
   protected openSubActions(sub: SubtitleFileRow, anchor: HTMLElement) {
     this.actionsAnchor.set(anchor);
     this.actionsOpenForId.set(sub.id);
+    this.actionsMenuOpen.set(true);
   }
+  /** `(closed)` handler — fires after the slide-down completes, so the row's
+   *  data is safe to drop here. */
   protected closeSubActions() {
+    this.actionsMenuOpen.set(false);
     this.actionsOpenForId.set(null);
     this.actionsAnchor.set(null);
   }
   protected runSubAction(action: (sub: SubtitleFileRow) => void): void {
     const sub = this.actionsSub();
     if (!sub) return;
-    this.closeSubActions();
+    // Start the close animation but keep the row's data until `(closed)` clears
+    // it, so the menu's buttons don't flip while the sheet slides out.
+    this.actionsMenuOpen.set(false);
     action(sub);
   }
   readonly subSearchLang = signal('en');

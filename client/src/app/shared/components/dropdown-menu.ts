@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   computed,
   effect,
@@ -94,6 +95,8 @@ export class DropdownMenuComponent {
   private readonly sheet = viewChild('sheet', { read: ElementRef });
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private wasOpen = false;
+  /** The sheet host once it's been moved under <html> (see below). */
+  private reparentedSheet: HTMLElement | null = null;
 
   constructor() {
     if (typeof document === 'undefined') return;
@@ -101,9 +104,17 @@ export class DropdownMenuComponent {
       const ref = this.sheet();
       if (!ref || this.useDropdown()) return;
       queueMicrotask(() => {
+        this.reparentedSheet = ref.nativeElement;
         document.documentElement.appendChild(ref.nativeElement);
       });
     });
+    // The sheet host is moved under <html> to escape the drawer's stacking
+    // context, so Angular no longer owns its DOM position and won't remove it
+    // when this component is destroyed. Detach it ourselves — otherwise a
+    // sheet torn down mid-close (its slide-down exit still running, e.g. an
+    // item tap that navigates away) orphans its full-screen backdrop, which
+    // keeps blocking clicks across the app.
+    inject(DestroyRef).onDestroy(() => this.reparentedSheet?.remove());
     // Sheet branch (touch / TV) doesn't go through DropdownToggleDirective,
     // so refocus the projected trigger ourselves on close — keeps Enter /
     // tap parity with the dropdown branch (re-activating re-opens).

@@ -136,9 +136,8 @@
        via showModal() — otherwise the modal would paint over it
        regardless of z-index. `position: fixed` on the popover-menu's
        content escapes modal-box's overflow on its own. -->
-  @if (actionsSub()) {
     <app-popover-menu
-      [open]="true"
+      [open]="actionsMenuOpen()"
       [anchor]="actionsAnchor()"
       placement="top-end"
       (closed)="closeSubActions()"
@@ -209,7 +208,6 @@
         </button>
       }
     </app-popover-menu>
-  }
 
   <form method="dialog" class="modal-backdrop">
     <button>close</button>

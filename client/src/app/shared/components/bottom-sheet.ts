@@ -7,6 +7,7 @@ import {
   ElementRef,
   viewChild,
   effect,
+  untracked,
   DestroyRef,
   inject,
 } from '@angular/core';
@@ -18,22 +19,28 @@ import { TvService } from '../../core/services/tv.service';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (open()) {
+    @if (visible()) {
       <!-- Backdrop — CSS @starting-style handles the fade-in declaratively
            (browser interpolates from opacity 0 on element creation), so the
            component does not need a JS-side toggling pattern. -->
       <div
-        [class]="'bottom-sheet-backdrop fixed inset-0 z-[100] transition-opacity duration-200 ' + (showBackdrop() ? 'bg-black/60' : '')"
+        [class]="
+          'bottom-sheet-backdrop fixed inset-0 z-[100] transition-opacity duration-150 ' +
+          (showBackdrop() ? 'bg-black/60' : '')
+        "
         [class.opacity-0]="dismissing()"
         (click)="dismiss()"
       ></div>
       <!-- Sheet -->
       <div
         #sheet
-        [class]="'fixed bottom-0 z-[101] bg-neutral/95 backdrop-blur-xl rounded-t-2xl shadow-2xl max-h-[70vh] overflow-y-auto portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' + (rightAligned() ? 'landscape:left-auto' : 'landscape:left-2 landscape:mx-auto')"
+        [class]="
+          'fixed bottom-0 z-[101] bg-neutral/95 backdrop-blur-xl rounded-t-2xl shadow-2xl max-h-[70vh] overflow-y-auto portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' +
+          (rightAligned() ? 'landscape:left-auto' : 'landscape:left-2 landscape:mx-auto')
+        "
         [class.animate-slide-up]="!dismissing()"
         [style.transform]="sheetTransform()"
-        [style.transition]="dragging() ? 'none' : 'transform 0.25s ease-out'"
+        [style.transition]="dragging() ? 'none' : 'transform 0.18s ease-out'"
         [style.padding-bottom]="'env(safe-area-inset-bottom)'"
         (touchstart)="onTouchStart($event)"
         (touchmove)="onTouchMove($event)"
@@ -59,6 +66,10 @@ export class BottomSheetComponent {
   readonly dragging = signal(false);
   readonly dismissing = signal(false);
   readonly dragOffset = signal(0);
+  /** Drives the DOM `@if`, decoupled from `open` so the sheet can play its
+   *  slide-down exit before it is removed. */
+  readonly visible = signal(false);
+  private exitTimer: ReturnType<typeof setTimeout> | null = null;
 
   private readonly dismissStack = inject(DismissableStackService);
   private readonly tv = inject(TvService);
@@ -88,9 +99,7 @@ export class BottomSheetComponent {
     if (!sheetEl) return;
     const target = e.target as HTMLElement | null;
     if (!target || sheetEl.contains(target)) return;
-    const first = sheetEl.querySelector<HTMLElement>(
-      BottomSheetComponent.FOCUSABLE_SELECTOR,
-    );
+    const first = sheetEl.querySelector<HTMLElement>(BottomSheetComponent.FOCUSABLE_SELECTOR);
     first?.focus({ preventScroll: true });
   };
 
@@ -98,102 +107,83 @@ export class BottomSheetComponent {
     const destroyRef = inject(DestroyRef);
 
     effect(() => {
-      if (this.open()) {
-        this.dismissing.set(false);
-        this.dragOffset.set(0);
-        // Lock the page scroll behind the sheet. Save+restore the previous
-        // inline overflow so we don't trample a parent component's setting.
-        // On TV body has a scale transform that makes html the scrolling
-        // element — lock both. On other form factors body is the scroller
-        // and locking html on tablet landscape (pinned drawer) shifts the
-        // sidebar upward.
-        if (typeof document !== 'undefined') {
-          this.prevBodyOverflow = document.body.style.overflow;
-          document.body.style.overflow = 'hidden';
-          if (this.tv.isTv()) {
-            this.prevHtmlOverflow = document.documentElement.style.overflow;
-            document.documentElement.style.overflow = 'hidden';
+      const isOpen = this.open();
+      // `open()` is the only intended dependency; the body reads and writes
+      // several other signals, so run it untracked to avoid re-entrancy.
+      untracked(() => {
+        if (isOpen) {
+          if (this.exitTimer) {
+            clearTimeout(this.exitTimer);
+            this.exitTimer = null;
           }
-        }
-        // Register on the dismiss stack so the hardware/gesture back closes
-        // this sheet before falling through to the route-level back handler.
-        if (!this.registered) {
-          this.dismissStack.push(this.dismissCallback);
-          this.registered = true;
-        }
-        if (this.tv.isTv() && !this.focusTrapActive && typeof document !== 'undefined') {
-          // Snapshot the trigger before the trap can bounce focus inside.
-          // Restored on close so the user lands back on the element they
-          // pressed (e.g. a <select appTvSelect>) — not on the option they
-          // happened to highlight last in the sheet.
-          this.prevFocused = document.activeElement as HTMLElement | null;
-          document.addEventListener('focusin', this.onFocusIn);
-          this.focusTrapActive = true;
-          // Move focus to the first item inside the sheet on open. Without
-          // this, the D-pad still operates on the trigger row (or the
-          // previously-focused tile in the route), so up/down moves to a
-          // background element and the focus-trap fires AFTER the user
-          // has already left the sheet visually — feels unresponsive.
-          // queueMicrotask waits until @if has materialised the sheet
-          // content; rAF would defer one extra frame and let the WebView
-          // paint the focus halo on the wrong element first.
-          queueMicrotask(() => {
-            if (!this.open()) return;
-            const sheetEl = this.sheet()?.nativeElement;
-            const first = sheetEl?.querySelector<HTMLElement>(
-              BottomSheetComponent.FOCUSABLE_SELECTOR,
-            );
-            first?.focus({ preventScroll: true });
-          });
-        }
-      } else {
-        if (this.prevBodyOverflow !== null) {
+          this.visible.set(true);
+          this.dismissing.set(false);
+          this.dragOffset.set(0);
+          // Lock the page scroll behind the sheet. Save+restore the previous
+          // inline overflow so we don't trample a parent component's setting.
+          // On TV body has a scale transform that makes html the scrolling
+          // element — lock both. On other form factors body is the scroller
+          // and locking html on tablet landscape (pinned drawer) shifts the
+          // sidebar upward.
           if (typeof document !== 'undefined') {
-            document.body.style.overflow = this.prevBodyOverflow;
-            document.documentElement.style.overflow = this.prevHtmlOverflow ?? '';
+            this.prevBodyOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            if (this.tv.isTv()) {
+              this.prevHtmlOverflow = document.documentElement.style.overflow;
+              document.documentElement.style.overflow = 'hidden';
+            }
           }
-          this.prevBodyOverflow = null;
-          this.prevHtmlOverflow = null;
-        }
-        if (this.registered) {
-          this.dismissStack.remove(this.dismissCallback);
-          this.registered = false;
-        }
-        if (this.focusTrapActive && typeof document !== 'undefined') {
-          document.removeEventListener('focusin', this.onFocusIn);
-          this.focusTrapActive = false;
-          if (this.prevFocused && document.contains(this.prevFocused)) {
-            this.prevFocused.focus({ preventScroll: true });
+          // Register on the dismiss stack so the hardware/gesture back closes
+          // this sheet before falling through to the route-level back handler.
+          if (!this.registered) {
+            this.dismissStack.push(this.dismissCallback);
+            this.registered = true;
           }
-          this.prevFocused = null;
+          if (this.tv.isTv() && !this.focusTrapActive && typeof document !== 'undefined') {
+            // Snapshot the trigger before the trap can bounce focus inside.
+            // Restored on close so the user lands back on the element they
+            // pressed (e.g. a <select appTvSelect>) — not on the option they
+            // happened to highlight last in the sheet.
+            this.prevFocused = document.activeElement as HTMLElement | null;
+            document.addEventListener('focusin', this.onFocusIn);
+            this.focusTrapActive = true;
+            // Move focus to the first item inside the sheet on open. Without
+            // this, the D-pad still operates on the trigger row (or the
+            // previously-focused tile in the route), so up/down moves to a
+            // background element and the focus-trap fires AFTER the user
+            // has already left the sheet visually — feels unresponsive.
+            // queueMicrotask waits until @if has materialised the sheet
+            // content; rAF would defer one extra frame and let the WebView
+            // paint the focus halo on the wrong element first.
+            queueMicrotask(() => {
+              if (!this.open()) return;
+              const sheetEl = this.sheet()?.nativeElement;
+              const first = sheetEl?.querySelector<HTMLElement>(
+                BottomSheetComponent.FOCUSABLE_SELECTOR,
+              );
+              first?.focus({ preventScroll: true });
+            });
+          }
+        } else {
+          // Animate the slide-down exit instead of an instant teardown, whatever
+          // caused the close (item select flipping `open`, or backdrop/drag/back
+          // via dismiss()).
+          this.beginClose();
         }
-      }
+      });
     });
 
-    // Belt: ensure scroll is unlocked + stack is clean even if the component
-    // is destroyed while still open (route change, navigation, etc.).
+    // Belt: ensure scroll is unlocked, the stack is clean, the exit timer is
+    // cleared, and (TV) focus is restored even if the component is destroyed
+    // while still open — e.g. a route change, or a parent `@if` tearing the
+    // sheet down (PopoverMenu hardcodes `[open]="true"`, so the effect's close
+    // branch never runs for that path).
     destroyRef.onDestroy(() => {
-      if (this.prevBodyOverflow !== null && typeof document !== 'undefined') {
-        document.body.style.overflow = this.prevBodyOverflow;
-        document.documentElement.style.overflow = this.prevHtmlOverflow ?? '';
-        this.prevBodyOverflow = null;
-        this.prevHtmlOverflow = null;
+      if (this.exitTimer) {
+        clearTimeout(this.exitTimer);
+        this.exitTimer = null;
       }
-      if (this.registered) {
-        this.dismissStack.remove(this.dismissCallback);
-        this.registered = false;
-      }
-      if (this.focusTrapActive && typeof document !== 'undefined') {
-        document.removeEventListener('focusin', this.onFocusIn);
-        this.focusTrapActive = false;
-      }
-      // PopoverMenu hardcodes `[open]="true"` and tears the sheet down via
-      // a parent `@if`, so the close branch of the effect above never runs
-      // for that path. Restore focus here as well to cover both lifecycles.
-      if (this.prevFocused && typeof document !== 'undefined' && document.contains(this.prevFocused)) {
-        this.prevFocused.focus({ preventScroll: true });
-      }
-      this.prevFocused = null;
+      this.releaseOpenState();
     });
   }
 
@@ -240,8 +230,48 @@ export class BottomSheetComponent {
   }
 
   dismiss() {
+    this.beginClose();
+  }
+
+  /** Slide the sheet down, then remove it from the DOM and notify the parent.
+   *  Idempotent — a close already in flight is not restarted. Every close path
+   *  funnels through here so selecting an item animates out exactly like a
+   *  backdrop tap or a drag-down. */
+  private beginClose() {
+    if (this.exitTimer || !this.visible()) return;
+    this.releaseOpenState();
     this.dismissing.set(true);
     this.dragOffset.set(0);
-    setTimeout(() => this.closed.emit(), 250);
+    this.exitTimer = setTimeout(() => {
+      this.exitTimer = null;
+      this.visible.set(false);
+      this.dismissing.set(false);
+      this.closed.emit();
+    }, 180);
+  }
+
+  /** Undo the open-time side effects: restore page scroll, leave the dismiss
+   *  stack, and (TV) drop the focus trap and restore the trigger's focus. */
+  private releaseOpenState() {
+    if (this.prevBodyOverflow !== null) {
+      if (typeof document !== 'undefined') {
+        document.body.style.overflow = this.prevBodyOverflow;
+        document.documentElement.style.overflow = this.prevHtmlOverflow ?? '';
+      }
+      this.prevBodyOverflow = null;
+      this.prevHtmlOverflow = null;
+    }
+    if (this.registered) {
+      this.dismissStack.remove(this.dismissCallback);
+      this.registered = false;
+    }
+    if (this.focusTrapActive && typeof document !== 'undefined') {
+      document.removeEventListener('focusin', this.onFocusIn);
+      this.focusTrapActive = false;
+      if (this.prevFocused && document.contains(this.prevFocused)) {
+        this.prevFocused.focus({ preventScroll: true });
+      }
+      this.prevFocused = null;
+    }
   }
 }
