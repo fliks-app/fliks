@@ -20,7 +20,7 @@ import {
   onDiskSql,
   onDiskEpisodeNumbers,
 } from '../media/episode-coverage.util';
-import { MediaType, MinimumAvailability } from '../../common/enums';
+import { MediaStatus, MediaType, MinimumAvailability } from '../../common/enums';
 import { ConfigService } from '@nestjs/config';
 import { CompletionService } from './completion.service';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
@@ -1470,12 +1470,25 @@ export class SchedulerService implements OnModuleInit {
       case MinimumAvailability.IN_CINEMAS:
         return !!(media.inCinemas && media.inCinemas <= today);
       case MinimumAvailability.RELEASED:
-        return !!(
-          (media.digitalRelease && media.digitalRelease <= today) ||
-          (media.physicalRelease && media.physicalRelease <= today)
-        );
+        // Home-media dates first, then fall back to the cinema date plus a
+        // grace window, the primary release date, and finally the catalogue
+        // status — so titles whose digital/physical dates are absent from the
+        // metadata source (typical for older catalogue films) still resolve.
+        if (media.digitalRelease && media.digitalRelease <= today) return true;
+        if (media.physicalRelease && media.physicalRelease <= today)
+          return true;
+        if (media.inCinemas && this.addDaysIso(media.inCinemas, 90) <= today)
+          return true;
+        if (media.releaseDate && media.releaseDate <= today) return true;
+        return media.status === MediaStatus.RELEASED;
       default:
         return true;
     }
+  }
+
+  private addDaysIso(isoDate: string, days: number): string {
+    const d = new Date(isoDate);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
   }
 }
