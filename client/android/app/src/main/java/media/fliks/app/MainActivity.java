@@ -32,6 +32,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(PipPlugin.class);
         registerPlugin(HdrPlugin.class);
         registerPlugin(AudioCapabilitiesPlugin.class);
+        registerPlugin(VideoCapabilitiesPlugin.class);
         registerPlugin(CastPlugin.class);
         registerPlugin(DownloadNotificationPlugin.class);
         registerPlugin(NativePlayerPlugin.class);
