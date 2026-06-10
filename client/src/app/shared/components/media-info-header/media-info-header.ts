@@ -48,6 +48,7 @@ import {
   resolutionFromQualityName,
 } from '../../../core/utils/player.utils';
 import { DropdownMenuComponent } from '../dropdown-menu';
+import { ProgressBadgeComponent } from '../progress-badge/progress-badge.component';
 import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
 import { TvRowDirective } from '../../directives/tv-row.directive';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
@@ -68,6 +69,17 @@ export interface MediaInfoHeaderSubtitle {
   forced?: boolean;
 }
 
+export interface MediaInfoHeaderBadge {
+  /** ngx-translate key for the badge text. */
+  labelKey: string;
+  /** 0–100 progress fill, or null for a plain status chip. */
+  percent: number | null;
+  /** daisyUI colour class, e.g. `badge-info` / `badge-ghost`. */
+  badgeClass: string;
+  /** When true the badge renders as a button that emits openDownloadDetail. */
+  clickable: boolean;
+}
+
 interface AudioTrack {
   index: number;
   label: string;
@@ -80,6 +92,7 @@ interface AudioTrack {
     MobileFanartHeroComponent,
     ResolveUrlPipe,
     DropdownMenuComponent,
+    ProgressBadgeComponent,
     ImgFadeInDirective,
     TvRowDirective,
     TvSelectDirective,
@@ -156,6 +169,10 @@ export class MediaInfoHeaderComponent {
   readonly grabBusy = input<string | null>(null);
   readonly monitoredLoading = input(false);
   readonly deleteLoading = input(false);
+  /** Status badge rendered next to the kebab menu (download progress, or the
+   *  monitored state), or null to show none. A clickable badge emits
+   *  openDownloadDetail. */
+  readonly badge = input<MediaInfoHeaderBadge | null>(null);
 
   // ── Inputs: series-specific ──
   readonly mediaType = input<string>('movie');
@@ -184,6 +201,9 @@ export class MediaInfoHeaderComponent {
   /** Open the tracking-status modal scoped to this header's context
    *  (whole series / the movie / the current episode). */
   readonly openTracking = output<void>();
+  /** Open the download-detail modal (per-season breakdown) from the header
+   *  download badge. */
+  readonly openDownloadDetail = output<void>();
   /** Viewer (regular requester) asks to (re-)request the current title. */
   readonly requestMedia = output<void>();
   /** Emitted after a series-level bulk watched toggle. Parent should refresh its episode watched list. */

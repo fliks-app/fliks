@@ -34,7 +34,10 @@ import { BackgroundService } from '../../core/services/background.service';
 import { StreamingApiService, MediaResumeInfo } from '../../core/services/api/streaming-api.service';
 import { MarkersApiService } from '../../core/services/api/markers-api.service';
 import { RequestsService, TitleRequestState } from '../../core/services/api/requests.service';
-import { MediaInfoHeaderComponent } from '../../shared/components/media-info-header/media-info-header';
+import {
+  MediaInfoHeaderComponent,
+  MediaInfoHeaderBadge,
+} from '../../shared/components/media-info-header/media-info-header';
 import { MediaInfoExtraComponent } from '../../shared/components/media-info-extra/media-info-extra';
 import { SubtitlesModalComponent } from '../../shared/components/subtitles-modal/subtitles-modal';
 import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
@@ -51,13 +54,8 @@ import { HorizontalScrollerComponent } from '../../shared/components/horizontal-
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
-import { ProgressBarComponent } from '../../shared/components/progress-bar/progress-bar.component';
+import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { DownloadProgressService } from '../../core/services/download-progress.service';
-import {
-  qbStateVariant,
-  formatSpeed,
-  formatEta,
-} from '../../shared/utils/download-format';
 import {
   filesForEpisode,
   filterSeasonEpisodesOnDisk,
@@ -101,7 +99,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     HorizontalScrollerComponent,
     MediaCardComponent,
     DownloadQualityModalComponent,
-    ProgressBarComponent,
+    DownloadDetailModalComponent,
     RouterLink,
     NgTemplateOutlet,
     ResolveUrlPipe,
@@ -136,18 +134,47 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const m = this.media();
     return m ? (this.downloadProgress.progress().get(m.id) ?? null) : null;
   });
-  readonly activeDownloadSpeed = computed(() => {
-    const d = this.activeDownload();
-    return d && d.dlspeed > 0 ? formatSpeed(d.dlspeed) : null;
+
+  /** Status badge shown next to the kebab on the movie/series header. Hidden
+   *  once the content is downloaded (movie file present / every episode in).
+   *  While a download is in flight it shows the mean percent and is clickable
+   *  (opens the detail modal); otherwise it reflects the monitored state. */
+  readonly headerBadge = computed<MediaInfoHeaderBadge | null>(() => {
+    const m = this.media();
+    if (!m) return null;
+    const downloaded =
+      m.type === 'series'
+        ? !!m.episodeStats &&
+          m.episodeStats.totalEpisodes > 0 &&
+          m.episodeStats.downloadedEpisodes >= m.episodeStats.totalEpisodes
+        : this.mediaFiles().length > 0;
+    if (downloaded) return null;
+    const dl = this.activeDownload();
+    if (dl) {
+      return {
+        labelKey: 'activity.tstatus_downloading',
+        percent: dl.percent,
+        badgeClass: 'badge-info',
+        clickable: true,
+      };
+    }
+    return m.monitored
+      ? {
+          labelKey: 'requests.badge_monitored',
+          percent: null,
+          badgeClass: 'badge-info',
+          clickable: false,
+        }
+      : {
+          labelKey: 'requests.badge_unmonitored',
+          percent: null,
+          badgeClass: 'badge-ghost',
+          clickable: false,
+        };
   });
-  readonly activeDownloadEta = computed(() => {
-    const d = this.activeDownload();
-    return d && d.eta > 0 ? formatEta(d.eta) : null;
-  });
-  readonly activeDownloadVariant = computed(() =>
-    qbStateVariant(this.activeDownload()?.state ?? ''),
-  );
   private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
+  private readonly downloadDetailModal =
+    viewChild<DownloadDetailModalComponent>('downloadDetailModal');
   /** Same SSE payload must run handlers once; `media` updates (e.g. after rescan) re-run this effect. */
   private lastHandledSseEvent: SseEvent | null = null;
 
@@ -1076,6 +1103,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   openDownloadModal() {
     const fileId = this.episodeMode() ? this.episodeActiveFileId() : this.activeFileId();
     if (fileId) this.downloadModal()?.open(fileId);
+  }
+
+  openDownloadDetailModal() {
+    this.downloadDetailModal()?.open();
   }
 
   openSubtitles() {

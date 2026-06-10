@@ -653,6 +653,7 @@
     "analyze_launch_error": "Impossible de lancer l'analyse",
     "not_found": "Contenu introuvable",
     "download_section": "Téléchargement",
+    "download_detail_title": "Téléchargement en cours",
     "quality_profile_label": "Profil de qualité",
     "no_quality_profile": "Aucun profil de qualité : configurez-en un (ou réimportez) pour activer la recherche de releases.",
     "search_releases": "Chercher des releases",
@@ -837,6 +838,7 @@
     "seasons_label": "Saisons",
     "badge_monitored": "Surveillé",
     "badge_unmonitored": "Non surveillé",
+    "badge_downloading": "Téléchargement",
     "status": {
       "pending": "En attente",
       "approved": "Acceptée",

@@ -181,18 +181,9 @@
           (editSubtitles)="openSubtitles()"
           (requestMedia)="openRequestForMedia()"
           (openTracking)="openTracking(m.type === 'movie' ? { kind: 'movie' } : { kind: 'series' })"
+          [badge]="headerBadge()"
+          (openDownloadDetail)="openDownloadDetailModal()"
         />
-
-        @if (activeDownload(); as dl) {
-          <div class="mt-3 flex flex-col gap-1.5">
-            <app-progress-bar [percent]="dl.percent" [variant]="activeDownloadVariant()" />
-            <div class="flex flex-wrap gap-x-3 gap-y-1 text-sm text-base-content/60">
-              <span>{{ dl.percent }}%</span>
-              @if (activeDownloadSpeed(); as sp) { <span>↓ {{ sp }}</span> }
-              @if (activeDownloadEta(); as e) { <span>{{ 'activity.eta' | translate }}: {{ e }}</span> }
-            </div>
-          </div>
-        }
 
         @if (m.type === 'movie') {
           <app-media-info-extra [media]="m" [directors]="directors()" />
@@ -328,6 +319,7 @@
         (save)="saveLibrary()"
       />
       <app-download-quality-modal #downloadModal (download)="onDownload($event)" />
+      <app-download-detail-modal #downloadDetailModal [progress]="activeDownload()" />
     </div>
 
   }
