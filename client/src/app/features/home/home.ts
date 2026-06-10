@@ -7,6 +7,8 @@ import { MediaService, Media, CalendarEntry } from '../../core/services/api/medi
 import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '../../core/services/api/streaming-api.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { RequestsService, FliksRequestRow } from '../../core/services/api/requests.service';
+import { SseService } from '../../core/services/sse.service';
+import { DownloadProgressService } from '../../core/services/download-progress.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { PlayableMediaService } from '../../core/services/playable-media.service';
@@ -83,6 +85,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly playableMedia = inject(PlayableMediaService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly requestsService = inject(RequestsService);
+  private readonly sse = inject(SseService);
+  private readonly downloadProgress = inject(DownloadProgressService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly focusMemory = inject(FocusMemoryService);
@@ -177,6 +181,21 @@ export class HomeComponent implements OnInit, OnDestroy {
       pool.push(...(r.media.additionalFanartUrls ?? []));
     }
     if (pool.length) this.backgroundService.setBackgrounds(pool);
+  });
+
+  /** When a download finishes, refresh the recent-requests row so a monitored
+   *  request flips to its downloaded badge without a manual reload. */
+  private readonly importEffect = effect(() => {
+    const ev = this.sse.lastEvent();
+    if (ev?.type !== 'import.complete') return;
+    const wantRequests = this.visibleSections().some(
+      (s) => s.type === 'requests-recent',
+    );
+    if (!wantRequests) return;
+    this.requestsService
+      .list({ limit: 12 }, { force: true })
+      .then((r) => this.recentRequests.set(r.data))
+      .catch(() => {});
   });
   /** Reactively re-filter the home rows whenever the user flips the
    *  "only my requests" toggle in display settings. Skips the very first
@@ -371,6 +390,16 @@ export class HomeComponent implements OnInit, OnDestroy {
     const wantRequests = this.visibleSections().some(
       (s) => s.type === 'requests-recent',
     );
+    // Seed live download progress so cards opened mid-download show the current
+    // percent before the next SSE tick. Only users allowed to read the queue
+    // (request/media creators) hit the endpoint; others get progress via SSE.
+    if (
+      wantRequests &&
+      (this.auth.hasPermission('requests.create') ||
+        this.auth.hasPermission('media.create'))
+    ) {
+      void this.downloadProgress.seed();
+    }
 
     try {
       const [recent, calendar, libEntries, requests] = await Promise.all([

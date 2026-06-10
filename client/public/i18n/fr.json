@@ -835,12 +835,14 @@
     "media_title_label": "Titre",
     "date_label": "Date · ",
     "seasons_label": "Saisons",
+    "badge_monitored": "Surveillé",
+    "badge_unmonitored": "Non surveillé",
     "status": {
       "pending": "En attente",
       "approved": "Acceptée",
       "declined": "Refusée",
       "processing": "En traitement",
-      "available": "Acceptée",
+      "available": "Téléchargé",
       "failed": "Échec"
     }
   },

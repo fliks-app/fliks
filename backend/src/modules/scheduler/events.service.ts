@@ -30,8 +30,31 @@ export type SseEvent =
       language: string;
       error: string;
     }
-  | { type: 'import.complete'; mediaId: number; title: string }
+  | {
+      type: 'import.complete';
+      mediaId: number;
+      title: string;
+      /** Season whose files just imported (single-season series import); unset
+       *  for movies and multi-season packs. Lets the client retire just that
+       *  season's live progress. */
+      seasonNumber?: number;
+    }
   | { type: 'import.failed'; mediaId: number; title: string; error: string }
+  | {
+      // Live torrent progress for an in-flight grab, delivered to the media's
+      // request audience. `progress` is 0–1; `state` is the raw qBittorrent
+      // state (the client maps it to a label/colour). Season/episode set for
+      // the matched scope of a series.
+      type: 'download.progress';
+      mediaId: number;
+      mediaType: 'movie' | 'series';
+      seasonNumber?: number;
+      episodeNumber?: number;
+      progress: number;
+      dlspeed: number;
+      eta: number;
+      state: string;
+    }
   | { type: 'stalled.removed'; title: string }
   | { type: 'queue.updated' }
   | { type: 'command.started'; name: string }

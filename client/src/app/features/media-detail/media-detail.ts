@@ -51,6 +51,13 @@ import { HorizontalScrollerComponent } from '../../shared/components/horizontal-
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
+import { ProgressBarComponent } from '../../shared/components/progress-bar/progress-bar.component';
+import { DownloadProgressService } from '../../core/services/download-progress.service';
+import {
+  qbStateVariant,
+  formatSpeed,
+  formatEta,
+} from '../../shared/utils/download-format';
 import {
   filesForEpisode,
   filterSeasonEpisodesOnDisk,
@@ -94,6 +101,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     HorizontalScrollerComponent,
     MediaCardComponent,
     DownloadQualityModalComponent,
+    ProgressBarComponent,
     RouterLink,
     NgTemplateOutlet,
     ResolveUrlPipe,
@@ -120,6 +128,25 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly markersApi = inject(MarkersApiService);
   private readonly requestsApi = inject(RequestsService);
   private readonly downloadManager = inject(DownloadManagerService);
+  private readonly downloadProgress = inject(DownloadProgressService);
+
+  /** Live download progress for the media on screen (null when not
+   *  downloading). Fed by `download.progress` SSE + a one-shot seed on load. */
+  readonly activeDownload = computed(() => {
+    const m = this.media();
+    return m ? (this.downloadProgress.progress().get(m.id) ?? null) : null;
+  });
+  readonly activeDownloadSpeed = computed(() => {
+    const d = this.activeDownload();
+    return d && d.dlspeed > 0 ? formatSpeed(d.dlspeed) : null;
+  });
+  readonly activeDownloadEta = computed(() => {
+    const d = this.activeDownload();
+    return d && d.eta > 0 ? formatEta(d.eta) : null;
+  });
+  readonly activeDownloadVariant = computed(() =>
+    qbStateVariant(this.activeDownload()?.state ?? ''),
+  );
   private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
   /** Same SSE payload must run handlers once; `media` updates (e.g. after rescan) re-run this effect. */
   private lastHandledSseEvent: SseEvent | null = null;
@@ -728,6 +755,14 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // button — admins skip the round-trip).
       if (this.canRequest()) {
         void this.loadTitleState(m.tmdbId, m.type);
+      }
+      // Seed live download progress (users who can request/import may read the
+      // queue; SSE keeps it live after). Plain viewers skip — they get no feed.
+      if (
+        this.auth.hasPermission('requests.create') ||
+        this.auth.hasPermission('media.create')
+      ) {
+        void this.downloadProgress.seed();
       }
       // Load resume + watched episodes + per-episode progress for series
       const [resumeInfo, watchedIds, progress] = await Promise.all([

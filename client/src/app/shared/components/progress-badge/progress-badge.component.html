@@ -1,0 +1,14 @@
+<span
+  class="badge badge-sm whitespace-nowrap relative overflow-hidden"
+  [class]="badgeClass()"
+>
+  @if (percent() !== null) {
+    <span
+      class="absolute inset-y-0 right-0 bg-base-100/40"
+      [style.width.%]="100 - (percent() ?? 0)"
+    ></span>
+  }
+  <span class="relative"
+    >{{ label() }}@if (percent() !== null) { · {{ percent() }}%}</span
+  >
+</span>

@@ -4,6 +4,7 @@ import {
   signal,
   inject,
   computed,
+  effect,
   OnInit,
   OnDestroy,
   viewChild,
@@ -28,6 +29,9 @@ import { RequestDeclineModalComponent } from './request-decline-modal/request-de
 import { RequestViewDeclineModalComponent } from './request-view-decline-modal/request-view-decline-modal.component';
 import { RequestEditModalComponent } from './request-edit-modal/request-edit-modal.component';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
+import { SseService } from '../../core/services/sse.service';
+import { DownloadProgressService } from '../../core/services/download-progress.service';
+import { ProgressBadgeComponent } from '../../shared/components/progress-badge/progress-badge.component';
 import { LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angular';
 
 @Component({
@@ -42,6 +46,7 @@ import { LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angu
     RequestViewDeclineModalComponent,
     RequestEditModalComponent,
     DropdownMenuComponent,
+    ProgressBadgeComponent,
     LucideEllipsisVertical,
     LucidePencil,
     LucideTrash2,
@@ -56,8 +61,17 @@ export class RequestsComponent implements OnInit, OnDestroy {
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly appResume = inject(AppResumeService);
+  private readonly sse = inject(SseService);
+  private readonly downloadProgress = inject(DownloadProgressService);
   readonly auth = inject(AuthService);
   private resumeSub?: Subscription;
+
+  /** When a download finishes, refetch so a monitored request flips to its
+   *  downloaded state and the progress badge clears. */
+  private readonly importEffect = effect(() => {
+    const ev = this.sse.lastEvent();
+    if (ev?.type === 'import.complete') void this.refreshStatuses();
+  });
 
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
   private readonly viewDeclineModal = viewChild(RequestViewDeclineModalComponent);
@@ -92,9 +106,13 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.reload();
+    this.seedProgress();
     // Native app-resume: this page only exists while it's the visible route
     // (no route reuse), so an unguarded reload is always the on-screen one.
-    this.resumeSub = this.appResume.resume$.subscribe(() => this.reload());
+    this.resumeSub = this.appResume.resume$.subscribe(() => {
+      this.reload();
+      this.seedProgress();
+    });
     try {
       const [qp, lp] = await Promise.all([
         this.profilesApi.getQualityProfiles(),
@@ -125,21 +143,54 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.fetch(false);
   }
 
-  private async fetch(append: boolean) {
+  private async fetch(append: boolean, force = false) {
     this.loading.set(true);
     const status = this.statusFilter();
     try {
-      const res = await this.requestsService.list({
-        page: this.page,
-        limit: 25,
-        ...(status ? { status } : {}),
-      });
+      const res = await this.requestsService.list(
+        {
+          page: this.page,
+          limit: 25,
+          ...(status ? { status } : {}),
+        },
+        { force },
+      );
       this.rows.update((prev) =>
         append ? [...prev, ...res.data] : res.data,
       );
       this.total.set(res.total);
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  /** Seed live download progress only for users allowed to read the download
+   *  queue (request/media creators); others get progress via SSE only. */
+  private seedProgress(): void {
+    if (
+      this.auth.hasPermission('requests.create') ||
+      this.auth.hasPermission('media.create')
+    ) {
+      void this.downloadProgress.seed();
+    }
+  }
+
+  /** Force-refetch the currently-loaded rows so backend status transitions (a
+   *  download finishing → downloaded) surface without a manual reload, while
+   *  preserving the user's loaded page depth. */
+  private async refreshStatuses(): Promise<void> {
+    const status = this.statusFilter();
+    const limit = Math.max(25, this.rows().length);
+    try {
+      const res = await this.requestsService.list(
+        { page: 1, limit, ...(status ? { status } : {}) },
+        { force: true },
+      );
+      this.rows.set(res.data);
+      this.total.set(res.total);
+      this.page = Math.max(1, Math.ceil(res.data.length / 25));
+    } catch {
+      /* ignore — next reload/resume refreshes */
     }
   }
 
@@ -325,6 +376,46 @@ export class RequestsComponent implements OnInit, OnDestroy {
       default:
         return 'badge-ghost';
     }
+  }
+
+  /** Translate key for the status badge. An approved/processing request tracks
+   *  the media's real monitored state ("monitored" / "not monitored");
+   *  available reads as "downloaded". */
+  badgeLabelKey(row: FliksRequestRow): string {
+    if (row.status === 'approved' || row.status === 'processing') {
+      return row.media?.monitored
+        ? 'requests.badge_monitored'
+        : 'requests.badge_unmonitored';
+    }
+    return 'requests.status.' + row.status;
+  }
+
+  badgeClassFor(row: FliksRequestRow): string {
+    if (row.status === 'approved' || row.status === 'processing') {
+      return row.media?.monitored ? 'badge-info' : 'badge-ghost';
+    }
+    return this.statusBadgeClass(row.status);
+  }
+
+  /** Live download percent for a monitored, in-flight request — null when not
+   *  monitored, not downloading, or the media isn't linked yet. For a
+   *  per-season request, averages only the requested seasons (not the whole
+   *  series rollup). */
+  progressPercent(row: FliksRequestRow): number | null {
+    if (row.status !== 'approved' && row.status !== 'processing') return null;
+    if (!row.media?.monitored) return null;
+    const id = row.media?.id;
+    if (id == null) return null;
+    const p = this.downloadProgress.progress().get(id);
+    if (!p) return null;
+    if (row.seasons?.length && p.seasons) {
+      const vals = row.seasons
+        .map((s) => p.seasons!.get(s)?.percent)
+        .filter((x): x is number => x != null);
+      if (!vals.length) return null;
+      return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+    }
+    return p.percent;
   }
 
   qualityProfileDisplay(id: number | null): string {

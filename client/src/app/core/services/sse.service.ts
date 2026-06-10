@@ -3,6 +3,8 @@ import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from './toast.service';
 import { ServerConfigService } from './server-config.service';
 import { AuthService } from './auth.service';
+import { DownloadProgressService } from './download-progress.service';
+import { MediaType } from '../enums/media-type.enum';
 import { invalidatePrefix } from '../interceptors/cache.interceptor';
 
 export interface SseEvent {
@@ -24,6 +26,7 @@ export class SseService implements OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly auth = inject(AuthService);
+  private readonly downloadProgress = inject(DownloadProgressService);
 
   readonly activeProgress = signal<Map<string, TaskProgress>>(new Map());
   readonly lastEvent = signal<SseEvent | null>(null);
@@ -59,8 +62,8 @@ export class SseService implements OnDestroy {
         const data = JSON.parse(event.data) as SseEvent;
         this.handleEvent(data);
         // Don't update lastEvent for high-frequency progress events
-        // (they are handled via activeProgress signal instead)
-        if (data.type !== 'task.progress') {
+        // (handled via dedicated signals/stores instead)
+        if (data.type !== 'task.progress' && data.type !== 'download.progress') {
           this.lastEvent.set(data);
         }
       } catch { /* ignore parse errors */ }
@@ -105,7 +108,25 @@ export class SseService implements OnDestroy {
         void invalidatePrefix('/api/media');
         // Toasts are handled by the media-detail component (only on the right page).
         break;
+      case 'download.progress':
+        this.downloadProgress.applyProgress({
+          mediaId: Number(event['mediaId']),
+          mediaType: event['mediaType'] as MediaType,
+          seasonNumber: event['seasonNumber'] as number | undefined,
+          episodeNumber: event['episodeNumber'] as number | undefined,
+          progress: Number(event['progress']),
+          dlspeed: Number(event['dlspeed'] ?? 0),
+          eta: Number(event['eta'] ?? 0),
+          state: String(event['state'] ?? ''),
+        });
+        break;
       case 'import.complete':
+        // The download finished → retire its live progress (just the imported
+        // season for a series; the whole entry otherwise).
+        this.downloadProgress.clearMedia(
+          Number(event['mediaId']),
+          event['seasonNumber'] as number | undefined,
+        );
         this.toast.success(
           this.translate.instant('sse.import_complete', { title: event['title'] ?? '' }),
         );

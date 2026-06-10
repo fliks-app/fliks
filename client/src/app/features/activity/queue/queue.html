@@ -150,17 +150,10 @@
             </div>
           </div>
 
-          <div class="w-full bg-base-300 rounded-full h-1.5 overflow-hidden">
-            <div
-              class="h-1.5 rounded-full transition-all duration-500"
-              [class.bg-primary]="item.trackerStatus === 'Downloading' || item.trackerStatus === 'Downloading metadata'"
-              [class.bg-success]="item.trackerStatus === 'Seeding' || item.status === 'Imported'"
-              [class.bg-warning]="item.trackerStatus === 'Stalled' || item.status === 'Importing' || item.status === 'Quality not upgraded'"
-              [class.bg-error]="item.status === 'Import failed'"
-              [class.bg-base-content/20]="item.trackerStatus === 'Paused' || item.trackerStatus === 'Stopped'"
-              [style.width.%]="item.progress * 100"
-            ></div>
-          </div>
+          <app-progress-bar
+            [percent]="item.progress * 100"
+            [variant]="barVariant(item)"
+          />
 
           <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-base-content/60">
             <span>{{ (item.progress * 100) | number:'1.1-1' }}%</span>

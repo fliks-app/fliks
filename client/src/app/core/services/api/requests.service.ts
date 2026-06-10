@@ -37,6 +37,10 @@ export interface RequestMedia {
   id: number;
   title: string;
   year: number | null;
+  /** Whether the library media is monitored — an approved request whose media
+   *  is monitored is being worked on (shown as "monitored" rather than just
+   *  "approved"). */
+  monitored?: boolean;
   /** Local `/api/images` paths of the imported media — secondary art source
    *  for requests created before local request art existed. */
   posterUrl: string | null;
