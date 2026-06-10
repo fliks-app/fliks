@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.11.0](https://github.com/fliks-app/fliks/compare/v1.10.1...v1.11.0) (2026-06-10)
+
+
+### Features
+
+* **media-detail:** clickable download status badge with detail modal ([#449](https://github.com/fliks-app/fliks/issues/449)) ([89b86a5](https://github.com/fliks-app/fliks/commit/89b86a500e80e74a0cd41251439d02343bce40d3))
+* **requests:** dedupe requests globally and lock series profiles ([#447](https://github.com/fliks-app/fliks/issues/447)) ([042b5b8](https://github.com/fliks-app/fliks/commit/042b5b8e364b56ccfc287ab19e6081b6347e06a8))
+* **requests:** live download progress on requests and media-detail ([#448](https://github.com/fliks-app/fliks/issues/448)) ([0319ba5](https://github.com/fliks-app/fliks/commit/0319ba5de95a93ff92ca4edc82e697de0a932fdf))
+* **streaming:** expose full quality ladder, gate direct play on quality ([#441](https://github.com/fliks-app/fliks/issues/441)) ([f3bdec0](https://github.com/fliks-app/fliks/commit/f3bdec05d7ea211d294056d7da9a9d39f1dc9910))
+
+
+### Bug Fixes
+
+* **player:** name audio by source codec in stats overlay, not transcode output ([#444](https://github.com/fliks-app/fliks/issues/444)) ([636a1e0](https://github.com/fliks-app/fliks/commit/636a1e06c12349c6f40bfa5e63af7a184b3f28a4))
+* **scheduler:** align availability gates across SearchMissing and RSS ([#445](https://github.com/fliks-app/fliks/issues/445)) ([31ccd47](https://github.com/fliks-app/fliks/commit/31ccd47a9d48509903ea2c815540431648c4bc14)), closes [#442](https://github.com/fliks-app/fliks/issues/442)
+
+
+### Performance Improvements
+
+* **requests:** return approval immediately and import media out of band ([#446](https://github.com/fliks-app/fliks/issues/446)) ([209e97b](https://github.com/fliks-app/fliks/commit/209e97ba20a4bb54f2f69c1e1eedf06af3e547d4))
+
 ## [1.10.1](https://github.com/fliks-app/fliks/compare/v1.10.0...v1.10.1) (2026-06-09)
 
 
