@@ -269,7 +269,7 @@ export class MediaImportService {
    * The library is also required to have a configured `path` — every
    * import flow needs to know where to drop files.
    */
-  private async resolveImportTarget(
+  async resolveImportTarget(
     type: MediaType,
     dto: { libraryId?: number },
   ): Promise<{ libraryId: number }> {

@@ -573,6 +573,24 @@ export class RequestsService {
       throw new ConflictException('Request is not pending');
     }
 
+    // Validate up front that the title can land in a library: a new import
+    // needs a resolvable target (the chosen library, or a configured default
+    // for the type). Resolving it here throws a clear error — surfaced to the
+    // admin as a toast — and leaves the request PENDING, instead of flipping to
+    // APPROVED and then failing silently in the out-of-band import tail when no
+    // default library is set. Skipped when the media already exists: that path
+    // only links/monitors, no import is needed.
+    const existingMedia = await this.mediaService.findByTmdbId(
+      row.tmdbId,
+      row.mediaType,
+    );
+    if (!existingMedia) {
+      await this.mediaService.assertImportTarget(
+        row.mediaType,
+        row.libraryId ?? undefined,
+      );
+    }
+
     row.status = RequestStatus.APPROVED;
     row.approvedBy = admin;
     row.declinedReason = null;
