@@ -20,22 +20,41 @@ export class ClientAbortExceptionFilter extends BaseExceptionFilter {
   private readonly logger = new Logger(ClientAbortExceptionFilter.name);
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    if (host.getType() === 'http') {
-      const req = host.switchToHttp().getRequest<Request>();
-      const socket = req?.socket;
-      const clientGone =
-        req?.aborted === true ||
-        (req as { readableAborted?: boolean })?.readableAborted === true ||
-        socket?.destroyed === true;
-      if (clientGone) {
-        this.logger.debug(
-          `Dropped error after client disconnect: ${
-            exception instanceof Error ? exception.message : String(exception)
-          }`,
-        );
-        return;
-      }
+    if (host.getType() === 'http' && this.isClientAbort(exception, host)) {
+      this.logger.debug(
+        `Dropped error after client disconnect: ${
+          exception instanceof Error ? exception.message : String(exception)
+        }`,
+      );
+      return;
     }
     super.catch(exception, host);
+  }
+
+  private isClientAbort(exception: unknown, host: ArgumentsHost): boolean {
+    const req = host.switchToHttp().getRequest<Request>();
+    const socket = req?.socket;
+    if (
+      req?.aborted === true ||
+      (req as { readableAborted?: boolean })?.readableAborted === true ||
+      socket?.destroyed === true
+    ) {
+      return true;
+    }
+    // Node's internal HTTP socket error handler throws "this.removeListener is
+    // not a function" when a socket errors after being detached (client RST /
+    // cancelled request). It surfaces through whatever async work was in flight
+    // (often the response serialization), so socket state may already read as
+    // alive by the time we get here — match the signature instead.
+    if (exception instanceof Error) {
+      const stack = exception.stack ?? '';
+      if (
+        /removeListener is not a function/i.test(exception.message) &&
+        /socketOnError|_http_server/i.test(stack)
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 }
