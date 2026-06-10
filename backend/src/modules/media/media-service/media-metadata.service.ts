@@ -73,6 +73,9 @@ export class MediaMetadataService {
       await this.mediaRepo.update(media.id, {
         ...buildMediaFieldsFromTmdb(details, MediaType.MOVIE),
       });
+      // Refresh keeps images synchronous: a full-library refresh processes one
+      // media at a time, so awaiting here bounds concurrency and lets the UI
+      // track real per-item progress (vs the import path, which defers images).
       await this.downloadMediaImages(media.id, details);
       await this.persistMediaMetadata(media, details);
     } else {
@@ -84,6 +87,7 @@ export class MediaMetadataService {
       await this.mediaRepo.update(media.id, {
         ...buildMediaFieldsFromTmdb(details, MediaType.SERIES),
       });
+      // Refresh keeps images synchronous — see the movie branch above.
       await this.downloadMediaImages(media.id, details);
       await this.persistMediaMetadata(media, details);
       const { insertedCount } = await this.refreshSeriesEpisodes(media, {
@@ -268,6 +272,7 @@ export class MediaMetadataService {
   async applySeasonDetails(
     dbSeason: Season,
     sd: SeasonDetails,
+    opts: { deferImages?: boolean } = {},
   ): Promise<{ insertedCount: number }> {
     const dbEpMap = new Map(
       (dbSeason.episodes ?? []).map((e) => [e.episodeNumber, e]),
@@ -333,14 +338,25 @@ export class MediaMetadataService {
         stillUrl: inserts[i].stillUrl,
       })),
     ];
+    const deferredStills: { episodeId: number; stillUrl: string }[] = [];
     await mapWithConcurrency(jobs, 8, async ({ id, updates, stillUrl }) => {
       if (updates && Object.keys(updates).length > 0) {
         await this.episodeRepo.update(id, updates);
       }
       if (stillUrl) {
-        await this.downloadEpisodeStill(id, stillUrl);
+        if (opts.deferImages) deferredStills.push({ episodeId: id, stillUrl });
+        else await this.downloadEpisodeStill(id, stillUrl);
       }
     });
+
+    if (opts.deferImages) {
+      this.downloadSeasonImagesInBackground(
+        dbSeason.id,
+        deferredStills,
+        sd.posterUrl ?? null,
+      );
+      return { insertedCount: insertedRows.length };
+    }
 
     if (sd.posterUrl) {
       await this.downloadSeasonPoster(dbSeason.id, sd.posterUrl);
@@ -582,6 +598,27 @@ export class MediaMetadataService {
   }
 
   /**
+   * Fire-and-forget variant of {@link downloadMediaImages} for the import path.
+   * The media row is persisted with the source CDN image URLs (displayable
+   * as-is) before this runs, so an import — and the request approval that
+   * awaits it — isn't blocked on the CDN GETs, the slowest part of an import;
+   * the local copies replace the CDN URLs once downloaded. Metadata refresh
+   * keeps images synchronous so its per-item progress stays accurate.
+   */
+  downloadMediaImagesInBackground(
+    mediaId: number,
+    details: MetadataDetails,
+  ): void {
+    void this.downloadMediaImages(mediaId, details).catch((e) =>
+      this.log.warn(
+        `media #${mediaId} image download failed: ${
+          e instanceof Error ? e.message : e
+        }`,
+      ),
+    );
+  }
+
+  /**
    * Download poster + fanart from TMDB and update the media row with local paths.
    */
   async downloadMediaImages(
@@ -701,6 +738,54 @@ export class MediaMetadataService {
     if (local) {
       await this.seasonRepo.update(seasonId, { posterUrl: local });
     }
+  }
+
+  /**
+   * Fire-and-forget the deferred episode stills and season poster for the
+   * import path. The episode and season rows they attach to are already
+   * persisted, so the auto-grab and the monitored badge never wait on these
+   * CDN GETs; refresh downloads them inline so its per-item progress stays
+   * accurate. Concurrency is capped so a many-episode season doesn't open a
+   * download per still.
+   */
+  downloadSeasonImagesInBackground(
+    seasonId: number,
+    stills: { episodeId: number; stillUrl: string }[],
+    posterUrl: string | null,
+  ): void {
+    void (async () => {
+      await mapWithConcurrency(stills, 8, ({ episodeId, stillUrl }) =>
+        this.downloadEpisodeStill(episodeId, stillUrl),
+      );
+      if (posterUrl) await this.downloadSeasonPoster(seasonId, posterUrl);
+    })().catch((e) =>
+      this.log.warn(
+        `season #${seasonId} image download failed: ${
+          e instanceof Error ? e.message : e
+        }`,
+      ),
+    );
+  }
+
+  /**
+   * Fire-and-forget variant of {@link persistMediaMetadata} for the import
+   * path. Cast, crew and per-person enrichment (biographies, avatars) are
+   * detail-page data that the monitored badge, the library link and the
+   * auto-grab never read, yet the per-person TMDB fan-out below dominates an
+   * import's latency — so an import (and the request approval awaiting it)
+   * isn't blocked on it. Metadata refresh keeps it synchronous.
+   */
+  persistMediaMetadataInBackground(
+    media: Media,
+    details: MetadataDetails,
+  ): void {
+    void this.persistMediaMetadata(media, details).catch((e) =>
+      this.log.warn(
+        `media #${media.id} metadata persist failed: ${
+          e instanceof Error ? e.message : e
+        }`,
+      ),
+    );
   }
 
   async persistMediaMetadata(
