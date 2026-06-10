@@ -993,6 +993,7 @@ export class SchedulerService implements OnModuleInit {
     const delayProfiles = await this.delayProfileRepo.find({
       order: { order: 'ASC' },
     });
+    const today = new Date().toISOString().slice(0, 10);
 
     for (let i = 0; i < indexers.length; i++) {
       const indexer = indexers[i];
@@ -1022,6 +1023,9 @@ export class SchedulerService implements OnModuleInit {
           const parsed = parseSeasonEpisode(release.title);
           const movieMatch = this.matchMovieRelease(release, movieCandidates);
           if (movieMatch) {
+            // Same availability gate as SearchMissing: don't grab a title
+            // that hasn't reached its minimum availability yet.
+            if (!this.isAvailable(movieMatch, today)) continue;
             if (this.releaseTooFresh(release, movieMatch, delayProfiles))
               continue;
             await this.grabRssRelease({
@@ -1059,8 +1063,15 @@ export class SchedulerService implements OnModuleInit {
           const onDiskNums = onDiskEpisodeNumbers(season.episodes ?? []);
 
           if (parsed.isFullSeason) {
+            // A pack is only worth grabbing when it covers a monitored,
+            // not-on-disk episode that has already aired — mirroring the
+            // airDate gate SearchMissing applies per episode.
             const wanted = (season.episodes ?? []).some(
-              (e) => e.monitored && !onDiskNums.has(e.episodeNumber),
+              (e) =>
+                e.monitored &&
+                !onDiskNums.has(e.episodeNumber) &&
+                !!e.airDate &&
+                e.airDate <= today,
             );
             if (!wanted) continue;
             packTriedThisPull.add(packKey);
@@ -1086,6 +1097,9 @@ export class SchedulerService implements OnModuleInit {
           );
           if (!ep || !ep.monitored || onDiskNums.has(ep.episodeNumber))
             continue;
+          // Don't grab an episode that hasn't aired yet — same airDate gate
+          // SearchMissing enforces in its query.
+          if (!ep.airDate || ep.airDate > today) continue;
           // Intra-pull Phase 1: a pack for this season was already handed
           // off above; skip the individual episode.
           if (packTriedThisPull.has(packKey)) continue;
