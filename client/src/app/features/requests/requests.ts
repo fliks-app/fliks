@@ -31,7 +31,7 @@ import { RequestEditModalComponent } from './request-edit-modal/request-edit-mod
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { SseService } from '../../core/services/sse.service';
 import { DownloadProgressService } from '../../core/services/download-progress.service';
-import { ProgressBadgeComponent } from '../../shared/components/progress-badge/progress-badge.component';
+import { RequestStatusBadgeComponent } from './request-status-badge/request-status-badge.component';
 import { LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angular';
 
 @Component({
@@ -46,7 +46,7 @@ import { LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angu
     RequestViewDeclineModalComponent,
     RequestEditModalComponent,
     DropdownMenuComponent,
-    ProgressBadgeComponent,
+    RequestStatusBadgeComponent,
     LucideEllipsisVertical,
     LucidePencil,
     LucideTrash2,
@@ -361,62 +361,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
       : ['/add', 'tv', row.tmdbId];
   }
 
-  statusBadgeClass(status: FliksRequestStatus): string {
-    switch (status) {
-      case 'pending':
-        return 'badge-warning';
-      case 'approved':
-      case 'available':
-        return 'badge-success';
-      case 'declined':
-      case 'failed':
-        return 'badge-error';
-      case 'processing':
-        return 'badge-info';
-      default:
-        return 'badge-ghost';
-    }
-  }
-
-  /** Translate key for the status badge. An approved/processing request tracks
-   *  the media's real monitored state ("monitored" / "not monitored");
-   *  available reads as "downloaded". */
-  badgeLabelKey(row: FliksRequestRow): string {
-    if (row.status === 'approved' || row.status === 'processing') {
-      return row.media?.monitored
-        ? 'requests.badge_monitored'
-        : 'requests.badge_unmonitored';
-    }
-    return 'requests.status.' + row.status;
-  }
-
-  badgeClassFor(row: FliksRequestRow): string {
-    if (row.status === 'approved' || row.status === 'processing') {
-      return row.media?.monitored ? 'badge-info' : 'badge-ghost';
-    }
-    return this.statusBadgeClass(row.status);
-  }
-
-  /** Live download percent for a monitored, in-flight request — null when not
-   *  monitored, not downloading, or the media isn't linked yet. For a
-   *  per-season request, averages only the requested seasons (not the whole
-   *  series rollup). */
-  progressPercent(row: FliksRequestRow): number | null {
-    if (row.status !== 'approved' && row.status !== 'processing') return null;
-    if (!row.media?.monitored) return null;
-    const id = row.media?.id;
-    if (id == null) return null;
-    const p = this.downloadProgress.progress().get(id);
-    if (!p) return null;
-    if (row.seasons?.length && p.seasons) {
-      const vals = row.seasons
-        .map((s) => p.seasons!.get(s)?.percent)
-        .filter((x): x is number => x != null);
-      if (!vals.length) return null;
-      return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
-    }
-    return p.percent;
-  }
 
   qualityProfileDisplay(id: number | null): string {
     if (id == null) return '—';

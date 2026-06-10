@@ -149,11 +149,7 @@
               </h2>
 
               <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70">
-                <app-progress-badge
-                  [label]="badgeLabelKey(row) | translate"
-                  [percent]="progressPercent(row)"
-                  [badgeClass]="badgeClassFor(row)"
-                />
+                <app-request-status-badge [request]="row" />
                 <span>
                   @if (row.mediaType === 'movie') {
                     {{ 'requests.type_movie' | translate }}

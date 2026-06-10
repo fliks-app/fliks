@@ -80,8 +80,16 @@
     }
 
     <!-- Action icons row -->
-    <div class="flex items-center justify-center gap-6 mt-4">
-      @if (!selectedFileId()) { <div class="flex-1"></div> }
+    <div
+      class="flex items-center gap-6 mt-4"
+      [class.justify-between]="badge()"
+      [class.justify-center]="!badge()"
+    >
+      @if (badge()) {
+        <ng-container *ngTemplateOutlet="downloadBadge"></ng-container>
+      } @else if (!selectedFileId()) {
+        <div class="flex-1"></div>
+      }
       @if (selectedFileId()) {
         <button class="flex flex-col items-center gap-1 text-sm" [class.text-success]="watched()" (click)="onToggleWatched()">
           <svg lucideCheck class="h-5 w-5"></svg>
@@ -268,6 +276,7 @@
             </button>
           }
         }
+        <ng-container *ngTemplateOutlet="downloadBadge"></ng-container>
         <app-dropdown-menu placement="bottom-end">
           <button trigger type="button" class="btn btn-ghost btn btn-circle">
             <svg lucideEllipsisVertical class="h-5 w-5"></svg>
@@ -314,6 +323,34 @@
     </div>
   </div>
 </div>
+
+<!-- Download status / progress chip, shared by the mobile metadata row and the
+     desktop action row. Clickable (opens the detail modal) only while a grab is
+     in flight; otherwise a plain status chip. -->
+<ng-template #downloadBadge>
+  @if (badge(); as b) {
+    @if (b.clickable) {
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm px-1.5"
+        [title]="'media_detail.download_detail_title' | translate"
+        (click)="openDownloadDetail.emit()"
+      >
+        <app-progress-badge
+          [label]="b.labelKey | translate"
+          [percent]="b.percent"
+          [badgeClass]="b.badgeClass"
+        />
+      </button>
+    } @else {
+      <app-progress-badge
+        [label]="b.labelKey | translate"
+        [percent]="b.percent"
+        [badgeClass]="b.badgeClass"
+      />
+    }
+  }
+</ng-template>
 
 <!-- Shared between mobile + desktop: Video (or file select) / Audio / Subtitles
      (hidden on series overview). Single source of truth so we don't drift
