@@ -661,11 +661,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const selectedAudio = this.availableAudioTracks().find(
       (t) => t.id === _audioTrackId,
     );
-    const channelLabel = src?.audioChannelLayout ?? (src?.audioChannels ? `${src.audioChannels}ch` : '');
-    const rawLang = selectedAudio?.language || src?.audioLanguage;
-    const langLabel = rawLang ? rawLang.charAt(0).toUpperCase() + rawLang.slice(1) : '?';
-    const audioCodecUpper = (activeVariant?.audioCodec ?? src?.audioCodec ?? '?').toUpperCase();
-    const audioLabel = `${langLabel} ${audioCodecUpper} ${channelLabel}`;
+    // Show the audio NAME exactly as the track selector renders it:
+    // selectedAudio.label is built by formatAudioLabel, which localizes the
+    // language and falls back to "Piste audio N" for untagged tracks instead of
+    // a raw "Und". Fall back to formatAudioLabel on the source's primary stream
+    // when no track is selected yet (tracks not populated).
+    const audioLabel =
+      selectedAudio?.label ??
+      formatAudioLabel(
+        {
+          language: src?.audioLanguage,
+          codec: activeVariant?.audioCodec ?? src?.audioCodec,
+          channels: src?.audioChannels,
+        },
+        this.translate,
+      );
 
     let audioStreamBitrate = '';
     if (selectedRateEntry) {
