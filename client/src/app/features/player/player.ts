@@ -2562,18 +2562,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const option = this.availableQualities().find(q => q.id === id);
     if (!option) return;
     const mode = this.playbackMode();
-    // User picked this explicitly → persist at app level. In non-direct mode
-    // the imminent reloadStream() re-applies the quality after load
-    // (applyQualityPreferenceAfterLoad), so pass engine=null here to only
-    // persist and avoid selecting a variant the full reload throws away.
-    this.qualityManager.selectQuality(option, mode !== 'direct' ? null : this.engine, mode, false, true);
-
-    // Transcode mode: the backend emits a single-variant master playlist
-    // (the one matching savedQualityId), so switching quality requires a
-    // full stream reload — same trade-off the native path already makes.
-    // The reload is done so that Shaka can't probe lower variants during
-    // startup (which would spin up FFmpeg at the wrong quality).
-    if (mode !== 'direct') {
+    // Picking a rung below source — or any rung while already on the HLS
+    // ladder — re-negotiates playback: reloadStream() re-requests playback-info
+    // with the chosen quality, the backend re-decides DirectPlay vs the
+    // transcode ladder, and the engine swaps the raw file for the HLS master.
+    // Staying on `original` while direct-playing needs no reload. When we WILL
+    // reload, pass engine=null so we don't select a variant the reload throws
+    // away (it re-applies the quality after load via applyQualityPreferenceAfterLoad).
+    const willReload = mode !== 'direct' || id !== 'original';
+    this.qualityManager.selectQuality(option, willReload ? null : this.engine, mode, false, true);
+    if (willReload) {
       await this.reloadStream();
     }
 
@@ -2618,8 +2616,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       .catch(() => {});
 
     const deviceProfile = this.deviceProfileService.getProfile();
+    // Pass the requested rung so the backend re-decides DirectPlay vs the
+    // transcode ladder: a rung below source forces the ladder, 'auto' lets the
+    // server apply its autoQualityMode.
+    const activeQuality = this.activeQualityId();
+    const requestedQuality =
+      activeQuality && activeQuality !== 'auto' ? activeQuality : undefined;
     this.playbackInfo = await this.streamingApi.getPlaybackInfo(
-      this.mediaFileId, deviceProfile, this.activeBurnInId ?? undefined, this.activeAudioStreamIndex,
+      this.mediaFileId,
+      deviceProfile,
+      this.activeBurnInId ?? undefined,
+      this.activeAudioStreamIndex,
+      requestedQuality,
     );
     const pi = this.playbackInfo;
     this.introMarker.set(pi.markers?.intro ?? null);

@@ -836,11 +836,17 @@ export class StreamingController {
     const user = req.user as User;
     const userId = user.id;
 
+    // Quality the client is requesting (absent / 'auto' = let the server
+    // decide per autoQualityMode; 'original' = source rung; anything else =
+    // a lower rung that must transcode). Drives DirectPlay-vs-ladder routing.
+    const startQuality = firstQueryString(req.query, 'startQuality');
     const evaluateResult = this.streamBuilder.evaluate(
       resolved,
       deviceProfile,
       tokenParam,
       burnInSubtitleId,
+      startQuality,
+      ss.autoQualityMode,
     );
     const { response, useHdrLadder, videoVariant } = evaluateResult;
     // Resolve the effective `useTs`. The explicit profile flag wins as
@@ -882,7 +888,6 @@ export class StreamingController {
     // another. No drift kill needed: a hop from browser → cast spawns a
     // new session under the cast's profileHash and leaves the browser's
     // session untouched.
-    const startQuality = firstQueryString(req.query, 'startQuality');
     const startAtRaw = firstQueryString(req.query, 'startAt');
     const startAt = startAtRaw != null ? parseFloat(startAtRaw) : undefined;
     // Offline download: the native DownloadManager pulls segments straight off

@@ -96,6 +96,12 @@ export interface DeviceProfile {
    *  to the target segment and never request seg-0, so they send false and the
    *  backend skips the companion (a wasted parallel transcode for them). */
   probesSegZero?: boolean;
+
+  /** Client engine can play a raw progressive file (DirectPlay served as-is).
+   *  True for Shaka (web), ExoPlayer/AVPlayer (native) and webOS `<video>`.
+   *  False for Tizen AVPlay (HLS-only): the backend then never returns
+   *  DirectPlay and falls back to DirectStream (remux to HLS). Unset = true. */
+  supportsDirectPlay?: boolean;
 }
 
 /** True when `localStorage['fliks.useTs']` is set to a truthy value.
@@ -344,6 +350,11 @@ export class BrowserDeviceProfileService {
       // through native players that seek straight to the resume segment). The
       // Cast receiver sets this true in its own profile.
       probesSegZero: !this.serverConfig.isNative,
+      // Samsung Tizen AVPlay is HLS-only and cannot open a raw progressive
+      // file, so it must never receive a DirectPlay decision — the backend
+      // falls back to DirectStream (remux to HLS, codec-copy). Every other
+      // engine (Shaka, ExoPlayer/AVPlayer, webOS <video>) plays raw files.
+      supportsDirectPlay: tvPlatform !== 'tizen',
     };
   }
 

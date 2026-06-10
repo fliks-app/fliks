@@ -61,6 +61,8 @@ export class StreamBuilderService {
     profile: DeviceProfileDto,
     tokenParam: string,
     burnInSubtitleId?: number,
+    requestedQuality?: string,
+    autoQualityMode: 'directplay' | 'abr' = 'directplay',
   ): EvaluateResult {
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
@@ -219,6 +221,54 @@ export class StreamBuilderService {
       });
     }
 
+    // --- Quality / engine routing gate ---
+    // The full quality ladder is always exposed (see buildQualityList). Direct
+    // Play — and remux at source resolution — is only what the client wants
+    // when it asks for the source rung. A lower explicit rung routes to the
+    // transcode ladder; "Auto" routes there too when the admin picked
+    // autoQualityMode='abr'. HLS-only engines (Tizen AVPlay) can never open a
+    // raw file, so they skip DirectPlay but still remux to HLS.
+    const wantsSourceRung =
+      requestedQuality == null ||
+      requestedQuality === 'auto' ||
+      requestedQuality === 'original';
+    const autoOnLadder =
+      (requestedQuality == null || requestedQuality === 'auto') &&
+      autoQualityMode === 'abr';
+    // Lower explicit rung OR ABR-on-auto: skip both DirectPlay and remux so the
+    // backend re-encodes at the requested rung (and the master carries the ABR
+    // ladder).
+    const forceLadder = autoOnLadder || !wantsSourceRung;
+
+    // Whether the source can be served at its own resolution without
+    // re-encoding (raw direct play or codec-copy remux). Independent of the
+    // quality gate so the `original` rung stays in the menu even while the user
+    // is currently watching a lower transcoded rung — letting them switch back.
+    const sourceCopyable =
+      directPlayResult.videoSupported &&
+      directPlayResult.videoConditionsMet &&
+      !needsTonemapping &&
+      !needsBurnIn &&
+      !needsCrop;
+
+    if (profile.supportsDirectPlay === false && directPlayResult.canDirectPlay) {
+      directPlayResult.canDirectPlay = false;
+      reasons.push({
+        flag: 'ClientRequiresHls',
+        message: 'Client requires an HLS container (no raw direct play)',
+      });
+    }
+    if (forceLadder) {
+      if (directPlayResult.canDirectPlay)
+        directPlayResult.canDirectPlay = false;
+      reasons.push({
+        flag: 'QualitySelection',
+        message: autoOnLadder
+          ? 'Adaptive bitrate (ABR) mode'
+          : `Requested quality below source (${requestedQuality})`,
+      });
+    }
+
     const deviceType: DeviceType = profile.deviceType ?? 'desktop';
     const ladder = getLadderForDevice(deviceType);
     // Quality ladder shown to the UI matches what the backend will
@@ -250,20 +300,17 @@ export class StreamBuilderService {
         outputContainer: sourceContainer,
         hwAccel: 'none',
         tonemapping: false,
-        qualities: this.buildQualityList(source, 'DirectPlay', true, qualityLadder),
+        qualities: this.buildQualityList(source, 'DirectPlay', sourceCopyable, qualityLadder),
         source,
       });
     }
 
     // --- Step 2: Try DirectStream (remux) ---
     // Video codec must be supported; only container or audio may differ
-    // Cannot remux if tone mapping or burn-in is needed (video must be re-encoded)
-    const canCopyVideo =
-      directPlayResult.videoSupported &&
-      directPlayResult.videoConditionsMet &&
-      !needsTonemapping &&
-      !needsBurnIn &&
-      !needsCrop;
+    // Cannot remux if tone mapping or burn-in is needed (video must be re-encoded).
+    // A lower explicit rung / ABR-on-auto wants a re-encoded ladder, not a
+    // source-resolution remux copy, so `forceLadder` skips this path too.
+    const canCopyVideo = sourceCopyable && !forceLadder;
     if (canCopyVideo) {
       // Some audio codecs the device profile claims to support are
       // only playable in their NATIVE container (e.g. MP3 via
@@ -348,7 +395,7 @@ export class StreamBuilderService {
         tonemapping: false,
         remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
         transcodeBitrateByQuality,
-        qualities: this.buildQualityList(source, 'DirectStream', true, qualityLadder),
+        qualities: this.buildQualityList(source, 'DirectStream', sourceCopyable, qualityLadder),
         source,
       });
     }
@@ -482,7 +529,7 @@ export class StreamBuilderService {
       hwAccel: effectiveHwAccel,
       tonemapping: needsTonemapping,
       transcodeBitrateByQuality,
-      qualities: this.buildQualityList(source, 'Transcode', false, qualityLadder),
+      qualities: this.buildQualityList(source, 'Transcode', sourceCopyable, qualityLadder),
       source,
     });
   }
@@ -490,9 +537,12 @@ export class StreamBuilderService {
   /**
    * Build the server-authoritative quality list shown in the player UI.
    *
-   * Rules:
-   * - DirectPlay → single `original` entry at source resolution.
-   * - Transcode / DirectStream → iterate the device ladder filtered to source.
+   * The full ladder is always exposed (DirectPlay included) so the user can
+   * downshift to a transcoded rung; picking a rung below source re-negotiates
+   * playback to the HLS ladder. Rules:
+   * - The source-resolution rung is `original` (raw on DirectPlay, copy on
+   *   DirectStream — only the latter sets `isRemux`).
+   * - Iterate the device ladder filtered to source.
    *   At the source-resolution rung:
    *     - If remux is possible (`videoCopyStream`) and `sourceTotal > ladderTotal × 1.3`:
    *       expose BOTH entries, `original` first (the remux path, full quality) and
@@ -532,22 +582,11 @@ export class StreamBuilderService {
     const originalHeight = sourceH || topProfile.maxHeight;
     const originalWidth = sourceW || topProfile.maxWidth;
 
-    if (playMethod === 'DirectPlay') {
-      return [
-        {
-          id: 'original',
-          label: resolutionLabel,
-          height: originalHeight,
-          width: originalWidth,
-          totalBitrateBps: sourceTotal,
-          isRemux: false,
-        },
-      ];
-    }
-
-    // Full-quality rungs. The top rung collapses into `original` (remux) when
-    // the source video can be copied; a forced transcode lists it as a normal
-    // rung instead.
+    // Full-quality rungs. The top rung collapses into `original` when the
+    // source video can be served untouched (DirectPlay) or copied (remux);
+    // a forced transcode lists it as a normal rung instead. `isRemux` is true
+    // only on the DirectStream path so the UI/stats can tell remux from a raw
+    // direct play.
     const qualities: QualityOption[] = [];
     for (const p of available) {
       if (isEcoProfile(p.name)) continue;
@@ -559,7 +598,7 @@ export class StreamBuilderService {
           height: originalHeight,
           width: originalWidth,
           totalBitrateBps: sourceTotal > 0 ? sourceTotal : total,
-          isRemux: true,
+          isRemux: playMethod === 'DirectStream',
         });
         continue;
       }
