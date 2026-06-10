@@ -75,6 +75,18 @@ export interface RequestsPage {
   total: number;
 }
 
+/** Aggregate active-request state for a title, across all users (no
+ *  requester identity). Drives the global "already requested" gate and the
+ *  series per-season + profile-lock UI. */
+export interface TitleRequestState {
+  requested: boolean;
+  wholeSeriesRequested: boolean;
+  requestedSeasons: number[];
+  profilesLocked: boolean;
+  lockedQualityProfileId: number | null;
+  lockedLanguageProfileId: number | null;
+}
+
 export interface ListRequestsParams {
   status?: FliksRequestStatus;
   userId?: number;
@@ -107,6 +119,15 @@ export class RequestsService {
         '/api/requests',
         headers ? { params: httpParams, headers } : { params: httpParams },
       ),
+    );
+  }
+
+  getTitleState(tmdbId: number, mediaType: MediaType) {
+    const params = new HttpParams()
+      .set('tmdbId', String(tmdbId))
+      .set('mediaType', mediaType);
+    return firstValueFrom(
+      this.http.get<TitleRequestState>('/api/requests/title-state', { params }),
     );
   }
 

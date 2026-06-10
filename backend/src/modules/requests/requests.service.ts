@@ -31,15 +31,19 @@ import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
 import { Action } from '../auth/casl/actions.enum';
 import { ImageService } from '../images/image.service';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
-import {
-  ACTIVE_REQUEST_STATUSES,
-  SATISFIABLE_REQUEST_STATUSES,
-  seasonScopeOf,
-} from './request-status.constants';
+import { ACTIVE_REQUEST_STATUSES } from './request-status.constants';
 
-interface ProfileEnvelope {
-  qualityProfileId: number | null;
-  languageProfileId: number | null;
+export interface TitleRequestState {
+  /** A movie or whole-series active request exists (blocks re-request). */
+  requested: boolean;
+  wholeSeriesRequested: boolean;
+  /** Union of active per-season scopes (series). */
+  requestedSeasons: number[];
+  /** Series profiles are fixed (an active request OR a library row already
+   *  set them): a further request must inherit `locked*` and can't change. */
+  profilesLocked: boolean;
+  lockedQualityProfileId: number | null;
+  lockedLanguageProfileId: number | null;
 }
 
 @Injectable()
@@ -172,15 +176,20 @@ export class RequestsService {
 
   async create(user: User, dto: CreateRequestDto): Promise<FliksRequest> {
     await this.checkQuota(user, dto.mediaType);
-    await this.assertNoActiveDuplicateForUser(user, dto);
+    await this.assertNoActiveDuplicate(dto);
 
-    // Auto-approve when either the rule engine allows it OR another user
-    // already has an active request whose profiles (and seasons, for
-    // series) encompass what this user is asking for — the resulting
-    // media will already satisfy the new request.
-    const autoApprove =
-      (await this.shouldAutoApprove(user, dto)) ||
-      (await this.satisfiedByExistingApprovedRequest(user, dto));
+    // Series share one profile set across seasons: a later-season request
+    // inherits the quality and language profiles fixed by the first request
+    // and cannot diverge from them.
+    if (dto.mediaType === MediaType.SERIES) {
+      const locked = await this.existingSeriesProfiles(dto.tmdbId);
+      if (locked) {
+        dto.qualityProfileId = locked.qualityProfileId ?? undefined;
+        dto.languageProfileId = locked.languageProfileId ?? undefined;
+      }
+    }
+
+    const autoApprove = await this.shouldAutoApprove(user, dto);
 
     // Whenever we auto-approve we also ensure a Media row exists so the
     // auto-grab pipeline can actually pick up the title. Idempotent: if
@@ -304,19 +313,15 @@ export class RequestsService {
   // ---------------------------------------------------------------------------
 
   /**
-   * One active request per (user, tmdbId, mediaType). For series carrying
-   * an explicit season list the rule is finer-grained: a new request is
-   * allowed as long as its seasons don't overlap with any of the user's
-   * active per-season requests, AND there's no whole-series request from
-   * the same user blocking everything.
+   * One active request per (tmdbId, mediaType) across all users, regardless
+   * of profiles. For series carrying an explicit season list the rule is
+   * finer-grained: a new request is allowed as long as its seasons don't
+   * overlap with any active per-season request, AND no active whole-series
+   * request is blocking everything.
    */
-  private async assertNoActiveDuplicateForUser(
-    user: User,
-    dto: CreateRequestDto,
-  ): Promise<void> {
+  private async assertNoActiveDuplicate(dto: CreateRequestDto): Promise<void> {
     const existing = await this.requestRepo.find({
       where: {
-        user: { id: user.id },
         tmdbId: dto.tmdbId,
         mediaType: dto.mediaType,
         status: In([...ACTIVE_REQUEST_STATUSES]),
@@ -328,9 +333,7 @@ export class RequestsService {
       dto.mediaType === MediaType.SERIES && !!dto.seasons?.length;
 
     if (!isSeriesWithSeasons) {
-      throw new ConflictException(
-        'You have already requested this title',
-      );
+      throw new ConflictException('This title has already been requested');
     }
 
     // Series + season list: collect taken seasons, factor in whole-series
@@ -339,7 +342,7 @@ export class RequestsService {
     for (const e of existing) {
       if (!e.seasons || e.seasons.length === 0) {
         throw new ConflictException(
-          'You have already requested the whole series',
+          'The whole series has already been requested',
         );
       }
       for (const n of e.seasons) taken.add(n);
@@ -347,67 +350,87 @@ export class RequestsService {
     const overlap = dto.seasons!.filter((s) => taken.has(s));
     if (overlap.length > 0) {
       throw new ConflictException(
-        `You have already requested season(s) ${overlap.join(', ')}`,
+        `Season(s) ${overlap.join(', ')} have already been requested`,
       );
     }
   }
 
   /**
-   * Profile-aware auto-approval. When another user's request — already
-   * approved, processing or available — covers the new request both in
-   * profile envelope (quality + language) and (for series) season scope,
-   * we approve the new one immediately: the requested media is already
-   * being produced under at least as good a configuration.
+   * Profiles a series is locked to: the quality + language profiles of the
+   * earliest active request for the title, or — when none exists — the
+   * library Media row's profiles. Series share one profile set across
+   * seasons, so any later-season request inherits these. Null only when the
+   * series is neither requested nor in the library (the first request picks
+   * freely).
    */
-  private async satisfiedByExistingApprovedRequest(
-    user: User,
-    dto: CreateRequestDto,
-  ): Promise<boolean> {
-    const others = await this.requestRepo.find({
+  private async existingSeriesProfiles(tmdbId: number): Promise<{
+    qualityProfileId: number | null;
+    languageProfileId: number | null;
+  } | null> {
+    const existing = await this.requestRepo.findOne({
       where: {
-        tmdbId: dto.tmdbId,
-        mediaType: dto.mediaType,
-        status: In([...SATISFIABLE_REQUEST_STATUSES]),
+        tmdbId,
+        mediaType: MediaType.SERIES,
+        status: In([...ACTIVE_REQUEST_STATUSES]),
       },
+      order: { createdAt: 'ASC' },
     });
-    const candidates = others.filter((r) => r.userId !== user.id);
-    if (candidates.length === 0) return false;
-
-    const requested: ProfileEnvelope = {
-      qualityProfileId: dto.qualityProfileId ?? null,
-      languageProfileId: dto.languageProfileId ?? null,
-    };
-
-    for (const existing of candidates) {
-      if (!this.coversSeasons(existing, dto)) continue;
-      if (!(await this.envelopeCovers(existing, requested))) continue;
-      return true;
+    if (existing) {
+      return {
+        qualityProfileId: existing.qualityProfileId ?? null,
+        languageProfileId: existing.languageProfileId ?? null,
+      };
     }
-    return false;
+    const media = await this.mediaService.findByTmdbId(
+      tmdbId,
+      MediaType.SERIES,
+    );
+    if (media) {
+      return {
+        qualityProfileId: media.qualityProfileId ?? null,
+        languageProfileId: media.languageProfileId ?? null,
+      };
+    }
+    return null;
   }
 
-  /** For series only: true when `existing` already covers every season
-   *  the new request is asking for. `null` scope on `existing` means
-   *  whole series → always covers. Movies skip this check. */
-  private coversSeasons(
-    existing: FliksRequest,
-    dto: CreateRequestDto,
-  ): boolean {
-    if (dto.mediaType !== MediaType.SERIES) return true;
-    const existingScope = seasonScopeOf(existing);
-    if (!existingScope) return true;
-    if (!dto.seasons || dto.seasons.length === 0) return false;
-    return dto.seasons.every((s) => existingScope.has(s));
-  }
-
-  /** Thin wrapper — the encompassment rule lives in ProfilesService so
-   *  every caller (request auto-approval, import-time request resolution)
-   *  reads from the same source of truth. */
-  private envelopeCovers(
-    existing: ProfileEnvelope,
-    requested: ProfileEnvelope,
-  ): Promise<boolean> {
-    return this.profilesService.envelopeCovers(existing, requested);
+  /**
+   * Aggregate active-request state for a title, computed across all users
+   * without exposing who requested it — drives the global "already
+   * requested" gate and the per-season + profile-lock hints in the UI.
+   */
+  async getTitleState(
+    tmdbId: number,
+    mediaType: MediaType,
+  ): Promise<TitleRequestState> {
+    const active = await this.requestRepo.find({
+      where: {
+        tmdbId,
+        mediaType,
+        status: In([...ACTIVE_REQUEST_STATUSES]),
+      },
+      order: { createdAt: 'ASC' },
+    });
+    const wholeSeriesRequested =
+      mediaType === MediaType.SERIES &&
+      active.some((r) => !r.seasons || r.seasons.length === 0);
+    const requestedSeasons = Array.from(
+      new Set(active.flatMap((r) => r.seasons ?? [])),
+    ).sort((a, b) => a - b);
+    const requested =
+      mediaType === MediaType.SERIES ? wholeSeriesRequested : active.length > 0;
+    const locked =
+      mediaType === MediaType.SERIES
+        ? await this.existingSeriesProfiles(tmdbId)
+        : null;
+    return {
+      requested,
+      wholeSeriesRequested,
+      requestedSeasons,
+      profilesLocked: locked !== null,
+      lockedQualityProfileId: locked?.qualityProfileId ?? null,
+      lockedLanguageProfileId: locked?.languageProfileId ?? null,
+    };
   }
 
   async findAll(

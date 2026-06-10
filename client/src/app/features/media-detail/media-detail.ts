@@ -33,7 +33,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { StreamingApiService, MediaResumeInfo } from '../../core/services/api/streaming-api.service';
 import { MarkersApiService } from '../../core/services/api/markers-api.service';
-import { FliksRequestRow, RequestsService } from '../../core/services/api/requests.service';
+import { RequestsService, TitleRequestState } from '../../core/services/api/requests.service';
 import { MediaInfoHeaderComponent } from '../../shared/components/media-info-header/media-info-header';
 import { MediaInfoExtraComponent } from '../../shared/components/media-info-extra/media-info-extra';
 import { SubtitlesModalComponent } from '../../shared/components/subtitles-modal/subtitles-modal';
@@ -569,31 +569,23 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.auth.hasPermission('requests.create'),
   );
 
-  /** Active requests of the viewer for the current title. The backend
-   *  filters by user for non-admins, so this is "my requests" by
-   *  construction; admins see all but they don't go through this
-   *  code path anyway (`canRequest()` is false for them). */
-  readonly userActiveRequests = signal<FliksRequestRow[]>([]);
+  /** Global active-request state for the current title (any user). Drives
+   *  the Demander gates and the series profile lock. Null until fetched. */
+  readonly titleState = signal<TitleRequestState | null>(null);
 
-  /** Whether the viewer already has an active "whole" request on this
-   *  title — a movie request (no seasons concept) or a series request
-   *  without a season scope (covers everything). Blocks the Demander
-   *  entry in the header for the corresponding case. */
-  readonly userHasOpenWholeRequest = computed(() =>
-    this.userActiveRequests().some(
-      (r) => !r.seasons || r.seasons.length === 0,
-    ),
+  /** Whether an active "whole" request already exists on this title (any
+   *  user) — a movie request (no seasons concept) or a whole-series request
+   *  covering everything. Blocks the Demander entry in the header for the
+   *  corresponding case. */
+  readonly hasBlockingRequest = computed(
+    () => this.titleState()?.requested ?? false,
   );
 
-  /** Season numbers the viewer has already requested. Used by the
-   *  season-level Demander gate and pre-fed to the request modal. */
-  readonly userRequestedSeasonNumbers = computed<number[]>(() => {
-    const set = new Set<number>();
-    for (const r of this.userActiveRequests()) {
-      if (r.seasons?.length) for (const n of r.seasons) set.add(n);
-    }
-    return Array.from(set).sort((a, b) => a - b);
-  });
+  /** Season numbers already covered by an active per-season request (any
+   *  user). Gates the season-level Demander entry and pre-fed to the modal. */
+  readonly requestedSeasons = computed<number[]>(
+    () => this.titleState()?.requestedSeasons ?? [],
+  );
   readonly deleteLoading = signal(false);
   readonly monitoredLoading = signal(false);
   /** Active season tab (series) — first season selected after load */
@@ -735,7 +727,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // Active requests (only for users who would ever see the Demander
       // button — admins skip the round-trip).
       if (this.canRequest()) {
-        void this.loadUserActiveRequests(m.tmdbId, m.type);
+        void this.loadTitleState(m.tmdbId, m.type);
       }
       // Load resume + watched episodes + per-episode progress for series
       const [resumeInfo, watchedIds, progress] = await Promise.all([
@@ -1597,21 +1589,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   private readonly requestModal = viewChild<RequestModalComponent>('requestModal');
 
-  /** Fetch the viewer's active requests for this title. Run after the
-   *  media loads, and again after a successful submit so the gates flip
-   *  without a manual reload. Non-admins only see their own rows from
-   *  this endpoint, so no extra filtering is needed. */
-  private async loadUserActiveRequests(tmdbId: number, mediaType: MediaType) {
+  /** Fetch the global active-request state for this title. Run after the
+   *  media loads, and again after a successful submit so the gates and the
+   *  profile lock flip without a manual reload. */
+  private async loadTitleState(tmdbId: number, mediaType: MediaType) {
     try {
-      const res = await this.requestsApi.list({ limit: 200 });
-      const active = new Set(['pending', 'approved', 'processing', 'available']);
-      this.userActiveRequests.set(
-        res.data.filter(
-          (r) =>
-            r.tmdbId === tmdbId &&
-            r.mediaType === mediaType &&
-            active.has(r.status),
-        ),
+      this.titleState.set(
+        await this.requestsApi.getTitleState(tmdbId, mediaType),
       );
     } catch {
       /* swallowed; global interceptor surfaces it */
@@ -1623,11 +1607,15 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   protected openRequestForMedia() {
     const m = this.media();
     if (!m) return;
+    const state = this.titleState();
     this.requestModal()?.open({
       title: m.title,
       mediaType: m.type,
       tmdbId: m.tmdbId,
-      alreadyRequestedSeasons: this.userRequestedSeasonNumbers(),
+      alreadyRequestedSeasons: this.requestedSeasons(),
+      profilesLocked: state?.profilesLocked ?? false,
+      lockedQualityProfileId: state?.lockedQualityProfileId ?? null,
+      lockedLanguageProfileId: state?.lockedLanguageProfileId ?? null,
     });
   }
 
@@ -1637,12 +1625,16 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   protected openRequestForSeason(season: Season) {
     const m = this.media();
     if (!m) return;
+    const state = this.titleState();
     this.requestModal()?.open({
       title: m.title,
       mediaType: m.type,
       tmdbId: m.tmdbId,
-      alreadyRequestedSeasons: this.userRequestedSeasonNumbers(),
+      alreadyRequestedSeasons: this.requestedSeasons(),
       preselectedSeasons: [season.seasonNumber],
+      profilesLocked: state?.profilesLocked ?? false,
+      lockedQualityProfileId: state?.lockedQualityProfileId ?? null,
+      lockedLanguageProfileId: state?.lockedLanguageProfileId ?? null,
     });
   }
 
@@ -1650,6 +1642,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
    *  season list flips its already-requested badges. */
   protected onRequestSubmitted() {
     const m = this.media();
-    if (m) void this.loadUserActiveRequests(m.tmdbId, m.type);
+    if (m) void this.loadTitleState(m.tmdbId, m.type);
   }
 }

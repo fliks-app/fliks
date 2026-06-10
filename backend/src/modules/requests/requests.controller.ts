@@ -23,6 +23,7 @@ import { Action } from '../auth/casl/actions.enum';
 import { FliksRequest } from './entities/request.entity';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
+import { MediaType } from '../../common/enums';
 
 @Controller('requests')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
@@ -39,6 +40,16 @@ export class RequestsController {
   @CheckPolicies((ability) => ability.can(Action.Read, FliksRequest))
   findAll(@CurrentUser() user: User, @Query() query: ListRequestsDto) {
     return this.requestsService.findAll(user, query);
+  }
+
+  // Declared before `:id` so the literal path isn't captured by ParseIntPipe.
+  @Get('title-state')
+  @CheckPolicies((ability) => ability.can(Action.Create, FliksRequest))
+  titleState(
+    @Query('tmdbId', ParseIntPipe) tmdbId: number,
+    @Query('mediaType') mediaType: MediaType,
+  ) {
+    return this.requestsService.getTitleState(tmdbId, mediaType);
   }
 
   @Get(':id')
