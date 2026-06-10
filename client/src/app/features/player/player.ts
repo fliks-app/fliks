@@ -1931,16 +1931,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
       }
     }
-    // Enforce the pre-reload play state. The native engine (ExoPlayer
-    // playWhenReady) autoplays on load(), so a recovery that should preserve a
-    // pause must actively pause after load — merely skipping play() lets it
-    // resume. A server restart (lost session → recovery reload) must not start
-    // playback the user had paused.
-    if (wasPaused) {
-      this.engine.pause().catch(() => {});
-    } else {
-      this.engine.play().catch(() => {});
-    }
+    this.restorePlayState(wasPaused);
+  }
+
+  /**
+   * Restore the engine to the play/pause state the user intended before a
+   * reload. Every reload — quality / audio / subtitle switch and lost-session
+   * recovery — must preserve whether playback is running; only the initial
+   * launch autoplays. The native engine (ExoPlayer playWhenReady) autoplays on
+   * load(), so a paused user must be actively re-paused after load, not merely
+   * left unplayed. The single enforcement point keeps every reload path
+   * consistent.
+   */
+  private restorePlayState(wasPaused: boolean): void {
+    if (!this.engine) return;
+    if (wasPaused) this.engine.pause().catch(() => {});
+    else this.engine.play().catch(() => {});
   }
 
   /**
@@ -2615,6 +2621,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async reloadStream() {
     if (!this.engine) return;
     const currentPos = this.engine.currentTime;
+    // Capture the user's play/pause intent before tearing the stream down — a
+    // quality / audio / subtitle switch must not resume a paused player.
+    const wasPaused = this.paused();
 
     // Remember active subtitle so we can restore it after reload
     const activeSub = this.activeSubtitleId()
@@ -2664,7 +2673,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     await this.engine.load(url, currentPos, mimeType);
 
     this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
-    this.engine.play().catch(() => {});
+    this.restorePlayState(wasPaused);
 
     // Restore active subtitle (non burn-in) after Shaka reload
     if (activeSub && !activeSub.burnIn && activeSub.url) {
