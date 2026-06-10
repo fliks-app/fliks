@@ -40,10 +40,17 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { ReleasesModalComponent } from '../../media-detail/components/releases-modal/releases-modal.component';
+import { ProgressBarComponent } from '../../../shared/components/progress-bar/progress-bar.component';
+import {
+  ProgressVariant,
+  formatBytes as fmtBytes,
+  formatSpeed as fmtSpeed,
+  formatEta as fmtEta,
+} from '../../../shared/utils/download-format';
 
 @Component({
   selector: 'app-activity-queue',
-  imports: [TranslateModule, DecimalPipe, NgClass, RouterLink, FormsModule, ResolveUrlPipe, DropdownMenuComponent, PaginationComponent, ReleasesModalComponent, LucideRotateCcw, LucideLink2, LucideEllipsisVertical, LucideTriangleAlert, LucideDownload, LucideSearch, LucideTrash2, LucideBan],
+  imports: [TranslateModule, DecimalPipe, NgClass, RouterLink, FormsModule, ResolveUrlPipe, DropdownMenuComponent, PaginationComponent, ReleasesModalComponent, ProgressBarComponent, LucideRotateCcw, LucideLink2, LucideEllipsisVertical, LucideTriangleAlert, LucideDownload, LucideSearch, LucideTrash2, LucideBan],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './queue.html',
 })
@@ -437,25 +444,36 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
   }
 
   formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+    return fmtBytes(bytes);
   }
 
   formatSpeed(bytesPerSec: number): string {
-    return `${this.formatBytes(bytesPerSec)}/s`;
+    return fmtSpeed(bytesPerSec);
   }
 
   formatEta(seconds: number): string {
-    if (seconds <= 0 || !isFinite(seconds)) return '—';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    if (h > 0) return `${h}h ${m}m`;
-    if (m > 0) return `${m}m ${s}s`;
-    return `${s}s`;
+    return fmtEta(seconds);
+  }
+
+  /** Progress-bar colour for a queue row, from its tracker + import status. */
+  barVariant(item: QueueItem): ProgressVariant {
+    if (item.status === 'Import failed') return 'error';
+    if (item.trackerStatus === 'Seeding' || item.status === 'Imported')
+      return 'success';
+    if (
+      item.trackerStatus === 'Stalled' ||
+      item.status === 'Importing' ||
+      item.status === 'Quality not upgraded'
+    )
+      return 'warning';
+    if (item.trackerStatus === 'Paused' || item.trackerStatus === 'Stopped')
+      return 'neutral';
+    if (
+      item.trackerStatus === 'Downloading' ||
+      item.trackerStatus === 'Downloading metadata'
+    )
+      return 'primary';
+    return 'neutral';
   }
 
   appStateClass(status: string): string {

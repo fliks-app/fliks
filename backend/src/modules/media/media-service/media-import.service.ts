@@ -269,7 +269,7 @@ export class MediaImportService {
    * The library is also required to have a configured `path` — every
    * import flow needs to know where to drop files.
    */
-  private async resolveImportTarget(
+  async resolveImportTarget(
     type: MediaType,
     dto: { libraryId?: number },
   ): Promise<{ libraryId: number }> {
@@ -331,12 +331,15 @@ export class MediaImportService {
     });
     const saved = await this.mediaRepo.save(row);
     this.logLibraryAdded('movie', saved);
-    await this.metadata.downloadMediaImages(saved.id, details);
+    this.metadata.downloadMediaImagesInBackground(saved.id, details);
     await this.metadata.updateSearchVector(saved.id);
-    await this.metadata.persistMediaMetadata(saved, details);
     await this.requestLifecycle.onMediaImported(saved, addedByUserId ?? null);
     const reloaded = await this.mediaRepo.findOne({ where: { id: saved.id } });
     if (!reloaded) throw new Error(`Media #${saved.id} not found after save`);
+    // Cast/crew + per-person enrichment is detail-page data the badge,
+    // monitoring and auto-grab never read; its per-person TMDB fan-out is the
+    // bulk of an import's latency, so it lands after approval returns.
+    this.metadata.persistMediaMetadataInBackground(saved, details);
     return reloaded;
   }
 
@@ -377,7 +380,7 @@ export class MediaImportService {
     });
     const saved = await this.mediaRepo.save(row);
     this.logLibraryAdded('series', saved, `seasons=${seasons.length}`);
-    await this.metadata.downloadMediaImages(saved.id, details);
+    this.metadata.downloadMediaImagesInBackground(saved.id, details);
 
     for (const sd of seasons) {
       const sSaved = await this.seasonRepo.save(
@@ -387,18 +390,20 @@ export class MediaImportService {
           monitored: true,
         }),
       );
-      // Defer to the same per-season routine the metadata refresh uses, so
-      // import and refresh end up with identical episode rows, stills and
-      // season posters — diverging here is exactly what left every episode
-      // sharing the series fanart until a manual refresh.
-      await this.metadata.applySeasonDetails(sSaved, sd);
+      // Reuse the same per-season routine the metadata refresh uses so import
+      // and refresh produce identical episode rows, stills and season posters.
+      // deferImages pushes the still/poster CDN GETs to the background — the
+      // episode rows (which the auto-grab reads) are still written inline.
+      await this.metadata.applySeasonDetails(sSaved, sd, { deferImages: true });
     }
 
     await this.metadata.updateSearchVector(saved.id);
-    await this.metadata.persistMediaMetadata(saved, details);
     await this.requestLifecycle.onMediaImported(saved, addedByUserId ?? null);
     const reloaded = await this.mediaRepo.findOne({ where: { id: saved.id } });
     if (!reloaded) throw new Error(`Media #${saved.id} not found after save`);
+    // See persistImportedMovie: cast/crew enrichment is deferred. Season and
+    // episode rows above stay synchronous because the auto-grab reads them.
+    this.metadata.persistMediaMetadataInBackground(saved, details);
     return reloaded;
   }
 }

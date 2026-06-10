@@ -331,6 +331,9 @@ export class CompletionService {
       await this.reconcileOrphanHistory(allTorrents, grabbed, importing);
     }
 
+    // Push live progress for in-flight grabs to each media's request audience.
+    await this.emitDownloadProgress(allTorrents);
+
     // Phase 3 — import the completed torrents.
     const completedTorrents = allTorrents.filter(
       (t) =>
@@ -437,6 +440,47 @@ export class CompletionService {
    * emitted on any change so the sidebar badge refreshes live rather than
    * staying stale until the next navigation.
    */
+  /**
+   * Push a `download.progress` SSE for every in-flight torrent to that media's
+   * request audience. Reuses the same hash-first matcher as the queue endpoint;
+   * resolves the season/episode scope so a series renders per-season progress.
+   * Recipients are cached per tick so a multi-episode show resolves once.
+   */
+  private async emitDownloadProgress(
+    allTorrents: ReadonlyArray<QbittorrentTorrent>,
+  ): Promise<void> {
+    const downloading = allTorrents.filter((t) => t.progress < 1);
+    if (!downloading.length) return;
+    const rows = await this.historyRepo.find({
+      where: [{ status: 'grabbed' }, { status: 'importing' }],
+      relations: ['media', 'season', 'episode'],
+    });
+    if (!rows.length) return;
+
+    const recipientsByMedia = new Map<number, number[]>();
+    for (const t of downloading) {
+      const match = await this.historyMatcher.matchAndHeal(t, rows);
+      if (!match?.media) continue;
+      let recipients = recipientsByMedia.get(match.mediaId);
+      if (!recipients) {
+        recipients = await this.sseAudience.recipientsForMedia(match.mediaId);
+        recipientsByMedia.set(match.mediaId, recipients);
+      }
+      if (!recipients.length) continue;
+      this.events.emitToUsers(recipients, {
+        type: 'download.progress',
+        mediaId: match.mediaId,
+        mediaType: match.media.type as 'movie' | 'series',
+        seasonNumber: match.season?.seasonNumber,
+        episodeNumber: match.episode?.episodeNumber,
+        progress: t.progress,
+        dlspeed: t.dlspeed,
+        eta: t.eta,
+        state: t.state,
+      });
+    }
+  }
+
   private async reconcileOrphanHistory(
     allTorrents: ReadonlyArray<QbittorrentTorrent>,
     grabbed: DownloadHistory[],
@@ -843,10 +887,22 @@ export class CompletionService {
     const importRecipients = await this.sseAudience.recipientsForMedia(
       media.id,
     );
+    // Single-season series imports carry the season so the client retires only
+    // that season's live progress (other in-flight seasons keep advancing).
+    let importedSeasonNumber: number | undefined;
+    const importedSeasonId = completedPatch.season?.id;
+    if (importedSeasonId != null) {
+      const s = await this.seasonRepo.findOne({
+        where: { id: importedSeasonId },
+        select: ['id', 'seasonNumber'],
+      });
+      importedSeasonNumber = s?.seasonNumber;
+    }
     this.events.emitToUsers(importRecipients, {
       type: 'import.complete',
       mediaId: media.id,
       title: media.title,
+      seasonNumber: importedSeasonNumber,
     });
     this.events.emit({ type: 'queue.updated' });
 

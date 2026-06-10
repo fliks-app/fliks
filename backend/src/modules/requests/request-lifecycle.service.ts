@@ -213,6 +213,27 @@ export class RequestLifecycleService
           mediaType: r.mediaType,
         });
       }
+      // Push a 0% progress event to the requesters so the bar + PROCESSING
+      // state appear immediately, without waiting for the next poll tick.
+      const userIds = [
+        ...new Set(
+          touched
+            .map((r) => r.userId)
+            .filter((id): id is number => id != null),
+        ),
+      ];
+      if (userIds.length) {
+        this.events.emitToUsers(userIds, {
+          type: 'download.progress',
+          mediaId,
+          mediaType: touched[0].mediaType as 'movie' | 'series',
+          seasonNumber,
+          progress: 0,
+          dlspeed: 0,
+          eta: 0,
+          state: 'downloading',
+        });
+      }
     }
   }
 

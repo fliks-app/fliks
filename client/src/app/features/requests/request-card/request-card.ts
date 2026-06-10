@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
   output,
 } from '@angular/core';
@@ -9,6 +10,8 @@ import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { RequestPosterComponent } from '../request-poster';
+import { ProgressBadgeComponent } from '../../../shared/components/progress-badge/progress-badge.component';
+import { DownloadProgressService } from '../../../core/services/download-progress.service';
 import {
   FliksRequestRow,
   FliksRequestStatus,
@@ -22,7 +25,13 @@ import {
  */
 @Component({
   selector: 'app-request-card',
-  imports: [DatePipe, RouterLink, TranslateModule, RequestPosterComponent],
+  imports: [
+    DatePipe,
+    RouterLink,
+    TranslateModule,
+    RequestPosterComponent,
+    ProgressBadgeComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // The host is the scroller flex item: fixed width, and a column flex so the
   // inner card fills the row's stretched height (all cards same height).
@@ -31,6 +40,8 @@ import {
   templateUrl: './request-card.html',
 })
 export class RequestCardComponent {
+  private readonly downloadProgress = inject(DownloadProgressService);
+
   readonly request = input.required<FliksRequestRow>();
   readonly canManage = input(false);
   readonly qualityProfileName = input('—');
@@ -75,5 +86,43 @@ export class RequestCardComponent {
       default:
         return 'badge-ghost';
     }
+  }
+
+  /** Status badge key — approved/processing tracks the media's monitored state;
+   *  available reads as "downloaded". Mirrors the requests page. */
+  badgeLabelKey(): string {
+    const r = this.request();
+    if (r.status === 'approved' || r.status === 'processing') {
+      return r.media?.monitored
+        ? 'requests.badge_monitored'
+        : 'requests.badge_unmonitored';
+    }
+    return 'requests.status.' + r.status;
+  }
+
+  badgeClassFor(): string {
+    const r = this.request();
+    if (r.status === 'approved' || r.status === 'processing') {
+      return r.media?.monitored ? 'badge-info' : 'badge-ghost';
+    }
+    return this.statusBadgeClass(r.status);
+  }
+
+  progressPercent(): number | null {
+    const r = this.request();
+    if (r.status !== 'approved' && r.status !== 'processing') return null;
+    if (!r.media?.monitored) return null;
+    const id = r.media?.id;
+    if (id == null) return null;
+    const p = this.downloadProgress.progress().get(id);
+    if (!p) return null;
+    if (r.seasons?.length && p.seasons) {
+      const vals = r.seasons
+        .map((s) => p.seasons!.get(s)?.percent)
+        .filter((x): x is number => x != null);
+      if (!vals.length) return null;
+      return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+    }
+    return p.percent;
   }
 }

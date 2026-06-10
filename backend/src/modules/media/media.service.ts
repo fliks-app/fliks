@@ -46,6 +46,16 @@ export class MediaService {
     return this.imports.importFromTmdb(dto, addedByUserId);
   }
 
+  /**
+   * Resolve (and validate) the import target library for a media type, or throw
+   * a clear BadRequestException — no default library, missing root path, or
+   * type mismatch. Lets request approval fail loudly up front instead of
+   * importing into the void from the out-of-band tail.
+   */
+  assertImportTarget(type: MediaType, libraryId?: number) {
+    return this.imports.resolveImportTarget(type, { libraryId });
+  }
+
   importMedia(dto: ImportMediaDto, addedByUserId: number | null = null) {
     return this.imports.importMedia(dto, addedByUserId);
   }
