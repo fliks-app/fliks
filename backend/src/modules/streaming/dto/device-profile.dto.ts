@@ -74,6 +74,18 @@ export class DeviceProfileDto {
   supportsHdr?: boolean;
 
   /**
+   * Client engine can play a raw progressive file served as-is (Direct Play).
+   * Shaka (web), ExoPlayer/AVPlayer (native mobile) and webOS `<video>` all
+   * can. Samsung Tizen AVPlay is HLS-only and cannot open a raw file, so it
+   * sends `false`: the backend then never returns `DirectPlay` for it and
+   * falls back to DirectStream (remux to HLS, codec-copy — still no
+   * re-encode). Unset is treated as `true` for backward compatibility.
+   */
+  @IsBoolean()
+  @IsOptional()
+  supportsDirectPlay?: boolean;
+
+  /**
    * Client renders HLS `SUBTITLES` renditions natively (AVPlayer, ExoPlayer,
    * Tizen AVPlay, webOS), so the master advertises a subtitle group and cues
    * show in PiP / AirPlay / lock-screen. Web (Shaka) leaves this unset and

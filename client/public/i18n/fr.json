@@ -64,7 +64,7 @@
     "auto_resolution": "Auto ({{res}})",
     "stats_direct_playback": "Lecture directe",
     "stats_transcoding": "Transcodage ({{hw}})",
-    "stats_transcode_audio": "Transcodage ({{codec}} 192 kbps)",
+    "stats_transcode_audio": "Transcodage ({{codec}})",
     "offline_not_found": "Contenu hors-ligne introuvable. Re-téléchargez le média.",
     "settings": "Paramètres",
     "quality": "Qualité",
@@ -82,7 +82,21 @@
     "stats_crop": "Recadrage",
     "stats_tonemapping": "Mappage tonal",
     "stats_reasons": "Raisons",
-    "stats_sample_rate": "Fréquence d'échantillonnage"
+    "stats_sample_rate": "Fréquence d'échantillonnage",
+    "transcode_reason": {
+      "VideoCodecNotSupported": "Codec vidéo non supporté",
+      "VideoHdrNotSupported": "HDR → SDR (mappage tonal)",
+      "VideoProfileNotSupported": "Profil vidéo non supporté",
+      "VideoLevelNotSupported": "Niveau vidéo trop élevé",
+      "VideoBitDepthNotSupported": "10-bit non supporté",
+      "VideoResolutionNotSupported": "Résolution trop élevée",
+      "VideoCrop": "Suppression des bandes noires",
+      "VideoQualityReduced": "Bitrate réduit (qualité choisie)",
+      "VideoAbr": "Bitrate adaptatif (ABR)",
+      "SubtitleBurnIn": "Sous-titres incrustés",
+      "AudioCodecNotSupported": "Codec audio non supporté",
+      "AudioChannelsNotSupported": "Trop de canaux audio"
+    }
   },
   "sse": {
     "subtitle_synced": "Sous-titre synchronisé avec succès.",
@@ -1147,6 +1161,12 @@
     "streaming": {
       "title": "Streaming",
       "description": "Configuration du format et de la taille des segments HLS. Affecte la vitesse de démarrage et le changement de qualité.",
+      "auto_quality_mode": "Comportement de la qualité « Auto »",
+      "auto_quality_mode_help": "Définit ce que fait la qualité « Auto ». Les choix de qualité explicites ne sont pas affectés : « Original » reste en lecture directe si l'appareil est compatible.",
+      "auto_quality_mode_directplay": "Lecture directe priorisée (recommandé NAS)",
+      "auto_quality_mode_directplay_help": "En « Auto », le serveur envoie le fichier original sans transcodage quand l'appareil est compatible : charge serveur quasi nulle. Inconvénient : pas d'adaptation automatique au débit — sur une connexion lente, choisissez manuellement une qualité inférieure.",
+      "auto_quality_mode_abr": "Streaming adaptatif priorisé (ABR)",
+      "auto_quality_mode_abr_help": "En « Auto », le serveur transcode en HLS adaptatif qui ajuste la qualité au débit réseau en temps réel. Inconvénient : chaque lecture « Auto » sollicite le transcodage (CPU/GPU) — à réserver aux serveurs avec accélération matérielle.",
       "segment_duration": "Durée des segments",
       "segment_duration_help": "Segments plus courts = démarrage plus rapide mais plus de requêtes HTTP. 3s est un bon compromis.",
       "init_time": "Durée du premier segment",

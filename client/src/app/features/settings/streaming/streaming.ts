@@ -32,6 +32,11 @@ export class StreamingSettingsComponent implements OnInit {
   readonly qsvPreset = signal('faster');
   readonly qsvLowPower = signal(false);
   readonly tonemapAlgo = signal('auto');
+  /** How the "Auto" quality resolves: 'directplay' tries Direct Play first
+   *  (zero transcoding when compatible), 'abr' always uses the adaptive HLS
+   *  ladder. Explicit quality picks are unaffected. */
+  readonly autoQualityMode = signal<'directplay' | 'abr'>('directplay');
+  readonly autoQualityModes = ['directplay', 'abr'] as const;
   /** Tonemap algorithms the server reports as runnable on this host.
    *  When the list has a single entry (`['auto']` — e.g. macOS, or a
    *  Linux box with no OpenCL stack and no Intel iGPU), we hide the
@@ -49,6 +54,9 @@ export class StreamingSettingsComponent implements OnInit {
       this.segmentDuration.set(all['streaming_segment_duration'] ?? '3');
       this.qsvPreset.set(all['streaming_qsv_preset'] ?? 'faster');
       this.qsvLowPower.set(all['streaming_qsv_low_power'] === 'true');
+      this.autoQualityMode.set(
+        all['streaming_auto_quality_mode'] === 'abr' ? 'abr' : 'directplay',
+      );
       this.tonemapAlgosAvailable.set(algos.available ?? ['auto']);
       // If the persisted value isn't runnable on this host (e.g. opencl
       // saved on a box where the probe failed after a driver change),
@@ -70,6 +78,7 @@ export class StreamingSettingsComponent implements OnInit {
         streaming_qsv_preset: this.qsvPreset(),
         streaming_qsv_low_power: String(this.qsvLowPower()),
         streaming_tonemap_algo: this.tonemapAlgo(),
+        streaming_auto_quality_mode: this.autoQualityMode(),
       });
       this.toast.success(this.translate.instant('settings.streaming.saved'));
     } catch { /* interceptor */ }

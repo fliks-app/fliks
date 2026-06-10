@@ -478,10 +478,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const playingWidth = activeVariant?.width ?? src?.width;
     const playingHeight = activeVariant?.height ?? src?.height;
 
-    // Determine effective copy/transcode state based on selected quality
+    // Video re-encodes on any pinned rung below the source. Audio is decided
+    // independently by the backend — a lower video rung still copies a
+    // supported audio track (e.g. AC3 5.1) verbatim — so reflect the backend's
+    // audioCopyStream, not the video rung. Forcing it off the rung mislabelled a
+    // copied AC3 stream as an AAC transcode.
     const isTranscodeQuality = !['auto', 'original'].includes(_quality);
     const effectiveVideoCopy = isTranscodeQuality ? false : (pi?.videoCopyStream ?? true);
-    const effectiveAudioCopy = isTranscodeQuality ? false : (pi?.audioCopyStream ?? true);
+    const effectiveAudioCopy = pi?.audioCopyStream ?? true;
 
     const formatBitrateBps = (bps: number): string => {
       if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbps`;
@@ -632,12 +636,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // the "\u2192 HLS" line of the stream section, and it doesn't tell you
     // anything about why this codec specifically had to change.
     const allFlags = (pi?.transcodeReasons ?? []).map((r) => r.flag);
+    // Translate each flag to a human label (e.g. VideoQualityReduced → "Bitrate
+    // réduit (qualité choisie)") so the overlay explains bitrate/quality-driven
+    // transcodes, not just raw codes. Unknown flags fall back to the raw token.
+    const reasonLabel = (flag: string) => {
+      const key = `player.transcode_reason.${flag}`;
+      const label = this.translate.instant(key);
+      return label === key ? flag : label;
+    };
     const videoTranscodeReasons = effectiveVideoCopy
       ? []
-      : allFlags.filter((f) => f.startsWith('Video') || f === 'SubtitleBurnIn');
+      : allFlags
+          .filter((f) => f.startsWith('Video') || f === 'SubtitleBurnIn')
+          .map(reasonLabel);
     const audioTranscodeReasons = effectiveAudioCopy
       ? []
-      : allFlags.filter((f) => f.startsWith('Audio'));
+      : allFlags.filter((f) => f.startsWith('Audio')).map(reasonLabel);
 
     // --- Audio ---
     // Derive from the SELECTED track, not the source's primary stream, so the
@@ -647,11 +661,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const selectedAudio = this.availableAudioTracks().find(
       (t) => t.id === _audioTrackId,
     );
-    const channelLabel = src?.audioChannelLayout ?? (src?.audioChannels ? `${src.audioChannels}ch` : '');
-    const rawLang = selectedAudio?.language || src?.audioLanguage;
-    const langLabel = rawLang ? rawLang.charAt(0).toUpperCase() + rawLang.slice(1) : '?';
-    const audioCodecUpper = (activeVariant?.audioCodec ?? src?.audioCodec ?? '?').toUpperCase();
-    const audioLabel = `${langLabel} ${audioCodecUpper} ${channelLabel}`;
+    // Show the audio NAME exactly as the track selector renders it:
+    // selectedAudio.label is built by formatAudioLabel, which localizes the
+    // language and falls back to "Piste audio N" for untagged tracks instead of
+    // a raw "Und". Fall back to formatAudioLabel on the source's primary stream
+    // when no track is selected yet (tracks not populated).
+    const audioLabel =
+      selectedAudio?.label ??
+      formatAudioLabel(
+        {
+          language: src?.audioLanguage,
+          codec: activeVariant?.audioCodec ?? src?.audioCodec,
+          channels: src?.audioChannels,
+        },
+        this.translate,
+      );
 
     let audioStreamBitrate = '';
     if (selectedRateEntry) {
@@ -671,7 +695,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (effectiveAudioCopy) {
       audioPlaybackMode = this.translate.instant('player.stats_direct_playback');
     } else {
-      const outCodec = isTranscodeQuality ? 'AAC' : (pi?.outputAudioCodec ?? 'aac').toUpperCase();
+      const outCodec = (pi?.outputAudioCodec ?? 'aac').toUpperCase();
       audioPlaybackMode = this.translate.instant('player.stats_transcode_audio', { codec: outCodec });
     }
 
@@ -1921,9 +1945,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
       }
     }
-    if (!wasPaused) {
-      this.engine.play().catch(() => {});
-    }
+    this.restorePlayState(wasPaused);
+  }
+
+  /**
+   * Restore the engine to the play/pause state the user intended before a
+   * reload. Every reload — quality / audio / subtitle switch and lost-session
+   * recovery — must preserve whether playback is running; only the initial
+   * launch autoplays. The native engine (ExoPlayer playWhenReady) autoplays on
+   * load(), so a paused user must be actively re-paused after load, not merely
+   * left unplayed. The single enforcement point keeps every reload path
+   * consistent.
+   */
+  private restorePlayState(wasPaused: boolean): void {
+    if (!this.engine) return;
+    if (wasPaused) this.engine.pause().catch(() => {});
+    else this.engine.play().catch(() => {});
   }
 
   /**
@@ -2562,18 +2599,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const option = this.availableQualities().find(q => q.id === id);
     if (!option) return;
     const mode = this.playbackMode();
-    // User picked this explicitly → persist at app level. In non-direct mode
-    // the imminent reloadStream() re-applies the quality after load
-    // (applyQualityPreferenceAfterLoad), so pass engine=null here to only
-    // persist and avoid selecting a variant the full reload throws away.
-    this.qualityManager.selectQuality(option, mode !== 'direct' ? null : this.engine, mode, false, true);
-
-    // Transcode mode: the backend emits a single-variant master playlist
-    // (the one matching savedQualityId), so switching quality requires a
-    // full stream reload — same trade-off the native path already makes.
-    // The reload is done so that Shaka can't probe lower variants during
-    // startup (which would spin up FFmpeg at the wrong quality).
-    if (mode !== 'direct') {
+    // Picking a rung below source — or any rung while already on the HLS
+    // ladder — re-negotiates playback: reloadStream() re-requests playback-info
+    // with the chosen quality, the backend re-decides DirectPlay vs the
+    // transcode ladder, and the engine swaps the raw file for the HLS master.
+    // Staying on `original` while direct-playing needs no reload. When we WILL
+    // reload, pass engine=null so we don't select a variant the reload throws
+    // away (it re-applies the quality after load via applyQualityPreferenceAfterLoad).
+    const willReload = mode !== 'direct' || id !== 'original';
+    this.qualityManager.selectQuality(option, willReload ? null : this.engine, mode, false, true);
+    if (willReload) {
       await this.reloadStream();
     }
 
@@ -2600,6 +2635,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async reloadStream() {
     if (!this.engine) return;
     const currentPos = this.engine.currentTime;
+    // Capture the user's play/pause intent before tearing the stream down — a
+    // quality / audio / subtitle switch must not resume a paused player.
+    const wasPaused = this.paused();
 
     // Remember active subtitle so we can restore it after reload
     const activeSub = this.activeSubtitleId()
@@ -2618,8 +2656,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       .catch(() => {});
 
     const deviceProfile = this.deviceProfileService.getProfile();
+    // Pass the requested rung so the backend re-decides DirectPlay vs the
+    // transcode ladder: a rung below source forces the ladder, 'auto' lets the
+    // server apply its autoQualityMode.
+    const activeQuality = this.activeQualityId();
+    const requestedQuality =
+      activeQuality && activeQuality !== 'auto' ? activeQuality : undefined;
     this.playbackInfo = await this.streamingApi.getPlaybackInfo(
-      this.mediaFileId, deviceProfile, this.activeBurnInId ?? undefined, this.activeAudioStreamIndex,
+      this.mediaFileId,
+      deviceProfile,
+      this.activeBurnInId ?? undefined,
+      this.activeAudioStreamIndex,
+      requestedQuality,
     );
     const pi = this.playbackInfo;
     this.introMarker.set(pi.markers?.intro ?? null);
@@ -2639,7 +2687,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     await this.engine.load(url, currentPos, mimeType);
 
     this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
-    this.engine.play().catch(() => {});
+    this.restorePlayState(wasPaused);
 
     // Restore active subtitle (non burn-in) after Shaka reload
     if (activeSub && !activeSub.burnIn && activeSub.url) {

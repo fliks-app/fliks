@@ -15,6 +15,17 @@ interface AudioCapabilitiesPlugin {
 }
 const AudioCaps = registerPlugin<AudioCapabilitiesPlugin>('AudioCapabilities');
 
+interface NativeVideoCaps {
+  videoCodecs: string[];
+  hevcMain10: boolean;
+  av1Main10: boolean;
+  containers: string[];
+}
+interface VideoCapabilitiesPlugin {
+  getSupported(): Promise<NativeVideoCaps>;
+}
+const VideoCaps = registerPlugin<VideoCapabilitiesPlugin>('VideoCapabilities');
+
 /** Probe Tizen's `webapis.avinfo.isHdrTvSupport()` synchronously. The
  *  Samsung runtime exposes a panel-level HDR capability flag that's
  *  more reliable than `matchMedia('(dynamic-range: high)')` on
@@ -96,6 +107,12 @@ export interface DeviceProfile {
    *  to the target segment and never request seg-0, so they send false and the
    *  backend skips the companion (a wasted parallel transcode for them). */
   probesSegZero?: boolean;
+
+  /** Client engine can play a raw progressive file (DirectPlay served as-is).
+   *  True for Shaka (web), ExoPlayer/AVPlayer (native) and webOS `<video>`.
+   *  False for Tizen AVPlay (HLS-only): the backend then never returns
+   *  DirectPlay and falls back to DirectStream (remux to HLS). Unset = true. */
+  supportsDirectPlay?: boolean;
 }
 
 /** True when `localStorage['fliks.useTs']` is set to a truthy value.
@@ -114,9 +131,11 @@ export class BrowserDeviceProfileService {
   private cachedProfile: DeviceProfile | null = null;
   private nativeHdr: boolean | null = null;
   private nativeAudio: { codecs: string[]; maxChannels: number } | null = null;
+  private nativeVideo: NativeVideoCaps | null = null;
 
   constructor() {
-    // Pre-fetch native HDR + audio capabilities (async, cached for later sync use)
+    // Pre-fetch native HDR + audio + video capabilities (async, cached for
+    // later sync use)
     if (Capacitor.isNativePlatform()) {
       Hdr.isSupported()
         .then((r) => { this.nativeHdr = r.supported; })
@@ -124,6 +143,9 @@ export class BrowserDeviceProfileService {
       AudioCaps.getSupported()
         .then((r) => { this.nativeAudio = r; this.cachedProfile = null; })
         .catch(() => { this.nativeAudio = null; });
+      VideoCaps.getSupported()
+        .then((r) => { this.nativeVideo = r; this.cachedProfile = null; })
+        .catch(() => { this.nativeVideo = null; });
     }
   }
 
@@ -244,6 +266,58 @@ export class BrowserDeviceProfileService {
       videoCodecs.push('vp8');
     }
 
+    // Native engines (Capacitor: ExoPlayer on Android, AVPlayer on iOS) decode
+    // through the OS media stack, not the WebView — whose MSE under-reports
+    // HEVC/AV1 on Android even when the device decodes them, forcing needless
+    // H.264 transcodes. When the native video-capability plugin answered, trust
+    // it for video codecs, their conditions, and the containers it can demux
+    // (incl. mkv on ExoPlayer). Smart TVs (Tizen AVPlay / webOS) run as web
+    // apps with no plugin: declare HEVC for them too, since their WebView MSE
+    // probe can miss it while the panel hardware-decodes it.
+    if (this.nativeVideo && this.nativeVideo.videoCodecs.length) {
+      const nv = this.nativeVideo;
+      videoCodecs.length = 0;
+      codecConditions.length = 0;
+      containers.length = 0;
+      containers.push(...nv.containers);
+      for (const c of nv.videoCodecs) {
+        if (c === 'h264') {
+          videoCodecs.push('h264', 'avc1');
+          codecConditions.push({
+            codec: 'h264',
+            profiles: ['baseline', 'constrained baseline', 'main', 'high'],
+            maxBitDepth: 8,
+          });
+        } else if (c === 'hevc') {
+          videoCodecs.push('hevc', 'h265', 'hvc1', 'hev1');
+          codecConditions.push({
+            codec: 'hevc',
+            profiles: nv.hevcMain10 ? ['main', 'main 10'] : ['main'],
+            maxBitDepth: nv.hevcMain10 ? 10 : 8,
+          });
+        } else if (c === 'av1') {
+          videoCodecs.push('av1');
+          codecConditions.push({
+            codec: 'av1',
+            profiles: nv.av1Main10 ? ['main', 'high'] : ['main'],
+            maxBitDepth: nv.av1Main10 ? 10 : 8,
+          });
+        } else {
+          videoCodecs.push(c); // vp9 / vp8 — no fine-grained conditions
+        }
+      }
+    } else if (
+      (tvPlatform === 'tizen' || tvPlatform === 'webos') &&
+      !videoCodecs.includes('hevc')
+    ) {
+      videoCodecs.push('hevc', 'h265', 'hvc1', 'hev1');
+      codecConditions.push({
+        codec: 'hevc',
+        profiles: ['main', 'main 10'],
+        maxBitDepth: 10,
+      });
+    }
+
     // --- Detect supported audio codecs ---
     // On native, the platform plugin (AudioCapabilities) is the source of
     // truth — playback goes through ExoPlayer / AVPlayer, not the WebView,
@@ -344,6 +418,11 @@ export class BrowserDeviceProfileService {
       // through native players that seek straight to the resume segment). The
       // Cast receiver sets this true in its own profile.
       probesSegZero: !this.serverConfig.isNative,
+      // Samsung Tizen AVPlay is HLS-only and cannot open a raw progressive
+      // file, so it must never receive a DirectPlay decision — the backend
+      // falls back to DirectStream (remux to HLS, codec-copy). Every other
+      // engine (Shaka, ExoPlayer/AVPlayer, webOS <video>) plays raw files.
+      supportsDirectPlay: tvPlatform !== 'tizen',
     };
   }
 

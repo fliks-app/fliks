@@ -836,11 +836,17 @@ export class StreamingController {
     const user = req.user as User;
     const userId = user.id;
 
+    // Quality the client is requesting (absent / 'auto' = let the server
+    // decide per autoQualityMode; 'original' = source rung; anything else =
+    // a lower rung that must transcode). Drives DirectPlay-vs-ladder routing.
+    const startQuality = firstQueryString(req.query, 'startQuality');
     const evaluateResult = this.streamBuilder.evaluate(
       resolved,
       deviceProfile,
       tokenParam,
       burnInSubtitleId,
+      startQuality,
+      ss.autoQualityMode,
     );
     const { response, useHdrLadder, videoVariant } = evaluateResult;
     // Resolve the effective `useTs`. The explicit profile flag wins as
@@ -882,7 +888,6 @@ export class StreamingController {
     // another. No drift kill needed: a hop from browser → cast spawns a
     // new session under the cast's profileHash and leaves the browser's
     // session untouched.
-    const startQuality = firstQueryString(req.query, 'startQuality');
     const startAtRaw = firstQueryString(req.query, 'startAt');
     const startAt = startAtRaw != null ? parseFloat(startAtRaw) : undefined;
     // Offline download: the native DownloadManager pulls segments straight off
@@ -1051,8 +1056,12 @@ export class StreamingController {
     // that gap with encoder init so segment 0 is usually already on disk
     // (or streaming) when requested. No-op for DirectPlay or auto quality.
     // Runs after LiveSession creation so buildSessionContext can find it.
+    // Fire-and-forget: the playback-info response (playUrl + sessionId) does
+    // not depend on the spawn, so it must not block on ffmpeg init — same
+    // pattern as the master.m3u8 prewarm. prewarmTranscodeSession swallows its
+    // own errors.
     if (response.playMethod !== 'DirectPlay') {
-      await this.prewarmTranscodeSession(
+      void this.prewarmTranscodeSession(
         mediaFileId,
         resolved,
         req,

@@ -15,6 +15,7 @@ import { BaseEntity } from '../../../common/entities/base.entity';
  *   companion_file_extensions — comma-separated list, e.g. ".nfo,.srt,.jpg"
  *   search_missing_auto   — "true" | "false"
  *   rss_sync_interval     — minutes, e.g. "15"
+ *   streaming_auto_quality_mode — "directplay" | "abr" (how "Auto" quality resolves)
  */
 @Entity('app_settings')
 export class AppSetting extends BaseEntity {

@@ -5,6 +5,20 @@
     <h2 class="text-xl font-semibold">{{ 'settings.streaming.title' | translate }}</h2>
     <p class="text-base-content/60">{{ 'settings.streaming.description' | translate }}</p>
 
+    <!-- "Auto" quality behavior: Direct Play (zero transcode) vs adaptive ABR.
+         The help line below shows the trade-off of the selected mode. -->
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.auto_quality_mode' | translate }}</span></label>
+      <select class="select select-bordered w-full" [ngModel]="autoQualityMode()" (ngModelChange)="autoQualityMode.set($event)">
+        <option value="directplay">{{ 'settings.streaming.auto_quality_mode_directplay' | translate }} ({{ 'settings.streaming.default' | translate }})</option>
+        <option value="abr">{{ 'settings.streaming.auto_quality_mode_abr' | translate }}</option>
+      </select>
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.auto_quality_mode_help' | translate }}</span></label>
+      <div class="mt-1 rounded-lg bg-base-200 p-3 text-sm text-base-content/70">
+        {{ ('settings.streaming.auto_quality_mode_' + autoQualityMode() + '_help') | translate }}
+      </div>
+    </div>
+
     <!-- Segment duration -->
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.segment_duration' | translate }}</span></label>
