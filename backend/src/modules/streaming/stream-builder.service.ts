@@ -157,7 +157,13 @@ export class StreamBuilderService {
       {
         width: source.width ?? 0,
         height: source.height ?? 0,
-        hdr: (source.hdrFormat as CodecVariant['hdr']) ?? null,
+        // Only carry HDR into the variant when we actually emit the HDR ladder.
+        // An HDR source tonemapped to SDR (useHdrLadder=false) is encoded as an
+        // 8-bit SDR variant, so selecting an HDR (Main10) variant here
+        // mismatches the real encoder — which left effectiveHwAccel resolving to
+        // the CPU fallback (stats showed "CPU") while ffmpeg actually ran
+        // hevc_qsv.
+        hdr: useHdrLadder ? ((source.hdrFormat as CodecVariant['hdr']) ?? null) : null,
         codec: normaliseSourceCodec(source.videoCodec) ?? undefined,
       },
       profile,
