@@ -64,7 +64,7 @@
     "auto_resolution": "Auto ({{res}})",
     "stats_direct_playback": "Lecture directe",
     "stats_transcoding": "Transcodage ({{hw}})",
-    "stats_transcode_audio": "Transcodage ({{codec}} 192 kbps)",
+    "stats_transcode_audio": "Transcodage ({{codec}})",
     "offline_not_found": "Contenu hors-ligne introuvable. Re-téléchargez le média.",
     "settings": "Paramètres",
     "quality": "Qualité",

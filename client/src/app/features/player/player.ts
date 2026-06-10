@@ -478,10 +478,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const playingWidth = activeVariant?.width ?? src?.width;
     const playingHeight = activeVariant?.height ?? src?.height;
 
-    // Determine effective copy/transcode state based on selected quality
+    // Video re-encodes on any pinned rung below the source. Audio is decided
+    // independently by the backend — a lower video rung still copies a
+    // supported audio track (e.g. AC3 5.1) verbatim — so reflect the backend's
+    // audioCopyStream, not the video rung. Forcing it off the rung mislabelled a
+    // copied AC3 stream as an AAC transcode.
     const isTranscodeQuality = !['auto', 'original'].includes(_quality);
     const effectiveVideoCopy = isTranscodeQuality ? false : (pi?.videoCopyStream ?? true);
-    const effectiveAudioCopy = isTranscodeQuality ? false : (pi?.audioCopyStream ?? true);
+    const effectiveAudioCopy = pi?.audioCopyStream ?? true;
 
     const formatBitrateBps = (bps: number): string => {
       if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbps`;
@@ -681,7 +685,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (effectiveAudioCopy) {
       audioPlaybackMode = this.translate.instant('player.stats_direct_playback');
     } else {
-      const outCodec = isTranscodeQuality ? 'AAC' : (pi?.outputAudioCodec ?? 'aac').toUpperCase();
+      const outCodec = (pi?.outputAudioCodec ?? 'aac').toUpperCase();
       audioPlaybackMode = this.translate.instant('player.stats_transcode_audio', { codec: outCodec });
     }
 
