@@ -6,6 +6,7 @@ import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AppModule } from './app.module';
 import { LogBufferService } from './modules/scheduler/log-buffer.service';
+import { ClientAbortExceptionFilter } from './common/filters/client-abort-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -83,6 +84,11 @@ async function bootstrap() {
   // every entity instance a controller returns. Plain-object responses pass
   // through unchanged; @Res()/SSE handlers bypass interceptors entirely.
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+  // Swallow errors that only fire because a client aborted a request mid-flight
+  // (e.g. a superseded playback-info fetch) — Node's socketOnError throws during
+  // response serialization against the dead socket. Live-connection errors keep
+  // the default handling.
+  app.useGlobalFilters(new ClientAbortExceptionFilter(app.getHttpAdapter()));
 
   const port = Number(process.env.PORT) || 4848;
   await app.listen(port);
