@@ -594,71 +594,73 @@ export class RequestsService {
     row.status = RequestStatus.APPROVED;
     row.approvedBy = admin;
     row.declinedReason = null;
+    await this.requestRepo.save(row);
 
-    const saved = await this.requestRepo.save(row);
-    this.projectEmbeddedUsers(saved);
-    void this.notifications.dispatch('request.approved', {
-      title: saved.title,
-    });
+    // Import (or reuse) the media SYNCHRONOUSLY so the response carries the
+    // real linked + monitored state — the client renders the correct badge
+    // immediately, no SSE/refresh needed. A failure here (TMDB error, profile
+    // conflict) rolls the approval back to PENDING and rethrows so the admin
+    // gets the error as a toast instead of an approved-but-empty request.
+    // Only the post-approval auto-grab (SearchMissing) stays asynchronous —
+    // the slow release search/download must not block the response.
+    let media: Media | null;
+    try {
+      media = await this.ensureMediaForApprovedRequest(
+        {
+          mediaType: row.mediaType,
+          tmdbId: row.tmdbId,
+          qualityProfileId: row.qualityProfileId ?? null,
+          languageProfileId: row.languageProfileId ?? null,
+          libraryId: row.libraryId ?? null,
+          seasons: row.seasons ?? null,
+        },
+        row.userId ?? null,
+      );
+    } catch (err) {
+      row.status = RequestStatus.PENDING;
+      row.approvedBy = null;
+      await this.requestRepo.save(row);
+      throw err;
+    }
 
-    // The media import (TMDB fetch + image downloads) and the immediate
-    // SearchMissing run out of band: the persisted status flip is all the
-    // client needs to render the approval, so the response returns without
-    // waiting on the network-bound import. The Media row is attributed to
-    // the requester (not the approving admin) so the "only the media I
-    // requested" filter — which matches `addedById = me OR
-    // requests.userId = me` — keeps surfacing it.
-    void this.finalizeApproval(
-      saved.id,
-      {
-        mediaType: row.mediaType,
-        tmdbId: row.tmdbId,
-        qualityProfileId: row.qualityProfileId ?? null,
-        languageProfileId: row.languageProfileId ?? null,
-        libraryId: row.libraryId ?? null,
-        seasons: row.seasons ?? null,
-      },
-      row.userId ?? null,
-    );
+    if (media) {
+      // A fresh import links the request inside onMediaImported; the
+      // existing-media path does not, so link here when still unlinked.
+      const linked = await this.requestRepo.findOne({ where: { id } });
+      if (linked && linked.status === RequestStatus.APPROVED && !linked.mediaId) {
+        linked.media = media;
+        await this.requestRepo.save(linked);
+      }
+      void this.scheduler.searchMissingForMedia([media.id]);
+    }
 
-    return saved;
+    void this.notifications.dispatch('request.approved', { title: row.title });
+
+    return this.findResolvedRow(id);
   }
 
   /**
-   * Out-of-band tail of {@link approve}: import (or reuse) the Media row,
-   * link it to the approved request, and trigger an immediate SearchMissing
-   * so the user doesn't wait for the next scheduler tick. Detached from the
-   * HTTP response — failures are logged and leave the request approved but
-   * unlinked rather than surfacing to the already-returned caller.
+   * Fetch a single request with its linked library media resolved by
+   * (tmdbId, type) — mirrors the list query so the monitored badge is accurate
+   * right after approval, without waiting on a list refresh.
    */
-  private async finalizeApproval(
-    requestId: number,
-    spec: {
-      mediaType: MediaType;
-      tmdbId: number;
-      qualityProfileId: number | null;
-      languageProfileId: number | null;
-      libraryId: number | null;
-      seasons: number[] | null;
-    },
-    userId: number | null,
-  ): Promise<void> {
-    try {
-      const media = await this.ensureMediaForApprovedRequest(spec, userId);
-      if (!media) return;
-      // A fresh import links the request inside onMediaImported; the
-      // existing-media path does not, so link here when still unlinked.
-      const req = await this.requestRepo.findOne({ where: { id: requestId } });
-      if (req && req.status === RequestStatus.APPROVED && !req.mediaId) {
-        req.media = media;
-        await this.requestRepo.save(req);
-      }
-      void this.scheduler.searchMissingForMedia([media.id]);
-    } catch (err) {
-      this.logger.warn(
-        `finalizeApproval: request #${requestId} import/link failed: ${(err as Error).message}`,
-      );
-    }
+  private async findResolvedRow(id: number): Promise<FliksRequest> {
+    const row = await this.requestRepo
+      .createQueryBuilder('r')
+      .leftJoin('r.user', 'user')
+      .addSelect(['user.id', 'user.username', 'user.avatar'])
+      .leftJoin('r.approvedBy', 'approvedBy')
+      .addSelect(['approvedBy.id', 'approvedBy.username', 'approvedBy.avatar'])
+      .leftJoinAndMapOne(
+        'r.media',
+        Media,
+        'media',
+        'media."tmdbId" = r."tmdbId" AND media.type::text = r."mediaType"::text',
+      )
+      .where('r.id = :id', { id })
+      .getOne();
+    if (!row) throw new NotFoundException(`Request #${id} not found`);
+    return this.projectEmbeddedUsers(row);
   }
 
   /**
