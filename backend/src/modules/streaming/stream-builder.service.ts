@@ -261,12 +261,17 @@ export class StreamBuilderService {
     if (forceLadder) {
       if (directPlayResult.canDirectPlay)
         directPlayResult.canDirectPlay = false;
-      reasons.push({
-        flag: 'QualitySelection',
-        message: autoOnLadder
-          ? 'Adaptive bitrate (ABR) mode'
-          : `Requested quality below source (${requestedQuality})`,
-      });
+      // `Video*` prefix so the player stats overlay surfaces it in the video
+      // section: a quality-driven transcode is not a defect, the user should
+      // see it was their bitrate/quality choice, not an incompatibility.
+      reasons.push(
+        autoOnLadder
+          ? { flag: 'VideoAbr', message: 'Adaptive bitrate (ABR) mode' }
+          : {
+              flag: 'VideoQualityReduced',
+              message: `Reduced-quality rung selected (${requestedQuality})`,
+            },
+      );
     }
 
     const deviceType: DeviceType = profile.deviceType ?? 'desktop';

@@ -82,7 +82,21 @@
     "stats_crop": "Recadrage",
     "stats_tonemapping": "Mappage tonal",
     "stats_reasons": "Raisons",
-    "stats_sample_rate": "Fréquence d'échantillonnage"
+    "stats_sample_rate": "Fréquence d'échantillonnage",
+    "transcode_reason": {
+      "VideoCodecNotSupported": "Codec vidéo non supporté",
+      "VideoHdrNotSupported": "HDR → SDR (mappage tonal)",
+      "VideoProfileNotSupported": "Profil vidéo non supporté",
+      "VideoLevelNotSupported": "Niveau vidéo trop élevé",
+      "VideoBitDepthNotSupported": "10-bit non supporté",
+      "VideoResolutionNotSupported": "Résolution trop élevée",
+      "VideoCrop": "Suppression des bandes noires",
+      "VideoQualityReduced": "Bitrate réduit (qualité choisie)",
+      "VideoAbr": "Bitrate adaptatif (ABR)",
+      "SubtitleBurnIn": "Sous-titres incrustés",
+      "AudioCodecNotSupported": "Codec audio non supporté",
+      "AudioChannelsNotSupported": "Trop de canaux audio"
+    }
   },
   "sse": {
     "subtitle_synced": "Sous-titre synchronisé avec succès.",
