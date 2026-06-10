@@ -54,6 +54,9 @@ export class RequestModalComponent {
   /** Season numbers already covered by an active request — passed in by
    *  the parent so the row is disabled in the table (cannot re-request). */
   readonly alreadyRequestedSeasons = signal<Set<number>>(new Set());
+  /** A series already has an active request: its profiles are fixed and the
+   *  selectors are locked to them (all seasons share one profile set). */
+  readonly profilesLocked = signal(false);
 
   open(params: {
     title: string;
@@ -64,13 +67,28 @@ export class RequestModalComponent {
      *  un-tick them or add more). Filtered against
      *  `alreadyRequestedSeasons` so we never re-add disabled rows. */
     preselectedSeasons?: number[];
+    /** Set when an active request already fixes this series' profiles: the
+     *  quality/language selectors are pre-filled with these and locked. */
+    profilesLocked?: boolean;
+    lockedQualityProfileId?: number | null;
+    lockedLanguageProfileId?: number | null;
   }) {
     this.title.set(params.title);
     this.mediaType.set(params.mediaType);
     this.tmdbId.set(params.tmdbId);
     this.alreadyRequestedSeasons.set(new Set(params.alreadyRequestedSeasons ?? []));
-    this.qualityProfileId.set(this.qualityProfiles()[0]?.id ?? null);
-    this.languageProfileId.set(this.languageProfiles()[0]?.id ?? null);
+    const locked = !!params.profilesLocked;
+    this.profilesLocked.set(locked);
+    this.qualityProfileId.set(
+      locked
+        ? (params.lockedQualityProfileId ?? null)
+        : (this.qualityProfiles()[0]?.id ?? null),
+    );
+    this.languageProfileId.set(
+      locked
+        ? (params.lockedLanguageProfileId ?? null)
+        : (this.languageProfiles()[0]?.id ?? null),
+    );
     const compatible = this.libraries().filter((l) => l.mediaTypes.includes(params.mediaType));
     const defaultLib =
       compatible.find((l) =>

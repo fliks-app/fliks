@@ -22,7 +22,7 @@ import { ProfilesService } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, Library } from '../../core/services/api/libraries-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
-import { FliksRequestRow, RequestsService } from '../../core/services/api/requests.service';
+import { RequestsService, TitleRequestState } from '../../core/services/api/requests.service';
 import { RequestModalComponent } from './components/request-modal/request-modal.component';
 import { ImportModalComponent } from './components/import-modal/import-modal.component';
 import { MediaType } from '../../core/enums/media-type.enum';
@@ -88,43 +88,23 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   readonly canImport = computed(() => this.auth.hasPermission('media.create'));
   readonly canRequest = computed(() => !this.canImport() && this.auth.hasPermission('requests.create'));
 
-  /** Existing requests for this tmdbId — populated after the media loads.
-   *  Empty when the user has no `requests.create` permission (we don't
-   *  fetch unless the Request button could otherwise show). */
-  readonly existingRequests = signal<FliksRequestRow[]>([]);
+  /** Global active-request state for this title (any user), populated after
+   *  the media loads. Null until fetched / when the user can't request. */
+  readonly titleState = signal<TitleRequestState | null>(null);
 
-  /** Statuses that fully consume the "can request again" right. Declined /
-   *  failed remain re-requestable; available is the "added to library"
-   *  case which the page surfaces via `existingMediaId` anyway. */
-  private static readonly ACTIVE_STATUSES = new Set<string>([
-    'pending', 'approved', 'processing', 'available',
-  ]);
-
-  /** True when a request blocks re-requesting:
+  /** True when a request blocks re-requesting (globally):
    *   - movies: any active request on this tmdbId
    *   - series: an active *whole-series* request (no `seasons` scope) */
-  readonly hasBlockingRequest = computed(() => {
-    const isSeries = this.type() === 'series';
-    return this.existingRequests().some((r) => {
-      if (!TmdbPreviewComponent.ACTIVE_STATUSES.has(r.status)) return false;
-      return isSeries ? !r.seasons || r.seasons.length === 0 : true;
-    });
-  });
+  readonly hasBlockingRequest = computed(
+    () => this.titleState()?.requested ?? false,
+  );
 
-  /** Season numbers already covered by an active per-season request.
-   *  Empty for movies. Used both for the inline badge and to pre-disable
+  /** Season numbers already covered by an active per-season request
+   *  (globally). Empty for movies. Drives the inline badge and pre-disables
    *  seasons in the request modal. */
-  readonly requestedSeasons = computed<number[]>(() => {
-    if (this.type() !== 'series') return [];
-    const set = new Set<number>();
-    for (const r of this.existingRequests()) {
-      if (!TmdbPreviewComponent.ACTIVE_STATUSES.has(r.status)) continue;
-      if (r.seasons?.length) {
-        for (const n of r.seasons) set.add(n);
-      }
-    }
-    return Array.from(set).sort((a, b) => a - b);
-  });
+  readonly requestedSeasons = computed<number[]>(
+    () => this.titleState()?.requestedSeasons ?? [],
+  );
 
   private readonly requestModal = viewChild(RequestModalComponent);
   private readonly importModal = viewChild(ImportModalComponent);
@@ -159,7 +139,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
       // Only relevant when the Request button could show: admins who can
       // import never see the "déjà demandé" badge anyway.
       if (this.canRequest()) {
-        await this.loadExistingRequests(details.tmdbId);
+        await this.loadTitleState(details.tmdbId);
       }
     } catch {
       this.error.set(this.translate.instant('discover.preview_error'));
@@ -168,14 +148,12 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Load every active request and keep the ones tied to this tmdbId.
-   *  Server-side filter on tmdbId would be cleaner but the endpoint
-   *  doesn't expose it yet — mirrors the search page pattern. */
-  private async loadExistingRequests(tmdbId: number) {
+  /** Global active-request state for this title — drives the "déjà demandé"
+   *  gate (any user) and the series profile lock. */
+  private async loadTitleState(tmdbId: number) {
     try {
-      const res = await this.requestsApi.list({ limit: 200 });
-      this.existingRequests.set(
-        res.data.filter((r) => r.tmdbId === tmdbId && r.mediaType === this.type()),
+      this.titleState.set(
+        await this.requestsApi.getTitleState(tmdbId, this.type() as MediaType),
       );
     } catch { /* ignore */ }
   }
@@ -184,7 +162,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
    *  flips to the "déjà demandé" state without a manual refresh. */
   protected refreshExistingRequests() {
     const m = this.media();
-    if (m) void this.loadExistingRequests(m.tmdbId);
+    if (m) void this.loadTitleState(m.tmdbId);
   }
 
   openImportModal() {
@@ -202,11 +180,15 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   openRequestModal() {
     const m = this.media();
     if (!m) return;
+    const state = this.titleState();
     this.requestModal()?.open({
       title: m.title,
       mediaType: this.type() as 'movie' | 'series',
       tmdbId: m.tmdbId,
       alreadyRequestedSeasons: this.requestedSeasons(),
+      profilesLocked: state?.profilesLocked ?? false,
+      lockedQualityProfileId: state?.lockedQualityProfileId ?? null,
+      lockedLanguageProfileId: state?.lockedLanguageProfileId ?? null,
     });
   }
 }
