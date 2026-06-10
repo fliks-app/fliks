@@ -554,11 +554,21 @@ export class RequestsService {
     row.approvedBy = admin;
     row.declinedReason = null;
 
-    // Attribute the new Media row to the requester (not the approving
-    // admin) so the "Afficher uniquement les médias que j'ai demandé"
-    // filter — which matches `addedById = me OR requests.userId = me`
-    // — keeps surfacing it even if the request row is later purged.
-    row.media = await this.ensureMediaForApprovedRequest(
+    const saved = await this.requestRepo.save(row);
+    this.projectEmbeddedUsers(saved);
+    void this.notifications.dispatch('request.approved', {
+      title: saved.title,
+    });
+
+    // The media import (TMDB fetch + image downloads) and the immediate
+    // SearchMissing run out of band: the persisted status flip is all the
+    // client needs to render the approval, so the response returns without
+    // waiting on the network-bound import. The Media row is attributed to
+    // the requester (not the approving admin) so the "only the media I
+    // requested" filter — which matches `addedById = me OR
+    // requests.userId = me` — keeps surfacing it.
+    void this.finalizeApproval(
+      saved.id,
       {
         mediaType: row.mediaType,
         tmdbId: row.tmdbId,
@@ -570,19 +580,44 @@ export class RequestsService {
       row.userId ?? null,
     );
 
-    const saved = await this.requestRepo.save(row);
-    this.projectEmbeddedUsers(saved);
-    void this.notifications.dispatch('request.approved', {
-      title: saved.title,
-    });
-    // Kick an immediate SearchMissing on the approved media so the user
-    // doesn't wait for the next scheduler tick (up to 6 h). The lifecycle
-    // path already does this on auto-approval; the manual approve was the
-    // outlier — fire-and-forget so the HTTP response stays snappy.
-    if (saved.media) {
-      void this.scheduler.searchMissingForMedia([saved.media.id]);
-    }
     return saved;
+  }
+
+  /**
+   * Out-of-band tail of {@link approve}: import (or reuse) the Media row,
+   * link it to the approved request, and trigger an immediate SearchMissing
+   * so the user doesn't wait for the next scheduler tick. Detached from the
+   * HTTP response — failures are logged and leave the request approved but
+   * unlinked rather than surfacing to the already-returned caller.
+   */
+  private async finalizeApproval(
+    requestId: number,
+    spec: {
+      mediaType: MediaType;
+      tmdbId: number;
+      qualityProfileId: number | null;
+      languageProfileId: number | null;
+      libraryId: number | null;
+      seasons: number[] | null;
+    },
+    userId: number | null,
+  ): Promise<void> {
+    try {
+      const media = await this.ensureMediaForApprovedRequest(spec, userId);
+      if (!media) return;
+      // A fresh import links the request inside onMediaImported; the
+      // existing-media path does not, so link here when still unlinked.
+      const req = await this.requestRepo.findOne({ where: { id: requestId } });
+      if (req && req.status === RequestStatus.APPROVED && !req.mediaId) {
+        req.media = media;
+        await this.requestRepo.save(req);
+      }
+      void this.scheduler.searchMissingForMedia([media.id]);
+    } catch (err) {
+      this.logger.warn(
+        `finalizeApproval: request #${requestId} import/link failed: ${(err as Error).message}`,
+      );
+    }
   }
 
   /**
