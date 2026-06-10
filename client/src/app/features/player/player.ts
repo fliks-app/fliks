@@ -1931,7 +1931,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
       }
     }
-    if (!wasPaused) {
+    // Enforce the pre-reload play state. The native engine (ExoPlayer
+    // playWhenReady) autoplays on load(), so a recovery that should preserve a
+    // pause must actively pause after load — merely skipping play() lets it
+    // resume. A server restart (lost session → recovery reload) must not start
+    // playback the user had paused.
+    if (wasPaused) {
+      this.engine.pause().catch(() => {});
+    } else {
       this.engine.play().catch(() => {});
     }
   }
