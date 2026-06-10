@@ -1056,8 +1056,12 @@ export class StreamingController {
     // that gap with encoder init so segment 0 is usually already on disk
     // (or streaming) when requested. No-op for DirectPlay or auto quality.
     // Runs after LiveSession creation so buildSessionContext can find it.
+    // Fire-and-forget: the playback-info response (playUrl + sessionId) does
+    // not depend on the spawn, so it must not block on ffmpeg init — same
+    // pattern as the master.m3u8 prewarm. prewarmTranscodeSession swallows its
+    // own errors.
     if (response.playMethod !== 'DirectPlay') {
-      await this.prewarmTranscodeSession(
+      void this.prewarmTranscodeSession(
         mediaFileId,
         resolved,
         req,
