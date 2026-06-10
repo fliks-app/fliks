@@ -671,7 +671,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       formatAudioLabel(
         {
           language: src?.audioLanguage,
-          codec: activeVariant?.audioCodec ?? src?.audioCodec,
+          codec: src?.audioCodec,
           channels: src?.audioChannels,
         },
         this.translate,
