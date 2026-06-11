@@ -13,7 +13,11 @@
 
   <div class="relative flex flex-1 flex-col gap-1.5 p-4">
     <h3 class="text-lg font-semibold leading-snug line-clamp-1 m-0">
-      <a [routerLink]="mediaLink()" class="link link-hover text-base-content hover:opacity-80">
+      <a
+        [routerLink]="mediaLink()"
+        class="link link-hover text-base-content hover:opacity-80"
+        tabindex="-1"
+      >
         {{ request().media?.title || request().title }}
       </a>
     </h3>
@@ -64,7 +68,8 @@
           type="button"
           class="btn btn-success btn-sm flex-1"
           [disabled]="busy()"
-          (click)="approve.emit(request().id)"
+          tabindex="-1"
+          (click)="$event.stopPropagation(); approve.emit(request().id)"
         >
           {{ 'requests.approve' | translate }}
         </button>
@@ -72,7 +77,8 @@
           type="button"
           class="btn btn-warning btn-sm flex-1"
           [disabled]="busy()"
-          (click)="decline.emit(request().id)"
+          tabindex="-1"
+          (click)="$event.stopPropagation(); decline.emit(request().id)"
         >
           {{ 'requests.decline' | translate }}
         </button>
