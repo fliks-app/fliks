@@ -75,12 +75,26 @@ export class AuthService {
   private _refreshToken: string | null = null;
   /** In-flight refresh request shared across concurrent 401s so we only
    *  rotate once even when 10 parallel calls all fail at the same time. */
-  private _refreshInFlight: Promise<string | null> | null = null;
+  private _refreshInFlight: Promise<boolean> | null = null;
   /** Long-lived stream JWT cached for the player + URL builders. See
    *  ensureStreamToken() for the lifecycle. */
   private _streamToken = signal<string | null>(null);
   private _streamTokenExpiresAt = 0;
   private _streamTokenInFlight: Promise<string | null> | null = null;
+
+  constructor() {
+    // Multi-tab: when another tab rotates the refresh token it persists the new
+    // value to localStorage, firing `storage` in every OTHER tab. Adopt it so a
+    // lagging tab never replays its now-stale token — which the server treats as
+    // reuse and revokes every session. Web-only (native runs a single webview).
+    if (typeof window !== 'undefined' && !this.serverConfig.isNative) {
+      window.addEventListener('storage', (e) => {
+        if (e.key === AuthService.REFRESH_KEY && e.newValue) {
+          this._refreshToken = e.newValue;
+        }
+      });
+    }
+  }
 
   get accessToken(): string | null {
     return this._accessToken;
@@ -229,56 +243,98 @@ export class AuthService {
   }
 
   /**
-   * Exchange the stored refresh token for a fresh access + refresh
-   * pair. Single-flight: parallel callers (e.g. 10 concurrent requests
-   * all 401-ing at once) share the same in-flight promise so the
-   * server only rotates the token once.
+   * Refresh the session by rotating the stored refresh token. Resolves `true`
+   * when usable credentials are in place afterwards (a fresh access token was
+   * obtained, or another tab had already rotated and we adopted it), `false`
+   * when refresh isn't possible — no stored token, or the server rejected ours.
    *
-   * Returns the new access token on success, or null if rotation is
-   * not possible (no refresh token stored, or the server rejected
-   * ours). A server rejection is treated as terminal: the local
-   * session is wiped and the user is sent back to /select-user.
-   * Network/5xx failures, by contrast, leave the tokens intact so a
-   * flaky-wifi user isn't logged out on every dropout.
+   * The boolean is a "retry the original request now?" signal: the fresh access
+   * token itself lands on {@link accessToken} / the session cookie as a side
+   * effect, which is what callers attach.
+   *
+   * Single-flight: parallel callers (e.g. 10 requests all 401-ing at once)
+   * share one in-flight promise so the server only rotates once. A server
+   * rejection is terminal — the local session is wiped and the user is sent
+   * back to /select-user. Network/5xx failures keep the tokens so a flaky
+   * connection doesn't log the user out.
    */
-  async refreshAccessToken(): Promise<string | null> {
+  async refreshAccessToken(): Promise<boolean> {
     if (this._refreshInFlight) return this._refreshInFlight;
-    const refresh = this._refreshToken;
-    if (!refresh) return null;
-    this._refreshInFlight = (async () => {
-      try {
-        const res = await firstValueFrom(
-          this.http.post<TokenPairResponse>('/api/auth/refresh', {
-            refreshToken: refresh,
-          }),
-        );
-        this._accessToken = res.accessToken;
-        this._refreshToken = res.refreshToken;
-        if (this.serverConfig.isNative) await this.saveToken(res.accessToken);
-        await this.saveRefreshToken(res.refreshToken);
-        return res.accessToken;
-      } catch (err) {
-        const status =
-          err instanceof HttpErrorResponse ? err.status : 0;
-        // 4xx = server-side rejection (refresh token expired, revoked,
-        // or theft-detection wiped every session). Terminal — force
-        // the user back to the picker so the next action goes through
-        // a fresh login.
-        // Anything else (0 = offline, 5xx = server hiccup) is treated
-        // as transient: keep the tokens, just signal "couldn't refresh
-        // right now" to the caller.
-        if (status >= 400 && status < 500) {
-          // Skip the /auth/logout round-trip: the server has already
-          // told us our credentials are dead, so posting them again
-          // would just 401 on top of the original failure.
-          await this.clearLocalSession();
-        }
-        return null;
-      } finally {
-        this._refreshInFlight = null;
-      }
-    })();
+    if (!this._refreshToken) return false;
+    this._refreshInFlight = this.runRefresh().finally(() => {
+      this._refreshInFlight = null;
+    });
     return this._refreshInFlight;
+  }
+
+  /**
+   * Cross-tab refresh coordination. Rotation invalidates the presented token,
+   * so two browser tabs racing to refresh would have the lagging one replay an
+   * already-rotated token — which the server treats as theft and revokes EVERY
+   * session. We serialise refreshes across tabs with the Web Locks API; the tab
+   * that wins the lock rotates, the others then see the token already changed
+   * and adopt it instead of replaying. Native/TV run a single webview, so they
+   * just refresh in-process (the {@link _refreshInFlight} single-flight covers
+   * the parallel-401 burst).
+   */
+  private async runRefresh(): Promise<boolean> {
+    const tokenAtStart = this._refreshToken;
+    const lockMgr =
+      typeof navigator !== 'undefined' ? navigator.locks : undefined;
+    if (!this.serverConfig.isNative && lockMgr) {
+      return lockMgr.request('fliks-token-refresh', () =>
+        this.rotateOrAdopt(tokenAtStart),
+      );
+    }
+    return this.rotateOrAdopt(tokenAtStart);
+  }
+
+  /** Re-read the freshest stored token; if another tab rotated it while we
+   *  waited for the lock, adopt it and skip the network call (that tab's
+   *  /refresh already set a fresh access cookie) so we don't replay a revoked
+   *  token. Otherwise perform the rotation ourselves. */
+  private async rotateOrAdopt(tokenAtStart: string | null): Promise<boolean> {
+    const stored = await this.loadRefreshToken();
+    if (!this.serverConfig.isNative && stored && stored !== tokenAtStart) {
+      this._refreshToken = stored;
+      return true;
+    }
+    return this.doRefresh(stored ?? tokenAtStart);
+  }
+
+  private async doRefresh(refresh: string | null): Promise<boolean> {
+    if (!refresh) return false;
+    try {
+      const res = await firstValueFrom(
+        this.http.post<TokenPairResponse>('/api/auth/refresh', {
+          refreshToken: refresh,
+        }),
+      );
+      this._accessToken = res.accessToken;
+      this._refreshToken = res.refreshToken;
+      if (this.serverConfig.isNative) await this.saveToken(res.accessToken);
+      await this.saveRefreshToken(res.refreshToken);
+      return true;
+    } catch (err) {
+      const status = err instanceof HttpErrorResponse ? err.status : 0;
+      // 4xx = server-side rejection (expired / revoked / theft-detection).
+      // Anything else (0 = offline, 5xx = hiccup) is transient: keep the tokens
+      // so a flaky connection doesn't log the user out.
+      if (status >= 400 && status < 500) {
+        // First check whether another tab rotated meanwhile: then our token was
+        // merely stale, not dead — adopt the new one and let the caller retry
+        // (against the fresh access cookie) instead of wiping the session.
+        const stored = await this.loadRefreshToken();
+        if (!this.serverConfig.isNative && stored && stored !== refresh) {
+          this._refreshToken = stored;
+          return true;
+        }
+        // Terminal — skip the /auth/logout round-trip (credentials are dead)
+        // and send the user back to the picker.
+        await this.clearLocalSession();
+      }
+      return false;
+    }
   }
 
   /**

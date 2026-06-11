@@ -15,6 +15,16 @@ import { RefreshToken } from './entities/refresh-token.entity';
  *  stolen token can't be replayed forever. Configurable via env. */
 const DEFAULT_TTL_DAYS = 60;
 
+/**
+ * Window after a token is rotated during which presenting it AGAIN is treated
+ * as a benign concurrent-refresh race (e.g. a second browser tab that hadn't
+ * yet picked up the rotation) rather than theft: that one refresh is rejected,
+ * but the user's token family is left intact. A genuinely stolen token is
+ * replayed long after its rotation, well outside this window, and still trips
+ * the family-wide revoke below.
+ */
+const REUSE_GRACE_MS = 30_000;
+
 export interface IssuedRefresh {
   /** Plaintext token, returned to the client once and never stored. */
   token: string;
@@ -84,6 +94,16 @@ export class RefreshTokenService {
     if (!row) throw new UnauthorizedException('Invalid refresh token');
 
     if (row.revokedAt) {
+      const sinceRevokeMs = Date.now() - row.revokedAt.getTime();
+      if (sinceRevokeMs <= REUSE_GRACE_MS) {
+        // Benign race: a token rotated moments ago is presented again (a second
+        // tab still holding the previous value). Reject this one refresh but
+        // keep the family — the client recovers with the already-rotated token.
+        this.log.debug(
+          `RefreshToken: token re-presented ${sinceRevokeMs}ms after rotation for user #${row.userId} — benign concurrent-refresh, rejecting without revoke-all`,
+        );
+        throw new UnauthorizedException('Refresh token already rotated');
+      }
       this.log.warn(
         `RefreshToken: replay detected for user #${row.userId} — revoking every active refresh token of this user`,
       );
