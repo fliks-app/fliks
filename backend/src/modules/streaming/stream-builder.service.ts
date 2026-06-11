@@ -598,28 +598,39 @@ export class StreamBuilderService {
     // a forced transcode lists it as a normal rung instead. `isRemux` is true
     // only on the DirectStream path so the UI/stats can tell remux from a raw
     // direct play.
-    const qualities: QualityOption[] = [];
+    // Track a resolution `tier` (the profile's bucket maxHeight) alongside each
+    // rung, kept separate from the displayed height. The source-resolution
+    // `original` rung carries the actual source height, which for a letterboxed
+    // / scope source (e.g. a 3840×1606 4K) is below its own eco rung's bucket
+    // height (2160) — sorting on raw height would then list "4K eco" above "4K".
+    const entries: { option: QualityOption; tier: number }[] = [];
     for (const p of available) {
       if (isEcoProfile(p.name)) continue;
       const total = totalOf(p);
       if (p.name === topProfile.name && videoCopyStream) {
-        qualities.push({
-          id: 'original',
-          label: resolutionLabel,
-          height: originalHeight,
-          width: originalWidth,
-          totalBitrateBps: sourceTotal > 0 ? sourceTotal : total,
-          isRemux: playMethod === 'DirectStream',
+        entries.push({
+          option: {
+            id: 'original',
+            label: resolutionLabel,
+            height: originalHeight,
+            width: originalWidth,
+            totalBitrateBps: sourceTotal > 0 ? sourceTotal : total,
+            isRemux: playMethod === 'DirectStream',
+          },
+          tier: p.maxHeight,
         });
         continue;
       }
-      qualities.push({
-        id: p.name,
-        label: displayLabel(p.name),
-        height: p.maxHeight,
-        width: p.maxWidth,
-        totalBitrateBps: total,
-        isRemux: false,
+      entries.push({
+        option: {
+          id: p.name,
+          label: displayLabel(p.name),
+          height: p.maxHeight,
+          width: p.maxWidth,
+          totalBitrateBps: total,
+          isRemux: false,
+        },
+        tier: p.maxHeight,
       });
     }
 
@@ -629,24 +640,31 @@ export class StreamBuilderService {
     const savingRef = sourceTotal > 0 ? sourceTotal : totalOf(topProfile);
     for (const p of available) {
       if (!isEcoProfile(p.name) || totalOf(p) >= savingRef) continue;
-      qualities.push({
-        id: p.name,
-        label: displayLabel(p.name),
-        height: p.maxHeight,
-        width: p.maxWidth,
-        totalBitrateBps: totalOf(p),
-        isRemux: false,
-        lowBandwidth: true,
+      entries.push({
+        option: {
+          id: p.name,
+          label: displayLabel(p.name),
+          height: p.maxHeight,
+          width: p.maxWidth,
+          totalBitrateBps: totalOf(p),
+          isRemux: false,
+          lowBandwidth: true,
+        },
+        tier: p.maxHeight,
       });
     }
 
-    // Order by resolution then bitrate (both descending) so full and eco
-    // interleave naturally: 4K, 4K eco, 1080p, 1080p eco, 720p, 720p eco, …
-    qualities.sort(
-      (a, b) => b.height - a.height || b.totalBitrateBps - a.totalBitrateBps,
+    // Order by resolution tier (descending), then the full rung before its
+    // low-consumption sibling, then bitrate — so an eco rung always follows the
+    // normal rung of the same resolution: 4K, 4K eco, 1080p, 1080p eco, 720p, …
+    entries.sort(
+      (a, b) =>
+        b.tier - a.tier ||
+        Number(!!a.option.lowBandwidth) - Number(!!b.option.lowBandwidth) ||
+        (b.option.totalBitrateBps ?? 0) - (a.option.totalBitrateBps ?? 0),
     );
 
-    return qualities;
+    return entries.map((e) => e.option);
   }
 
   // ---------------------------------------------------------------------------
