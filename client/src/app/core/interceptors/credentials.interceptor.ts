@@ -59,13 +59,14 @@ export const credentialsInterceptor: HttpInterceptorFn = (req, next) => {
       }
       // 401 with a refresh token available → try to rotate.
       return from(auth.refreshAccessToken()).pipe(
-        switchMap((newToken): Observable<HttpEvent<unknown>> => {
-          if (!newToken) {
+        switchMap((refreshed): Observable<HttpEvent<unknown>> => {
+          if (!refreshed) {
             // Rotation failed: bubble the original 401 so the route
             // guard / error handler can react (redirect to login).
             return throwError(() => err);
           }
-          // Retry the original request with the fresh credentials.
+          // Retry with the fresh credentials — attach() reads them live
+          // from auth.accessToken / the session cookie.
           return next(attach(req));
         }),
       );
