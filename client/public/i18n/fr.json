@@ -873,7 +873,7 @@
     "queue_error": "Impossible de charger la file de téléchargement.",
     "history_empty": "Aucun historique de téléchargement.",
     "history_error": "Impossible de charger l'historique.",
-    "eta": "Temps restant",
+    "eta": "Temps restant :",
     "col_title": "Release",
     "col_media": "Média",
     "col_quality": "Qualité",

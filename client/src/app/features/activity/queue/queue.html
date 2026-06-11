@@ -165,7 +165,7 @@
               <span>↑ {{ formatSpeed(item.upspeed) }}</span>
             }
             @if (item.eta > 0 && item.trackerStatus === 'Downloading') {
-              <span>{{ 'activity.eta' | translate }}: {{ formatEta(item.eta) }}</span>
+              <span>{{ 'activity.eta' | translate }} {{ formatEta(item.eta) }}</span>
             }
             @if (item.num_seeds > 0 || item.num_leechs > 0) {
               <span>S:{{ item.num_seeds }} L:{{ item.num_leechs }}</span>

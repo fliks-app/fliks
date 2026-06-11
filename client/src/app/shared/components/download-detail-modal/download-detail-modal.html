@@ -14,7 +14,7 @@
           <span class="font-medium">{{ overallStateLabelKey() | translate }}</span>
           @if (p.percent !== null) { <span class="tabular-nums">{{ p.percent }}%</span> }
           @if (speedLabel(); as sp) { <span>↓ {{ sp }}</span> }
-          @if (etaLabel(); as e) { <span>{{ 'activity.eta' | translate }}: {{ e }}</span> }
+          @if (etaLabel(); as e) { <span>{{ 'activity.eta' | translate }} {{ e }}</span> }
         </div>
       </div>
 
