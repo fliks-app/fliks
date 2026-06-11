@@ -2,11 +2,12 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
   output,
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { RequestPosterComponent } from '../request-poster';
 import { RequestStatusBadgeComponent } from '../request-status-badge/request-status-badge.component';
@@ -31,10 +32,25 @@ import { FliksRequestRow } from '../../../core/services/api/requests.service';
   // The host is the scroller flex item: fixed width, and a column flex so the
   // inner card fills the row's stretched height (all cards same height).
   // Compact on mobile, growing to full size on desktop/TV.
-  host: { class: 'flex shrink-0 w-64 sm:w-72 lg:w-80' },
+  // The host is the single focusable unit (like a media card): it carries
+  // tabindex/role and the focus ring (via its data-home-focus attribute on the
+  // home page), while inner links/buttons sit at tabindex=-1 so keyboard and
+  // D-pad navigation move card-to-card instead of into the card. Activating the
+  // card opens the linked media.
+  host: {
+    class: 'flex shrink-0 w-64 sm:w-72 lg:w-80 cursor-pointer rounded-box',
+    tabindex: '0',
+    role: 'button',
+    '[attr.aria-label]': 'ariaLabel()',
+    '(click)': 'onCardActivate($event)',
+    '(keydown.enter)': 'onCardActivate($event)',
+    '(keydown.space)': 'onCardActivate($event)',
+  },
   templateUrl: './request-card.html',
 })
 export class RequestCardComponent {
+  private readonly router = inject(Router);
+
   readonly request = input.required<FliksRequestRow>();
   readonly canManage = input(false);
   readonly qualityProfileName = input('—');
@@ -45,6 +61,18 @@ export class RequestCardComponent {
   readonly decline = output<number>();
   /** Forwarded up from the status badge: open the download-detail modal. */
   readonly badgeClick = output<void>();
+
+  protected readonly ariaLabel = computed(
+    () => this.request().media?.title ?? this.request().title,
+  );
+
+  /** Activate the whole card (Enter / Space / click) → open the linked media,
+   *  mirroring a media card. Inner controls stop propagation so they still fire
+   *  their own action without also navigating. */
+  protected onCardActivate(event?: Event): void {
+    event?.preventDefault();
+    void this.router.navigate(this.mediaLink());
+  }
 
   /** Backdrop art: the request's own stored fanart, falling back to the
    *  linked media's (both local `/api/images` paths). Null lets the poster
