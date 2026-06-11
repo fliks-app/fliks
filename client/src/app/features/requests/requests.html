@@ -149,7 +149,7 @@
               </h2>
 
               <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70">
-                <app-request-status-badge [request]="row" />
+                <app-request-status-badge [request]="row" (badgeClick)="onBadgeClick(row)" />
                 <span>
                   @if (row.mediaType === 'movie') {
                     {{ 'requests.type_movie' | translate }}
@@ -328,3 +328,5 @@
   (dismissed)="closeEdit()"
   (save)="saveEdit()"
 />
+
+<app-download-detail-modal #detailModal [progress]="detailProgress()" />

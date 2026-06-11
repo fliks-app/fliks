@@ -127,6 +127,7 @@
                 [busy]="requestActionBusyId() === req.id"
                 (approve)="approveRequest($event)"
                 (decline)="openDecline($event)"
+                (badgeClick)="onBadgeClick(req)"
               />
             }
           </app-horizontal-scroller>
@@ -165,3 +166,5 @@
   (dismissed)="closeDecline()"
   (submitted)="submitDecline()"
 />
+
+<app-download-detail-modal #detailModal [progress]="detailProgress()" />

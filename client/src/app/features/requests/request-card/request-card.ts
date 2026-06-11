@@ -43,6 +43,8 @@ export class RequestCardComponent {
 
   readonly approve = output<number>();
   readonly decline = output<number>();
+  /** Forwarded up from the status badge: open the download-detail modal. */
+  readonly badgeClick = output<void>();
 
   /** Backdrop art: the request's own stored fanart, falling back to the
    *  linked media's (both local `/api/images` paths). Null lets the poster

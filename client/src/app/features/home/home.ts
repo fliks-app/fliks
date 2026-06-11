@@ -8,7 +8,11 @@ import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '.
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { RequestsService, FliksRequestRow } from '../../core/services/api/requests.service';
 import { SseService } from '../../core/services/sse.service';
-import { DownloadProgressService } from '../../core/services/download-progress.service';
+import {
+  DownloadProgressService,
+  MediaDownloadProgress,
+} from '../../core/services/download-progress.service';
+import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { PlayableMediaService } from '../../core/services/playable-media.service';
@@ -73,6 +77,7 @@ import { RequestDeclineModalComponent } from '../requests/request-decline-modal/
     TvSectionDirective,
     RequestCardComponent,
     RequestDeclineModalComponent,
+    DownloadDetailModalComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home.html',
@@ -113,6 +118,14 @@ export class HomeComponent implements OnInit, OnDestroy {
    *  Gates the app-resume refresh so only the visible home refetches. */
   private detached = false;
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
+  private readonly detailModal = viewChild(DownloadDetailModalComponent);
+
+  /** Media whose download-detail modal is open; its live progress is fed in. */
+  readonly detailMediaId = signal<number | null>(null);
+  readonly detailProgress = computed<MediaDownloadProgress | null>(() => {
+    const id = this.detailMediaId();
+    return id != null ? (this.downloadProgress.progress().get(id) ?? null) : null;
+  });
 
   readonly libraries = signal<LibrarySummary[]>([]);
   readonly continueWatching = signal<ContinueWatchingItem[]>([]);
@@ -476,6 +489,14 @@ export class HomeComponent implements OnInit, OnDestroy {
     } finally {
       this.requestActionBusyId.set(null);
     }
+  }
+
+  /** Open the download-detail modal for a request card's media (badge click). */
+  onBadgeClick(row: FliksRequestRow): void {
+    const id = row.media?.id;
+    if (id == null) return;
+    this.detailMediaId.set(id);
+    this.detailModal()?.open();
   }
 
   openDecline(id: number) {

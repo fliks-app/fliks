@@ -473,6 +473,7 @@ export class CompletionService {
         mediaType: match.media.type as 'movie' | 'series',
         seasonNumber: match.season?.seasonNumber,
         episodeNumber: match.episode?.episodeNumber,
+        hash: t.hash,
         progress: t.progress,
         dlspeed: t.dlspeed,
         eta: t.eta,
@@ -898,11 +899,24 @@ export class CompletionService {
       });
       importedSeasonNumber = s?.seasonNumber;
     }
+    // Single-episode imports also carry the episode so the client retires only
+    // that episode's progress leaf, leaving sibling episodes of the same season
+    // still downloading (a whole-season clear would wipe them for ~60s).
+    let importedEpisodeNumber: number | undefined;
+    const importedEpisodeId = completedPatch.episode?.id;
+    if (importedEpisodeId != null) {
+      const e = await this.episodeRepo.findOne({
+        where: { id: importedEpisodeId },
+        select: ['id', 'episodeNumber'],
+      });
+      importedEpisodeNumber = e?.episodeNumber;
+    }
     this.events.emitToUsers(importRecipients, {
       type: 'import.complete',
       mediaId: media.id,
       title: media.title,
       seasonNumber: importedSeasonNumber,
+      episodeNumber: importedEpisodeNumber,
     });
     this.events.emit({ type: 'queue.updated' });
 

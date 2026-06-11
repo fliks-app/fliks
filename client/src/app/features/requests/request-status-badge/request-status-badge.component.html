@@ -1,5 +1,24 @@
-<app-progress-badge
-  [label]="labelKey() | translate"
-  [percent]="percent()"
-  [badgeClass]="badgeClass()"
-/>
+@if (descriptor(); as d) {
+  @if (d.labelKey) {
+    @if (clickable()) {
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm px-1.5"
+        [attr.aria-label]="'media_detail.download_detail_title' | translate"
+        (click)="$event.stopPropagation(); badgeClick.emit()"
+      >
+        <app-progress-badge
+          [label]="d.labelKey | translate"
+          [percent]="d.percent"
+          [badgeClass]="d.badgeClass"
+        />
+      </button>
+    } @else {
+      <app-progress-badge
+        [label]="d.labelKey | translate"
+        [percent]="d.percent"
+        [badgeClass]="d.badgeClass"
+      />
+    }
+  }
+}
