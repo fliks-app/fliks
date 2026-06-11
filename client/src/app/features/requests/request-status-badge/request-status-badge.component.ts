@@ -4,10 +4,16 @@ import {
   computed,
   inject,
   input,
+  output,
 } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
 import { ProgressBadgeComponent } from '../../../shared/components/progress-badge/progress-badge.component';
 import { DownloadProgressService } from '../../../core/services/download-progress.service';
+import {
+  describeBadge,
+  DownloadBadgeDescriptor,
+} from '../../../shared/utils/download-format';
+import { TvService } from '../../../core/services/tv.service';
 import {
   FliksRequestRow,
   FliksRequestStatus,
@@ -15,11 +21,16 @@ import {
 
 /**
  * Status badge for a request row, shared by the requests list and the home
- * request card so the label, colour and live download percent are computed in
- * one place. An approved/processing request with an in-flight download reads as
- * "downloading" (with the mean percent, per-season requests averaging only
- * their requested seasons); otherwise it tracks the media's monitored state.
- * Other statuses (pending, declined, available…) read as their status label.
+ * request card. Composes two concerns:
+ *  - request **lifecycle** states (pending / declined / available / failed) →
+ *    `requests.status.*`, owned here;
+ *  - for an in-flight approved/processing request, the real **download** status
+ *    (downloading / stalled / queued / paused / error…) via the shared
+ *    {@link describeBadge}, which also covers the monitored/unmonitored states.
+ *
+ * When a download is in flight the badge is clickable (emits `badgeClick` so
+ * the host can open the detail modal) — except on TV, where a focusable in-card
+ * button would add a second D-pad stop and break card focus traversal.
  */
 @Component({
   selector: 'app-request-status-badge',
@@ -32,45 +43,39 @@ import {
 })
 export class RequestStatusBadgeComponent {
   private readonly downloadProgress = inject(DownloadProgressService);
+  private readonly tv = inject(TvService);
 
   readonly request = input.required<FliksRequestRow>();
+  /** Emitted when the (clickable) download badge is activated. */
+  readonly badgeClick = output<void>();
 
-  readonly percent = computed<number | null>(() => {
-    const r = this.request();
-    if (r.status !== 'approved' && r.status !== 'processing') return null;
-    if (!r.media?.monitored) return null;
-    const id = r.media?.id;
-    if (id == null) return null;
-    const p = this.downloadProgress.progress().get(id);
-    if (!p) return null;
-    if (r.seasons?.length && p.seasons) {
-      const vals = r.seasons
-        .map((s) => p.seasons!.get(s)?.percent)
-        .filter((x): x is number => x != null);
-      if (!vals.length) return null;
-      return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
-    }
-    return p.percent;
-  });
-
-  readonly labelKey = computed<string>(() => {
+  readonly descriptor = computed<DownloadBadgeDescriptor>(() => {
     const r = this.request();
     if (r.status === 'approved' || r.status === 'processing') {
-      if (this.percent() !== null) return 'requests.badge_downloading';
-      return r.media?.monitored
-        ? 'requests.badge_monitored'
-        : 'requests.badge_unmonitored';
+      const id = r.media?.id;
+      const progress =
+        id != null ? (this.downloadProgress.progress().get(id) ?? null) : null;
+      return describeBadge(progress, {
+        monitored: r.media?.monitored ?? false,
+        downloaded: false,
+        seasonFilter: r.seasons ?? undefined,
+      });
     }
-    return 'requests.status.' + r.status;
+    return {
+      state: '',
+      labelKey: 'requests.status.' + r.status,
+      badgeClass: this.statusBadgeClass(r.status),
+      percent: null,
+      isClickable: false,
+      totalLeaves: 0,
+      stalledLeaves: 0,
+    };
   });
 
-  readonly badgeClass = computed<string>(() => {
-    const r = this.request();
-    if (r.status === 'approved' || r.status === 'processing') {
-      return r.media?.monitored ? 'badge-info' : 'badge-ghost';
-    }
-    return this.statusBadgeClass(r.status);
-  });
+  /** Clickable on web/mobile only (see class doc on the TV exclusion). */
+  readonly clickable = computed(
+    () => this.descriptor().isClickable && !this.tv.isTv(),
+  );
 
   private statusBadgeClass(status: FliksRequestStatus): string {
     switch (status) {

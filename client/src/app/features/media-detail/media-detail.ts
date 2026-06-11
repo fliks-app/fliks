@@ -55,6 +55,8 @@ import { MediaCardComponent } from '../../shared/components/media-card/media-car
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
+import { describeBadge } from '../../shared/utils/download-format';
+import { TvService } from '../../core/services/tv.service';
 import { DownloadProgressService } from '../../core/services/download-progress.service';
 import {
   filesForEpisode,
@@ -127,6 +129,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly requestsApi = inject(RequestsService);
   private readonly downloadManager = inject(DownloadManagerService);
   private readonly downloadProgress = inject(DownloadProgressService);
+  private readonly tv = inject(TvService);
 
   /** Live download progress for the media on screen (null when not
    *  downloading). Fed by `download.progress` SSE + a one-shot seed on load. */
@@ -148,29 +151,19 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
           m.episodeStats.totalEpisodes > 0 &&
           m.episodeStats.downloadedEpisodes >= m.episodeStats.totalEpisodes
         : this.mediaFiles().length > 0;
-    if (downloaded) return null;
-    const dl = this.activeDownload();
-    if (dl) {
-      return {
-        labelKey: 'activity.tstatus_downloading',
-        percent: dl.percent,
-        badgeClass: 'badge-info',
-        clickable: true,
-      };
-    }
-    return m.monitored
-      ? {
-          labelKey: 'requests.badge_monitored',
-          percent: null,
-          badgeClass: 'badge-info',
-          clickable: false,
-        }
-      : {
-          labelKey: 'requests.badge_unmonitored',
-          percent: null,
-          badgeClass: 'badge-ghost',
-          clickable: false,
-        };
+    const d = describeBadge(this.activeDownload(), {
+      monitored: m.monitored,
+      downloaded,
+    });
+    if (!d.labelKey) return null;
+    return {
+      labelKey: d.labelKey,
+      percent: d.percent,
+      badgeClass: d.badgeClass,
+      // Non-interactive on TV: a focusable in-card/header button would add a
+      // second D-pad stop. The download detail is a web/mobile drill-down.
+      clickable: d.isClickable && !this.tv.isTv(),
+    };
   });
   private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
   private readonly downloadDetailModal =

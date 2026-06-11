@@ -19,7 +19,7 @@
     </h3>
 
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70">
-      <app-request-status-badge [request]="request()" />
+      <app-request-status-badge [request]="request()" (badgeClick)="badgeClick.emit()" />
       <span>
         @if (request().mediaType === 'movie') {
           {{ 'requests.type_movie' | translate }}

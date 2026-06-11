@@ -114,6 +114,7 @@ export class SseService implements OnDestroy {
           mediaType: event['mediaType'] as MediaType,
           seasonNumber: event['seasonNumber'] as number | undefined,
           episodeNumber: event['episodeNumber'] as number | undefined,
+          hash: event['hash'] as string | undefined,
           progress: Number(event['progress']),
           dlspeed: Number(event['dlspeed'] ?? 0),
           eta: Number(event['eta'] ?? 0),
@@ -126,6 +127,7 @@ export class SseService implements OnDestroy {
         this.downloadProgress.clearMedia(
           Number(event['mediaId']),
           event['seasonNumber'] as number | undefined,
+          event['episodeNumber'] as number | undefined,
         );
         this.toast.success(
           this.translate.instant('sse.import_complete', { title: event['title'] ?? '' }),

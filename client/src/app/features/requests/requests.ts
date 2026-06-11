@@ -30,8 +30,12 @@ import { RequestViewDeclineModalComponent } from './request-view-decline-modal/r
 import { RequestEditModalComponent } from './request-edit-modal/request-edit-modal.component';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { SseService } from '../../core/services/sse.service';
-import { DownloadProgressService } from '../../core/services/download-progress.service';
+import {
+  DownloadProgressService,
+  MediaDownloadProgress,
+} from '../../core/services/download-progress.service';
 import { RequestStatusBadgeComponent } from './request-status-badge/request-status-badge.component';
+import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angular';
 
 @Component({
@@ -47,6 +51,7 @@ import { LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angu
     RequestEditModalComponent,
     DropdownMenuComponent,
     RequestStatusBadgeComponent,
+    DownloadDetailModalComponent,
     LucideEllipsisVertical,
     LucidePencil,
     LucideTrash2,
@@ -76,6 +81,14 @@ export class RequestsComponent implements OnInit, OnDestroy {
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
   private readonly viewDeclineModal = viewChild(RequestViewDeclineModalComponent);
   private readonly editModal = viewChild(RequestEditModalComponent);
+  private readonly detailModal = viewChild(DownloadDetailModalComponent);
+
+  /** Media whose download-detail modal is open; its live progress is fed in. */
+  readonly detailMediaId = signal<number | null>(null);
+  readonly detailProgress = computed<MediaDownloadProgress | null>(() => {
+    const id = this.detailMediaId();
+    return id != null ? (this.downloadProgress.progress().get(id) ?? null) : null;
+  });
 
   readonly rows = signal<FliksRequestRow[]>([]);
   readonly total = signal(0);
@@ -370,5 +383,13 @@ export class RequestsComponent implements OnInit, OnDestroy {
   languageProfileDisplay(id: number | null): string {
     if (id == null) return '—';
     return this.languageProfiles().find((p) => p.id === id)?.name ?? `#${id}`;
+  }
+
+  /** Open the download-detail modal for a request's media (badge click). */
+  onBadgeClick(row: FliksRequestRow): void {
+    const id = row.media?.id;
+    if (id == null) return;
+    this.detailMediaId.set(id);
+    this.detailModal()?.open();
   }
 }

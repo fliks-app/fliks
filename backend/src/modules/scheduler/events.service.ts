@@ -38,6 +38,11 @@ export type SseEvent =
        *  for movies and multi-season packs. Lets the client retire just that
        *  season's live progress. */
       seasonNumber?: number;
+      /** Episode whose file just imported (single-episode import); unset for
+       *  movies, packs and multi-episode imports. Lets the client retire just
+       *  that episode's live progress leaf, leaving sibling episodes of the
+       *  same season still downloading. */
+      episodeNumber?: number;
     }
   | { type: 'import.failed'; mediaId: number; title: string; error: string }
   | {
@@ -50,6 +55,10 @@ export type SseEvent =
       mediaType: 'movie' | 'series';
       seasonNumber?: number;
       episodeNumber?: number;
+      /** Torrent hash — disambiguates concurrent leaves of the same season when
+       *  the episode relation couldn't be resolved (loose episodes with no
+       *  episodeNumber would otherwise collide). */
+      hash?: string;
       progress: number;
       dlspeed: number;
       eta: number;
