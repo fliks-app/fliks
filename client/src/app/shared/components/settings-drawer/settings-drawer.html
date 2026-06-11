@@ -4,7 +4,7 @@
      controls visibility, no class toggle, no `display:none` override,
      no DaisyUI animation quirks to dance around. -->
 <div class="drawer min-h-screen" [class.lg:drawer-open]="!tv.isTv()">
-  <input [id]="drawerId" #drawerToggle type="checkbox" class="drawer-toggle" />
+  <input [id]="drawerId()" #drawerToggle type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative min-w-0">
     <!-- Top bar — `lg:hidden` on desktop only. On TV the navbar is
          permanent (drawer is transient there, the hamburger is the
@@ -21,12 +21,12 @@
         <button type="button" class="btn btn-square btn-ghost" (click)="goBack()">
           <svg lucideChevronLeft class="h-5 w-5"></svg>
         </button>
-        <label [for]="drawerId" tabindex="0" role="button" class="btn btn-square btn-ghost">
+        <label [for]="drawerId()" tabindex="0" role="button" class="btn btn-square btn-ghost">
           <svg lucideMenu class="h-5 w-5"></svg>
         </label>
       </div>
       <div class="flex-1">
-        <span class="text-lg font-bold">{{ title }}</span>
+        <span class="text-lg font-bold">{{ title() }}</span>
       </div>
     </nav>
     <!-- Spacer pushes content below the fixed navbar (visible on TV too
@@ -43,7 +43,7 @@
   </div>
 
   <div class="drawer-side z-40">
-    <label [for]="drawerId" class="drawer-overlay"></label>
+    <label [for]="drawerId()" class="drawer-overlay"></label>
     <aside class="bg-base-100 w-64 min-h-full flex flex-col"
       style="
         padding-top: calc(env(safe-area-inset-top, 0px) / 2 );
@@ -54,11 +54,11 @@
       <div class="p-4 border-b border-base-200">
         <a routerLink="/" class="flex items-center gap-2 px-2 py-1 rounded-lg text-base-content/60 hover:text-base-content text-sm mb-2 mt-4">
           <svg lucideChevronLeft class="h-4 w-4"></svg>
-          {{ backLabel }}
+          {{ backLabel() }}
         </a>
         <h2 class="text-xl font-bold flex items-center gap-2">
           <ng-content select="[drawerIcon]"></ng-content>
-          {{ title }}
+          {{ title() }}
         </h2>
       </div>
 
