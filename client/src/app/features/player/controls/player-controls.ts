@@ -37,6 +37,7 @@ import {
   LucideSkipForward,
   LucideCast,
   LucideHeadphones,
+  LucideLeaf,
   LucideVolume2,
   LucideVolumeX,
 } from '@lucide/angular';
@@ -55,6 +56,7 @@ import {
     LucideSkipForward,
     LucideCast,
     LucideHeadphones,
+    LucideLeaf,
     LucideVolume2,
     LucideVolumeX,
     LucideSettings,
@@ -79,6 +81,16 @@ export class PlayerControlsComponent {
    *  every visible rung is eco then, so the tag is just noise. */
   readonly showEcoBadge = computed(
     () => !this.playerSettings.settings().ecoByDefault,
+  );
+  /** Show a leaf next to the quality value when the active rung is a
+   *  low-consumption one — and the eco-by-default setting hasn't already made
+   *  the tag redundant (every rung eco then). */
+  readonly showEcoLeaf = computed(
+    () =>
+      this.showEcoBadge() &&
+      (this.availableQualities().find((q) => q.id === this.activeQualityId())
+        ?.lowBandwidth ??
+        false),
   );
 
   constructor() {
