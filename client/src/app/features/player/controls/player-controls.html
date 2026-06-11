@@ -316,7 +316,10 @@
       @if (availableQualities().length > 1) {
         <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="settingsPanel.set('quality')">
           <span class="flex-1 text-left">{{ 'player.quality' | translate }}</span>
-          <span class="text-white/40 text-xs">{{ activeQualityLabel() }}</span>
+          <span class="flex items-center gap-1 text-white/40 text-xs">
+            {{ activeQualityLabel() }}
+            @if (showEcoLeaf()) { <svg lucideLeaf class="h-3.5 w-3.5 shrink-0"></svg> }
+          </span>
           <svg lucideChevronRight class="h-4 w-4 text-white/30 shrink-0"></svg>
         </button>
       }
@@ -364,7 +367,10 @@
         @if (availableQualities().length > 1) {
           <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="settingsPanel.set('quality')">
             <span class="flex-1 text-left">{{ 'player.quality' | translate }}</span>
-            <span class="text-white/50 text-xs">{{ activeQualityLabel() }}</span>
+            <span class="flex items-center gap-1 text-white/50 text-xs">
+              {{ activeQualityLabel() }}
+              @if (showEcoLeaf()) { <svg lucideLeaf class="h-3.5 w-3.5 shrink-0"></svg> }
+            </span>
             <svg lucideChevronRight class="h-4 w-4 text-white/40 shrink-0"></svg>
           </button>
         }
