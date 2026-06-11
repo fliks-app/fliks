@@ -27,7 +27,10 @@ export function formatSpeed(bytesPerSec: number): string {
 }
 
 export function formatEta(seconds: number): string {
-  if (seconds <= 0 || !isFinite(seconds)) return '—';
+  // qBittorrent reports 8640000s (100 days) as its "infinite" ETA sentinel for
+  // stalled / no-progress torrents — show ∞ rather than a bogus "2400h 0m".
+  if (!isFinite(seconds) || seconds >= 8640000) return '∞';
+  if (seconds <= 0) return '—';
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
