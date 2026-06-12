@@ -41,6 +41,7 @@ import {
 import { MediaInfoExtraComponent } from '../../shared/components/media-info-extra/media-info-extra';
 import { SubtitlesModalComponent } from '../../shared/components/subtitles-modal/subtitles-modal';
 import { MediaFileInfoComponent } from '../../shared/components/media-file-info';
+import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { MediaDetailSeasonsComponent } from './components/media-detail-seasons/media-detail-seasons.component';
 import { ReleasesModalComponent } from './components/releases-modal/releases-modal.component';
 import {
@@ -88,6 +89,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
   selector: 'app-media-detail',
   imports: [
     TranslateModule,
+    DefaultFocusDirective,
     MediaInfoHeaderComponent,
     MediaInfoExtraComponent,
     SubtitlesModalComponent,

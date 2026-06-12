@@ -1,5 +1,6 @@
 import { Injectable, inject, DestroyRef } from '@angular/core';
 import { TvService } from './tv.service';
+import { DefaultFocusService } from './default-focus.service';
 
 /**
  * Spatial navigation for D-pad input on Android TV — and keyboard
@@ -49,6 +50,7 @@ const NAV_MIN_INTERVAL_MS = 300;
 @Injectable({ providedIn: 'root' })
 export class TvSpatialNavService {
   private readonly tv = inject(TvService);
+  private readonly defaultFocus = inject(DefaultFocusService);
   private readonly destroyRef = inject(DestroyRef);
   private bound = false;
   /** Timestamp of the last performed spatial-nav move (for pacing). */
@@ -404,7 +406,9 @@ export class TvSpatialNavService {
     if (!all.length) return null;
 
     if (!active || active === document.body) {
-      return all[0] ?? null;
+      // Nothing focused yet (cold load) — prefer the active page's declared
+      // default focus over the first document focusable (which is the topbar).
+      return this.defaultFocus.currentTarget() ?? all[0] ?? null;
     }
 
     const fromRect = active.getBoundingClientRect();

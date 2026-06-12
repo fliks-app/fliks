@@ -3,7 +3,7 @@
 }
 
 
-<div appTvSection class="flex flex-col gap-8">
+<div appTvSection appDefaultFocus="a[data-home-focus^='library:']" focusKey="home" focusIdAttr="data-home-focus" class="flex flex-col gap-8">
 
   @for (section of visibleSections(); track section.key) {
     @switch (section.type) {

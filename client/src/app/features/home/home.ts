@@ -1,5 +1,5 @@
-import { Component, ChangeDetectionStrategy, inject, signal, computed, effect, OnInit, OnDestroy, Injector, afterNextRender, viewChild } from '@angular/core';
-import { ActivatedRoute, NavigationStart, Router, RouterLink } from '@angular/router';
+import { Component, ChangeDetectionStrategy, inject, signal, computed, effect, OnInit, OnDestroy, Injector, viewChild } from '@angular/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { TranslateModule } from '@ngx-translate/core';
@@ -17,7 +17,7 @@ import { ProfilesService } from '../../core/services/api/profiles.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { PlayableMediaService } from '../../core/services/playable-media.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
-import { FocusMemoryService } from '../../core/services/focus-memory.service';
+import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { NavbarService } from '../../core/services/navbar.service';
 import { AppResumeService } from '../../core/services/app-resume.service';
 import { BackgroundService } from '../../core/services/background.service';
@@ -69,7 +69,7 @@ import { RequestDeclineModalComponent } from '../requests/request-decline-modal/
 @Component({
   selector: 'app-home',
   imports: [
-    RouterLink, TranslateModule,
+    RouterLink, TranslateModule, DefaultFocusDirective,
     MediaCardComponent,
     HorizontalScrollerComponent,
     LucideIconComponent,
@@ -94,7 +94,6 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly downloadProgress = inject(DownloadProgressService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly scrollMemory = inject(ScrollMemoryService);
-  private readonly focusMemory = inject(FocusMemoryService);
   private readonly navbar = inject(NavbarService);
   private readonly appResume = inject(AppResumeService);
   private readonly backgroundService = inject(BackgroundService);
@@ -107,10 +106,6 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly reuseStrategy = inject(CachingReuseStrategy);
 
   private static readonly SCROLL_KEY = 'home';
-  private static readonly FOCUS_KEY = 'home';
-  /** Captured at ngOnInit before NavbarService.lastWasBack auto-resets. */
-  private arrivedViaBack = false;
-  private navStartSub?: Subscription;
   private attachedSub?: Subscription;
   private detachedSub?: Subscription;
   private resumeSub?: Subscription;
@@ -249,7 +244,6 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
-    this.arrivedViaBack = this.navbar.lastWasBack();
     this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
     // Profile names for the request cards are resolved client-side (same as
     // the requests page); load them once for users who can have requests.
@@ -265,20 +259,6 @@ export class HomeComponent implements OnInit, OnDestroy {
     // overwrites in place; no spinner, no flash.
     queueMicrotask(() => void this.loadAllSections({ force: true }));
     this.scrollMemory.restore(HomeComponent.SCROLL_KEY, this.injector);
-    if (this.tv.isTv()) {
-      afterNextRender(() => this.applyDefaultFocus(), { injector: this.injector });
-      // NavigationStart fires the moment a click triggers a route change,
-      // before Angular tears down this component — activeElement is still
-      // the focused card so we can capture its data-home-focus once.
-      this.navStartSub = this.router.events
-        .pipe(filter((e): e is NavigationStart => e instanceof NavigationStart))
-        .subscribe(() => {
-          const active = document.activeElement as HTMLElement | null;
-          const container = active?.closest<HTMLElement>('[data-home-focus]');
-          const sel = container?.dataset['homeFocus'];
-          if (sel) this.focusMemory.save(HomeComponent.FOCUS_KEY, sel);
-        });
-    }
     // The route is detached/cached on navigate-away (see CachingReuseStrategy
     // + `data: { reuse: true }` on the home route). On return, ngOnInit does
     // NOT fire again — refresh data + scroll + focus through this hook
@@ -298,10 +278,6 @@ export class HomeComponent implements OnInit, OnDestroy {
       void this.loadAllSections();
       queueMicrotask(() => void this.loadAllSections({ force: true }));
       this.scrollMemory.restoreSticky(HomeComponent.SCROLL_KEY);
-      if (this.tv.isTv()) {
-        this.arrivedViaBack = true;
-        afterNextRender(() => this.applyDefaultFocus(), { injector: this.injector });
-      }
     });
     // ngOnDestroy doesn't fire when detaching, so the active scroll key would
     // stay pointing at us — and a NavigationStart on the next page would then
@@ -326,7 +302,6 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.scrollMemory.deactivate();
-    this.navStartSub?.unsubscribe();
     this.attachedSub?.unsubscribe();
     this.detachedSub?.unsubscribe();
     this.resumeSub?.unsubscribe();
@@ -361,27 +336,6 @@ export class HomeComponent implements OnInit, OnDestroy {
       if (recs) this.recommendations.set(recs);
     } catch { /* ignore */ }
     await this.loadFilteredSections({ force });
-  }
-
-  private applyDefaultFocus() {
-    const root = document.querySelector<HTMLElement>('app-home') ?? document.body;
-    const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex="0"]';
-    if (this.arrivedViaBack) {
-      const saved = this.focusMemory.retrieve(HomeComponent.FOCUS_KEY);
-      const container = saved
-        ? root.querySelector<HTMLElement>(`[data-home-focus="${CSS.escape(saved)}"]`)
-        : null;
-      const target =
-        container?.matches(FOCUSABLE)
-          ? container
-          : container?.querySelector<HTMLElement>(FOCUSABLE) ?? null;
-      if (target) {
-        target.focus({ preventScroll: false });
-        return;
-      }
-    }
-    // Default: first focusable in DOM order = first library card.
-    root.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: false });
   }
 
   private async loadFilteredSections(opts: { force?: boolean } = {}) {

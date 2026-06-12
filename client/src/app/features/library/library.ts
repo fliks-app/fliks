@@ -9,10 +9,9 @@ import {
   OnDestroy,
   ElementRef,
   ViewChild,
-  afterNextRender,
   effect,
 } from '@angular/core';
-import { ActivatedRoute, NavigationStart, Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -29,7 +28,7 @@ import type {
   RecommendationItem,
 } from '../../core/services/api/streaming-api.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
-import { FocusMemoryService } from '../../core/services/focus-memory.service';
+import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
@@ -62,6 +61,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
   selector: 'app-library',
   imports: [
     MediaCardComponent,
+    DefaultFocusDirective,
     DropdownMenuComponent,
     TvSelectDirective,
     HorizontalScrollerComponent,
@@ -86,15 +86,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly scrollMemory = inject(ScrollMemoryService);
-  private readonly focusMemory = inject(FocusMemoryService);
   readonly navbar = inject(NavbarService);
   private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
   private readonly translate = inject(TranslateService);
   private readonly reuseStrategy = inject(CachingReuseStrategy);
   private readonly appResume = inject(AppResumeService);
-  private arrivedViaBack = false;
-  private navStartSub?: Subscription;
   private attachedSub?: Subscription;
   private detachedSub?: Subscription;
   private queryParamSub?: Subscription;
@@ -202,7 +199,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }, { allowSignalWrites: true });
 
   ngOnInit() {
-    this.arrivedViaBack = this.navbar.lastWasBack();
     if (this.tv.isTv()) {
       // DOM windowing for the `all` grid: only render a row-aligned slice
       // around the viewport so a large library doesn't pile hundreds of cards
@@ -210,17 +206,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.list.enableWindowing(() => this.readGridMetrics(), 4);
       this.onResize = () => this.list.onWindowScroll();
       window.addEventListener('resize', this.onResize, { passive: true });
-    }
-    if (this.tv.isTv()) {
-      this.navStartSub = this.router.events
-        .pipe(filter((e): e is NavigationStart => e instanceof NavigationStart))
-        .subscribe(() => {
-          const active = document.activeElement as HTMLElement | null;
-          const container = active?.closest<HTMLElement>('[data-library-focus]');
-          const sel = container?.dataset['libraryFocus'];
-          const lib = this.library();
-          if (sel && lib) this.focusMemory.save(`library-${lib.id}`, sel);
-        });
     }
     // Subscribe to route param changes (handles initial load + sidebar nav).
     this.route.params.subscribe(async (params) => {
@@ -291,9 +276,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
         void this.loadCollections();
       }
       this.scrollMemory.restore(scrollKey, this.injector);
-      if (this.tv.isTv()) {
-        afterNextRender(() => this.applyDefaultFocus(lib.id), { injector: this.injector });
-      }
     });
 
     // Each /libraries/:libraryName has its own cache slot (CachingReuseStrategy
@@ -317,10 +299,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
         void this.loadGenres();
       }
       this.scrollMemory.restoreSticky(scrollKey);
-      if (this.tv.isTv()) {
-        this.arrivedViaBack = true;
-        afterNextRender(() => this.applyDefaultFocus(lib.id), { injector: this.injector });
-      }
     });
     this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
       if (key !== ownKey) return;
@@ -370,35 +348,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
     this.navbar.clearPageTitle();
-    this.navStartSub?.unsubscribe();
     this.attachedSub?.unsubscribe();
     this.detachedSub?.unsubscribe();
     this.queryParamSub?.unsubscribe();
     this.resumeSub?.unsubscribe();
-  }
-
-  private applyDefaultFocus(libraryId: number) {
-    const root = document.querySelector<HTMLElement>('app-library') ?? document.body;
-    const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex="0"]';
-    if (this.arrivedViaBack) {
-      const saved = this.focusMemory.retrieve(`library-${libraryId}`);
-      const container = saved
-        ? root.querySelector<HTMLElement>(`[data-library-focus="${CSS.escape(saved)}"]`)
-        : null;
-      const target = container?.matches(FOCUSABLE)
-        ? container
-        : container?.querySelector<HTMLElement>(FOCUSABLE) ?? null;
-      if (target) {
-        target.focus({ preventScroll: false });
-        return;
-      }
-    }
-    // Default: first card in the grid.
-    const firstCard = root.querySelector<HTMLElement>('[data-library-focus^="media:"]');
-    const target = firstCard?.matches(FOCUSABLE)
-      ? firstCard
-      : firstCard?.querySelector<HTMLElement>(FOCUSABLE);
-    target?.focus({ preventScroll: false });
   }
 
   scrollToLetter(letter: string) {
