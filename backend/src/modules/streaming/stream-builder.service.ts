@@ -123,53 +123,62 @@ export class StreamBuilderService {
     // HDR detection
     const isSourceHdr = !!source.hdrFormat;
     const clientSupportsHdr = profile.supportsHdr === true;
-    // HEVC HDR ladder eligibility. Triggers a separate master.m3u8 path
-    // (HEVC Main10 transcodes carrying BT.2020/PQ in their VUI) instead
-    // of the H.264 SDR ladder. Gated by:
-    //   - Source video codec is HEVC (only codec we re-encode while
-    //     preserving HDR signaling in HLS).
-    //   - Client claims HDR support (browser-device-profile sourced from
-    //     `AVPlayer.eligibleForHDRPlayback` on iOS, MediaCapabilities on
-    //     web/Android).
-    // Encoder availability is checked downstream by the codec selector
-    // via `encoderRegistry.resolve()` — deployments without a working
-    // hevc_qsv Main10 path automatically fall back to libx265 (or to
-    // H.264 SDR if the source isn't HEVC).
-    const useHdrLadder =
-      isSourceHdr && clientSupportsHdr && sourceVideoCodec === 'hevc';
-    // Tone-map iff the source is HDR and we're not routing through the
-    // HDR ladder. Anything that re-encodes via H.264 needs the tonemap
-    // filter or AVPlayer rejects with -12927 (mismatched VUI vs codec).
-    const needsTonemapping = isSourceHdr && !useHdrLadder;
-
     // Codec selector: picks the variant the encoder pipeline will produce
-    // when the playback path lands on transcode. The result is stored in
-    // the tracker so the controller can thread it into every later
-    // session spawn via SessionContext.videoVariant. Today only the
-    // first-ranked variant is emitted (single codec per master); the
-    // remainder is kept in diagnostics. Source HDR + HEVC source still
-    // routes through `useHdrLadder` for backward compat — the selector's
-    // job here is to give the encoder layer an explicit variant target
-    // rather than rely on profile-name inference.
+    // when the playback path lands on transcode. The result is threaded by
+    // the controller onto every later session spawn via
+    // SessionContext.videoVariant. Only the first-ranked variant is emitted
+    // (single codec per master); the rest is diagnostics.
+    //
+    // Carry the source HDR format in unconditionally: the selector + encoder
+    // registry are the single source of truth for whether an HDR-preserving
+    // encoder exists for a codec the client supports (HEVC Main10 on QSV,
+    // AV1 via NVENC/libsvtav1, …). It returns an SDR variant when the client
+    // lacks HDR display support or no HDR encoder is probed-OK.
     const detectedHwAccel = this.transcodingService.getDetectedHwAccel();
     const userAgent = ''; // UA-driven quirks plumbed via a later patch
-    const selectedVariant = pickPrimaryVariant(
+    let selectedVariant = pickPrimaryVariant(
       {
         width: source.width ?? 0,
         height: source.height ?? 0,
-        // Only carry HDR into the variant when we actually emit the HDR ladder.
-        // An HDR source tonemapped to SDR (useHdrLadder=false) is encoded as an
-        // 8-bit SDR variant, so selecting an HDR (Main10) variant here
-        // mismatches the real encoder — which left effectiveHwAccel resolving to
-        // the CPU fallback (stats showed "CPU") while ffmpeg actually ran
-        // hevc_qsv.
-        hdr: useHdrLadder ? ((source.hdrFormat as CodecVariant['hdr']) ?? null) : null,
+        hdr: (source.hdrFormat as CodecVariant['hdr']) ?? null,
         codec: normaliseSourceCodec(source.videoCodec) ?? undefined,
       },
       profile,
       detectedHwAccel,
       userAgent,
     );
+    // The HDR ladder emission (master-playlist `hdrPassThrough` branch) only
+    // produces HEVC Main10 rungs today. When the selector resolves a non-HEVC
+    // HDR encoder (e.g. AV1 HDR on NVENC Ada), re-pick an SDR variant so we
+    // tone-map consistently instead of advertising an HDR ladder we can't
+    // emit. On QSV — the deployment target — AV1 HDR never resolves (no
+    // mastering-display API), so an HDR source always lands on HEVC here.
+    // Lifting this needs the HDR branch to go codec-aware (follow-up).
+    if (selectedVariant.hdr != null && selectedVariant.codec !== 'hevc') {
+      selectedVariant = pickPrimaryVariant(
+        {
+          width: source.width ?? 0,
+          height: source.height ?? 0,
+          hdr: null,
+          codec: normaliseSourceCodec(source.videoCodec) ?? undefined,
+        },
+        profile,
+        detectedHwAccel,
+        userAgent,
+      );
+    }
+    // The transcode ladder preserves HDR exactly when the selector chose an
+    // HDR (Main10) variant. Codec-agnostic on the source side: AV1, VP9 and
+    // HEVC 10-bit HDR all route here; an AV1 HDR source on QSV re-encodes to
+    // HEVC Main10 HDR, the proven path. `useHdrLadder` drives the HDR rung
+    // naming and is threaded to the session by the controller.
+    const useHdrLadder = selectedVariant.hdr != null;
+    // Tone-map iff the source is HDR and the transcode ladder won't preserve
+    // it (SDR client, or no HDR encoder for a client-supported codec). The
+    // re-encode then runs the tonemap filter; copy paths (DirectPlay / remux)
+    // never tone-map. AVPlayer rejects with -12927 if an H.264 re-encode
+    // keeps the HDR VUI, hence the filter.
+    const transcodeTonemaps = isSourceHdr && !useHdrLadder;
     // useHdrLadder and selectedVariant are returned to the controller
     // via EvaluateResult; the controller threads them onto the live
     // session rather than the service writing side-effects.
@@ -197,14 +206,31 @@ export class StreamBuilderService {
       `audioDecision[file=${resolved.mediaFile.id}] tryDirectPlay → audioSupported=${directPlayResult.audioSupported}, containerSupported=${directPlayResult.containerSupported}, videoSupported=${directPlayResult.videoSupported}, reasons=${reasons.map((r) => r.flag).join('|') || '-'}`,
     );
 
-    // HDR on SDR client forces transcode
-    if (needsTonemapping) {
+    // Can the client present THIS HDR stream as-is? DirectPlay and remux copy
+    // the video bitstream verbatim, so HDR survives for any codec — it only
+    // needs an HDR display plus acceptance of the source codec at its bit
+    // depth, which tryDirectPlay already validated via codecConditions
+    // (videoConditionsMet covers the per-codec maxBitDepth). Decoupled from
+    // the source codec on purpose: AV1, VP9 and HEVC 10-bit HDR all qualify.
+    const clientCanPresentHdr =
+      isSourceHdr &&
+      clientSupportsHdr &&
+      directPlayResult.videoSupported &&
+      directPlayResult.videoConditionsMet;
+
+    // HDR the client can't present as-is forces a transcode. Flag the
+    // tone-map only when the re-encode is actually SDR — when the HDR ladder
+    // preserves it the real blocker is whatever tryDirectPlay already
+    // recorded (resolution, level, …).
+    if (isSourceHdr && !clientCanPresentHdr) {
       if (directPlayResult.canDirectPlay)
         directPlayResult.canDirectPlay = false;
-      reasons.push({
-        flag: 'VideoHdrNotSupported',
-        message: `HDR → SDR (tone mapping ${source.hdrFormat})`,
-      });
+      if (transcodeTonemaps) {
+        reasons.push({
+          flag: 'VideoHdrNotSupported',
+          message: `HDR → SDR (tone mapping ${source.hdrFormat})`,
+        });
+      }
     }
 
     // Subtitle burn-in forces transcode
@@ -253,7 +279,7 @@ export class StreamBuilderService {
     const sourceCopyable =
       directPlayResult.videoSupported &&
       directPlayResult.videoConditionsMet &&
-      !needsTonemapping &&
+      (!isSourceHdr || clientCanPresentHdr) &&
       !needsBurnIn &&
       !needsCrop;
 
@@ -413,7 +439,7 @@ export class StreamBuilderService {
 
     // --- Step 3: Full Transcode ---
     if (
-      needsTonemapping &&
+      transcodeTonemaps &&
       !reasons.some((r) => r.flag === 'VideoHdrNotSupported')
     ) {
       reasons.push({
@@ -437,10 +463,10 @@ export class StreamBuilderService {
     const qsvNativeAvailableForReport =
       hasUsableQsvNativeDecoderForReport &&
       needsCrop &&
-      (!needsTonemapping || isVppQsvTonemapEnabled());
+      (!transcodeTonemaps || isVppQsvTonemapEnabled());
     const qsvCanCropForReport =
       qsvNativeAvailableForReport ||
-      (detectedHw === 'qsv' && needsCrop && needsTonemapping && !needsBurnIn);
+      (detectedHw === 'qsv' && needsCrop && transcodeTonemaps && !needsBurnIn);
     const requestedHwAccel = requestedHwAccelFor(detectedHw, {
       burnIn: needsBurnIn,
       crop: needsCrop,
@@ -538,7 +564,7 @@ export class StreamBuilderService {
           },
       outputContainer: 'hls',
       hwAccel: effectiveHwAccel,
-      tonemapping: needsTonemapping,
+      tonemapping: transcodeTonemaps,
       transcodeBitrateByQuality,
       qualities: this.buildQualityList(source, 'Transcode', sourceCopyable, qualityLadder),
       source,
