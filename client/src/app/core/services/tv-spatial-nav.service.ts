@@ -47,6 +47,14 @@ export class TvSpatialNavService {
   private bound = false;
   /** Registered containers, keyed by their host element. */
   private readonly containers = new Map<HTMLElement, ContainerNode>();
+  /** Cached whole-document focusable list, reused until the DOM mutates. When
+   *  no tree container matches the active element (e.g. the library grid),
+   *  findNeighbor scans the whole document on every D-pad press, and
+   *  querySelectorAll + getComputedStyle over hundreds of cards per press
+   *  stalls the main thread. A pure scroll/focus move mutates nothing, so the
+   *  list stays valid between presses; the observer below clears it on change. */
+  private focusableCache: HTMLElement[] | null = null;
+  private focusObserver?: MutationObserver;
 
   constructor() {
     // Bind unconditionally — desktop / laptop users press arrow keys
@@ -81,6 +89,22 @@ export class TvSpatialNavService {
     const focusInHandler = (e: FocusEvent) => this.updateActiveChild(e.target as HTMLElement | null);
     document.addEventListener('focusin', focusInHandler);
     this.destroyRef.onDestroy(() => document.removeEventListener('focusin', focusInHandler));
+    // Invalidate the focusable cache whenever the DOM that could change the
+    // focusable set changes. Scoped to the attributes that flip an element's
+    // focusability/visibility (not every attribute) so cosmetic churn doesn't
+    // thrash the cache; childList/subtree covers infinite-scroll card adds.
+    if (typeof MutationObserver !== 'undefined') {
+      this.focusObserver = new MutationObserver(() => {
+        this.focusableCache = null;
+      });
+      this.focusObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'style', 'disabled', 'hidden', 'aria-hidden', 'tabindex'],
+      });
+      this.destroyRef.onDestroy(() => this.focusObserver?.disconnect());
+    }
     // Android TV WebView often leaves the body un-focused on first paint, which
     // means D-pad events are consumed by the native View and never reach JS.
     // Pushing focus to the first interactive element guarantees subsequent
@@ -158,10 +182,15 @@ export class TvSpatialNavService {
     }
   }
 
+  /** Whole-document focusables, cached between DOM mutations (see focusableCache). */
+  private getFocusables(): HTMLElement[] {
+    return (this.focusableCache ??= collectFocusables());
+  }
+
   private focusFirstIfNoFocus() {
     if (typeof document === 'undefined') return;
     if (document.activeElement && document.activeElement !== document.body) return;
-    const all = collectFocusables();
+    const all = this.getFocusables();
     all[0]?.focus({ preventScroll: true });
   }
 
@@ -319,7 +348,7 @@ export class TvSpatialNavService {
       const tree = this.findNeighborInTree(active, dir);
       if (tree) return tree;
     }
-    const all = openModal ? collectFocusables(openModal) : collectFocusables();
+    const all = openModal ? collectFocusables(openModal) : this.getFocusables();
     if (!all.length) return null;
 
     if (!active || active === document.body) {
@@ -359,7 +388,6 @@ export class TvSpatialNavService {
       if (el === active) continue;
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
-      if (getComputedStyle(el).pointerEvents === 'none') continue;
 
       const cx = r.left + r.width / 2;
       const cy = r.top + r.height / 2;
@@ -633,6 +661,10 @@ function collectFocusables(root: ParentNode = document): HTMLElement[] {
     }
     const style = getComputedStyle(el);
     if (style.visibility === 'hidden' || style.display === 'none') return false;
+    // pointerEvents:none folded in here (the scoring loop used to call
+    // getComputedStyle a second time per element for this) — reuses the style
+    // object already resolved above, so it's free, and the result is cached.
+    if (style.pointerEvents === 'none') return false;
     return true;
   });
   // Keep only the outermost focusables: if an element has an ancestor that is

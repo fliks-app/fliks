@@ -34,7 +34,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { AppResumeService } from '../../core/services/app-resume.service';
-import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
+import { InfiniteScrollList, type GridMetrics } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideX, LucideFilm } from '@lucide/angular';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 
@@ -172,6 +172,16 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.list.observeSentinel(ref);
   }
 
+  /** The `all`-view card grid — measured for DOM windowing on TV. */
+  private cardGridEl?: HTMLElement;
+  @ViewChild('cardGrid') set cardGridRef(ref: ElementRef<HTMLElement> | undefined) {
+    this.cardGridEl = ref?.nativeElement;
+    // Grid just (re)mounted — e.g. initial load or a tab switch back to `all`.
+    // Recompute the window now that it's measurable.
+    if (ref && this.tv.isTv()) this.list.onWindowScroll();
+  }
+  private onResize?: () => void;
+
   // Bulk editing
   readonly selectedIds = signal<Set<number>>(new Set());
   readonly bulkMode = signal(false);
@@ -193,6 +203,14 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.arrivedViaBack = this.navbar.lastWasBack();
+    if (this.tv.isTv()) {
+      // DOM windowing for the `all` grid: only render a row-aligned slice
+      // around the viewport so a large library doesn't pile hundreds of cards
+      // into the DOM and stutter the TV's scroll. Inert on every other surface.
+      this.list.enableWindowing(() => this.readGridMetrics(), 4);
+      this.onResize = () => this.list.onWindowScroll();
+      window.addEventListener('resize', this.onResize, { passive: true });
+    }
     if (this.tv.isTv()) {
       this.navStartSub = this.router.events
         .pipe(filter((e): e is NavigationStart => e instanceof NavigationStart))
@@ -350,6 +368,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.scrollMemory.deactivate();
     this.list.destroy();
+    if (this.onResize) window.removeEventListener('resize', this.onResize);
     this.navbar.clearPageTitle();
     this.navStartSub?.unsubscribe();
     this.attachedSub?.unsubscribe();
@@ -384,6 +403,24 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   scrollToLetter(letter: string) {
     this.list.scrollToLetter(letter, (m) => m.title, 'media');
+  }
+
+  /** Live measurements of the `all` grid for windowing. Read together (rect +
+   *  scroller.scrollTop) so a webOS `zoom` scales them consistently. Returns
+   *  null until the grid is laid out, where windowing falls back to full render. */
+  private readGridMetrics(): GridMetrics | null {
+    const grid = this.cardGridEl;
+    if (!grid) return null;
+    const cs = getComputedStyle(grid);
+    const cols = cs.gridTemplateColumns.split(' ').filter((t) => t && t !== '0px').length;
+    if (cols < 1) return null;
+    const firstCell = grid.firstElementChild as HTMLElement | null;
+    const cellH = firstCell?.getBoundingClientRect().height ?? 0;
+    if (cellH <= 0) return null;
+    const rowGap = parseFloat(cs.rowGap) || 0;
+    const scroller = document.scrollingElement ?? document.documentElement;
+    const gridTopDoc = grid.getBoundingClientRect().top + scroller.scrollTop;
+    return { gridTopDoc, rowHeight: cellH + rowGap, rowGap, cols };
   }
 
   onSearch(query: string) {

@@ -284,9 +284,11 @@
         </div>
       }
       <div class="flex gap-1">
-        <div class="flex-1 min-w-0 grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4"
+        <div #cardGrid class="flex-1 min-w-0 grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-1.5 sm:gap-4"
           [class.pr-4]="sortBy() === 'title' && sortOrder() === 'ASC'"
-          [class.pr-2]="sortBy() !== 'title' || sortOrder() !== 'ASC'">
+          [class.pr-2]="sortBy() !== 'title' || sortOrder() !== 'ASC'"
+          [style.paddingTop.px]="list.padTop()"
+          [style.paddingBottom.px]="list.padBottom()">
           @for (item of list.visible(); track item.id) {
             @if (bulkMode()) {
               <div
@@ -436,7 +438,7 @@
            page rather than a separate component. -->
       @if (suggestionsRecommendations().length) {
         <h2 class="text-lg font-semibold mt-2">{{ 'home.recommendations' | translate }}</h2>
-        <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4">
+        <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-1.5 sm:gap-4">
           @for (rec of suggestionsRecommendations(); track rec.media.id) {
             <app-media-card
               [imageUrl]="rec.media.posterUrl"
