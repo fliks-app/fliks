@@ -9,7 +9,6 @@ import {
   OnDestroy,
   ElementRef,
   ViewChild,
-  effect,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
@@ -92,6 +91,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly reuseStrategy = inject(CachingReuseStrategy);
   private readonly appResume = inject(AppResumeService);
+  private paramSub?: Subscription;
   private attachedSub?: Subscription;
   private detachedSub?: Subscription;
   private queryParamSub?: Subscription;
@@ -192,12 +192,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
    *  for the previous library can't overwrite the current view. */
   private loadGen = 0;
 
-  /** Re-load when route param changes (e.g. clicking another library in sidebar). */
-  private readonly paramEffect = effect(() => {
-    // Angular signal-based route params aren't available yet in 21.x for
-    // lazy routes, so we subscribe manually in ngOnInit below.
-  }, { allowSignalWrites: true });
-
   ngOnInit() {
     if (this.tv.isTv()) {
       // DOM windowing for the `all` grid: only render a row-aligned slice
@@ -208,7 +202,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       window.addEventListener('resize', this.onResize, { passive: true });
     }
     // Subscribe to route param changes (handles initial load + sidebar nav).
-    this.route.params.subscribe(async (params) => {
+    this.paramSub = this.route.params.subscribe(async (params) => {
       const rawName = params['libraryName'] as string;
       if (!rawName) return;
       const name = decodeURIComponent(rawName);
@@ -348,6 +342,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
     this.navbar.clearPageTitle();
+    this.paramSub?.unsubscribe();
     this.attachedSub?.unsubscribe();
     this.detachedSub?.unsubscribe();
     this.queryParamSub?.unsubscribe();
@@ -553,19 +548,25 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Reflect the current state in the URL. `push` adds a real history
    *  entry instead of replacing — used for the genres-list → genre-filter
    *  transition so the browser back button returns to the Genres list. */
+  /** The filter / view state serialized identically to URL query params and to
+   *  localStorage — built once, used by both syncQueryParams and saveFilters. */
+  private buildFilterParams(): Record<string, string> {
+    const p: Record<string, string> = {};
+    if (this.searchQuery()) p['q'] = this.searchQuery();
+    if (this.filterMonitored()) p['monitored'] = this.filterMonitored();
+    if (this.filterStatus()) p['status'] = this.filterStatus();
+    if (this.filterWatched()) p['watched'] = this.filterWatched();
+    if (this.sortBy() !== 'title') p['sortBy'] = this.sortBy();
+    if (this.sortOrder() !== 'ASC') p['sortOrder'] = this.sortOrder();
+    if (this.viewMode() !== 'all') p['view'] = this.viewMode();
+    if (this.selectedGenre()) p['genre'] = this.selectedGenre();
+    if (this.selectedCollectionId()) p['collectionId'] = String(this.selectedCollectionId());
+    return p;
+  }
+
   private syncQueryParams(push = false) {
-    const params: Record<string, string> = {};
-    if (this.searchQuery()) params['q'] = this.searchQuery();
-    if (this.filterMonitored()) params['monitored'] = this.filterMonitored();
-    if (this.filterStatus()) params['status'] = this.filterStatus();
-    if (this.filterWatched()) params['watched'] = this.filterWatched();
-    if (this.sortBy() !== 'title') params['sortBy'] = this.sortBy();
-    if (this.sortOrder() !== 'ASC') params['sortOrder'] = this.sortOrder();
-    if (this.viewMode() !== 'all') params['view'] = this.viewMode();
-    if (this.selectedGenre()) params['genre'] = this.selectedGenre();
-    if (this.selectedCollectionId()) params['collectionId'] = String(this.selectedCollectionId());
     this.skipQueryParamSync = true;
-    void this.router.navigate([], { queryParams: params, replaceUrl: !push });
+    void this.router.navigate([], { queryParams: this.buildFilterParams(), replaceUrl: !push });
     this.saveFilters();
   }
 
@@ -574,17 +575,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   private saveFilters() {
-    const data: Record<string, string> = {};
-    if (this.searchQuery()) data['q'] = this.searchQuery();
-    if (this.filterMonitored()) data['monitored'] = this.filterMonitored();
-    if (this.filterStatus()) data['status'] = this.filterStatus();
-    if (this.filterWatched()) data['watched'] = this.filterWatched();
-    if (this.sortBy() !== 'title') data['sortBy'] = this.sortBy();
-    if (this.sortOrder() !== 'ASC') data['sortOrder'] = this.sortOrder();
-    if (this.viewMode() !== 'all') data['view'] = this.viewMode();
-    if (this.selectedGenre()) data['genre'] = this.selectedGenre();
-    if (this.selectedCollectionId()) data['collectionId'] = String(this.selectedCollectionId());
-    localStorage.setItem(this.storageKey, JSON.stringify(data));
+    localStorage.setItem(this.storageKey, JSON.stringify(this.buildFilterParams()));
   }
 
   private loadFilters(name: string): Record<string, string> {

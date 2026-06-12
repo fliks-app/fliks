@@ -1,6 +1,7 @@
 import { Injectable, inject, DestroyRef } from '@angular/core';
 import { TvService } from './tv.service';
 import { DefaultFocusService } from './default-focus.service';
+import { FOCUSABLE_SELECTOR } from './focusable.constants';
 
 /**
  * Spatial navigation for D-pad input on Android TV — and keyboard
@@ -46,6 +47,10 @@ interface ContainerNode {
  *  retargets the animation. Pace moves to this interval; the dispatcher is
  *  leading + trailing so no press is dropped, only delayed. */
 const NAV_MIN_INTERVAL_MS = 300;
+
+/** Page scroll step (px) when an up/down move has no focusable neighbour — lets
+ *  the user reach non-focusable info content below the last card. */
+const PAGE_SCROLL_AMOUNT_PX = 300;
 
 @Injectable({ providedIn: 'root' })
 export class TvSpatialNavService {
@@ -320,7 +325,7 @@ export class TvSpatialNavService {
     // No focusable neighbour: scroll the page so the user can reach info content
     // below the last card. Held keys stay put; up/down only; not in a modal.
     if (crossZones && !this.openModals().length && (dir === 'down' || dir === 'up')) {
-      window.scrollBy({ top: dir === 'down' ? 300 : -300, behavior: 'smooth' });
+      window.scrollBy({ top: dir === 'down' ? PAGE_SCROLL_AMOUNT_PX : -PAGE_SCROLL_AMOUNT_PX, behavior: 'smooth' });
     }
   }
 
@@ -352,19 +357,12 @@ export class TvSpatialNavService {
     }
   }
 
-  /** Move focus to the up/down neighbour, falling back to a manual page
-   *  scroll when none exists. Mirrors the up/down tail of {@link onKey} so
-   *  the wheel and the D-pad share one notion of "scroll vertically". */
+  /** Magic-Remote wheel vertical step. Routes through the same paced dispatcher
+   *  as the D-pad so a fast spin can't fire smooth scrolls faster than they
+   *  settle. crossZones=true: a wheel is a scroll gesture, not a discrete press,
+   *  so it may scroll out of a zone (unlike a held D-pad key). */
   private navigateVertical(dir: 'up' | 'down') {
-    const next = this.findNeighbor(dir);
-    if (next) {
-      next.focus({ preventScroll: true });
-      next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
-      return;
-    }
-    if (!this.openModals().length) {
-      window.scrollBy({ top: dir === 'down' ? 300 : -300, behavior: 'smooth' });
-    }
+    this.dispatchMove(dir, true);
   }
 
   /** Currently-open overlays that scope spatial navigation. Bottom sheets
@@ -680,9 +678,6 @@ const KEYCODE_TO_DIR: Record<number, 'left' | 'right' | 'up' | 'down' | undefine
   39: 'right',
   40: 'down',
 };
-
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [data-tv-focusable]';
 
 function collectFocusables(root: ParentNode = document): HTMLElement[] {
   const nodes = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));

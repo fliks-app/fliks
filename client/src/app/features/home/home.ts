@@ -2,7 +2,7 @@ import { Component, ChangeDetectionStrategy, inject, signal, computed, effect, O
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media, CalendarEntry } from '../../core/services/api/media.service';
 import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '../../core/services/api/streaming-api.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
@@ -95,6 +95,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly profilesApi = inject(ProfilesService);
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly navbar = inject(NavbarService);
+  private readonly translate = inject(TranslateService);
   private readonly appResume = inject(AppResumeService);
   private readonly backgroundService = inject(BackgroundService);
   private readonly displaySettings = inject(DisplaySettingsService);
@@ -610,8 +611,8 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   async removeContinueWatching(item: ContinueWatchingItem) {
     const confirmed = await this.confirmation.confirm({
-      title: 'Retirer',
-      message: `Retirer "${item.mediaTitle}" de la liste ?`,
+      title: this.translate.instant('home.cw_remove_title'),
+      message: this.translate.instant('home.cw_remove_message', { title: item.mediaTitle }),
     });
     if (!confirmed) return;
     try {
