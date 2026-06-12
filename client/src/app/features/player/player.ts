@@ -177,6 +177,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private readonly videoEl = viewChild<ElementRef<HTMLVideoElement>>('videoElement');
   private readonly containerEl = viewChild<ElementRef<HTMLDivElement>>('playerContainer');
+  private readonly controls = viewChild(PlayerControlsComponent);
 
   /** Active engine (Shaka for web HLS, Native for Android/iOS). Cast
    *  bypasses the engine abstraction and is driven by `castPlayerService`
@@ -1409,6 +1410,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.resetHideTimer();
   }
 
+  /** Move focus to the seekbar after the controls bar has rendered/become
+   *  visible. Deferred so it lands after the controls' own "focus play/pause on
+   *  reappear" effect, which would otherwise win the focus race on TV. */
+  private focusSeekbar() {
+    setTimeout(() => this.controls()?.focusSeekbar(), 0);
+  }
+
   private hideControls() {
     if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
     this.controlsVisible.set(false);
@@ -1432,7 +1440,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // 5 s on TV: focus is visual only, give the user time to read the labels.
     const delay = this.device.isTv() ? 5000 : 3000;
     this.controlsTimeout = setTimeout(() => {
-      if (!this.paused() && !this.isDropdownOpen() && !this.seekDragging) this.controlsVisible.set(false);
+      // Route through hideControls() (not a bare set(false)) so it also blurs
+      // the focused control. After an arrow-seek lands focus on the seekbar,
+      // the seekbar's keydown stops propagation — without blurring on auto-hide
+      // the next arrow never reaches the global handler, so the controls would
+      // stay hidden on the second seek.
+      if (!this.paused() && !this.isDropdownOpen() && !this.seekDragging) this.hideControls();
     }, delay);
   }
 
@@ -2452,6 +2465,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // keep clear of the lib.dom `keyCode` deprecation.
     const legacyKeyCode = (e as { keyCode: number }).keyCode;
     const isBackKey = legacyKeyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack' || e.key === 'Escape';
+    // Controls hidden + Left/Right: wake the bar, seek, and land focus on the
+    // seekbar so the next presses scrub it — on every device (keyboard + TV
+    // remote), matching the seekbar-focused scrub when the bar is already up.
+    if (
+      !this.controlsVisible() &&
+      (e.key === 'ArrowLeft' || e.key === 'ArrowRight')
+    ) {
+      this.showControls();
+      this.onSeek(this.engine.currentTime + (e.key === 'ArrowLeft' ? -10 : 10));
+      this.focusSeekbar();
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    // TV only: any other key while the bar is hidden just WAKES it — never
+    // activates the invisible focused button (e.g. OK would hit the back arrow
+    // and quit). The back key bubbles to app.ts so the user can still exit.
     if (!isBackKey && !this.controlsVisible() && this.device.isTv()) {
       this.showControls();
       e.preventDefault();
@@ -2554,12 +2585,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   };
 
   private onPlayerBackEvent = () => {
-    // TV: D-pad navigation needs an explicit "dismiss controls" step
-    // before exiting the player, so back/Return on the remote first
-    // closes the controls bar, then leaves on the second press.
-    // Phones and tablets get the direct exit — touch users dismiss
+    // TV remote Return and desktop Escape first close a visible controls bar,
+    // then exit on the next press — back mirrors the on-screen close. (On
+    // desktop this event only ever comes from Escape, a deliberate keyboard
+    // press.) Phones and tablets get the direct exit: touch users dismiss the
     // controls by tapping the video surface, not via hardware back.
-    if (this.device.isTv() && this.controlsVisible()) {
+    if ((this.device.isTv() || this.device.isDesktop()) && this.controlsVisible()) {
       this.hideControls();
       return;
     }
