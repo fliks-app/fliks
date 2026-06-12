@@ -291,7 +291,6 @@
             @if (bulkMode()) {
               <div
                 class="relative cursor-pointer cv-auto"
-                style="contain-intrinsic-size: auto 18rem"
                 [id]="'media-' + item.id"
                 (click)="toggleSelect(item.id)"
               >
@@ -310,12 +309,7 @@
                 />
               </div>
             } @else {
-              <div
-                class="cv-auto"
-                style="contain-intrinsic-size: auto 18rem"
-                [id]="'media-' + item.id"
-                [attr.data-library-focus]="'media:' + item.id"
-              >
+              <div [id]="'media-' + item.id" [attr.data-library-focus]="'media:' + item.id">
                 <app-media-card
                   [media]="item"
                   [status]="watchedIds().has(item.id) ? 'watched' : null"
