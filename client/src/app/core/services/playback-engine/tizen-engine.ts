@@ -100,6 +100,15 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
    *  budget. */
   private recoveryAttempted = false;
 
+  /** Timestamp of the last resume issued from PAUSED. AVPlay can throw a
+   *  transient network-shaped error while re-priming the decoder on resume;
+   *  treating that as a lost session and reloading the whole stream is what made
+   *  a quick pause→play flash black and re-buffer. Errors within
+   *  {@link RESUME_ERROR_GRACE_MS} of a resume are swallowed — if playback is
+   *  genuinely wedged the player's stall watchdog still recovers it. */
+  private _lastResumeAt = 0;
+  private static readonly RESUME_ERROR_GRACE_MS = 5000;
+
   /** DOM-rendered subtitle overlay shared with the webOS engine. AVPlay's
    *  `setExternalSubtitlePath` only accepts local file paths, not HTTPS,
    *  so we parse VTT ourselves and paint cues into a positioned div. */
@@ -301,6 +310,15 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     const msg = String(err);
     if (msg.includes('SEEK_FAILED')) return;
 
+    // A transient error right after a resume is AVPlay re-priming the decoder,
+    // not a lost backend session — swallow it instead of triggering a full
+    // reload (which flashes black + re-buffers on every pause→play). AVPlay
+    // usually recovers on its own; a genuinely wedged playhead is caught by the
+    // player's stall watchdog.
+    if (Date.now() - this._lastResumeAt < TizenEngine.RESUME_ERROR_GRACE_MS) {
+      return;
+    }
+
     // AVPlay swallows the HTTP status of the failed segment fetch — we
     // can't tell a 410 (session expired) from a 500 (ffmpeg crash) from
     // here. Heuristic: if playback was healthy (firstFrame fired, no
@@ -332,8 +350,13 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this._paused = false;
     try {
       const s = webapis.avplay.getState();
-      if (s === 'PAUSED' && typeof webapis.avplay.resume === 'function') {
-        webapis.avplay.resume();
+      if (s === 'PAUSED') {
+        // Mark the resume so a transient AVPlay error while re-priming the
+        // decoder isn't mistaken for a lost session (see handleError). Fall
+        // back to play() on firmware without resume() rather than no-op.
+        this._lastResumeAt = Date.now();
+        if (typeof webapis.avplay.resume === 'function') webapis.avplay.resume();
+        else webapis.avplay.play();
       } else if (s === 'READY') {
         webapis.avplay.play();
       }
