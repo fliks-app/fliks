@@ -248,12 +248,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.sortOrder.set(
         (qp.get('sortOrder') ?? stored['sortOrder'] ?? 'ASC') as SortOrder,
       );
-      this.viewMode.set(
-        (qp.get('view') ?? stored['view'] ?? 'all') as LibraryViewMode,
-      );
-      this.selectedGenre.set(qp.get('genre') ?? stored['genre'] ?? '');
-      const storedColl = qp.get('collectionId') ?? stored['collectionId'];
-      this.selectedCollectionId.set(storedColl ? Number(storedColl) : null);
+      // View / genre / collection are navigation state, read only from the URL
+      // (within-session back/forward, deep links) — never from the persisted
+      // filters — so opening a library fresh lands on the `all` tab.
+      this.viewMode.set((qp.get('view') ?? 'all') as LibraryViewMode);
+      this.selectedGenre.set(qp.get('genre') ?? '');
+      const collId = qp.get('collectionId');
+      this.selectedCollectionId.set(collId ? Number(collId) : null);
 
       this.scrollMemory.activate(scrollKey);
       this.list.trackScroll('media');
@@ -545,12 +546,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Reflect the current state in the URL. `push` adds a real history
-   *  entry instead of replacing — used for the genres-list → genre-filter
-   *  transition so the browser back button returns to the Genres list. */
-  /** The filter / view state serialized identically to URL query params and to
-   *  localStorage — built once, used by both syncQueryParams and saveFilters. */
-  private buildFilterParams(): Record<string, string> {
+  /** Filter/sort *preferences* persisted to localStorage and restored when a
+   *  library is opened fresh. Deliberately excludes the active tab and its
+   *  in-tab selection (view / genre / collection): those are navigation state,
+   *  not preferences, so reopening the app lands on the library root rather
+   *  than the tab the user happened to leave open. */
+  private buildStoredParams(): Record<string, string> {
     const p: Record<string, string> = {};
     if (this.searchQuery()) p['q'] = this.searchQuery();
     if (this.filterMonitored()) p['monitored'] = this.filterMonitored();
@@ -558,15 +559,26 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (this.filterWatched()) p['watched'] = this.filterWatched();
     if (this.sortBy() !== 'title') p['sortBy'] = this.sortBy();
     if (this.sortOrder() !== 'ASC') p['sortOrder'] = this.sortOrder();
+    return p;
+  }
+
+  /** The full state mirrored into the URL — the persisted preferences plus the
+   *  active tab and its selection — so within-session back/forward and deep
+   *  links restore the exact view. */
+  private buildUrlParams(): Record<string, string> {
+    const p = this.buildStoredParams();
     if (this.viewMode() !== 'all') p['view'] = this.viewMode();
     if (this.selectedGenre()) p['genre'] = this.selectedGenre();
     if (this.selectedCollectionId()) p['collectionId'] = String(this.selectedCollectionId());
     return p;
   }
 
+  /** Reflect the current state in the URL. `push` adds a real history entry
+   *  instead of replacing — used for the genres-list → genre-filter transition
+   *  so the browser back button returns to the Genres list. */
   private syncQueryParams(push = false) {
     this.skipQueryParamSync = true;
-    void this.router.navigate([], { queryParams: this.buildFilterParams(), replaceUrl: !push });
+    void this.router.navigate([], { queryParams: this.buildUrlParams(), replaceUrl: !push });
     this.saveFilters();
   }
 
@@ -575,7 +587,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   private saveFilters() {
-    localStorage.setItem(this.storageKey, JSON.stringify(this.buildFilterParams()));
+    localStorage.setItem(this.storageKey, JSON.stringify(this.buildStoredParams()));
   }
 
   private loadFilters(name: string): Record<string, string> {
