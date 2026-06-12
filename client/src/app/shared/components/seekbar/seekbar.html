@@ -74,9 +74,9 @@
     }
     <!-- Progress. `rounded-l-full` matches the track's left cap; right side
          stays square so the progress ends on a crisp vertical edge instead of
-         a curved bulge. Kept visible while loading IF the user is seeking, so
-         the position fill tracks the drag instead of vanishing into the sweep;
-         otherwise hidden so fill + sweep don't show at once. -->
+         a curved bulge. Shown whenever the media is loaded so the fill never
+         drops out mid-seek (the engine re-buffers on every seek); the sweep
+         below only takes over on the cold start, before there's a position. -->
     @if (showPositionFill()) {
       <div
         class="absolute inset-y-0 left-0 rounded-l-full"
@@ -84,11 +84,12 @@
         [style.width.%]="displayPercent()"
       ></div>
     }
-    <!-- Indeterminate loading sweep — a soft highlight crosses the track
-         while the engine is fetching/buffering, so the bar shows activity
-         even when the playhead isn't advancing. Shown only when buffering
-         outside a user seek; sits below the chapter ticks. -->
-    @if (loading() && !showPositionFill()) {
+    <!-- Indeterminate loading sweep — a soft highlight that travels across the
+         track whenever the engine is buffering, painted over the bars (later in
+         the DOM). It reads only on the darker, unfilled track to the right of
+         the playhead: white-on-white over the solid fill leaves no visible
+         animation there, so the fill itself stays static. Below the ticks. -->
+    @if (loading()) {
       <div [class]="loadingSweepClass()"></div>
     }
     <!-- Chapter ticks -->

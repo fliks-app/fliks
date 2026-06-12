@@ -68,7 +68,12 @@ export class SeekbarComponent {
   readonly displayTime = computed(() => {
     if (this.dragging()) return this.dragTime();
     if (this.seekPending()) {
-      if (Math.abs(this.currentTime() - this.seekTarget) < 2) {
+      // Only consider the seek settled once the playhead reached the target
+      // AND buffering finished. Clearing on position alone, while the engine is
+      // still buffering (loading), drops the determinate fill into the
+      // indeterminate sweep for a frame — the white bar flickering away right
+      // as the seek lands (very visible on Tizen, where the seek re-buffers).
+      if (Math.abs(this.currentTime() - this.seekTarget) < 2 && !this.loading()) {
         setTimeout(() => this.seekPending.set(false), 0);
         return this.currentTime();
       }
@@ -82,14 +87,15 @@ export class SeekbarComponent {
     return (this.displayTime() / d) * 100;
   });
 
-  /** Show the determinate position fill — always when not loading, and ALSO
-   *  while the user is actively choosing a seek target (drag / pending seek)
-   *  even if the engine flipped to buffering, so the white bar tracks the seek
-   *  instead of vanishing into the indeterminate sweep. Very visible on Tizen,
-   *  where every seek re-buffers the transcode (loading → fill was hidden). */
-  readonly showPositionFill = computed(
-    () => !this.loading() || this.dragging() || this.seekPending(),
-  );
+  /** Show the determinate position fill whenever the media is loaded, i.e. we
+   *  have a real position to draw. Deliberately independent of `loading` and
+   *  `seekPending`: a seek re-buffers and the playhead jumps to the target a
+   *  frame before `loading` flips true, so any condition mixing those signals
+   *  races and drops the fill for a frame between seek-end and resume — on the
+   *  browser as much as on Tizen. The indeterminate sweep is reserved for the
+   *  cold start (no position yet, `duration === 0`); `displayTime` still parks
+   *  the fill on the seek target while buffering. */
+  readonly showPositionFill = computed(() => this.duration() > 0);
 
   /** Track height + tint class string. Slim baseline (`h-1`),
    *  thickens to `h-2.5` during interaction:
