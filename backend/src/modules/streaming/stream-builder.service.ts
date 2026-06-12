@@ -747,16 +747,23 @@ export class StreamBuilderService {
         return { ...base, copy: true, outputCodec: codec, reasonFlags: [] };
       }
 
-      // DirectStream (remux): copy when the codec is profile-supported AND
-      // fMP4-safe, else re-encode to AAC.
+      // DirectStream (remux): a track is copied only when its codec is
+      // profile-supported, fMP4-safe AND its channel count fits the device —
+      // a 7.1 track on a 5.1 cap must downmix, so it can't be copied. Missing
+      // the channel check made every OPUS track look copyable, so a file whose
+      // default track was 8-channel collapsed all renditions to one plan and a
+      // fitting 5.1 track got needlessly downmixed to AAC stereo.
       if (playMethod === 'DirectStream') {
-        const copy = codecSupported && FMP4_COMPATIBLE_AUDIO.has(codec);
-        return {
-          ...base,
-          copy,
-          outputCodec: copy ? codec : 'aac',
-          reasonFlags: copy ? [] : ['AudioCodecNotSupported'],
-        };
+        const copy =
+          codecSupported && !channelsExceed && FMP4_COMPATIBLE_AUDIO.has(codec);
+        const reasonFlags: string[] = [];
+        if (!copy) {
+          if (channelsExceed) reasonFlags.push('AudioChannelsNotSupported');
+          if (!codecSupported || !FMP4_COMPATIBLE_AUDIO.has(codec)) {
+            reasonFlags.push('AudioCodecNotSupported');
+          }
+        }
+        return { ...base, copy, outputCodec: copy ? codec : 'aac', reasonFlags };
       }
 
       // Transcode: source-compatible → copy; else surround (EAC-3/AC-3)
