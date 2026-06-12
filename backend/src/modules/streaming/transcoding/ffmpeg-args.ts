@@ -94,6 +94,13 @@ export interface BuildFfmpegArgsOptions {
         codec: 'aac' | 'ac3' | 'eac3';
         bitrateBps: number;
       };
+  /** Per-rendition audio decision for the multi-audio `var_stream_map` path,
+   *  one entry per `audioStreams[]` track in the same order. When the
+   *  renditions don't all share `audioPlan` (mixed codecs/channels — e.g. a
+   *  stereo default next to a 5.1 track), each output stream gets its own
+   *  `-c:a:N`. Omitted / uniform → the single `audioPlan` applies to all
+   *  (unchanged behaviour). */
+  audioTrackPlans?: { copy: boolean; outputCodec: string }[];
   encoderPreset?: string;
   qsvOptions?: { lowPower: boolean };
   /** HDR → SDR tone-mapping algorithm (admin override). Defaults to `'auto'`
@@ -134,6 +141,38 @@ function hasNoAudio(streams: AudioStreamMeta[] | undefined): boolean {
   return streams != null && streams.length === 0;
 }
 
+/**
+ * Per-output-stream audio codec args for the multi-audio `var_stream_map`
+ * path, indexed to match the `-map 0:a:i` order. Returns `null` when there's
+ * nothing to specialise — no per-track plans, a length mismatch, or every
+ * rendition shares the same plan — so the caller keeps the single `-c:a` form
+ * (byte-identical to the pre-existing behaviour). Only mixed-codec/-channel
+ * sources (e.g. a stereo default beside a 5.1 track) take the per-stream form.
+ */
+function perStreamAudioArgs(
+  audioStreams: AudioStreamMeta[],
+  plans: { copy: boolean; outputCodec: string }[] | undefined,
+  aacBitrate: string,
+): string[] | null {
+  if (!plans || plans.length !== audioStreams.length) return null;
+  const allSame = plans.every(
+    (p) => p.copy === plans[0].copy && p.outputCodec === plans[0].outputCodec,
+  );
+  if (allSame) return null;
+  const out: string[] = [];
+  plans.forEach((p, i) => {
+    if (p.copy) {
+      out.push(`-c:a:${i}`, 'copy');
+    } else if (p.outputCodec === 'aac') {
+      out.push(`-c:a:${i}`, 'aac', `-b:a:${i}`, aacBitrate, `-ac:${i}`, '2');
+    } else {
+      // EAC-3 / AC-3 keep source channels at 640 kbps.
+      out.push(`-c:a:${i}`, p.outputCodec, `-b:a:${i}`, '640k');
+    }
+  });
+  return out;
+}
+
 export function buildFfmpegArgs(
   opts: BuildFfmpegArgsOptions,
   log: Logger,
@@ -151,6 +190,7 @@ export function buildFfmpegArgs(
     videoOnly = false,
     audioStreams,
     audioPlan,
+    audioTrackPlans,
     encoderPreset = 'faster',
     qsvOptions = { lowPower: false },
     sourceFps,
@@ -638,7 +678,13 @@ export function buildFfmpegArgs(
     for (let i = 0; i < audioStreams.length; i++) {
       args.push('-map', audioMapSpec(audioStreams, i));
     }
-    args.push(...audioArgs);
+    // Per-rendition codec when the renditions diverge (mixed codecs/channels).
+    const perStream = perStreamAudioArgs(
+      audioStreams,
+      audioTrackPlans,
+      profile.audioBitrate,
+    );
+    args.push(...(perStream ?? audioArgs));
 
     // Build var_stream_map: "v:0,agroup:audio a:0,agroup:audio,language:fre ..."
     const varParts = ['v:0,agroup:audio'];

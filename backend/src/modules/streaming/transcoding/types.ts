@@ -160,6 +160,14 @@ export interface SessionContext {
         bitrateBps: number;
       };
   /**
+   * Per-rendition audio decision for the multi-audio `var_stream_map` path,
+   * one entry per `audioStreams[]` track in source order. Threaded so each
+   * rendition encodes with its own codec when the file mixes codecs/channels
+   * (the single `audioPlan` above only describes the default track). Uniform
+   * sources leave every rendition on `audioPlan`.
+   */
+  audioTrackPlans?: { copy: boolean; outputCodec: string }[];
+  /**
    * True when the playback target is a Tizen TV that can't consume the
    * HLS muxer's fMP4 output — AVPlay rejects the `iso5` + per-stream
    * `sidx` boxes with `InvalidAccessError` / `PLAYER_ERROR_CONNECTION_FAILED`

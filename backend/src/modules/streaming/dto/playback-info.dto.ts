@@ -10,6 +10,30 @@ export interface TranscodeReason {
 }
 
 /**
+ * Per-audio-track playback decision, one entry per `streamInfo.audio` stream
+ * in source order. The single top-level `audioPlan` / `transcodeReasons`
+ * describe the default track only; multi-audio files are served as independent
+ * EXT-X-MEDIA renditions, so the player switches audio client-side and needs
+ * the copy/transcode reason of the *active* track, not the default. The client
+ * looks this up by the active track's position (renditions are emitted in
+ * `streamInfo.audio` order — see master-playlist generation).
+ */
+export interface AudioTrackPlan {
+  /** Index into `streamInfo.audio` (source order). */
+  index: number;
+  language?: string;
+  /** Source codec (lowercased ffprobe name). */
+  codec: string;
+  channels?: number;
+  /** True when this track plays as-is (no re-encode). */
+  copy: boolean;
+  /** Codec the client actually hears for this track. */
+  outputCodec: string;
+  /** Why this track is re-encoded (`Audio*` flags); empty when copied. */
+  reasonFlags: string[];
+}
+
+/**
  * Server-authoritative quality option for the player UI.
  * Built from the per-device ladder and source bitrate — frontend renders
  * these verbatim (plus a prepended "Auto" entry).
@@ -111,6 +135,12 @@ export interface PlaybackInfoResponse {
 
   /** Ordered list of quality rungs to show in the player UI (excluding "Auto"). */
   qualities?: QualityOption[];
+
+  /** Per-audio-track copy/transcode decision, one entry per source audio
+   *  stream. Lets the player show the reason for the *active* track after a
+   *  client-side audio switch (the top-level `transcodeReasons` only describe
+   *  the default track). */
+  audioTracks?: AudioTrackPlan[];
 
   /** Source file info */
   source: {

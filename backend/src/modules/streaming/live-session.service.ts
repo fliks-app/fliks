@@ -56,6 +56,9 @@ export interface LiveSession {
   // ── Per-session settings owned by this entry ──
   useTs: boolean;
   audioPlan: AudioPlan | null;
+  /** Per-rendition audio decision (one entry per source audio stream) for the
+   *  multi-audio var_stream_map encode; null when uniform / not multi-audio. */
+  audioTrackPlans: { copy: boolean; outputCodec: string }[] | null;
   audioStreamIndex: number | null;
   audioStreamCount: number;
   useExtXMedia: boolean;
@@ -110,6 +113,7 @@ export interface CreateLiveSessionInput {
   position?: number;
   useTs?: boolean;
   audioPlan?: AudioPlan | null;
+  audioTrackPlans?: { copy: boolean; outputCodec: string }[] | null;
   audioStreamIndex?: number | null;
   audioStreamCount?: number;
   useExtXMedia?: boolean;
@@ -213,6 +217,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       subtitleTrackIndex: null,
       useTs: input.useTs ?? false,
       audioPlan: input.audioPlan ?? null,
+      audioTrackPlans: input.audioTrackPlans ?? null,
       audioStreamIndex: input.audioStreamIndex ?? null,
       audioStreamCount: input.audioStreamCount ?? 0,
       useExtXMedia: input.useExtXMedia ?? false,

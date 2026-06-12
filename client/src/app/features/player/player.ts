@@ -487,6 +487,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const isTranscodeQuality = !['auto', 'original'].includes(_quality);
     const effectiveVideoCopy = isTranscodeQuality ? false : (pi?.videoCopyStream ?? true);
     const effectiveAudioCopy = pi?.audioCopyStream ?? true;
+    // Per-track audio decision for the ACTIVE track. Multi-audio renditions
+    // switch client-side, so the default track's copy/reason (top-level
+    // audioCopyStream / transcodeReasons) is wrong for any other track.
+    // availableAudioTracks() is in streamInfo.audio order (the i-th track maps
+    // to streamInfo.audio[i]), so the selected track's position is its backend
+    // audioTracks index. Reading both signals keeps this computed reactive to
+    // a track switch (engine-level shaka-* switches included — they never
+    // refetch playback-info).
+    const _activeAudioTrackId = this.activeAudioTrackId();
+    const _activeAudioPos = this.availableAudioTracks().findIndex(
+      (t) => t.id === _activeAudioTrackId,
+    );
+    const _activeAudioIndex =
+      _activeAudioPos >= 0 ? _activeAudioPos : (this.activeAudioStreamIndex ?? 0);
+    const activeAudioPlan = pi?.audioTracks?.find(
+      (t) => t.index === _activeAudioIndex,
+    );
+    const activeAudioCopy = activeAudioPlan?.copy ?? effectiveAudioCopy;
 
     const formatBitrateBps = (bps: number): string => {
       if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbps`;
@@ -650,9 +668,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       : allFlags
           .filter((f) => f.startsWith('Video') || f === 'SubtitleBurnIn')
           .map(reasonLabel);
-    const audioTranscodeReasons = effectiveAudioCopy
-      ? []
-      : allFlags.filter((f) => f.startsWith('Audio')).map(reasonLabel);
+    // Reason for the ACTIVE track: prefer its per-track plan (correct after a
+    // client-side switch); fall back to the default-track flags when the
+    // backend didn't send per-track plans (older server).
+    const audioTranscodeReasons = activeAudioPlan
+      ? activeAudioPlan.reasonFlags.map(reasonLabel)
+      : effectiveAudioCopy
+        ? []
+        : allFlags.filter((f) => f.startsWith('Audio')).map(reasonLabel);
 
     // --- Audio ---
     // Derive from the SELECTED track, not the source's primary stream, so the
@@ -693,10 +716,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const audioDetailLine = src?.audioSampleRate ? `${src.audioSampleRate} Hz` : '?';
 
     let audioPlaybackMode: string;
-    if (effectiveAudioCopy) {
+    if (activeAudioCopy) {
       audioPlaybackMode = this.translate.instant('player.stats_direct_playback');
     } else {
-      const outCodec = (pi?.outputAudioCodec ?? 'aac').toUpperCase();
+      const outCodec = (
+        activeAudioPlan?.outputCodec ?? pi?.outputAudioCodec ?? 'aac'
+      ).toUpperCase();
       audioPlaybackMode = this.translate.instant('player.stats_transcode_audio', { codec: outCodec });
     }
 

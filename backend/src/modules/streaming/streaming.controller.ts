@@ -427,6 +427,7 @@ export class StreamingController {
       // stored on the LiveSession, threaded through here so respawns /
       // quality switches stay coherent with what playback-info promised.
       audioPlan: live?.audioPlan ?? undefined,
+      audioTrackPlans: live?.audioTrackPlans ?? undefined,
       sourceVideoCodec:
         (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
       sourceWidth: si?.video?.[0]?.width,
@@ -1016,6 +1017,11 @@ export class StreamingController {
       position: resumePosition,
       useTs: effectiveUseTs,
       audioPlan: response.audioPlan,
+      audioTrackPlans:
+        response.audioTracks?.map((t) => ({
+          copy: t.copy,
+          outputCodec: t.outputCodec,
+        })) ?? null,
       audioStreamIndex: audioStreamIndex ?? null,
       audioStreamCount: sourceAudioCount,
       useExtXMedia,
