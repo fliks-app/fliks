@@ -15,10 +15,11 @@ import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
   template: `
     <button
       type="button"
+      data-no-focus-ring
       class="group flex flex-col items-stretch gap-2 text-left focus:outline-none min-w-0 w-full"
       (click)="clicked.emit()"
     >
-      <div class="aspect-square rounded-xl overflow-hidden bg-base-300 ring-1 ring-base-300 group-hover:ring-primary group-focus-visible:ring-primary group-focus-visible:ring-2 transition-colors">
+      <div class="mosaic-art aspect-square rounded-xl overflow-hidden bg-base-300 ring-1 ring-base-300 transition-shadow group-hover:ring-primary">
         @if (posters().length >= 4) {
           <div class="grid grid-cols-2 grid-rows-2 w-full h-full">
             @for (p of posters().slice(0, 4); track p) {
