@@ -329,7 +329,16 @@ export class BrowserDeviceProfileService {
     } else {
       audioCodecs = [];
       if (this.testCodec(video, hasMSE, 'audio/mp4', 'mp4a.40.2')) audioCodecs.push('aac');
-      if (this.testCodec(video, hasMSE, 'audio/mpeg', '')) audioCodecs.push('mp3');
+      // MP3 probed wrapped in MP4 (mp4a.6B/mp4a.69), the form we deliver —
+      // Chrome's MSE rejects it though 'audio/mpeg' passes. webOS plays it
+      // through its native <video>.
+      if (
+        this.testCodec(video, hasMSE, 'audio/mp4', 'mp4a.6B') ||
+        this.testCodec(video, hasMSE, 'audio/mp4', 'mp4a.69') ||
+        tvPlatform === 'webos'
+      ) {
+        audioCodecs.push('mp3');
+      }
       if (this.testCodec(video, hasMSE, 'audio/mp4', 'ac-3')) audioCodecs.push('ac3');
       if (this.testCodec(video, hasMSE, 'audio/mp4', 'ec-3')) audioCodecs.push('eac3');
       if (this.testCodec(video, hasMSE, 'audio/mp4', 'opus') ||
