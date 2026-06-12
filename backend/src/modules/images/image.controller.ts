@@ -76,7 +76,11 @@ export class ImageController {
 
     // Fall back to `full` when the requested size hasn't been generated yet
     // (e.g. images downloaded before multi-size support, or non-TMDB sources
-    // that only yield a single file).
+    // that only yield a single file). NOTE: `full` is the original (~2000px),
+    // so an old library serves oversized bytes for grid thumbs — the
+    // X-Image-Size-Served header below makes that downgrade observable. The
+    // proper fix is a variant backfill (re-fetch the missing TMDB sizes).
+    let servedSize: ImageSize = size;
     if (!existsSync(filePath) && size !== 'full') {
       filePath = this.imageService.getDiskPath(
         type as ImageType,
@@ -84,11 +88,13 @@ export class ImageController {
         variant as MediaImageVariant | undefined,
         'full',
       );
+      servedSize = 'full';
     }
 
     if (!existsSync(filePath)) throw new NotFoundException();
 
     res.set('Cache-Control', 'public, max-age=86400');
+    if (servedSize !== size) res.set('X-Image-Size-Served', servedSize);
     res.sendFile(filePath);
   }
 }

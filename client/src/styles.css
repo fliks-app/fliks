@@ -282,6 +282,16 @@ html.tv-host {
   scroll-padding-top: 96px;
   scroll-padding-bottom: 20vh;
 }
+/* Same focus-into-view breathing room on the browser when navigating by
+   keyboard: arrow / Tab focus scrolls via scrollIntoView({block:'nearest'}) (or
+   sequential focus nav), which otherwise parks the focused card against the
+   bottom edge. Scoped through :has to keyboard modality so mouse scrolling is
+   untouched. TVs already get this via html.tv-host above; :has never matches on
+   the TV WebView's Chrome 85, which is fine. */
+html:has(body.keyboard-modality) {
+  scroll-padding-top: 96px;
+  scroll-padding-bottom: 20vh;
+}
 /* Disable hover styles on TV — there is no pointer */
 body.tv *:hover {
   background-color: revert;
@@ -312,7 +322,8 @@ body.native select {
 }
 body:not(.keyboard-modality):not(.tv) app-media-card figure:focus-visible,
 body:not(.keyboard-modality):not(.tv) [data-home-focus]:focus-visible,
-body:not(.keyboard-modality):not(.tv) [data-tv-focusable]:focus-visible {
+body:not(.keyboard-modality):not(.tv) [data-tv-focusable]:focus-visible,
+body:not(.keyboard-modality):not(.tv) app-mosaic-card button:focus-visible .mosaic-art {
   transform: none !important;
 }
 
@@ -358,14 +369,16 @@ body.tv .btn-ghost:focus-visible {
    selected card "lifts" off the grid. Smaller bump on desktop (mouse
    users already get hover feedback), bigger on TV for the 10-foot UI. */
 app-media-card figure:focus-visible,
-[data-home-focus]:focus-visible {
+[data-home-focus]:focus-visible,
+app-mosaic-card button:focus-visible .mosaic-art {
   transform: scale(1.04);
   transition: transform 0.15s ease-out;
 }
 body.tv .media-card:focus-within,
 body.tv app-media-card figure:focus-visible,
 body.tv [data-home-focus]:focus-visible,
-body.tv [data-tv-focusable]:focus-visible {
+body.tv [data-tv-focusable]:focus-visible,
+body.tv app-mosaic-card button:focus-visible .mosaic-art {
   transform: scale(1.06);
 }
 
@@ -401,7 +414,8 @@ body.tv app-media-card .opacity-0.group-hover\:opacity-100 {
    the card's `border-radius` — needed because Tizen 6.5 Chromium 85
    would otherwise paint a rectangle (outline-without-radius). */
 app-media-card figure:focus-visible,
-[data-home-focus]:focus-visible {
+[data-home-focus]:focus-visible,
+app-mosaic-card button:focus-visible .mosaic-art {
   outline: none !important;
   box-shadow:
     0 0 0 2px var(--color-base-100, #1d232a),
@@ -415,7 +429,8 @@ app-media-card figure:focus-visible,
    Drop the blurs on every TV, keep the crisp 2-step ring (cheap, no blur).
    Desktop keeps the full Lumen look. */
 body.tv app-media-card figure:focus-visible,
-body.tv [data-home-focus]:focus-visible {
+body.tv [data-home-focus]:focus-visible,
+body.tv app-mosaic-card button:focus-visible .mosaic-art {
   box-shadow:
     0 0 0 2px var(--color-base-100, #1d232a),
     0 0 0 6px var(--color-primary, #7a3ff2) !important;

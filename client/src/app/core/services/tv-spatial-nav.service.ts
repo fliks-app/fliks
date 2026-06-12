@@ -1,5 +1,7 @@
 import { Injectable, inject, DestroyRef } from '@angular/core';
 import { TvService } from './tv.service';
+import { DefaultFocusService } from './default-focus.service';
+import { FOCUSABLE_SELECTOR } from './focusable.constants';
 
 /**
  * Spatial navigation for D-pad input on Android TV — and keyboard
@@ -40,11 +42,27 @@ interface ContainerNode {
   activeChild: HTMLElement | null;
 }
 
+/** Minimum ms between focus moves. A held key (auto-repeat) and fast taps both
+ *  fire faster than a smooth scroll settles, which judders as each move
+ *  retargets the animation. Pace moves to this interval; the dispatcher is
+ *  leading + trailing so no press is dropped, only delayed. */
+const NAV_MIN_INTERVAL_MS = 300;
+
+/** Page scroll step (px) when an up/down move has no focusable neighbour — lets
+ *  the user reach non-focusable info content below the last card. */
+const PAGE_SCROLL_AMOUNT_PX = 300;
+
 @Injectable({ providedIn: 'root' })
 export class TvSpatialNavService {
   private readonly tv = inject(TvService);
+  private readonly defaultFocus = inject(DefaultFocusService);
   private readonly destroyRef = inject(DestroyRef);
   private bound = false;
+  /** Timestamp of the last performed spatial-nav move (for pacing). */
+  private lastNavAt = 0;
+  private pendingNavTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingNavDir: 'left' | 'right' | 'up' | 'down' = 'down';
+  private pendingCrossZones = false;
   /** Registered containers, keyed by their host element. */
   private readonly containers = new Map<HTMLElement, ContainerNode>();
   /** Cached whole-document focusable list, reused until the DOM mutates. When
@@ -254,28 +272,69 @@ export class TvSpatialNavService {
     if (active?.matches('[role="slider"], [data-tv-skip-spatial], [data-tv-skip-spatial] *')) {
       if (dir === 'left' || dir === 'right') return;
     }
-    const next = this.findNeighbor(dir);
     e.preventDefault();
+    // crossZones = !e.repeat: a deliberate (non-repeat) press may leave the
+    // current zone; a held key's repeats stay inside it.
+    this.dispatchMove(dir, !e.repeat);
+  }
+
+  /** Pace focus moves: a held key or a fast double-tap can fire smooth scrolls
+   *  faster than they settle, which judders. Leading + trailing — the first
+   *  move runs now, any move within the window is coalesced into one trailing
+   *  move at the window's end (latest direction wins), so no press is lost. */
+  private dispatchMove(dir: 'left' | 'right' | 'up' | 'down', crossZones: boolean) {
+    if (this.pendingNavTimer !== null) {
+      this.pendingNavDir = dir;
+      // A fresh press (repeat=false → crossZones true) mid-window re-enables
+      // crossing for the trailing move; held repeats keep it false.
+      this.pendingCrossZones ||= crossZones;
+      return;
+    }
+    const wait = NAV_MIN_INTERVAL_MS - (Date.now() - this.lastNavAt);
+    if (wait <= 0) {
+      this.lastNavAt = Date.now();
+      this.performMove(dir, crossZones);
+      return;
+    }
+    this.pendingNavDir = dir;
+    this.pendingCrossZones = crossZones;
+    this.pendingNavTimer = setTimeout(() => {
+      this.pendingNavTimer = null;
+      this.lastNavAt = Date.now();
+      this.performMove(this.pendingNavDir, this.pendingCrossZones);
+    }, wait);
+  }
+
+  /** Move focus to the neighbour in `dir`, or scroll the page when none exists.
+   *  `crossZones` false (a held key) keeps focus inside its current zone. */
+  private performMove(dir: 'left' | 'right' | 'up' | 'down', crossZones: boolean) {
+    const active = document.activeElement as HTMLElement | null;
+    const next = this.findNeighbor(dir);
     if (next) {
-      // `preventScroll: true` keeps the browser's instant auto-scroll from
-      // firing on every focus tick. We then call `scrollIntoView` smooth
-      // with `block: 'nearest'` so an off-screen card animates in, while
-      // horizontal-scroller's `focusin` handler owns vertical row-top
-      // alignment when focus crosses rows. Two coordinated smooth
-      // scrolls instead of a jarring instant→smooth one-two punch.
+      // Held key stays inside the current zone (a TV row, the library grid):
+      // a deliberate press crosses out, a held one doesn't, so you can't
+      // overshoot out of a row / grid by leaning on the D-pad.
+      if (!crossZones && this.exitsZone(active, next)) return;
+      // preventScroll keeps the browser's instant auto-scroll off; the smooth
+      // scrollIntoView animates an off-screen card in (block:'nearest'), while
+      // horizontal-scroller's focusin handler owns vertical row-top alignment.
       next.focus({ preventScroll: true });
       next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
       return;
     }
-    // No focusable neighbour: scroll the page manually so the user can
-    // reach informational content (file infos, descriptions, etc.) that
-    // sits below the last focusable card. Up/down only — left/right at a
-    // boundary should just block (intra-row). Skip while a modal is open
-    // so the user hitting the boundary inside a menu doesn't drift the
-    // page underneath.
-    if (!this.openModals().length && (dir === 'down' || dir === 'up')) {
-      window.scrollBy({ top: dir === 'down' ? 300 : -300, behavior: 'smooth' });
+    // No focusable neighbour: scroll the page so the user can reach info content
+    // below the last card. Held keys stay put; up/down only; not in a modal.
+    if (crossZones && !this.openModals().length && (dir === 'down' || dir === 'up')) {
+      window.scrollBy({ top: dir === 'down' ? PAGE_SCROLL_AMOUNT_PX : -PAGE_SCROLL_AMOUNT_PX, behavior: 'smooth' });
     }
+  }
+
+  /** True when moving to `next` would leave the [data-tv-zone] that currently
+   *  holds focus. Elements outside any zone never block. */
+  private exitsZone(active: HTMLElement | null, next: HTMLElement): boolean {
+    const zone = active?.closest('[data-tv-zone]');
+    if (!zone) return false;
+    return !zone.contains(next);
   }
 
   /** Accumulated wheel deltaY between focus-step emissions, so one notch
@@ -298,19 +357,12 @@ export class TvSpatialNavService {
     }
   }
 
-  /** Move focus to the up/down neighbour, falling back to a manual page
-   *  scroll when none exists. Mirrors the up/down tail of {@link onKey} so
-   *  the wheel and the D-pad share one notion of "scroll vertically". */
+  /** Magic-Remote wheel vertical step. Routes through the same paced dispatcher
+   *  as the D-pad so a fast spin can't fire smooth scrolls faster than they
+   *  settle. crossZones=true: a wheel is a scroll gesture, not a discrete press,
+   *  so it may scroll out of a zone (unlike a held D-pad key). */
   private navigateVertical(dir: 'up' | 'down') {
-    const next = this.findNeighbor(dir);
-    if (next) {
-      next.focus({ preventScroll: true });
-      next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
-      return;
-    }
-    if (!this.openModals().length) {
-      window.scrollBy({ top: dir === 'down' ? 300 : -300, behavior: 'smooth' });
-    }
+    this.dispatchMove(dir, true);
   }
 
   /** Currently-open overlays that scope spatial navigation. Bottom sheets
@@ -352,7 +404,9 @@ export class TvSpatialNavService {
     if (!all.length) return null;
 
     if (!active || active === document.body) {
-      return all[0] ?? null;
+      // Nothing focused yet (cold load) — prefer the active page's declared
+      // default focus over the first document focusable (which is the topbar).
+      return this.defaultFocus.currentTarget() ?? all[0] ?? null;
     }
 
     const fromRect = active.getBoundingClientRect();
@@ -624,9 +678,6 @@ const KEYCODE_TO_DIR: Record<number, 'left' | 'right' | 'up' | 'down' | undefine
   39: 'right',
   40: 'down',
 };
-
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [data-tv-focusable]';
 
 function collectFocusables(root: ParentNode = document): HTMLElement[] {
   const nodes = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));

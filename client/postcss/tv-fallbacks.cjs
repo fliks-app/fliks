@@ -121,6 +121,22 @@ function isLevel3SimpleSelector(s) {
   return tokens.join('') === s && tokens.length === 1;
 }
 
+/** `translate: x [y]` (Chrome 104+) → an equivalent transform function for
+ *  Chromium 85, which drops the standalone property. */
+function translateToFn(value) {
+  const parts = value.trim().split(/\s+/);
+  if (parts.length <= 1) return `translateX(${parts[0] || '0'})`;
+  return `translate(${parts[0]}, ${parts[1]})`;
+}
+
+/** `scale: x [y]` → `scale(...)`, converting the percentage form (`95%` → `.95`)
+ *  the `scale()` function doesn't accept. */
+function scaleToFn(value) {
+  const toNum = (v) => (v.endsWith('%') ? String(parseFloat(v) / 100) : v);
+  const parts = value.trim().split(/\s+/).map(toNum);
+  return parts.length <= 1 ? `scale(${parts[0]})` : `scale(${parts[0]}, ${parts[1]})`;
+}
+
 const CQ_UNIT = /\d(cqi|cqw|cqh|cqb)\b/;
 const DROP_PROPS = new Set(['text-wrap', 'field-sizing']);
 const SCROLL_INLINE_MAP = {
@@ -158,6 +174,33 @@ module.exports = () => ({
       if (next.length === 0) rule.remove();
       else rule.selector = next.join(',');
     }
+    // Tailwind v4 emits the individual transform properties `translate` /
+    // `rotate` / `scale` (Chrome 104+); Chromium 85 silently drops them, so
+    // centering, hover-scale, indicators etc. break. Fold whatever a rule
+    // carries into ONE `transform` — in spec order (translate → rotate →
+    // scale) so several on one rule compose instead of clobbering, and so a
+    // `transition: translate` (rewritten below) still animates it.
+    let tx = null;
+    let rot = null;
+    let sc = null;
+    rule.walkDecls((d) => {
+      if (d.prop === 'translate') tx = translateToFn(d.value);
+      else if (d.prop === 'rotate') rot = `rotate(${d.value})`;
+      else if (d.prop === 'scale') sc = scaleToFn(d.value);
+    });
+    if (tx || rot || sc) {
+      rule.walkDecls((d) => {
+        if (d.prop === 'translate' || d.prop === 'rotate' || d.prop === 'scale') {
+          d.remove();
+        }
+      });
+      const composed = [tx, rot, sc].filter(Boolean).join(' ');
+      const existing = rule.nodes.find(
+        (n) => n.type === 'decl' && n.prop === 'transform',
+      );
+      if (existing) existing.value = `${composed} ${existing.value}`;
+      else rule.append({ prop: 'transform', value: composed });
+    }
   },
   AtRule: {
     container: (atRule) => {
@@ -170,6 +213,15 @@ module.exports = () => ({
     if (DROP_PROPS.has(decl.prop)) {
       decl.remove();
       return;
+    }
+    // The transform-property → `transform` rewrite (Rule handler) leaves any
+    // `transition: translate …` animating a property that no longer exists —
+    // point it at `transform` instead.
+    if (
+      (decl.prop === 'transition' || decl.prop === 'transition-property') &&
+      /\b(?:translate|rotate|scale)\b/.test(decl.value)
+    ) {
+      decl.value = decl.value.replace(/\b(?:translate|rotate|scale)\b/g, 'transform');
     }
     const inlineMap = SCROLL_INLINE_MAP[decl.prop];
     if (inlineMap) {

@@ -1,12 +1,19 @@
-<div class="flex flex-col gap-4 h-full">
+<div
+  appDefaultFocus="[data-library-focus^='media:']"
+  [focusKey]="'library-' + (library()?.id ?? '')"
+  focusIdAttr="data-library-focus"
+  class="flex flex-col gap-4 h-full"
+>
   <!-- Library title — hidden when the mobile topbar already shows it
        (avoids the duplicated heading on small screens). -->
   @if (!navbar.mobileNavbarVisible()) {
     <h1 class="text-2xl font-bold">{{ libraryName() }}</h1>
   }
 
-  <!-- View tabs (own row, centered like the reference) -->
-  <nav class="flex items-center gap-1 overflow-x-auto py-2 -my-2 px-2 -mx-2">
+  <!-- View tabs — a spatial-nav row so `↑` from the content below lands on the
+       tabs (the nearest registered container) instead of bridging past them to
+       the fixed topbar. -->
+  <nav appTvRow class="flex items-center gap-1 overflow-x-auto py-2 -my-2 px-2 -mx-2">
     <button
       type="button"
       class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
@@ -284,7 +291,7 @@
         </div>
       }
       <div class="flex gap-1">
-        <div #cardGrid class="flex-1 min-w-0 grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-1.5 sm:gap-4"
+        <div #cardGrid data-tv-zone class="flex-1 min-w-0 grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-1.5 sm:gap-4"
           [class.pr-4]="sortBy() === 'title' && sortOrder() === 'ASC'"
           [class.pr-2]="sortBy() !== 'title' || sortOrder() !== 'ASC'"
           [style.paddingTop.px]="list.padTop()"

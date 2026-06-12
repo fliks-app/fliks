@@ -81,13 +81,23 @@ export class NavbarService {
         // between two URLs forever.
         if (this.isPoppingBack) {
           this.isPoppingBack = false;
-        } else if (lastUrl && lastUrl !== e.urlAfterRedirects) {
+        } else if (lastUrl && this.pathOf(lastUrl) !== this.pathOf(e.urlAfterRedirects)) {
+          // Only a real page change (path differs) pushes a back entry. A
+          // query-only change on the same path — library tabs, filters, sort,
+          // all written with replaceUrl — is in-page state, so back returns to
+          // the previous PAGE, not the previous tab, matching browser back.
           this.history.push(lastUrl);
         }
         lastUrl = e.urlAfterRedirects;
         this.canGoBack.set(this.history.length > 0 && this.router.url !== '/');
       }
     });
+  }
+
+  /** URL path without query/fragment — query-only changes on the same path are
+   *  in-page state (tabs / filters), not navigations to push onto the stack. */
+  private pathOf(url: string): string {
+    return url.split(/[?#]/)[0];
   }
 
   /**

@@ -232,7 +232,9 @@
     "recent_media": "Récemment ajoutés",
     "recommendations": "Recommandations",
     "recent_media_in": "Récemment ajouté – {{library}}",
-    "requests_recent": "Demandes récentes"
+    "requests_recent": "Demandes récentes",
+    "cw_remove_title": "Retirer",
+    "cw_remove_message": "Retirer « {{title}} » de la liste ?"
   },
   "playback_settings": {
     "title": "Paramètres de lecture",

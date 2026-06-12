@@ -9,10 +9,8 @@ import {
   OnDestroy,
   ElementRef,
   ViewChild,
-  afterNextRender,
-  effect,
 } from '@angular/core';
-import { ActivatedRoute, NavigationStart, Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -29,7 +27,8 @@ import type {
   RecommendationItem,
 } from '../../core/services/api/streaming-api.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
-import { FocusMemoryService } from '../../core/services/focus-memory.service';
+import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
+import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
@@ -62,6 +61,8 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
   selector: 'app-library',
   imports: [
     MediaCardComponent,
+    DefaultFocusDirective,
+    TvRowDirective,
     DropdownMenuComponent,
     TvSelectDirective,
     HorizontalScrollerComponent,
@@ -86,15 +87,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly scrollMemory = inject(ScrollMemoryService);
-  private readonly focusMemory = inject(FocusMemoryService);
   readonly navbar = inject(NavbarService);
   private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
   private readonly translate = inject(TranslateService);
   private readonly reuseStrategy = inject(CachingReuseStrategy);
   private readonly appResume = inject(AppResumeService);
-  private arrivedViaBack = false;
-  private navStartSub?: Subscription;
+  private paramSub?: Subscription;
   private attachedSub?: Subscription;
   private detachedSub?: Subscription;
   private queryParamSub?: Subscription;
@@ -195,14 +194,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
    *  for the previous library can't overwrite the current view. */
   private loadGen = 0;
 
-  /** Re-load when route param changes (e.g. clicking another library in sidebar). */
-  private readonly paramEffect = effect(() => {
-    // Angular signal-based route params aren't available yet in 21.x for
-    // lazy routes, so we subscribe manually in ngOnInit below.
-  }, { allowSignalWrites: true });
-
   ngOnInit() {
-    this.arrivedViaBack = this.navbar.lastWasBack();
     if (this.tv.isTv()) {
       // DOM windowing for the `all` grid: only render a row-aligned slice
       // around the viewport so a large library doesn't pile hundreds of cards
@@ -211,19 +203,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.onResize = () => this.list.onWindowScroll();
       window.addEventListener('resize', this.onResize, { passive: true });
     }
-    if (this.tv.isTv()) {
-      this.navStartSub = this.router.events
-        .pipe(filter((e): e is NavigationStart => e instanceof NavigationStart))
-        .subscribe(() => {
-          const active = document.activeElement as HTMLElement | null;
-          const container = active?.closest<HTMLElement>('[data-library-focus]');
-          const sel = container?.dataset['libraryFocus'];
-          const lib = this.library();
-          if (sel && lib) this.focusMemory.save(`library-${lib.id}`, sel);
-        });
-    }
     // Subscribe to route param changes (handles initial load + sidebar nav).
-    this.route.params.subscribe(async (params) => {
+    this.paramSub = this.route.params.subscribe(async (params) => {
       const rawName = params['libraryName'] as string;
       if (!rawName) return;
       const name = decodeURIComponent(rawName);
@@ -269,12 +250,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.sortOrder.set(
         (qp.get('sortOrder') ?? stored['sortOrder'] ?? 'ASC') as SortOrder,
       );
-      this.viewMode.set(
-        (qp.get('view') ?? stored['view'] ?? 'all') as LibraryViewMode,
-      );
-      this.selectedGenre.set(qp.get('genre') ?? stored['genre'] ?? '');
-      const storedColl = qp.get('collectionId') ?? stored['collectionId'];
-      this.selectedCollectionId.set(storedColl ? Number(storedColl) : null);
+      // View / genre / collection are navigation state, read only from the URL
+      // (within-session back/forward, deep links) — never from the persisted
+      // filters — so opening a library fresh lands on the `all` tab.
+      this.viewMode.set((qp.get('view') ?? 'all') as LibraryViewMode);
+      this.selectedGenre.set(qp.get('genre') ?? '');
+      const collId = qp.get('collectionId');
+      this.selectedCollectionId.set(collId ? Number(collId) : null);
 
       this.scrollMemory.activate(scrollKey);
       this.list.trackScroll('media');
@@ -291,9 +273,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
         void this.loadCollections();
       }
       this.scrollMemory.restore(scrollKey, this.injector);
-      if (this.tv.isTv()) {
-        afterNextRender(() => this.applyDefaultFocus(lib.id), { injector: this.injector });
-      }
     });
 
     // Each /libraries/:libraryName has its own cache slot (CachingReuseStrategy
@@ -317,10 +296,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
         void this.loadGenres();
       }
       this.scrollMemory.restoreSticky(scrollKey);
-      if (this.tv.isTv()) {
-        this.arrivedViaBack = true;
-        afterNextRender(() => this.applyDefaultFocus(lib.id), { injector: this.injector });
-      }
     });
     this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
       if (key !== ownKey) return;
@@ -370,35 +345,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
     this.navbar.clearPageTitle();
-    this.navStartSub?.unsubscribe();
+    this.paramSub?.unsubscribe();
     this.attachedSub?.unsubscribe();
     this.detachedSub?.unsubscribe();
     this.queryParamSub?.unsubscribe();
     this.resumeSub?.unsubscribe();
-  }
-
-  private applyDefaultFocus(libraryId: number) {
-    const root = document.querySelector<HTMLElement>('app-library') ?? document.body;
-    const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex="0"]';
-    if (this.arrivedViaBack) {
-      const saved = this.focusMemory.retrieve(`library-${libraryId}`);
-      const container = saved
-        ? root.querySelector<HTMLElement>(`[data-library-focus="${CSS.escape(saved)}"]`)
-        : null;
-      const target = container?.matches(FOCUSABLE)
-        ? container
-        : container?.querySelector<HTMLElement>(FOCUSABLE) ?? null;
-      if (target) {
-        target.focus({ preventScroll: false });
-        return;
-      }
-    }
-    // Default: first card in the grid.
-    const firstCard = root.querySelector<HTMLElement>('[data-library-focus^="media:"]');
-    const target = firstCard?.matches(FOCUSABLE)
-      ? firstCard
-      : firstCard?.querySelector<HTMLElement>(FOCUSABLE);
-    target?.focus({ preventScroll: false });
   }
 
   scrollToLetter(letter: string) {
@@ -597,22 +548,39 @@ export class LibraryComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Reflect the current state in the URL. `push` adds a real history
-   *  entry instead of replacing — used for the genres-list → genre-filter
-   *  transition so the browser back button returns to the Genres list. */
+  /** Filter/sort *preferences* persisted to localStorage and restored when a
+   *  library is opened fresh. Deliberately excludes the active tab and its
+   *  in-tab selection (view / genre / collection): those are navigation state,
+   *  not preferences, so reopening the app lands on the library root rather
+   *  than the tab the user happened to leave open. */
+  private buildStoredParams(): Record<string, string> {
+    const p: Record<string, string> = {};
+    if (this.searchQuery()) p['q'] = this.searchQuery();
+    if (this.filterMonitored()) p['monitored'] = this.filterMonitored();
+    if (this.filterStatus()) p['status'] = this.filterStatus();
+    if (this.filterWatched()) p['watched'] = this.filterWatched();
+    if (this.sortBy() !== 'title') p['sortBy'] = this.sortBy();
+    if (this.sortOrder() !== 'ASC') p['sortOrder'] = this.sortOrder();
+    return p;
+  }
+
+  /** The full state mirrored into the URL — the persisted preferences plus the
+   *  active tab and its selection — so within-session back/forward and deep
+   *  links restore the exact view. */
+  private buildUrlParams(): Record<string, string> {
+    const p = this.buildStoredParams();
+    if (this.viewMode() !== 'all') p['view'] = this.viewMode();
+    if (this.selectedGenre()) p['genre'] = this.selectedGenre();
+    if (this.selectedCollectionId()) p['collectionId'] = String(this.selectedCollectionId());
+    return p;
+  }
+
+  /** Reflect the current state in the URL. `push` adds a real history entry
+   *  instead of replacing — used for the genres-list → genre-filter transition
+   *  so the browser back button returns to the Genres list. */
   private syncQueryParams(push = false) {
-    const params: Record<string, string> = {};
-    if (this.searchQuery()) params['q'] = this.searchQuery();
-    if (this.filterMonitored()) params['monitored'] = this.filterMonitored();
-    if (this.filterStatus()) params['status'] = this.filterStatus();
-    if (this.filterWatched()) params['watched'] = this.filterWatched();
-    if (this.sortBy() !== 'title') params['sortBy'] = this.sortBy();
-    if (this.sortOrder() !== 'ASC') params['sortOrder'] = this.sortOrder();
-    if (this.viewMode() !== 'all') params['view'] = this.viewMode();
-    if (this.selectedGenre()) params['genre'] = this.selectedGenre();
-    if (this.selectedCollectionId()) params['collectionId'] = String(this.selectedCollectionId());
     this.skipQueryParamSync = true;
-    void this.router.navigate([], { queryParams: params, replaceUrl: !push });
+    void this.router.navigate([], { queryParams: this.buildUrlParams(), replaceUrl: !push });
     this.saveFilters();
   }
 
@@ -621,17 +589,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   private saveFilters() {
-    const data: Record<string, string> = {};
-    if (this.searchQuery()) data['q'] = this.searchQuery();
-    if (this.filterMonitored()) data['monitored'] = this.filterMonitored();
-    if (this.filterStatus()) data['status'] = this.filterStatus();
-    if (this.filterWatched()) data['watched'] = this.filterWatched();
-    if (this.sortBy() !== 'title') data['sortBy'] = this.sortBy();
-    if (this.sortOrder() !== 'ASC') data['sortOrder'] = this.sortOrder();
-    if (this.viewMode() !== 'all') data['view'] = this.viewMode();
-    if (this.selectedGenre()) data['genre'] = this.selectedGenre();
-    if (this.selectedCollectionId()) data['collectionId'] = String(this.selectedCollectionId());
-    localStorage.setItem(this.storageKey, JSON.stringify(data));
+    localStorage.setItem(this.storageKey, JSON.stringify(this.buildStoredParams()));
   }
 
   private loadFilters(name: string): Record<string, string> {

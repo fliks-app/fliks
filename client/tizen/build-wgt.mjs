@@ -45,6 +45,35 @@ for (const f of stylesFiles) {
   console.log(`[tizen] downlevelled ${f}: ${before.length} → ${after.length} bytes`);
 }
 
+// Guard: a Chromium-85-unsafe token surviving the downlevel pass means a
+// pipeline gap (e.g. a new Tailwind feature) would ship a silently-broken WGT —
+// fail the build here instead. Each token below is one the pipeline is supposed
+// to have folded/flattened/dropped. (color-mix is intentionally NOT listed: its
+// @supports fallback path is kept on purpose.)
+const UNSAFE_TOKENS = [
+  [/[;{](?:translate|rotate|scale):/, 'individual transform property — should fold into `transform`'],
+  // Negative lookbehind excludes Tailwind's escaped container-query CLASSES
+  // (`.\@container`, `.\@md\:…`) — only the real at-rules are unsafe.
+  [/(?<!\\)@container[\s({]/, '@container query'],
+  [/(?<!\\)@starting-style[\s{]/, '@starting-style'],
+  [/\d(?:cqi|cqw|cqh|cqb)\b/, 'container-query length unit'],
+  [/:where\(/, ':where()'],
+];
+for (const f of stylesFiles) {
+  const css = readFileSync(resolve(stage, f), 'utf8');
+  for (const [re, label] of UNSAFE_TOKENS) {
+    const m = css.match(re);
+    if (m) {
+      const ctx = css.slice(Math.max(0, m.index - 50), m.index + 60);
+      console.error(
+        `[tizen] BUILD BLOCKED — Chromium-85-unsafe CSS survived downlevel in ${f}: ${label}\n  …${ctx}…`,
+      );
+      process.exit(1);
+    }
+  }
+}
+console.log('[tizen] CSS downlevel guard passed');
+
 // Force the stylesheet `<link>` to load synchronously (render-blocking).
 // Angular's build pipeline emits the lazy pattern
 // `<link rel="stylesheet" href="X" media="print" onload="this.media='all'">`

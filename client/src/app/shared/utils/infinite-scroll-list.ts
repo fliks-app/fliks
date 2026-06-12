@@ -37,6 +37,8 @@ export class InfiniteScrollList<T extends { id: number }> {
   private metricsFn: (() => GridMetrics | null) | null = null;
   private bufferRows = 4;
   private windowRaf: number | null = null;
+  private windowedOnce = false;
+  private warnedWindowFail = false;
 
   /** All items (reactive — use in computed for counts/stats). */
   readonly all = signal<T[]>([]);
@@ -137,6 +139,16 @@ export class InfiniteScrollList<T extends { id: number }> {
     if (!m || m.rowHeight <= 0 || m.cols < 1) {
       // Metrics not ready yet (grid not laid out) — render everything, which
       // is exactly the non-windowed behavior, so never worse than before.
+      // Warn once if windowing previously succeeded then broke: that's a grid
+      // CSS / measurement regression silently disabling the DOM cap, not the
+      // benign first-render case.
+      if (this.windowedOnce && this.allItems.length && !this.warnedWindowFail) {
+        this.warnedWindowFail = true;
+        console.warn(
+          '[InfiniteScrollList] grid metrics unavailable after windowing succeeded — ' +
+            'rendering all items. A grid layout change likely broke readGridMetrics().',
+        );
+      }
       this.visible.set(this.allItems.slice());
       this.padTop.set(0);
       this.padBottom.set(0);
@@ -150,6 +162,8 @@ export class InfiniteScrollList<T extends { id: number }> {
   }
 
   private applyWindow(m: GridMetrics, startRowRaw: number, endRowRaw: number) {
+    this.windowedOnce = true;
+    this.warnedWindowFail = false;
     const total = this.allItems.length;
     const cols = m.cols;
     const totalRows = Math.ceil(total / cols);
