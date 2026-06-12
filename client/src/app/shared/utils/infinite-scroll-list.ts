@@ -11,7 +11,6 @@ export class InfiniteScrollList<T extends { id: number }> {
   private idPrefix = '';
   private letterBoundaries: { letter: string; itemId: number }[] = [];
   private scrollHandler: (() => void) | null = null;
-  private scrollRaf: number | null = null;
   private scrollLock = false;
   private scrollLockTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -133,16 +132,7 @@ export class InfiniteScrollList<T extends { id: number }> {
   /** Start tracking scroll position to update activeLetter. Call once after init. */
   trackScroll(idPrefix: string) {
     this.idPrefix = idPrefix;
-    // Coalesce to one active-letter lookup per frame: onScroll reads
-    // getBoundingClientRect for every letter boundary (a forced layout), and
-    // the TV fires scroll rapidly during its smooth D-pad scroll.
-    this.scrollHandler = () => {
-      if (this.scrollRaf !== null) return;
-      this.scrollRaf = requestAnimationFrame(() => {
-        this.scrollRaf = null;
-        this.onScroll();
-      });
-    };
+    this.scrollHandler = () => this.onScroll();
     window.addEventListener('scroll', this.scrollHandler, { passive: true });
   }
 
@@ -151,10 +141,6 @@ export class InfiniteScrollList<T extends { id: number }> {
     this.observer?.disconnect();
     if (this.scrollHandler) {
       window.removeEventListener('scroll', this.scrollHandler);
-    }
-    if (this.scrollRaf !== null) {
-      cancelAnimationFrame(this.scrollRaf);
-      this.scrollRaf = null;
     }
   }
 
