@@ -115,7 +115,15 @@ export class PlayerControlsComponent {
       const visible = this.visible();
       const wasVisible = this.lastVisible;
       this.lastVisible = visible;
-      if (visible && !wasVisible && this.isTv()) {
+      // Focus play/pause when the bar appears under keyboard / D-pad — on TV
+      // (always) and on the browser in keyboard modality — so the next
+      // Enter/Space toggles playback. Skipped for pointer (mouse-revealed
+      // controls shouldn't steal focus). An arrow-seek re-focuses the seekbar
+      // afterwards (player.focusSeekbar), which wins the deferred race.
+      const keyboardModality =
+        typeof document !== 'undefined' &&
+        document.body.classList.contains('keyboard-modality');
+      if (visible && !wasVisible && (this.isTv() || keyboardModality)) {
         this.closeDropdown();
         this.playPauseBtn()?.nativeElement.focus({ preventScroll: true });
       }
@@ -253,6 +261,11 @@ export class PlayerControlsComponent {
   readonly activeSheet = signal<'subtitles' | 'audio' | 'speed' | 'settings' | null>(null);
 
   readonly seekbar = viewChild(SeekbarComponent);
+
+  /** Focus the seekbar track (used when an arrow press wakes hidden controls). */
+  focusSeekbar(): void {
+    this.seekbar()?.focus();
+  }
   /** Desktop/TV play-pause button — focused on TV every time the controls
    *  bar reappears, so the next D-pad center triggers play/pause. */
   private readonly playPauseBtn = viewChild<ElementRef<HTMLButtonElement>>('playPauseBtn');

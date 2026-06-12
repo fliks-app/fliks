@@ -1,10 +1,12 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { formatTime, calcDragTime, calcHoverPercent, SpriteMetadata } from '../../../core/utils/player.utils';
 
@@ -51,6 +53,15 @@ export class SeekbarComponent {
   readonly hoverTime = signal(0);
   readonly hoverPercent = signal(0);
 
+  /** The focusable track element (role=slider). */
+  private readonly trackRoot = viewChild<ElementRef<HTMLElement>>('trackRoot');
+
+  /** Focus the seekbar track. Used when an arrow press wakes hidden controls so
+   *  subsequent D-pad presses scrub here instead of nudging another control. */
+  focus(): void {
+    this.trackRoot()?.nativeElement.focus();
+  }
+
   readonly formatTime = formatTime;
 
   /** The displayed position: dragTime during drag/seekPending, currentTime otherwise */
@@ -70,6 +81,15 @@ export class SeekbarComponent {
     const d = this.duration() || 1;
     return (this.displayTime() / d) * 100;
   });
+
+  /** Show the determinate position fill — always when not loading, and ALSO
+   *  while the user is actively choosing a seek target (drag / pending seek)
+   *  even if the engine flipped to buffering, so the white bar tracks the seek
+   *  instead of vanishing into the indeterminate sweep. Very visible on Tizen,
+   *  where every seek re-buffers the transcode (loading → fill was hidden). */
+  readonly showPositionFill = computed(
+    () => !this.loading() || this.dragging() || this.seekPending(),
+  );
 
   /** Track height + tint class string. Slim baseline (`h-1`),
    *  thickens to `h-2.5` during interaction:
@@ -150,12 +170,12 @@ export class SeekbarComponent {
 
   readonly tooltipLeft = computed(() => {
     const pct = this.dragging() ? this.displayPercent() : this.hoverPercent();
-    const half = this.previewWidth() / 2 || 120;
-    // No left-side clamp: at low seek positions the tooltip should
-    // happily overlap the overlay title rather than freeze at the
-    // edge. Right-side cap stays so the preview doesn't run off the
-    // player frame.
-    return `min(${pct}%, calc(100% - ${half}px))`;
+    // Centre the tooltip on the seek point (the element carries
+    // `-translate-x-1/2`). Plain `%` only — a CSS min()/calc() cap is ignored
+    // by Tizen's older Chromium in `left`, which left the preview stuck
+    // off-centre on the TV. The tooltip can overshoot the frame edges (the
+    // left side already did); a CSS-only right cap needs min()/clamp().
+    return `${pct}%`;
   });
 
   onProgressDown(event: PointerEvent) {
