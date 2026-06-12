@@ -55,6 +55,7 @@ export class TvSpatialNavService {
   private lastNavAt = 0;
   private pendingNavTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingNavDir: 'left' | 'right' | 'up' | 'down' = 'down';
+  private pendingCrossZones = false;
   /** Registered containers, keyed by their host element. */
   private readonly containers = new Map<HTMLElement, ContainerNode>();
   /** Cached whole-document focusable list, reused until the DOM mutates. When
@@ -265,36 +266,48 @@ export class TvSpatialNavService {
       if (dir === 'left' || dir === 'right') return;
     }
     e.preventDefault();
-    this.dispatchMove(dir);
+    // crossZones = !e.repeat: a deliberate (non-repeat) press may leave the
+    // current zone; a held key's repeats stay inside it.
+    this.dispatchMove(dir, !e.repeat);
   }
 
   /** Pace focus moves: a held key or a fast double-tap can fire smooth scrolls
    *  faster than they settle, which judders. Leading + trailing — the first
    *  move runs now, any move within the window is coalesced into one trailing
    *  move at the window's end (latest direction wins), so no press is lost. */
-  private dispatchMove(dir: 'left' | 'right' | 'up' | 'down') {
+  private dispatchMove(dir: 'left' | 'right' | 'up' | 'down', crossZones: boolean) {
     if (this.pendingNavTimer !== null) {
       this.pendingNavDir = dir;
+      // A fresh press (repeat=false → crossZones true) mid-window re-enables
+      // crossing for the trailing move; held repeats keep it false.
+      this.pendingCrossZones ||= crossZones;
       return;
     }
     const wait = NAV_MIN_INTERVAL_MS - (Date.now() - this.lastNavAt);
     if (wait <= 0) {
       this.lastNavAt = Date.now();
-      this.performMove(dir);
+      this.performMove(dir, crossZones);
       return;
     }
     this.pendingNavDir = dir;
+    this.pendingCrossZones = crossZones;
     this.pendingNavTimer = setTimeout(() => {
       this.pendingNavTimer = null;
       this.lastNavAt = Date.now();
-      this.performMove(this.pendingNavDir);
+      this.performMove(this.pendingNavDir, this.pendingCrossZones);
     }, wait);
   }
 
-  /** Move focus to the neighbour in `dir`, or scroll the page when none exists. */
-  private performMove(dir: 'left' | 'right' | 'up' | 'down') {
+  /** Move focus to the neighbour in `dir`, or scroll the page when none exists.
+   *  `crossZones` false (a held key) keeps focus inside its current zone. */
+  private performMove(dir: 'left' | 'right' | 'up' | 'down', crossZones: boolean) {
+    const active = document.activeElement as HTMLElement | null;
     const next = this.findNeighbor(dir);
     if (next) {
+      // Held key stays inside the current zone (a TV row, the library grid):
+      // a deliberate press crosses out, a held one doesn't, so you can't
+      // overshoot out of a row / grid by leaning on the D-pad.
+      if (!crossZones && this.exitsZone(active, next)) return;
       // preventScroll keeps the browser's instant auto-scroll off; the smooth
       // scrollIntoView animates an off-screen card in (block:'nearest'), while
       // horizontal-scroller's focusin handler owns vertical row-top alignment.
@@ -303,10 +316,18 @@ export class TvSpatialNavService {
       return;
     }
     // No focusable neighbour: scroll the page so the user can reach info content
-    // below the last card. Up/down only; skip while a modal is open.
-    if (!this.openModals().length && (dir === 'down' || dir === 'up')) {
+    // below the last card. Held keys stay put; up/down only; not in a modal.
+    if (crossZones && !this.openModals().length && (dir === 'down' || dir === 'up')) {
       window.scrollBy({ top: dir === 'down' ? 300 : -300, behavior: 'smooth' });
     }
+  }
+
+  /** True when moving to `next` would leave the [data-tv-zone] that currently
+   *  holds focus. Elements outside any zone never block. */
+  private exitsZone(active: HTMLElement | null, next: HTMLElement): boolean {
+    const zone = active?.closest('[data-tv-zone]');
+    if (!zone) return false;
+    return !zone.contains(next);
   }
 
   /** Accumulated wheel deltaY between focus-step emissions, so one notch
