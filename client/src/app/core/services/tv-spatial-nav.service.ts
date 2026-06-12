@@ -40,11 +40,21 @@ interface ContainerNode {
   activeChild: HTMLElement | null;
 }
 
+/** Minimum ms between focus moves. A held key (auto-repeat) and fast taps both
+ *  fire faster than a smooth scroll settles, which judders as each move
+ *  retargets the animation. Pace moves to this interval; the dispatcher is
+ *  leading + trailing so no press is dropped, only delayed. */
+const NAV_MIN_INTERVAL_MS = 300;
+
 @Injectable({ providedIn: 'root' })
 export class TvSpatialNavService {
   private readonly tv = inject(TvService);
   private readonly destroyRef = inject(DestroyRef);
   private bound = false;
+  /** Timestamp of the last performed spatial-nav move (for pacing). */
+  private lastNavAt = 0;
+  private pendingNavTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingNavDir: 'left' | 'right' | 'up' | 'down' = 'down';
   /** Registered containers, keyed by their host element. */
   private readonly containers = new Map<HTMLElement, ContainerNode>();
   /** Cached whole-document focusable list, reused until the DOM mutates. When
@@ -254,25 +264,46 @@ export class TvSpatialNavService {
     if (active?.matches('[role="slider"], [data-tv-skip-spatial], [data-tv-skip-spatial] *')) {
       if (dir === 'left' || dir === 'right') return;
     }
-    const next = this.findNeighbor(dir);
     e.preventDefault();
+    this.dispatchMove(dir);
+  }
+
+  /** Pace focus moves: a held key or a fast double-tap can fire smooth scrolls
+   *  faster than they settle, which judders. Leading + trailing — the first
+   *  move runs now, any move within the window is coalesced into one trailing
+   *  move at the window's end (latest direction wins), so no press is lost. */
+  private dispatchMove(dir: 'left' | 'right' | 'up' | 'down') {
+    if (this.pendingNavTimer !== null) {
+      this.pendingNavDir = dir;
+      return;
+    }
+    const wait = NAV_MIN_INTERVAL_MS - (Date.now() - this.lastNavAt);
+    if (wait <= 0) {
+      this.lastNavAt = Date.now();
+      this.performMove(dir);
+      return;
+    }
+    this.pendingNavDir = dir;
+    this.pendingNavTimer = setTimeout(() => {
+      this.pendingNavTimer = null;
+      this.lastNavAt = Date.now();
+      this.performMove(this.pendingNavDir);
+    }, wait);
+  }
+
+  /** Move focus to the neighbour in `dir`, or scroll the page when none exists. */
+  private performMove(dir: 'left' | 'right' | 'up' | 'down') {
+    const next = this.findNeighbor(dir);
     if (next) {
-      // `preventScroll: true` keeps the browser's instant auto-scroll from
-      // firing on every focus tick. We then call `scrollIntoView` smooth
-      // with `block: 'nearest'` so an off-screen card animates in, while
-      // horizontal-scroller's `focusin` handler owns vertical row-top
-      // alignment when focus crosses rows. Two coordinated smooth
-      // scrolls instead of a jarring instant→smooth one-two punch.
+      // preventScroll keeps the browser's instant auto-scroll off; the smooth
+      // scrollIntoView animates an off-screen card in (block:'nearest'), while
+      // horizontal-scroller's focusin handler owns vertical row-top alignment.
       next.focus({ preventScroll: true });
       next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
       return;
     }
-    // No focusable neighbour: scroll the page manually so the user can
-    // reach informational content (file infos, descriptions, etc.) that
-    // sits below the last focusable card. Up/down only — left/right at a
-    // boundary should just block (intra-row). Skip while a modal is open
-    // so the user hitting the boundary inside a menu doesn't drift the
-    // page underneath.
+    // No focusable neighbour: scroll the page so the user can reach info content
+    // below the last card. Up/down only; skip while a modal is open.
     if (!this.openModals().length && (dir === 'down' || dir === 'up')) {
       window.scrollBy({ top: dir === 'down' ? 300 : -300, behavior: 'smooth' });
     }

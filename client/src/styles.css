@@ -282,6 +282,16 @@ html.tv-host {
   scroll-padding-top: 96px;
   scroll-padding-bottom: 20vh;
 }
+/* Same focus-into-view breathing room on the browser when navigating by
+   keyboard: arrow / Tab focus scrolls via scrollIntoView({block:'nearest'}) (or
+   sequential focus nav), which otherwise parks the focused card against the
+   bottom edge. Scoped through :has to keyboard modality so mouse scrolling is
+   untouched. TVs already get this via html.tv-host above; :has never matches on
+   the TV WebView's Chrome 85, which is fine. */
+html:has(body.keyboard-modality) {
+  scroll-padding-top: 96px;
+  scroll-padding-bottom: 20vh;
+}
 /* Disable hover styles on TV — there is no pointer */
 body.tv *:hover {
   background-color: revert;
