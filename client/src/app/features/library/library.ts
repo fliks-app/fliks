@@ -28,6 +28,7 @@ import type {
 } from '../../core/services/api/streaming-api.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
+import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
@@ -61,6 +62,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
   imports: [
     MediaCardComponent,
     DefaultFocusDirective,
+    TvRowDirective,
     DropdownMenuComponent,
     TvSelectDirective,
     HorizontalScrollerComponent,

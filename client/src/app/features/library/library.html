@@ -10,8 +10,10 @@
     <h1 class="text-2xl font-bold">{{ libraryName() }}</h1>
   }
 
-  <!-- View tabs (own row, centered like the reference) -->
-  <nav class="flex items-center gap-1 overflow-x-auto py-2 -my-2 px-2 -mx-2">
+  <!-- View tabs — a spatial-nav row so `↑` from the content below lands on the
+       tabs (the nearest registered container) instead of bridging past them to
+       the fixed topbar. -->
+  <nav appTvRow class="flex items-center gap-1 overflow-x-auto py-2 -my-2 px-2 -mx-2">
     <button
       type="button"
       class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
