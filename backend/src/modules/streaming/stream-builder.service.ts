@@ -686,12 +686,24 @@ export class StreamBuilderService {
     let videoSupported = false;
     let audioSupported = false;
 
-    // Check against each DirectPlayProfile
+    // Per-flag support across all profiles — kept for DirectStream's per-codec
+    // copy decision and the reason messages below (those answer "is this codec
+    // playable at all", independent of container).
     for (const dp of profile.directPlayProfiles) {
       if (dp.containers.includes(source.container)) containerSupported = true;
       if (dp.videoCodecs.includes(source.videoCodec)) videoSupported = true;
       if (dp.audioCodecs.includes(source.audioCodec)) audioSupported = true;
     }
+
+    // Direct Play requires ONE profile entry to bind all three together — a
+    // container from one entry paired with a codec from another is a
+    // combination the device never claimed it can play as-is.
+    const boundMatch = profile.directPlayProfiles.some(
+      (dp) =>
+        dp.containers.includes(source.container) &&
+        dp.videoCodecs.includes(source.videoCodec) &&
+        dp.audioCodecs.includes(source.audioCodec),
+    );
 
     // Check fine-grained codec conditions on video
     let videoConditionsMet = true;
@@ -796,11 +808,9 @@ export class StreamBuilderService {
       });
     }
 
-    const canDirectPlay =
-      containerSupported &&
-      videoSupported &&
-      audioSupported &&
-      videoConditionsMet;
+    // boundMatch already implies container + video + audio are supported (in one
+    // entry); audioSupported additionally carries the channel-count constraint.
+    const canDirectPlay = boundMatch && audioSupported && videoConditionsMet;
     return {
       canDirectPlay,
       containerSupported,
