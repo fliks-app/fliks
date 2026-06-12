@@ -256,6 +256,14 @@ body.tv-webos:not(.immersive) {
 html.tv-host {
   background: #1d232a;
   scroll-behavior: smooth;
+  /* D-pad focus-into-view uses scrollIntoView({block:'nearest'}), which
+     otherwise parks the focused card flush against a screen edge. Keep it off
+     the edges: clear the top dock (matching the 96px the home rows snap to) and
+     leave a strip of look-ahead below so moving down a grid row never leaves
+     the bottom row cut. The document is the scroll container (see layout: <main>
+     stays overflow-x:clip precisely so it isn't a scroller), so it goes here. */
+  scroll-padding-top: 96px;
+  scroll-padding-bottom: 20vh;
 }
 /* Disable hover styles on TV — there is no pointer */
 body.tv *:hover {
@@ -342,6 +350,21 @@ body.tv app-media-card figure:focus-visible,
 body.tv [data-home-focus]:focus-visible,
 body.tv [data-tv-focusable]:focus-visible {
   transform: scale(1.06);
+}
+
+/* Card labels are sized in rem (text-sm / text-xs), so the body.tv 18px font
+   bump doesn't reach them — they read tiny from the couch. Enlarge the title
+   and subtitle across every TV. */
+body.tv app-media-card h3 {
+  font-size: 1.25rem;
+}
+body.tv app-media-card p {
+  font-size: 0.95rem;
+  /* text-base-content/50 dims via color-mix, which the TV WebView (Chrome 85)
+     can't parse — its downlevel fallback drops the alpha, so the subtitle lands
+     at full colour. Force the colour and dim with the opacity property. */
+  color: var(--color-base-content);
+  opacity: 0.5;
 }
 
 /* Media-card simplification on TV: the card is a single focus target. The
