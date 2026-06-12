@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 import {
+  AudioTrackPlan,
   PlaybackInfoResponse,
+  PlayMethod,
   QualityOption,
   TranscodeReason,
 } from './dto/playback-info.dto';
@@ -23,6 +25,12 @@ import { isVppQsvTonemapEnabled } from './transcoding/codec/vpp-qsv-probe';
 import { normaliseSourceCodec } from './transcoding/codec/normalise';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
 import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
+
+/** Audio codecs that can be copied verbatim into fMP4 segments via MSE.
+ *  Anything outside this set is re-encoded to AAC on the remux path even when
+ *  the device profile claims support — Chrome rejects e.g. `audio/mp4;
+ *  codecs="mp4a.6B"` (MP3) on append. */
+const FMP4_COMPATIBLE_AUDIO = new Set(['aac', 'ac3', 'eac3', 'opus', 'flac']);
 
 /**
  * What stream-builder hands back: the public playback-info response,
@@ -312,6 +320,7 @@ export class StreamBuilderService {
         hwAccel: 'none',
         tonemapping: false,
         qualities: this.buildQualityList(source, 'DirectPlay', sourceCopyable, qualityLadder),
+        audioTracks: this.buildAudioTracks(audioStreams, profile, 'DirectPlay'),
         source,
       });
     }
@@ -330,10 +339,9 @@ export class StreamBuilderService {
       // For DirectStream we always emit fMP4 / HLS, so audio codecs
       // outside the fMP4-MSE-safe set get force-transcoded to AAC
       // regardless of the profile match.
-      const fmp4CompatibleAudio = new Set(['aac', 'ac3', 'eac3', 'opus', 'flac']);
       const canCopyAudio =
         directPlayResult.audioSupported &&
-        fmp4CompatibleAudio.has(sourceAudioCodec.toLowerCase());
+        FMP4_COMPATIBLE_AUDIO.has(sourceAudioCodec.toLowerCase());
       const outputAudioCodec = canCopyAudio ? sourceAudioCodec : 'aac';
       if (!canCopyAudio && !reasons.some((r) => r.flag.startsWith('Audio'))) {
         reasons.push({
@@ -407,6 +415,7 @@ export class StreamBuilderService {
         remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
         transcodeBitrateByQuality,
         qualities: this.buildQualityList(source, 'DirectStream', sourceCopyable, qualityLadder),
+        audioTracks: this.buildAudioTracks(audioStreams, profile, 'DirectStream'),
         source,
       });
     }
@@ -541,6 +550,7 @@ export class StreamBuilderService {
       tonemapping: needsTonemapping,
       transcodeBitrateByQuality,
       qualities: this.buildQualityList(source, 'Transcode', sourceCopyable, qualityLadder),
+      audioTracks: this.buildAudioTracks(audioStreams, profile, 'Transcode'),
       source,
     });
   }
@@ -670,6 +680,83 @@ export class StreamBuilderService {
   // ---------------------------------------------------------------------------
   // Private
   // ---------------------------------------------------------------------------
+
+  /**
+   * Per-track audio copy/transcode decision for every source audio stream,
+   * in `streamInfo.audio` order. Mirrors the per-play-method audio handling
+   * — DirectPlay copies every track (raw file), DirectStream copies the
+   * fMP4-safe codecs and re-encodes the rest to AAC, Transcode keeps surround
+   * via EAC-3/AC-3 or downmixes to AAC stereo.
+   *
+   * The top-level `audioPlan` / `transcodeReasons` only describe the default
+   * track; multi-audio files are served as independent EXT-X-MEDIA renditions
+   * the player switches client-side, so the overlay reads the *active* track's
+   * entry here instead of the default's reason.
+   */
+  private buildAudioTracks(
+    audioStreams: { codec?: string; channels?: number; language?: string }[],
+    profile: DeviceProfileDto,
+    playMethod: PlayMethod,
+  ): AudioTrackPlan[] {
+    const profileAudioCodecs = profile.directPlayProfiles
+      .flatMap((p) => p.audioCodecs)
+      .map((c) => c.toLowerCase());
+    const maxChannels = profile.maxAudioChannels ?? 2;
+    const surroundCodec = profileAudioCodecs.includes('eac3')
+      ? 'eac3'
+      : profileAudioCodecs.includes('ac3')
+        ? 'ac3'
+        : null;
+
+    return audioStreams.map((t, index) => {
+      const codec = (t.codec ?? '').toLowerCase();
+      const channels = t.channels;
+      const language = t.language;
+      const base = { index, language, codec, channels };
+      const codecSupported = profileAudioCodecs.includes(codec);
+      const channelsExceed = channels != null && channels > maxChannels;
+
+      // DirectPlay serves the raw file — every track plays natively.
+      if (playMethod === 'DirectPlay') {
+        return { ...base, copy: true, outputCodec: codec, reasonFlags: [] };
+      }
+
+      // DirectStream (remux): copy when the codec is profile-supported AND
+      // fMP4-safe, else re-encode to AAC.
+      if (playMethod === 'DirectStream') {
+        const copy = codecSupported && FMP4_COMPATIBLE_AUDIO.has(codec);
+        return {
+          ...base,
+          copy,
+          outputCodec: copy ? codec : 'aac',
+          reasonFlags: copy ? [] : ['AudioCodecNotSupported'],
+        };
+      }
+
+      // Transcode: source-compatible → copy; else surround (EAC-3/AC-3)
+      // keeping channels; else AAC stereo downmix. A track saved by the
+      // surround path doesn't claim the codec is incompatible (the user gets
+      // surround), but a real channel overflow is still surfaced — mirrors
+      // the default-track reason cleanup.
+      const srcCompatible = codecSupported && !channelsExceed;
+      if (srcCompatible) {
+        return { ...base, copy: true, outputCodec: codec, reasonFlags: [] };
+      }
+      const surroundPossible =
+        channels != null && channels >= 6 && maxChannels >= 6 && surroundCodec != null;
+      const reasonFlags: string[] = [];
+      if (channelsExceed) reasonFlags.push('AudioChannelsNotSupported');
+      if (!codecSupported && !surroundPossible) {
+        reasonFlags.push('AudioCodecNotSupported');
+      }
+      return {
+        ...base,
+        copy: false,
+        outputCodec: surroundPossible ? surroundCodec : 'aac',
+        reasonFlags,
+      };
+    });
+  }
 
   private tryDirectPlay(
     source: PlaybackInfoResponse['source'],
