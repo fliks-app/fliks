@@ -151,8 +151,13 @@ function hasNoAudio(streams: AudioStreamMeta[] | undefined): boolean {
  * the single `-c:a` form. The group's output codec is uniform (HLS CODECS
  * requirement), but copy and transcode mix per rendition: a track already in
  * the output codec copies; the rest re-encode, downmixed to `outputChannels`.
+ *
+ * Every per-stream option uses the audio-relative specifier (`-c:a:i`,
+ * `-b:a:i`, `-ac:a:i`): the muxed output carries the video at stream 0, so a
+ * bare `-ac:i` would target the wrong output stream and leave the last
+ * rendition at its source channel count.
  */
-function perStreamAudioArgs(
+export function perStreamAudioArgs(
   audioStreams: AudioStreamMeta[],
   plans:
     | { copy: boolean; outputCodec: string; outputChannels?: number }[]
@@ -167,7 +172,7 @@ function perStreamAudioArgs(
       return;
     }
     if (p.outputCodec === 'aac') {
-      out.push(`-c:a:${i}`, 'aac', `-b:a:${i}`, aacBitrate, `-ac:${i}`, '2');
+      out.push(`-c:a:${i}`, 'aac', `-b:a:${i}`, aacBitrate, `-ac:a:${i}`, '2');
       return;
     }
     if (p.outputCodec === 'opus') {
@@ -175,14 +180,14 @@ function perStreamAudioArgs(
       // for 5.1 (Opus is far more efficient than EAC-3 at the same quality).
       out.push(`-c:a:${i}`, 'libopus', `-b:a:${i}`, '256k');
       if (p.outputChannels != null) {
-        out.push(`-ac:${i}`, String(p.outputChannels));
+        out.push(`-ac:a:${i}`, String(p.outputChannels));
       }
       return;
     }
     // EAC-3 / AC-3 at 640 kbps, downmixed to the planned channel count (≤ 5.1).
     out.push(`-c:a:${i}`, p.outputCodec, `-b:a:${i}`, '640k');
     if (p.outputChannels != null) {
-      out.push(`-ac:${i}`, String(p.outputChannels));
+      out.push(`-ac:a:${i}`, String(p.outputChannels));
     }
   });
   return out;
