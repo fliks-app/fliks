@@ -81,7 +81,7 @@
     "stats_dropped_frames": "Images perdues",
     "stats_crop": "Recadrage",
     "stats_tonemapping": "Mappage tonal",
-    "stats_reasons": "Raisons",
+    "stats_reasons": "Raisons :",
     "stats_sample_rate": "Fréquence d'échantillonnage",
     "transcode_reason": {
       "VideoCodecNotSupported": "Codec vidéo non supporté",
