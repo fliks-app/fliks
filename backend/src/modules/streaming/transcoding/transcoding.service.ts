@@ -173,34 +173,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return matches;
   }
 
-  /** Convenience lookup: derives the profile hash from the supplied
-   *  context and returns the matching session, if any. Use this from
-   *  segment-serving routes where the controller has just rebuilt the
-   *  session context from the request. */
-  findSessionByCtx(
-    mediaFileId: number,
-    ctx: SessionContext | undefined,
-  ): TranscodeSession | undefined {
-    return this.getExistingSession(
-      mediaFileId,
-      ctx?.userId,
-      this.computeProfileHashForCtx(ctx),
-    );
-  }
-
-  /** Same as {@link findSessionByCtx} for the early-segment companion. */
-  findEarlySessionByCtx(
-    mediaFileId: number,
-    ctx: SessionContext | undefined,
-  ): TranscodeSession | undefined {
-    return this.getExistingSession(
-      mediaFileId,
-      ctx?.userId,
-      this.computeProfileHashForCtx(ctx),
-      VARIANT_EARLY,
-    );
-  }
-
   /** Most-recently-accessed transcode session for this `(file, user)`
    *  pair across every profile variant. Used by segment-serving routes
    *  that can't cheaply reconstruct the session context — when only one
@@ -317,21 +289,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       quality,
     );
     return { dir, baseHash };
-  }
-
-  /** Absolute path to the `(userId, mediaFileId)` parent dir under the
-   *  new cache root. Used by full-session cleanup which wipes every
-   *  profile variant for a given user-file pair. */
-  private userFileParentDir(
-    mediaFileId: number,
-    userId: number | undefined,
-  ): string {
-    const userSeg = userId == null ? 'anon' : `u${userId}`;
-    return path.join(
-      this.cacheService.cacheRoot(),
-      userSeg,
-      String(mediaFileId),
-    );
   }
 
   /**
@@ -1553,11 +1510,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.log.log(`Cleanup stale (fallback) session: ${id}`);
       this.sessions.delete(id);
     }
-  }
-
-  /** Send SIGTERM, wait for exit, then remove cache directory. Fire-and-forget version. */
-  private gracefulKill(session: TranscodeSession) {
-    this.killAndClean(session.process, session.cachePath).catch(() => {});
   }
 
   /**

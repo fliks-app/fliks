@@ -182,7 +182,3 @@ export function audioRenditionChannels(
   if (outputAudioCodec.toLowerCase() === 'aac') return 2;
   return sourceChannels && sourceChannels > 0 ? sourceChannels : 2;
 }
-
-function pad2(n: number): string {
-  return n.toString().padStart(2, '0');
-}
