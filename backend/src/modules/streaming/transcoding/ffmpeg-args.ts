@@ -170,6 +170,15 @@ function perStreamAudioArgs(
       out.push(`-c:a:${i}`, 'aac', `-b:a:${i}`, aacBitrate, `-ac:${i}`, '2');
       return;
     }
+    if (p.outputCodec === 'opus') {
+      // libopus, downmixed to the planned channel count. 256k is transparent
+      // for 5.1 (Opus is far more efficient than EAC-3 at the same quality).
+      out.push(`-c:a:${i}`, 'libopus', `-b:a:${i}`, '256k');
+      if (p.outputChannels != null) {
+        out.push(`-ac:${i}`, String(p.outputChannels));
+      }
+      return;
+    }
     // EAC-3 / AC-3 at 640 kbps, downmixed to the planned channel count (≤ 5.1).
     out.push(`-c:a:${i}`, p.outputCodec, `-b:a:${i}`, '640k');
     if (p.outputChannels != null) {

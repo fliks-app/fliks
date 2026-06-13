@@ -32,6 +32,14 @@ import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
  *  codecs="mp4a.6B"` (MP3) on append. */
 const FMP4_COMPATIBLE_AUDIO = new Set(['aac', 'ac3', 'eac3', 'opus', 'flac']);
 
+/** Audio codecs the backend can transcode TO (FFmpeg encoders we drive:
+ *  `aac`, `eac3`, `ac3`, `libopus`). A group can keep one of these as its
+ *  uniform output codec even when some renditions need re-encoding (downmix),
+ *  so a track already in that codec copies and only the over-capacity ones
+ *  re-encode. Codecs outside this set can only be a group codec when every
+ *  rendition copies (no re-encode needed). */
+const ENCODABLE_AUDIO = new Set(['aac', 'eac3', 'ac3', 'opus']);
+
 /**
  * What stream-builder hands back: the public playback-info response,
  * plus the two side-band decisions the controller threads onto the
@@ -738,7 +746,6 @@ export class StreamBuilderService {
       profileAudioCodecs,
       maxChannels,
     );
-    const surroundOut = groupCodec === 'eac3' || groupCodec === 'ac3';
 
     return audioStreams.map((t, index) => {
       const codec = (t.codec ?? '').toLowerCase();
@@ -772,19 +779,26 @@ export class StreamBuilderService {
           reasonFlags: [],
         };
       }
-      // EAC-3 / AC-3 cap at 5.1 (6 ch); AAC downmixes to stereo.
-      const outputChannels = surroundOut
-        ? Math.min(channels ?? maxChannels, maxChannels, 6)
-        : 2;
-      const surroundPreserved = surroundOut && outputChannels >= 6;
+      // Output channel count: AAC downmixes to stereo; EAC-3/AC-3 cap at 5.1
+      // (the encoders' max); OPUS (and other multichannel codecs) keep up to
+      // the device cap.
+      const outputChannels =
+        groupCodec === 'aac'
+          ? 2
+          : groupCodec === 'eac3' || groupCodec === 'ac3'
+            ? Math.min(channels ?? maxChannels, maxChannels, 6)
+            : Math.min(channels ?? maxChannels, maxChannels);
+      const surroundPreserved = groupCodec !== 'aac' && outputChannels >= 6;
+      // A track plays as-is only if the device decodes it AND it's fMP4-safe
+      // (MP3 is device-supported but can't ride in fMP4/HLS, so it must
+      // transcode — that's a genuine reason, unlike a codec re-encoded only to
+      // match the group's output codec).
+      const playableAsIs = codecSupported && fmp4Safe;
       const reasonFlags: string[] = [];
       if (channelsExceed) {
         // Real overflow (downmixed). Takes priority over the codec reason.
         reasonFlags.push('AudioChannelsNotSupported');
-      } else if (!codecSupported && !surroundPreserved) {
-        // Device can't play this codec and we didn't save it as surround.
-        // A supported codec re-encoded only to match the group's output
-        // codec carries no flag — it's not an incompatibility.
+      } else if (!playableAsIs && !surroundPreserved) {
         reasonFlags.push('AudioCodecNotSupported');
       }
       return {
@@ -813,13 +827,24 @@ export class StreamBuilderService {
     maxChannels: number,
   ): string {
     const codecs = audioStreams.map((t) => (t.codec ?? '').toLowerCase());
-    const allCopyable = audioStreams.every(
-      (t, i) =>
-        profileAudioCodecs.includes(codecs[i]) &&
-        FMP4_COMPATIBLE_AUDIO.has(codecs[i]) &&
-        (t.channels == null || t.channels <= maxChannels),
-    );
-    if (allCopyable && new Set(codecs).size === 1) return codecs[0];
+    // All renditions share one source codec the device plays in fMP4: keep it
+    // as the group's output codec so the fitting tracks copy verbatim. If every
+    // track fits, nothing re-encodes; if one is over-capacity, we re-encode
+    // ONLY that one to the SAME codec (downmix) — which needs an encoder for it
+    // (e.g. an all-OPUS group stays OPUS via libopus instead of collapsing to
+    // EAC-3 and re-encoding the 5.1 tracks too).
+    if (codecs.length > 0 && new Set(codecs).size === 1) {
+      const c = codecs[0];
+      const supported =
+        profileAudioCodecs.includes(c) && FMP4_COMPATIBLE_AUDIO.has(c);
+      const allFit = audioStreams.every(
+        (t) => t.channels == null || t.channels <= maxChannels,
+      );
+      if (supported && (allFit || ENCODABLE_AUDIO.has(c))) return c;
+    }
+    // Mixed source codecs (or an unencodable codec with an over-capacity
+    // track): pick the best the device accepts — surround when any track
+    // carries it so 5.1/7.1 survive, else AAC.
     const anySurround = audioStreams.some((t) => (t.channels ?? 0) >= 6);
     if (anySurround && profileAudioCodecs.includes('eac3')) return 'eac3';
     if (anySurround && profileAudioCodecs.includes('ac3')) return 'ac3';
