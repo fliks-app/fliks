@@ -29,7 +29,6 @@ import {
   PROFILES,
   getLadderForDevice,
   getHdrLadderForDevice,
-  SessionContext,
   profileFitsSource,
   computeProfileHash,
   buildPlaybackProfileFromContext,
@@ -44,6 +43,8 @@ import { LiveSessionRegistry } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
 import { SessionRouter } from './services/session-router.service';
+import { SessionContextBuilder } from './services/session-context-builder.service';
+import { pickAudioLayout } from './transcoding/audio-layout';
 import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
@@ -123,33 +124,6 @@ function buildTokenParam(req: Request): string {
  *  older firmwares — issue #148) → video/MP2T. */
 function segmentContentType(segment: string): string {
   return segment.endsWith('.ts') ? 'video/MP2T' : 'video/mp4';
-}
-
-/** Decide whether ffmpeg should emit muxed segments (`inline`) or the
- *  EXT-X-MEDIA layout (`var-stream-map`, video-only main + audio served
- *  as separate renditions).
- *
- *  Rules (single source of truth, mirrored by `master-playlist.ts` and
- *  `ffmpeg-args.ts`):
- *    1. Zero audio sources → inline (degenerate, no audio rendition).
- *    2. Multi-audio sources → var-stream-map (Shaka / AVPlay pick the
- *       rendition client-side without a backend reload).
- *    3. Single-audio sources → inline regardless of mux flavour. The
- *       HLS muxer's hardcoded `+frag_custom+dash+delay_moov` movflags
- *       used to produce iso5+sidx fMP4 segments AVPlay rejected (issue
- *       #148), which forced the var_stream_map workaround. With the
- *       in-tree `cmaf-rewrite` post-processor stripping `sidx` /
- *       `styp` and stamping the `hlsf` brand on every served chunk,
- *       muxed segments parse on AVPlay too — and the single-variant
- *       master that comes with single-audio doesn't trigger AVPlay's
- *       audio-rendition probe, so leaving audio inline is the only
- *       layout that actually plays on Tizen single-audio fmp4. */
-export function pickAudioLayout(
-  audioCount: number,
-  _muxFlavour: 'ts' | 'fmp4',
-): 'inline' | 'var-stream-map' {
-  if (audioCount <= 1) return 'inline';
-  return 'var-stream-map';
 }
 
 /**
@@ -272,85 +246,13 @@ export class StreamingController {
     private readonly liveSessions: LiveSessionRegistry,
     private readonly segmentPackaging: SegmentPackagingService,
     private readonly sessionRouter: SessionRouter,
+    private readonly sessionContextBuilder: SessionContextBuilder,
   ) {}
 
   private getStreamingSettings() {
     return this.streamingSettingsCache.get();
   }
 
-  private buildSessionContext(
-    req: Request,
-    resolved: ResolvedFile,
-    mediaFileId: number,
-  ): SessionContext {
-    const user = req.user as User | undefined;
-    const si = resolved.mediaFile.streamInfo;
-    const live = this.sessionRouter.findRequestSession(req, mediaFileId);
-    // var_stream_map decision: same logic as playback-info — relies on
-    // the file's intrinsic audio-stream count, which doesn't drift
-    // across sessions.
-    const audioCount = si?.audio?.length ?? 0;
-    const useTs = live?.useTs ?? false;
-    const useMultiAudioLayout =
-      pickAudioLayout(audioCount, useTs ? 'ts' : 'fmp4') === 'var-stream-map';
-    return {
-      userId: user?.id,
-      username: user?.username,
-      mediaTitle: resolved.media?.title,
-      mediaType: resolved.media?.type,
-      posterUrl: resolved.media?.posterUrl ?? null,
-      transcodeReasons: live?.transcodeReasons ?? [],
-      tonemap: live?.tonemapping ?? false,
-      burnInSubtitle: live?.burnIn ?? undefined,
-      audioStreamIndex: live?.audioStreamIndex ?? undefined,
-      crop: si?.video?.[0]?.crop ?? undefined,
-      // Multi-audio: produce video-only segments and let ffmpeg's var_stream_map
-      // emit one audio rendition per track (subdirs 1..N) so Shaka can switch
-      // client-side via EXT-X-MEDIA.
-      videoOnly: useMultiAudioLayout,
-      // Always plumb the audio streams (incl. `streamIndex`) so the
-      // single-track path can also resolve `-map 0:<abs>` and skip FFmpeg's
-      // audio enumeration. `useMultiAudioLayout` only gates the var_stream_map
-      // branch, not the presence of the data.
-      audioStreams: si?.audio ?? undefined,
-      deviceType: live?.deviceType ?? 'desktop',
-      useTs,
-      encoderPreset: live?.encoderPreset ?? 'faster',
-      qsvOptions: this.activeStreamTracker.getQsvOptions(),
-      tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
-      // Source framerate (e.g. "24", "23.976", "29.97") — used to compute an
-      // accurate GOP so IDR frames fall on the same boundary regardless of
-      // source fps. Falls back to 24 when unknown.
-      sourceFps: parseFloat(si?.video?.[0]?.frameRate ?? '') || undefined,
-      // ffprobe ran at import/rescan and the result is cached in streamInfo —
-      // tell FFmpeg to skip its own redundant avformat_find_stream_info scan.
-      trustedStreamInfo: !!si?.video?.[0]?.codec,
-      // Canonical audio decision — computed once in stream-builder,
-      // stored on the LiveSession, threaded through here so respawns /
-      // quality switches stay coherent with what playback-info promised.
-      audioPlan: live?.audioPlan ?? undefined,
-      audioTrackPlans: live?.audioTrackPlans ?? undefined,
-      sourceVideoCodec:
-        (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
-      sourceWidth: si?.video?.[0]?.width,
-      sourceHeight: si?.video?.[0]?.height,
-      sourceVideoBitrateBps: resolveSourceVideoBitrateBps(
-        si?.video?.[0]?.bitRate,
-        si?.formatBitRate,
-        (si?.audio ?? []).reduce((sum, a) => sum + (a?.bitRate ?? 0), 0),
-      ),
-      isSourceHdr: !!si?.video?.[0]?.hdrFormat,
-      hdrMetadata: si?.video?.[0]?.hdrMetadata,
-      // Variant chosen by stream-builder's codec selector at
-      // playback-info time, threaded through every session spawn so
-      // ffmpeg-args resolves the matching encoder descriptor. HLS
-      // routes 410-gate stale `?sid=` upstream via assertFreshSession,
-      // so videoVariant is undefined here only for legacy callers that
-      // never sent a sid — those route through the
-      // userId-based `findCurrent` fallback.
-      videoVariant: live?.videoVariant ?? undefined,
-    };
-  }
 
   /**
    * Effective resume offset in seconds. The explicit `startAt` query wins when
@@ -439,7 +341,7 @@ export class StreamingController {
         resolved.mediaFile.mediaId,
         resolved.mediaFile.episodeId ?? undefined,
       );
-      const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+      const ctx = this.sessionContextBuilder.build(req, resolved, mediaFileId);
       ctx.spawnReason = 'prewarm';
       const profileHash = this.transcodingService.computeProfileHashForCtx(ctx);
       const existing = this.transcodingService.getExistingSession(
@@ -860,7 +762,7 @@ export class StreamingController {
     // next (~100–300ms later) and then seg-0. Starting ffmpeg here overlaps
     // that gap with encoder init so segment 0 is usually already on disk
     // (or streaming) when requested. No-op for DirectPlay or auto quality.
-    // Runs after LiveSession creation so buildSessionContext can find it.
+    // Runs after LiveSession creation so the SessionContextBuilder can find it.
     // Fire-and-forget: the playback-info response (playUrl + sessionId) does
     // not depend on the spawn, so it must not block on ffmpeg init — same
     // pattern as the master.m3u8 prewarm. prewarmTranscodeSession swallows its
@@ -1347,7 +1249,7 @@ export class StreamingController {
         mediaFileId,
         req.user as User,
       );
-      const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+      const ctx = this.sessionContextBuilder.build(req, resolved, mediaFileId);
       // No resolvable LiveSession means no codec variant to thread into
       // ffmpeg (player closed / torn down while segment requests were still
       // in flight — e.g. a rapid open/close — or a stale sid). 410 so the
@@ -1501,7 +1403,7 @@ export class StreamingController {
       if (!existing || existing.process.exitCode !== null) {
         const startAtSec = parseInt(startAtRaw, 10);
         const startSegment = secondsToSegmentIndex(startAtSec);
-        const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+        const ctx = this.sessionContextBuilder.build(req, resolved, mediaFileId);
         ctx.spawnReason = 'variant-prespawn';
         if (quality === 'remux') {
           const copyAudio =
@@ -1708,7 +1610,7 @@ export class StreamingController {
       req.user as User,
     );
 
-    const ctx = this.buildSessionContext(req, resolved, mediaFileId);
+    const ctx = this.sessionContextBuilder.build(req, resolved, mediaFileId);
     // No resolvable LiveSession → no codec variant to thread into ffmpeg
     // (player closed / torn down with segment requests still in flight, or a
     // stale sid). 410 so the client re-establishes instead of a 500 from
