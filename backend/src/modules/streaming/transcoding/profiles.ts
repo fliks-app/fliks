@@ -5,6 +5,73 @@ import type { DeviceType, TranscodeProfile } from './types';
  *  alongside the transcode rung at the same resolution. */
 export const ORIGINAL_SEPARATE_RATIO = 1.3;
 
+/** Relative bits to reach a given visual quality, normalised to H.264 = 1.
+ *  A less-efficient target codec needs proportionally more bits than the
+ *  source to hold the same quality (HEVC/AV1 are more efficient → fewer bits). */
+const CODEC_BITRATE_FACTOR: Record<string, number> = {
+  h264: 1,
+  avc: 1,
+  avc1: 1,
+  hevc: 0.6,
+  h265: 0.6,
+  hvc1: 0.6,
+  hev1: 0.6,
+  vp9: 0.7,
+  av1: 0.5,
+  av01: 0.5,
+};
+
+/**
+ * Source video bitrate in bps: the probed per-stream value, or an estimate
+ * from the container bitrate minus audio when the stream omits it (common in
+ * MKV, where ffprobe leaves the per-stream bitrate unset). Returns undefined
+ * when neither is known. Shared by the stream-builder decision and the session
+ * context so the encode cap and the overlay agree on the source bitrate.
+ */
+export function resolveSourceVideoBitrateBps(
+  videoStreamBitrateBps: number | null | undefined,
+  formatBitrateBps: number | null | undefined,
+  audioSumBitrateBps: number,
+): number | undefined {
+  if (videoStreamBitrateBps != null && videoStreamBitrateBps > 0) {
+    return videoStreamBitrateBps;
+  }
+  if (
+    formatBitrateBps != null &&
+    formatBitrateBps > 0 &&
+    audioSumBitrateBps > 0
+  ) {
+    const est = formatBitrateBps - audioSumBitrateBps;
+    if (est > 10_000) return est;
+  }
+  return undefined;
+}
+
+/**
+ * Cap a ladder rung's video bitrate to what the source actually needs, so a
+ * forced transcode (crop, explicit rung, …) never *inflates* the bitrate above
+ * the source — re-encoding a 2 Mbps source up to an 8 Mbps rung burns CPU and
+ * bandwidth for no quality gain (you can't recover detail the source lacks).
+ * The ceiling scales with codec efficiency (a less-efficient target gets
+ * proportionally more bits to hold the same quality) and never drops below the
+ * source bitrate, so the rung still wins whenever it is the lower of the two.
+ * Returns the rung bitrate unchanged when the source bitrate is unknown.
+ */
+export function cappedTranscodeVideoBitrateBps(
+  rungBitrateBps: number,
+  sourceVideoBitrateBps: number | null | undefined,
+  sourceCodec: string | null | undefined,
+  targetCodec: string | null | undefined,
+): number {
+  if (!sourceVideoBitrateBps || sourceVideoBitrateBps <= 0) {
+    return rungBitrateBps;
+  }
+  const src = CODEC_BITRATE_FACTOR[(sourceCodec ?? '').toLowerCase()] ?? 1;
+  const tgt = CODEC_BITRATE_FACTOR[(targetCodec ?? '').toLowerCase()] ?? 1;
+  const headroom = Math.max(1, tgt / src);
+  return Math.min(rungBitrateBps, Math.round(sourceVideoBitrateBps * headroom));
+}
+
 export const DESKTOP_PROFILES: TranscodeProfile[] = [
   {
     name: '2160p',

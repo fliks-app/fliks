@@ -197,6 +197,10 @@ export interface SessionContext {
    */
   sourceWidth?: number;
   sourceHeight?: number;
+  /** Probed (or container-minus-audio estimated) source video bitrate in bps.
+   *  Threaded to `buildFfmpegArgs` so the rung target is capped to the source
+   *  (no upward inflation on a forced transcode). */
+  sourceVideoBitrateBps?: number;
   /**
    * Source has HDR transfer characteristics (HDR10 / HLG / DV). The
    * session-wide `tonemap` flag follows the pass-through decision —

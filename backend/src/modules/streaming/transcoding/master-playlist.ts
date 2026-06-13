@@ -1,4 +1,5 @@
 import {
+  cappedTranscodeVideoBitrateBps,
   getHdrLadderForDevice,
   getLadderForDevice,
   parseBitrateToBps,
@@ -151,6 +152,11 @@ export function generateMasterPlaylist(
    *  the WebVTT the subtitle service already extracts, so the HEVC
    *  `var_stream_map` is untouched (no decoder-buffer regression). */
   subtitleRenditions?: SubtitleRenditionMeta[],
+  /** Probed (or estimated) source video bitrate + codec. Each transcode
+   *  rung's declared BANDWIDTH is capped to the source (no upward inflation),
+   *  matching the encode cap in `buildFfmpegArgs`. Omitted → no cap. */
+  sourceVideoBitrateBps?: number,
+  sourceVideoCodec?: string,
 ): string {
   // The "multi-audio" flag is really an "EXT-X-MEDIA layout" toggle —
   // the caller decided whether to split audio into renditions. Single-
@@ -263,7 +269,12 @@ export function generateMasterPlaylist(
       );
       for (const p of hdrLadder) {
         const avg =
-          parseBitrateToBps(p.videoBitrate) + parseBitrateToBps(p.audioBitrate);
+          cappedTranscodeVideoBitrateBps(
+            parseBitrateToBps(p.videoBitrate),
+            sourceVideoBitrateBps,
+            sourceVideoCodec,
+            'hevc',
+          ) + parseBitrateToBps(p.audioBitrate);
         const bw = Math.round(avg * 1.5);
         const { width: w, height: h } = profileResolution(
           p,
@@ -342,7 +353,12 @@ export function generateMasterPlaylist(
 
   for (const p of profiles) {
     const avg =
-      parseBitrateToBps(p.videoBitrate) + parseBitrateToBps(p.audioBitrate);
+      cappedTranscodeVideoBitrateBps(
+        parseBitrateToBps(p.videoBitrate),
+        sourceVideoBitrateBps,
+        sourceVideoCodec,
+        sdrVariant?.codec,
+      ) + parseBitrateToBps(p.audioBitrate);
     // BANDWIDTH must reflect the peak segment bitrate (HLS spec). With
     // `-maxrate == -b:v` the encoder is near-CBR but VBV bursts still
     // push individual segments ~30% above nominal. Declaring BANDWIDTH

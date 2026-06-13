@@ -469,6 +469,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     sdrVariant?: import('./codec/types').CodecVariant,
     sourceFrameRate?: number,
     subtitleRenditions?: import('./types').SubtitleRenditionMeta[],
+    sourceVideoBitrateBps?: number,
+    sourceVideoCodec?: string,
   ): string {
     // Ask the encoder registry whether any HEVC Main10 HDR10 encoder is
     // probed-OK on the detected hwAccel (or CPU fallback). When false,
@@ -499,6 +501,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       sdrVariant,
       sourceFrameRate,
       subtitleRenditions,
+      sourceVideoBitrateBps,
+      sourceVideoCodec,
     );
   }
 
@@ -835,6 +839,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           useTs: ctx?.useTs ?? false,
           videoVariant: ctx?.videoVariant,
           sourceVideoCodec: ctx?.sourceVideoCodec,
+          sourceVideoBitrateBps: ctx?.sourceVideoBitrateBps,
           sourceBitDepth: ctx?.isSourceHdr ? 10 : 8,
           sourceWidth: ctx?.sourceWidth,
           sourceHeight: ctx?.sourceHeight,
@@ -1161,6 +1166,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         useTs: ctx?.useTs ?? false,
         videoVariant: ctx?.videoVariant,
         sourceVideoCodec: ctx?.sourceVideoCodec,
+        sourceVideoBitrateBps: ctx?.sourceVideoBitrateBps,
         sourceBitDepth: ctx?.isSourceHdr ? 10 : 8,
         sourceWidth: ctx?.sourceWidth,
         sourceHeight: ctx?.sourceHeight,

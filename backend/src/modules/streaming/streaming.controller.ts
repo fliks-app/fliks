@@ -34,6 +34,7 @@ import {
   profileFitsSource,
   computeProfileHash,
   buildPlaybackProfileFromContext,
+  resolveSourceVideoBitrateBps,
 } from './transcoding';
 import type { TranscodeSession } from './transcoding/types';
 import {
@@ -432,6 +433,11 @@ export class StreamingController {
         (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
       sourceWidth: si?.video?.[0]?.width,
       sourceHeight: si?.video?.[0]?.height,
+      sourceVideoBitrateBps: resolveSourceVideoBitrateBps(
+        si?.video?.[0]?.bitRate,
+        si?.formatBitRate,
+        (si?.audio ?? []).reduce((sum, a) => sum + (a?.bitRate ?? 0), 0),
+      ),
       isSourceHdr: !!si?.video?.[0]?.hdrFormat,
       hdrMetadata: si?.video?.[0]?.hdrMetadata,
       // Variant chosen by stream-builder's codec selector at
@@ -1297,6 +1303,12 @@ export class StreamingController {
       sdrVariant && sdrVariant.hdr == null ? sdrVariant : undefined,
       sourceFrameRate,
       subtitleRenditions,
+      resolveSourceVideoBitrateBps(
+        v?.bitRate,
+        si?.formatBitRate,
+        (si?.audio ?? []).reduce((sum, a) => sum + (a?.bitRate ?? 0), 0),
+      ),
+      (v?.codec ?? '').toLowerCase() || undefined,
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
