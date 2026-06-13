@@ -735,6 +735,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       containerBitrate,
       outputFormat,
       outputFps,
+      directPlay: pi?.playMethod === 'DirectPlay',
       videoLabel,
       videoStreamBitrate,
       videoProfileLine,
