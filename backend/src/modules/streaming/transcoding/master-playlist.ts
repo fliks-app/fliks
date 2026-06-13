@@ -20,6 +20,7 @@ import {
   h264CodecString,
   hevcMain10CodecString,
   hevcMainCodecString,
+  hevcMainTierCapBps,
 } from './codec/codec-strings';
 
 /** Format frame rate for the HLS `FRAME-RATE` attribute. Apple's spec
@@ -105,25 +106,26 @@ export function generateMasterPlaylist(
    *  append. Recognised values: `'aac'` (AAC-LC), `'ac3'` (Dolby Digital),
    *  `'eac3'` (Dolby Digital Plus). Defaults to AAC for legacy callers. */
   outputAudioCodec: string = 'aac',
-  /** When set, the master advertises a single HEVC HDR variant pointing at
-   *  the `remux/index.m3u8` path instead of the H.264 transcode ladder.
-   *  The remux session does `-c:v copy` so the HDR metadata (BT.2020/PQ
-   *  or HLG transfer) reaches the player intact. iOS AVPlayer / ExoPlayer
-   *  use the `VIDEO-RANGE` attribute + `hvc1.*` codec string to dispatch
-   *  to the HDR rendering path. */
+  /** When set, the master emits an HDR ladder instead of the SDR transcode
+   *  ladder. `hdrVariant` is the codec the encoder pipeline resolved for this
+   *  HDR source on the host (HEVC Main10 on QSV/VAAPI/NVENC/VideoToolbox,
+   *  native AV1 HDR on NVENC Ada / libsvtav1); every rung's CODECS string is
+   *  derived from it (`hvc1.2.4.*` for HEVC, `av01.*.10` for AV1). iOS
+   *  AVPlayer / ExoPlayer use the `VIDEO-RANGE` attribute + the codec string
+   *  to dispatch to the HDR rendering path. */
   hdrPassThrough?: {
     hdrFormat: 'HDR10' | 'HLG';
+    hdrVariant: CodecVariant;
     videoBitRateBps?: number;
     audioBitRateBps?: number;
   },
-  /** True when the backend can actually emit HEVC Main10 segments — only
-   *  the QSV path has `hevc_qsv Main10` wired (ffmpeg-args.ts). Other
-   *  hwAccels (VAAPI, NVENC, VideoToolbox, CPU) fall through to libx264
-   *  and produce H.264 segments that contradict the master's `hvc1.*`
-   *  CODECS string, which trips a Media3 fallback-options crash on
-   *  ExoPlayer. When false, only the remux pass-through rung is emitted
-   *  — that path is `-c:v copy` and works regardless of hwAccel. */
-  canEncodeHevcHdr = false,
+  /** True when the registry has a probed-OK encoder for `hdrPassThrough.
+   *  hdrVariant` on this host (the resolved codec + HDR format, with CPU
+   *  fallback). When false the HDR ladder is skipped so the master never
+   *  advertises HDR rungs whose segments the host can't actually produce —
+   *  a `hvc1.*`/`av01.*` CODECS claim with no matching encoder trips a
+   *  Media3 fallback-options crash on ExoPlayer / an MSE append reject. */
+  canEmitHdrLadder = false,
   /** SDR-ladder output codec, picked by the codec selector. When the
    *  selector promoted HEVC (source codec match, or efficiency
    *  ranking on HEVC-capable clients), every SDR rung emits a
@@ -243,16 +245,15 @@ export function generateMasterPlaylist(
     const hdrAudioAttr = multiAudio ? ',AUDIO="audio"' : '';
     pushSubtitleMedia(lines);
 
-    // HEVC HDR rungs are pure transcodes (hevc_qsv Main10 with forced
-    // 3-second keyframes), gated on `canEncodeHevcHdr`. The former
-    // top "remux" pass-through was dropped: `-c:v copy` cuts on
-    // existing source IDRs (variable durations) which mis-aligns with
-    // the synthetic uniform-3s VOD playlist, and ExoPlayer's buffer
-    // scheduler drifts behind audio. A transcode at ~28 Mbps Main10
-    // is visually transparent and gives perfectly uniform segments.
-    // Includes the source-resolution rung if there's an HDR profile
-    // at or below source height.
-    if (canEncodeHevcHdr) {
+    // HDR rungs are pure transcodes (HEVC Main10 or native AV1 HDR with forced
+    // keyframes), gated on `canEmitHdrLadder`. The former top "remux" pass-
+    // through was dropped: `-c:v copy` cuts on existing source IDRs (variable
+    // durations) which mis-aligns with the synthetic uniform VOD playlist, and
+    // ExoPlayer's buffer scheduler drifts behind audio. A transcode is visually
+    // transparent and gives perfectly uniform segments. Includes the source-
+    // resolution rung if there's an HDR profile at or below source height.
+    if (canEmitHdrLadder) {
+      const hdrVariant = hdrPassThrough.hdrVariant;
       const baseHdrLadder = getHdrLadderForDevice(deviceType).filter((p) =>
         profileFitsSource(p, sourceWidth, sourceHeight),
       );
@@ -268,32 +269,52 @@ export function generateMasterPlaylist(
         /* hdrSuffix */ true,
       );
       for (const p of hdrLadder) {
-        const avg =
-          cappedTranscodeVideoBitrateBps(
-            parseBitrateToBps(p.videoBitrate),
-            sourceVideoBitrateBps,
-            sourceVideoCodec,
-            'hevc',
-          ) + parseBitrateToBps(p.audioBitrate);
-        const bw = Math.round(avg * 1.5);
         const { width: w, height: h } = profileResolution(
           p,
           sourceWidth,
           sourceHeight,
         );
-        // Level driven by luma sample rate (width × height × fps) so
-        // cropped 4K sources (e.g. 3840×2024 cinemascope, height < 2160)
-        // still get L5.x — height-only bucketing under-declared L4.1
-        // for these and AVPlayer rejected every variant, surfacing as
-        // NSURLErrorUnsupportedURL on iOS. Same rationale as the SDR
-        // branch below.
-        const videoCodec = hevcMain10CodecString({
+        let cappedVideo = cappedTranscodeVideoBitrateBps(
+          parseBitrateToBps(p.videoBitrate),
+          sourceVideoBitrateBps,
+          sourceVideoCodec,
+          hdrVariant.codec,
+        );
+        // HEVC declares the Main tier; clamp the advertised AVERAGE-BANDWIDTH to
+        // the level's Main-tier ceiling so it tracks the capped encode (same
+        // clamp hevcMainTierCapBps applies in ffmpeg-args) — a High-tier
+        // bitstream behind a Main-tier `hvc1.2.4.L*` claim is rejected by strict
+        // hardware decoders (Shaka 3014). AV1 HDR has no Main-tier bitrate gate
+        // at the current ladder, so it is left unclamped.
+        if (hdrVariant.codec === 'hevc') {
+          cappedVideo = Math.min(
+            cappedVideo,
+            hevcMainTierCapBps({
+              width: w,
+              height: h,
+              videoBitrateBps: 0,
+              gopSize: 0,
+              frameRate: sourceFrameRate,
+            }),
+          );
+        }
+        const avg = cappedVideo + parseBitrateToBps(p.audioBitrate);
+        const bw = Math.round(avg * 1.5);
+        // Codec string per rung, driven by luma sample rate (width × height ×
+        // fps) so cropped 4K sources (e.g. 3840×2024 cinemascope, height <
+        // 2160) still get L5.x — height-only bucketing under-declared L4.1 and
+        // AVPlayer rejected every variant (NSURLErrorUnsupportedURL on iOS).
+        const target = {
           width: w,
           height: h,
           videoBitrateBps: 0,
           gopSize: 0,
           frameRate: sourceFrameRate,
-        });
+        };
+        const videoCodec =
+          hdrVariant.codec === 'av1'
+            ? av1CodecString(target, hdrVariant.bitDepth)
+            : hevcMain10CodecString(target);
         lines.push(
           `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range}${frameRateAttr},NAME="${p.name}",CODECS="${videoCodec}${codecsTail}"${hdrAudioAttr}${subsAttr}`,
           `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
@@ -352,24 +373,40 @@ export function generateMasterPlaylist(
   profiles = applyQualityPin(profiles, onlyQuality, sourceWidth, sourceHeight);
 
   for (const p of profiles) {
-    const avg =
-      cappedTranscodeVideoBitrateBps(
-        parseBitrateToBps(p.videoBitrate),
-        sourceVideoBitrateBps,
-        sourceVideoCodec,
-        sdrVariant?.codec,
-      ) + parseBitrateToBps(p.audioBitrate);
+    const { width: w, height: h } = profileResolution(
+      p,
+      sourceWidth,
+      sourceHeight,
+    );
+    let cappedVideo = cappedTranscodeVideoBitrateBps(
+      parseBitrateToBps(p.videoBitrate),
+      sourceVideoBitrateBps,
+      sourceVideoCodec,
+      sdrVariant?.codec,
+    );
+    // HEVC declares the Main tier in CODECS; clamp the advertised rate to the
+    // level's Main-tier ceiling so AVERAGE-BANDWIDTH matches the capped encode
+    // (mirrors the clamp in ffmpeg-args). H.264 has no tier and AV1's Main-tier
+    // ceiling is far above the current ladder, so they are left unchanged.
+    if (sdrVariant?.codec === 'hevc') {
+      cappedVideo = Math.min(
+        cappedVideo,
+        hevcMainTierCapBps({
+          width: w,
+          height: h,
+          videoBitrateBps: 0,
+          gopSize: 0,
+          frameRate: sourceFrameRate,
+        }),
+      );
+    }
+    const avg = cappedVideo + parseBitrateToBps(p.audioBitrate);
     // BANDWIDTH must reflect the peak segment bitrate (HLS spec). With
     // `-maxrate == -b:v` the encoder is near-CBR but VBV bursts still
     // push individual segments ~30% above nominal. Declaring BANDWIDTH
     // ~1.5× nominal gives AVPlayer ABR a stable hysteresis margin and
     // stops it from down-/up-shifting on every VBV spike.
     const bw = Math.round(avg * 1.5);
-    const { width: w, height: h } = profileResolution(
-      p,
-      sourceWidth,
-      sourceHeight,
-    );
     // Codec string MUST be derived from the actual emitted height (`h`),
     // not `p.maxHeight`. Cropped content (e.g. 2.39:1 cinemascope on a
     // 1920×1080 source → 1920×816) advertises a height below the

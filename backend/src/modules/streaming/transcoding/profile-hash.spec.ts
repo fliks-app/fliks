@@ -153,3 +153,50 @@ describe('buildPlaybackProfileFromContext', () => {
     expect(computeProfileHash(a)).toBe(computeProfileHash(b));
   });
 });
+
+describe('computeProfileHash — golden values (characterization)', () => {
+  // These lock the EXACT hash for a representative profile matrix. The hash is
+  // the transcode-cache directory key and the prewarm-reuse key: a silent drift
+  // (e.g. when the upcoming PlaybackPlan keystone changes how the profile is
+  // serialized) would spawn a cold session instead of reusing the prewarmed one
+  // on every refresh. If one of these changes, it is an intentional cache-key
+  // migration — bump it deliberately, don't let it drift.
+  it('locks the hash for the SDR H.264 baseline', () => {
+    expect(computeProfileHash(BASE)).toMatchInlineSnapshot(`"f1608be8d4"`);
+  });
+
+  it('locks the hash for HEVC HDR10 10-bit', () => {
+    expect(
+      computeProfileHash({
+        ...BASE,
+        videoCodec: 'hevc',
+        videoBitDepth: 10,
+        hdr: 'HDR10',
+      }),
+    ).toMatchInlineSnapshot(`"274bc33b24"`);
+  });
+
+  it('locks the hash for a multi-audio E-AC-3 copy var-stream-map session', () => {
+    expect(
+      computeProfileHash({
+        ...BASE,
+        videoCodec: 'hevc',
+        audioCodec: 'eac3',
+        audioChannels: 6,
+        audioMode: 'copy',
+        audioLayout: 'var-stream-map',
+      }),
+    ).toMatchInlineSnapshot(`"c067b583f0"`);
+  });
+
+  it('locks the hash for a Tizen TS 6s-segment session', () => {
+    expect(
+      computeProfileHash({
+        ...BASE,
+        muxFlavour: 'ts',
+        segmentDurationMs: 6000,
+        tvPlatform: 'tizen',
+      }),
+    ).toMatchInlineSnapshot(`"f1ee30bed2"`);
+  });
+});

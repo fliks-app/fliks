@@ -28,6 +28,7 @@ import {
   buildFfmpegArgs,
   buildRemuxArgs,
 } from './ffmpeg-args';
+import { varStreamMapLayout } from './audio-layout';
 import { detectHwAccel } from './hw-detect';
 import { ALL_DESCRIPTORS, encoderRegistry } from './codec/encoders';
 import { runEncoderProbes } from './codec/encoder-probe';
@@ -109,7 +110,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // wait for it, but the codec selector defaults to "every encoder
     // usable" until the probe completes (the runtime fallback layer
     // catches stragglers).
-    void runEncoderProbes(ALL_DESCRIPTORS, this.log);
+    void runEncoderProbes(ALL_DESCRIPTORS, this.log, this.detectedHwAccel);
     // Same one-frame validation pass on the decoder side: synthesise a
     // tiny bitstream per codec, hand it to each descriptor under its
     // real `-hwaccel ...` setup, drop the frame to /dev/null. Both
@@ -170,34 +171,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return matches;
-  }
-
-  /** Convenience lookup: derives the profile hash from the supplied
-   *  context and returns the matching session, if any. Use this from
-   *  segment-serving routes where the controller has just rebuilt the
-   *  session context from the request. */
-  findSessionByCtx(
-    mediaFileId: number,
-    ctx: SessionContext | undefined,
-  ): TranscodeSession | undefined {
-    return this.getExistingSession(
-      mediaFileId,
-      ctx?.userId,
-      this.computeProfileHashForCtx(ctx),
-    );
-  }
-
-  /** Same as {@link findSessionByCtx} for the early-segment companion. */
-  findEarlySessionByCtx(
-    mediaFileId: number,
-    ctx: SessionContext | undefined,
-  ): TranscodeSession | undefined {
-    return this.getExistingSession(
-      mediaFileId,
-      ctx?.userId,
-      this.computeProfileHashForCtx(ctx),
-      VARIANT_EARLY,
-    );
   }
 
   /** Most-recently-accessed transcode session for this `(file, user)`
@@ -316,21 +289,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       quality,
     );
     return { dir, baseHash };
-  }
-
-  /** Absolute path to the `(userId, mediaFileId)` parent dir under the
-   *  new cache root. Used by full-session cleanup which wipes every
-   *  profile variant for a given user-file pair. */
-  private userFileParentDir(
-    mediaFileId: number,
-    userId: number | undefined,
-  ): string {
-    const userSeg = userId == null ? 'anon' : `u${userId}`;
-    return path.join(
-      this.cacheService.cacheRoot(),
-      userSeg,
-      String(mediaFileId),
-    );
   }
 
   /**
@@ -463,6 +421,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     outputAudioCodec: string = 'aac',
     hdrPassThrough?: {
       hdrFormat: 'HDR10' | 'HLG';
+      hdrVariant: import('./codec/types').CodecVariant;
       videoBitRateBps?: number;
       audioBitRateBps?: number;
     },
@@ -472,18 +431,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     sourceVideoBitrateBps?: number,
     sourceVideoCodec?: string,
   ): string {
-    // Ask the encoder registry whether any HEVC Main10 HDR10 encoder is
-    // probed-OK on the detected hwAccel (or CPU fallback). When false,
-    // the manifest skips lower-res HEVC HDR rungs so we don't advertise
-    // `hvc1.*` segments we can't actually produce — the top remux rung
-    // stays because `-c:v copy` works regardless of the encoder probe
-    // matrix. Pre-registry this was hard-coded to `qsv` and ignored
-    // libx265 + hevc_vaapi_main10, leaving valid HDR rungs off the
-    // manifest on AMD/CPU-only hosts.
-    const canEncodeHevcHdr = !!encoderRegistry.resolve(
-      { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' },
-      this.detectedHwAccel,
-    );
+    // Gate the HDR ladder on the registry having a probed-OK encoder for the
+    // variant the selector actually resolved — the chosen codec (HEVC or AV1)
+    // AND the source's HDR format (HDR10 or HLG), with automatic CPU fallback.
+    // The manifest then advertises only HDR rungs the host can emit; a `hvc1.*`
+    // / `av01.*` CODECS claim with no matching encoder would otherwise reject
+    // on MSE append (or crash Media3 on ExoPlayer).
+    const canEmitHdrLadder = hdrPassThrough
+      ? !!encoderRegistry.resolve(
+          hdrPassThrough.hdrVariant,
+          this.detectedHwAccel,
+        )
+      : false;
     return generateMasterPlaylist(
       mediaFileId,
       sourceWidth,
@@ -497,7 +456,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       deviceType,
       outputAudioCodec,
       hdrPassThrough,
-      canEncodeHevcHdr,
+      canEmitHdrLadder,
       sdrVariant,
       sourceFrameRate,
       subtitleRenditions,
@@ -555,7 +514,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const isVideoOnly = ctx?.videoOnly ?? false;
     const ctxAudioStreams = ctx?.audioStreams;
     const useVarStreamMap =
-      isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
+      !!ctxAudioStreams && varStreamMapLayout(isVideoOnly, ctxAudioStreams.length);
 
     const existing = this.sessions.get(key);
     if (existing) {
@@ -684,7 +643,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const isVideoOnly = ctx?.videoOnly ?? false;
     const ctxAudioStreams = ctx?.audioStreams;
     const useVarStreamMap =
-      isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
+      !!ctxAudioStreams && varStreamMapLayout(isVideoOnly, ctxAudioStreams.length);
     const ladder = isHdrProfile(quality)
       ? getHdrLadderForDevice(ctx?.deviceType)
       : getLadderForDevice(ctx?.deviceType);
@@ -806,7 +765,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       const isVideoOnly = ctx?.videoOnly ?? false;
       const ctxAudioStreams = ctx?.audioStreams;
       const useVarStreamMap =
-        isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
+        !!ctxAudioStreams && varStreamMapLayout(isVideoOnly, ctxAudioStreams.length);
       if (useVarStreamMap) {
         for (let i = 0; i <= ctxAudioStreams.length; i++) {
           await fsp.mkdir(path.join(sessionDir, String(i)), {
@@ -857,7 +816,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       if (inputIdx >= 0) args.splice(inputIdx, 0, '-t', String(earlyReadSec));
 
       const usesVarStreamMap =
-        isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
+        !!ctxAudioStreams && varStreamMapLayout(isVideoOnly, ctxAudioStreams.length);
       const session = this.spawnFfmpegSession({
         id,
         mediaFileId,
@@ -1176,7 +1135,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     );
 
     const usesVarStreamMap =
-      isVideoOnly && audioStreams && audioStreams.length > 1;
+      !!audioStreams && varStreamMapLayout(isVideoOnly, audioStreams.length);
     const session = this.spawnFfmpegSession({
       id: sessionId,
       mediaFileId,
@@ -1553,11 +1512,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Send SIGTERM, wait for exit, then remove cache directory. Fire-and-forget version. */
-  private gracefulKill(session: TranscodeSession) {
-    this.killAndClean(session.process, session.cachePath).catch(() => {});
-  }
-
   /**
    * Kill an ffmpeg process and wait for it to exit. Does NOT delete cache.
    * Uses SIGKILL by default (instant) for seek restarts — ffmpeg's graceful
@@ -1614,16 +1568,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     session.audioPlan = ctx.audioPlan;
     session.videoVariant = ctx.videoVariant;
     session.muxFlavour = ctx.useTs ? 'ts' : 'fmp4';
-    // Match the gate in `ffmpeg-args.ts useVarStreamMap`: any non-empty
-    // `audioStreams[]` paired with `videoOnly` triggers the var_stream_map
-    // layout (subdirs `0/`, `1/`...). Tag the session with the actual
-    // layout ffmpeg was spawned with so the controller's drift detection
-    // (in `playback-info`) sees the same value `pickAudioLayout()`
-    // computes and doesn't false-positive a kill on every refresh.
-    session.audioLayout =
-      ctx.videoOnly && ctx.audioStreams && ctx.audioStreams.length > 0
-        ? 'var-stream-map'
-        : 'inline';
+    // Tag the session with the layout ffmpeg was actually spawned with — the
+    // same `varStreamMapLayout` predicate ffmpeg-args uses — so the
+    // controller's drift detection (in `playback-info`) sees a matching value
+    // and doesn't false-positive a kill on every refresh.
+    session.audioLayout = varStreamMapLayout(
+      ctx.videoOnly ?? false,
+      ctx.audioStreams?.length ?? 0,
+    )
+      ? 'var-stream-map'
+      : 'inline';
     if (!session.startedAt) session.startedAt = new Date();
   }
 
