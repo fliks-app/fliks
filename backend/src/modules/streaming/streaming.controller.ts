@@ -1303,6 +1303,12 @@ export class StreamingController {
       sdrVariant && sdrVariant.hdr == null ? sdrVariant : undefined,
       sourceFrameRate,
       subtitleRenditions,
+      resolveSourceVideoBitrateBps(
+        v?.bitRate,
+        si?.formatBitRate,
+        (si?.audio ?? []).reduce((sum, a) => sum + (a?.bitRate ?? 0), 0),
+      ),
+      (v?.codec ?? '').toLowerCase() || undefined,
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
