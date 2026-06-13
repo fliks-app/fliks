@@ -58,7 +58,7 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
   private readonly gcIntervalMs = StreamLifetime.cacheGcIntervalMs();
 
   async onModuleInit(): Promise<void> {
-    await fsp.mkdir(CACHE_LAYOUT_ROOT, { recursive: true });
+    await fsp.mkdir(this.cacheRoot(), { recursive: true });
     await this.rebuildIndex();
     this.gcTimer = setInterval(() => {
       this.runGc().catch((err) =>
@@ -224,11 +224,12 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
     userId?: number,
   ): Promise<string[]> {
     const dirs: string[] = [];
-    for (const userDir of await readdirSafe(CACHE_LAYOUT_ROOT)) {
+    const root = this.cacheRoot();
+    for (const userDir of await readdirSafe(root)) {
       const uid = parseUserDir(userDir);
       if (uid === undefined) continue;
       if (userId != null && uid !== userId) continue;
-      const userPath = path.join(CACHE_LAYOUT_ROOT, userDir);
+      const userPath = path.join(root, userDir);
       for (const fileDir of await readdirSafe(userPath)) {
         const fid = Number.parseInt(fileDir, 10);
         if (!Number.isFinite(fid)) continue;
@@ -292,9 +293,12 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
     return this.entries.size;
   }
 
-  /** Visible for tests. */
+  /** The cache root directory — single source of truth, resolved lazily so
+   *  every disk walk goes through it. Overridable via the `TRANSCODE_CACHE_ROOT`
+   *  env var so each test spec can point at an isolated mkdtemp dir; otherwise
+   *  parallel specs sharing the default root stomp each other's entries. */
   cacheRoot(): string {
-    return CACHE_LAYOUT_ROOT;
+    return process.env.TRANSCODE_CACHE_ROOT ?? CACHE_LAYOUT_ROOT;
   }
 
   /**
@@ -310,7 +314,7 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
   ): string {
     const userSeg = userId == null ? 'anon' : `u${userId}`;
     const base = path.join(
-      CACHE_LAYOUT_ROOT,
+      this.cacheRoot(),
       userSeg,
       String(mediaFileId),
       profileHash,
@@ -364,9 +368,10 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
    *  not mutate {@link entries}; the caller swaps it in. */
   private async scanIndexFromDisk(): Promise<Map<string, CacheEntry>> {
     const result = new Map<string, CacheEntry>();
+    const root = this.cacheRoot();
     let userDirs: string[];
     try {
-      userDirs = await fsp.readdir(CACHE_LAYOUT_ROOT);
+      userDirs = await fsp.readdir(root);
     } catch {
       return result;
     }
@@ -374,7 +379,7 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
     for (const userDir of userDirs) {
       const userId = parseUserDir(userDir);
       if (userId === undefined) continue;
-      const userPath = path.join(CACHE_LAYOUT_ROOT, userDir);
+      const userPath = path.join(root, userDir);
       let mediaDirs: string[];
       try {
         mediaDirs = await fsp.readdir(userPath);

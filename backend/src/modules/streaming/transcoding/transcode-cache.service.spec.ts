@@ -1,9 +1,20 @@
+import * as fs from 'fs';
 import * as fsp from 'fs/promises';
+import * as os from 'os';
 import * as path from 'path';
 import type { CacheEntry, QualityCache } from './transcode-cache.service';
 import { TranscodeCacheService } from './transcode-cache.service';
 
-const CACHE_ROOT = path.join('/tmp/transcode', 'cache');
+// Isolated per-spec cache root so parallel jest workers don't stomp each other
+// (TranscodeCacheService.cacheRoot() honours TRANSCODE_CACHE_ROOT).
+const CACHE_ROOT = fs.mkdtempSync(
+  path.join(os.tmpdir(), 'fliks-transcode-cache-'),
+);
+process.env.TRANSCODE_CACHE_ROOT = CACHE_ROOT;
+
+afterAll(() => {
+  fs.rmSync(CACHE_ROOT, { recursive: true, force: true });
+});
 
 async function writeFile(p: string, size: number): Promise<void> {
   await fsp.mkdir(path.dirname(p), { recursive: true });
