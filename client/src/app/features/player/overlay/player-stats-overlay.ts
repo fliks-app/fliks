@@ -7,6 +7,9 @@ export interface PlayerStats {
   containerBitrate: string;
   outputFormat: string;
   outputFps: string;
+  /** True when the session is served as-is (DirectPlay) — no remux or
+   *  transcode. Drives the "Lecture directe" arrow under the container. */
+  directPlay: boolean;
 
   videoLabel: string;
   videoStreamBitrate: string;
