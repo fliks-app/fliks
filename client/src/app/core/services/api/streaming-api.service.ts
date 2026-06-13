@@ -61,6 +61,9 @@ export interface PlaybackInfoResponse {
     channels?: number;
     copy: boolean;
     outputCodec: string;
+    /** Output channel count when transcoded (downmixed to the device/codec
+     *  cap); source channels when copied. */
+    outputChannels?: number;
     reasonFlags: string[];
   }[];
   source: {
