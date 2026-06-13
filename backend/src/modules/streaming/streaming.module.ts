@@ -22,6 +22,7 @@ import { ThumbnailService } from './thumbnail.service';
 import { RecommendationService } from './recommendation.service';
 import { StreamingSettingsCache } from './streaming-settings-cache.service';
 import { SegmentPackagingService } from './services/segment-packaging.service';
+import { SessionRouter } from './services/session-router.service';
 import { Command } from '../scheduler/entities/command.entity';
 import { AuthModule } from '../auth/auth.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -60,6 +61,7 @@ import { MarkersModule } from '../markers/markers.module';
     RecommendationService,
     StreamingSettingsCache,
     SegmentPackagingService,
+    SessionRouter,
   ],
   exports: [
     PlaybackService,

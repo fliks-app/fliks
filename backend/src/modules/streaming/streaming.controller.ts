@@ -30,21 +30,20 @@ import {
   getLadderForDevice,
   getHdrLadderForDevice,
   SessionContext,
-  VARIANT_EARLY,
   profileFitsSource,
   computeProfileHash,
   buildPlaybackProfileFromContext,
   resolveSourceVideoBitrateBps,
 } from './transcoding';
-import type { TranscodeSession } from './transcoding/types';
 import {
   EARLY_PROBE_SEGMENTS,
   getSegmentDuration,
   secondsToSegmentIndex,
 } from './transcoding/constants';
-import { LiveSession, LiveSessionRegistry } from './live-session.service';
+import { LiveSessionRegistry } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
+import { SessionRouter } from './services/session-router.service';
 import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
@@ -259,57 +258,6 @@ function firstQueryString(
 export class StreamingController {
   private readonly log = new Logger(StreamingController.name);
 
-  /** Resolve the exact transcode session for a request: prefer the
-   *  `(file, user, profileHash)` triple derived from the request's
-   *  `?sid=` query — that's what manifest URLs bake in so segment
-   *  fetches route to the right ffmpeg even when a single user is
-   *  watching the same file on multiple devices with different
-   *  profiles. Falls back to the "most recently accessed" heuristic
-   *  when no sid is provided or the live session has expired. */
-  private resolveSession(
-    mediaFileId: number,
-    userId: number | undefined,
-    req: Request,
-  ): TranscodeSession | undefined {
-    const sid = firstQueryString(req.query, 'sid');
-    if (sid) {
-      const live = this.liveSessions.get(sid);
-      if (live && live.profileHash) {
-        const exact = this.transcodingService.getExistingSession(
-          mediaFileId,
-          userId,
-          live.profileHash,
-        );
-        if (exact) return exact;
-      }
-    }
-    return this.transcodingService.findCurrentSession(mediaFileId, userId);
-  }
-
-  /** Same routing as {@link resolveSession} for the early-segment
-   *  companion — the base profile hash is the same; only the variant
-   *  differs. */
-  private resolveEarlySession(
-    mediaFileId: number,
-    userId: number | undefined,
-    req: Request,
-  ): TranscodeSession | undefined {
-    const sid = firstQueryString(req.query, 'sid');
-    if (sid) {
-      const live = this.liveSessions.get(sid);
-      if (live && live.profileHash) {
-        const exact = this.transcodingService.getExistingSession(
-          mediaFileId,
-          userId,
-          live.profileHash,
-          VARIANT_EARLY,
-        );
-        if (exact) return exact;
-      }
-    }
-    return this.transcodingService.findCurrentEarlySession(mediaFileId, userId);
-  }
-
   constructor(
     private readonly streamingService: StreamingService,
     private readonly subtitleStreamService: SubtitleStreamService,
@@ -323,56 +271,11 @@ export class StreamingController {
     private readonly streamingSettingsCache: StreamingSettingsCache,
     private readonly liveSessions: LiveSessionRegistry,
     private readonly segmentPackaging: SegmentPackagingService,
+    private readonly sessionRouter: SessionRouter,
   ) {}
 
   private getStreamingSettings() {
     return this.streamingSettingsCache.get();
-  }
-
-  /**
-   * Resolve the LiveSession this request belongs to. Honoured order:
-   *  1. `?sid=` on the URL (set by playback-info, threaded by manifests).
-   *  2. Most-recently-active session for (user, file) — fallback for
-   *     legacy callers that never sent `sid` (e.g. direct-URL fetches).
-   * Returns null when nothing matches — caller is expected to fall
-   * back to safe defaults.
-   */
-  private findRequestSession(
-    req: Request,
-    mediaFileId: number,
-  ): LiveSession | null {
-    const sid = firstQueryString(req.query, 'sid');
-    if (sid) {
-      const direct = this.liveSessions.get(sid);
-      if (direct) return direct;
-    }
-    const userId = (req.user as User | undefined)?.id;
-    if (userId == null) return null;
-    return this.liveSessions.findCurrent(userId, mediaFileId);
-  }
-
-  /**
-   * 410-gate HLS routes against a stale `?sid=`. When the URL carries a
-   * sid the LiveSessionRegistry no longer knows (typical after a
-   * backend restart or a long-idle GC pass), refuse the request with a
-   * typed body the player can pattern-match. The Shaka response filter
-   * and the Tizen / Capacitor / webOS engine wrappers all react to
-   * `code === 'session_expired'` by triggering the shared
-   * refreshSidAndReload recovery flow.
-   *
-   * Without a sid we let the request through — legacy direct-URL
-   * fetches and pre-#302 callers fall back to the userId-based
-   * `findCurrent` lookup downstream.
-   */
-  private assertFreshSession(req: Request): void {
-    const sid = firstQueryString(req.query, 'sid');
-    if (!sid) return;
-    // The fetch itself keeps the session warm: an actively-playing
-    // receiver pulls segments straight off these routes, so its session
-    // must not depend on a separate heartbeat channel to survive the ttl.
-    if (!this.liveSessions.touch(sid)) {
-      throw new SessionExpiredException(sid);
-    }
   }
 
   private buildSessionContext(
@@ -382,7 +285,7 @@ export class StreamingController {
   ): SessionContext {
     const user = req.user as User | undefined;
     const si = resolved.mediaFile.streamInfo;
-    const live = this.findRequestSession(req, mediaFileId);
+    const live = this.sessionRouter.findRequestSession(req, mediaFileId);
     // var_stream_map decision: same logic as playback-info — relies on
     // the file's intrinsic audio-stream count, which doesn't drift
     // across sessions.
@@ -560,7 +463,7 @@ export class StreamingController {
       // (`1080p`), so translate to the HDR equivalent so prewarm
       // doesn't spawn a doomed SDR session that the player will
       // immediately kill and replace with the matching HDR rung.
-      const session = this.findRequestSession(req, mediaFileId);
+      const session = this.sessionRouter.findRequestSession(req, mediaFileId);
       const targetQuality =
         (session?.hdrLadder ?? false) && !startQuality.endsWith('-hdr')
           ? `${startQuality}-hdr`
@@ -1083,7 +986,7 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    this.assertFreshSession(req);
+    this.sessionRouter.assertFresh(req);
     const resolved = await this.streamingService.resolveFile(
       mediaFileId,
       req.user as User,
@@ -1099,7 +1002,7 @@ export class StreamingController {
 
     const includeRemux = firstQueryString(req.query, 'remux') === '1';
     const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
-    const live = this.findRequestSession(req, mediaFileId);
+    const live = this.sessionRouter.findRequestSession(req, mediaFileId);
     // HDR ladder eligibility — decided by stream-builder at playback-info
     // time and stored on the LiveSession. Independent from `includeRemux`:
     // even a /master.m3u8 without `?remux=1` should emit the HDR ladder
@@ -1357,7 +1260,7 @@ export class StreamingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    this.assertFreshSession(req);
+    this.sessionRouter.assertFresh(req);
     const resolved = await this.streamingService.resolveFile(
       mediaFileId,
       req.user as User,
@@ -1377,7 +1280,7 @@ export class StreamingController {
     // fMP4 source with audio (issue #148, Tizen) and for multi-audio
     // sources regardless of mux flavour. Only the muxed TS / muxed-fMP4
     // legacy path needs a separate audio-only session as a fallback.
-    const live = this.findRequestSession(req, mediaFileId);
+    const live = this.sessionRouter.findRequestSession(req, mediaFileId);
     const useExtXMedia = live?.useExtXMedia ?? false;
     if (!useExtXMedia) {
       const user = req.user;
@@ -1416,7 +1319,7 @@ export class StreamingController {
     @CurrentUser() user: User | undefined,
     @Res() res: Response,
   ) {
-    this.assertFreshSession(req);
+    this.sessionRouter.assertFresh(req);
     // Enforce the library ACL on every segment serve (the cached fast path
     // below otherwise serves a revoked-mid-stream session — see hlsSegment).
     await this.streamingService.resolveFile(mediaFileId, user);
@@ -1438,7 +1341,7 @@ export class StreamingController {
     // on a multi-audio video session (master.m3u8 only emits EXT-X-MEDIA when
     // `audioStreams.length > 1`), so we don't need a separate audio-only path —
     // any segment Shaka asks for here is in `<videoSession.cachePath>/<varStreamPath>`.
-    let videoSession = this.resolveSession(mediaFileId, user?.id, req);
+    let videoSession = this.sessionRouter.resolveSession(mediaFileId, user?.id, req);
     if (!videoSession) {
       const resolved = await this.streamingService.resolveFile(
         mediaFileId,
@@ -1456,7 +1359,7 @@ export class StreamingController {
         );
       }
       ctx.spawnReason = 'seg-race';
-      const live = this.findRequestSession(req, mediaFileId);
+      const live = this.sessionRouter.findRequestSession(req, mediaFileId);
       const deviceType = live?.deviceType ?? 'desktop';
       const sourceW =
         this.activeStreamTracker.getSourceWidth(mediaFileId) || 1920;
@@ -1496,7 +1399,7 @@ export class StreamingController {
     // parallel with main, so it lands first. Use a short timeout — main
     // covers the same files behind it, so wasting 60s on early when it has
     // already exited adds latency for nothing.
-    const earlySession = this.resolveEarlySession(mediaFileId, user?.id, req);
+    const earlySession = this.sessionRouter.resolveEarlySession(mediaFileId, user?.id, req);
     const useEarly =
       earlySession != null &&
       videoSession.startSegment != null &&
@@ -1568,7 +1471,7 @@ export class StreamingController {
     if (!VALID_QUALITIES.has(quality)) {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
-    this.assertFreshSession(req);
+    this.sessionRouter.assertFresh(req);
     const resolved = await this.streamingService.resolveFile(
       mediaFileId,
       req.user as User,
@@ -1594,7 +1497,7 @@ export class StreamingController {
     // Exception: Cast passes startAt for resume position — pre-start for Cast/remux only.
     const startAtRaw = firstQueryString(req.query, 'startAt');
     if (startAtRaw) {
-      const existing = this.resolveSession(mediaFileId, req.user?.id, req);
+      const existing = this.sessionRouter.resolveSession(mediaFileId, req.user?.id, req);
       if (!existing || existing.process.exitCode !== null) {
         const startAtSec = parseInt(startAtRaw, 10);
         const startSegment = secondsToSegmentIndex(startAtSec);
@@ -1625,7 +1528,7 @@ export class StreamingController {
     const tokenParam = buildTokenParam(req);
     const basePath = `/api/stream/${mediaFileId}/${quality}`;
     // Use the master.m3u8 decision — must match to avoid init filename mismatch.
-    const live = this.findRequestSession(req, mediaFileId);
+    const live = this.sessionRouter.findRequestSession(req, mediaFileId);
     const multiAudio = live?.useExtXMedia ?? false;
     const useTs = live?.useTs ?? false;
     // Tizen TV sessions can opt into MPEG-TS segments (no init segment)
@@ -1669,7 +1572,7 @@ export class StreamingController {
     if (!VALID_QUALITIES.has(quality)) {
       throw new BadRequestException(`Invalid quality: ${quality}`);
     }
-    this.assertFreshSession(req);
+    this.sessionRouter.assertFresh(req);
     // Enforce the library ACL on every segment serve — the cached fast path
     // below otherwise keeps serving a session whose owner lost access
     // mid-stream (only the slow create path checked, not the fast path).
@@ -1687,12 +1590,12 @@ export class StreamingController {
         `[request] ${segment} mfid=${mediaFileId} quality=${quality}`,
       );
     }
-    const live = this.findRequestSession(req, mediaFileId);
+    const live = this.sessionRouter.findRequestSession(req, mediaFileId);
 
     // Fast path: if a session already exists, skip the DB query — we only
     // need resolveFile for absolutePath + context when creating a NEW session.
     // Saves ~15-25ms per segment (a 2h file = ~2400 segments = ~40s saved).
-    const existing = this.resolveSession(mediaFileId, req.user?.id, req);
+    const existing = this.sessionRouter.resolveSession(mediaFileId, req.user?.id, req);
 
     // For init.mp4: serve from the early session when it exists with matching
     // quality. Its init bytes are byte-identical to main's (same encoder
@@ -1717,7 +1620,7 @@ export class StreamingController {
       // Same caveat as the segment path: remux video-only doesn't use
       // var_stream_map, so the `0/` prefix would 404 on the init lookup.
       const initFile = ma && quality !== 'remux' ? `0/${segment}` : segment;
-      const earlySession = this.resolveEarlySession(
+      const earlySession = this.sessionRouter.resolveEarlySession(
         mediaFileId,
         req.user?.id,
         req,
@@ -1846,7 +1749,7 @@ export class StreamingController {
         (resumeFloor > EARLY_PROBE_SEGMENTS &&
           segIndex < EARLY_PROBE_SEGMENTS));
     if (isEarlyProbe) {
-      let earlySession = this.resolveEarlySession(
+      let earlySession = this.sessionRouter.resolveEarlySession(
         mediaFileId,
         req.user?.id,
         req,
