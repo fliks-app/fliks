@@ -8,6 +8,7 @@ import { AppSettingsService } from './app-settings.service';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
 import { AuthService } from './auth.service';
 import { DeviceProfile } from './browser-device-profile.service';
+import { ENGINE_TRAITS, EngineKind } from './engine-traits';
 import { ServerConfigService } from './server-config.service';
 import { formatAudioLabel, formatSubtitleLabel, parseAudioIndex, SpriteMetadata } from '../utils/player.utils';
 import { PlayerSettingsService } from './player-settings.service';
@@ -170,8 +171,10 @@ export class CastPlayerService {
       // back later without re-doing the plumbing.
       useTs: false,
       // The Cast receiver runs Shaka, which fetches seg-0 on a load-then-seek,
-      // so keep the backend's seg-0 early-start companion for resumes.
-      probesSegZero: true,
+      // so keep the backend's seg-0 early-start companion for resumes. The CAST
+      // row sets only `probesSegZero`, leaving useTsOnSingleAudio /
+      // supportsHlsSubtitles / supportsDirectPlay undefined on the wire.
+      ...ENGINE_TRAITS[EngineKind.CAST],
     };
   }
 
