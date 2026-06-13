@@ -17,12 +17,23 @@
  * need a mocked `child_process.spawn` harness that's worth its own
  * scaffolding PR.
  */
+import * as fs from 'fs';
 import * as fsp from 'fs/promises';
+import * as os from 'os';
 import * as path from 'path';
 import { LiveSessionRegistry } from './live-session.service';
 import { TranscodeCacheService } from './transcoding/transcode-cache.service';
 
-const CACHE_ROOT = '/tmp/transcode/cache';
+// Isolated per-spec cache root so parallel jest workers don't stomp each other
+// (TranscodeCacheService.cacheRoot() honours TRANSCODE_CACHE_ROOT).
+const CACHE_ROOT = fs.mkdtempSync(
+  path.join(os.tmpdir(), 'fliks-transcode-cache-'),
+);
+process.env.TRANSCODE_CACHE_ROOT = CACHE_ROOT;
+
+afterAll(() => {
+  fs.rmSync(CACHE_ROOT, { recursive: true, force: true });
+});
 const ALICE = { userId: 1, username: 'alice' };
 const BOB = { userId: 2, username: 'bob' };
 const FILE_ID = 42;
