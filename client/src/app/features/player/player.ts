@@ -35,7 +35,7 @@ import { ServerConfigService } from '../../core/services/server-config.service';
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
-import { formatAudioLabel, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
+import { audioChannelsLabel, formatAudioLabel, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
 import {
   PlayerSettingsService, normalizeLang,
   SUBTITLE_SIZE_MAP, SUBTITLE_COLOR_MAP, SUBTITLE_SHADOW_MAP, SUBTITLE_BG_MAP,
@@ -719,10 +719,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (activeAudioCopy) {
       audioPlaybackMode = this.translate.instant('player.stats_direct_playback');
     } else {
+      // Show the TARGET codec + channel layout (e.g. "OPUS - 5.1") so a downmix
+      // is visible. `outputChannels` comes from the active track's plan.
       const outCodec = (
         activeAudioPlan?.outputCodec ?? pi?.outputAudioCodec ?? 'aac'
       ).toUpperCase();
-      audioPlaybackMode = this.translate.instant('player.stats_transcode_audio', { codec: outCodec });
+      const outLayout = audioChannelsLabel(activeAudioPlan?.outputChannels);
+      const codecLabel = outLayout ? `${outCodec} - ${outLayout}` : outCodec;
+      audioPlaybackMode = this.translate.instant('player.stats_transcode_audio', { codec: codecLabel });
     }
 
     return {

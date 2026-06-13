@@ -120,7 +120,7 @@ function shortSubtitleCodec(codec: string | null | undefined, hasFile: boolean):
 }
 
 /** Channel count to a recognizable layout label (5.1, 7.1, 2.0, …). */
-function audioChannelsLabel(channels: number | null | undefined): string {
+export function audioChannelsLabel(channels: number | null | undefined): string {
   if (!channels) return '';
   if (channels === 6) return '5.1';
   if (channels === 8) return '7.1';
