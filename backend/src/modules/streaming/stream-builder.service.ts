@@ -813,11 +813,17 @@ export class StreamBuilderService {
       // (MP3 is device-decodable but not fMP4-safe, so it must transcode — a
       // genuine reason, unlike a codec re-encoded only to match the group).
       const playableAsIs = codecSupported && fmp4Safe;
+      // Both reasons can apply at once: a browser fed EAC-3 5.1 transcodes to
+      // AAC 2.0 because the codec ISN'T decodable AND the channels overflow —
+      // surface both, not just one. A supported codec that's only downmixed
+      // shows the channel reason alone (no codec flag); a codec re-encoded
+      // purely to match the group's output codec (playable as-is, or saved as
+      // surround) shows neither.
       const reasonFlags: string[] = [];
       if (downmixed) {
-        // Channels were actually reduced. Takes priority over the codec reason.
         reasonFlags.push('AudioChannelsNotSupported');
-      } else if (!playableAsIs && !surroundPreserved) {
+      }
+      if (!playableAsIs && !surroundPreserved) {
         reasonFlags.push('AudioCodecNotSupported');
       }
       return {
