@@ -437,12 +437,12 @@ export class BrowserDeviceProfileService {
       // Cast and native mobile consume muxed fMP4 across the board (webOS's
       // native <video> has no such stall and fMP4 keeps Dolby pass-through).
       useTsOnSingleAudio: tvPlatform === 'tizen',
-      // Phone/desktop clients (iOS AVPlayer, Android ExoPlayer, web Shaka)
-      // consume the master SUBTITLES renditions natively, so cues render
-      // inside the player (PiP / AirPlay / browser PiP). TVs stay false:
-      // they have no PiP and their AVPlay/webOS cue APIs are limited, so the
-      // Tizen/webOS engines keep their DOM overlay (fed by sidecar VTT).
-      supportsHlsSubtitles: !isTv,
+      // Players that decode the master SUBTITLES renditions natively (iOS
+      // AVPlayer, Android ExoPlayer — phone and TV alike, web Shaka) render
+      // cues inside the player pipeline. Only Tizen and webOS opt out: their
+      // AVPlay/webOS cue APIs are limited, so those engines drive a DOM
+      // overlay fed by sidecar VTT instead of the HLS renditions.
+      supportsHlsSubtitles: tvPlatform !== 'tizen' && tvPlatform !== 'webos',
       // Only the web/Shaka path probes seg-0 on a load-then-seek; that is
       // exactly the `!isNative` engine branch (Capacitor mobile + every TV go
       // through native players that seek straight to the resume segment). The
