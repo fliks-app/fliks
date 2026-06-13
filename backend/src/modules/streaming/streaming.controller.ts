@@ -43,9 +43,8 @@ import {
   secondsToSegmentIndex,
 } from './transcoding/constants';
 import { LiveSession, LiveSessionRegistry } from './live-session.service';
-import { readAndRewriteCmaf } from './transcoding/cmaf-rewrite';
-import { parseInitTracks, rewriteSegmentTfdt } from './transcoding/timeline';
 import * as path from 'path';
+import { SegmentPackagingService } from './services/segment-packaging.service';
 import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
@@ -81,11 +80,6 @@ function withTimestampMap(vtt: string | Buffer): string {
 
 /** Default segment duration — overridden by admin streaming settings. */
 let SEG_DURATION = 3;
-
-/** Per-cache-dir track info (timescale + video flag), parsed once from each
- *  rendition's init segment and reused to anchor that rendition's segments
- *  onto the absolute presentation timeline (see {@link rewriteSegmentTfdt}). */
-const initTrackCache = new Map<string, ReturnType<typeof parseInitTracks>>();
 
 /**
  * Compose / append the `token=...` + `sid=...` query pair that every
@@ -189,7 +183,10 @@ async function awaitFileNonEmpty(
  *  retry policies (Shaka, Media3's loader when given a backoff)
  *  treat 503 as retryable, unlike 404 which Media3 marks as a
  *  terminal failure. `Retry-After` is honoured by both stacks. */
-function sendTransientUnavailable(res: Response, retryAfterSec: number = 2): void {
+function sendTransientUnavailable(
+  res: Response,
+  retryAfterSec: number = 2,
+): void {
   res.setHeader('Retry-After', String(retryAfterSec));
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.status(503).end();
@@ -325,6 +322,7 @@ export class StreamingController {
     private readonly markersService: MarkersService,
     private readonly streamingSettingsCache: StreamingSettingsCache,
     private readonly liveSessions: LiveSessionRegistry,
+    private readonly segmentPackaging: SegmentPackagingService,
   ) {}
 
   private getStreamingSettings() {
@@ -469,7 +467,11 @@ export class StreamingController {
   ): Promise<number> {
     if (startAt !== undefined) return startAt;
     if (userId != null && mediaId != null) {
-      const state = await this.playbackService.getState(userId, mediaId, episodeId);
+      const state = await this.playbackService.getState(
+        userId,
+        mediaId,
+        episodeId,
+      );
       if (state && !state.completed && state.positionSeconds > 10) {
         return state.positionSeconds;
       }
@@ -629,118 +631,6 @@ export class StreamingController {
       }
     }
     return duration;
-  }
-
-  /** Serve an fMP4 init or segment, rewriting the bytes for AVPlay
-   *  compatibility (Tizen) before flushing them to the client.
-   *
-   *  The rewrite happens in memory and the result is sent via `res.end`
-   *  rather than `createReadStream`: ffmpeg's HLS muxer rewrites init
-   *  and segments in-place on session restart, and that overwrite races
-   *  the `stat` → `createReadStream` window — the response ends up with
-   *  a Content-Length from one revision of the file and bytes from
-   *  another. Serving from the rewritten buffer takes that race off the
-   *  table. */
-  private async serveCmafFile(
-    res: Response,
-    filePath: string,
-    contentType: string,
-    skipTimelineRewrite = false,
-  ): Promise<void> {
-    // TS segments aren't fMP4/CMAF — the CMAF rewrite and tfdt anchoring below
-    // are no-ops on them, and running an ISO-BMFF box parser over MPEG-TS bytes
-    // is meaningless. Read + serve verbatim. Buffered (not streamed) to keep
-    // the same read-after-unlink safety the fMP4 path relies on.
-    if (filePath.endsWith('.ts')) {
-      let tsBuf: Buffer;
-      try {
-        tsBuf = await fs.promises.readFile(filePath);
-      } catch {
-        if (!res.headersSent) res.status(404).end();
-        return;
-      }
-      if (tsBuf.length === 0) {
-        if (!res.headersSent) res.status(404).end();
-        return;
-      }
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Length', String(tsBuf.length));
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cache-Control', 'no-store');
-      res.end(tsBuf);
-      return;
-    }
-
-    const buf = await readAndRewriteCmaf(filePath);
-    if (!buf || buf.length === 0) {
-      if (!res.headersSent) res.status(404).end();
-      return;
-    }
-    // Remux (`-c:v copy`) segments carry an absolute, GOP-aligned -copyts
-    // timeline; the grid tfdt anchor assumes forced-keyframe transcode output
-    // (seg-N decodes at N*SEG) and would shift each remux segment by its own
-    // IDR-vs-grid offset, breaking the single monotonic timeline (#349).
-    // Transcode output is grid-aligned so the anchor is a no-op — only remux
-    // must skip it.
-    const out = skipTimelineRewrite
-      ? buf
-      : await this.anchorSegmentTimeline(filePath, buf);
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Length', String(out.length));
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    // Cloudflare (and any intermediate CDN) will gladly cache a 0-byte
-    // 200 response under the URL and serve it back for 4h by default —
-    // turning a transient cold-start race into a session-killing
-    // permanent failure. Mark each fMP4 chunk un-cacheable so a CDN
-    // refusing the upstream length check never pins a broken response.
-    res.setHeader('Cache-Control', 'no-store');
-    res.end(out);
-  }
-
-  /** Anchor a media segment onto the single absolute presentation timeline:
-   *  rewrite its `tfdt` so `seg-N` decodes at its true content time
-   *  `N · SEG_DURATION` (per-track timescale), instead of FFmpeg's per-run
-   *  0-based reset. This is the packaging layer owning the timeline so all
-   *  renditions (video, audio, subtitle) stay coherent across resume / seek
-   *  runs (HLS requires one shared timeline). Init segments and MPEG-TS
-   *  segments carry no `tfdt` and pass through unchanged. */
-  private async anchorSegmentTimeline(
-    filePath: string,
-    buf: Buffer,
-  ): Promise<Buffer> {
-    const m = /(?:^|\/)seg-(\d+)\.m4s$/.exec(filePath);
-    if (!m) return buf;
-    const tracks = await this.tracksForDir(path.dirname(filePath));
-    if (tracks.size === 0) return buf;
-    return rewriteSegmentTfdt(buf, tracks, Number(m[1]), SEG_DURATION);
-  }
-
-  /** Track info for a rendition's cache dir, parsed once from its init
-   *  segment. Cached only once populated so a cold-start race (init not yet
-   *  flushed) retries on the next segment instead of caching empty. */
-  private async tracksForDir(
-    dir: string,
-  ): Promise<ReturnType<typeof parseInitTracks>> {
-    const cached = initTrackCache.get(dir);
-    if (cached) return cached;
-    let initBuf: Buffer | null = null;
-    try {
-      initBuf = await fs.promises.readFile(path.join(dir, 'init.mp4'));
-    } catch {
-      // var_stream_map renditions may name the init `init_<n>.mp4`.
-      try {
-        const entry = (await fs.promises.readdir(dir)).find((f) =>
-          /^init.*\.mp4$/.test(f),
-        );
-        if (entry) initBuf = await fs.promises.readFile(path.join(dir, entry));
-      } catch {
-        return new Map();
-      }
-    }
-    if (!initBuf) return new Map();
-    const tracks = parseInitTracks(initBuf);
-    if (tracks.size > 0) initTrackCache.set(dir, tracks);
-    return tracks;
   }
 
   /** Available download qualities for a media file (used by download-quality modal). */
@@ -960,8 +850,7 @@ export class StreamingController {
     // Surface the actually-used tonemap filter (after `auto` resolution
     // + boot probe). Stats overlay reads this so it can show what's
     // running, not what was originally requested.
-    const hasCrop =
-      resolved.mediaFile.streamInfo?.video?.[0]?.crop != null;
+    const hasCrop = resolved.mediaFile.streamInfo?.video?.[0]?.crop != null;
     const tonemapAlgo = response.tonemapping
       ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop })
       : null;
@@ -1266,16 +1155,17 @@ export class StreamingController {
     // video transcode: each rendition wraps the WebVTT the subtitle service
     // already extracts. Web (Shaka) leaves the flag off and keeps fetching
     // sidecar VTT.
-    const subtitleRenditions = (live?.supportsHlsSubtitles ?? false)
-      ? await this.subtitleStreamService
-          .listTextSubtitleRenditions(mediaFileId, req.user as User)
-          .catch((e) => {
-            this.log.warn(
-              `subtitle renditions failed for #${mediaFileId}: ${e instanceof Error ? e.message : e}`,
-            );
-            return undefined;
-          })
-      : undefined;
+    const subtitleRenditions =
+      (live?.supportsHlsSubtitles ?? false)
+        ? await this.subtitleStreamService
+            .listTextSubtitleRenditions(mediaFileId, req.user as User)
+            .catch((e) => {
+              this.log.warn(
+                `subtitle renditions failed for #${mediaFileId}: ${e instanceof Error ? e.message : e}`,
+              );
+              return undefined;
+            })
+        : undefined;
 
     const sdrVariant = liveVariant;
     const sourceFrameRate = parseFloat(v?.frameRate ?? '') || undefined;
@@ -1561,7 +1451,9 @@ export class StreamingController {
       // client re-establishes via playback-info instead of a 500, and we
       // never spawn a transcode for a stream nobody is watching.
       if (!ctx.videoVariant) {
-        throw new SessionExpiredException(firstQueryString(req.query, 'sid') ?? null);
+        throw new SessionExpiredException(
+          firstQueryString(req.query, 'sid') ?? null,
+        );
       }
       ctx.spawnReason = 'seg-race';
       const live = this.findRequestSession(req, mediaFileId);
@@ -1583,8 +1475,7 @@ export class StreamingController {
       // quality-change path. Translate to the HDR rung when the master
       // is publishing the HDR ladder so the spawned session matches.
       const quality =
-        (live?.hdrLadder ?? false) &&
-        !baseQuality.endsWith('-hdr')
+        (live?.hdrLadder ?? false) && !baseQuality.endsWith('-hdr')
           ? `${baseQuality}-hdr`
           : baseQuality;
       // No existing main and we're spawning to serve a request: anchor at the
@@ -1656,7 +1547,14 @@ export class StreamingController {
       return;
     }
 
-    await this.serveCmafFile(res, segPath, segmentContentType(segment));
+    await this.segmentPackaging.serve(
+      res,
+      segPath,
+      segmentContentType(segment),
+      {
+        segDuration: SEG_DURATION,
+      },
+    );
   }
 
   /** HLS variant playlist — pre-computed segment list based on known duration. */
@@ -1853,7 +1751,12 @@ export class StreamingController {
           );
           continue;
         }
-        await this.serveCmafFile(res, initPath, segmentContentType(segment));
+        await this.segmentPackaging.serve(
+          res,
+          initPath,
+          segmentContentType(segment),
+          { segDuration: SEG_DURATION },
+        );
         return;
       }
     }
@@ -1883,7 +1786,14 @@ export class StreamingController {
           return;
         }
         existing.lastAccess = Date.now();
-        await this.serveCmafFile(res, segPath, segmentContentType(segment));
+        await this.segmentPackaging.serve(
+          res,
+          segPath,
+          segmentContentType(segment),
+          {
+            segDuration: SEG_DURATION,
+          },
+        );
         return;
       }
       // Segment not on disk — fall through to full resolve + getOrCreateSession.
@@ -1901,7 +1811,9 @@ export class StreamingController {
     // stale sid). 410 so the client re-establishes instead of a 500 from
     // buildFfmpegArgs; nothing is spawned for a stream nobody is watching.
     if (!ctx.videoVariant) {
-      throw new SessionExpiredException(firstQueryString(req.query, 'sid') ?? null);
+      throw new SessionExpiredException(
+        firstQueryString(req.query, 'sid') ?? null,
+      );
     }
     ctx.spawnReason = 'seg-request';
 
@@ -1931,7 +1843,8 @@ export class StreamingController {
       // init here would spawn a companion they never read — keep them on main.
       (live?.probesSegZero ?? true) &&
       (isInit ||
-        (resumeFloor > EARLY_PROBE_SEGMENTS && segIndex < EARLY_PROBE_SEGMENTS));
+        (resumeFloor > EARLY_PROBE_SEGMENTS &&
+          segIndex < EARLY_PROBE_SEGMENTS));
     if (isEarlyProbe) {
       let earlySession = this.resolveEarlySession(
         mediaFileId,
@@ -1966,7 +1879,14 @@ export class StreamingController {
             sendTransientUnavailable(res);
             return;
           }
-          await this.serveCmafFile(res, segPath, segmentContentType(segment));
+          await this.segmentPackaging.serve(
+            res,
+            segPath,
+            segmentContentType(segment),
+            {
+              segDuration: SEG_DURATION,
+            },
+          );
           return;
         }
         // Early failed/timeout — log and fall through to slow path
@@ -2032,14 +1952,17 @@ export class StreamingController {
       return;
     }
     // Remux segments skip the tfdt anchor — they already carry an absolute
-    // -copyts timeline (see serveCmafFile / #349). The early-probe paths above
-    // never run for remux (gated on quality !== 'remux'), so this main serve
-    // is the only remux-reachable tfdt path.
-    await this.serveCmafFile(
+    // -copyts timeline (see SegmentPackagingService / #349). The early-probe
+    // paths above never run for remux (gated on quality !== 'remux'), so this
+    // main serve is the only remux-reachable tfdt path.
+    await this.segmentPackaging.serve(
       res,
       segPath,
       segmentContentType(segment),
-      quality === 'remux',
+      {
+        segDuration: SEG_DURATION,
+        skipTimelineRewrite: quality === 'remux',
+      },
     );
   }
 
