@@ -463,6 +463,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     outputAudioCodec: string = 'aac',
     hdrPassThrough?: {
       hdrFormat: 'HDR10' | 'HLG';
+      hdrVariant: import('./codec/types').CodecVariant;
       videoBitRateBps?: number;
       audioBitRateBps?: number;
     },
@@ -472,18 +473,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     sourceVideoBitrateBps?: number,
     sourceVideoCodec?: string,
   ): string {
-    // Ask the encoder registry whether any HEVC Main10 HDR10 encoder is
-    // probed-OK on the detected hwAccel (or CPU fallback). When false,
-    // the manifest skips lower-res HEVC HDR rungs so we don't advertise
-    // `hvc1.*` segments we can't actually produce — the top remux rung
-    // stays because `-c:v copy` works regardless of the encoder probe
-    // matrix. Pre-registry this was hard-coded to `qsv` and ignored
-    // libx265 + hevc_vaapi_main10, leaving valid HDR rungs off the
-    // manifest on AMD/CPU-only hosts.
-    const canEncodeHevcHdr = !!encoderRegistry.resolve(
-      { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' },
-      this.detectedHwAccel,
-    );
+    // Gate the HDR ladder on the registry having a probed-OK encoder for the
+    // variant the selector actually resolved — the chosen codec (HEVC or AV1)
+    // AND the source's HDR format (HDR10 or HLG), with automatic CPU fallback.
+    // The manifest then advertises only HDR rungs the host can emit; a `hvc1.*`
+    // / `av01.*` CODECS claim with no matching encoder would otherwise reject
+    // on MSE append (or crash Media3 on ExoPlayer).
+    const canEmitHdrLadder = hdrPassThrough
+      ? !!encoderRegistry.resolve(
+          hdrPassThrough.hdrVariant,
+          this.detectedHwAccel,
+        )
+      : false;
     return generateMasterPlaylist(
       mediaFileId,
       sourceWidth,
@@ -497,7 +498,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       deviceType,
       outputAudioCodec,
       hdrPassThrough,
-      canEncodeHevcHdr,
+      canEmitHdrLadder,
       sdrVariant,
       sourceFrameRate,
       subtitleRenditions,

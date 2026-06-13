@@ -176,30 +176,13 @@ export class StreamBuilderService {
       detectedHwAccel,
       userAgent,
     );
-    // The HDR ladder emission (master-playlist `hdrPassThrough` branch) only
-    // produces HEVC Main10 rungs today. When the selector resolves a non-HEVC
-    // HDR encoder (e.g. AV1 HDR on NVENC Ada), re-pick an SDR variant so we
-    // tone-map consistently instead of advertising an HDR ladder we can't
-    // emit. On QSV — the deployment target — AV1 HDR never resolves (no
-    // mastering-display API), so an HDR source always lands on HEVC here.
-    // Lifting this needs the HDR branch to go codec-aware (follow-up).
-    if (selectedVariant.hdr != null && selectedVariant.codec !== 'hevc') {
-      selectedVariant = pickPrimaryVariant(
-        {
-          width: source.width ?? 0,
-          height: source.height ?? 0,
-          hdr: null,
-          codec: normaliseSourceCodec(source.videoCodec) ?? undefined,
-        },
-        profile,
-        detectedHwAccel,
-        userAgent,
-      );
-    }
     // The transcode ladder preserves HDR exactly when the selector chose an
-    // HDR (Main10) variant. Codec-agnostic on the source side: AV1, VP9 and
-    // HEVC 10-bit HDR all route here; an AV1 HDR source on QSV re-encodes to
-    // HEVC Main10 HDR, the proven path. `useHdrLadder` drives the HDR rung
+    // HDR variant. Codec-agnostic on both the source and the output side: an
+    // HDR source routes to whatever HDR encoder the registry resolved for a
+    // client-supported codec — HEVC Main10 on QSV/VAAPI/NVENC/VideoToolbox,
+    // native AV1 HDR on NVENC Ada / libsvtav1 — and the master playlist
+    // advertises that codec per rung (the `hdrPassThrough` branch switches the
+    // CODECS string on `hdrVariant.codec`). `useHdrLadder` drives the HDR rung
     // naming and is threaded to the session by the controller.
     const useHdrLadder = selectedVariant.hdr != null;
     // Tone-map iff the source is HDR and the transcode ladder won't preserve

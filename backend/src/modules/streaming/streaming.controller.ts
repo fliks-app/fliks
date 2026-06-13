@@ -1216,10 +1216,17 @@ export class StreamingController {
     // even a /master.m3u8 without `?remux=1` should emit the HDR ladder
     // when the source + client combination warrant it.
     const sourceHdrFormat = v?.hdrFormat as 'HDR10' | 'HLG' | undefined;
+    // The selector's chosen variant, frozen on the session at playback-info.
+    // The HDR branch needs it to emit the right CODECS string per rung (HEVC
+    // Main10 vs native AV1 HDR); the SDR branch reuses it below. Gate the HDR
+    // pass-through on the stored variant actually being HDR (defensive against
+    // an SDR variant left behind a stale hdrLadder flag).
+    const liveVariant = live?.videoVariant ?? null;
     const hdrPassThrough =
-      (live?.hdrLadder ?? false) && sourceHdrFormat
+      (live?.hdrLadder ?? false) && sourceHdrFormat && liveVariant?.hdr != null
         ? {
             hdrFormat: sourceHdrFormat,
+            hdrVariant: liveVariant,
             videoBitRateBps: v?.bitRate ?? undefined,
             audioBitRateBps: si?.audio?.[0]?.bitRate ?? undefined,
           }
@@ -1270,7 +1277,7 @@ export class StreamingController {
           })
       : undefined;
 
-    const sdrVariant = live?.videoVariant ?? null;
+    const sdrVariant = liveVariant;
     const sourceFrameRate = parseFloat(v?.frameRate ?? '') || undefined;
     // CODECS audio entry. With EXT-X-MEDIA renditions every track shares one
     // output codec (the audio group is uniform — see buildAudioTracks), so the
