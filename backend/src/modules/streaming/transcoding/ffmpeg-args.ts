@@ -26,6 +26,7 @@ import { normaliseSourceCodec } from './codec/normalise';
 import { hevcMainTierCapBps } from './codec/codec-strings';
 import { varStreamMapLayout } from './audio-layout';
 import { resolveEncodePipeline } from './encode-pipeline';
+import { buildVideoFilters } from './ffmpeg-filter-graph';
 
 /**
  * Probe ceiling (bytes) for the trusted-streamInfo fast path. Paired with
@@ -529,43 +530,6 @@ export function buildFfmpegArgs(
     args.push('-ss', String(seekSeconds));
   }
 
-  const cropStr = crop
-    ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`
-    : '';
-  const cpuCropPrefix = cropStr ? `${cropStr},` : '';
-  const burnInFilter = burnIn?.filter ? `,${burnIn.filter}` : '';
-  const tonemapOpencl =
-    tonemap && !useVaapiTonemap && !burnIn?.filter
-      ? ',hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0'
-      : '';
-  const tonemapVaapi =
-    useVaapiTonemap && !burnIn?.filter
-      ? ',tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709'
-      : '';
-  // CPU tonemap chain: HDR (PQ/HLG BT.2020) → SDR (BT.709).
-  // convert to float → tonemap → back to yuv420p. The `tonemap` filter
-  // handles PQ/HLG linearisation internally. No zscale/libzimg dependency
-  // (not available in stock Homebrew FFmpeg on macOS).
-  const tonemapCpu = tonemap
-    ? `format=gbrpf32le,tonemap=mobius:desat=0,format=yuv420p,`
-    : '';
-
-  // For HW paths with crop: hwdownload to CPU, crop, then hwupload back.
-  // The intermediate `format=` is explicit on purpose — without it
-  // ffmpeg can insert an `auto_scale_0` between hwdownload and crop
-  // (the crop filter refuses some HW-adjacent formats), and that
-  // auto-scaler trips scale_vaapi's "fixed-size pool" check
-  // downstream. Pick the format that matches the source bit depth so
-  // crop runs in the same colour space as the decoded surface: for a
-  // 10-bit HDR source, `format=nv12` would silently downconvert to
-  // 8-bit BT.709-clamped pixels before the tonemap filter ever runs,
-  // which is what produced the dark image on cropped 2160p HDR10
-  // sources.
-  const cropPxFmt = sourceBitDepth === 10 ? 'p010le' : 'nv12';
-  const hwCropPrefix = cropStr
-    ? `hwdownload,format=${cropPxFmt},${cropStr},hwupload=derive_device=vaapi,`
-    : '';
-
   const encoderInput: EncoderInput = {
     variant,
     target: {
@@ -586,15 +550,13 @@ export function buildFfmpegArgs(
       bufsize: qsvBufsize,
     },
     libx264BufsizeMb,
-    filters: {
-      cropStr,
-      cpuCropPrefix,
-      hwCropPrefix,
-      burnInFilter,
-      tonemapVaapi,
-      tonemapOpencl,
-      tonemapCpu,
-    },
+    filters: buildVideoFilters({
+      crop,
+      burnIn,
+      tonemap,
+      useVaapiTonemap,
+      sourceBitDepth,
+    }),
     tonemap,
     tonemapPath,
     hasBurnIn: !!burnIn?.filter,
