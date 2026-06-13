@@ -161,12 +161,16 @@ export interface SessionContext {
       };
   /**
    * Per-rendition audio decision for the multi-audio `var_stream_map` path,
-   * one entry per `audioStreams[]` track in source order. Threaded so each
-   * rendition encodes with its own codec when the file mixes codecs/channels
-   * (the single `audioPlan` above only describes the default track). Uniform
-   * sources leave every rendition on `audioPlan`.
+   * one entry per `audioStreams[]` track in source order. The group shares one
+   * output codec (HLS requires it); each rendition copies it or transcodes to
+   * it, downmixing to `outputChannels`. Threaded so the encode matches the
+   * playback-info decision the overlay shows.
    */
-  audioTrackPlans?: { copy: boolean; outputCodec: string }[];
+  audioTrackPlans?: {
+    copy: boolean;
+    outputCodec: string;
+    outputChannels?: number;
+  }[];
   /**
    * True when the playback target is a Tizen TV that can't consume the
    * HLS muxer's fMP4 output — AVPlay rejects the `iso5` + per-stream

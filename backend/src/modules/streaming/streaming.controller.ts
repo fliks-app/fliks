@@ -1021,6 +1021,7 @@ export class StreamingController {
         response.audioTracks?.map((t) => ({
           copy: t.copy,
           outputCodec: t.outputCodec,
+          outputChannels: t.outputChannels,
         })) ?? null,
       audioStreamIndex: audioStreamIndex ?? null,
       audioStreamCount: sourceAudioCount,
@@ -1265,6 +1266,14 @@ export class StreamingController {
 
     const sdrVariant = live?.videoVariant ?? null;
     const sourceFrameRate = parseFloat(v?.frameRate ?? '') || undefined;
+    // CODECS audio entry. With EXT-X-MEDIA renditions every track shares one
+    // output codec (the audio group is uniform — see buildAudioTracks), so the
+    // master must advertise THAT codec, not the default track's audioPlan
+    // (which is only the muxed single-audio decision).
+    const masterAudioCodec =
+      useExtXMedia && live?.audioTrackPlans?.length
+        ? live.audioTrackPlans[0].outputCodec
+        : (live?.audioPlan?.codec ?? 'aac');
     const playlist = this.transcodingService.generateMasterPlaylist(
       mediaFileId,
       w,
@@ -1281,7 +1290,7 @@ export class StreamingController {
       onlyQuality,
       pickedIdx ?? 0,
       deviceType,
-      live?.audioPlan?.codec ?? 'aac',
+      masterAudioCodec,
       hdrPassThrough,
       // Only the SDR ladder branch consumes this — the HDR branch
       // already drives its codec strings from `hdrPassThrough`.

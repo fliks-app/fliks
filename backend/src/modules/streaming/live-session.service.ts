@@ -58,7 +58,11 @@ export interface LiveSession {
   audioPlan: AudioPlan | null;
   /** Per-rendition audio decision (one entry per source audio stream) for the
    *  multi-audio var_stream_map encode; null when uniform / not multi-audio. */
-  audioTrackPlans: { copy: boolean; outputCodec: string }[] | null;
+  audioTrackPlans: {
+    copy: boolean;
+    outputCodec: string;
+    outputChannels?: number;
+  }[] | null;
   audioStreamIndex: number | null;
   audioStreamCount: number;
   useExtXMedia: boolean;
@@ -113,7 +117,11 @@ export interface CreateLiveSessionInput {
   position?: number;
   useTs?: boolean;
   audioPlan?: AudioPlan | null;
-  audioTrackPlans?: { copy: boolean; outputCodec: string }[] | null;
+  audioTrackPlans?: {
+    copy: boolean;
+    outputCodec: string;
+    outputChannels?: number;
+  }[] | null;
   audioStreamIndex?: number | null;
   audioStreamCount?: number;
   useExtXMedia?: boolean;

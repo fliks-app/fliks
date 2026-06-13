@@ -95,12 +95,15 @@ export interface BuildFfmpegArgsOptions {
         bitrateBps: number;
       };
   /** Per-rendition audio decision for the multi-audio `var_stream_map` path,
-   *  one entry per `audioStreams[]` track in the same order. When the
-   *  renditions don't all share `audioPlan` (mixed codecs/channels — e.g. a
-   *  stereo default next to a 5.1 track), each output stream gets its own
-   *  `-c:a:N`. Omitted / uniform → the single `audioPlan` applies to all
-   *  (unchanged behaviour). */
-  audioTrackPlans?: { copy: boolean; outputCodec: string }[];
+   *  one entry per `audioStreams[]` track in the same order. The group shares
+   *  one output codec; each rendition gets its own `-c:a:N` (copy when its
+   *  source already is that codec, else transcode, downmixed to
+   *  `outputChannels`). Omitted → the single `audioPlan` applies to all. */
+  audioTrackPlans?: {
+    copy: boolean;
+    outputCodec: string;
+    outputChannels?: number;
+  }[];
   encoderPreset?: string;
   qsvOptions?: { lowPower: boolean };
   /** HDR → SDR tone-mapping algorithm (admin override). Defaults to `'auto'`
@@ -143,31 +146,43 @@ function hasNoAudio(streams: AudioStreamMeta[] | undefined): boolean {
 
 /**
  * Per-output-stream audio codec args for the multi-audio `var_stream_map`
- * path, indexed to match the `-map 0:a:i` order. Returns `null` when there's
- * nothing to specialise — no per-track plans, a length mismatch, or every
- * rendition shares the same plan — so the caller keeps the single `-c:a` form
- * (byte-identical to the pre-existing behaviour). Only mixed-codec/-channel
- * sources (e.g. a stereo default beside a 5.1 track) take the per-stream form.
+ * path, indexed to match the `-map 0:a:i` order. Returns `null` only when
+ * there are no per-track plans (or a length mismatch) — then the caller keeps
+ * the single `-c:a` form. The group's output codec is uniform (HLS CODECS
+ * requirement), but copy and transcode mix per rendition: a track already in
+ * the output codec copies; the rest re-encode, downmixed to `outputChannels`.
  */
 function perStreamAudioArgs(
   audioStreams: AudioStreamMeta[],
-  plans: { copy: boolean; outputCodec: string }[] | undefined,
+  plans:
+    | { copy: boolean; outputCodec: string; outputChannels?: number }[]
+    | undefined,
   aacBitrate: string,
 ): string[] | null {
   if (!plans || plans.length !== audioStreams.length) return null;
-  const allSame = plans.every(
-    (p) => p.copy === plans[0].copy && p.outputCodec === plans[0].outputCodec,
-  );
-  if (allSame) return null;
   const out: string[] = [];
   plans.forEach((p, i) => {
     if (p.copy) {
       out.push(`-c:a:${i}`, 'copy');
-    } else if (p.outputCodec === 'aac') {
+      return;
+    }
+    if (p.outputCodec === 'aac') {
       out.push(`-c:a:${i}`, 'aac', `-b:a:${i}`, aacBitrate, `-ac:${i}`, '2');
-    } else {
-      // EAC-3 / AC-3 keep source channels at 640 kbps.
-      out.push(`-c:a:${i}`, p.outputCodec, `-b:a:${i}`, '640k');
+      return;
+    }
+    if (p.outputCodec === 'opus') {
+      // libopus, downmixed to the planned channel count. 256k is transparent
+      // for 5.1 (Opus is far more efficient than EAC-3 at the same quality).
+      out.push(`-c:a:${i}`, 'libopus', `-b:a:${i}`, '256k');
+      if (p.outputChannels != null) {
+        out.push(`-ac:${i}`, String(p.outputChannels));
+      }
+      return;
+    }
+    // EAC-3 / AC-3 at 640 kbps, downmixed to the planned channel count (≤ 5.1).
+    out.push(`-c:a:${i}`, p.outputCodec, `-b:a:${i}`, '640k');
+    if (p.outputChannels != null) {
+      out.push(`-ac:${i}`, String(p.outputChannels));
     }
   });
   return out;
@@ -224,8 +239,10 @@ export function buildFfmpegArgs(
     if (codec === 'aac') {
       return ['-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2'];
     }
-    // EAC-3 / AC-3 keep source channels (no `-ac`) at 640 kbps.
-    return ['-c:a', codec, '-b:a', '640k'];
+    // EAC-3 / AC-3 at 640 kbps, downmixed to 5.1 (the encoders' max): keeps
+    // surround while staying within the device cap, and stops a 7.1 source
+    // from failing to open (FFmpeg's eac3/ac3 encoders reject > 6 channels).
+    return ['-c:a', codec, '-b:a', '640k', '-ac', '6'];
   })();
 
   // GOP = segment_duration × fps so each segment starts exactly on an IDR.
@@ -678,7 +695,8 @@ export function buildFfmpegArgs(
     for (let i = 0; i < audioStreams.length; i++) {
       args.push('-map', audioMapSpec(audioStreams, i));
     }
-    // Per-rendition codec when the renditions diverge (mixed codecs/channels).
+    // Per-rendition audio (uniform output codec; copy or transcode per track).
+    // Falls back to the single `audioArgs` only when no plans were threaded.
     const perStream = perStreamAudioArgs(
       audioStreams,
       audioTrackPlans,

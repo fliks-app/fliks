@@ -32,6 +32,14 @@ import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
  *  codecs="mp4a.6B"` (MP3) on append. */
 const FMP4_COMPATIBLE_AUDIO = new Set(['aac', 'ac3', 'eac3', 'opus', 'flac']);
 
+/** Audio codecs the backend can transcode TO (FFmpeg encoders we drive:
+ *  `aac`, `eac3`, `ac3`, `libopus`). A group can keep one of these as its
+ *  uniform output codec even when some renditions need re-encoding (downmix),
+ *  so a track already in that codec copies and only the over-capacity ones
+ *  re-encode. Codecs outside this set can only be a group codec when every
+ *  rendition copies (no re-encode needed). */
+const ENCODABLE_AUDIO = new Set(['aac', 'eac3', 'ac3', 'opus']);
+
 /**
  * What stream-builder hands back: the public playback-info response,
  * plus the two side-band decisions the controller threads onto the
@@ -709,15 +717,20 @@ export class StreamBuilderService {
 
   /**
    * Per-track audio copy/transcode decision for every source audio stream,
-   * in `streamInfo.audio` order. Mirrors the per-play-method audio handling
-   * — DirectPlay copies every track (raw file), DirectStream copies the
-   * fMP4-safe codecs and re-encodes the rest to AAC, Transcode keeps surround
-   * via EAC-3/AC-3 or downmixes to AAC stereo.
+   * in `streamInfo.audio` order.
+   *
+   * For HLS output (DirectStream / Transcode) every rendition of the audio
+   * group MUST share one OUTPUT codec — a master playlist carries a single
+   * CODECS string and players (AVPlayer, Shaka) reject a group whose
+   * renditions disagree. So the group picks one output codec
+   * ({@link pickGroupAudioCodec}) and each rendition either copies (its source
+   * already IS that codec and fits the channel cap) or transcodes to it,
+   * downmixing surround to the cap. Copy + transcode can mix freely since the
+   * output codec stays uniform. DirectPlay copies everything (raw file).
    *
    * The top-level `audioPlan` / `transcodeReasons` only describe the default
-   * track; multi-audio files are served as independent EXT-X-MEDIA renditions
-   * the player switches client-side, so the overlay reads the *active* track's
-   * entry here instead of the default's reason.
+   * track; the overlay reads the *active* track's entry here so the reason
+   * follows a client-side audio switch.
    */
   private buildAudioTracks(
     audioStreams: { codec?: string; channels?: number; language?: string }[],
@@ -728,60 +741,114 @@ export class StreamBuilderService {
       .flatMap((p) => p.audioCodecs)
       .map((c) => c.toLowerCase());
     const maxChannels = profile.maxAudioChannels ?? 2;
-    const surroundCodec = profileAudioCodecs.includes('eac3')
-      ? 'eac3'
-      : profileAudioCodecs.includes('ac3')
-        ? 'ac3'
-        : null;
+    const groupCodec = this.pickGroupAudioCodec(
+      audioStreams,
+      profileAudioCodecs,
+      maxChannels,
+    );
 
     return audioStreams.map((t, index) => {
       const codec = (t.codec ?? '').toLowerCase();
       const channels = t.channels;
-      const language = t.language;
-      const base = { index, language, codec, channels };
+      const base = { index, language: t.language, codec, channels };
       const codecSupported = profileAudioCodecs.includes(codec);
       const channelsExceed = channels != null && channels > maxChannels;
+      const fmp4Safe = FMP4_COMPATIBLE_AUDIO.has(codec);
 
       // DirectPlay serves the raw file — every track plays natively.
       if (playMethod === 'DirectPlay') {
-        return { ...base, copy: true, outputCodec: codec, reasonFlags: [] };
-      }
-
-      // DirectStream (remux): copy when the codec is profile-supported AND
-      // fMP4-safe, else re-encode to AAC.
-      if (playMethod === 'DirectStream') {
-        const copy = codecSupported && FMP4_COMPATIBLE_AUDIO.has(codec);
         return {
           ...base,
-          copy,
-          outputCodec: copy ? codec : 'aac',
-          reasonFlags: copy ? [] : ['AudioCodecNotSupported'],
+          copy: true,
+          outputCodec: codec,
+          outputChannels: channels,
+          reasonFlags: [],
         };
       }
 
-      // Transcode: source-compatible → copy; else surround (EAC-3/AC-3)
-      // keeping channels; else AAC stereo downmix. A track saved by the
-      // surround path doesn't claim the codec is incompatible (the user gets
-      // surround), but a real channel overflow is still surfaced — mirrors
-      // the default-track reason cleanup.
-      const srcCompatible = codecSupported && !channelsExceed;
-      if (srcCompatible) {
-        return { ...base, copy: true, outputCodec: codec, reasonFlags: [] };
+      // HLS group: copy only when the source already IS the group's output
+      // codec and fits the channel cap; otherwise transcode to it.
+      const copy =
+        codec === groupCodec && codecSupported && fmp4Safe && !channelsExceed;
+      if (copy) {
+        return {
+          ...base,
+          copy: true,
+          outputCodec: groupCodec,
+          outputChannels: channels,
+          reasonFlags: [],
+        };
       }
-      const surroundPossible =
-        channels != null && channels >= 6 && maxChannels >= 6 && surroundCodec != null;
+      // Output channel count: AAC downmixes to stereo; EAC-3/AC-3 cap at 5.1
+      // (the encoders' max); OPUS (and other multichannel codecs) keep up to
+      // the device cap.
+      const outputChannels =
+        groupCodec === 'aac'
+          ? 2
+          : groupCodec === 'eac3' || groupCodec === 'ac3'
+            ? Math.min(channels ?? maxChannels, maxChannels, 6)
+            : Math.min(channels ?? maxChannels, maxChannels);
+      const surroundPreserved = groupCodec !== 'aac' && outputChannels >= 6;
+      // A track plays as-is only if the device decodes it AND it's fMP4-safe
+      // (MP3 is device-supported but can't ride in fMP4/HLS, so it must
+      // transcode — that's a genuine reason, unlike a codec re-encoded only to
+      // match the group's output codec).
+      const playableAsIs = codecSupported && fmp4Safe;
       const reasonFlags: string[] = [];
-      if (channelsExceed) reasonFlags.push('AudioChannelsNotSupported');
-      if (!codecSupported && !surroundPossible) {
+      if (channelsExceed) {
+        // Real overflow (downmixed). Takes priority over the codec reason.
+        reasonFlags.push('AudioChannelsNotSupported');
+      } else if (!playableAsIs && !surroundPreserved) {
         reasonFlags.push('AudioCodecNotSupported');
       }
       return {
         ...base,
         copy: false,
-        outputCodec: surroundPossible ? surroundCodec : 'aac',
+        outputCodec: groupCodec,
+        outputChannels,
         reasonFlags,
       };
     });
+  }
+
+  /**
+   * Pick the single OUTPUT codec shared by every rendition of an audio group
+   * (HLS requires one codec per group). Copy-all when every track is the same
+   * supported, fMP4-safe codec that fits the channel cap — that codec is the
+   * output and nothing re-encodes. Otherwise the best the device accepts: a
+   * surround codec (EAC-3 > AC-3) when any track carries surround so 5.1/7.1
+   * survive, else AAC. Only AAC/EAC-3/AC-3 are valid transcode targets (the
+   * codecs we encode), so e.g. an all-OPUS group with one over-capacity track
+   * can't stay OPUS and lands on EAC-3.
+   */
+  private pickGroupAudioCodec(
+    audioStreams: { codec?: string; channels?: number }[],
+    profileAudioCodecs: string[],
+    maxChannels: number,
+  ): string {
+    const codecs = audioStreams.map((t) => (t.codec ?? '').toLowerCase());
+    // All renditions share one source codec the device plays in fMP4: keep it
+    // as the group's output codec so the fitting tracks copy verbatim. If every
+    // track fits, nothing re-encodes; if one is over-capacity, we re-encode
+    // ONLY that one to the SAME codec (downmix) — which needs an encoder for it
+    // (e.g. an all-OPUS group stays OPUS via libopus instead of collapsing to
+    // EAC-3 and re-encoding the 5.1 tracks too).
+    if (codecs.length > 0 && new Set(codecs).size === 1) {
+      const c = codecs[0];
+      const supported =
+        profileAudioCodecs.includes(c) && FMP4_COMPATIBLE_AUDIO.has(c);
+      const allFit = audioStreams.every(
+        (t) => t.channels == null || t.channels <= maxChannels,
+      );
+      if (supported && (allFit || ENCODABLE_AUDIO.has(c))) return c;
+    }
+    // Mixed source codecs (or an unencodable codec with an over-capacity
+    // track): pick the best the device accepts — surround when any track
+    // carries it so 5.1/7.1 survive, else AAC.
+    const anySurround = audioStreams.some((t) => (t.channels ?? 0) >= 6);
+    if (anySurround && profileAudioCodecs.includes('eac3')) return 'eac3';
+    if (anySurround && profileAudioCodecs.includes('ac3')) return 'ac3';
+    return 'aac';
   }
 
   private tryDirectPlay(

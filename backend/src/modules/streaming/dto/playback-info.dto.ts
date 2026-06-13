@@ -27,8 +27,12 @@ export interface AudioTrackPlan {
   channels?: number;
   /** True when this track plays as-is (no re-encode). */
   copy: boolean;
-  /** Codec the client actually hears for this track. */
+  /** Codec the client actually hears for this track (uniform across the audio
+   *  group on the HLS paths). */
   outputCodec: string;
+  /** Output channel count (source channels when copied; downmixed to the
+   *  device/codec cap when transcoded). */
+  outputChannels?: number;
   /** Why this track is re-encoded (`Audio*` flags); empty when copied. */
   reasonFlags: string[];
 }
