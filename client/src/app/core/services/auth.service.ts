@@ -532,6 +532,33 @@ export class AuthService {
     void this.router.navigate(['/select-user'], { replaceUrl: true });
   }
 
+  /**
+   * Drop every credential scoped to the previously-active server so the next
+   * request re-mints against the server the user just switched to. Tokens are
+   * stored under fixed, non-server-keyed names, so a switch must WIPE rather
+   * than swap: the old access/refresh/stream tokens would otherwise leak into
+   * the Bearer header (credentials interceptor) and into every streaming URL
+   * (StreamingApiService.playbackToken prefers the cached stream token), which
+   * the new server rejects with 401 — breaking the whole playback path.
+   *
+   * Unlike {@link clearLocalSession} this does NOT navigate: the switch sites
+   * (setup save/useKnown, select-user changeServer) own their own redirect.
+   * In-flight refresh / stream-token fetches tied to the old server are dropped
+   * so they can't repopulate state after the wipe.
+   */
+  async resetForServerSwitch(): Promise<void> {
+    this._refreshInFlight = null;
+    this._streamTokenInFlight = null;
+    this._user.set(null);
+    await this.clearTokens();
+    try {
+      localStorage.removeItem('fliks.cachedUser');
+    } catch {
+      // ignore
+    }
+    await this.serverCache.clearAll();
+  }
+
   // ---------------------------------------------------------------------------
   // Token persistence — Preferences on native (survives app restarts reliably),
   // localStorage as fallback on web or if Preferences fails.

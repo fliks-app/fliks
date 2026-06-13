@@ -132,6 +132,9 @@ export class SelectUserComponent {
   async changeServer() {
     await this.serverCache.clearAll();
     await this.serverConfig.clear();
+    // Drop the old server's access/refresh/stream tokens too — clearAll only
+    // wipes cached view data, leaving credentials that the next server rejects.
+    await this.auth.resetForServerSwitch();
     void this.router.navigate(['/setup']);
   }
 
