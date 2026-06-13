@@ -3,6 +3,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import { PlayerSettingsService } from './player-settings.service';
 import { DeviceService } from './device.service';
 import { ServerConfigService } from './server-config.service';
+import { ENGINE_TRAITS, engineKindFor } from './engine-traits';
 import { getDeviceName } from '../utils/device-info';
 
 interface HdrPlugin {
@@ -235,6 +236,10 @@ export class BrowserDeviceProfileService {
     // Q-series TVs.
     const isTv = this.device.isTv();
     const tvPlatform = this.device.tvPlatform();
+    // The four engine-behavioural flags below come from one declarative
+    // row keyed on the engine kind (platform + native split). Adding a
+    // platform is a single row in `engine-traits.ts`.
+    const traits = ENGINE_TRAITS[engineKindFor(tvPlatform, this.serverConfig.isNative)];
     if (
       this.testCodec(video, hasMSE, 'video/mp4', 'hvc1.1.6.L120.B0') ||
       this.testCodec(video, hasMSE, 'video/mp4', 'hev1.1.6.L120.B0')
@@ -436,23 +441,23 @@ export class BrowserDeviceProfileService {
       // ≥2 audio renditions and AVPlay engages its probe. webOS, browser,
       // Cast and native mobile consume muxed fMP4 across the board (webOS's
       // native <video> has no such stall and fMP4 keeps Dolby pass-through).
-      useTsOnSingleAudio: tvPlatform === 'tizen',
+      useTsOnSingleAudio: traits.useTsOnSingleAudio,
       // Players that decode the master SUBTITLES renditions natively (iOS
       // AVPlayer, Android ExoPlayer — phone and TV alike, web Shaka) render
       // cues inside the player pipeline. Only Tizen and webOS opt out: their
       // AVPlay/webOS cue APIs are limited, so those engines drive a DOM
       // overlay fed by sidecar VTT instead of the HLS renditions.
-      supportsHlsSubtitles: tvPlatform !== 'tizen' && tvPlatform !== 'webos',
+      supportsHlsSubtitles: traits.supportsHlsSubtitles,
       // Only the web/Shaka path probes seg-0 on a load-then-seek; that is
       // exactly the `!isNative` engine branch (Capacitor mobile + every TV go
       // through native players that seek straight to the resume segment). The
       // Cast receiver sets this true in its own profile.
-      probesSegZero: !this.serverConfig.isNative,
+      probesSegZero: traits.probesSegZero,
       // Samsung Tizen AVPlay is HLS-only and cannot open a raw progressive
       // file, so it must never receive a DirectPlay decision — the backend
       // falls back to DirectStream (remux to HLS, codec-copy). Every other
       // engine (Shaka, ExoPlayer/AVPlayer, webOS <video>) plays raw files.
-      supportsDirectPlay: tvPlatform !== 'tizen',
+      supportsDirectPlay: traits.supportsDirectPlay,
     };
   }
 
