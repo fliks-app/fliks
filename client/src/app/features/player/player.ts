@@ -699,6 +699,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           channels: src?.audioChannels,
         },
         this.translate,
+        1,
       );
 
     let audioStreamBitrate = '';
@@ -2315,7 +2316,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (audioList?.length > 1) {
           const tracks = audioList.map((a: any, i: number) => ({
             id: `si-${i}`,
-            label: formatAudioLabel(a, this.translate),
+            label: formatAudioLabel(a, this.translate, i + 1),
             language: normalizeLang(a.language),
           }));
           this.availableAudioTracks.set(tracks);
@@ -2341,7 +2342,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const audioList = (file?.streamInfo as any)?.audio ?? [];
       const tracks = engineTracks.map((t, i) => ({
         id: t.id,
-        label: audioList[i] ? formatAudioLabel(audioList[i], this.translate) : t.label,
+        label: audioList[i] ? formatAudioLabel(audioList[i], this.translate, i + 1) : t.label,
         language: normalizeLang(t.language),
       }));
 
