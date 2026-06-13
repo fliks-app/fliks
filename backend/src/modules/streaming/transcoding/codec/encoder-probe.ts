@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { EncoderDescriptor } from './types';
+import type { HwAccelType } from '../types';
 
 const execFileAsync = promisify(execFile);
 
@@ -32,6 +33,27 @@ export function isEncoderEnabled(descriptorId: string): boolean {
   return probeResult.get(descriptorId) ?? false;
 }
 
+/** The encoder hwAccels worth probing on a host whose detected accel is
+ *  `detected`. The orchestrator only ever asks the registry for the detected
+ *  accel, the CPU fallback (`'none'`), and — on a QSV host — VAAPI, because a
+ *  cropped QSV encode falls back to the vaapi chain (see `requestedHwAccelFor`).
+ *  Every other accel's encoders are never requested here, so probing them just
+ *  spawns ffmpeg encodes guaranteed to fail (wrong device / encoder absent). */
+export function probeableAccels(detected: HwAccelType): Set<HwAccelType> {
+  switch (detected) {
+    case 'qsv':
+      return new Set(['qsv', 'vaapi', 'none']);
+    case 'vaapi':
+      return new Set(['vaapi', 'none']);
+    case 'nvenc':
+      return new Set(['nvenc', 'none']);
+    case 'videotoolbox':
+      return new Set(['videotoolbox', 'none']);
+    default:
+      return new Set(['none']);
+  }
+}
+
 /** Probe one tiny ffmpeg per descriptor. HW-accel descriptors run
  *  serially within their family because driver state on the iGPU /
  *  dGPU is shared — 20+ concurrent VAAPI contexts trip 'internal
@@ -43,12 +65,24 @@ export function isEncoderEnabled(descriptorId: string): boolean {
 export async function runEncoderProbes(
   descriptors: readonly EncoderDescriptor[],
   log: Logger,
+  detectedHwAccel: HwAccelType,
 ): Promise<void> {
   const t0 = Date.now();
+  const probeable = probeableAccels(detectedHwAccel);
 
   const cpuDescriptors: EncoderDescriptor[] = [];
   const hwDescriptors: EncoderDescriptor[] = [];
+  const skipped: string[] = [];
   for (const d of descriptors) {
+    if (!probeable.has(d.hwAccel)) {
+      // The orchestrator never asks the registry for this hwAccel on this host
+      // (see requestedHwAccelFor), so a probe here would only spawn a doomed
+      // ffmpeg encode. Mark it disabled and skip — resolve() then falls through
+      // to a usable encoder exactly as it would after a real probe failure.
+      probeResult.set(d.id, false);
+      skipped.push(d.id);
+      continue;
+    }
     (d.hwAccel === 'none' ? cpuDescriptors : hwDescriptors).push(d);
   }
 
@@ -86,8 +120,9 @@ export async function runEncoderProbes(
   for (const r of settled) {
     (r.ok ? enabled : disabled).push(r.id);
   }
+  const probedCount = cpuDescriptors.length + hwDescriptors.length;
   log.log(
-    `[encoder-probe] ${enabled.length}/${descriptors.length} enabled (${Date.now() - t0}ms): ${enabled.join(',')}${disabled.length ? ` | disabled: ${disabled.join(',')}` : ''}`,
+    `[encoder-probe] ${enabled.length}/${probedCount} enabled (${Date.now() - t0}ms): ${enabled.join(',')}${disabled.length ? ` | disabled: ${disabled.join(',')}` : ''}${skipped.length ? ` | skipped ${skipped.length} (accel != ${detectedHwAccel}): ${skipped.join(',')}` : ''}`,
   );
 }
 

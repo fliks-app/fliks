@@ -110,7 +110,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // wait for it, but the codec selector defaults to "every encoder
     // usable" until the probe completes (the runtime fallback layer
     // catches stragglers).
-    void runEncoderProbes(ALL_DESCRIPTORS, this.log);
+    void runEncoderProbes(ALL_DESCRIPTORS, this.log, this.detectedHwAccel);
     // Same one-frame validation pass on the decoder side: synthesise a
     // tiny bitstream per codec, hand it to each descriptor under its
     // real `-hwaccel ...` setup, drop the frame to /dev/null. Both
