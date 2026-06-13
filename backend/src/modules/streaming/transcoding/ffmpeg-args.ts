@@ -1,7 +1,12 @@
 import { Logger } from '@nestjs/common';
 import * as path from 'path';
 import { getSegmentDuration, segmentIndexToSeconds } from './constants';
-import { isHdrProfile, parseBitrateToBps, profileResolution } from './profiles';
+import {
+  cappedTranscodeVideoBitrateBps,
+  isHdrProfile,
+  parseBitrateToBps,
+  profileResolution,
+} from './profiles';
 import { requestedHwAccelFor } from './hw-detect';
 import type {
   AudioStreamMeta,
@@ -79,6 +84,10 @@ export interface BuildFfmpegArgsOptions {
    *  defaults to the profile's raw `maxWidth × maxHeight`. */
   sourceWidth?: number;
   sourceHeight?: number;
+  /** Probed (or estimated) source video bitrate in bps. Caps the rung target
+   *  so a forced transcode never inflates the bitrate above the source — see
+   *  {@link cappedTranscodeVideoBitrateBps}. Omitted → no cap. */
+  sourceVideoBitrateBps?: number;
   /** Source HDR10 static metadata (mastering display + content light), probed
    *  from the source. Fed into the encoder's master-display / max-cll so the
    *  display tonemaps to the real peak luminance; the encoders fall back to a
@@ -219,6 +228,7 @@ export function buildFfmpegArgs(
     useTs = false,
     videoVariant,
     sourceVideoCodec,
+    sourceVideoBitrateBps,
     sourceBitDepth = 8,
     sourceWidth = 0,
     sourceHeight = 0,
@@ -319,7 +329,14 @@ export function buildFfmpegArgs(
 
   // parseBitrateToBps handles both "8M" and "200k" correctly. Using parseInt()*1e6
   // would give 200 Mbps for "200k" (it drops the suffix and multiplies as if M).
-  const bitrateNum = parseBitrateToBps(profile.videoBitrate);
+  // Capped to the source bitrate (codec-aware) so a forced transcode never
+  // inflates a low-bitrate source up to the rung's nominal target.
+  const bitrateNum = cappedTranscodeVideoBitrateBps(
+    parseBitrateToBps(profile.videoBitrate),
+    sourceVideoBitrateBps,
+    sourceVideoCodec,
+    videoVariant?.codec ?? sourceVideoCodec,
+  );
 
   // Pre-flight: can we keep the whole pipeline on QSV (decode + filter
   // + encode without bouncing through VAAPI)?

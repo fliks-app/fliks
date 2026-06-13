@@ -6,6 +6,7 @@ export {
   ECO_PROFILES,
   ORIGINAL_SEPARATE_RATIO,
   PROFILES,
+  cappedTranscodeVideoBitrateBps,
   getHdrLadderForDevice,
   getLadderForDevice,
   isEcoProfile,
@@ -13,6 +14,7 @@ export {
   parseBitrateToBps,
   profileFitsSource,
   profileResolution,
+  resolveSourceVideoBitrateBps,
 } from './profiles';
 export { requestedHwAccelFor } from './hw-detect';
 export { resolveTonemapPath, type ResolvedTonemapPath } from './tonemap-path';

@@ -15,11 +15,14 @@ import {
   encoderRegistry,
   getHdrLadderForDevice,
   getLadderForDevice,
+  cappedTranscodeVideoBitrateBps,
   isEcoProfile,
   parseBitrateToBps,
   profileFitsSource,
   requestedHwAccelFor,
+  resolveSourceVideoBitrateBps,
 } from './transcoding';
+import { bucketResolutionHeight } from '../../common/utils/resolution.util';
 import { isDecoderEnabled } from './transcoding/codec/decoder-probe';
 import { isVppQsvTonemapEnabled } from './transcoding/codec/vpp-qsv-probe';
 import { normaliseSourceCodec } from './transcoding/codec/normalise';
@@ -105,13 +108,11 @@ export class StreamBuilderService {
       0,
     );
 
-    let videoBitRate = v?.bitRate;
-    if (videoBitRate == null && formatBitRate != null) {
-      if (audioSumBitrate > 0) {
-        const est = formatBitRate - audioSumBitrate;
-        if (est > 10_000) videoBitRate = est;
-      }
-    }
+    const videoBitRate = resolveSourceVideoBitrateBps(
+      v?.bitRate,
+      formatBitRate,
+      audioSumBitrate,
+    );
 
     let audioBitRate = a?.bitRate;
     if (audioBitRate == null && formatBitRate != null && videoBitRate != null) {
@@ -321,17 +322,13 @@ export class StreamBuilderService {
     if (forceLadder) {
       if (directPlayResult.canDirectPlay)
         directPlayResult.canDirectPlay = false;
-      // `Video*` prefix so the player stats overlay surfaces it in the video
-      // section: a quality-driven transcode is not a defect, the user should
-      // see it was their bitrate/quality choice, not an incompatibility.
-      reasons.push(
-        autoOnLadder
-          ? { flag: 'VideoAbr', message: 'Adaptive bitrate (ABR) mode' }
-          : {
-              flag: 'VideoQualityReduced',
-              message: `Reduced-quality rung selected (${requestedQuality})`,
-            },
-      );
+      // ABR mode is a `Video*` reason so the overlay surfaces it in the video
+      // section. The explicit-rung case adds VideoQualityReduced below, but
+      // only when the rung genuinely downscales resolution or cuts bitrate vs
+      // the source — picking a fixed rung is not itself a transcode reason.
+      if (autoOnLadder) {
+        reasons.push({ flag: 'VideoAbr', message: 'Adaptive bitrate (ABR) mode' });
+      }
     }
 
     const deviceType: DeviceType = profile.deviceType ?? 'desktop';
@@ -345,6 +342,35 @@ export class StreamBuilderService {
     const qualityLadder = useHdrLadder
       ? getHdrLadderForDevice(deviceType)
       : ladder;
+
+    // Surface a quality-reduction reason only when the chosen explicit rung is
+    // an ACTUAL downscale or bitrate cut vs the source — not merely because a
+    // fixed rung was picked. A rung at the source resolution whose source-
+    // capped bitrate matches the source changes nothing worth flagging.
+    if (forceLadder && !autoOnLadder) {
+      const rung = qualityLadder.find((p) => p.name === requestedQuality);
+      if (rung) {
+        const reducesResolution =
+          bucketResolutionHeight(rung.maxWidth, rung.maxHeight) <
+          bucketResolutionHeight(source.width, source.height);
+        const rungVideoBps = cappedTranscodeVideoBitrateBps(
+          parseBitrateToBps(rung.videoBitrate),
+          source.videoBitRate,
+          source.videoCodec,
+          selectedVariant.codec,
+        );
+        const reducesBitrate =
+          source.videoBitRate != null &&
+          source.videoBitRate > 0 &&
+          rungVideoBps < source.videoBitRate * 0.95;
+        if (reducesResolution || reducesBitrate) {
+          reasons.push({
+            flag: 'VideoQualityReduced',
+            message: `Reduced-quality rung selected (${requestedQuality})`,
+          });
+        }
+      }
+    }
 
     if (directPlayResult.canDirectPlay) {
       this.log.log(
@@ -424,7 +450,12 @@ export class StreamBuilderService {
       // Using the SDR `ladder` here left HDR / eco-hdr rungs unmatched, and
       // the overlay fell back to the full remux bandwidth.
       for (const p of qualityLadder) {
-        const v = parseBitrateToBps(p.videoBitrate);
+        const v = cappedTranscodeVideoBitrateBps(
+          parseBitrateToBps(p.videoBitrate),
+          source.videoBitRate,
+          source.videoCodec,
+          selectedVariant.codec,
+        );
         const a = parseBitrateToBps(p.audioBitrate);
         transcodeBitrateByQuality[p.name] = {
           videoBitrateBps: v,
@@ -569,7 +600,12 @@ export class StreamBuilderService {
     // overlay resolves the selected rung instead of falling back to the full
     // remux bandwidth.
     for (const p of qualityLadder) {
-      const v = parseBitrateToBps(p.videoBitrate);
+      const v = cappedTranscodeVideoBitrateBps(
+        parseBitrateToBps(p.videoBitrate),
+        source.videoBitRate,
+        source.videoCodec,
+        selectedVariant.codec,
+      );
       const a = outputAudioBitrateBps ?? parseBitrateToBps(p.audioBitrate);
       transcodeBitrateByQuality[p.name] = {
         videoBitrateBps: v,
