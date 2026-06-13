@@ -358,17 +358,14 @@ export class BrowserDeviceProfileService {
     // Same reasoning as the codec override above: AudioContext exposes the
     // Same source as the codec list above — the native plugin reports
     // what the active output sink (HDMI / speakers / Bluetooth) accepts.
+    // The native plugin reports the real DECODE capability (Android: per-codec
+    // getMaxInputChannelCount; iOS: device-class estimate) — the device decodes
+    // this many channels and the OS downmixes to the actual output, so a 5.1/
+    // 7.1 source DirectPlays instead of a server-side downmix. (Web keeps the
+    // AudioContext output-sink value above; browsers don't downmix multichannel
+    // for us.)
     if (this.nativeAudio) {
       maxAudioChannels = Math.max(maxAudioChannels, this.nativeAudio.maxChannels);
-    }
-    // Native mobile (Android ExoPlayer / iOS AVPlayer) decodes multichannel
-    // audio and the OS downmixes to whatever the real output is (stereo on
-    // speakers/Bluetooth, surround on HDMI/USB). Report the DECODE capability,
-    // not the active output sink, so a 5.1/7.1 source DirectPlays and the
-    // device downmixes locally instead of a server-side downmix + transcode.
-    // TVs are excluded — they need the sink / eARC-passthrough logic below.
-    if (Capacitor.isNativePlatform() && !isTv) {
-      maxAudioChannels = Math.max(maxAudioChannels, 8);
     }
     // webOS: the WebView's AudioContext caps at 2ch, but the native <video>
     // pipeline decodes Dolby and renders/passes it (TV speakers downmix, eARC

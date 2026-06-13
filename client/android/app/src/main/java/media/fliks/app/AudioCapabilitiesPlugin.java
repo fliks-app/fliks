@@ -28,13 +28,27 @@ public class AudioCapabilitiesPlugin extends Plugin {
     @PluginMethod()
     public void getSupported(PluginCall call) {
         Set<String> codecs = new HashSet<>();
+        // Real DECODE capability: the largest channel count any audio decoder
+        // accepts (MediaCodec's getMaxInputChannelCount). ExoPlayer decodes up
+        // to this and the OS downmixes to whatever the active output renders,
+        // so reporting it lets a 5.1/7.1 source DirectPlay instead of a
+        // server-side downmix. Falls back to stereo when no decoder reports it.
+        int maxChannels = 2;
         try {
             MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
             for (MediaCodecInfo info : list.getCodecInfos()) {
                 if (info.isEncoder()) continue;
                 for (String type : info.getSupportedTypes()) {
                     String key = mimeToCodecKey(type);
-                    if (key != null) codecs.add(key);
+                    if (key == null) continue;
+                    codecs.add(key);
+                    try {
+                        MediaCodecInfo.AudioCapabilities ac =
+                            info.getCapabilitiesForType(type).getAudioCapabilities();
+                        if (ac != null) {
+                            maxChannels = Math.max(maxChannels, ac.getMaxInputChannelCount());
+                        }
+                    } catch (Throwable ignored) { /* decoder omits audio caps */ }
                 }
             }
         } catch (Throwable ignored) { /* best-effort */ }
@@ -43,9 +57,7 @@ public class AudioCapabilitiesPlugin extends Plugin {
         for (String c : codecs) arr.put(c);
         JSObject result = new JSObject();
         result.put("codecs", arr);
-        // 6 = stereo + 5.1 reasonable default when a multi-channel decoder
-        // is present; ExoPlayer downmixes if the actual output can't.
-        result.put("maxChannels", codecs.contains("ac3") || codecs.contains("eac3") ? 6 : 2);
+        result.put("maxChannels", maxChannels);
         call.resolve(result);
     }
 
