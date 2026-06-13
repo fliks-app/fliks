@@ -22,6 +22,10 @@ import {
   requestedHwAccelFor,
   resolveSourceVideoBitrateBps,
 } from './transcoding';
+import {
+  cappedRungVideoBitrateBps,
+  type RungBitrateContext,
+} from './transcoding/quality-ladder';
 import { bucketResolutionHeight } from '../../common/utils/resolution.util';
 import { isDecoderEnabled } from './transcoding/codec/decoder-probe';
 import { isVppQsvTonemapEnabled } from './transcoding/codec/vpp-qsv-probe';
@@ -432,13 +436,9 @@ export class StreamBuilderService {
       // suffix) so the stats overlay can resolve the selected rung's bitrate.
       // Using the SDR `ladder` here left HDR / eco-hdr rungs unmatched, and
       // the overlay fell back to the full remux bandwidth.
+      const rungCtx = this.rungBitrateCtx(source, selectedVariant.codec);
       for (const p of qualityLadder) {
-        const v = cappedTranscodeVideoBitrateBps(
-          parseBitrateToBps(p.videoBitrate),
-          source.videoBitRate,
-          source.videoCodec,
-          selectedVariant.codec,
-        );
+        const v = cappedRungVideoBitrateBps(p, rungCtx);
         const a = parseBitrateToBps(p.audioBitrate);
         transcodeBitrateByQuality[p.name] = {
           videoBitrateBps: v,
@@ -582,13 +582,9 @@ export class StreamBuilderService {
     // Key by the offered ladder (HDR/eco-hdr rungs carry `-hdr`) so the stats
     // overlay resolves the selected rung instead of falling back to the full
     // remux bandwidth.
+    const rungCtx = this.rungBitrateCtx(source, selectedVariant.codec);
     for (const p of qualityLadder) {
-      const v = cappedTranscodeVideoBitrateBps(
-        parseBitrateToBps(p.videoBitrate),
-        source.videoBitRate,
-        source.videoCodec,
-        selectedVariant.codec,
-      );
+      const v = cappedRungVideoBitrateBps(p, rungCtx);
       const a = outputAudioBitrateBps ?? parseBitrateToBps(p.audioBitrate);
       transcodeBitrateByQuality[p.name] = {
         videoBitrateBps: v,
@@ -621,6 +617,23 @@ export class StreamBuilderService {
       audioTracks: this.buildAudioTracks(audioStreams, profile, 'Transcode'),
       source,
     });
+  }
+
+  /** Per-rung bitrate context from the source + chosen output codec, so the
+   *  playback-info bitrate hints go through the same cappedRungVideoBitrateBps
+   *  as the manifest BANDWIDTH and the encoder (cap + HEVC Main-tier clamp). */
+  private rungBitrateCtx(
+    source: PlaybackInfoResponse['source'],
+    outputCodec: string | undefined,
+  ): RungBitrateContext {
+    return {
+      outputCodec,
+      sourceWidth: source.width ?? 0,
+      sourceHeight: source.height ?? 0,
+      sourceFrameRate: parseFloat(source.frameRate ?? '') || 24,
+      sourceVideoBitrateBps: source.videoBitRate,
+      sourceVideoCodec: source.videoCodec,
+    };
   }
 
   /**
@@ -666,13 +679,9 @@ export class StreamBuilderService {
     // the encode and the master BANDWIDTH — a forced transcode never inflates a
     // low-bitrate source up to the rung nominal, so the stats overlay (which
     // reads this list) shows the real target.
+    const rungCtx = this.rungBitrateCtx(source, targetCodec);
     const totalOf = (p: TranscodeProfile) =>
-      cappedTranscodeVideoBitrateBps(
-        parseBitrateToBps(p.videoBitrate),
-        source.videoBitRate,
-        source.videoCodec,
-        targetCodec,
-      ) + parseBitrateToBps(p.audioBitrate);
+      cappedRungVideoBitrateBps(p, rungCtx) + parseBitrateToBps(p.audioBitrate);
 
     // First non-eco entry = the source-resolution (top) rung.
     const topProfile =
