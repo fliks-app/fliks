@@ -251,7 +251,7 @@ export class StreamBuilderService {
         directPlayResult.canDirectPlay = false;
       reasons.push({
         flag: 'SubtitleBurnIn',
-        message: 'Sous-titres gravés dans la vidéo',
+        message: 'Subtitles burned into the video',
       });
     }
 
@@ -261,7 +261,7 @@ export class StreamBuilderService {
         directPlayResult.canDirectPlay = false;
       reasons.push({
         flag: 'VideoCrop',
-        message: 'Suppression des bandes noires',
+        message: 'Removing black bars (crop)',
       });
     }
 
@@ -954,7 +954,7 @@ export class StreamBuilderService {
           videoConditionsMet = false;
           reasons.push({
             flag: 'VideoLevelNotSupported',
-            message: `Niveau ${source.videoLevel} > max ${cond.maxLevel}`,
+            message: `Level ${source.videoLevel} > max ${cond.maxLevel}`,
           });
         }
         if (
@@ -983,14 +983,14 @@ export class StreamBuilderService {
           videoConditionsMet = false;
           reasons.push({
             flag: 'VideoResolutionNotSupported',
-            message: `Largeur ${source.width} > max ${cond.maxWidth}`,
+            message: `Width ${source.width} > max ${cond.maxWidth}`,
           });
         }
         if (cond.maxHeight && source.height && source.height > cond.maxHeight) {
           videoConditionsMet = false;
           reasons.push({
             flag: 'VideoResolutionNotSupported',
-            message: `Hauteur ${source.height} > max ${cond.maxHeight}`,
+            message: `Height ${source.height} > max ${cond.maxHeight}`,
           });
         }
       }
@@ -1004,7 +1004,7 @@ export class StreamBuilderService {
       if (totalBitrate > profile.maxStreamingBitrate) {
         reasons.push({
           flag: 'VideoBitrateNotSupported',
-          message: `Débit trop élevé (${Math.round(totalBitrate / 1_000_000)} Mbps)`,
+          message: `Bitrate too high (${Math.round(totalBitrate / 1_000_000)} Mbps)`,
         });
         videoConditionsMet = false;
       }
@@ -1016,7 +1016,7 @@ export class StreamBuilderService {
       audioSupported = false;
       reasons.push({
         flag: 'AudioChannelsNotSupported',
-        message: `${source.audioChannels} canaux > max ${audioCap}`,
+        message: `${source.audioChannels} channels > max ${audioCap}`,
       });
     }
 
@@ -1035,7 +1035,7 @@ export class StreamBuilderService {
     if (!containerSupported) {
       reasons.push({
         flag: 'ContainerNotSupported',
-        message: `Conteneur "${source.container}" not supported`,
+        message: `Container "${source.container}" not supported`,
       });
     }
 
