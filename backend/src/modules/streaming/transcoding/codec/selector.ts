@@ -70,6 +70,7 @@ export function pickVariants(
     for (const codec of codecOrder) {
       if (codec === 'h264') continue;
       if (!clientSupports(clientCodecs, codec)) continue;
+      if (!clientSupports10bit(profile, codec)) continue;
       const variant: CodecVariant = { codec, bitDepth: 10, hdr: source.hdr };
       if (resolveHwEncoder(variant, hwAccel)) {
         candidates.push(variant);
@@ -80,6 +81,7 @@ export function pickVariants(
       for (const codec of codecOrder) {
         if (codec === 'h264') continue;
         if (!clientSupports(clientCodecs, codec)) continue;
+        if (!clientSupports10bit(profile, codec)) continue;
         const variant: CodecVariant = { codec, bitDepth: 10, hdr: source.hdr };
         if (encoderRegistry.resolve(variant, hwAccel)) {
           candidates.push(variant);
@@ -145,6 +147,22 @@ export interface SourceInfoForSelector {
    *  `VideoCodec` union). When set, the selector prefers transcoding to
    *  the same codec for fidelity and HW path predictability. */
   codec?: VideoCodec;
+}
+
+/** True when the client declares it decodes `codec` at 10-bit (per-codec
+ *  `maxBitDepth` in the profile's codecConditions). HDR is 10-bit, so an HDR
+ *  variant must target a codec the client supports AT 10-bit — a browser that
+ *  lists HEVC (Main, 8-bit) but only has a 10-bit decoder for AV1 must not be
+ *  handed HEVC Main10: its MSE SourceBuffer rejects the segment (Shaka 3014 /
+ *  MEDIA_SOURCE_OPERATION_FAILED). Absent a condition, assume 8-bit (no HDR). */
+function clientSupports10bit(
+  profile: DeviceProfileDto,
+  codec: VideoCodec,
+): boolean {
+  const cond = profile.codecConditions?.find(
+    (c) => c.codec.toLowerCase() === codec,
+  );
+  return (cond?.maxBitDepth ?? 8) >= 10;
 }
 
 /** Codec name list comparison — clients send aliases (`hvc1`/`hev1` for
