@@ -1,16 +1,12 @@
-import {
-  cappedTranscodeVideoBitrateBps,
-  parseBitrateToBps,
-  profileResolution,
-} from './profiles';
+import { parseBitrateToBps, profileResolution } from './profiles';
 import {
   audioRenditionChannels,
   av1CodecString,
   h264CodecString,
   hevcMain10CodecString,
   hevcMainCodecString,
-  hevcMainTierCapBps,
 } from './codec/codec-strings';
+import { cappedRungVideoBitrateBps } from './quality-ladder';
 import type { CodecVariant, EncoderTarget } from './codec/types';
 import type { AudioStreamMeta, TranscodeProfile } from './types';
 
@@ -139,29 +135,14 @@ export function emitVariantLadder(
       sourceWidth,
       sourceHeight,
     );
-    let cappedVideo = cappedTranscodeVideoBitrateBps(
-      parseBitrateToBps(p.videoBitrate),
+    const cappedVideo = cappedRungVideoBitrateBps(p, {
+      outputCodec: variant.codec,
+      sourceWidth,
+      sourceHeight,
+      sourceFrameRate,
       sourceVideoBitrateBps,
       sourceVideoCodec,
-      variant.codec,
-    );
-    // HEVC declares the Main tier in CODECS; clamp the advertised
-    // AVERAGE-BANDWIDTH to the level's Main-tier ceiling so it tracks the capped
-    // encode (mirrors ffmpeg-args). A High-tier bitstream behind a Main-tier
-    // claim is rejected by strict hardware decoders (Shaka 3014). H.264 has no
-    // tier and AV1's ceiling is far above the current ladder.
-    if (variant.codec === 'hevc') {
-      cappedVideo = Math.min(
-        cappedVideo,
-        hevcMainTierCapBps({
-          width: w,
-          height: h,
-          videoBitrateBps: 0,
-          gopSize: 0,
-          frameRate: sourceFrameRate,
-        }),
-      );
-    }
+    });
     const avg = cappedVideo + parseBitrateToBps(p.audioBitrate);
     // BANDWIDTH ~1.5x nominal: with -maxrate == -b:v the encoder is near-CBR but
     // VBV bursts push segments ~30% above nominal; the margin gives AVPlayer ABR
