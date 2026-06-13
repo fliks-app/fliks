@@ -28,12 +28,14 @@ public class AudioCapabilitiesPlugin extends Plugin {
     @PluginMethod()
     public void getSupported(PluginCall call) {
         Set<String> codecs = new HashSet<>();
-        // Real DECODE capability: the largest channel count any audio decoder
-        // accepts (MediaCodec's getMaxInputChannelCount). ExoPlayer decodes up
-        // to this and the OS downmixes to whatever the active output renders,
-        // so reporting it lets a 5.1/7.1 source DirectPlay instead of a
-        // server-side downmix. Falls back to stereo when no decoder reports it.
+        // Real DECODE capability per codec (MediaCodec getMaxInputChannelCount):
+        // ExoPlayer decodes up to this and the OS downmixes to whatever the
+        // active output renders, so reporting it lets a 5.1/7.1 source
+        // DirectPlay instead of a server-side downmix. Per-codec, because a
+        // device may decode AAC 7.1 but EAC-3 only 5.1. Falls back to stereo
+        // when no decoder reports a channel count.
         int maxChannels = 2;
+        JSObject channelsByCodec = new JSObject();
         try {
             MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
             for (MediaCodecInfo info : list.getCodecInfos()) {
@@ -46,7 +48,12 @@ public class AudioCapabilitiesPlugin extends Plugin {
                         MediaCodecInfo.AudioCapabilities ac =
                             info.getCapabilitiesForType(type).getAudioCapabilities();
                         if (ac != null) {
-                            maxChannels = Math.max(maxChannels, ac.getMaxInputChannelCount());
+                            int ch = ac.getMaxInputChannelCount();
+                            maxChannels = Math.max(maxChannels, ch);
+                            // Largest across decoders of the same codec.
+                            if (ch > channelsByCodec.optInt(key, 0)) {
+                                channelsByCodec.put(key, ch);
+                            }
                         }
                     } catch (Throwable ignored) { /* decoder omits audio caps */ }
                 }
@@ -58,6 +65,7 @@ public class AudioCapabilitiesPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("codecs", arr);
         result.put("maxChannels", maxChannels);
+        result.put("channelsByCodec", channelsByCodec);
         call.resolve(result);
     }
 

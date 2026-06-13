@@ -40,6 +40,18 @@ const FMP4_COMPATIBLE_AUDIO = new Set(['aac', 'ac3', 'eac3', 'opus', 'flac']);
  *  rendition copies (no re-encode needed). */
 const ENCODABLE_AUDIO = new Set(['aac', 'eac3', 'ac3', 'opus']);
 
+/** Max channels the device can decode for `codec` — the per-codec cap when the
+ *  profile carries one (`audioChannelsByCodec`), else the global
+ *  `maxAudioChannels`, else stereo. Lets a device decode AAC 7.1 while its
+ *  EAC-3 decoder tops out at 5.1, instead of a single device-wide number. */
+function audioChannelCap(profile: DeviceProfileDto, codec: string): number {
+  return (
+    profile.audioChannelsByCodec?.[codec.toLowerCase()] ??
+    profile.maxAudioChannels ??
+    2
+  );
+}
+
 /**
  * What stream-builder hands back: the public playback-info response,
  * plus the two side-band decisions the controller threads onto the
@@ -507,15 +519,19 @@ export class StreamBuilderService {
       .flatMap((p) => p.audioCodecs)
       .map((c) => c.toLowerCase());
     const srcChannels = source.audioChannels ?? 2;
-    const maxChannels = profile.maxAudioChannels ?? 2;
     const srcCodec = (source.audioCodec ?? '').toLowerCase();
+    const srcCap = audioChannelCap(profile, srcCodec);
     const srcCompatible =
-      directPlayResult.audioSupported && srcChannels <= maxChannels;
+      directPlayResult.audioSupported && srcChannels <= srcCap;
+    const surroundCodec = profileAudioCodecs.includes('eac3')
+      ? 'eac3'
+      : profileAudioCodecs.includes('ac3')
+        ? 'ac3'
+        : null;
     const surroundPossible =
       srcChannels >= 6 &&
-      maxChannels >= 6 &&
-      (profileAudioCodecs.includes('eac3') ||
-        profileAudioCodecs.includes('ac3'));
+      surroundCodec != null &&
+      audioChannelCap(profile, surroundCodec) >= 6;
 
     let outputAudioCodec: 'aac' | 'ac3' | 'eac3' | string;
     let outputAudioBitrateBps: number;
@@ -525,9 +541,8 @@ export class StreamBuilderService {
       outputAudioCodec = srcCodec;
       outputAudioBitrateBps = source.audioBitRate ?? 0;
       canCopyAudio = true;
-    } else if (surroundPossible) {
-      if (profileAudioCodecs.includes('eac3')) outputAudioCodec = 'eac3';
-      else outputAudioCodec = 'ac3';
+    } else if (surroundPossible && surroundCodec) {
+      outputAudioCodec = surroundCodec;
       outputAudioBitrateBps = 640_000;
     } else {
       outputAudioCodec = 'aac';
@@ -544,7 +559,7 @@ export class StreamBuilderService {
     }
 
     this.log.log(
-      `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')} (audioOut=${outputAudioCodec}, copy=${canCopyAudio}, srcCh=${srcChannels}, maxCh=${maxChannels})`,
+      `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')} (audioOut=${outputAudioCodec}, copy=${canCopyAudio}, srcCh=${srcChannels}, maxCh=${srcCap})`,
     );
     const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}`;
     const transcodeBitrateByQuality: NonNullable<
@@ -740,20 +755,25 @@ export class StreamBuilderService {
     const profileAudioCodecs = profile.directPlayProfiles
       .flatMap((p) => p.audioCodecs)
       .map((c) => c.toLowerCase());
-    const maxChannels = profile.maxAudioChannels ?? 2;
     const groupCodec = this.pickGroupAudioCodec(
       audioStreams,
+      profile,
       profileAudioCodecs,
-      maxChannels,
     );
+    // Channel cap of the chosen OUTPUT codec — what a transcoded rendition
+    // downmixes to (EAC-3/AC-3 additionally cap at 5.1, AAC at stereo).
+    const outCap = audioChannelCap(profile, groupCodec);
 
     return audioStreams.map((t, index) => {
       const codec = (t.codec ?? '').toLowerCase();
       const channels = t.channels;
       const base = { index, language: t.language, codec, channels };
       const codecSupported = profileAudioCodecs.includes(codec);
-      const channelsExceed = channels != null && channels > maxChannels;
       const fmp4Safe = FMP4_COMPATIBLE_AUDIO.has(codec);
+      // Fits for a verbatim copy only within ITS OWN codec's decode cap (a
+      // device may decode AAC 7.1 but EAC-3 only 5.1).
+      const channelsExceed =
+        channels != null && channels > audioChannelCap(profile, codec);
 
       // DirectPlay serves the raw file — every track plays natively.
       if (playMethod === 'DirectPlay') {
@@ -779,24 +799,23 @@ export class StreamBuilderService {
           reasonFlags: [],
         };
       }
-      // Output channel count: AAC downmixes to stereo; EAC-3/AC-3 cap at 5.1
-      // (the encoders' max); OPUS (and other multichannel codecs) keep up to
-      // the device cap.
+      // Output channels: AAC → stereo; EAC-3/AC-3 → output-codec device cap,
+      // hard-capped at 5.1; OPUS (and other multichannel codecs) → device cap.
       const outputChannels =
         groupCodec === 'aac'
           ? 2
           : groupCodec === 'eac3' || groupCodec === 'ac3'
-            ? Math.min(channels ?? maxChannels, maxChannels, 6)
-            : Math.min(channels ?? maxChannels, maxChannels);
+            ? Math.min(channels ?? outCap, outCap, 6)
+            : Math.min(channels ?? outCap, outCap);
+      const downmixed = channels != null && outputChannels < channels;
       const surroundPreserved = groupCodec !== 'aac' && outputChannels >= 6;
       // A track plays as-is only if the device decodes it AND it's fMP4-safe
-      // (MP3 is device-supported but can't ride in fMP4/HLS, so it must
-      // transcode — that's a genuine reason, unlike a codec re-encoded only to
-      // match the group's output codec).
+      // (MP3 is device-decodable but not fMP4-safe, so it must transcode — a
+      // genuine reason, unlike a codec re-encoded only to match the group).
       const playableAsIs = codecSupported && fmp4Safe;
       const reasonFlags: string[] = [];
-      if (channelsExceed) {
-        // Real overflow (downmixed). Takes priority over the codec reason.
+      if (downmixed) {
+        // Channels were actually reduced. Takes priority over the codec reason.
         reasonFlags.push('AudioChannelsNotSupported');
       } else if (!playableAsIs && !surroundPreserved) {
         reasonFlags.push('AudioCodecNotSupported');
@@ -823,8 +842,8 @@ export class StreamBuilderService {
    */
   private pickGroupAudioCodec(
     audioStreams: { codec?: string; channels?: number }[],
+    profile: DeviceProfileDto,
     profileAudioCodecs: string[],
-    maxChannels: number,
   ): string {
     const codecs = audioStreams.map((t) => (t.codec ?? '').toLowerCase());
     // All renditions share one source codec the device plays in fMP4: keep it
@@ -838,7 +857,7 @@ export class StreamBuilderService {
       const supported =
         profileAudioCodecs.includes(c) && FMP4_COMPATIBLE_AUDIO.has(c);
       const allFit = audioStreams.every(
-        (t) => t.channels == null || t.channels <= maxChannels,
+        (t) => t.channels == null || t.channels <= audioChannelCap(profile, c),
       );
       if (supported && (allFit || ENCODABLE_AUDIO.has(c))) return c;
     }
@@ -956,16 +975,13 @@ export class StreamBuilderService {
       }
     }
 
-    // Audio channels check
-    if (
-      profile.maxAudioChannels &&
-      source.audioChannels &&
-      source.audioChannels > profile.maxAudioChannels
-    ) {
+    // Audio channels check — against the source codec's own decode cap.
+    const audioCap = audioChannelCap(profile, source.audioCodec);
+    if (audioCap && source.audioChannels && source.audioChannels > audioCap) {
       audioSupported = false;
       reasons.push({
         flag: 'AudioChannelsNotSupported',
-        message: `${source.audioChannels} canaux > max ${profile.maxAudioChannels}`,
+        message: `${source.audioChannels} canaux > max ${audioCap}`,
       });
     }
 

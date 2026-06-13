@@ -11,7 +11,14 @@ interface HdrPlugin {
 const Hdr = registerPlugin<HdrPlugin>('Hdr');
 
 interface AudioCapabilitiesPlugin {
-  getSupported(): Promise<{ codecs: string[]; maxChannels: number }>;
+  getSupported(): Promise<{
+    codecs: string[];
+    maxChannels: number;
+    /** Per-codec max decodable channel count (lowercased codec → channels).
+     *  Lets the backend allow AAC 7.1 while downmixing EAC-3 7.1 on a device
+     *  whose EAC-3 decoder tops out at 5.1. */
+    channelsByCodec?: Record<string, number>;
+  }>;
 }
 const AudioCaps = registerPlugin<AudioCapabilitiesPlugin>('AudioCapabilities');
 
@@ -69,6 +76,9 @@ export interface DeviceProfile {
   codecConditions: CodecCondition[];
   maxStreamingBitrate: number;
   maxAudioChannels: number;
+  /** Per-audio-codec max decodable channels (lowercased codec → channels).
+   *  Falls back to maxAudioChannels per codec on the backend. */
+  audioChannelsByCodec?: Record<string, number>;
   supportsHdr: boolean;
   /** Client device category — selects the backend bitrate ladder.
    *  Capacitor native (iOS/Android app) → 'mobile'; web (incl. Cast sender) → 'desktop'. */
@@ -130,7 +140,11 @@ export class BrowserDeviceProfileService {
   private readonly serverConfig = inject(ServerConfigService);
   private cachedProfile: DeviceProfile | null = null;
   private nativeHdr: boolean | null = null;
-  private nativeAudio: { codecs: string[]; maxChannels: number } | null = null;
+  private nativeAudio: {
+    codecs: string[];
+    maxChannels: number;
+    channelsByCodec?: Record<string, number>;
+  } | null = null;
   private nativeVideo: NativeVideoCaps | null = null;
 
   constructor() {
@@ -411,6 +425,7 @@ export class BrowserDeviceProfileService {
       codecConditions,
       maxStreamingBitrate: 0, // 0 = no limit
       maxAudioChannels,
+      audioChannelsByCodec: this.nativeAudio?.channelsByCodec,
       supportsHdr,
       deviceType: Capacitor.isNativePlatform() ? 'mobile' : 'desktop',
       deviceName: getDeviceName(),

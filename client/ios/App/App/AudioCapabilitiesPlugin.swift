@@ -32,9 +32,17 @@ public class AudioCapabilitiesPlugin: CAPPlugin, CAPBridgedPlugin {
             codecs.append(contentsOf: ["ac3", "eac3"])
         }
 
+        // Per-codec decode estimate (no MediaCodecList equivalent on iOS): MP3
+        // is stereo; the rest decode multichannel and the OS downmixes.
+        var channelsByCodec: [String: Int] = [:]
+        for c in codecs {
+            channelsByCodec[c] = (c == "mp3") ? 2 : maxChannels
+        }
+
         call.resolve([
             "codecs": codecs,
             "maxChannels": maxChannels,
+            "channelsByCodec": channelsByCodec,
         ])
     }
 }

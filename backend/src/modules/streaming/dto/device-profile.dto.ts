@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsIn,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   ValidateNested,
@@ -68,6 +69,18 @@ export class DeviceProfileDto {
   @IsNumber()
   @IsOptional()
   maxAudioChannels?: number;
+
+  /**
+   * Per-audio-codec max decodable channel count (e.g. `{aac: 8, eac3: 6}`),
+   * keyed by lowercased codec. The device can decode a codec up to this many
+   * channels (the OS downmixes to the real output). Lets the backend allow a
+   * 7.1 AAC source while still downmixing a 7.1 EAC-3 source whose decoder
+   * tops out at 5.1 on the same device. Falls back to {@link maxAudioChannels}
+   * for codecs absent from the map.
+   */
+  @IsObject()
+  @IsOptional()
+  audioChannelsByCodec?: Record<string, number>;
 
   @IsBoolean()
   @IsOptional()
