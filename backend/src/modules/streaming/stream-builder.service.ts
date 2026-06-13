@@ -391,7 +391,7 @@ export class StreamBuilderService {
         outputContainer: sourceContainer,
         hwAccel: 'none',
         tonemapping: false,
-        qualities: this.buildQualityList(source, 'DirectPlay', sourceCopyable, qualityLadder),
+        qualities: this.buildQualityList(source, 'DirectPlay', sourceCopyable, qualityLadder, selectedVariant.codec),
         audioTracks: this.buildAudioTracks(audioStreams, profile, 'DirectPlay'),
         source,
       });
@@ -491,7 +491,7 @@ export class StreamBuilderService {
         tonemapping: false,
         remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
         transcodeBitrateByQuality,
-        qualities: this.buildQualityList(source, 'DirectStream', sourceCopyable, qualityLadder),
+        qualities: this.buildQualityList(source, 'DirectStream', sourceCopyable, qualityLadder, selectedVariant.codec),
         audioTracks: this.buildAudioTracks(audioStreams, profile, 'DirectStream'),
         source,
       });
@@ -634,7 +634,7 @@ export class StreamBuilderService {
       hwAccel: effectiveHwAccel,
       tonemapping: transcodeTonemaps,
       transcodeBitrateByQuality,
-      qualities: this.buildQualityList(source, 'Transcode', sourceCopyable, qualityLadder),
+      qualities: this.buildQualityList(source, 'Transcode', sourceCopyable, qualityLadder, selectedVariant.codec),
       audioTracks: this.buildAudioTracks(audioStreams, profile, 'Transcode'),
       source,
     });
@@ -663,6 +663,7 @@ export class StreamBuilderService {
     playMethod: 'DirectPlay' | 'DirectStream' | 'Transcode',
     videoCopyStream: boolean,
     ladder: TranscodeProfile[],
+    targetCodec?: string,
   ): QualityOption[] {
     const sourceW = source.width ?? 0;
     const sourceH = source.height ?? 0;
@@ -678,8 +679,17 @@ export class StreamBuilderService {
       const stripped = name.replace(/^eco-/, '').replace(/-hdr$/, '');
       return stripped === '2160p' ? '4K' : stripped;
     };
+    // Transcode rungs are capped to the source bitrate (codec-aware), matching
+    // the encode and the master BANDWIDTH — a forced transcode never inflates a
+    // low-bitrate source up to the rung nominal, so the stats overlay (which
+    // reads this list) shows the real target.
     const totalOf = (p: TranscodeProfile) =>
-      parseBitrateToBps(p.videoBitrate) + parseBitrateToBps(p.audioBitrate);
+      cappedTranscodeVideoBitrateBps(
+        parseBitrateToBps(p.videoBitrate),
+        source.videoBitRate,
+        source.videoCodec,
+        targetCodec,
+      ) + parseBitrateToBps(p.audioBitrate);
 
     // First non-eco entry = the source-resolution (top) rung.
     const topProfile =
