@@ -10,6 +10,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ServerConfigService, KnownServer } from '../../core/services/server-config.service';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-setup',
@@ -19,6 +20,7 @@ import { ServerConfigService, KnownServer } from '../../core/services/server-con
 })
 export class SetupComponent {
   private readonly serverConfig = inject(ServerConfigService);
+  private readonly auth = inject(AuthService);
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly translate = inject(TranslateService);
@@ -57,12 +59,18 @@ export class SetupComponent {
     const result = this.testResult();
     if (!result?.ok) return;
     await this.serverConfig.save(this.url().trim());
+    // Drop the previous server's credentials so playback-info and every
+    // streaming URL re-mint against the server just picked.
+    await this.auth.resetForServerSwitch();
     void this.router.navigate(['/select-user']);
   }
 
   /** One-tap "use this server" — already known, skip the test step. */
   async useKnown(server: KnownServer) {
     await this.serverConfig.save(server.url);
+    // Worst case for stale credentials: this path can skip login() entirely
+    // when a session is still hydrated, so wipe the old server's tokens here.
+    await this.auth.resetForServerSwitch();
     void this.router.navigate(['/select-user'], {
       queryParams: server.lastUsername ? { username: server.lastUsername } : undefined,
     });
