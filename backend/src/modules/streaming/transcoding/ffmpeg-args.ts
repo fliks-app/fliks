@@ -32,6 +32,7 @@ import {
 } from './codec/tonemap-opencl-probe';
 import { resolveTonemapPath } from './tonemap-path';
 import { normaliseSourceCodec } from './codec/normalise';
+import { hevcMainTierCapBps } from './codec/codec-strings';
 
 /**
  * Probe ceiling (bytes) for the trusted-streamInfo fast path. Paired with
@@ -327,16 +328,50 @@ export function buildFfmpegArgs(
     args.push('-ss', String(seekSeconds));
   }
 
+  // Output dimensions cap the source aspect to the profile's `maxWidth`.
+  // `vpp_qsv` / `scale_qsv` don't honour the `-2` auto-height token, so a
+  // 2.39:1 cinemascope title (1920×804) needs its height computed up front to
+  // land at 1920×804 instead of being stretched to 1920×1080 by an explicit
+  // `h=maxHeight`. The result matches the RESOLUTION attribute the master
+  // playlist already advertises for this rung — display aspect stays stable
+  // across the session even if the player re-parses the manifest. Resolved here
+  // (ahead of the bitrate) so the HEVC Main-tier clamp below can use it.
+  const outDims =
+    sourceWidth > 0 && sourceHeight > 0
+      ? profileResolution(profile, sourceWidth, sourceHeight)
+      : { width: profile.maxWidth, height: profile.maxHeight };
+  const w = outDims.width;
+  const h = outDims.height;
+
   // parseBitrateToBps handles both "8M" and "200k" correctly. Using parseInt()*1e6
   // would give 200 Mbps for "200k" (it drops the suffix and multiplies as if M).
   // Capped to the source bitrate (codec-aware) so a forced transcode never
   // inflates a low-bitrate source up to the rung's nominal target.
-  const bitrateNum = cappedTranscodeVideoBitrateBps(
+  let bitrateNum = cappedTranscodeVideoBitrateBps(
     parseBitrateToBps(profile.videoBitrate),
     sourceVideoBitrateBps,
     sourceVideoCodec,
     videoVariant?.codec ?? sourceVideoCodec,
   );
+  // HEVC declares the Main tier (`L<level>`) in the manifest CODECS string, but
+  // the encoder flips `general_tier_flag` to High when the rate exceeds the
+  // level's Main-tier ceiling — a High-tier bitstream behind a Main-tier
+  // manifest claim is rejected by strict hardware MediaCodec decoders (surfaces
+  // as Shaka 3014). Clamp HEVC rungs to the Main-tier ceiling so the bitstream
+  // stays Main and matches the declared `L<level>`. Runs before the VBV bufsize
+  // derivations below so they size to the capped rate.
+  if (videoVariant?.codec === 'hevc') {
+    bitrateNum = Math.min(
+      bitrateNum,
+      hevcMainTierCapBps({
+        width: w,
+        height: h,
+        videoBitrateBps: 0,
+        gopSize: 0,
+        frameRate: fps,
+      }),
+    );
+  }
 
   // Pre-flight: can we keep the whole pipeline on QSV (decode + filter
   // + encode without bouncing through VAAPI)?
@@ -557,20 +592,6 @@ export function buildFfmpegArgs(
     args.push('-ss', String(seekSeconds));
   }
 
-  // Output dimensions cap the source aspect to the profile's
-  // `maxWidth`. `vpp_qsv` / `scale_qsv` don't honour the `-2`
-  // auto-height token, so a 2.39:1 cinemascope title (1920×804) needs
-  // its height computed up front to land at 1920×804 instead of being
-  // stretched to 1920×1080 by an explicit `h=maxHeight`. The result
-  // matches the RESOLUTION attribute the master playlist already
-  // advertises for this rung — display aspect stays stable across the
-  // session even if the player re-parses the manifest.
-  const outDims =
-    sourceWidth > 0 && sourceHeight > 0
-      ? profileResolution(profile, sourceWidth, sourceHeight)
-      : { width: profile.maxWidth, height: profile.maxHeight };
-  const w = outDims.width;
-  const h = outDims.height;
   const cropStr = crop
     ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`
     : '';

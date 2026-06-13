@@ -20,6 +20,7 @@ import {
   h264CodecString,
   hevcMain10CodecString,
   hevcMainCodecString,
+  hevcMainTierCapBps,
 } from './codec/codec-strings';
 
 /** Format frame rate for the HLS `FRAME-RATE` attribute. Apple's spec
@@ -268,19 +269,33 @@ export function generateMasterPlaylist(
         /* hdrSuffix */ true,
       );
       for (const p of hdrLadder) {
-        const avg =
-          cappedTranscodeVideoBitrateBps(
-            parseBitrateToBps(p.videoBitrate),
-            sourceVideoBitrateBps,
-            sourceVideoCodec,
-            'hevc',
-          ) + parseBitrateToBps(p.audioBitrate);
-        const bw = Math.round(avg * 1.5);
         const { width: w, height: h } = profileResolution(
           p,
           sourceWidth,
           sourceHeight,
         );
+        // HEVC HDR rungs are clamped to the level's Main-tier ceiling so the
+        // advertised AVERAGE-BANDWIDTH tracks the capped encode (same clamp
+        // hevcMainTierCapBps applies in ffmpeg-args) — a High-tier bitstream
+        // behind the Main-tier `hvc1.2.4.L*` claim is rejected by strict
+        // hardware decoders (Shaka 3014).
+        const avg =
+          Math.min(
+            cappedTranscodeVideoBitrateBps(
+              parseBitrateToBps(p.videoBitrate),
+              sourceVideoBitrateBps,
+              sourceVideoCodec,
+              'hevc',
+            ),
+            hevcMainTierCapBps({
+              width: w,
+              height: h,
+              videoBitrateBps: 0,
+              gopSize: 0,
+              frameRate: sourceFrameRate,
+            }),
+          ) + parseBitrateToBps(p.audioBitrate);
+        const bw = Math.round(avg * 1.5);
         // Level driven by luma sample rate (width × height × fps) so
         // cropped 4K sources (e.g. 3840×2024 cinemascope, height < 2160)
         // still get L5.x — height-only bucketing under-declared L4.1
@@ -352,24 +367,40 @@ export function generateMasterPlaylist(
   profiles = applyQualityPin(profiles, onlyQuality, sourceWidth, sourceHeight);
 
   for (const p of profiles) {
-    const avg =
-      cappedTranscodeVideoBitrateBps(
-        parseBitrateToBps(p.videoBitrate),
-        sourceVideoBitrateBps,
-        sourceVideoCodec,
-        sdrVariant?.codec,
-      ) + parseBitrateToBps(p.audioBitrate);
+    const { width: w, height: h } = profileResolution(
+      p,
+      sourceWidth,
+      sourceHeight,
+    );
+    let cappedVideo = cappedTranscodeVideoBitrateBps(
+      parseBitrateToBps(p.videoBitrate),
+      sourceVideoBitrateBps,
+      sourceVideoCodec,
+      sdrVariant?.codec,
+    );
+    // HEVC declares the Main tier in CODECS; clamp the advertised rate to the
+    // level's Main-tier ceiling so AVERAGE-BANDWIDTH matches the capped encode
+    // (mirrors the clamp in ffmpeg-args). H.264 has no tier and AV1's Main-tier
+    // ceiling is far above the current ladder, so they are left unchanged.
+    if (sdrVariant?.codec === 'hevc') {
+      cappedVideo = Math.min(
+        cappedVideo,
+        hevcMainTierCapBps({
+          width: w,
+          height: h,
+          videoBitrateBps: 0,
+          gopSize: 0,
+          frameRate: sourceFrameRate,
+        }),
+      );
+    }
+    const avg = cappedVideo + parseBitrateToBps(p.audioBitrate);
     // BANDWIDTH must reflect the peak segment bitrate (HLS spec). With
     // `-maxrate == -b:v` the encoder is near-CBR but VBV bursts still
     // push individual segments ~30% above nominal. Declaring BANDWIDTH
     // ~1.5× nominal gives AVPlayer ABR a stable hysteresis margin and
     // stops it from down-/up-shifting on every VBV spike.
     const bw = Math.round(avg * 1.5);
-    const { width: w, height: h } = profileResolution(
-      p,
-      sourceWidth,
-      sourceHeight,
-    );
     // Codec string MUST be derived from the actual emitted height (`h`),
     // not `p.maxHeight`. Cropped content (e.g. 2.39:1 cinemascope on a
     // 1920×1080 source → 1920×816) advertises a height below the

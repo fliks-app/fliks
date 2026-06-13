@@ -85,6 +85,26 @@ export function av1CodecString(
 
 // ───────────────────────── helpers ─────────────────────────
 
+/** HEVC level + its Main-tier bitrate ceiling, resolved from one luma-rate
+ *  table so the declared CODECS level and the encode bitrate cap can never
+ *  disagree. `idc = level * 30`; `mainTierMaxBitrateBps` is the HEVC Annex A
+ *  `MaxBR` for the Main tier at that level (High tier allows ~4× more, but we
+ *  declare and stay on Main — see {@link hevcMainTierCapBps}). */
+interface HevcLevelInfo {
+  idc: number;
+  mainTierMaxBitrateBps: number;
+}
+
+function hevcLevelInfo(target: EncoderTarget): HevcLevelInfo {
+  const lumaPerSec = target.width * target.height * target.frameRate;
+  if (lumaPerSec <= 33_177_600) return { idc: 93, mainTierMaxBitrateBps: 10_000_000 }; //   L3.1
+  if (lumaPerSec <= 66_846_720) return { idc: 120, mainTierMaxBitrateBps: 12_000_000 }; //  L4.0
+  if (lumaPerSec <= 133_693_440) return { idc: 123, mainTierMaxBitrateBps: 20_000_000 }; // L4.1
+  if (lumaPerSec <= 267_386_880) return { idc: 150, mainTierMaxBitrateBps: 25_000_000 }; // L5.0
+  if (lumaPerSec <= 534_773_760) return { idc: 153, mainTierMaxBitrateBps: 40_000_000 }; // L5.1
+  return { idc: 156, mainTierMaxBitrateBps: 60_000_000 }; //                                L5.2
+}
+
 /** HEVC level encoded as `L<level_idc>` where `level_idc = level * 30`.
  *  Picked to match the level the encoder will pick on its own — both
  *  HEVC Spec Annex A and every encoder we drive (hevc_qsv, hevc_vaapi,
@@ -96,13 +116,19 @@ export function av1CodecString(
  *  not supported by the QSV runtime"), so we match what the encoder
  *  emits instead of telling it what to emit. */
 function hevcLevel(target: EncoderTarget): string {
-  const lumaPerSec = target.width * target.height * target.frameRate;
-  if (lumaPerSec <= 33_177_600) return 'L93'; //   L3.1
-  if (lumaPerSec <= 66_846_720) return 'L120'; //  L4.0
-  if (lumaPerSec <= 133_693_440) return 'L123'; // L4.1
-  if (lumaPerSec <= 267_386_880) return 'L150'; // L5.0
-  if (lumaPerSec <= 534_773_760) return 'L153'; // L5.1
-  return 'L156'; //                                L5.2
+  return `L${hevcLevelInfo(target).idc}`;
+}
+
+/** Main-tier `MaxBR` (bits/s) for the level {@link hevcLevel} resolves to.
+ *  The CODECS string always declares the Main tier (`hvc1.1.6.L*` /
+ *  `hvc1.2.4.L*`), but HEVC encoders auto-flip `general_tier_flag` to High
+ *  when the encode bitrate exceeds the Main-tier ceiling for the level — and a
+ *  High-tier bitstream behind a Main-tier manifest claim is rejected by strict
+ *  hardware MediaCodec decoders (Shaka 3014). Clamp the encode `-b:v`/`-maxrate`
+ *  to this ceiling for HEVC rungs so the bitstream stays Main tier and matches
+ *  the declared `L<level>`. */
+export function hevcMainTierCapBps(target: EncoderTarget): number {
+  return hevcLevelInfo(target).mainTierMaxBitrateBps;
 }
 
 /** AV1 level encoded as `<level_idc>` (decimal). Levels follow the AV1

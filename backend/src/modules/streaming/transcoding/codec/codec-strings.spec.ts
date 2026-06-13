@@ -1,4 +1,22 @@
-import { audioCodecString, audioRenditionChannels } from './codec-strings';
+import {
+  audioCodecString,
+  audioRenditionChannels,
+  hevcMain10CodecString,
+  hevcMainTierCapBps,
+} from './codec-strings';
+import type { EncoderTarget } from './types';
+
+const target = (
+  width: number,
+  height: number,
+  frameRate: number,
+): EncoderTarget => ({
+  width,
+  height,
+  frameRate,
+  videoBitrateBps: 0,
+  gopSize: 0,
+});
 
 describe('audioCodecString', () => {
   it('maps the fMP4-compatible codecs to their RFC 6381 strings', () => {
@@ -38,5 +56,38 @@ describe('audioRenditionChannels', () => {
   it('falls back to 2 when the source channel count is unknown or invalid', () => {
     expect(audioRenditionChannels('eac3', undefined)).toBe(2);
     expect(audioRenditionChannels('eac3', 0)).toBe(2);
+  });
+});
+
+describe('hevcMainTierCapBps', () => {
+  // Cap maps to the level the existing luma-rate buckets pick (the buckets are
+  // ~half the HEVC Annex A MaxLumaSr — preserved verbatim from hevcLevel).
+  it('returns the Main-tier MaxBR for the level the luma rate selects', () => {
+    // 720p24 = 22.1M → L3.1 (cap 10 Mbps)
+    expect(hevcMainTierCapBps(target(1280, 720, 24))).toBe(10_000_000);
+    // 1080p24 = 49.8M → L4.0 (cap 12 Mbps)
+    expect(hevcMainTierCapBps(target(1920, 1080, 24))).toBe(12_000_000);
+    // cropped 4K @24 = 150.4M → L5.0 (cap 25 Mbps) — the #474 repro case
+    expect(hevcMainTierCapBps(target(3840, 1632, 24))).toBe(25_000_000);
+    // full 4K @24 = 199.1M → L5.0 (cap 25 Mbps)
+    expect(hevcMainTierCapBps(target(3840, 2160, 24))).toBe(25_000_000);
+    // 4K @60 = 497.7M → L5.1 (cap 40 Mbps): the same 28 Mbps rung stays Main
+    expect(hevcMainTierCapBps(target(3840, 2160, 60))).toBe(40_000_000);
+  });
+
+  it('caps the #474 cropped-4K-HDR rung (28 Mbps @24fps) to the L5.0 ceiling', () => {
+    const cap = hevcMainTierCapBps(target(3840, 1632, 24));
+    expect(Math.min(28_000_000, cap)).toBe(25_000_000);
+  });
+});
+
+describe('hevcMain10CodecString', () => {
+  it('declares the Main-tier level (L) — the encode is clamped to keep it Main', () => {
+    // Regression lock: the cropped-4K @24fps case stays hvc1.2.4.L150.B0
+    // (Main tier). hevcMainTierCapBps keeps the encode within L5.0's 25 Mbps
+    // Main ceiling so the declared level matches the bitstream tier.
+    expect(hevcMain10CodecString(target(3840, 1632, 24))).toBe('hvc1.2.4.L150.B0');
+    expect(hevcMain10CodecString(target(3840, 2160, 24))).toBe('hvc1.2.4.L150.B0');
+    expect(hevcMain10CodecString(target(1920, 1080, 24))).toBe('hvc1.2.4.L120.B0');
   });
 });
