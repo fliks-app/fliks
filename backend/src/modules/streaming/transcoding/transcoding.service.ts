@@ -28,6 +28,7 @@ import {
   buildFfmpegArgs,
   buildRemuxArgs,
 } from './ffmpeg-args';
+import { varStreamMapLayout } from './audio-layout';
 import { detectHwAccel } from './hw-detect';
 import { ALL_DESCRIPTORS, encoderRegistry } from './codec/encoders';
 import { runEncoderProbes } from './codec/encoder-probe';
@@ -556,7 +557,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const isVideoOnly = ctx?.videoOnly ?? false;
     const ctxAudioStreams = ctx?.audioStreams;
     const useVarStreamMap =
-      isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
+      !!ctxAudioStreams && varStreamMapLayout(isVideoOnly, ctxAudioStreams.length);
 
     const existing = this.sessions.get(key);
     if (existing) {
@@ -685,7 +686,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const isVideoOnly = ctx?.videoOnly ?? false;
     const ctxAudioStreams = ctx?.audioStreams;
     const useVarStreamMap =
-      isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
+      !!ctxAudioStreams && varStreamMapLayout(isVideoOnly, ctxAudioStreams.length);
     const ladder = isHdrProfile(quality)
       ? getHdrLadderForDevice(ctx?.deviceType)
       : getLadderForDevice(ctx?.deviceType);
@@ -807,7 +808,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       const isVideoOnly = ctx?.videoOnly ?? false;
       const ctxAudioStreams = ctx?.audioStreams;
       const useVarStreamMap =
-        isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
+        !!ctxAudioStreams && varStreamMapLayout(isVideoOnly, ctxAudioStreams.length);
       if (useVarStreamMap) {
         for (let i = 0; i <= ctxAudioStreams.length; i++) {
           await fsp.mkdir(path.join(sessionDir, String(i)), {
@@ -858,7 +859,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       if (inputIdx >= 0) args.splice(inputIdx, 0, '-t', String(earlyReadSec));
 
       const usesVarStreamMap =
-        isVideoOnly && ctxAudioStreams && ctxAudioStreams.length > 1;
+        !!ctxAudioStreams && varStreamMapLayout(isVideoOnly, ctxAudioStreams.length);
       const session = this.spawnFfmpegSession({
         id,
         mediaFileId,
@@ -1177,7 +1178,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     );
 
     const usesVarStreamMap =
-      isVideoOnly && audioStreams && audioStreams.length > 1;
+      !!audioStreams && varStreamMapLayout(isVideoOnly, audioStreams.length);
     const session = this.spawnFfmpegSession({
       id: sessionId,
       mediaFileId,
@@ -1615,16 +1616,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     session.audioPlan = ctx.audioPlan;
     session.videoVariant = ctx.videoVariant;
     session.muxFlavour = ctx.useTs ? 'ts' : 'fmp4';
-    // Match the gate in `ffmpeg-args.ts useVarStreamMap`: any non-empty
-    // `audioStreams[]` paired with `videoOnly` triggers the var_stream_map
-    // layout (subdirs `0/`, `1/`...). Tag the session with the actual
-    // layout ffmpeg was spawned with so the controller's drift detection
-    // (in `playback-info`) sees the same value `pickAudioLayout()`
-    // computes and doesn't false-positive a kill on every refresh.
-    session.audioLayout =
-      ctx.videoOnly && ctx.audioStreams && ctx.audioStreams.length > 0
-        ? 'var-stream-map'
-        : 'inline';
+    // Tag the session with the layout ffmpeg was actually spawned with — the
+    // same `varStreamMapLayout` predicate ffmpeg-args uses — so the
+    // controller's drift detection (in `playback-info`) sees a matching value
+    // and doesn't false-positive a kill on every refresh.
+    session.audioLayout = varStreamMapLayout(
+      ctx.videoOnly ?? false,
+      ctx.audioStreams?.length ?? 0,
+    )
+      ? 'var-stream-map'
+      : 'inline';
     if (!session.startedAt) session.startedAt = new Date();
   }
 

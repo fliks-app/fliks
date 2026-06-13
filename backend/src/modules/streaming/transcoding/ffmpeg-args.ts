@@ -33,6 +33,7 @@ import {
 import { resolveTonemapPath } from './tonemap-path';
 import { normaliseSourceCodec } from './codec/normalise';
 import { hevcMainTierCapBps } from './codec/codec-strings';
+import { varStreamMapLayout } from './audio-layout';
 
 /**
  * Probe ceiling (bytes) for the trusted-streamInfo fast path. Paired with
@@ -728,7 +729,7 @@ export function buildFfmpegArgs(
   // 1 audio on fMP4 to trigger this branch.
   const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
   const useVarStreamMap =
-    videoOnly && audioStreams && audioStreams.length > 0;
+    !!audioStreams && varStreamMapLayout(videoOnly, audioStreams.length);
 
   if (useVarStreamMap) {
     // Single FFmpeg process for video + all audio renditions (perfect sync).
