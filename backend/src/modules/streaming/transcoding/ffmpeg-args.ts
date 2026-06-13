@@ -7,7 +7,6 @@ import {
   parseBitrateToBps,
   profileResolution,
 } from './profiles';
-import { requestedHwAccelFor } from './hw-detect';
 import type {
   AudioStreamMeta,
   BurnInSubtitle,
@@ -15,7 +14,6 @@ import type {
   TonemapAlgo,
   TranscodeProfile,
 } from './types';
-import { encoderRegistry } from './codec/encoders';
 import type {
   BitDepth,
   CodecVariant,
@@ -24,16 +22,10 @@ import type {
   VideoCodec,
 } from './codec/types';
 import { decoderRegistry, findQsvNativeDecoder } from './codec/decoders';
-import { isDecoderEnabled } from './codec/decoder-probe';
-import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
-import {
-  isTonemapOpenclEnabled,
-  isTonemapOpenclEnabledWithCrop,
-} from './codec/tonemap-opencl-probe';
-import { resolveTonemapPath } from './tonemap-path';
 import { normaliseSourceCodec } from './codec/normalise';
 import { hevcMainTierCapBps } from './codec/codec-strings';
 import { varStreamMapLayout } from './audio-layout';
+import { resolveEncodePipeline } from './encode-pipeline';
 
 /**
  * Probe ceiling (bytes) for the trusted-streamInfo fast path. Paired with
@@ -374,82 +366,12 @@ export function buildFfmpegArgs(
     );
   }
 
-  // Pre-flight: can we keep the whole pipeline on QSV (decode + filter
-  // + encode without bouncing through VAAPI)?
-  //
-  // Three sub-cases, all gated on `hwAccel === 'qsv'`, no burn-in
-  // (libass needs CPU buffers) and a known source codec:
-  //
-  //   a. crop + !tonemap → qsv-native decoder + vpp_qsv crop/scale.
-  //   b. tonemap + vpp_qsv tonemap probed enabled → qsv-native decoder
-  //      + vpp_qsv with `tonemap=1` (single-pass HDR→SDR on the iGPU
-  //      VPP, no hwmap, no opencl bridge). Available on Tiger Lake and
-  //      later; the boot probe in `vpp-qsv-probe.ts` is the gate.
-  //   c. crop + tonemap on older gens → still goes through the legacy
-  //      vaapi-decode chain (scale_vaapi+tonemap_vaapi+hwmap=qsv), so
-  //      we can stay on the QSV encoder via the hwCropPrefix splice.
-  const normalisedSourceCodecPreflight = normaliseSourceCodec(sourceVideoCodec);
-  const hasUsableQsvNativeDecoder =
-    hwAccel === 'qsv' &&
-    !burnIn?.filter &&
-    normalisedSourceCodecPreflight != null &&
-    isDecoderEnabled(`${normalisedSourceCodecPreflight}_qsv_native_decode`);
-  // Resolve the effective tone-mapping path the session will use.
-  // `auto` picks opencl when the boot probe enabled it, vaapi
-  // otherwise; the explicit overrides bypass the probe. This single
-  // value drives both the qsv-native eligibility gate AND the
-  // `useVaapiTonemap` flag below, keeping the two decisions in sync.
-  const tonemapPath = resolveTonemapPath(tonemapAlgo, { hasCrop: !!crop });
-
-  // The qsv-native path keeps the whole pipeline on the QSV device
-  // (no `hwdownload→crop→hwupload` round-trip), which is roughly 3×
-  // faster than the vaapi-decode chain on cropped HDR sessions.
-  // Enable it when:
-  //  - crop-only sessions: always (no tonemap to coordinate)
-  //  - tonemap via vpp_qsv LUT: when the probe confirmed the LUT
-  //  - tonemap via opencl: `vpp_qsv` does crop+scale on QSV, then
-  //    `hwmap=opencl` reads QSV surfaces, `tonemap_opencl` runs the
-  //    reinhard curve, and the reverse `hwmap=qsv` brings the SDR
-  //    nv12 back to the encoder (same probe gate as the
-  //    vaapi-decode opencl chain)
-  //  - tonemap via vaapi: NOT compatible — tonemap_vaapi consumes
-  //    vaapi surfaces; if the input is QSV-native, we have no way
-  //    to feed it without a hwmap that doesn't exist
-  const tonemapOpenclOk = !!crop
-    ? isTonemapOpenclEnabledWithCrop()
-    : isTonemapOpenclEnabled();
-  const qsvNativeAvailable =
-    hasUsableQsvNativeDecoder &&
-    (!!crop || tonemapPath === 'qsv' || tonemapPath === 'opencl') &&
-    (!tonemap ||
-      (tonemapPath === 'qsv' && isVppQsvTonemapEnabled()) ||
-      (tonemapPath === 'opencl' && tonemapOpenclOk));
-  const qsvCanCrop =
-    qsvNativeAvailable ||
-    (hwAccel === 'qsv' && !!crop && !!tonemap && !burnIn?.filter);
-
-  const requestedHwAccel = requestedHwAccelFor(hwAccel, {
-    burnIn: !!burnIn?.filter,
-    crop: !!crop,
-    qsvCanCrop,
-  });
-
-  // Resolve the actual encoder before setting up the input pipeline.
-  // The registry can downgrade to CPU when a HW encoder failed its
-  // boot-time probe (e.g. h264_vaapi on a renderD node that exposes
-  // only video-proc entrypoints). If we keep the HW input setup the
-  // CPU encoder receives HW surfaces and the filter chain blows up
-  // with `Function not implemented` / `Impossible to convert between
-  // the formats supported by the filter`.
-  //
-  // `videoVariant` is required: callers must thread it from the
-  // LiveSession the request resolves to, so the segment bitstream
-  // matches the master playlist's CODECS string. Heuristic inference
-  // (profile name + hwAccel) silently produced HEVC when the manifest
-  // claimed H.264 (or vice-versa) on cache misses — MSE then rejected
-  // the segments. HLS routes 410-gate stale sids upstream via
-  // assertFreshSession; reaching this throw means a non-HLS caller
-  // bypassed playback-info entirely.
+  // `videoVariant` is required: callers thread it from the LiveSession so the
+  // segment bitstream matches the master playlist's CODECS string. Heuristic
+  // inference once produced HEVC when the manifest claimed H.264 (or vice
+  // versa) on cache misses → MSE rejected the segments. HLS 410-gates stale
+  // sids upstream; reaching this throw means a non-HLS caller bypassed
+  // playback-info entirely.
   if (!videoVariant) {
     throw new Error(
       `buildFfmpegArgs: missing videoVariant for profile "${profile.name}" — caller must thread it from the LiveSession`,
@@ -457,13 +379,33 @@ export function buildFfmpegArgs(
   }
   const variant: CodecVariant = videoVariant;
   const isHdrOutput = variant.hdr !== null;
-  const encoder = encoderRegistry.resolve(variant, requestedHwAccel);
+
+  // Resolve the encode pipeline once via the shared resolver that stream-builder
+  // also uses (so the stats hwAccel can't drift from the encoder that runs):
+  // the requested-vs-effective hwAccel, the encoder (with registry CPU
+  // fallback), the tone-map path, and the QSV-native eligibility.
+  const {
+    requestedHwAccel,
+    encoder,
+    effectiveHwAccel,
+    tonemapPath,
+    qsvNativeAvailable,
+    useVaapiTonemap,
+  } = resolveEncodePipeline(variant, {
+    hwAccel,
+    crop: !!crop,
+    burnIn: !!burnIn?.filter,
+    tonemap: !!tonemap,
+    tonemapAlgo,
+    sourceVideoCodec,
+  });
+  // No encoder means the variant is unsupported on this host even after the
+  // registry's CPU fallback.
   if (!encoder) {
     throw new Error(
       `No encoder for variant ${JSON.stringify(variant)} on ${requestedHwAccel}`,
     );
   }
-  const effectiveHwAccel: HwAccelType = encoder.hwAccel;
 
   // Early sessions live ~1s before Shaka jumps to the main session — visual
   // quality on those warm-up frames is throwaway, so bias every knob towards
@@ -493,19 +435,13 @@ export function buildFfmpegArgs(
     Math.ceil((bitrateNum * (early ? 1 : 2)) / 1_000_000),
   )}M`;
 
-  // Tone-mapping filter selection. `tonemapPath` (computed above) is
-  // the source of truth — `useVaapiTonemap` is just the boolean the
-  // existing filter helpers expect. The qsv path is handled by the
-  // qsv-native filter chain (`qsvScaleFilter8bit`'s `inputSurface ===
-  // 'qsv'` branch), so it doesn't need a flag here.
-  const useVaapiTonemap = tonemap && tonemapPath === 'vaapi';
-
   // Resolve the decoder via the same registry pattern as the encoder.
   // The decoder picks how the source is brought into memory (HW device
   // init + `-hwaccel`); the encoder's `hwAccel` + `inputSurface` decide
   // where the frame needs to land for encode (qsv-native + vpp_qsv,
-  // vaapi + scale_vaapi, CPU + hwdownload).
-  const normalisedSourceCodec = normalisedSourceCodecPreflight;
+  // vaapi + scale_vaapi, CPU + hwdownload). `useVaapiTonemap` /
+  // `tonemapPath` / `qsvNativeAvailable` come from resolveEncodePipeline above.
+  const normalisedSourceCodec = normaliseSourceCodec(sourceVideoCodec);
   // Opt into the qsv-native decoder when the qsv crop path is in use
   // (pre-flighted above so requestedHwAccelFor could keep us on QSV).
   // The default qsv decoder emits VAAPI surfaces — kept as the safe

@@ -12,23 +12,21 @@ import {
   DeviceType,
   TranscodeProfile,
   TranscodingService,
-  encoderRegistry,
   getHdrLadderForDevice,
   getLadderForDevice,
   cappedTranscodeVideoBitrateBps,
   isEcoProfile,
   parseBitrateToBps,
   profileFitsSource,
-  requestedHwAccelFor,
   resolveSourceVideoBitrateBps,
 } from './transcoding';
 import {
   cappedRungVideoBitrateBps,
   type RungBitrateContext,
 } from './transcoding/quality-ladder';
+import { resolveEncodePipeline } from './transcoding/encode-pipeline';
+import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { bucketResolutionHeight } from '../../common/utils/resolution.util';
-import { isDecoderEnabled } from './transcoding/codec/decoder-probe';
-import { isVppQsvTonemapEnabled } from './transcoding/codec/vpp-qsv-probe';
 import { normaliseSourceCodec } from './transcoding/codec/normalise';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
 import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
@@ -86,6 +84,7 @@ export class StreamBuilderService {
 
   constructor(
     private readonly transcodingService: TranscodingService,
+    private readonly activeStreamTracker: ActiveStreamTracker,
   ) {}
 
   /**
@@ -490,34 +489,18 @@ export class StreamBuilderService {
         message: `HDR → SDR (tone mapping ${source.hdrFormat})`,
       });
     }
-    // Mirror the ffmpeg-args dispatch: same pipeline rule, same registry
-    // resolve, same qsvCanCrop hint. Picks up the registry's runtime
-    // fallback (e.g. h264_vaapi disabled → libx264) so the stats overlay
-    // reports the actual encoder that will run, not the host's nominal
-    // HW accel.
-    const detectedHw = this.transcodingService.getDetectedHwAccel();
-    const normalisedSourceCodecForDecode =
-      normaliseSourceCodec(sourceVideoCodec);
-    const hasUsableQsvNativeDecoderForReport =
-      detectedHw === 'qsv' &&
-      !needsBurnIn &&
-      normalisedSourceCodecForDecode != null &&
-      isDecoderEnabled(`${normalisedSourceCodecForDecode}_qsv_native_decode`);
-    const qsvNativeAvailableForReport =
-      hasUsableQsvNativeDecoderForReport &&
-      needsCrop &&
-      (!transcodeTonemaps || isVppQsvTonemapEnabled());
-    const qsvCanCropForReport =
-      qsvNativeAvailableForReport ||
-      (detectedHw === 'qsv' && needsCrop && transcodeTonemaps && !needsBurnIn);
-    const requestedHwAccel = requestedHwAccelFor(detectedHw, {
-      burnIn: needsBurnIn,
+    // Report the encoder that will actually run via the SAME resolver
+    // ffmpeg-args uses, so the stats hwAccel can't drift from the real encode
+    // (it picks up the registry's runtime CPU fallback and the QSV crop→VAAPI
+    // splice). Same inputs the session will carry, so the result matches.
+    const effectiveHwAccel = resolveEncodePipeline(selectedVariant, {
+      hwAccel: this.transcodingService.getDetectedHwAccel(),
       crop: needsCrop,
-      qsvCanCrop: qsvCanCropForReport,
-    });
-    const effectiveHwAccel =
-      encoderRegistry.resolve(selectedVariant, requestedHwAccel)?.hwAccel ??
-      'none';
+      burnIn: needsBurnIn,
+      tonemap: transcodeTonemaps,
+      tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
+      sourceVideoCodec,
+    }).effectiveHwAccel;
 
     // Audio output decision — single source of truth for ffmpeg-args and
     // the master playlist. Three paths:
