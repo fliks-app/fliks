@@ -1,8 +1,6 @@
 import {
-  cappedTranscodeVideoBitrateBps,
   getHdrLadderForDevice,
   getLadderForDevice,
-  parseBitrateToBps,
   profileFitsSource,
   profileResolution,
 } from './profiles';
@@ -13,15 +11,13 @@ import type {
   TranscodeProfile,
 } from './types';
 import type { CodecVariant } from './codec/types';
+import { audioCodecString } from './codec/codec-strings';
 import {
-  audioCodecString,
-  audioRenditionChannels,
-  av1CodecString,
-  h264CodecString,
-  hevcMain10CodecString,
-  hevcMainCodecString,
-  hevcMainTierCapBps,
-} from './codec/codec-strings';
+  buildUniqueAudioNames,
+  emitAudioRenditions,
+  emitVariantLadder,
+  SDR_H264_VARIANT,
+} from './hls-variant-ladder';
 
 /** Format frame rate for the HLS `FRAME-RATE` attribute. Apple's spec
  *  says "decimal-floating-point describing the maximum frame rate …
@@ -217,30 +213,17 @@ export function generateMasterPlaylist(
   if (hdrPassThrough) {
     const range = hdrPassThrough.hdrFormat === 'HLG' ? 'HLG' : 'PQ';
 
-    // Multi-audio: each HEVC HDR variant references the shared audio
-    // group via AUDIO="audio". Audio is served from /audio/<i>/ as
-    // standalone AAC renditions, same wiring as the SDR ladder.
+    // Each HDR variant references the shared `audio` group; renditions are
+    // served from /audio/<i>/, same wiring as the SDR ladder.
     if (multiAudio) {
-      const pickedIdx =
-        defaultAudioIndex >= 0 && defaultAudioIndex < audioStreams.length
-          ? defaultAudioIndex
-          : 0;
-      const names = buildUniqueAudioNames(audioStreams);
-      for (let i = 0; i < audioStreams.length; i++) {
-        const a = audioStreams[i];
-        const lang = a.language || 'und';
-        const isDefault = i === pickedIdx ? 'YES' : 'NO';
-        // CHANNELS hint matches Apple's reference master and lets
-        // Tizen AVPlay pre-allocate the right audio decoder before
-        // the variant playlist + init are fetched. Without it the
-        // single-audio fMP4 path doesn't follow the rendition link
-        // (issue #148 bisection — multi-audio works because AVPlay
-        // probes the renditions, single-audio doesn't trigger the
-        // probe when the hint is missing).
-        lines.push(
-          `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="${audioRenditionChannels(outputAudioCodec, a.channels)}",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
-        );
-      }
+      emitAudioRenditions(
+        lines,
+        audioStreams,
+        defaultAudioIndex,
+        outputAudioCodec,
+        mediaFileId,
+        tokenParam,
+      );
     }
     const hdrAudioAttr = multiAudio ? ',AUDIO="audio"' : '';
     pushSubtitleMedia(lines);
@@ -268,82 +251,36 @@ export function generateMasterPlaylist(
         sourceHeight,
         /* hdrSuffix */ true,
       );
-      for (const p of hdrLadder) {
-        const { width: w, height: h } = profileResolution(
-          p,
-          sourceWidth,
-          sourceHeight,
-        );
-        let cappedVideo = cappedTranscodeVideoBitrateBps(
-          parseBitrateToBps(p.videoBitrate),
-          sourceVideoBitrateBps,
-          sourceVideoCodec,
-          hdrVariant.codec,
-        );
-        // HEVC declares the Main tier; clamp the advertised AVERAGE-BANDWIDTH to
-        // the level's Main-tier ceiling so it tracks the capped encode (same
-        // clamp hevcMainTierCapBps applies in ffmpeg-args) — a High-tier
-        // bitstream behind a Main-tier `hvc1.2.4.L*` claim is rejected by strict
-        // hardware decoders (Shaka 3014). AV1 HDR has no Main-tier bitrate gate
-        // at the current ladder, so it is left unclamped.
-        if (hdrVariant.codec === 'hevc') {
-          cappedVideo = Math.min(
-            cappedVideo,
-            hevcMainTierCapBps({
-              width: w,
-              height: h,
-              videoBitrateBps: 0,
-              gopSize: 0,
-              frameRate: sourceFrameRate,
-            }),
-          );
-        }
-        const avg = cappedVideo + parseBitrateToBps(p.audioBitrate);
-        const bw = Math.round(avg * 1.5);
-        // Codec string per rung, driven by luma sample rate (width × height ×
-        // fps) so cropped 4K sources (e.g. 3840×2024 cinemascope, height <
-        // 2160) still get L5.x — height-only bucketing under-declared L4.1 and
-        // AVPlayer rejected every variant (NSURLErrorUnsupportedURL on iOS).
-        const target = {
-          width: w,
-          height: h,
-          videoBitrateBps: 0,
-          gopSize: 0,
-          frameRate: sourceFrameRate,
-        };
-        const videoCodec =
-          hdrVariant.codec === 'av1'
-            ? av1CodecString(target, hdrVariant.bitDepth)
-            : hevcMain10CodecString(target);
-        lines.push(
-          `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h},VIDEO-RANGE=${range}${frameRateAttr},NAME="${p.name}",CODECS="${videoCodec}${codecsTail}"${hdrAudioAttr}${subsAttr}`,
-          `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
-        );
-      }
+      emitVariantLadder(lines, {
+        profiles: hdrLadder,
+        variant: hdrVariant,
+        range,
+        audioAttr: hdrAudioAttr,
+        subsAttr,
+        frameRateAttr,
+        codecsTail,
+        sourceWidth,
+        sourceHeight,
+        sourceFrameRate,
+        sourceVideoBitrateBps,
+        sourceVideoCodec,
+        mediaFileId,
+        tokenParam,
+      });
     }
     return lines.join('\n');
   }
 
   // Multi-audio: declare alternate audio renditions via EXT-X-MEDIA
   if (multiAudio) {
-    const pickedIdx =
-      defaultAudioIndex >= 0 && defaultAudioIndex < audioStreams.length
-        ? defaultAudioIndex
-        : 0;
-    const names = buildUniqueAudioNames(audioStreams);
-    for (let i = 0; i < audioStreams.length; i++) {
-      const a = audioStreams[i];
-      const lang = a.language || 'und';
-      const isDefault = i === pickedIdx ? 'YES' : 'NO';
-      // CHANNELS reports the rendition's real output layout (AAC downmixes
-      // to 2 via `-ac 2`; copy / AC-3 / E-AC-3 keep the source layout) — Tizen
-      // AVPlay uses this hint to pre-allocate the right audio decoder before
-      // fetching the rendition. Without it the single-audio variant doesn't
-      // trigger a rendition probe (issue #148 bisection).
-      lines.push(
-        `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="${audioRenditionChannels(outputAudioCodec, a.channels)}",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
-      );
-    }
+    emitAudioRenditions(
+      lines,
+      audioStreams,
+      defaultAudioIndex,
+      outputAudioCodec,
+      mediaFileId,
+      tokenParam,
+    );
   }
 
   // Always declare CODECS on EXT-X-STREAM-INF. For HLS-TS, this lets Shaka
@@ -372,92 +309,22 @@ export function generateMasterPlaylist(
   // chosen quality.
   profiles = applyQualityPin(profiles, onlyQuality, sourceWidth, sourceHeight);
 
-  for (const p of profiles) {
-    const { width: w, height: h } = profileResolution(
-      p,
-      sourceWidth,
-      sourceHeight,
-    );
-    let cappedVideo = cappedTranscodeVideoBitrateBps(
-      parseBitrateToBps(p.videoBitrate),
-      sourceVideoBitrateBps,
-      sourceVideoCodec,
-      sdrVariant?.codec,
-    );
-    // HEVC declares the Main tier in CODECS; clamp the advertised rate to the
-    // level's Main-tier ceiling so AVERAGE-BANDWIDTH matches the capped encode
-    // (mirrors the clamp in ffmpeg-args). H.264 has no tier and AV1's Main-tier
-    // ceiling is far above the current ladder, so they are left unchanged.
-    if (sdrVariant?.codec === 'hevc') {
-      cappedVideo = Math.min(
-        cappedVideo,
-        hevcMainTierCapBps({
-          width: w,
-          height: h,
-          videoBitrateBps: 0,
-          gopSize: 0,
-          frameRate: sourceFrameRate,
-        }),
-      );
-    }
-    const avg = cappedVideo + parseBitrateToBps(p.audioBitrate);
-    // BANDWIDTH must reflect the peak segment bitrate (HLS spec). With
-    // `-maxrate == -b:v` the encoder is near-CBR but VBV bursts still
-    // push individual segments ~30% above nominal. Declaring BANDWIDTH
-    // ~1.5× nominal gives AVPlayer ABR a stable hysteresis margin and
-    // stops it from down-/up-shifting on every VBV spike.
-    const bw = Math.round(avg * 1.5);
-    // Codec string MUST be derived from the actual emitted height (`h`),
-    // not `p.maxHeight`. Cropped content (e.g. 2.39:1 cinemascope on a
-    // 1920×1080 source → 1920×816) advertises a height below the
-    // profile nominal, so `h264CodecString({height: 720})` would
-    // declare avc1 L3.2 in the master while the bitstream SPS carries
-    // L3.1 for the actual 1280×544 frames. The mismatch (declared > SPS)
-    // can leave ExoPlayer's track selector stuck on cold prepare —
-    // visible as the "buffering forever, no decoder allocated"
-    // pattern on Android with cropped masters.
-    const target = {
-      width: w,
-      height: h,
-      videoBitrateBps: 0,
-      gopSize: 0,
-      frameRate: sourceFrameRate,
-    };
-    // Codec string must agree with what the encoder will actually emit —
-    // mismatched CODECS makes Shaka fail with HLS_COULD_NOT_GUESS_CODECS
-    // (3014) after it tries to sniff the segment and the bitstream
-    // doesn't parse as the declared codec.
-    const videoCodec =
-      sdrVariant?.codec === 'hevc'
-        ? hevcMainCodecString(target)
-        : sdrVariant?.codec === 'av1'
-          ? av1CodecString(target, sdrVariant.bitDepth)
-          : h264CodecString(target);
-    const codecsAttr = `,CODECS="${videoCodec}${codecsTail}"`;
-    lines.push(
-      `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h}${frameRateAttr},NAME="${p.name}"${codecsAttr}${audioAttr}${subsAttr}`,
-      `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
-    );
-  }
+  emitVariantLadder(lines, {
+    profiles,
+    variant: sdrVariant ?? SDR_H264_VARIANT,
+    audioAttr,
+    subsAttr,
+    frameRateAttr,
+    codecsTail,
+    sourceWidth,
+    sourceHeight,
+    sourceFrameRate,
+    sourceVideoBitrateBps,
+    sourceVideoCodec,
+    mediaFileId,
+    tokenParam,
+  });
   return lines.join('\n');
 }
 
-/** Build a unique NAME per audio rendition for `EXT-X-MEDIA`. When two
- *  tracks resolve to the same display string (typical case: MKV with two
- *  audio streams both falling back to `und` because the container left
- *  language + title empty), AVPlayer dedupes them into a single
- *  `AVMediaSelectionOption` and the user can no longer switch between
- *  them. Append `#2`, `#3`, … when the base name has already been used
- *  earlier in the list. */
-function buildUniqueAudioNames(
-  streams: { language?: string; title?: string }[],
-): string[] {
-  const seen = new Map<string, number>();
-  return streams.map((s) => {
-    const base = s.title || s.language || 'und';
-    const count = (seen.get(base) ?? 0) + 1;
-    seen.set(base, count);
-    return count === 1 ? base : `${base} #${count}`;
-  });
-}
 
