@@ -1,0 +1,302 @@
+import { app, BrowserWindow, ipcMain, Menu } from 'electron';
+import path from 'node:path';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import { registerAppSchemePrivileged, registerAppProtocol, APP_URL } from './protocol';
+import { installCorsBypass } from './cors';
+import { IPC, type DesktopEvent, type DesktopSubtitleStyle } from '../shared/contract';
+
+// Force software OSR: Chromium's GPU process can't init here, and a
+// GPU-composited OSR window never recovers from a GPU-process crash.
+app.disableHardwareAcceleration();
+if (process.platform === 'linux') app.commandLine.appendSwitch('ozone-platform', 'x11');
+registerAppSchemePrivileged();
+
+process.on('uncaughtException', (e) => console.error('[main:uncaughtException]', e?.stack ?? e));
+process.on('unhandledRejection', (e) => console.error('[main:unhandledRejection]', e));
+
+const WIDTH = 1280;
+const HEIGHT = 800;
+
+// The native compositor addon (single SDL/GLES window: mpv video + OSR UI).
+// Loaded via a real require so esbuild leaves the .node resolution to runtime.
+const nativeRequire = createRequire(__filename);
+type Addon = {
+  start(o: { width: number; height: number; title: string }): void;
+  onEvent(cb: (json: string) => void): void;
+  onInput(cb: (json: string) => void): void;
+  uploadUi(buf: Buffer, w: number, h: number): void;
+  load(o: { url: string; startTime?: number; headers?: Record<string, string>; subtitles?: unknown[] }): void;
+  command(args: string[]): void;
+  getProperty(name: string): string | null;
+  setProperty(name: string, value: string): void;
+  setFullscreen(enabled: boolean): void;
+  stop(): void;
+};
+
+function webDir(): string {
+  if (process.env.FLIKS_WEB_DIR) return process.env.FLIKS_WEB_DIR;
+  if (app.isPackaged) return path.join(process.resourcesPath, 'web');
+  return path.resolve(app.getAppPath(), '..', 'client', 'dist', 'client', 'browser');
+}
+
+const num = (v: string | null): number => {
+  const n = v == null ? NaN : parseFloat(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+function parseTracks(json: string | null): {
+  audioTracks: unknown[];
+  subtitleTracks: unknown[];
+} {
+  let list: any[] = [];
+  try {
+    list = JSON.parse(json ?? '[]') ?? [];
+  } catch {
+    /* not ready */
+  }
+  const audioTracks: unknown[] = [];
+  const subtitleTracks: unknown[] = [];
+  for (const t of list) {
+    if (t.type === 'audio')
+      audioTracks.push({ id: String(t.id), language: t.lang ?? '', label: t.title ?? '', selected: !!t.selected });
+    else if (t.type === 'sub')
+      subtitleTracks.push({
+        id: String(t.id),
+        language: t.lang ?? '',
+        label: t.title ?? '',
+        forced: !!t.forced,
+        selected: !!t.selected,
+      });
+  }
+  return { audioTracks, subtitleTracks };
+}
+
+// Base subtitle size the app's fontScale presets multiply. mpv's own default
+// (55) renders far too large in the compositor window, so we calibrate lower —
+// at scale 1.0 this lands around a typical caption height once mpv scales it to
+// the window.
+const MPV_BASE_SUB_FONT_SIZE = 32;
+
+/** Translate the app's subtitle style presets to mpv `sub-*` property pairs.
+ *  Both the app and mpv use #AARRGGBB with 00 = transparent / FF = opaque, so
+ *  colours pass through unchanged. `sub-ass-override=force` lets the app style
+ *  win over a subtitle track's embedded ASS/SSA styling, matching the mobile
+ *  native player. `background-box` draws the configured backdrop behind the
+ *  text; with no backdrop we fall back to outline-and-shadow so the edge effect
+ *  is what's visible. */
+function mpvSubtitleProps(s: DesktopSubtitleStyle): Array<[string, string]> {
+  const hasBox = !!s.backgroundColor && s.backgroundColor !== 'transparent';
+  const props: Array<[string, string]> = [
+    ['sub-ass-override', 'force'],
+    ['sub-font-size', String(Math.round(MPV_BASE_SUB_FONT_SIZE * (s.fontScale || 1)))],
+    ['sub-color', s.foregroundColor || '#FFFFFF'],
+    ['sub-border-style', hasBox ? 'background-box' : 'outline-and-shadow'],
+    ['sub-back-color', hasBox ? s.backgroundColor : '#00000000'],
+    ['sub-pos', String(Math.max(0, Math.min(100, 100 - (s.bottomMarginPercent || 0))))],
+  ];
+  // Every branch sets outline-size / shadow-offset / blur explicitly: these are
+  // sticky mpv properties, so a preset that omits one would inherit a stale
+  // value from the previous preset.
+  switch (s.edgeType) {
+    case 'none':
+      props.push(['sub-outline-size', '0'], ['sub-shadow-offset', '0'], ['sub-blur', '0']);
+      break;
+    case 'outline':
+      props.push(
+        ['sub-outline-size', '3'], ['sub-outline-color', '#FF000000'],
+        ['sub-shadow-offset', '0'], ['sub-blur', '0'],
+      );
+      break;
+    case 'raised':
+      props.push(
+        ['sub-outline-size', '1'], ['sub-outline-color', '#FF000000'],
+        ['sub-shadow-offset', '1'], ['sub-shadow-color', '#FF000000'], ['sub-blur', '0'],
+      );
+      break;
+    case 'drop_shadow':
+    default:
+      // A soft glow behind the text with NO directional offset — a blurred,
+      // half-opacity black outline. The blur lands on the outline (not the
+      // fill), so the glyphs stay crisp; the offset is zero, so there's no
+      // displaced ghost copy. Opacity is kept low so it reads as a light shadow
+      // rather than a dark band around the text.
+      props.push(
+        ['sub-outline-size', '1.5'], ['sub-outline-color', '#4D000000'],
+        ['sub-shadow-offset', '0'], ['sub-shadow-color', '#00000000'], ['sub-blur', '0.5'],
+      );
+      break;
+  }
+  return props;
+}
+
+const KEYMAP: Record<string, string> = {
+  Return: 'Enter',
+  Backspace: 'Backspace',
+  Tab: 'Tab',
+  Escape: 'Escape',
+  Space: 'Space',
+  Left: 'Left',
+  Right: 'Right',
+  Up: 'Up',
+  Down: 'Down',
+  Delete: 'Delete',
+  Home: 'Home',
+  End: 'End',
+};
+
+let uiWin: BrowserWindow | null = null;
+const inputCounts: Record<string, number> = {};
+
+function send(ev: DesktopEvent): void {
+  if (uiWin && !uiWin.isDestroyed()) uiWin.webContents.send(IPC.event, ev);
+}
+
+app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
+  installCorsBypass();
+
+  const dir = webDir();
+  const haveApp = fs.existsSync(path.join(dir, 'index.html'));
+  if (haveApp) registerAppProtocol(dir);
+
+  if (!process.env.FLIKS_MPV_PATH) {
+    process.env.FLIKS_MPV_PATH = path.join(app.getAppPath(), 'native', 'vendor', 'libmpv.so.2');
+  }
+  const addon = nativeRequire(
+    path.join(app.getAppPath(), 'native', 'build', 'Release', 'fliks_compositor.node'),
+  ) as Addon;
+
+  // The OFFSCREEN window renders the Angular UI to a transparent bitmap; the
+  // addon's SDL window is the only visible surface.
+  uiWin = new BrowserWindow({
+    width: WIDTH,
+    height: HEIGHT,
+    show: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      offscreen: true,
+      preload: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
+      contextIsolation: true,
+      sandbox: false,
+    },
+  });
+  uiWin.webContents.setFrameRate(60);
+  uiWin.webContents.on('paint', (_e, _dirty, image) => {
+    const s = image.getSize();
+    if (s.width > 0) addon.uploadUi(image.toBitmap(), s.width, s.height);
+  });
+  uiWin.webContents.on('console-message', (_e, _l, m) => console.log('[renderer]', m));
+
+  addon.start({ width: WIDTH, height: HEIGHT, title: 'Fliks' });
+
+  // mpv events → reshape to the DesktopEvent contract → renderer.
+  addon.onEvent((json) => {
+    let raw: any;
+    try {
+      raw = JSON.parse(json);
+    } catch {
+      return;
+    }
+    switch (raw.type) {
+      case 'timeUpdate':
+        send({ type: 'timeUpdate', payload: { position: raw.position, duration: raw.duration, buffered: 0 } });
+        break;
+      case 'stateChanged':
+        send({ type: 'stateChanged', payload: { state: raw.state } });
+        break;
+      case 'tracksChanged':
+        send({ type: 'tracksChanged', payload: parseTracks(addon.getProperty('track-list')) as any });
+        break;
+      case 'firstFrame':
+        send({ type: 'firstFrame' });
+        break;
+      case 'error':
+        send({ type: 'error', payload: { code: -1, message: raw.message ?? 'error' } });
+        break;
+    }
+  });
+
+  // SDL input (the addon owns the visible window) → the offscreen webContents.
+  addon.onInput((json) => {
+    let i: any;
+    try {
+      i = JSON.parse(json);
+    } catch {
+      return;
+    }
+    if (!uiWin || uiWin.isDestroyed()) return;
+    // Keep the OSR render size == the compositor window size so SDL input
+    // coords map 1:1 to the offscreen webContents.
+    if (i.kind === 'resize') {
+      if (i.w > 0 && i.h > 0) uiWin.setContentSize(i.w, i.h);
+      return;
+    }
+    inputCounts[i.kind] = (inputCounts[i.kind] || 0) + 1;
+    if (inputCounts[i.kind] === 1 || (i.kind === 'move' && inputCounts.move % 60 === 0))
+      console.log('[input]', i.kind, 'x=', i.x, 'y=', i.y, 'count=', inputCounts[i.kind]);
+    const wc = uiWin.webContents;
+    if (i.kind !== 'move' && i.kind !== 'wheel') wc.focus();
+    if (i.kind === 'move') wc.sendInputEvent({ type: 'mouseMove', x: i.x, y: i.y } as any);
+    else if (i.kind === 'button')
+      wc.sendInputEvent({ type: i.down ? 'mouseDown' : 'mouseUp', x: i.x, y: i.y, button: i.button, clickCount: i.clicks || 1 } as any);
+    else if (i.kind === 'wheel')
+      wc.sendInputEvent({ type: 'mouseWheel', x: i.x, y: i.y, deltaX: i.dx * 40, deltaY: i.dy * 40, canScroll: true } as any);
+    else if (i.kind === 'text') wc.sendInputEvent({ type: 'char', keyCode: i.text } as any);
+    else if (i.kind === 'key') {
+      const k = KEYMAP[i.key];
+      if (k) wc.sendInputEvent({ type: i.down ? 'keyDown' : 'keyUp', keyCode: k } as any);
+    }
+  });
+
+  // Route the renderer's player IPC to the addon (control via mpv properties).
+  ipcMain.handle(IPC.load, (_e, opts) => {
+    console.log('[ipc] load', opts?.url, 'start=', opts?.startTime, 'headers=', Object.keys(opts?.headers ?? {}).join(','));
+    return addon.load(opts);
+  });
+  ipcMain.handle(IPC.play, () => addon.setProperty('pause', 'no'));
+  ipcMain.handle(IPC.pause, () => addon.setProperty('pause', 'yes'));
+  ipcMain.handle(IPC.seek, (_e, position: number) => addon.command(['seek', String(position), 'absolute']));
+  ipcMain.handle(IPC.stop, () => addon.command(['stop']));
+  ipcMain.handle(IPC.setPlaybackRate, (_e, r: number) => addon.setProperty('speed', String(r)));
+  ipcMain.handle(IPC.setVolume, (_e, v: number) => addon.setProperty('volume', String(v)));
+  ipcMain.handle(IPC.setMuted, (_e, m: boolean) => addon.setProperty('mute', m ? 'yes' : 'no'));
+  ipcMain.handle(IPC.getPosition, () => ({
+    position: num(addon.getProperty('time-pos')),
+    duration: num(addon.getProperty('duration')),
+    buffered: num(addon.getProperty('demuxer-cache-time')),
+  }));
+  ipcMain.handle(IPC.getAudioTracks, () => parseTracks(addon.getProperty('track-list')).audioTracks);
+  ipcMain.handle(IPC.selectAudioTrack, (_e, id: string) => addon.setProperty('aid', id));
+  ipcMain.handle(IPC.getSubtitleTracks, () => parseTracks(addon.getProperty('track-list')).subtitleTracks);
+  ipcMain.handle(IPC.selectSubtitleTrack, (_e, id: string | null) => {
+    if (id == null) {
+      addon.setProperty('sid', 'no');
+      addon.setProperty('sub-visibility', 'no');
+    } else {
+      addon.setProperty('sid', id);
+      addon.setProperty('sub-visibility', 'yes');
+    }
+  });
+  ipcMain.handle(IPC.setFullscreen, (_e, enabled: boolean) => addon.setFullscreen(enabled));
+  ipcMain.handle(IPC.setSubtitleStyle, (_e, s: DesktopSubtitleStyle) => {
+    if (!s) return;
+    for (const [name, value] of mpvSubtitleProps(s)) addon.setProperty(name, value);
+  });
+  ipcMain.handle(IPC.resize, () => {});
+  ipcMain.handle(IPC.destroy, () => addon.command(['stop']));
+
+  uiWin.loadURL(haveApp ? APP_URL : 'data:text/html,<body style="background:%231d232a"></body>');
+  uiWin.webContents.once('did-finish-load', () => send({ type: 'ready' }));
+
+  app.on('before-quit', () => {
+    try {
+      addon.stop();
+    } catch {
+      /* already stopped */
+    }
+  });
+});
+
+app.on('window-all-closed', () => app.quit());

@@ -26,11 +26,11 @@ export class ServerConfigService {
   readonly knownServers = this._knownServers.asReadonly();
   readonly isConfigured = computed(() => this._serverUrl().length > 0);
   /** "Native" = the app runs standalone, with no backend host serving its
-   * shell — true for Capacitor (iOS/Android), Smart TV (Tizen/webOS) and
-   * any other bundle loaded via `file://`. The bundle is responsible for
-   * resolving every `/api/...` request against a server URL the user
-   * picked at setup. Web builds (served by the backend) keep relative
-   * URLs and have `isNative = false`.
+   * shell — true for Capacitor (iOS/Android), Smart TV (Tizen/webOS), the
+   * Electron desktop client and any other bundle loaded from a non-HTTP
+   * origin. The bundle is responsible for resolving every `/api/...` request
+   * against a server URL the user picked at setup. Web builds (served by the
+   * backend) keep relative URLs and have `isNative = false`.
    * Plain boolean so the dozens of existing `if (serverConfig.isNative)`
    * call sites stay non-reactive; computed from the UA at construction
    * time rather than via `DeviceService.isTv()` to avoid a circular
@@ -39,7 +39,7 @@ export class ServerConfigService {
     if (Capacitor.isNativePlatform()) return true;
     if (typeof navigator === 'undefined') return false;
     const ua = navigator.userAgent;
-    return /AndroidTV\/\d|\bTizen\b|SMART-TV|Web0S|webOS|BRAVIA|SHIELD|AFT[A-Z0-9]+|GoogleTV/i.test(ua);
+    return /AndroidTV\/\d|\bTizen\b|SMART-TV|Web0S|webOS|BRAVIA|SHIELD|AFT[A-Z0-9]+|GoogleTV|\bElectron\//i.test(ua);
   })();
   /** @deprecated Same as `isNative` since Smart TV got folded in.
    *  Kept as a signal alias for call sites still using it. */

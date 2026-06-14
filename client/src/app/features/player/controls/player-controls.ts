@@ -187,6 +187,9 @@ export class PlayerControlsComponent {
   readonly hasPrevEpisode = input(false);
   readonly activeQualityLabel = input('Auto');
   readonly isNative = input(false);
+  /** Desktop (Electron) — native engine but mouse-driven; keeps the fullscreen
+   *  button which is otherwise hidden for native (mobile/TV) engines. */
+  readonly isDesktop = input(false);
   readonly subtitlePickerOpen = input(false);
   readonly qualityPickerOpen = input(false);
   readonly availableSubtitles = input<{ id: string; label: string; burnIn?: boolean }[]>([]);

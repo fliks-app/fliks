@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+        color: #fff;
+        -webkit-user-select: none;
+      }
+      .title {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        padding: 8px 14px;
+        background: rgba(29, 35, 42, 0.72);
+        border-radius: 10px;
+        font-weight: 600;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+      }
+      .state {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        padding: 8px 14px;
+        background: rgba(29, 35, 42, 0.72);
+        border-radius: 10px;
+        font-variant-numeric: tabular-nums;
+      }
+      .center {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.65);
+        pointer-events: none;
+      }
+      .controls {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 84px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 0 20px;
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0));
+      }
+      button {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        border: none;
+        background: #36d399;
+        color: #04110b;
+        font-size: 20px;
+        cursor: pointer;
+      }
+      .bar {
+        flex: 1;
+        height: 6px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.25);
+        position: relative;
+      }
+      .bar > i {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 0%;
+        border-radius: 3px;
+        background: #36d399;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="title">Fliks desktop · DesktopPlayer bridge</div>
+    <div class="state" id="state">connecting…</div>
+    <div class="center">video composites behind this transparent UI</div>
+    <div class="controls">
+      <button id="pp">⏸</button>
+      <div class="bar"><i id="prog"></i></div>
+      <span id="clock">0:00 / 0:00</span>
+    </div>
+    <script>
+      // M1 placeholder renderer: drives playback through window.fliksDesktop to
+      // exercise the full preload → IPC → mpv chain. Replaced by the Angular app.
+      const fmt = (s) => {
+        s = Math.max(0, Math.floor(s || 0));
+        return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+      };
+      const $ = (id) => document.getElementById(id);
+      const params = new URLSearchParams(location.search);
+      const clip = params.get('clip');
+      let paused = false;
+
+      const api = window.fliksDesktop;
+      if (!api) {
+        $('state').textContent = 'no fliksDesktop bridge!';
+      } else {
+        $('state').textContent = `runtime: ${api.runtime}`;
+        api.on(async (ev) => {
+          if (ev.type === 'ready') {
+            $('state').textContent = 'ready · loading clip';
+            if (clip) {
+              await api.load({ url: clip });
+              await api.play();
+            }
+          } else if (ev.type === 'firstFrame') {
+            $('state').textContent = 'playing (first frame)';
+          } else if (ev.type === 'stateChanged') {
+            $('state').textContent = ev.payload.state;
+          } else if (ev.type === 'timeUpdate') {
+            const { position, duration } = ev.payload;
+            $('clock').textContent = `${fmt(position)} / ${fmt(duration)}`;
+            $('prog').style.width = duration ? `${(position / duration) * 100}%` : '0%';
+          } else if (ev.type === 'error') {
+            $('state').textContent = `error: ${ev.payload.message}`;
+          }
+        });
+      }
+
+      $('pp').addEventListener('click', async () => {
+        paused = !paused;
+        $('pp').textContent = paused ? '▶' : '⏸';
+        await (paused ? api.pause() : api.play());
+      });
+    </script>
+  </body>
+</html>

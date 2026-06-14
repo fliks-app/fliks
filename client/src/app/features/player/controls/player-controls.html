@@ -492,7 +492,7 @@
      plugin already runs the WebView fullscreen). `size` is one of
      'sm' | 'md'; defaults to 'md'. -->
 <ng-template #fullscreenBtn let-size>
-  @if (!isNative()) {
+  @if (!isNative() || isDesktop()) {
     @let isSm = size === 'sm';
     <button
       type="button"

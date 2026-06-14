@@ -48,6 +48,7 @@ import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playbac
 import { WebOsEngine } from '../../core/services/playback-engine/webos-engine';
 import { NativePlayer } from '../../core/plugins/native-player.plugin';
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
+import { DesktopEngine } from '../../core/services/playback-engine/desktop-engine';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { TrackManagerService, SubtitleOption } from '../../core/services/track-manager.service';
 import { QualityManagerService } from '../../core/services/quality-manager.service';
@@ -196,6 +197,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  (HW HEVC/AV1, Dolby, HDR, native HLS) — a regular in-WebView element,
    *  so it groups with the Shaka UX, not the transparent-plane native one. */
   readonly isWebOs = this.device.tvPlatform() === 'webos';
+  /** Native desktop shell (Electron + embedded mpv). Plays through the
+   *  DesktopEngine — same transparent-overlay UX as the Capacitor native
+   *  engine, with mpv behind the UI instead of ExoPlayer/AVPlayer. */
+  readonly isDesktopNative = this.device.desktopPlatform() === 'electron';
 
   /** Template binding — true when using native (ExoPlayer/AVPlayer) engine. */
   get nativeEngine(): boolean {
@@ -998,17 +1003,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           // complete duplicate — it skipped visibility / burn-in handling).
           const subs = await tvSubsPromise;
           this.availableSubtitles.set(subs);
-        } else if (this.isNative) {
-          // Subtitles arrive as HLS SUBTITLES renditions in the master
-          // playlist, so the ExoPlayer MediaItem doesn't depend on this
-          // fetch. Run it in parallel and resolve it after load() (like the
-          // Shaka path below) — awaiting it before load() only adds a network
-          // round-trip to the time-to-first-frame critical path.
+        } else if (this.isDesktopNative || this.isNative) {
+          // Native player path (Electron+mpv on desktop, ExoPlayer/AVPlayer on
+          // Capacitor mobile). Subtitles arrive as HLS SUBTITLES renditions in
+          // the master playlist, so the player doesn't depend on this fetch.
+          // Run it in parallel and resolve it after load() (like the Shaka path
+          // below) — awaiting it before load() only adds a network round-trip
+          // to the time-to-first-frame critical path.
           subsPromise = this.trackManager.loadSubtitles(
             this.mediaId, this.mediaFileId, this.streamingApi, this.media,
           );
 
-          await this.createNativeEngine();
+          if (this.isDesktopNative) await this.createDesktopEngine();
+          else await this.createNativeEngine();
 
           this.applyNativeSubtitleStyle();
 
@@ -1186,14 +1193,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // during load(). Force the player UI back into a visible-DOM state
       // so the user can read what blew up instead of staring at the
       // pre-paint bg-base-200 plane.
-      if (this.isTizenEngine() && this.engine) {
+      if ((this.isTizenEngine() || this.isDesktopNative || this.isNativeEngine()) && this.engine) {
         document.documentElement.classList.remove('native-player-active');
         const video = this.videoEl()?.nativeElement;
         if (video) video.style.display = '';
         try {
           await this.engine.destroy();
         } catch {
-          /* AVPlay state may already be torn down — fine */
+          /* engine state may already be torn down — fine */
         }
         this.engine = null;
         this.isTizenEngine.set(false);
@@ -1368,32 +1375,50 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Force transparent background so native player shows through
     document.documentElement.classList.add('native-player-active');
 
+    this.wireNativePlayerEngine(engine);
+  }
+
+  private async createDesktopEngine(): Promise<void> {
+    const video = this.videoEl()!.nativeElement;
+    video.style.display = 'none';
+
+    const engine = new DesktopEngine();
+    const container = this.containerEl()?.nativeElement ?? video.parentElement!;
+    await engine.init(container);
+
+    // Transparent page above the mpv video window — same hook the Capacitor
+    // native engine uses to show the hardware surface through the WebView.
+    document.documentElement.classList.add('native-player-active');
+
+    this.wireNativePlayerEngine(engine);
+  }
+
+  /** Shared wiring for the transparent-overlay native engines (Capacitor
+   *  ExoPlayer/AVPlayer and Electron mpv): bind state, surface the first
+   *  frame, arm session-expired recovery, and reconcile the audio-track list
+   *  against the backend streamInfo so labels match the media-detail header. */
+  private wireNativePlayerEngine(engine: PlaybackEngine): void {
     this.engine = engine;
     this.isNativeEngine.set(true);
     this.state.bindEngine(engine);
 
-    // videoStarted flips on the engine 'firstFrame' event (forwarded from
-    // ExoPlayer.Listener.onRenderedFirstFrame via the native plugin), so
-    // the spinner+fanart stay until the surface is actually painting. No
-    // separate stateChanged 'playing' hook needed — that fires on
-    // STATE_READY which can precede the first frame on cold starts.
+    // videoStarted flips on the engine 'firstFrame' event so the
+    // spinner+fanart stay until the surface is actually painting. No separate
+    // stateChanged 'playing' hook needed — that can precede the first frame.
     engine.on('firstFrame', () => {
       this.state.videoStarted.set(true);
     });
     this.wireSessionExpiredRecovery(engine);
 
-    // Listen for audio tracks from native engine.
-    // ExoPlayer may emit this multiple times (e.g. rendition switch) —
-    // never overwrite a good list with a smaller one. BUT: always let
+    // Engine audio tracks may emit multiple times (e.g. rendition switch) —
+    // never overwrite a good list with a smaller one. BUT always let
     // engine-sourced tracks (audio-* / shaka-*) replace the streamInfo
     // fallback (si-*), even at equal length — their IDs enable client-side
     // PID switching instead of a full backend reload.
     engine.on('audioTracksChanged', (e) => {
       // Cross-reference engine tracks with streamInfo.audio so the dropdown
-      // label matches what the media-detail header shows (e.g.
-      // "Français (EAC3 - 5.1)" instead of Shaka's raw "fre" / "English (eng)").
-      // Engine emits tracks in streamInfo order — see comment at the
-      // streamInfo-fallback branch below.
+      // label matches what the media-detail header shows. Engine emits tracks
+      // in streamInfo order.
       const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
       const audioList = (file?.streamInfo as any)?.audio ?? [];
       const tracks = e.tracks.map((t: any, i: number) => ({
@@ -1409,13 +1434,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const existingIsFallback =
         existing.length > 0 && existing[0].id.startsWith('si-');
       // Upgrade ONLY when incoming has at least as many tracks as existing —
-      // otherwise a transient partial emission (e.g. 1 audio track during
-      // ExoPlayer's initial parse) would wipe the full 3-track si-* list.
+      // otherwise a transient partial emission would wipe the full si-* list.
       const upgradeFromFallback =
         newIsEngineSourced && existingIsFallback && tracks.length >= existing.length;
       if (tracks.length <= existing.length && !upgradeFromFallback) return;
       this.availableAudioTracks.set(tracks);
-      // Use the track ExoPlayer reports as selected, fallback to first
       const selected = tracks.find((t: any) => t.selected) ?? tracks[0];
       this.activeAudioTrackId.set(selected.id);
       this.trackManager.autoSelectAudioTrack(
@@ -1756,6 +1779,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onToggleFullscreen() {
+    // Desktop compositor: the visible surface is the native (SDL) window owned
+    // by the addon, not this offscreen WebView, so toggle fullscreen there.
+    if (this.isDesktopNative && this.engine instanceof DesktopEngine) {
+      this.engine.setFullscreen(!this.engine.fullscreen);
+      return;
+    }
     // iOS Safari rejects the standard Fullscreen API on arbitrary elements
     // (and `document.fullscreenEnabled` is false). The only path to a
     // fullscreen video there is the legacy `webkitEnterFullscreen` on the
@@ -2168,6 +2197,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   onBack() {
     this.savePosition();
+    // Desktop compositor: leaving the player drops the native (SDL) window out
+    // of fullscreen so the rest of the app isn't stuck fullscreen. Episode
+    // switches route through goToNextEpisode(), not onBack(), so they keep it.
+    if (this.isDesktopNative && this.engine instanceof DesktopEngine && this.engine.fullscreen) {
+      this.engine.setFullscreen(false);
+    }
     // Explicit navigation rather than history.back() — nav-inside-player
     // (e.g. next-episode) leaves multiple /watch entries on the stack, and
     // router-reuse across same routes means history.back() only rewrites
@@ -2452,7 +2487,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (!this.isOfflinePlayback) await this.reloadStream();
       }
       const track = await this.engine.addTextTrack(sub.url, sub.language, sub.label, sub.forced);
-      this.engine.selectTextTrack(track);
+      this.engine.selectTextTrack({
+        ...track,
+        id: sub.id,
+        embIndex: sub.id.startsWith('emb-') ? Number(sub.id.slice(4)) : null,
+      });
       try { this.engine.setTextVisibility(true); } catch {}
     } catch (e) {
       console.error('[Player] Failed to load subtitle:', e);

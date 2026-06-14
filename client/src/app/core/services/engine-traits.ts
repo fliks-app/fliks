@@ -7,6 +7,7 @@ import { TvPlatform } from './device.service';
  *
  *  - WEB        — browser web build (Shaka / MSE).
  *  - NATIVE     — Capacitor mobile (ExoPlayer on Android, AVPlayer on iOS).
+ *  - DESKTOP    — Electron desktop client (embedded mpv).
  *  - ANDROID_TV — Android TV box / 10-foot ExoPlayer build.
  *  - TIZEN      — Samsung Smart TV (AVPlay, HLS-only).
  *  - WEBOS      — LG Smart TV (native `<video>`).
@@ -18,6 +19,7 @@ import { TvPlatform } from './device.service';
 export enum EngineKind {
   WEB = 'web',
   NATIVE = 'native',
+  DESKTOP = 'desktop',
   ANDROID_TV = 'androidtv',
   TIZEN = 'tizen',
   WEBOS = 'webos',
@@ -64,6 +66,16 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     probesSegZero: false,
     supportsDirectPlay: true,
   },
+  // Embedded mpv: renders behind the UI like NATIVE, but its ffmpeg HLS
+  // demuxer fetches seg-0 on load then seeks (like Shaka), so it needs the
+  // seg-0 early-start companion — otherwise resuming HLS content (e.g. an HDR
+  // transcode) 404s on seg-0 and mpv aborts with an end-file error.
+  [EngineKind.DESKTOP]: {
+    useTsOnSingleAudio: false,
+    supportsHlsSubtitles: true,
+    probesSegZero: true,
+    supportsDirectPlay: true,
+  },
   [EngineKind.ANDROID_TV]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
@@ -90,11 +102,16 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
 /**
  * Resolve the playback-engine kind from the detected platform and the
  * `isNative` flag (`ServerConfigService.isNative`). A null `tvPlatform`
- * splits into NATIVE (Capacitor mobile) vs WEB (browser) on `isNative`;
- * that split is what `probesSegZero` keys on. CAST is selected explicitly by
- * the Cast player and never resolved through this function.
+ * splits into DESKTOP (Electron + embedded mpv), NATIVE (Capacitor mobile),
+ * or WEB (browser); that split is what `probesSegZero` keys on. CAST is
+ * selected explicitly by the Cast player and never resolved through this
+ * function.
  */
-export function engineKindFor(tvPlatform: TvPlatform, isNative: boolean): EngineKind {
+export function engineKindFor(
+  tvPlatform: TvPlatform,
+  isNative: boolean,
+  isDesktop = false,
+): EngineKind {
   switch (tvPlatform) {
     case 'tizen':
       return EngineKind.TIZEN;
@@ -103,6 +120,9 @@ export function engineKindFor(tvPlatform: TvPlatform, isNative: boolean): Engine
     case 'androidtv':
       return EngineKind.ANDROID_TV;
     default:
+      // Desktop is also `isNative` (the Electron UA matches), so it must be
+      // checked first.
+      if (isDesktop) return EngineKind.DESKTOP;
       return isNative ? EngineKind.NATIVE : EngineKind.WEB;
   }
 }
