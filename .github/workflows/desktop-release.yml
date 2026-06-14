@@ -1,0 +1,252 @@
+# Builds the Fliks ELECTRON DESKTOP client installers for all three desktop OSes:
+#   - Linux   → .deb     (ubuntu-latest)
+#   - macOS   → .dmg      (macos-latest)
+#   - Windows → .exe/nsis (windows-latest)
+#
+# This is the thin Electron client under desktop/ — NOT the SwiftUI menu-bar
+# server host under macos/, which has its own workflow (macos-dmg.yml). Keep the
+# two separate; they share nothing.
+#
+# Build = three units assembled by electron-builder:
+#   1. native C++ compositor addon (desktop/native) — node-gyp rebuild against
+#      the Electron 42 ABI, linked to libmpv + SDL2 + GLES/EGL.
+#   2. esbuild main/preload bundle  (cd desktop && npm run build).
+#   3. the Angular client           (cd client && npx ng build), staged into
+#      desktop/web so electron-builder ships it at resources/web.
+#   + a vendored self-contained libmpv into desktop/native/vendor per OS.
+#
+# STATUS: iteration-1 scaffold. The Linux path is the closest to known-good
+# (it mirrors desktop/CLAUDE.md). macOS and especially Windows have unresolved
+# TODOs (cross-platform binding.gyp, vendored mpv, libmpv headers) flagged inline
+# and called out in the PR. This is expected to need a real CI run to shake out.
+name: Desktop release
+
+on:
+  workflow_dispatch:
+  push:
+    # Dedicated desktop tag namespace so this does not fire on release-please's
+    # `v*` tags (those drive the macos/ SwiftUI host's macos-dmg.yml).
+    tags: ['desktop-v*']
+
+# Needed to attach installers to a GitHub Release on a tag push.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.os }} → ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Don't cancel the other OSes when one fails — we want to see every
+      # platform's outcome on a single run while this is being stabilised.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: deb
+            dist_script: dist:linux
+            artifact_glob: desktop/release/*.deb
+          - os: macos-latest
+            label: dmg
+            dist_script: dist:mac
+            artifact_glob: desktop/release/*.dmg
+          - os: windows-latest
+            label: exe
+            dist_script: dist:win
+            artifact_glob: desktop/release/*.exe
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # ── Resolve the build version → baked into the installer filenames ──
+      # A desktop-v* tag gives the release version; a manual/test run uses the
+      # package.json version with a -dev.<sha> prerelease suffix. Both are valid
+      # semver, so they can be injected into electron-builder
+      # (-c.extraMetadata.version) and appear in the artifact names.
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/desktop-v* ]]; then
+            v="${GITHUB_REF#refs/tags/desktop-v}"
+          else
+            base=$(node -p "require('./desktop/package.json').version")
+            v="${base}-dev.$(git rev-parse --short HEAD)"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Resolved desktop version: $v"
+
+      # desktop/package.json declares Node >= 20, but electron-builder 26's
+      # transitive deps (@electron/rebuild, node-abi, app-builder-lib) require
+      # Node >= 22.12, so the runner uses 22. The addon's Electron 42 ABI is
+      # pinned via node-gyp --target/--dist-url and is independent of host Node.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            desktop/package-lock.json
+            client/package-lock.json
+
+      # Cache the heavy downloads each run otherwise repeats: the Electron
+      # binary + electron-builder helper tooling (app-builder, ~150-200 MB) and
+      # the node-gyp Electron headers. setup-node above already caches the npm
+      # store. Paths are listed for all three OSes; actions/cache skips the ones
+      # that don't exist on a given runner. Keyed on the Electron major + lock.
+      - name: Cache electron / electron-builder / node-gyp
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+            ~/.electron-gyp
+            ~/.node-gyp
+          key: ${{ runner.os }}-electron42-${{ hashFiles('desktop/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron42-
+
+      # ────────────────────────────────────────────────────────────────────
+      # Platform build dependencies for the native addon (SDL2 + GLES/EGL +
+      # libmpv headers) and for libmpv at runtime.
+      # ────────────────────────────────────────────────────────────────────
+
+      # Linux: the exact apt set from desktop/CLAUDE.md. CONFIDENT.
+      - name: Install Linux build deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential python3 pkg-config \
+            libsdl2-dev libgles2-mesa-dev libegl1-mesa-dev libmpv-dev
+
+      # macOS: brew provides mpv + sdl2 (with pkg-config files). GLES/EGL is NOT
+      # native on macOS — the addon uses GLES 3.2 + EGL, which Apple does not
+      # ship. binding.gyp's `pkg-config glesv2 egl` WILL FAIL here as-is.
+      # TODO(macos-addon): the binding.gyp is Linux-only. Building the compositor
+      #   on macOS needs either an ANGLE/EGL shim (e.g. brew install angle, or a
+      #   bundled libEGL/libGLESv2 from ANGLE) or a macOS code path in addon.cc.
+      #   Until then the node-gyp step below is expected to fail on macOS.
+      - name: Install macOS build deps
+        if: runner.os == 'macOS'
+        run: |
+          brew install mpv sdl2 pkg-config
+          # TODO(macos-addon): GLES/EGL not available from Homebrew core; the
+          # addon's `pkg-config --cflags glesv2 egl` will not resolve. Needs an
+          # ANGLE-based EGL/GLES provider before this can link.
+
+      # Windows: there is no first-class libmpv/SDL2/GLES dev package via the
+      # default toolchains, and binding.gyp is written for pkg-config + POSIX.
+      # TODO(windows-addon): this is the least-certain platform. Options to try:
+      #   - vcpkg: `vcpkg install sdl2 angle libmpv` (libmpv port availability is
+      #     unconfirmed) and a windows binding.gyp branch using vcpkg include/lib.
+      #   - prebuilt libmpv from https://sourceforge.net/projects/mpv-player-windows/
+      #     (shinchiro builds) for the runtime DLL, plus headers for compile.
+      #   - MSYS2 pacman (mingw-w64-x86_64-{SDL2,mpv,angleproject}) — but that
+      #     toolchain differs from node-gyp's MSVC default.
+      #   Expect the node-gyp step to fail on Windows until binding.gyp grows a
+      #   win32 branch and the deps are sourced. Left as a scaffold on purpose.
+      - name: Install Windows build deps
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "TODO(windows-addon): no confident libmpv/SDL2/GLES dev source yet."
+          echo "See the inline notes in this workflow. The node-gyp + electron-builder"
+          echo "steps below will likely need binding.gyp + vendoring work to pass."
+
+      # ── Install node deps (desktop + client) ──
+      - name: Install desktop deps
+        working-directory: desktop
+        run: npm ci
+
+      - name: Install client deps
+        working-directory: client
+        run: npm ci
+
+      # ────────────────────────────────────────────────────────────────────
+      # Vendor a self-contained libmpv into desktop/native/vendor.
+      # The main process resolves FLIKS_MPV_PATH to
+      #   app.getAppPath()/native/vendor/libmpv.so.2
+      # and electron-builder ships native/vendor/** (asarUnpacked).
+      # TODO(vendor-mpv): desktop/scripts/fetch-vendored does NOT exist yet.
+      #   It must drop a *self-contained* libmpv (FFmpeg symbols hidden — see
+      #   desktop/CLAUDE.md kill-switch `nm -D … | grep ' av_'` must be empty) at:
+      #     Linux:   desktop/native/vendor/libmpv.so.2
+      #     macOS:   desktop/native/vendor/libmpv.2.dylib  (note: index.ts hard-
+      #              codes libmpv.so.2 — needs a per-OS filename, owned elsewhere)
+      #     Windows: desktop/native/vendor/libmpv-2.dll
+      #   For now this step only creates the dir so electron-builder's
+      #   native/vendor/** glob does not error on an empty match; the produced
+      #   installer will NOT play video without the real libmpv.
+      # ────────────────────────────────────────────────────────────────────
+      - name: Vendor libmpv (placeholder)
+        shell: bash
+        run: |
+          mkdir -p desktop/native/vendor
+          if [ -x desktop/scripts/fetch-vendored ]; then
+            desktop/scripts/fetch-vendored
+          else
+            echo "TODO(vendor-mpv): desktop/scripts/fetch-vendored missing —"
+            echo "shipping WITHOUT a runtime libmpv. Installer builds but playback"
+            echo "is non-functional until the vendoring script lands."
+          fi
+
+      # ── Build the native compositor addon against the Electron 42 ABI ──
+      # CONFIDENT on Linux (mirrors desktop/CLAUDE.md). Expected to fail on
+      # macOS/Windows until binding.gyp is made cross-platform (see deps notes).
+      - name: Build native addon
+        working-directory: desktop/native
+        shell: bash
+        run: |
+          ../node_modules/.bin/node-gyp rebuild \
+            --target=42.4.0 \
+            --dist-url=https://electronjs.org/headers \
+            --arch=x64
+
+      # ── Build the esbuild main/preload bundle (dist/**) ── CONFIDENT.
+      - name: Build main + preload bundle
+        working-directory: desktop
+        run: npm run build
+
+      # ── Build the Angular client and stage it where electron-builder expects ──
+      # angular.json emits to client/dist/client/browser. electron-builder ships
+      # desktop/web → resources/web (read at runtime via process.resourcesPath).
+      - name: Build Angular client
+        working-directory: client
+        run: npx ng build --configuration=production
+
+      - name: Stage client into desktop/web
+        shell: bash
+        run: |
+          rm -rf desktop/web
+          mkdir -p desktop/web
+          cp -r client/dist/client/browser/. desktop/web/
+
+      # ── Package the installer for this OS ──
+      # electron-builder publishes to a Release when GH_TOKEN is set and the ref
+      # is a tag; we keep that explicit via the attach step below instead, so we
+      # disable auto-publish here and just produce the artifact.
+      - name: Build installer
+        working-directory: desktop
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run ${{ matrix.dist_script }} -- --publish never -c.extraMetadata.version=${{ steps.version.outputs.version }}
+
+      # ── Upload the installer as a workflow artifact (always) ──
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fliks-desktop-${{ matrix.label }}-${{ steps.version.outputs.version }}
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: error
+
+      # ── Attach to the GitHub Release on a desktop tag push ──
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ${{ matrix.artifact_glob }}

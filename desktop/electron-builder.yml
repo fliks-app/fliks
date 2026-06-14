@@ -1,27 +1,71 @@
-# electron-builder config (seed). Produces one installer per OS from the same
-# Electron app: macOS .dmg, Windows NSIS .exe, Linux AppImage + .deb.
+# electron-builder config. Produces one installer per OS from the same Electron
+# app: macOS .dmg, Windows NSIS .exe, Linux .deb (+ AppImage).
 #
-# The built Angular client and the vendored mpv binary are bundled as extra
-# resources (wired up with the macOS/Windows/Linux packaging milestone).
+# What gets shipped (see desktop/src/main/index.ts for the runtime lookups this
+# layout has to satisfy):
+#   - the esbuild main/preload bundle   → dist/**            (app.getAppPath()/dist)
+#   - the native compositor addon       → native/build/**    (app.getAppPath()/native/build/Release/fliks_compositor.node)
+#   - the vendored self-contained mpv   → native/vendor/**    (FLIKS_MPV_PATH defaults to app.getAppPath()/native/vendor/libmpv.so.2)
+#   - the built Angular client          → resources/web      (process.resourcesPath/web when app.isPackaged)
+#
+# The native .node addon and the libmpv shared library must NOT be packed into
+# the asar (they are dlopen'd at runtime), hence the asarUnpack globs. node-gyp
+# rebuild against the Electron ABI and the per-OS mpv vendoring both happen in CI
+# *before* electron-builder runs (see .github/workflows/desktop-release.yml).
 appId: media.fliks.desktop
 productName: Fliks
+# Bake the version into every installer filename (the CI injects the resolved
+# version via -c.extraMetadata.version). e.g. Fliks-1.2.3-x64.dmg / -amd64.deb.
+artifactName: ${productName}-${version}-${arch}.${ext}
 directories:
   output: release
   buildResources: build
+# Bundle the bundled main/preload, the compiled native addon, and the vendored
+# mpv runtime into the app. native/** carries the prebuilt addon + libmpv that
+# the main process resolves relative to app.getAppPath().
 files:
   - dist/**
-  - src/renderer/**
+  - native/build/Release/**
+  - native/vendor/**
+  - package.json
+# The addon (.node) and libmpv (.so/.dylib/.dll) are loaded by dlopen/require at
+# runtime, so they must live on disk unpacked, not inside app.asar.
+asarUnpack:
+  - native/build/Release/**
+  - native/vendor/**
+# The built Angular client is read from process.resourcesPath/web in a packaged
+# app. CI builds it into client/dist/client/browser and copies it to
+# desktop/web before packaging (see the workflow's "stage web" step).
 extraResources:
-  # Vendored mpv binary per OS lands here (see scripts/fetch-vendored).
-  - from: vendor/${os}
-    to: mpv
+  - from: web
+    to: web
     filter: ['**/*']
 mac:
   target: [dmg]
   category: public.app-category.entertainment
-  # Notarization + hardened runtime wired with the signing milestone.
+  # TODO(signing): hardened runtime + notarization are intentionally omitted for
+  # iteration 1. Unsigned .dmg is fine for internal testing; production needs a
+  # Developer ID cert, CSC_LINK/CSC_KEY_PASSWORD, and notarytool credentials.
 win:
   target: [nsis]
+  # TODO(signing): Authenticode signing omitted for now (WIN_CSC_LINK/…).
 linux:
+  # Binary + generated .desktop basename = "fliks", matching the compositor
+  # window's WM_CLASS (set to "fliks" in addon.cc). GNOME/Ubuntu key the dock
+  # entry on that, so the installed app shows the Fliks icon (the desktop entry
+  # below also pins StartupWMClass explicitly). The icon itself comes from
+  # build/icon.png, which electron-builder installs into the hicolor theme.
+  executableName: fliks
+  desktop:
+    entry:
+      StartupWMClass: fliks
   target: [AppImage, deb]
   category: AudioVideo
+  # deb runtime deps: the addon links SDL2/GLES/EGL and dlopen's libmpv. The
+  # vendored libmpv is self-contained, but SDL2 + GL are expected on the host.
+  # TODO: confirm this list against a real .deb install on a clean Ubuntu box.
+  deb:
+    depends:
+      - libsdl2-2.0-0
+      - libgles2
+      - libegl1
