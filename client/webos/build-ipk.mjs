@@ -38,7 +38,7 @@ appInfo.version = pkg.version ?? appInfo.version;
 writeFileSync(resolve(stage, 'appinfo.json'), JSON.stringify(appInfo, null, 2));
 
 const iconSrc = resolve(here, 'icon.png');
-const iconFallback = resolve(clientRoot, 'public/fliks-mark.png');
+const iconFallback = resolve(clientRoot, 'public/icons/icon-512x512.png');
 copyFileSync(existsSync(iconSrc) ? iconSrc : iconFallback, resolve(stage, 'icon.png'));
 
 // Optional 1920x1080 loading splash (appinfo `splashBackground`). Only staged

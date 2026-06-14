@@ -114,7 +114,7 @@ console.log('[tizen] CSS downlevel guard passed');
 
 const configXml = resolve(here, 'config.xml');
 const iconSrc = resolve(here, 'icon.png');
-const iconFallback = resolve(clientRoot, 'public/fliks-mark.png');
+const iconFallback = resolve(clientRoot, 'public/icons/icon-512x512.png');
 copyFileSync(configXml, resolve(stage, 'config.xml'));
 copyFileSync(existsSync(iconSrc) ? iconSrc : iconFallback, resolve(stage, 'icon.png'));
 
