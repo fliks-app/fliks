@@ -47,6 +47,15 @@ win:
   target: [nsis]
   # TODO(signing): Authenticode signing omitted for now (WIN_CSC_LINK/…).
 linux:
+  # Binary + generated .desktop basename = "fliks", matching the compositor
+  # window's WM_CLASS (set to "fliks" in addon.cc). GNOME/Ubuntu key the dock
+  # entry on that, so the installed app shows the Fliks icon (the desktop entry
+  # below also pins StartupWMClass explicitly). The icon itself comes from
+  # build/icon.png, which electron-builder installs into the hicolor theme.
+  executableName: fliks
+  desktop:
+    entry:
+      StartupWMClass: fliks
   target: [AppImage, deb]
   category: AudioVideo
   # deb runtime deps: the addon links SDL2/GLES/EGL and dlopen's libmpv. The
