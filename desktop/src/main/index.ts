@@ -26,7 +26,7 @@ const HEIGHT = 800;
 // Loaded via a real require so esbuild leaves the .node resolution to runtime.
 const nativeRequire = createRequire(__filename);
 type Addon = {
-  start(o: { width: number; height: number; title: string }): void;
+  start(o: { width: number; height: number; title: string; icon?: string }): void;
   onEvent(cb: (json: string) => void): void;
   onInput(cb: (json: string) => void): void;
   uploadUi(buf: Buffer, w: number, h: number): void;
@@ -51,6 +51,15 @@ function webDir(): string {
 function windowIcon(): string | undefined {
   const candidate = path.join(app.getAppPath(), 'build', 'icon.png');
   return fs.existsSync(candidate) ? candidate : undefined;
+}
+
+// The VISIBLE window is the native SDL compositor (the BrowserWindow above is
+// offscreen), so the dock/taskbar icon comes from SDL_SetWindowIcon in the
+// addon — not the BrowserWindow. SDL2's core loader reads BMP only, so the
+// addon takes a .bmp. Empty string → addon keeps no icon (rather than crash).
+function compositorIcon(): string {
+  const candidate = path.join(app.getAppPath(), 'build', 'icon.bmp');
+  return fs.existsSync(candidate) ? candidate : '';
 }
 
 const num = (v: string | null): number => {
@@ -211,7 +220,7 @@ app.whenReady().then(() => {
   });
   uiWin.webContents.on('console-message', (_e, _l, m) => console.log('[renderer]', m));
 
-  addon.start({ width: WIDTH, height: HEIGHT, title: 'Fliks' });
+  addon.start({ width: WIDTH, height: HEIGHT, title: 'Fliks', icon: compositorIcon() });
 
   // Periodic position emit. The addon's `time-pos` observe doesn't push while
   // playback advances, so poll mpv on a timer and forward a `timeUpdate` — this

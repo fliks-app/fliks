@@ -21,6 +21,7 @@
 
 #include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -105,6 +106,7 @@ struct GlState {
   int width = 1280;
   int height = 800;
   std::string title = "Fliks";
+  std::string iconPath;  // BMP loaded onto the window via SDL_SetWindowIcon
   std::atomic<bool> run{false};
   std::atomic<int> fsRequest{-1};  // -1 none, 0 windowed, 1 fullscreen-desktop
   std::thread renderThread;
@@ -245,6 +247,10 @@ void MpvRenderInit(GlState* s) {
 }
 
 void RenderThreadMain(GlState* s) {
+  // Name the X11 WM_CLASS so the window isn't grouped under "electron" (argv0).
+  // GNOME/Ubuntu key the dock entry on this; default to "fliks" but let an
+  // explicit launch-time SDL_VIDEO_X11_WMCLASS win (overwrite=0).
+  setenv("SDL_VIDEO_X11_WMCLASS", "fliks", 0);
   if (SDL_Init(SDL_INIT_VIDEO) != 0) {
     fprintf(stderr, "[compositor] SDL_Init failed: %s\n", SDL_GetError());
     return;
@@ -260,6 +266,17 @@ void RenderThreadMain(GlState* s) {
     fprintf(stderr, "[compositor] SDL_CreateWindow failed: %s\n", SDL_GetError());
     SDL_Quit();
     return;
+  }
+  // Window icon (the dock/taskbar uses this when no .desktop matches). Loaded
+  // from a BMP so SDL2's core loader suffices — no SDL_image dependency.
+  if (!s->iconPath.empty()) {
+    if (SDL_Surface* icon = SDL_LoadBMP(s->iconPath.c_str())) {
+      SDL_SetWindowIcon(s->window, icon);
+      SDL_FreeSurface(icon);
+    } else {
+      fprintf(stderr, "[compositor] icon load failed (%s): %s\n",
+              s->iconPath.c_str(), SDL_GetError());
+    }
   }
   s->gl = SDL_GL_CreateContext(s->window);
   SDL_GL_MakeCurrent(s->window, s->gl);
@@ -464,6 +481,8 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
     if (o.Has("width")) g_state.width = o.Get("width").As<Napi::Number>().Int32Value();
     if (o.Has("height")) g_state.height = o.Get("height").As<Napi::Number>().Int32Value();
     if (o.Has("title")) g_state.title = o.Get("title").As<Napi::String>().Utf8Value();
+    if (o.Has("icon") && o.Get("icon").IsString())
+      g_state.iconPath = o.Get("icon").As<Napi::String>().Utf8Value();
   }
   if (!M::Load()) {
     Napi::Error::New(env, "libmpv load failed").ThrowAsJavaScriptException();
