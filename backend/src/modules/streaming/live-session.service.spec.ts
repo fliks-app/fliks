@@ -245,3 +245,92 @@ describe('LiveSessionRegistry GC', () => {
     expect(svc.size()).toBe(1);
   });
 });
+
+describe('LiveSessionRegistry per-user cap', () => {
+  const ENV = process.env;
+  let svc: LiveSessionRegistry;
+
+  beforeEach(() => {
+    process.env = { ...ENV };
+  });
+
+  afterEach(() => {
+    svc?.onModuleDestroy();
+    process.env = ENV;
+  });
+
+  it('evicts the oldest-lastBeat session once a user is over the cap', async () => {
+    process.env.STREAM_MAX_SESSIONS_PER_USER = '2';
+    svc = new LiveSessionRegistry();
+    svc.onModuleInit();
+
+    const first = svc.create(BASE);
+    await new Promise((r) => setTimeout(r, 5));
+    const second = svc.create(BASE);
+    // The user is at the cap (2). The third create evicts the
+    // oldest-beaten entry (first) rather than rejecting the new one.
+    await new Promise((r) => setTimeout(r, 5));
+    const third = svc.create(BASE);
+
+    expect(svc.get(first.sessionId)).toBeNull();
+    expect(svc.get(second.sessionId)).not.toBeNull();
+    expect(svc.get(third.sessionId)).not.toBeNull();
+    expect(svc.size()).toBe(2);
+  });
+
+  it('evicts the least-recently-beaten session, not the first inserted', async () => {
+    process.env.STREAM_MAX_SESSIONS_PER_USER = '2';
+    svc = new LiveSessionRegistry();
+    svc.onModuleInit();
+
+    const first = svc.create(BASE);
+    await new Promise((r) => setTimeout(r, 5));
+    const second = svc.create(BASE);
+    // Beat `first` so `second` becomes the stalest entry.
+    await new Promise((r) => setTimeout(r, 5));
+    svc.heartbeat(first.sessionId, { position: 1 });
+    await new Promise((r) => setTimeout(r, 5));
+    const third = svc.create(BASE);
+
+    expect(svc.get(second.sessionId)).toBeNull();
+    expect(svc.get(first.sessionId)).not.toBeNull();
+    expect(svc.get(third.sessionId)).not.toBeNull();
+    expect(svc.size()).toBe(2);
+  });
+
+  it('caps each user independently and never blocks a fresh session', () => {
+    process.env.STREAM_MAX_SESSIONS_PER_USER = '2';
+    svc = new LiveSessionRegistry();
+    svc.onModuleInit();
+
+    svc.create(BASE);
+    svc.create(BASE);
+    svc.create(BASE); // evicts alice's oldest, alice stays at 2
+    svc.create({ ...BASE, userId: 99, username: 'bob' });
+
+    expect(svc.size()).toBe(3);
+    expect(svc.listForJob(1, 42, 'aaaaaaaaaa')).toHaveLength(2);
+  });
+
+  it('does not cap anonymous (null userId) sessions', () => {
+    process.env.STREAM_MAX_SESSIONS_PER_USER = '1';
+    svc = new LiveSessionRegistry();
+    svc.onModuleInit();
+
+    svc.create({ ...BASE, userId: null, username: null });
+    svc.create({ ...BASE, userId: null, username: null });
+    svc.create({ ...BASE, userId: null, username: null });
+
+    expect(svc.size()).toBe(3);
+  });
+
+  it('defaults the cap to 10 when the env var is unset', () => {
+    delete process.env.STREAM_MAX_SESSIONS_PER_USER;
+    svc = new LiveSessionRegistry();
+    svc.onModuleInit();
+
+    for (let i = 0; i < 11; i++) svc.create(BASE);
+    // The 11th create evicts the oldest — the user never exceeds 10.
+    expect(svc.size()).toBe(10);
+  });
+});

@@ -43,6 +43,7 @@ import {
   type LiveSessionSnapshot,
   LiveSessionRegistry,
 } from '../streaming/live-session.service';
+import { StreamLifetime } from '../streaming/lifetime-constants';
 import { PlaybackService } from '../streaming/playback.service';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
@@ -315,7 +316,14 @@ export class SystemController {
     // currently watching". Each playback gets its own sid, so two
     // devices on the same (user, file) coexist as two distinct
     // entries — no clobber, no dedup destroying multi-device.
-    const live = this.liveSessions.list();
+    // Show only genuinely-live sessions. `list()` returns every entry (the
+    // bulk DELETE handler relies on that), so a client that died still shows
+    // here until the next GC sweep. Filter to the same TTL the registry GCs
+    // on so a dead session drops off the dashboard at once.
+    const liveTtlMs = StreamLifetime.liveSessionTtlMs();
+    const live = this.liveSessions
+      .list()
+      .filter((s) => s.lastBeat.getTime() > Date.now() - liveTtlMs);
     const transcodeSessions = this.transcodingService.getActiveSessions();
     const findTranscodeSession = (
       userId: number | null,
