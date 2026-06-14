@@ -44,9 +44,12 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
    *  `nativePlayerError` bridge. ExoPlayer / AVPlayer can't tell us the
    *  HTTP status that triggered the error, so the first error during
    *  stable playback is routed to `sessionExpired` (which makes the
-   *  player call /playback-info + reload). If a second error follows
-   *  before the next load() clears the flag, fall through to a real
-   *  fatal `error` so the UI isn't stuck retrying a broken stream. */
+   *  player call /playback-info + reload). A second error before the
+   *  guard is re-armed falls through to a real fatal `error` so the UI
+   *  isn't stuck retrying a broken stream. The guard is re-armed only by
+   *  {@link resetRecoveryGuard} — on a user-initiated (re)load or once a
+   *  recovery has sustained playback, never on every load() — so a
+   *  recovery reload that immediately re-fails can't loop forever. */
   private recoveryAttempted = false;
   /** Last `timeUpdate.position` seen, used to detect that playback is
    *  actually advancing (Android's onRenderedFirstFrame is unreliable on
@@ -112,6 +115,13 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   /** Mark next load() as offline — uses CacheDataSource on Android. */
   setOffline(offline: boolean) { this._offline = offline; }
 
+  /** Re-arm the one-shot {@link recoveryAttempted} guard so a fresh stream
+   *  gets its single optimistic recovery again. Called by the player on a
+   *  user-initiated (re)load and after a recovery sustains playback. */
+  resetRecoveryGuard(): void {
+    this.recoveryAttempted = false;
+  }
+
   async load(
     url: string,
     startTime?: number,
@@ -119,7 +129,6 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     headers?: Record<string, string>,
   ): Promise<void> {
     this.firstFrameEmitted = false;
-    this.recoveryAttempted = false;
     this.lastTimeUpdatePos = -1;
     // Subtitles are delivered as HLS SUBTITLES renditions in the master
     // playlist, not sidecar SubtitleConfigurations, so the player surfaces
