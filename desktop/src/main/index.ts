@@ -6,6 +6,10 @@ import { registerAppSchemePrivileged, registerAppProtocol, APP_URL } from './pro
 import { installCorsBypass } from './cors';
 import { IPC, type DesktopEvent, type DesktopSubtitleStyle } from '../shared/contract';
 
+// Name the app before `ready` so Linux derives the WM class (and thus the
+// GNOME/Ubuntu top-bar + dock identity) from "Fliks" rather than "Electron".
+app.setName('Fliks');
+
 // Force software OSR: Chromium's GPU process can't init here, and a
 // GPU-composited OSR window never recovers from a GPU-process crash.
 app.disableHardwareAcceleration();
@@ -38,6 +42,15 @@ function webDir(): string {
   if (process.env.FLIKS_WEB_DIR) return process.env.FLIKS_WEB_DIR;
   if (app.isPackaged) return path.join(process.resourcesPath, 'web');
   return path.resolve(app.getAppPath(), '..', 'client', 'dist', 'client', 'browser');
+}
+
+// The Fliks logo for the dev (`electron .`) window. Packaged builds get their
+// dock/launcher icon from electron-builder's `build/icon.*`, so this only needs
+// to resolve when running unpackaged from `desktop/`. Returns undefined if the
+// PNG is missing so Electron keeps its default rather than throwing.
+function windowIcon(): string | undefined {
+  const candidate = path.join(app.getAppPath(), 'build', 'icon.png');
+  return fs.existsSync(candidate) ? candidate : undefined;
 }
 
 const num = (v: string | null): number => {
@@ -175,6 +188,8 @@ app.whenReady().then(() => {
     show: false,
     transparent: true,
     backgroundColor: '#00000000',
+    title: 'Fliks',
+    icon: windowIcon(),
     webPreferences: {
       offscreen: true,
       preload: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
