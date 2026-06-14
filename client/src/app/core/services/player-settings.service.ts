@@ -50,7 +50,7 @@ const DEFAULTS: PlayerSettings = {
   subtitleColor: 'white',
   subtitleShadow: 'drop',
   subtitleBackground: 'transparent',
-  subtitleBottomMargin: 10,
+  subtitleBottomMargin: 5,
   subtitleTopMargin: 5,
   autoSkipIntro: false,
 };
