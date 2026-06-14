@@ -1,0 +1,361 @@
+import {
+  AbstractPlaybackEngine,
+  type PlaybackEngine,
+  type AudioTrack,
+  type EngineStats,
+  type PlaybackState,
+} from './playback-engine';
+import {
+  NATIVE_SUBTITLE_SIZE_SCALE,
+  SUBTITLE_FG_HEX,
+  SUBTITLE_BG_ARGB,
+  SUBTITLE_EDGE_KEY,
+} from '../../utils/subtitle-presets';
+import { normalizeLangCode } from '../../utils/language.utils';
+import {
+  desktopBridge,
+  type DesktopEvent,
+  type DesktopSubtitleTrack,
+  type FliksDesktopApi,
+} from '../../plugins/desktop-player.bridge';
+
+/**
+ * PlaybackEngine backed by the Electron desktop shell's embedded mpv player
+ * (window.fliksDesktop). mpv renders into a window behind the transparent UI —
+ * the same model as NativeEngine on mobile, so this mirrors that engine: the
+ * desktop bridge replaces the Capacitor NativePlayer plugin, and mpv's event
+ * stream replaces the native window CustomEvents.
+ */
+export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEngine {
+  private readonly bridge: FliksDesktopApi = desktopBridge();
+  private unsubscribe: (() => void) | null = null;
+
+  private _currentTime = 0;
+  private _duration = 0;
+  private _buffered = 0;
+  private _paused = true;
+  private _playbackRate = 1;
+  private _volume = 1;
+  private _muted = false;
+  private _state: PlaybackState = 'idle';
+  private _audioTracks: AudioTrack[] = [];
+
+  private firstFrameEmitted = false;
+  private recoveryAttempted = false;
+  /** Set in destroy() so a leaked late event (the mpv player is a persistent
+   *  singleton) can't drive a torn-down engine into recovery. */
+  private dead = false;
+
+  private _initialized = false;
+
+  // ── Subtitles ──
+  // mpv renders subtitles in its own pipeline; selection is by (language,
+  // forced) against the track list mpv reports, mirroring NativeEngine.
+  private _activeTrackId: string | null = null;
+  private _desiredSubtitle: { language: string; forced: boolean; embIndex: number | null } | null = null;
+  private _nativeSubtitleTracks: DesktopSubtitleTrack[] = [];
+  /** mpv's own audio track ids, indexed parallel to the `audio-<i>` ids the
+   *  player expects (mpv ids are bare ints; the player keys off the prefix). */
+  private _mpvAudioIds: string[] = [];
+  private _fullscreen = false;
+
+  private _subtitleStyle: {
+    fontScale: number;
+    foregroundColor: string;
+    backgroundColor: string;
+    edgeType: string;
+    bottomMarginPercent: number;
+  } | null = null;
+
+  // ── Lifecycle ──
+
+  async init(_container: HTMLElement): Promise<void> {
+    // The video window + mpv already exist in the Electron main process; just
+    // wire the event stream (and re-apply any style set before init).
+    this.subscribe();
+    this._initialized = true;
+    if (this._subtitleStyle) {
+      this.bridge.setSubtitleStyle(this._subtitleStyle).catch(() => {});
+    }
+  }
+
+  async destroy(): Promise<void> {
+    this.dead = true;
+    this._initialized = false;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this._activeTrackId = null;
+    this.clearHandlers();
+    await this.bridge.stop().catch(() => {});
+  }
+
+  async load(
+    url: string,
+    startTime?: number,
+    _mimeType?: string,
+    headers?: Record<string, string>,
+  ): Promise<void> {
+    this.firstFrameEmitted = false;
+    this.recoveryAttempted = false;
+    await this.bridge.load({ url, startTime, headers });
+    if (this._subtitleStyle) {
+      await this.bridge.setSubtitleStyle(this._subtitleStyle);
+    }
+    // Fresh media → fresh track ids; let the desired selection re-apply once
+    // mpv reports the new track list (tracksChanged).
+    this._activeTrackId = null;
+    this._nativeSubtitleTracks = [];
+  }
+
+  async unload(): Promise<void> {
+    await this.bridge.stop();
+    this._state = 'idle';
+    this._currentTime = 0;
+    this._duration = 0;
+  }
+
+  // ── Playback ──
+
+  async play(): Promise<void> {
+    await this.bridge.play();
+    this._paused = false;
+  }
+
+  async pause(): Promise<void> {
+    await this.bridge.pause();
+    this._paused = true;
+  }
+
+  async seek(position: number): Promise<void> {
+    await this.bridge.seek(position);
+    this._currentTime = position;
+  }
+
+  // ── State ──
+
+  get currentTime(): number {
+    return this._currentTime;
+  }
+  get duration(): number {
+    return this._duration;
+  }
+  get paused(): boolean {
+    return this._paused;
+  }
+  get buffered(): number {
+    return this._buffered;
+  }
+  get playbackRate(): number {
+    return this._playbackRate;
+  }
+  set playbackRate(rate: number) {
+    this._playbackRate = rate;
+    this.bridge.setPlaybackRate(rate).catch(() => {});
+  }
+
+  // Desktop has an in-app volume control (unlike mobile, which defers to the
+  // OS slider): drive mpv's volume/mute directly.
+  get volume(): number {
+    return this._volume;
+  }
+  set volume(v: number) {
+    this._volume = v;
+    this.bridge.setVolume(Math.round(v * 100)).catch(() => {});
+  }
+  get muted(): boolean {
+    return this._muted;
+  }
+  set muted(m: boolean) {
+    this._muted = m;
+    this.bridge.setMuted(m).catch(() => {});
+  }
+
+  // ── Audio tracks ──
+
+  getAudioTracks(): AudioTrack[] {
+    return this._audioTracks;
+  }
+
+  async selectAudioTrack(id: string): Promise<void> {
+    // The player sends `audio-<i>` ids; translate back to mpv's own aid.
+    const idx = parseInt(id.replace(/^audio-/, ''), 10);
+    const mpvId = this._mpvAudioIds[idx] ?? String(idx + 1);
+    await this.bridge.selectAudioTrack(mpvId);
+  }
+
+  /** Toggle the native (SDL) compositor window fullscreen. */
+  async setFullscreen(enabled: boolean): Promise<void> {
+    this._fullscreen = enabled;
+    await this.bridge.setFullscreen(enabled).catch(() => {});
+  }
+  get fullscreen(): boolean {
+    return this._fullscreen;
+  }
+
+  // ── Subtitles ──
+
+  async addTextTrack(
+    _url: string,
+    language: string,
+    _label: string,
+    forced = false,
+  ): Promise<{ language: string; forced: boolean }> {
+    // Subtitles arrive as HLS SUBTITLES renditions; mpv surfaces them as text
+    // tracks. Return the desired descriptor — selection resolves against the
+    // reported track list (see resolveSubtitle).
+    return { language, forced };
+  }
+
+  selectTextTrack(track: any): void {
+    this._desiredSubtitle =
+      track && typeof track === 'object' && track.language
+        ? { language: track.language, forced: !!track.forced, embIndex: track.embIndex ?? null }
+        : null;
+    this.resolveSubtitle();
+  }
+
+  setTextVisibility(visible: boolean): void {
+    if (!visible) {
+      this._desiredSubtitle = null;
+      this._activeTrackId = null;
+      this.bridge.selectSubtitleTrack(null).catch(() => {});
+    }
+  }
+
+  private resolveSubtitle(): void {
+    if (!this._desiredSubtitle) return;
+    const { language, forced, embIndex } = this._desiredSubtitle;
+    const want = normalizeLangCode(language);
+    const tracks = this._nativeSubtitleTracks;
+    // (lang+forced) → lang → the picked ordinal (embedded subs often report
+    // lang "und") → first track, so a deliberate pick is never silently dropped.
+    const match =
+      tracks.find((t) => normalizeLangCode(t.language) === want && !!t.forced === !!forced) ??
+      tracks.find((t) => normalizeLangCode(t.language) === want) ??
+      (embIndex != null ? tracks[embIndex] : undefined) ??
+      (tracks.length ? tracks[0] : undefined);
+    const selectedId = match?.id ?? null;
+    if (selectedId) {
+      this._activeTrackId = selectedId;
+      this.bridge.selectSubtitleTrack(selectedId).catch(() => {});
+    }
+  }
+
+  /** Match NativeEngine.setSubtitleStyle: maps the player's preset keys to the
+   *  native style payload and pushes it to mpv. */
+  setSubtitleStyle(settings: {
+    size: string;
+    color: string;
+    shadow: string;
+    background: string;
+    bottomMargin: number;
+  }): void {
+    this._subtitleStyle = {
+      fontScale: NATIVE_SUBTITLE_SIZE_SCALE[settings.size] ?? 1.0,
+      foregroundColor: SUBTITLE_FG_HEX[settings.color] ?? '#FFFFFF',
+      backgroundColor: SUBTITLE_BG_ARGB[settings.background] ?? 'transparent',
+      edgeType: SUBTITLE_EDGE_KEY[settings.shadow] ?? 'drop_shadow',
+      bottomMarginPercent: settings.bottomMargin,
+    };
+    if (this._initialized) {
+      this.bridge.setSubtitleStyle(this._subtitleStyle).catch(() => {});
+    }
+  }
+
+  // ── Stats ──
+
+  getStats(): EngineStats {
+    return { droppedFrames: 0 };
+  }
+
+  // ── Quality ──
+  // mpv handles ABR over the HLS master internally; the backend ladder already
+  // bounds the rungs, so variant pinning is a no-op here (kept for the
+  // PlaybackEngine contract).
+  getVariantTracks(): any[] {
+    return [];
+  }
+  selectVariantTrack(_track: any, _clearBuffer?: boolean): void {
+    /* mpv-driven ABR */
+  }
+  configure(_config: any): void {
+    /* mpv-driven ABR */
+  }
+
+  // ── Event bridge ──
+
+  private subscribe(): void {
+    this.unsubscribe?.();
+    this.unsubscribe = this.bridge.on((event) => this.onEvent(event));
+  }
+
+  private onEvent(event: DesktopEvent): void {
+    if (this.dead) return;
+    switch (event.type) {
+      case 'stateChanged': {
+        const state = event.payload.state;
+        this._state = state;
+        this._paused = state === 'paused' || state === 'idle';
+        this.emit('stateChanged', { state });
+        if (state === 'ended') this.emit('ended', undefined);
+        break;
+      }
+      case 'timeUpdate': {
+        const d = event.payload;
+        this._currentTime = d.position;
+        this._duration = d.duration;
+        this._buffered = d.buffered;
+        this.emit('timeUpdate', d);
+        // firstFrame is driven by mpv's authoritative 'playback-restart' (the
+        // 'firstFrame' case). Deriving it from a position delta mis-fires on a
+        // stale time-pos the persistent mpv replays after a reopen, which would
+        // flip a fresh engine into the sessionExpired recovery path.
+        break;
+      }
+      case 'tracksChanged': {
+        const raw = event.payload.audioTracks ?? [];
+        // Emit the `audio-<i>` id contract the player keys off; keep mpv's real
+        // ids for selectAudioTrack to map back.
+        this._mpvAudioIds = raw.map((t) => t.id);
+        this._audioTracks = raw.map((t, i) => ({
+          id: `audio-${i}`,
+          language: t.language,
+          label: t.label,
+          selected: !!t.selected,
+        }));
+        this.emit('audioTracksChanged', { tracks: this._audioTracks });
+        this._nativeSubtitleTracks = event.payload.subtitleTracks ?? [];
+        this.resolveSubtitle();
+        break;
+      }
+      case 'firstFrame': {
+        if (this.firstFrameEmitted) return;
+        this.firstFrameEmitted = true;
+        this.emit('firstFrame', undefined);
+        // The persistent mpv may not fire a pause-property change on a fresh
+        // load (it was already unpaused from a prior session), so the UI's
+        // paused signal would stay stuck on its default. Assert the playing
+        // state once frames start flowing so the controls show pause, not play.
+        this._paused = false;
+        this._state = 'playing';
+        this.emit('stateChanged', { state: 'playing' });
+        break;
+      }
+      case 'error': {
+        // mpv can't expose the failing segment's HTTP status either; mirror the
+        // native heuristic — first error after a frame played → try one
+        // session-expired recovery before surfacing a fatal error.
+        if (this.firstFrameEmitted && !this.recoveryAttempted) {
+          this.recoveryAttempted = true;
+          this.emit('sessionExpired', undefined);
+          return;
+        }
+        this._state = 'error';
+        this.emit('error', event.payload);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+}

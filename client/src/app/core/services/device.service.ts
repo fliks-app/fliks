@@ -10,6 +10,11 @@ export type FormFactor = 'desktop' | 'phone' | 'tablet' | 'tv';
  * and the platform enum only for OS-bound capabilities.
  */
 export type TvPlatform = 'androidtv' | 'tizen' | 'webos' | null;
+/**
+ * Desktop shell underneath a `formFactor=desktop`. Drives the native-player
+ * engine selection and packaging glue, the desktop counterpart of TvPlatform.
+ */
+export type DesktopPlatform = 'electron' | null;
 
 const TABLET_MIN_WIDTH = 768;
 const OVERRIDE_KEY = 'fliks.deviceOverride';
@@ -45,7 +50,10 @@ export class DeviceService {
   readonly input = signal<InputMode>('mouse');
   readonly formFactor = signal<FormFactor>('desktop');
   readonly tvPlatform = signal<TvPlatform>(null);
+  readonly desktopPlatform = signal<DesktopPlatform>(null);
 
+  /** Running inside the native desktop shell (Electron + embedded mpv). */
+  readonly isDesktopNative = computed(() => this.desktopPlatform() !== null);
   readonly isTv = computed(() => this.formFactor() === 'tv');
   readonly isTablet = computed(() => this.formFactor() === 'tablet');
   readonly isPhone = computed(() => this.formFactor() === 'phone');
@@ -59,6 +67,7 @@ export class DeviceService {
     this.input.set(detected.input);
     this.formFactor.set(detected.formFactor);
     this.tvPlatform.set(detected.tvPlatform);
+    this.desktopPlatform.set(this.detectDesktopPlatform());
     this.syncBodyClasses();
     this.bindResize();
     // Visible in remote debug (chrome://inspect) — invisible in normal use.
@@ -124,6 +133,17 @@ export class DeviceService {
 
     // 8. Default
     return { input: 'mouse', formFactor: 'desktop', tvPlatform: null };
+  }
+
+  /** Electron desktop shell: the preload bridge is authoritative; the UA tag
+   *  is a fallback for the brief window before it attaches. */
+  private detectDesktopPlatform(): DesktopPlatform {
+    if (typeof window === 'undefined') return null;
+    if (window.fliksDesktop) return 'electron';
+    if (typeof navigator !== 'undefined' && /\bElectron\//.test(navigator.userAgent)) {
+      return 'electron';
+    }
+    return null;
   }
 
   /** Re-detect on resize (covers tablet rotation crossing the 768 px breakpoint). */

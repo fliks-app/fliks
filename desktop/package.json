@@ -1,0 +1,27 @@
+{
+  "name": "fliks-desktop",
+  "version": "1.11.0",
+  "description": "Fliks native desktop client (macOS / Windows / Linux)",
+  "private": true,
+  "type": "module",
+  "main": "dist/main/index.cjs",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build:main": "esbuild src/main/index.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --outfile=dist/main/index.cjs",
+    "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --outfile=dist/preload/index.cjs",
+    "build": "npm run build:main && npm run build:preload",
+    "start": "npm run build && electron .",
+    "smoke:mpv": "node spike/smoke-mpv.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "electron": "^42.4.0",
+    "esbuild": "^0.28.1",
+    "node-addon-api": "^8.8.0",
+    "node-gyp": "^12.4.0",
+    "typescript": "^6.0.3"
+  }
+}

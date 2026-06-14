@@ -1,0 +1,27 @@
+# electron-builder config (seed). Produces one installer per OS from the same
+# Electron app: macOS .dmg, Windows NSIS .exe, Linux AppImage + .deb.
+#
+# The built Angular client and the vendored mpv binary are bundled as extra
+# resources (wired up with the macOS/Windows/Linux packaging milestone).
+appId: media.fliks.desktop
+productName: Fliks
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - src/renderer/**
+extraResources:
+  # Vendored mpv binary per OS lands here (see scripts/fetch-vendored).
+  - from: vendor/${os}
+    to: mpv
+    filter: ['**/*']
+mac:
+  target: [dmg]
+  category: public.app-category.entertainment
+  # Notarization + hardened runtime wired with the signing milestone.
+win:
+  target: [nsis]
+linux:
+  target: [AppImage, deb]
+  category: AudioVideo

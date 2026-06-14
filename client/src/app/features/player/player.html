@@ -5,7 +5,7 @@
   [class.hide-cursor]="!controlsVisible()"
   [class.native-player]="!!nativeEngine"
   [class.hidden]="castService.isConnected()"
-  (mousemove)="device.isTouch() || isNative ? null : showControls()"
+  (mousemove)="device.isTouch() || device.isDpad() ? null : showControls()"
 >
   <!-- Backdrop until video renders its first frame. Rendered for both
        web (Shaka) and native (ExoPlayer) — on native the WebView is
@@ -106,6 +106,7 @@
     [hasPrevEpisode]="false"
     [activeQualityLabel]="activeQualityLabel()"
     [isNative]="isNative"
+    [isDesktop]="isDesktopNative"
     (togglePlay)="onTogglePlay()"
     (tapOverlay)="toggleControls()"
     (seek)="onSeek($event)"

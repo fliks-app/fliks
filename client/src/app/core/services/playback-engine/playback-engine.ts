@@ -14,6 +14,7 @@ export interface AudioTrack {
   id: string;
   language: string;
   label: string;
+  selected?: boolean;
 }
 
 export interface SubtitleTrack {

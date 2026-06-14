@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        /* Transparent: the mpv video window below must show through. */
+        background: transparent;
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+        color: #fff;
+        -webkit-user-select: none;
+      }
+      /* Top-left title chip — proves the UI composites OVER the video. */
+      .title {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        padding: 8px 14px;
+        background: rgba(29, 35, 42, 0.72);
+        border-radius: 10px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+      }
+      /* Bottom control bar — semi-opaque, gradient like the real player. */
+      .controls {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 84px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 0 20px;
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0));
+      }
+      button {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        border: none;
+        background: #36d399;
+        color: #04110b;
+        font-size: 20px;
+        cursor: pointer;
+      }
+      .bar {
+        flex: 1;
+        height: 6px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.25);
+        position: relative;
+      }
+      .bar > i {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 35%;
+        border-radius: 3px;
+        background: #36d399;
+      }
+      /* A translucent center watermark so transparency is unmistakable. */
+      .center {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.65);
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="title">Fliks · overlay UI (z-top)</div>
+    <div class="center">video should be visible behind this text</div>
+    <div class="controls">
+      <button id="pp">⏸</button>
+      <div class="bar"><i></i></div>
+      <span id="clock">0:00</span>
+    </div>
+    <script>
+      // Spike-only: a fake clock so the screenshot shows a live overlay.
+      let t = 0;
+      setInterval(() => {
+        t += 1;
+        const m = Math.floor(t / 60),
+          s = String(t % 60).padStart(2, '0');
+        document.getElementById('clock').textContent = `${m}:${s}`;
+      }, 1000);
+    </script>
+  </body>
+</html>

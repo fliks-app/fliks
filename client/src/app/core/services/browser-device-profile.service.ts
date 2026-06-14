@@ -239,7 +239,10 @@ export class BrowserDeviceProfileService {
     // The four engine-behavioural flags below come from one declarative
     // row keyed on the engine kind (platform + native split). Adding a
     // platform is a single row in `engine-traits.ts`.
-    const traits = ENGINE_TRAITS[engineKindFor(tvPlatform, this.serverConfig.isNative)];
+    const traits =
+      ENGINE_TRAITS[
+        engineKindFor(tvPlatform, this.serverConfig.isNative, this.device.isDesktopNative())
+      ];
     if (
       this.testCodec(video, hasMSE, 'video/mp4', 'hvc1.1.6.L120.B0') ||
       this.testCodec(video, hasMSE, 'video/mp4', 'hev1.1.6.L120.B0')
@@ -395,6 +398,29 @@ export class BrowserDeviceProfileService {
       (audioCodecs.includes('eac3') || audioCodecs.includes('ac3'))
     ) {
       maxAudioChannels = Math.max(maxAudioChannels, 6);
+    }
+
+    // Desktop native shell (Electron + embedded mpv): mpv/ffmpeg decode
+    // virtually any codec/container, but the Chromium MSE probe wildly
+    // under-reports (no HEVC, no E-AC3), which would force the backend to
+    // transcode everything. Advertise mpv's broad capability set so sources
+    // Direct Play / copy straight through.
+    if (this.device.isDesktopNative()) {
+      containers.length = 0;
+      containers.push('mp4', 'mkv', 'webm', 'mov', 'ts', 'm4v', 'avi', 'flv');
+      videoCodecs.length = 0;
+      videoCodecs.push(
+        'h264', 'avc1', 'hevc', 'h265', 'hvc1', 'hev1',
+        'av1', 'vp9', 'vp8', 'mpeg2video', 'mpeg4',
+      );
+      codecConditions.length = 0;
+      codecConditions.push(
+        { codec: 'h264', profiles: ['baseline', 'constrained baseline', 'main', 'high'], maxBitDepth: 8 },
+        { codec: 'hevc', profiles: ['main', 'main 10'], maxBitDepth: 10 },
+        { codec: 'av1', profiles: ['main', 'high'], maxBitDepth: 10 },
+      );
+      audioCodecs = ['aac', 'ac3', 'eac3', 'opus', 'flac', 'alac', 'mp3', 'dts', 'truehd', 'vorbis'];
+      maxAudioChannels = Math.max(maxAudioChannels, 8);
     }
 
     // --- HDR support ---
