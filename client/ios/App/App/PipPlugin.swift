@@ -121,8 +121,18 @@ public class PipPlugin: CAPPlugin, CAPBridgedPlugin, AVPictureInPictureControlle
 
     public func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
         nativePlayer?.finishSubtitlePiPExit()
+        // PiP transferred the shared AVPlayerLayer into its window; the inline
+        // layer can come back not-presenting (black) once PiP releases it.
+        nativePlayer?.reassertVideoPresentation()
         emitPipModeChanged(false)
         pipController = nil
+    }
+
+    public func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void) {
+        // Re-present the inline layer before signalling the restore is done,
+        // so the full-app UI never reappears over a black (sourceless) layer.
+        nativePlayer?.reassertVideoPresentation()
+        completionHandler(true)
     }
 
     public func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, failedToStartPictureInPictureWithError error: Error) {

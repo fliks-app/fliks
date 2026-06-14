@@ -3,6 +3,7 @@ import Capacitor
 import AVFoundation
 import AVKit
 import CoreMedia
+import UIKit
 
 /// UIView subclass that keeps its first CALayer sublayer (the AVPlayerLayer) sized to bounds.
 private class PlayerContainerView: UIView {
@@ -67,6 +68,36 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     public var activePlayerLayer: AVPlayerLayer? { playerLayer }
     /// Exposed for PipPlugin to access the player.
     public var activePlayer: AVPlayer? { player }
+
+    /// Re-present the AVPlayerLayer after a background round-trip or a PiP
+    /// exit. iOS can release the layer's backing render surface for the
+    /// off-screen scene (and an auto-PiP exit can leave the inline layer
+    /// detached) while AVPlayer keeps decoding audio and the subtitle overlay
+    /// keeps drawing — so the inline video returns black over the container's
+    /// black backdrop. Rebinding the player, re-stamping the frame and (when
+    /// the layer isn't presenting) toggling videoGravity force a recomposite.
+    /// Idempotent; safe to call when already presenting.
+    func reassertVideoPresentation() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self,
+                  let layer = self.playerLayer,
+                  let player = self.player,
+                  let view = self.playerView else { return }
+            // Diagnostic — surfaces on-device whether the returning layer is
+            // detached / not-ready (vs ready-but-black) so the recomposite
+            // path can be tuned from real logs.
+            let state = "ready=\(layer.isReadyForDisplay) attached=\(layer.player != nil) size=\(Int(view.bounds.width))x\(Int(view.bounds.height))"
+            self.bridge?.webView?.evaluateJavaScript("console.warn('[NativePlayer] reassert: \(state)');")
+
+            if layer.player !== player { layer.player = player }
+            layer.frame = view.bounds
+            if !layer.isReadyForDisplay {
+                let gravity = layer.videoGravity
+                layer.videoGravity = .resize
+                layer.videoGravity = gravity
+            }
+        }
+    }
 
     // MARK: - Lifecycle
 
@@ -772,6 +803,29 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             name: .AVPlayerItemDidPlayToEndTime,
             object: player.currentItem
         )
+
+        // Returning from background / becoming active: iOS can drop the
+        // AVPlayerLayer's backing surface for the off-screen scene (or an
+        // auto-PiP exit leaves the inline layer detached) while audio and the
+        // subtitle overlay keep running — the video returns black. Re-present
+        // it. Torn down by removeObservers() and re-added on the next load(),
+        // matching the item observers above.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppDidForeground),
+            name: UIApplication.willEnterForegroundNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppDidForeground),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleAppDidForeground() {
+        reassertVideoPresentation()
     }
 
     @objc private func handleNewErrorLogEntry(_ notification: Notification) {
