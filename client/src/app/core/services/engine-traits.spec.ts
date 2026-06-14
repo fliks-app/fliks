@@ -16,6 +16,12 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     probesSegZero: false,
     supportsDirectPlay: true,
   },
+  [EngineKind.DESKTOP]: {
+    useTsOnSingleAudio: false,
+    supportsHlsSubtitles: true,
+    probesSegZero: true,
+    supportsDirectPlay: true,
+  },
   [EngineKind.ANDROID_TV]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
@@ -58,6 +64,11 @@ describe('engineKindFor', () => {
 
   it('maps webos to WEBOS', () => {
     expect(engineKindFor('webos', true)).toBe(EngineKind.WEBOS);
+  });
+
+  it('maps isDesktop=true to DESKTOP, ahead of the native split', () => {
+    // Electron is also isNative (its UA matches), so isDesktop must win.
+    expect(engineKindFor(null, true, true)).toBe(EngineKind.DESKTOP);
   });
 });
 
