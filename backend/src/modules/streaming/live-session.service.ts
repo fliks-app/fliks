@@ -185,6 +185,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
 
   private readonly ttlMs = StreamLifetime.liveSessionTtlMs();
   private readonly gcIntervalMs = StreamLifetime.liveSessionGcIntervalMs();
+  private readonly maxSessionsPerUser = StreamLifetime.maxSessionsPerUser();
   /** Idle window for pinned (download) sessions. Active segment fetches keep
    *  them warm; this only bounds how long a paused or finished download holds
    *  its session before GC reclaims it. */
@@ -246,6 +247,22 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       canCopyAudio: input.canCopyAudio ?? false,
       pinned: input.pinned ?? false,
     };
+    // Per-user concurrent-session cap. Legit multi-device viewing must never
+    // be blocked, so we evict the user's oldest-beaten session rather than
+    // reject the new one — this only bounds runaway session leaks from a
+    // client that keeps issuing fresh playback-info without ever stopping.
+    if (input.userId != null) {
+      const own = [...this.sessions.values()].filter(
+        (s) => s.userId === input.userId,
+      );
+      if (own.length >= this.maxSessionsPerUser) {
+        const oldest = own.reduce((a, b) => (a.lastBeat <= b.lastBeat ? a : b));
+        this.sessions.delete(oldest.sessionId);
+        this.log.log(
+          `evicted oldest session ${oldest.sessionId} for user ${input.userId} (cap ${this.maxSessionsPerUser})`,
+        );
+      }
+    }
     this.sessions.set(session.sessionId, session);
     return session;
   }

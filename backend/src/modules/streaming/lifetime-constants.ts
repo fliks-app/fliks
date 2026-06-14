@@ -7,6 +7,7 @@
  *
  *   STREAM_LIVE_SESSION_TTL_MS         live-session.service.ts
  *   STREAM_LIVE_SESSION_GC_INTERVAL_MS live-session.service.ts
+ *   STREAM_MAX_SESSIONS_PER_USER       live-session.service.ts
  *   STREAM_JOB_GRACE_MS                transcoding/constants.ts
  *   STREAM_JOB_FALLBACK_TIMEOUT_MS     transcoding/constants.ts
  *   TRANSCODE_CACHE_TTL_MS             transcode-cache.service.ts
@@ -16,6 +17,7 @@
 
 const DEFAULT_LIVE_SESSION_TTL_MS = 30_000;
 const DEFAULT_LIVE_SESSION_GC_INTERVAL_MS = 5_000;
+const DEFAULT_MAX_SESSIONS_PER_USER = 10;
 const DEFAULT_JOB_GRACE_MS = 60_000;
 const DEFAULT_JOB_FALLBACK_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
@@ -36,6 +38,11 @@ export const StreamLifetime = {
     readEnvPositiveInt(
       'STREAM_LIVE_SESSION_GC_INTERVAL_MS',
       DEFAULT_LIVE_SESSION_GC_INTERVAL_MS,
+    ),
+  maxSessionsPerUser: (): number =>
+    readEnvPositiveInt(
+      'STREAM_MAX_SESSIONS_PER_USER',
+      DEFAULT_MAX_SESSIONS_PER_USER,
     ),
   jobGraceMs: (): number =>
     readEnvPositiveInt('STREAM_JOB_GRACE_MS', DEFAULT_JOB_GRACE_MS),
