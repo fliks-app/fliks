@@ -1970,6 +1970,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     opts: { preservePause: boolean; unmute: boolean },
   ): Promise<void> {
     if (!this.engine || !this.mediaFileId) return;
+    // Drop the prior sid before minting a new one. A recovery loop that
+    // re-mints without this leaks one LiveSession per iteration, each
+    // surfacing as its own row on the admin activity dashboard. Fire-and-
+    // forget — a stale/expired sid 204s. (reloadStream already does this.)
+    const prevSid = this.playbackInfo?.sessionId;
+    if (prevSid) {
+      this.streamingApi
+        .stopSessions(this.mediaFileId, prevSid)
+        .catch(() => {});
+    }
     if (opts.unmute) this.engine.muted = false;
     const wasPaused = opts.preservePause ? this.paused() : false;
     const deviceProfile = this.deviceProfileService.getProfile();
@@ -2043,13 +2053,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * surface `sessionLost: true` in the interval.
    */
   private recoveringFromLostSession = false;
-  /** Failed recovery attempts in the current loss episode. Reset to 0 on a
-   *  successful reload; once it reaches {@link maxRecoverAttempts} we stop
-   *  retrying and surface a terminal error instead of reloading forever. */
+  /** Recovery attempts in the current loss episode. Cleared only once a
+   *  reload sustains playback (see {@link recoverConfirmPending}), NOT on the
+   *  instant a reload resolves — a reload that succeeds then re-fails within
+   *  seconds must keep counting toward {@link maxRecoverAttempts}, or it
+   *  re-mints a fresh sid every iteration and loops forever. */
   private recoverAttempts = 0;
   private readonly maxRecoverAttempts = 3;
   /** Pending backoff retry between failed recovery attempts (2s → 4s). */
   private recoverRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** A recovery reload just resolved; the episode counter and the native
+   *  recovery guard are cleared only after the playhead advances for
+   *  {@link recoverConfirmMs} (confirmed in checkStall). */
+  private recoverConfirmPending = false;
+  private recoverConfirmAt = 0;
+  private readonly recoverConfirmMs = 5_000;
   /** Set in ngOnDestroy. Blocks any late async (heartbeat sessionLost,
    *  sessionExpired event, Cast resume) from reloading the engine after the
    *  player has been torn down — otherwise a fresh native player relaunches
@@ -2085,7 +2103,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.castService.isConnected()) return;
     // Not trying to play, or not playing yet → no stall to detect; keep the
     // baseline fresh so resuming/finishing-load doesn't trip the timer.
-    if (this.paused() || this.state.loading() || this.recoveringFromLostSession) {
+    if (
+      this.paused() ||
+      this.state.loading() ||
+      this.recoveringFromLostSession ||
+      this.reloadingStream
+    ) {
       this.resetStallWatchdog();
       return;
     }
@@ -2100,6 +2123,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (Math.abs(pos - this.lastProgressPos) > 0.25) {
       this.lastProgressPos = pos;
       this.lastProgressAt = Date.now();
+      // A recovery that has sustained playback for recoverConfirmMs is clean:
+      // clear the episode counter and re-arm the native one-shot guard so a
+      // later, unrelated blip gets its own recovery instead of going fatal.
+      if (
+        this.recoverConfirmPending &&
+        Date.now() - this.recoverConfirmAt >= this.recoverConfirmMs
+      ) {
+        this.recoverConfirmPending = false;
+        this.recoverAttempts = 0;
+        this.engine?.resetRecoveryGuard?.();
+      }
       return;
     }
     if (Date.now() - this.lastProgressAt >= this.stallTimeoutMs) {
@@ -2139,9 +2173,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         preservePause: true,
         unmute: false,
       });
-      this.recoverAttempts = 0;
       this.resetStallWatchdog();
       this.state.setRecovering(false);
+      // Don't clear the episode counter yet — only once the reload proves it
+      // plays (checkStall confirms sustained progress). A reload that resolves
+      // then immediately re-fails keeps counting toward the cap.
+      this.recoverConfirmPending = true;
+      this.recoverConfirmAt = Date.now();
     } catch {
       this.recoverAttempts += 1;
       if (this.recoverAttempts >= this.maxRecoverAttempts) {
@@ -2732,8 +2770,26 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // ── Private helpers ──
 
-  /** Reload the stream (e.g. when toggling burn-in subtitles or switching audio). */
+  /** Guards against overlapping reloads: a user switch racing a recovery (or
+   *  a second quick switch) must not run two getPlaybackInfo + load cycles at
+   *  once — that races the engine and leaks a session. */
+  private reloadingStream = false;
+
+  /** Reload the stream (e.g. when toggling burn-in subtitles or switching
+   *  audio). User-initiated, so re-arm the native recovery guard and serialise
+   *  against any concurrent reload/recovery. */
   private async reloadStream() {
+    if (!this.engine || this.reloadingStream) return;
+    this.reloadingStream = true;
+    this.engine.resetRecoveryGuard?.();
+    try {
+      await this.doReloadStream();
+    } finally {
+      this.reloadingStream = false;
+    }
+  }
+
+  private async doReloadStream() {
     if (!this.engine) return;
     const currentPos = this.engine.currentTime;
     // Capture the user's play/pause intent before tearing the stream down — a
@@ -2801,7 +2857,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private fireAndForgetStopSessions() {
-    if (!this.mediaFileId || this.playbackMode() === 'direct') return;
+    // Release this device's session on exit — DirectPlay included, so its
+    // "now watching" dashboard row clears at once instead of lingering until
+    // the backend idle reap (transcode/remux paths also stop their ffmpeg).
+    if (!this.mediaFileId) return;
     const url = this.streamingApi.getStopSessionsUrl(
       this.mediaFileId,
       this.activeSessionId(),

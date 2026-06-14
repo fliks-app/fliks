@@ -119,6 +119,10 @@ export interface PlaybackEngine {
   destroy(): Promise<void>;
   load(url: string, startTime?: number, mimeType?: string, headers?: Record<string, string>): Promise<void>;
   unload(): Promise<void>;
+  /** Re-arm the native optimistic-recovery one-shot guard. No-op on engines
+   *  that read a real HTTP status (Shaka). Called on a user-initiated
+   *  (re)load and after a recovery sustains playback. */
+  resetRecoveryGuard?(): void;
 
   // ── Playback ──
   play(): Promise<void>;
