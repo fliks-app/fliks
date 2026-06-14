@@ -148,6 +148,13 @@ const KEYMAP: Record<string, string> = {
 let uiWin: BrowserWindow | null = null;
 const inputCounts: Record<string, number> = {};
 
+// Cadence of the periodic position emit while playing. The addon only observes
+// `time-pos` for duration/seek transitions, not as playback advances, so the
+// renderer's seekbar and its 10s save heartbeat stay frozen unless the main
+// process pushes the position itself. ~250ms (4Hz) keeps the bar smooth and
+// feeds the renderer's per-second stats refresh without flooding IPC.
+const POSITION_POLL_MS = 250;
+
 function send(ev: DesktopEvent): void {
   if (uiWin && !uiWin.isDestroyed()) uiWin.webContents.send(IPC.event, ev);
 }
@@ -191,6 +198,31 @@ app.whenReady().then(() => {
 
   addon.start({ width: WIDTH, height: HEIGHT, title: 'Fliks' });
 
+  // Periodic position emit. The addon's `time-pos` observe doesn't push while
+  // playback advances, so poll mpv on a timer and forward a `timeUpdate` — this
+  // is what advances the seekbar and feeds the renderer's resume-save heartbeat.
+  let positionTimer: ReturnType<typeof setInterval> | null = null;
+  const emitPosition = (): void => {
+    send({
+      type: 'timeUpdate',
+      payload: {
+        position: num(addon.getProperty('time-pos')),
+        duration: num(addon.getProperty('duration')),
+        buffered: num(addon.getProperty('demuxer-cache-time')),
+      },
+    });
+  };
+  const startPositionTimer = (): void => {
+    if (positionTimer) return; // idempotent — never stack intervals
+    emitPosition(); // emit immediately so the bar doesn't wait a full tick
+    positionTimer = setInterval(emitPosition, POSITION_POLL_MS);
+  };
+  const stopPositionTimer = (): void => {
+    if (!positionTimer) return;
+    clearInterval(positionTimer);
+    positionTimer = null;
+  };
+
   // mpv events → reshape to the DesktopEvent contract → renderer.
   addon.onEvent((json) => {
     let raw: any;
@@ -204,15 +236,25 @@ app.whenReady().then(() => {
         send({ type: 'timeUpdate', payload: { position: raw.position, duration: raw.duration, buffered: 0 } });
         break;
       case 'stateChanged':
+        // Only an actively-playing session should drive the position timer;
+        // pausing / ending / going idle stops it so a torn-down or paused
+        // player can't keep emitting (and leaking the interval).
+        if (raw.state === 'playing') startPositionTimer();
+        else stopPositionTimer();
         send({ type: 'stateChanged', payload: { state: raw.state } });
         break;
       case 'tracksChanged':
         send({ type: 'tracksChanged', payload: parseTracks(addon.getProperty('track-list')) as any });
         break;
       case 'firstFrame':
+        // mpv autoplays on load (addon forces pause=no) but may not emit a
+        // pause-property change, so the playing stateChanged can be missing on
+        // a fresh load — arm the timer on the first frame as well.
+        startPositionTimer();
         send({ type: 'firstFrame' });
         break;
       case 'error':
+        stopPositionTimer();
         send({ type: 'error', payload: { code: -1, message: raw.message ?? 'error' } });
         break;
     }
@@ -258,7 +300,10 @@ app.whenReady().then(() => {
   ipcMain.handle(IPC.play, () => addon.setProperty('pause', 'no'));
   ipcMain.handle(IPC.pause, () => addon.setProperty('pause', 'yes'));
   ipcMain.handle(IPC.seek, (_e, position: number) => addon.command(['seek', String(position), 'absolute']));
-  ipcMain.handle(IPC.stop, () => addon.command(['stop']));
+  ipcMain.handle(IPC.stop, () => {
+    stopPositionTimer();
+    return addon.command(['stop']);
+  });
   ipcMain.handle(IPC.setPlaybackRate, (_e, r: number) => addon.setProperty('speed', String(r)));
   ipcMain.handle(IPC.setVolume, (_e, v: number) => addon.setProperty('volume', String(v)));
   ipcMain.handle(IPC.setMuted, (_e, m: boolean) => addon.setProperty('mute', m ? 'yes' : 'no'));
@@ -285,12 +330,16 @@ app.whenReady().then(() => {
     for (const [name, value] of mpvSubtitleProps(s)) addon.setProperty(name, value);
   });
   ipcMain.handle(IPC.resize, () => {});
-  ipcMain.handle(IPC.destroy, () => addon.command(['stop']));
+  ipcMain.handle(IPC.destroy, () => {
+    stopPositionTimer();
+    return addon.command(['stop']);
+  });
 
   uiWin.loadURL(haveApp ? APP_URL : 'data:text/html,<body style="background:%231d232a"></body>');
   uiWin.webContents.once('did-finish-load', () => send({ type: 'ready' }));
 
   app.on('before-quit', () => {
+    stopPositionTimer();
     try {
       addon.stop();
     } catch {
