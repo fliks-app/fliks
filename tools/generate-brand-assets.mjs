@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Regenerate every Fliks brand asset (app icons, favicons, launcher icons,
- * splash screens, menu-bar icon, in-app mark) from the two source SVGs.
+ * splash screens, menu-bar icon) from the two source SVGs.
  *
  * Sources (tracked, the two artwork files provided by design):
  *   client/public/fliks-icon.svg   the standalone mark
@@ -16,8 +16,7 @@
  *   - brand base #1d232a (manifest theme, Android adaptive bg, maskable bg)
  *   - opaque icons are flattened with NO alpha channel (App Store + webOS store
  *     reject alpha; webOS also needs the bg to match the appinfo tile colour)
- *   - transparent contexts (PWA "any", launcher foreground, Tizen, the
- *     in-app mark) keep alpha
+ *   - transparent contexts (PWA "any", launcher foreground, Tizen) keep alpha
  *   - safe zones: adaptive foreground inside the 66% circle, maskable inside
  *     the 80% circle, app icons ~14% padding
  */
@@ -120,7 +119,6 @@ const PWA_ROOTS = [
 const AND_RES = 'client/android/app/src/main/res';
 const LAUNCH = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
 const FG = { mdpi: 108, hdpi: 162, xhdpi: 216, xxhdpi: 324, xxxhdpi: 432 };
-const IOS_SIZES = [20, 29, 40, 58, 60, 76, 80, 87, 120, 152, 167, 180, 1024];
 const AND_SPLASH = {
   'drawable-land-hdpi': [800, 480], 'drawable-land-mdpi': [480, 320],
   'drawable-land-xhdpi': [1280, 720], 'drawable-land-xxhdpi': [1600, 960],
@@ -139,7 +137,6 @@ for (const root of PWA_ROOTS) {
   await write(await icon(iconSvg, 16, { pad: 0.02 }), `${root}/favicon-16.png`);
   await write(await icon(iconSvg, 32, { pad: 0.02 }), `${root}/favicon-32.png`);
   await write(await icon(iconSvg, 180, { bg: DARK, pad: 0.14 }), `${root}/apple-touch-icon.png`);
-  await write(await icon(iconSvg, 1024, { pad: 0.06 }), `${root}/fliks-mark.png`); // in-app navbar/sidebar mark
   const ico = buildIco([
     { size: 16, buf: await icon(iconSvg, 16, { pad: 0.02 }) },
     { size: 32, buf: await icon(iconSvg, 32, { pad: 0.02 }) },
@@ -150,10 +147,6 @@ for (const root of PWA_ROOTS) {
 
 // iOS app icon (single 1024, opaque)
 await write(await icon(iconSvg, 1024, { bg: DARK, pad: 0.14 }), 'client/ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png');
-// logos/ios reference set (gitignored, kept for archival / manual Xcode use)
-for (const s of IOS_SIZES) await write(await icon(iconSvg, s, { bg: DARK, pad: 0.14 }), `logos/ios/Icon-${s}.png`);
-await write(await icon(iconSvg, 1024, { bg: DARK, pad: 0.14 }), 'logos/ios/Icon-1024-appstore-dark.png');
-await write(await icon(iconSvg, 1024, { bg: WHITE, pad: 0.14 }), 'logos/ios/Icon-1024-appstore-light.png');
 
 // Android adaptive + legacy launcher + in-app drawable
 for (const [d, s] of Object.entries(LAUNCH)) {
@@ -174,10 +167,6 @@ await write(await icon(iconSvg, 400, { bg: DARK, pad: 0.14 }), 'client/webos/ico
 // webOS — 1920x1080 loading splash (appinfo `splashBackground`): the mark on
 // the brand base, same treatment as the iOS/Android splashes.
 await write(await splash(iconSvg, 1920, 1080, 0.25), 'client/webos/splash.png');
-
-// Chromecast receiver splash mark — transparent, composited over the
-// #1d232a splash; shown at 192 CSS px so 384 covers 2× displays.
-await write(await sharp(await icon(iconSvg, 384, { pad: 0.04 })).webp({ quality: 92 }).toBuffer(), 'cast-receiver/fliks-mark.webp');
 
 // Splash — icon only, on the brand base
 for (const [d, [w, h]] of Object.entries(AND_SPLASH)) await write(await splash(iconSvg, w, h, 0.40), `${AND_RES}/${d}/splash.png`);

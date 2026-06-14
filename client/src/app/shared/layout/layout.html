@@ -54,7 +54,7 @@
                fallbacks below — no title in the clearlogo slot. -->
         } @else if (isNative && isHomeRoute() && navbar.mobileNavTitle()) {
           <span class="flex items-center gap-2 pl-2 text-lg font-bold min-w-0">
-            <img src="fliks-mark.png" alt="" class="h-7 w-7 shrink-0" />
+            <img src="fliks-icon.svg" alt="" class="h-7 w-7 shrink-0" />
             <span class="truncate" [attr.title]="navbar.mobileNavTitle()">{{ navbar.mobileNavTitle() }}</span>
           </span>
         } @else if (navbar.mobileNavTitle()) {
@@ -275,7 +275,7 @@
            style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 )">
       <div class="p-4 border-b border-base-200 flex items-center gap-2">
         <a routerLink="/" class="flex items-center gap-2 px-2 py-1 rounded-lg text-2xl font-bold flex-1 min-w-0">
-          <img src="fliks-mark.png" alt="" class="h-8 w-8 shrink-0" />
+          <img src="fliks-icon.svg" alt="" class="h-8 w-8 shrink-0" />
           <span class="truncate">{{ 'app.name' | translate }}</span>
         </a>
         @if (!networkService.isOnline()) {

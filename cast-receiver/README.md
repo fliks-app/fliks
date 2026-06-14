@@ -31,7 +31,7 @@ Your media stays on your NAS — only the receiver shell is centralised.
 - `index.html` — entry point loaded by the Chromecast.
 - `receiver.js` — boots CAF SDK, hooks LOAD/IDLE, applies subtitle defaults.
 - `receiver.css` — branding, idle splash, `::cue` style.
-- `fliks-mark.png` — splash logo.
+- `fliks-icon.svg` — splash logo.
 
 No build step. The directory is published as-is to GitHub Pages by
 [`.github/workflows/deploy-cast-receiver.yml`](../.github/workflows/deploy-cast-receiver.yml).
