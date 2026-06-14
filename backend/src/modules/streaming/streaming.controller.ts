@@ -1301,16 +1301,40 @@ export class StreamingController {
     // parallel with main, so it lands first. Use a short timeout — main
     // covers the same files behind it, so wasting 60s on early when it has
     // already exited adds latency for nothing.
-    const earlySession = this.sessionRouter.resolveEarlySession(mediaFileId, user?.id, req);
-    const useEarly =
-      earlySession != null &&
+    let earlySession = this.sessionRouter.resolveEarlySession(mediaFileId, user?.id, req);
+    const wantEarly =
       videoSession.startSegment != null &&
       videoSession.startSegment > 0 &&
-      earlySession.quality === videoSession.quality &&
       // Only seg-0 .. seg-(EARLY_PROBE_SEGMENTS-1) live in the early session —
       // bound to the same window the video path uses. (Was `< startSegment`,
       // which on a deep resume routed segments the early session never wrote.)
       (isInit || segIndex < EARLY_PROBE_SEGMENTS);
+    // (Re)spawn the companion when it is absent or on a different rung, mirroring
+    // the video route. The audio rendition rides the video session and is served
+    // from the companion's `<audioIndex+1>/` subdir; without this its seg-0/init
+    // has no producer when prewarm hasn't landed (or committed to another rung)
+    // and the main — anchored at the resume floor — never writes it, so a
+    // seg-0-probing client (Shaka, Cast, desktop mpv) gets a 404 on the rendition
+    // init. Resolve file/ctx lazily so the common in-window serve adds no work.
+    if (wantEarly && (!earlySession || earlySession.quality !== videoSession.quality)) {
+      const resolvedEarly = await this.streamingService.resolveFile(
+        mediaFileId,
+        req.user as User,
+      );
+      const earlyCtx = this.sessionContextBuilder.build(req, resolvedEarly, mediaFileId);
+      earlySession = await this.transcodingService
+        .getOrCreateEarlySession(
+          mediaFileId,
+          videoSession.quality,
+          resolvedEarly.absolutePath,
+          earlyCtx,
+        )
+        .catch(() => undefined);
+    }
+    const useEarly =
+      wantEarly &&
+      earlySession != null &&
+      earlySession.quality === videoSession.quality;
 
     let segPath: string | null = null;
     if (useEarly && earlySession) {
