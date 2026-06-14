@@ -14,6 +14,9 @@
 # *before* electron-builder runs (see .github/workflows/desktop-release.yml).
 appId: media.fliks.desktop
 productName: Fliks
+# Bake the version into every installer filename (the CI injects the resolved
+# version via -c.extraMetadata.version). e.g. Fliks-1.2.3-x64.dmg / -amd64.deb.
+artifactName: ${productName}-${version}-${arch}.${ext}
 directories:
   output: release
   buildResources: build

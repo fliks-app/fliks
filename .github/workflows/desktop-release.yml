@@ -58,16 +58,23 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # ── Resolve a version label (only used for artifact naming) ──
+      # ── Resolve the build version → baked into the installer filenames ──
+      # A desktop-v* tag gives the release version; a manual/test run uses the
+      # package.json version with a -dev.<sha> prerelease suffix. Both are valid
+      # semver, so they can be injected into electron-builder
+      # (-c.extraMetadata.version) and appear in the artifact names.
       - name: Resolve version
         id: version
         shell: bash
         run: |
           if [[ "$GITHUB_REF" == refs/tags/desktop-v* ]]; then
-            echo "version=${GITHUB_REF#refs/tags/desktop-v}" >> "$GITHUB_OUTPUT"
+            v="${GITHUB_REF#refs/tags/desktop-v}"
           else
-            echo "version=dev-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+            base=$(node -p "require('./desktop/package.json').version")
+            v="${base}-dev.$(git rev-parse --short HEAD)"
           fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Resolved desktop version: $v"
 
       # desktop/package.json declares Node >= 20, but electron-builder 26's
       # transitive deps (@electron/rebuild, node-abi, app-builder-lib) require
@@ -80,6 +87,27 @@ jobs:
           cache-dependency-path: |
             desktop/package-lock.json
             client/package-lock.json
+
+      # Cache the heavy downloads each run otherwise repeats: the Electron
+      # binary + electron-builder helper tooling (app-builder, ~150-200 MB) and
+      # the node-gyp Electron headers. setup-node above already caches the npm
+      # store. Paths are listed for all three OSes; actions/cache skips the ones
+      # that don't exist on a given runner. Keyed on the Electron major + lock.
+      - name: Cache electron / electron-builder / node-gyp
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+            ~/.electron-gyp
+            ~/.node-gyp
+          key: ${{ runner.os }}-electron42-${{ hashFiles('desktop/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron42-
 
       # ────────────────────────────────────────────────────────────────────
       # Platform build dependencies for the native addon (SDL2 + GLES/EGL +
@@ -206,7 +234,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run ${{ matrix.dist_script }} -- --publish never
+        run: npm run ${{ matrix.dist_script }} -- --publish never -c.extraMetadata.version=${{ steps.version.outputs.version }}
 
       # ── Upload the installer as a workflow artifact (always) ──
       - name: Upload installer artifact
