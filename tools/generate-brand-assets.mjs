@@ -119,7 +119,6 @@ const PWA_ROOTS = [
 const AND_RES = 'client/android/app/src/main/res';
 const LAUNCH = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
 const FG = { mdpi: 108, hdpi: 162, xhdpi: 216, xxhdpi: 324, xxxhdpi: 432 };
-const IOS_SIZES = [20, 29, 40, 58, 60, 76, 80, 87, 120, 152, 167, 180, 1024];
 const AND_SPLASH = {
   'drawable-land-hdpi': [800, 480], 'drawable-land-mdpi': [480, 320],
   'drawable-land-xhdpi': [1280, 720], 'drawable-land-xxhdpi': [1600, 960],
@@ -148,10 +147,6 @@ for (const root of PWA_ROOTS) {
 
 // iOS app icon (single 1024, opaque)
 await write(await icon(iconSvg, 1024, { bg: DARK, pad: 0.14 }), 'client/ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png');
-// logos/ios reference set (gitignored, kept for archival / manual Xcode use)
-for (const s of IOS_SIZES) await write(await icon(iconSvg, s, { bg: DARK, pad: 0.14 }), `logos/ios/Icon-${s}.png`);
-await write(await icon(iconSvg, 1024, { bg: DARK, pad: 0.14 }), 'logos/ios/Icon-1024-appstore-dark.png');
-await write(await icon(iconSvg, 1024, { bg: WHITE, pad: 0.14 }), 'logos/ios/Icon-1024-appstore-light.png');
 
 // Android adaptive + legacy launcher + in-app drawable
 for (const [d, s] of Object.entries(LAUNCH)) {
