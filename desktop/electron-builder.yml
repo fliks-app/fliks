@@ -61,11 +61,12 @@ linux:
       StartupWMClass: fliks
   target: [AppImage, deb]
   category: AudioVideo
-  # deb runtime deps: the addon links SDL2/GLES/EGL and dlopen's libmpv. The
-  # vendored libmpv is self-contained, but SDL2 + GL are expected on the host.
-  # TODO: confirm this list against a real .deb install on a clean Ubuntu box.
-  deb:
-    depends:
-      - libsdl2-2.0-0
-      - libgles2
-      - libegl1
+# deb runtime deps live at the ROOT (DebOptions), not under `linux`. The addon
+# links SDL2/GLES/EGL and dlopen's libmpv; the vendored libmpv is self-contained
+# but SDL2 + GL are expected on the host.
+# TODO: confirm this list against a real .deb install on a clean Ubuntu box.
+deb:
+  depends:
+    - libsdl2-2.0-0
+    - libgles2
+    - libegl1
