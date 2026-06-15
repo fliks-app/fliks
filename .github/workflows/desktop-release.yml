@@ -130,33 +130,20 @@ jobs:
         working-directory: client
         run: npm ci
 
-      # ────────────────────────────────────────────────────────────────────
-      # Vendor a self-contained libmpv into desktop/native/vendor.
-      # The main process resolves FLIKS_MPV_PATH to
-      #   app.getAppPath()/native/vendor/libmpv.so.2
-      # and electron-builder ships native/vendor/** (asarUnpacked).
-      # TODO(vendor-mpv): desktop/scripts/fetch-vendored does NOT exist yet.
-      #   It must drop a *self-contained* libmpv (FFmpeg symbols hidden — see
-      #   desktop/CLAUDE.md kill-switch `nm -D … | grep ' av_'` must be empty) at:
-      #     Linux:   desktop/native/vendor/libmpv.so.2
-      #     macOS:   desktop/native/vendor/libmpv.2.dylib  (note: index.ts hard-
-      #              codes libmpv.so.2 — needs a per-OS filename, owned elsewhere)
-      #     Windows: desktop/native/vendor/libmpv-2.dll
-      #   For now this step only creates the dir so electron-builder's
-      #   native/vendor/** glob does not error on an empty match; the produced
-      #   installer will NOT play video without the real libmpv.
-      # ────────────────────────────────────────────────────────────────────
-      - name: Vendor libmpv (placeholder)
+      # The self-contained libmpv (FFmpeg statically linked, symbols hidden) is
+      # committed at desktop/native/vendor/libmpv.so.2 and bundled by
+      # electron-builder (files: native/vendor/**, asarUnpacked). It's the only
+      # OS that uses the compositor addon today; mac/win embed mpv natively and
+      # vendor their own .dylib/.dll later.
+      - name: Verify vendored libmpv (Linux)
+        if: runner.os == 'Linux'
         shell: bash
         run: |
-          mkdir -p desktop/native/vendor
-          if [ -x desktop/scripts/fetch-vendored ]; then
-            desktop/scripts/fetch-vendored
-          else
-            echo "TODO(vendor-mpv): desktop/scripts/fetch-vendored missing —"
-            echo "shipping WITHOUT a runtime libmpv. Installer builds but playback"
-            echo "is non-functional until the vendoring script lands."
-          fi
+          f=desktop/native/vendor/libmpv.so.2
+          test -f "$f" || { echo "::error::vendored libmpv missing at $f"; exit 1; }
+          test -z "$(nm -D "$f" 2>/dev/null | grep ' av_')" \
+            || { echo "::error::libmpv exports av_* — not self-contained, will clash with Electron's libffmpeg"; exit 1; }
+          echo "vendored libmpv OK: $(du -h "$f" | cut -f1)"
 
       # ── Build the native compositor addon against the Electron 42 ABI ──
       # Linux-only: SDL2 + GLES/EGL OSR compositor (the Mutter/X11 model). macOS
