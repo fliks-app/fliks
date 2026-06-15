@@ -15,10 +15,11 @@
 #      desktop/web so electron-builder ships it at resources/web.
 #   + a vendored self-contained libmpv into desktop/native/vendor per OS.
 #
-# STATUS: iteration-1 scaffold. The Linux path is the closest to known-good
-# (it mirrors desktop/CLAUDE.md). macOS and especially Windows have unresolved
-# TODOs (cross-platform binding.gyp, vendored mpv, libmpv headers) flagged inline
-# and called out in the PR. This is expected to need a real CI run to shake out.
+# The native compositor addon (SDL2 + GLES/EGL) is LINUX-ONLY by design — it is
+# the OSR self-compositor needed under Mutter/X11. macOS and Windows embed mpv
+# natively instead (--wid into a child NSView/HWND, see desktop/src/main/window/
+# backends), so they do NOT build the addon. All three OSes still produce an
+# installer; mac/win playback lands with their embed backends + vendored libmpv.
 name: Desktop release
 
 on:
@@ -109,12 +110,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-electron42-
 
-      # ────────────────────────────────────────────────────────────────────
-      # Platform build dependencies for the native addon (SDL2 + GLES/EGL +
-      # libmpv headers) and for libmpv at runtime.
-      # ────────────────────────────────────────────────────────────────────
-
-      # Linux: the exact apt set from desktop/CLAUDE.md. CONFIDENT.
+      # Linux-only: build deps for the native compositor addon (SDL2 + GLES/EGL
+      # + libmpv headers). macOS/Windows don't build the addon (they embed mpv
+      # natively), so they need no extra build deps here.
       - name: Install Linux build deps
         if: runner.os == 'Linux'
         run: |
@@ -122,40 +120,6 @@ jobs:
           sudo apt-get install -y \
             build-essential python3 pkg-config \
             libsdl2-dev libgles2-mesa-dev libegl1-mesa-dev libmpv-dev
-
-      # macOS: brew provides mpv + sdl2 (with pkg-config files). GLES/EGL is NOT
-      # native on macOS — the addon uses GLES 3.2 + EGL, which Apple does not
-      # ship. binding.gyp's `pkg-config glesv2 egl` WILL FAIL here as-is.
-      # TODO(macos-addon): the binding.gyp is Linux-only. Building the compositor
-      #   on macOS needs either an ANGLE/EGL shim (e.g. brew install angle, or a
-      #   bundled libEGL/libGLESv2 from ANGLE) or a macOS code path in addon.cc.
-      #   Until then the node-gyp step below is expected to fail on macOS.
-      - name: Install macOS build deps
-        if: runner.os == 'macOS'
-        run: |
-          brew install mpv sdl2 pkg-config
-          # TODO(macos-addon): GLES/EGL not available from Homebrew core; the
-          # addon's `pkg-config --cflags glesv2 egl` will not resolve. Needs an
-          # ANGLE-based EGL/GLES provider before this can link.
-
-      # Windows: there is no first-class libmpv/SDL2/GLES dev package via the
-      # default toolchains, and binding.gyp is written for pkg-config + POSIX.
-      # TODO(windows-addon): this is the least-certain platform. Options to try:
-      #   - vcpkg: `vcpkg install sdl2 angle libmpv` (libmpv port availability is
-      #     unconfirmed) and a windows binding.gyp branch using vcpkg include/lib.
-      #   - prebuilt libmpv from https://sourceforge.net/projects/mpv-player-windows/
-      #     (shinchiro builds) for the runtime DLL, plus headers for compile.
-      #   - MSYS2 pacman (mingw-w64-x86_64-{SDL2,mpv,angleproject}) — but that
-      #     toolchain differs from node-gyp's MSVC default.
-      #   Expect the node-gyp step to fail on Windows until binding.gyp grows a
-      #   win32 branch and the deps are sourced. Left as a scaffold on purpose.
-      - name: Install Windows build deps
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          echo "TODO(windows-addon): no confident libmpv/SDL2/GLES dev source yet."
-          echo "See the inline notes in this workflow. The node-gyp + electron-builder"
-          echo "steps below will likely need binding.gyp + vendoring work to pass."
 
       # ── Install node deps (desktop + client) ──
       - name: Install desktop deps
@@ -195,9 +159,11 @@ jobs:
           fi
 
       # ── Build the native compositor addon against the Electron 42 ABI ──
-      # CONFIDENT on Linux (mirrors desktop/CLAUDE.md). Expected to fail on
-      # macOS/Windows until binding.gyp is made cross-platform (see deps notes).
+      # Linux-only: SDL2 + GLES/EGL OSR compositor (the Mutter/X11 model). macOS
+      # and Windows embed mpv natively (--wid) and ship no addon — electron-
+      # builder's native/build/Release/** glob simply matches nothing there.
       - name: Build native addon
+        if: runner.os == 'Linux'
         working-directory: desktop/native
         shell: bash
         run: |
