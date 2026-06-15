@@ -147,4 +147,17 @@ export class SystemStreamsComponent implements OnInit, OnDestroy {
     if (bps >= 1_000) return `${(bps / 1_000).toFixed(0)} kbps`;
     return `${bps} bps`;
   }
+
+  /** Display label for a hardware-acceleration code (the per-session value the
+   *  backend ships), falling back to the upper-cased code for unknowns. */
+  hwLabel(hwAccel: string): string {
+    const labels: Record<string, string> = {
+      qsv: 'QSV',
+      vaapi: 'VAAPI',
+      nvenc: 'NVENC',
+      videotoolbox: 'Apple VT',
+      none: 'CPU',
+    };
+    return labels[hwAccel] ?? hwAccel.toUpperCase();
+  }
 }

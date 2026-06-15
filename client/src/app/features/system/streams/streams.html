@@ -69,7 +69,16 @@
             <span class="text-base-content/40 w-10 shrink-0">{{ 'system.streams_label_video' | translate }}</span>
             <div>
               <span class="font-medium">{{ s.videoResolution ?? '?' }} {{ s.videoCodec ?? '?' }}</span>
-              <div class="text-base-content/50">&rarr; {{ s.videoPlaybackMode }}</div>
+              <div class="text-base-content/50">&rarr;
+                @switch (s.mode) {
+                  @case ('transcode') {
+                    {{ 'system.streams_video_transcode' | translate:{ hw: hwLabel(s.hwAccel) } }}
+                  }
+                  @default {
+                    {{ 'system.streams_video_direct' | translate }}
+                  }
+                }
+              </div>
               @for (r of s.videoReasons; track r) {
                 <div class="text-warning/80 italic">{{ r }}</div>
               }

@@ -954,6 +954,8 @@
     "streams_audio_copy": "Copie bitstream ({{codec}})",
     "streams_audio_transcode": "Transcodage ({{codec}})",
     "streams_audio_transcode_with_bitrate": "Transcodage ({{codec}}, {{kbps}} kbps)",
+    "streams_video_direct": "Lecture directe",
+    "streams_video_transcode": "Transcodage ({{hw}})",
     "stream_message_btn": "Envoyer un message",
     "stream_message_title": "Envoyer un message",
     "stream_message_subtitle": "À {{user}}, en train de regarder « {{title}} ».",
