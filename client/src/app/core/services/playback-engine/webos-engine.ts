@@ -49,7 +49,6 @@ const SEEK_DEBOUNCE_MS = 280;
 export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngine {
   private video: HTMLVideoElement | null = null;
   private readonly subtitles = new SubtitleOverlay();
-  private firstFrameEmitted = false;
   private _duration = 0;
   /** Last URL handed to `load()` — the base for reload-on-seek. */
   private loadedUrl = '';
@@ -58,15 +57,6 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   /** Suppress the persistent `error` handler while a (re)load is in flight —
    *  a mediaOption rejection is recovered via the fallback, not surfaced. */
   private loadingPhase = false;
-
-  /** One-shot guard for the optimistic-recovery branch in the `error`
-   *  bridge. webOS's native HLS pipeline hides the HTTP status of the
-   *  failing segment fetch — we can't tell a backend 410 from a real
-   *  decode failure. First network-shaped MediaError after a frame has
-   *  played is routed to `sessionExpired`; the player tries one cheap
-   *  /playback-info reload before surfacing a fatal error. Reset on
-   *  every {@link load} so a fresh playback starts with a fresh budget. */
-  private recoveryAttempted = false;
 
   /** Optimistic position reported while a seek settles, so the seekbar stays
    *  pinned and relative (±10s) steps accumulate even though the real clock
@@ -126,7 +116,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     });
     add('playing', () => {
       this.emit('stateChanged', { state: 'playing' });
-      this.emitFirstFrame();
+      this.emitFirstFrameOnce();
     });
     add('play', () => this.emit('stateChanged', { state: 'playing' }));
     add('pause', () => {
@@ -147,7 +137,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
         duration: this._duration || v.duration || 0,
         buffered: this.bufferedEnd(),
       });
-      if (v.currentTime > 0) this.emitFirstFrame();
+      if (v.currentTime > 0) this.emitFirstFrameOnce();
     });
     add('ended', () => {
       this.emit('stateChanged', { state: 'ended' });
@@ -164,11 +154,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
       const networkShaped =
         err?.code === MediaError.MEDIA_ERR_NETWORK ||
         err?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;
-      if (this.firstFrameEmitted && !this.recoveryAttempted && networkShaped) {
-        this.recoveryAttempted = true;
-        this.emit('sessionExpired', undefined);
-        return;
-      }
+      if (networkShaped && this.maybeEmitSessionExpired()) return;
       this.emit('error', {
         code: err?.code ?? -1,
         message: mediaErrorMessage(err),
@@ -182,15 +168,9 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     if ('requestVideoFrameCallback' in v) {
       this.frameCbHandle = (v as any).requestVideoFrameCallback(() => {
         this.frameCbHandle = null;
-        this.emitFirstFrame();
+        this.emitFirstFrameOnce();
       });
     }
-  }
-
-  private emitFirstFrame(): void {
-    if (this.firstFrameEmitted) return;
-    this.firstFrameEmitted = true;
-    this.emit('firstFrame', undefined);
   }
 
   // ── Loading ─────────────────────────────────────────────────────────
@@ -198,8 +178,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   async load(url: string, startTime?: number): Promise<void> {
     if (!this.video) throw new Error('WebOsEngine not initialised');
     this.loadedUrl = url;
-    this.firstFrameEmitted = false;
-    this.recoveryAttempted = false;
+    this.resetFirstFrame();
     this.clearSeekDebounce();
     this.pendingReloadTarget = null;
     const start = startTime && startTime > 0 ? startTime : 0;

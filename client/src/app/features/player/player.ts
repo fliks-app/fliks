@@ -2133,7 +2133,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       ) {
         this.recoverConfirmPending = false;
         this.recoverAttempts = 0;
-        this.engine?.resetRecoveryGuard?.();
+        this.engine?.resetRecoveryGuard();
       }
       return;
     }
@@ -2164,6 +2164,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // reloads — recovery is about to resume playback, so the reload window
     // reads as buffering, not "Playback error".
     this.state.setRecovering(true);
+    // Count the attempt up front, not only on failure: a reload that resolves
+    // then re-fails within seconds must keep counting toward maxRecoverAttempts.
+    // On the Shaka path there is no per-engine one-shot latch, so a fresh sid
+    // that 410s again on the next segment would otherwise re-enter with the
+    // counter still at 0 and loop unbounded. The counter clears only after
+    // playback sustains for recoverConfirmMs (checkStall).
+    this.recoverAttempts += 1;
     // engine.currentTime can read 0 right after an error (e.g. Tizen AVPlay),
     // which would reload from the start — fall back to the last mirrored
     // position in that case.
@@ -2182,7 +2189,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.recoverConfirmPending = true;
       this.recoverConfirmAt = Date.now();
     } catch {
-      this.recoverAttempts += 1;
       if (this.recoverAttempts >= this.maxRecoverAttempts) {
         this.state.setRecovering(false);
         this.state.error.set(this.translate.instant('player.playback_error'));
@@ -2782,7 +2788,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async reloadStream() {
     if (!this.engine || this.reloadingStream) return;
     this.reloadingStream = true;
-    this.engine.resetRecoveryGuard?.();
+    this.engine.resetRecoveryGuard();
     try {
       await this.doReloadStream();
     } finally {
@@ -2898,7 +2904,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    if (!pos) return;
+    // Heartbeat even at position 0 — a player paused at the very start is
+    // still live and the backend refreshes the LiveSession TTL off this PUT.
+    // Only bail on a non-finite reading (engine not ready), never on 0.
+    if (!Number.isFinite(pos)) return;
 
     const now = Date.now();
     if (now - this.lastSaveAt < 2_000) return;

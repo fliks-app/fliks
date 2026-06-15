@@ -40,8 +40,6 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   private _state: PlaybackState = 'idle';
   private _audioTracks: AudioTrack[] = [];
 
-  private firstFrameEmitted = false;
-  private recoveryAttempted = false;
   /** Set in destroy() so a leaked late event (the mpv player is a persistent
    *  singleton) can't drive a torn-down engine into recovery. */
   private dead = false;
@@ -96,8 +94,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     _mimeType?: string,
     headers?: Record<string, string>,
   ): Promise<void> {
-    this.firstFrameEmitted = false;
-    this.recoveryAttempted = false;
+    this.resetFirstFrame();
     await this.bridge.load({ url, startTime, headers });
     if (this._subtitleStyle) {
       await this.bridge.setSubtitleStyle(this._subtitleStyle);
@@ -335,9 +332,8 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
         break;
       }
       case 'firstFrame': {
-        if (this.firstFrameEmitted) return;
-        this.firstFrameEmitted = true;
-        this.emit('firstFrame', undefined);
+        if (this.firstFrameEmitted) break;
+        this.emitFirstFrameOnce();
         // The persistent mpv may not fire a pause-property change on a fresh
         // load (it was already unpaused from a prior session), so the UI's
         // paused signal would stay stuck on its default. Assert the playing
@@ -351,11 +347,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
         // mpv can't expose the failing segment's HTTP status either; mirror the
         // native heuristic — first error after a frame played → try one
         // session-expired recovery before surfacing a fatal error.
-        if (this.firstFrameEmitted && !this.recoveryAttempted) {
-          this.recoveryAttempted = true;
-          this.emit('sessionExpired', undefined);
-          return;
-        }
+        if (this.maybeEmitSessionExpired()) return;
         this._state = 'error';
         this.emit('error', event.payload);
         break;

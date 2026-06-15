@@ -86,19 +86,9 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   /** AVPlay exposes no `getCurrentAudioTrack()` — track it ourselves
    *  so the dropdown reflects the active language. */
   private _currentAudioIndex = 0;
-  private firstFrameEmitted = false;
   private orientationHandler: (() => void) | null = null;
   private _seekInFlight = false;
   private _pendingSeek: number | null = null;
-
-  /** One-shot guard for the optimistic-recovery branch in
-   *  {@link handleError}. AVPlay can't surface HTTP status, so the
-   *  first network-shaped error during stable playback is treated as a
-   *  possible session-expired event and emits `sessionExpired` instead
-   *  of a fatal `error`. Subsequent errors fall through normally. Reset
-   *  on every {@link load} so a fresh playback starts with a fresh
-   *  budget. */
-  private recoveryAttempted = false;
 
   /** Timestamp of the last resume issued from PAUSED. AVPlay can throw a
    *  transient network-shaped error while re-priming the decoder on resume;
@@ -170,8 +160,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     _headers?: Record<string, string>,
   ): Promise<void> {
     this._lastLoadedUrl = url;
-    this.firstFrameEmitted = false;
-    this.recoveryAttempted = false;
+    this.resetFirstFrame();
     this._currentTime = 0;
     this._duration = 0;
 
@@ -296,10 +285,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       buffered: this._buffered,
     });
     this.subtitles.updateAt(this._currentTime);
-    if (!this.firstFrameEmitted && ms > 0) {
-      this.firstFrameEmitted = true;
-      this.emit('firstFrame', undefined);
-    }
+    if (ms > 0) this.emitFirstFrameOnce();
   }
   private handleError(err: unknown): void {
     // Seek failures go through `runSeek`'s per-call error path (which
@@ -328,12 +314,9 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     // if it fails the next error after `recoveryAttempted` falls through
     // to the regular error path.
     if (
-      this.firstFrameEmitted &&
-      !this.recoveryAttempted &&
-      /CONNECTION|HTTP|NETWORK|PLAYER_ERROR_INVALID_URI/i.test(msg)
+      /CONNECTION|HTTP|NETWORK|PLAYER_ERROR_INVALID_URI/i.test(msg) &&
+      this.maybeEmitSessionExpired()
     ) {
-      this.recoveryAttempted = true;
-      this.emit('sessionExpired', undefined);
       return;
     }
     this.emit('error', { code: -1, message: msg, errorKey: 'player.playback_error' });

@@ -87,6 +87,23 @@ export type EngineEventHandler<E extends EngineEvent> = (
 export abstract class AbstractPlaybackEngine {
   private handlers = new Map<EngineEvent, Set<EngineEventHandler<any>>>();
 
+  /** Whether `firstFrame` has been emitted for the current load. Subclasses
+   *  drive the emit via {@link emitFirstFrameOnce} and clear it in load() via
+   *  {@link resetFirstFrame}; the recovery heuristic reads it so a pre-frame
+   *  failure goes straight to a fatal error instead of optimistic recovery. */
+  protected firstFrameEmitted = false;
+
+  /** One-shot guard for the optimistic session-expired recovery. The native /
+   *  desktop / TV engines can't read the HTTP status of a failed segment fetch,
+   *  so the first error during stable playback is routed to `sessionExpired`
+   *  (which makes the player mint a fresh sid + reload). A second error before
+   *  the guard is re-armed falls through to a fatal `error`, so a reload that
+   *  immediately re-fails can't loop forever. Re-armed only by
+   *  {@link resetRecoveryGuard} — never on every load() — so a recovery reload
+   *  doesn't reset its own budget. Shaka reads a real 410 instead and never
+   *  touches this. */
+  protected recoveryAttempted = false;
+
   on<E extends EngineEvent>(event: E, handler: EngineEventHandler<E>): void {
     if (!this.handlers.has(event)) this.handlers.set(event, new Set());
     this.handlers.get(event)!.add(handler);
@@ -107,6 +124,43 @@ export abstract class AbstractPlaybackEngine {
   protected clearHandlers(): void {
     this.handlers.clear();
   }
+
+  /** Re-arm the optimistic-recovery one-shot. Called by the player on a
+   *  user-initiated (re)load and after a recovery sustains playback. No-op in
+   *  effect for engines that read a real HTTP status (Shaka). */
+  resetRecoveryGuard(): void {
+    this.recoveryAttempted = false;
+  }
+
+  /** Clear the first-frame latch at the start of a load() so the next stream
+   *  re-emits `firstFrame`. */
+  protected resetFirstFrame(): void {
+    this.firstFrameEmitted = false;
+  }
+
+  /** Emit `firstFrame` exactly once per load. Subclasses call this from
+   *  whichever signal first proves a frame was presented (rvfc, position
+   *  delta, native first-frame callback). */
+  protected emitFirstFrameOnce(): void {
+    if (this.firstFrameEmitted) return;
+    this.firstFrameEmitted = true;
+    this.emit('firstFrame', undefined);
+  }
+
+  /** Route a post-first-frame stream error to a single optimistic
+   *  `sessionExpired` recovery. Returns true when it consumed the error (the
+   *  caller should stop and not surface a fatal error), false when the guard
+   *  is spent / no frame has played and the caller must fall through to a real
+   *  error. Engines with a platform-specific precondition (e.g. a
+   *  network-shaped error string) gate on it before calling this. */
+  protected maybeEmitSessionExpired(): boolean {
+    if (this.firstFrameEmitted && !this.recoveryAttempted) {
+      this.recoveryAttempted = true;
+      this.emit('sessionExpired', undefined);
+      return true;
+    }
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -121,8 +175,9 @@ export interface PlaybackEngine {
   unload(): Promise<void>;
   /** Re-arm the native optimistic-recovery one-shot guard. No-op on engines
    *  that read a real HTTP status (Shaka). Called on a user-initiated
-   *  (re)load and after a recovery sustains playback. */
-  resetRecoveryGuard?(): void;
+   *  (re)load and after a recovery sustains playback. Provided by
+   *  {@link AbstractPlaybackEngine}. */
+  resetRecoveryGuard(): void;
 
   // ── Playback ──
   play(): Promise<void>;
