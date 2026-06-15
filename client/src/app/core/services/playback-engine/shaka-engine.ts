@@ -304,10 +304,16 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }
 
   setTextVisibility(visible: boolean): void {
+    // Shaka 5.x merged text visibility into track selection: the standalone
+    // `setTextVisibility(boolean)` method was removed, so the old bare call
+    // threw (silently caught) and disabling subtitles never took effect.
+    // Showing is handled by `selectTextTrack(track)` in selectTextTrack();
+    // to hide, deselect the track with `selectTextTrack(null)`.
+    if (visible) return;
     try {
-      (this.player as any)?.setTextVisibility(visible);
+      (this.player as any)?.selectTextTrack(null);
     } catch {
-      // Shaka may throw if no text tracks exist
+      // no player / no active text track
     }
   }
 

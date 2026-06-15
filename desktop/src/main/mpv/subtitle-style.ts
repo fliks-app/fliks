@@ -3,7 +3,7 @@ import type { DesktopSubtitleStyle } from '../../shared/contract';
 // Base subtitle size the app's fontScale presets multiply. mpv's own default
 // (55) renders far too large, so we calibrate lower — at scale 1.0 this lands
 // around a typical caption height once mpv scales it to the window.
-export const MPV_BASE_SUB_FONT_SIZE = 28;
+export const MPV_BASE_SUB_FONT_SIZE = 26;
 
 /** Translate the app's subtitle style presets to mpv `sub-*` property pairs.
  *  Shared by every playback backend (the Linux compositor and the embed
@@ -26,6 +26,11 @@ export function mpvSubtitleProps(s: DesktopSubtitleStyle): Array<[string, string
     ['sub-border-style', hasBox ? 'background-box' : 'outline-and-shadow'],
     ['sub-back-color', hasBox ? s.backgroundColor : '#00000000'],
     ['sub-pos', String(Math.max(0, Math.min(100, 100 - (s.bottomMarginPercent || 0))))],
+    // mpv's default bottom margin (sub-margin-y ~22) parks subtitles well above
+    // the bottom edge, so at 0% bottom-margin they sat much higher than the web
+    // player (whose 0% is the near-edge browser default). Shrink it so sub-pos
+    // 100 is "almost glued to the bottom", matching Shaka.
+    ['sub-margin-y', '6'],
   ];
   // Every branch sets outline-size / shadow-offset / blur explicitly: these are
   // sticky mpv properties, so a preset that omits one would inherit a stale
@@ -48,14 +53,14 @@ export function mpvSubtitleProps(s: DesktopSubtitleStyle): Array<[string, string
       break;
     case 'drop_shadow':
     default:
-      // A soft glow behind the text with NO directional offset — a blurred,
-      // half-opacity black outline. The blur lands on the outline (not the
-      // fill), so the glyphs stay crisp; the offset is zero, so there's no
-      // displaced ghost copy. Opacity is kept low so it reads as a light shadow
-      // rather than a dark band around the text.
+      // A soft glow behind the text with NO directional offset — a blurred
+      // black outline. The blur lands on the outline (not the fill), so the
+      // glyphs stay crisp; the offset is zero, so there's no displaced ghost
+      // copy. Opacity is kept moderate so it reads as a shadow that lifts the
+      // text off bright backdrops without becoming a hard band around it.
       props.push(
-        ['sub-outline-size', '1.5'], ['sub-outline-color', '#4D000000'],
-        ['sub-shadow-offset', '0'], ['sub-shadow-color', '#00000000'], ['sub-blur', '0.5'],
+        ['sub-outline-size', '0.5'], ['sub-outline-color', '#AA000000'],
+        ['sub-shadow-offset', '0'], ['sub-shadow-color', '#00000000'], ['sub-blur', '1'],
       );
       break;
   }

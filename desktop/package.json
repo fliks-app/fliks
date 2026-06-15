@@ -13,6 +13,7 @@
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --outfile=dist/preload/index.cjs",
     "build": "npm run build:main && npm run build:preload",
     "start": "npm run build && electron .",
+    "dev:linux": "bash scripts/dev-linux.sh",
     "dist": "electron-builder",
     "dist:linux": "electron-builder --linux deb",
     "dist:mac": "electron-builder --mac dmg",

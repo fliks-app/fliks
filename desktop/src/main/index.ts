@@ -278,7 +278,17 @@ app.whenReady().then(async () => {
     }
     switch (raw.type) {
       case 'timeUpdate':
-        send({ type: 'timeUpdate', payload: { position: raw.position, duration: raw.duration, buffered: 0 } });
+        // Read the real buffered position (matches the polled emitPosition).
+        // Hardcoding 0 here made bufferedEnd flip 0 <-> real as these events
+        // interleaved with the poll, so the seekbar's buffered zone flickered.
+        send({
+          type: 'timeUpdate',
+          payload: {
+            position: raw.position,
+            duration: raw.duration,
+            buffered: num(addon.getProperty('demuxer-cache-time')),
+          },
+        });
         break;
       case 'stateChanged':
         // Only an actively-playing session should drive the position timer;
