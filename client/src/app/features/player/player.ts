@@ -2004,11 +2004,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.engine,
       this.playbackMode(),
     );
-    // Shaka/webOS drop sidecar text tracks on a fresh load(), so a recovery
-    // reload silently loses the user's subtitle. Re-add + re-select the active
-    // soft subtitle. Native restores its own pick inside load(); burn-in is
-    // re-baked server-side via the activeBurnInId passed to playback-info above.
-    if (!this.isNativeEngine()) {
+    // Shaka/webOS and the desktop mpv engine drop sidecar text tracks on a fresh
+    // load(), so a recovery reload silently loses the user's subtitle. Re-add +
+    // re-select the active soft subtitle. The Capacitor native players restore
+    // their own pick inside load(); burn-in is re-baked server-side via the
+    // activeBurnInId passed to playback-info above.
+    if (!this.isNativeEngine() || this.isDesktopNative) {
       const activeId = this.activeSubtitleId();
       const sub = activeId
         ? this.availableSubtitles().find((s) => s.id === activeId)

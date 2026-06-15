@@ -368,6 +368,14 @@ export class MpvPlayer extends EventEmitter {
     return this.set('sid', id == null ? 'no' : id);
   }
 
+  /** Load a sidecar subtitle (mpv sub-add). `cached` makes mpv reuse an
+   *  already-loaded track for the same URL instead of adding a duplicate, so
+   *  re-selecting the same subtitle never stacks; mpv parses the VTT once and
+   *  seeks within it natively, unlike a re-read HLS rendition. */
+  async subAdd(url: string, label: string, language: string): Promise<void> {
+    await this.command(['sub-add', url, 'cached', label ?? '', language ?? '']);
+  }
+
   async setSubtitleStyle(s: DesktopSubtitleStyle): Promise<void> {
     for (const [name, value] of mpvSubtitleProps(s)) await this.set(name, value);
   }

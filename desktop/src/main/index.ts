@@ -369,6 +369,13 @@ app.whenReady().then(async () => {
       addon.setProperty('sub-visibility', 'yes');
     }
   });
+  // Sidecar subtitle: mpv parses the VTT once and seeks within it natively, so
+  // (unlike a single-segment HLS SUBTITLES rendition) cues don't re-inject and
+  // stack on seek. `cached` makes mpv reuse an already-loaded track for the same
+  // URL, so repeated picks of the same subtitle don't add duplicates.
+  ipcMain.handle(IPC.subAdd, (_e, url: string, label: string, language: string) =>
+    addon.command(['sub-add', url, 'cached', label ?? '', language ?? '']),
+  );
   ipcMain.handle(IPC.setFullscreen, (_e, enabled: boolean) => addon.setFullscreen(enabled));
   ipcMain.handle(IPC.setSubtitleStyle, (_e, s: DesktopSubtitleStyle) => {
     if (!s) return;

@@ -49,8 +49,9 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   private _initialized = false;
 
   // ── Subtitles ──
-  // mpv renders subtitles in its own pipeline; selection is by (language,
-  // forced) against the track list mpv reports, mirroring NativeEngine.
+  // mpv renders subtitles in its own pipeline. Tracks are loaded sidecar via
+  // `sub-add` (addTextTrack), and selection is by (language, forced) against the
+  // track list mpv reports, mirroring NativeEngine.
   private _activeTrackId: string | null = null;
   private _desiredSubtitle: { language: string; forced: boolean; embIndex: number | null } | null = null;
   private _nativeSubtitleTracks: DesktopSubtitleTrack[] = [];
@@ -195,14 +196,19 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   // ── Subtitles ──
 
   async addTextTrack(
-    _url: string,
+    url: string,
     language: string,
-    _label: string,
+    label: string,
     forced = false,
   ): Promise<{ language: string; forced: boolean }> {
-    // Subtitles arrive as HLS SUBTITLES renditions; mpv surfaces them as text
-    // tracks. Return the desired descriptor — selection resolves against the
-    // reported track list (see resolveSubtitle).
+    // Sidecar load (mpv `sub-add`): mpv parses the VTT once and seeks within it
+    // natively. The alternative — an HLS SUBTITLES rendition — is a single
+    // segment over the whole VTT that mpv's ffmpeg HLS demuxer re-reads on each
+    // seek, re-injecting every cue without clearing the prior set, so cues stack.
+    // `sub-add` is idempotent per URL (main passes `cached`), so re-selecting the
+    // same subtitle doesn't duplicate the track. mpv then surfaces it in the
+    // track list; selection resolves against that list (see resolveSubtitle).
+    if (url) await this.bridge.subAdd(url, label, language).catch(() => {});
     return { language, forced };
   }
 

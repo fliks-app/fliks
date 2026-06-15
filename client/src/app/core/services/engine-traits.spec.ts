@@ -18,7 +18,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
   },
   [EngineKind.DESKTOP]: {
     useTsOnSingleAudio: false,
-    supportsHlsSubtitles: true,
+    supportsHlsSubtitles: false,
     probesSegZero: true,
     supportsDirectPlay: true,
   },
