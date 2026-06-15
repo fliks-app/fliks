@@ -2,7 +2,7 @@
   "name": "fliks-desktop",
   "version": "1.11.0",
   "description": "Fliks native desktop client (macOS / Windows / Linux)",
-  "author": "Fliks <contact@fliks.media>",
+  "author": "Clément Delestre <contact@fliks.media>",
   "homepage": "https://github.com/fliks-app/fliks",
   "private": true,
   "type": "module",
