@@ -168,7 +168,15 @@ jobs:
             [ -n "$sub" ] && cp -rf "$sub"/. "$dest"/
           fi
           test -f "$dest/mpv.exe" || { echo "::error::mpv.exe missing after extract"; find "$dest" -maxdepth 2; exit 1; }
+          rm -f "$dest/libmpv.so.2"  # the committed Linux lib isn't used on Windows
           echo "vendored mpv.exe ($(du -h "$dest/mpv.exe" | cut -f1)) + $(ls "$dest"/*.dll 2>/dev/null | wc -l) DLLs"
+
+      # macOS is UI-only for now (no native compositor), so it ships no mpv —
+      # drop the committed Linux lib so it isn't carried into the .dmg.
+      - name: Drop unused vendor libs (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: rm -f desktop/native/vendor/libmpv.so.2
 
       # ── Build the native compositor addon against the Electron 42 ABI ──
       # Linux-only: SDL2 + GLES/EGL OSR compositor (the Mutter/X11 model). macOS
