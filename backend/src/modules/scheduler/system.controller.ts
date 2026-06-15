@@ -32,11 +32,13 @@ import { LogBufferService } from './log-buffer.service';
 import { EventsService } from './events.service';
 import { Observable } from 'rxjs';
 import {
-  HW_ACCEL_LABEL,
   type HwAccelType,
   type TranscodeSession,
   TranscodingService,
   TranscodeCacheService,
+  getLadderForDevice,
+  getHdrLadderForDevice,
+  parseBitrateToBps,
 } from '../streaming/transcoding';
 import { ActiveStreamTracker } from '../streaming/active-stream-tracker.service';
 import {
@@ -90,7 +92,6 @@ export interface ActiveStreamDto {
   audioLanguage: string | null;
   outputContainer: string | null;
   outputBitrate: number | null;
-  videoPlaybackMode: string; // "Lecture directe" / "Transcodage (QSV)"
   /** `null` when audio is direct-played (no transcode). For transcoded
    *  sessions, the actual codec ffmpeg emits — caller renders the display
    *  string from these raw values. */
@@ -135,6 +136,32 @@ export interface StatsReport {
   series: number;
   pendingRequests: number;
   diskSpace: DiskSpaceEntry[];
+}
+
+/** Map a LiveSession `audioPlan` to the dashboard's audio output fields.
+ *  With a plan, the plan is authoritative (copy or transcode); without one,
+ *  remux copies the bitstream and every other mode is a straight direct play. */
+function deriveAudioOutput(
+  audioPlan: LiveSessionSnapshot['audioPlan'],
+  mode: 'transcode' | 'remux' | 'directplay',
+): {
+  audioMode: 'direct' | 'copy' | 'transcode';
+  audioOutputCodec: string | null;
+  audioOutputBitrateBps: number | null;
+} {
+  if (audioPlan) {
+    return {
+      audioMode: audioPlan.mode,
+      audioOutputCodec: audioPlan.codec,
+      audioOutputBitrateBps:
+        audioPlan.mode === 'transcode' ? audioPlan.bitrateBps : null,
+    };
+  }
+  return {
+    audioMode: mode === 'remux' ? 'copy' : 'direct',
+    audioOutputCodec: null,
+    audioOutputBitrateBps: null,
+  };
 }
 
 @Controller('system')
@@ -339,14 +366,16 @@ export class SystemController {
       );
     };
 
+    // Legacy direct-play paths that bypass playback-info still surface here;
+    // their (user, file) pair isn't represented by any LiveSession so we read
+    // from the tracker. Snapshot once — the dashboard reads it twice.
+    const directPlaySessions = this.activeStreamTracker.getActive();
+
     // Collect lookups before the per-session loop so we batch DB hits.
     const mediaFileIds = [
       ...new Set([
         ...live.map((s) => s.mediaFileId),
-        // Legacy direct-play paths that bypass playback-info still
-        // surface here; their (user, file) pair isn't represented by
-        // any LiveSession so we have to read from the tracker.
-        ...this.activeStreamTracker.getActive().map((s) => s.mediaFileId),
+        ...directPlaySessions.map((s) => s.mediaFileId),
       ]),
     ];
     const mediaFiles = mediaFileIds.length
@@ -370,6 +399,8 @@ export class SystemController {
       deviceLabel: string | null;
       transcodeSession: TranscodeSession | undefined;
       audioPlan: LiveSessionSnapshot['audioPlan'];
+      position: number;
+      episodeId: number | null;
     };
 
     const work: StreamWorkItem[] = [];
@@ -417,6 +448,10 @@ export class SystemController {
             : null),
         transcodeSession: ts,
         audioPlan: session.audioPlan,
+        // The LiveSession keeps the playhead fresh on every heartbeat — read
+        // it straight from memory instead of a per-row playback_states query.
+        position: session.position,
+        episodeId: mediaFileMap.get(session.mediaFileId)?.episodeId ?? null,
       });
     }
 
@@ -426,7 +461,7 @@ export class SystemController {
     const liveByKey = new Set(
       live.map((s) => `${s.userId ?? 0}-${s.mediaFileId}`),
     );
-    for (const dp of this.activeStreamTracker.getActive()) {
+    for (const dp of directPlaySessions) {
       const key = `${dp.userId}-${dp.mediaFileId}`;
       if (liveByKey.has(key)) continue;
       work.push({
@@ -448,10 +483,10 @@ export class SystemController {
         ),
         transcodeSession: undefined,
         audioPlan: null,
+        position: 0,
+        episodeId: null,
       });
     }
-
-    const streamEpisodeIds: (number | null)[] = [];
 
     for (const s of work) {
       const mf = mediaFileMap.get(s.mediaFileId);
@@ -459,63 +494,31 @@ export class SystemController {
       const v = si?.video?.[0];
       const a = si?.audio?.[0];
 
-      // Playback state (position/duration + episodeId)
-      let positionSeconds = 0;
-      let durationSeconds = si?.durationSeconds ?? 0;
-      let episodeId: number | null = null;
-      if (s.userId && mf?.mediaId) {
-        try {
-          // `playback_states` is keyed by (user, media, episode?). Series
-          // episodes carry an episodeId — the media-file row tells us
-          // which one — so we pass it through, otherwise the lookup
-          // hits the IS NULL branch (movies) and returns nothing.
-          const ps = await this.playbackService.getState(
-            s.userId,
-            mf.mediaId,
-            mf.episodeId ?? undefined,
-          );
-          if (ps) {
-            positionSeconds = ps.positionSeconds;
-            if (ps.durationSeconds > 0) durationSeconds = ps.durationSeconds;
-            episodeId = ps.episodeId ?? null;
-          }
-        } catch {
-          /* ignore */
-        }
-      }
+      // Position comes from the in-memory LiveSession (fresher than the
+      // debounced playback_states row); duration from the probed streamInfo.
+      const positionSeconds = s.position;
+      const durationSeconds = si?.durationSeconds ?? 0;
+      const episodeId = s.episodeId;
 
       // Output decisions: the LiveSession holds the authoritative
       // `audioPlan`; mode/codec/bitrate read directly.
-      let videoPlaybackMode = 'Lecture directe';
       let outputContainer: string | null = null;
       let outputBitrate: number | null = null;
-      let audioOutputCodec: string | null = null;
-      let audioOutputBitrateBps: number | null = null;
-      let audioMode: 'direct' | 'copy' | 'transcode' = 'direct';
-      const audioPlan = s.audioPlan;
+      const audio = deriveAudioOutput(s.audioPlan, s.mode);
+      const audioMode = audio.audioMode;
+      const audioOutputCodec = audio.audioOutputCodec;
+      const audioOutputBitrateBps = audio.audioOutputBitrateBps;
 
       if (s.mode === 'transcode') {
-        videoPlaybackMode = `Transcodage (${HW_ACCEL_LABEL[hwAccel] ?? hwAccel.toUpperCase()})`;
         outputContainer = 'HLS';
-        const profile = { '1080p': 8, '720p': 4, '480p': 2 }[s.quality];
-        outputBitrate = profile ? profile * 1_000_000 : null;
-        if (audioPlan) {
-          audioMode = audioPlan.mode;
-          audioOutputCodec = audioPlan.codec;
-          audioOutputBitrateBps =
-            audioPlan.mode === 'transcode' ? audioPlan.bitrateBps : null;
-        }
+        const rung = [
+          ...getLadderForDevice(undefined),
+          ...getHdrLadderForDevice(undefined),
+        ].find((p) => p.name === s.quality);
+        outputBitrate = rung ? parseBitrateToBps(rung.videoBitrate) : null;
       } else if (s.mode === 'remux') {
         outputContainer = 'HLS';
         outputBitrate = (v?.bitRate ?? 0) + (a?.bitRate ?? 0) || null;
-        if (audioPlan) {
-          audioMode = audioPlan.mode;
-          audioOutputCodec = audioPlan.codec;
-          audioOutputBitrateBps =
-            audioPlan.mode === 'transcode' ? audioPlan.bitrateBps : null;
-        } else {
-          audioMode = 'copy';
-        }
       }
 
       const sourceResLabel =
@@ -529,7 +532,6 @@ export class SystemController {
           ? s.quality
           : sourceResLabel;
 
-      streamEpisodeIds.push(episodeId);
       streams.push({
         sessionId: s.sessionId,
         userId: s.userId,
@@ -561,7 +563,6 @@ export class SystemController {
         audioLanguage: a?.language ?? null,
         outputContainer,
         outputBitrate,
-        videoPlaybackMode,
         audioOutputCodec,
         audioOutputBitrateBps,
         audioMode,
@@ -574,7 +575,9 @@ export class SystemController {
 
     // Resolve episode labels
     const uniqueEpIds = [
-      ...new Set(streamEpisodeIds.filter((id): id is number => !!id)),
+      ...new Set(
+        streams.map((s) => s.episodeId).filter((id): id is number => !!id),
+      ),
     ];
     if (uniqueEpIds.length) {
       const episodes = await this.episodeRepo.find({
@@ -582,16 +585,12 @@ export class SystemController {
         relations: ['season'],
       });
       const epMap = new Map(episodes.map((e) => [e.id, e]));
-      for (let i = 0; i < streams.length; i++) {
-        const epId = streamEpisodeIds[i];
-        if (epId) {
-          const ep = epMap.get(epId);
-          if (ep) {
-            const label = `S${ep.season?.seasonNumber ?? '?'}:E${ep.episodeNumber}`;
-            streams[i].episodeLabel = ep.title
-              ? `${label} - ${ep.title}`
-              : label;
-          }
+      for (const stream of streams) {
+        if (!stream.episodeId) continue;
+        const ep = epMap.get(stream.episodeId);
+        if (ep) {
+          const label = `S${ep.season?.seasonNumber ?? '?'}:E${ep.episodeNumber}`;
+          stream.episodeLabel = ep.title ? `${label} - ${ep.title}` : label;
         }
       }
     }
@@ -644,7 +643,7 @@ export class SystemController {
   private resolveStreamCommandTarget(sessionId: string): {
     userId: number;
     mediaFileId: number;
-    killTranscodeId: string | null;
+    profileHash: string | null;
     isDirectPlay: boolean;
   } | null {
     if (sessionId.startsWith('dp-')) {
@@ -652,21 +651,14 @@ export class SystemController {
       const userId = parseInt(parts[0], 10);
       const mediaFileId = parseInt(parts[1], 10);
       if (!userId || !mediaFileId) return null;
-      return { userId, mediaFileId, killTranscodeId: null, isDirectPlay: true };
+      return { userId, mediaFileId, profileHash: null, isDirectPlay: true };
     }
     const live = this.liveSessions.get(sessionId);
     if (live && live.userId != null) {
-      const transcode = live.profileHash
-        ? this.transcodingService.getExistingSession(
-            live.mediaFileId,
-            live.userId,
-            live.profileHash,
-          )
-        : null;
       return {
         userId: live.userId,
         mediaFileId: live.mediaFileId,
-        killTranscodeId: transcode?.id ?? null,
+        profileHash: live.profileHash ?? null,
         isDirectPlay: live.kind === 'directplay',
       };
     }
@@ -677,7 +669,7 @@ export class SystemController {
       return {
         userId: transcode.userId,
         mediaFileId: transcode.mediaFileId,
-        killTranscodeId: transcode.id,
+        profileHash: transcode.baseProfileHash ?? null,
         isDirectPlay: false,
       };
     }
@@ -728,20 +720,6 @@ export class SystemController {
     return { ok: true, ...freed };
   }
 
-  @Delete('streams/:sessionId')
-  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  killStream(@Param('sessionId') sessionId: string) {
-    const target = this.resolveStreamCommandTarget(sessionId);
-    if (!target) return { ok: true }; // already gone
-    if (target.isDirectPlay) {
-      this.activeStreamTracker.unregister(target.userId, target.mediaFileId);
-    } else if (target.killTranscodeId) {
-      this.transcodingService.killSessionById(target.killTranscodeId);
-    }
-    this.liveSessions.stop(sessionId);
-    return { ok: true };
-  }
-
   @Post('streams/:sessionId/command')
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   sendPlayerCommand(
@@ -764,8 +742,15 @@ export class SystemController {
     if (body.action === 'stop') {
       if (target.isDirectPlay) {
         this.activeStreamTracker.unregister(target.userId, target.mediaFileId);
-      } else if (target.killTranscodeId) {
-        this.transcodingService.killSessionById(target.killTranscodeId);
+      } else if (target.profileHash) {
+        // Admin stop is a force-kill: reap every ffmpeg variant of the job
+        // (main / early / remux / per-audio), not just the main one — the
+        // companions would otherwise idle on until the reaper sweeps them.
+        this.transcodingService.killSessionsForJob(
+          target.mediaFileId,
+          target.userId,
+          target.profileHash,
+        );
       }
       this.liveSessions.stop(sessionId);
     }

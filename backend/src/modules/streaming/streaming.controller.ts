@@ -833,17 +833,11 @@ export class StreamingController {
       live.profileHash,
     );
     if (remaining.length > 0) return;
-    const userId = live.userId ?? undefined;
-    const matching = this.transcodingService.getSessionsForFileUser(
+    this.transcodingService.killSessionsForJob(
       live.mediaFileId,
-      userId,
+      live.userId ?? undefined,
+      live.profileHash,
     );
-    const toKill = matching.filter(
-      (s) => s.baseProfileHash === live.profileHash,
-    );
-    for (const s of toKill) {
-      this.transcodingService.killSessionById(s.id);
-    }
   }
 
   // ---------------------------------------------------------------------------

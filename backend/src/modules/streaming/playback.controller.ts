@@ -239,6 +239,13 @@ export class PlaybackController {
       return sessionLost ? { sessionLost: true } : null;
     }
     this.lastDbWriteAt.set(dbKey, now);
+    // Drop debounce entries for playbacks idle past a few write intervals so
+    // the map can't grow unbounded over the process lifetime — a pruned entry
+    // only gated the next write, which simply re-creates it.
+    const staleBefore = now - STATE_DB_WRITE_INTERVAL_MS * 10;
+    for (const [key, ts] of this.lastDbWriteAt) {
+      if (ts < staleBefore) this.lastDbWriteAt.delete(key);
+    }
     const state = await this.playbackService.updateState(user.id, mediaId, {
       positionSeconds: body.positionSeconds,
       durationSeconds: body.durationSeconds,
