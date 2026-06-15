@@ -497,14 +497,16 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
     M::set_option_string(g_state.mpv, "load-unsafe-playlists", "yes");
     // The backend produces transcode segments on demand: it answers 404 (seg-0/
     // init on a resume, before the early companion writes them) or 503 (the
-    // resume segment while ffmpeg is still encoding it). Shaka/ExoPlayer retry
-    // and recover — mpv's ffmpeg HLS demuxer aborts/skips on the first error.
-    // Make its child segment/init opens reconnect on BOTH 4xx and 5xx with
-    // backoff so a transient miss doesn't kill the load or skip the resume
-    // segment. The `4xx,5xx` value carries a comma, so it uses mpv's `%len%`
-    // escaping (7 = strlen("4xx,5xx")) to survive the key-value-list parser.
+    // resume segment while ffmpeg is still encoding it), and a late multi-audio
+    // rendition transcode can fail the open at the TRANSPORT layer (reset /
+    // refused / TLS) rather than with a 4xx/5xx status. mpv's ffmpeg HLS demuxer
+    // aborts on the first error; make its child segment/init opens reconnect on
+    // BOTH network errors and 4xx/5xx with backoff so a transient miss doesn't
+    // kill the load or skip the resume segment. The `4xx,5xx` value carries a
+    // comma, so it uses mpv's `%len%` escaping (7 = strlen("4xx,5xx")) to
+    // survive the key-value-list parser.
     M::set_option_string(g_state.mpv, "demuxer-lavf-o",
-        "reconnect=1,reconnect_streamed=1,reconnect_on_http_error=%7%4xx,5xx,reconnect_delay_max=30");
+        "reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=%7%4xx,5xx,reconnect_delay_max=60");
     if (M::initialize(g_state.mpv) < 0) fprintf(stderr, "[compositor] mpv_initialize failed\n");
     M::observe_property(g_state.mpv, 1, "time-pos", MPV_FORMAT_DOUBLE);
     M::observe_property(g_state.mpv, 2, "duration", MPV_FORMAT_DOUBLE);
