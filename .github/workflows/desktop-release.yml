@@ -195,11 +195,15 @@ jobs:
       # electron-builder publishes to a Release when GH_TOKEN is set and the ref
       # is a tag; we keep that explicit via the attach step below instead, so we
       # disable auto-publish here and just produce the artifact.
+      # No GH_TOKEN here: with a token set, electron-builder auto-configures a
+      # GitHub publisher and tries to build auto-update metadata (latest*.yml),
+      # which crashes in computeChannelNames (Cannot read properties of null
+      # reading 'channel'). We don't auto-update via electron-builder — the
+      # release artifacts are attached by the softprops step below — so build
+      # with publishing fully off.
       - name: Build installer
         working-directory: desktop
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run ${{ matrix.dist_script }} -- --publish never -c.extraMetadata.version=${{ steps.version.outputs.version }}
 
       # ── Upload the installer as a workflow artifact (always) ──
