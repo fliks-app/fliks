@@ -33,9 +33,13 @@ export function registerPlayerIpc(session: PlayerSession): void {
   ipcMain.handle(IPC.selectSubtitleTrack, (_e, id: string | null) =>
     session.player.selectSubtitleTrack(id),
   );
+  ipcMain.handle(IPC.subAdd, (_e, url: string, label: string, language: string) =>
+    session.player.subAdd(url, label, language),
+  );
   ipcMain.handle(IPC.setSubtitleStyle, (_e, style: DesktopSubtitleStyle) =>
     session.player.setSubtitleStyle(style),
   );
+  ipcMain.handle(IPC.setFullscreen, (_e, enabled: boolean) => session.setFullscreen(enabled));
   ipcMain.handle(IPC.resize, (_e, rect: DesktopRect) => session.resize(rect));
   ipcMain.handle(IPC.destroy, () => session.destroy());
 }

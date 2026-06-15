@@ -70,9 +70,15 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
   // demuxer fetches seg-0 on load then seeks (like Shaka), so it needs the
   // seg-0 early-start companion — otherwise resuming HLS content (e.g. an HDR
   // transcode) 404s on seg-0 and mpv aborts with an end-file error.
+  //
+  // Subtitles are loaded sidecar (mpv `sub-add`), not as an HLS SUBTITLES
+  // rendition: the rendition is a single-segment VOD playlist over the whole
+  // VTT, and mpv's ffmpeg HLS demuxer re-reads that segment on every seek
+  // without clearing the prior cue set, so cues accumulate/stack. `sub-add`
+  // parses the VTT once and seeks within it natively (like the browser).
   [EngineKind.DESKTOP]: {
     useTsOnSingleAudio: false,
-    supportsHlsSubtitles: true,
+    supportsHlsSubtitles: false,
     probesSegZero: true,
     supportsDirectPlay: true,
   },

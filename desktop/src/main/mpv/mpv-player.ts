@@ -17,6 +17,7 @@ import type {
   DesktopSubtitleStyle,
   DesktopSubtitleTrack,
 } from '../../shared/contract';
+import { mpvSubtitleProps } from './subtitle-style';
 
 const CONNECT_RETRY_MS = 30;
 const CONNECT_TIMEOUT_MS = 5000;
@@ -63,10 +64,14 @@ export class MpvPlayer extends EventEmitter {
     this.mpvPath = opts.mpvPath ?? 'mpv';
     this.baseArgs = opts.baseArgs;
     this.env = opts.env ?? process.env;
-    this.sockPath = path.join(
-      os.tmpdir(),
-      `fliks-mpv-${process.pid}-${this.reqId}-${Math.floor(performance.now())}.sock`,
-    );
+    // mpv's --input-ipc-server is a unix socket on POSIX but a NAMED PIPE on
+    // Windows; Node's net only accepts the \\.\pipe\ namespace there (a /tmp
+    // path is rejected), so build the path per-platform.
+    const stamp = `fliks-mpv-${process.pid}-${this.reqId}-${Math.floor(performance.now())}`;
+    this.sockPath =
+      process.platform === 'win32'
+        ? `\\\\.\\pipe\\${stamp}`
+        : path.join(os.tmpdir(), `${stamp}.sock`);
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
@@ -81,6 +86,16 @@ export class MpvPlayer extends EventEmitter {
       // The Fliks HLS references tokenised same-host segment/rendition URLs;
       // mpv's playlist safety check otherwise refuses them on the fallback path.
       '--load-unsafe-playlists=yes',
+      '--ytdl=no',
+      // A slow transcode (HDR tonemap re-encode) isn't ready when mpv opens
+      // seg-0/init for a stream, so it aborts unless told to reconnect. A
+      // separate multi-audio rendition's transcode spins up late and the open
+      // can fail at the TRANSPORT layer (reset / refused / TLS) rather than with
+      // a 4xx/5xx status, so reconnect_on_network_error is needed alongside
+      // reconnect_on_http_error. The `4xx,5xx` value carries a comma, so it uses
+      // mpv's `%len%` escaping (7 = strlen("4xx,5xx")) to survive the key-value-
+      // list parser. Mirrors native/compositor/addon.cc.
+      '--demuxer-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=%7%4xx,5xx,reconnect_delay_max=60',
       `--input-ipc-server=${this.sockPath}`,
     ];
     console.log('[mpv] spawn:', this.mpvPath, args.join(' '));
@@ -93,17 +108,22 @@ export class MpvPlayer extends EventEmitter {
 
     await this.connect();
     await this.setupObservers();
-    // Surface mpv's own warn/error log over IPC (ffmpeg HTTP/TLS/decode
-    // failures) — `--no-terminal` suppresses stderr, so this is how we see why
-    // a load failed.
-    await this.command(['request_log_messages', 'warn']).catch(() => {});
+    // Surface mpv's own log over IPC (ffmpeg HTTP/TLS/decode failures) —
+    // `--no-terminal` suppresses stderr, so this is how we see why a load
+    // failed. Defaults to warn; FLIKS_MPV_LOGLEVEL=v exposes ffmpeg's per-open
+    // 'Will reconnect' / HTTP-status lines for diagnosing segment failures.
+    const logLevel = process.env.FLIKS_MPV_LOGLEVEL || 'warn';
+    await this.command(['request_log_messages', logLevel]).catch(() => {});
     return this;
   }
 
   private async connect(): Promise<void> {
     const deadline = performance.now() + CONNECT_TIMEOUT_MS;
+    // A Windows named pipe is not a filesystem entry, so existsSync never sees
+    // it — connect directly and retry on error instead of gating on the file.
+    const isPipe = process.platform === 'win32';
     for (;;) {
-      if (fs.existsSync(this.sockPath)) {
+      if (isPipe || fs.existsSync(this.sockPath)) {
         try {
           await this.open();
           return;
@@ -244,15 +264,22 @@ export class MpvPlayer extends EventEmitter {
 
   async load(opts: DesktopLoadOptions): Promise<void> {
     this.sawFirstFrame = false;
-    const fileOpts: string[] = [];
-    if (opts.startTime && opts.startTime > 0) fileOpts.push(`start=+${opts.startTime}`);
+    // Auth/other headers → the http-header-fields LIST property, set BEFORE
+    // loadfile. Don't cram them into the comma-separated loadfile options
+    // string — header values contain ',' and ':' that would break that parse.
     if (opts.headers && Object.keys(opts.headers).length) {
-      const fields = Object.entries(opts.headers)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join(',');
-      fileOpts.push(`http-header-fields=${fields}`);
+      await this.set(
+        'http-header-fields',
+        Object.entries(opts.headers).map(([k, v]) => `${k}: ${v}`),
+      );
     }
-    await this.command(['loadfile', opts.url, 'replace', fileOpts.join(',')]);
+    // mpv >= 0.38 loadfile signature is <url> <flags> <index> <options>; the
+    // bundled mpv is recent, so pass index 0 then the options. Append the start
+    // option only when set — an empty options string is otherwise parsed as the
+    // index and mpv rejects it ("invalid parameter").
+    const cmd: unknown[] = ['loadfile', opts.url, 'replace', 0];
+    if (opts.startTime && opts.startTime > 0) cmd.push(`start=${opts.startTime}`);
+    await this.command(cmd);
     for (const s of opts.subtitles ?? []) {
       await this.command(['sub-add', s.url, 'auto', s.label ?? '', s.language ?? '']);
     }
@@ -341,14 +368,16 @@ export class MpvPlayer extends EventEmitter {
     return this.set('sid', id == null ? 'no' : id);
   }
 
+  /** Load a sidecar subtitle (mpv sub-add). `cached` makes mpv reuse an
+   *  already-loaded track for the same URL instead of adding a duplicate, so
+   *  re-selecting the same subtitle never stacks; mpv parses the VTT once and
+   *  seeks within it natively, unlike a re-read HLS rendition. */
+  async subAdd(url: string, label: string, language: string): Promise<void> {
+    await this.command(['sub-add', url, 'cached', label ?? '', language ?? '']);
+  }
+
   async setSubtitleStyle(s: DesktopSubtitleStyle): Promise<void> {
-    await this.set('sub-font-size', Math.round(55 * (s.fontScale ?? 1)));
-    if (s.foregroundColor) await this.set('sub-color', s.foregroundColor);
-    if (s.backgroundColor && s.backgroundColor !== 'transparent') {
-      await this.set('sub-back-color', s.backgroundColor);
-      await this.set('sub-border-style', 'background-box');
-    }
-    if (s.bottomMarginPercent != null) await this.set('sub-pos', 100 - s.bottomMarginPercent);
+    for (const [name, value] of mpvSubtitleProps(s)) await this.set(name, value);
   }
 
   async destroy(): Promise<void> {

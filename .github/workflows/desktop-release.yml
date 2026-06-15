@@ -15,10 +15,11 @@
 #      desktop/web so electron-builder ships it at resources/web.
 #   + a vendored self-contained libmpv into desktop/native/vendor per OS.
 #
-# STATUS: iteration-1 scaffold. The Linux path is the closest to known-good
-# (it mirrors desktop/CLAUDE.md). macOS and especially Windows have unresolved
-# TODOs (cross-platform binding.gyp, vendored mpv, libmpv headers) flagged inline
-# and called out in the PR. This is expected to need a real CI run to shake out.
+# The native compositor addon (SDL2 + GLES/EGL) is LINUX-ONLY by design — it is
+# the OSR self-compositor needed under Mutter/X11. macOS and Windows embed mpv
+# natively instead (--wid into a child NSView/HWND, see desktop/src/main/window/
+# backends), so they do NOT build the addon. All three OSes still produce an
+# installer; mac/win playback lands with their embed backends + vendored libmpv.
 name: Desktop release
 
 on:
@@ -109,12 +110,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-electron42-
 
-      # ────────────────────────────────────────────────────────────────────
-      # Platform build dependencies for the native addon (SDL2 + GLES/EGL +
-      # libmpv headers) and for libmpv at runtime.
-      # ────────────────────────────────────────────────────────────────────
-
-      # Linux: the exact apt set from desktop/CLAUDE.md. CONFIDENT.
+      # Linux-only: build deps for the native compositor addon (SDL2 + GLES/EGL
+      # + libmpv headers). macOS/Windows don't build the addon (they embed mpv
+      # natively), so they need no extra build deps here.
       - name: Install Linux build deps
         if: runner.os == 'Linux'
         run: |
@@ -122,40 +120,6 @@ jobs:
           sudo apt-get install -y \
             build-essential python3 pkg-config \
             libsdl2-dev libgles2-mesa-dev libegl1-mesa-dev libmpv-dev
-
-      # macOS: brew provides mpv + sdl2 (with pkg-config files). GLES/EGL is NOT
-      # native on macOS — the addon uses GLES 3.2 + EGL, which Apple does not
-      # ship. binding.gyp's `pkg-config glesv2 egl` WILL FAIL here as-is.
-      # TODO(macos-addon): the binding.gyp is Linux-only. Building the compositor
-      #   on macOS needs either an ANGLE/EGL shim (e.g. brew install angle, or a
-      #   bundled libEGL/libGLESv2 from ANGLE) or a macOS code path in addon.cc.
-      #   Until then the node-gyp step below is expected to fail on macOS.
-      - name: Install macOS build deps
-        if: runner.os == 'macOS'
-        run: |
-          brew install mpv sdl2 pkg-config
-          # TODO(macos-addon): GLES/EGL not available from Homebrew core; the
-          # addon's `pkg-config --cflags glesv2 egl` will not resolve. Needs an
-          # ANGLE-based EGL/GLES provider before this can link.
-
-      # Windows: there is no first-class libmpv/SDL2/GLES dev package via the
-      # default toolchains, and binding.gyp is written for pkg-config + POSIX.
-      # TODO(windows-addon): this is the least-certain platform. Options to try:
-      #   - vcpkg: `vcpkg install sdl2 angle libmpv` (libmpv port availability is
-      #     unconfirmed) and a windows binding.gyp branch using vcpkg include/lib.
-      #   - prebuilt libmpv from https://sourceforge.net/projects/mpv-player-windows/
-      #     (shinchiro builds) for the runtime DLL, plus headers for compile.
-      #   - MSYS2 pacman (mingw-w64-x86_64-{SDL2,mpv,angleproject}) — but that
-      #     toolchain differs from node-gyp's MSVC default.
-      #   Expect the node-gyp step to fail on Windows until binding.gyp grows a
-      #   win32 branch and the deps are sourced. Left as a scaffold on purpose.
-      - name: Install Windows build deps
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          echo "TODO(windows-addon): no confident libmpv/SDL2/GLES dev source yet."
-          echo "See the inline notes in this workflow. The node-gyp + electron-builder"
-          echo "steps below will likely need binding.gyp + vendoring work to pass."
 
       # ── Install node deps (desktop + client) ──
       - name: Install desktop deps
@@ -166,38 +130,60 @@ jobs:
         working-directory: client
         run: npm ci
 
-      # ────────────────────────────────────────────────────────────────────
-      # Vendor a self-contained libmpv into desktop/native/vendor.
-      # The main process resolves FLIKS_MPV_PATH to
-      #   app.getAppPath()/native/vendor/libmpv.so.2
-      # and electron-builder ships native/vendor/** (asarUnpacked).
-      # TODO(vendor-mpv): desktop/scripts/fetch-vendored does NOT exist yet.
-      #   It must drop a *self-contained* libmpv (FFmpeg symbols hidden — see
-      #   desktop/CLAUDE.md kill-switch `nm -D … | grep ' av_'` must be empty) at:
-      #     Linux:   desktop/native/vendor/libmpv.so.2
-      #     macOS:   desktop/native/vendor/libmpv.2.dylib  (note: index.ts hard-
-      #              codes libmpv.so.2 — needs a per-OS filename, owned elsewhere)
-      #     Windows: desktop/native/vendor/libmpv-2.dll
-      #   For now this step only creates the dir so electron-builder's
-      #   native/vendor/** glob does not error on an empty match; the produced
-      #   installer will NOT play video without the real libmpv.
-      # ────────────────────────────────────────────────────────────────────
-      - name: Vendor libmpv (placeholder)
+      # The self-contained libmpv (FFmpeg statically linked, symbols hidden) is
+      # committed at desktop/native/vendor/libmpv.so.2 and bundled by
+      # electron-builder (files: native/vendor/**, asarUnpacked). It's the only
+      # OS that uses the compositor addon today; mac/win embed mpv natively and
+      # vendor their own .dylib/.dll later.
+      - name: Verify vendored libmpv (Linux)
+        if: runner.os == 'Linux'
         shell: bash
         run: |
-          mkdir -p desktop/native/vendor
-          if [ -x desktop/scripts/fetch-vendored ]; then
-            desktop/scripts/fetch-vendored
-          else
-            echo "TODO(vendor-mpv): desktop/scripts/fetch-vendored missing —"
-            echo "shipping WITHOUT a runtime libmpv. Installer builds but playback"
-            echo "is non-functional until the vendoring script lands."
+          f=desktop/native/vendor/libmpv.so.2
+          test -f "$f" || { echo "::error::vendored libmpv missing at $f"; exit 1; }
+          test -z "$(nm -D "$f" 2>/dev/null | grep ' av_')" \
+            || { echo "::error::libmpv exports av_* — not self-contained, will clash with Electron's libffmpeg"; exit 1; }
+          echo "vendored libmpv OK: $(du -h "$f" | cut -f1)"
+
+      # Windows embeds mpv via --wid by spawning a vendored mpv.exe. Download a
+      # static x64 build (zhongfly/mpv-winbuild — maintained) into native/vendor,
+      # which electron-builder ships via the native/vendor/** glob. UNTESTED on
+      # real Windows hardware — playback verification needs a Windows box.
+      - name: Vendor mpv (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dest=desktop/native/vendor
+          mkdir -p "$dest"
+          url=$(curl -fsSL https://api.github.com/repos/zhongfly/mpv-winbuild/releases/latest \
+            | grep -oE 'https://[^"]+' \
+            | grep -E 'mpv-x86_64-[0-9][^"]*\.7z$' | head -1)
+          test -n "$url" || { echo "::error::no mpv x86_64 .7z asset found"; exit 1; }
+          echo "Downloading mpv: $url"
+          curl -fsSL -o "$RUNNER_TEMP/mpv.7z" "$url"
+          7z x -y -o"$dest" "$RUNNER_TEMP/mpv.7z" >/dev/null
+          if [ ! -f "$dest/mpv.exe" ]; then
+            sub=$(find "$dest" -name mpv.exe -printf '%h\n' | head -1)
+            [ -n "$sub" ] && cp -rf "$sub"/. "$dest"/
           fi
+          test -f "$dest/mpv.exe" || { echo "::error::mpv.exe missing after extract"; find "$dest" -maxdepth 2; exit 1; }
+          rm -f "$dest/libmpv.so.2"  # the committed Linux lib isn't used on Windows
+          echo "vendored mpv.exe ($(du -h "$dest/mpv.exe" | cut -f1)) + $(ls "$dest"/*.dll 2>/dev/null | wc -l) DLLs"
+
+      # macOS is UI-only for now (no native compositor), so it ships no mpv —
+      # drop the committed Linux lib so it isn't carried into the .dmg.
+      - name: Drop unused vendor libs (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: rm -f desktop/native/vendor/libmpv.so.2
 
       # ── Build the native compositor addon against the Electron 42 ABI ──
-      # CONFIDENT on Linux (mirrors desktop/CLAUDE.md). Expected to fail on
-      # macOS/Windows until binding.gyp is made cross-platform (see deps notes).
+      # Linux-only: SDL2 + GLES/EGL OSR compositor (the Mutter/X11 model). macOS
+      # and Windows embed mpv natively (--wid) and ship no addon — electron-
+      # builder's native/build/Release/** glob simply matches nothing there.
       - name: Build native addon
+        if: runner.os == 'Linux'
         working-directory: desktop/native
         shell: bash
         run: |
@@ -229,11 +215,15 @@ jobs:
       # electron-builder publishes to a Release when GH_TOKEN is set and the ref
       # is a tag; we keep that explicit via the attach step below instead, so we
       # disable auto-publish here and just produce the artifact.
+      # No GH_TOKEN here: with a token set, electron-builder auto-configures a
+      # GitHub publisher and tries to build auto-update metadata (latest*.yml),
+      # which crashes in computeChannelNames (Cannot read properties of null
+      # reading 'channel'). We don't auto-update via electron-builder — the
+      # release artifacts are attached by the softprops step below — so build
+      # with publishing fully off.
       - name: Build installer
         working-directory: desktop
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run ${{ matrix.dist_script }} -- --publish never -c.extraMetadata.version=${{ steps.version.outputs.version }}
 
       # ── Upload the installer as a workflow artifact (always) ──

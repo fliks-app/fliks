@@ -27,6 +27,8 @@ const api: FliksDesktopApi = {
   selectAudioTrack: (id: string) => ipcRenderer.invoke(IPC.selectAudioTrack, id),
   getSubtitleTracks: () => ipcRenderer.invoke(IPC.getSubtitleTracks),
   selectSubtitleTrack: (id: string | null) => ipcRenderer.invoke(IPC.selectSubtitleTrack, id),
+  subAdd: (url: string, label: string, language: string) =>
+    ipcRenderer.invoke(IPC.subAdd, url, label, language),
   setSubtitleStyle: (style: DesktopSubtitleStyle) =>
     ipcRenderer.invoke(IPC.setSubtitleStyle, style),
   resize: (rect: DesktopRect) => ipcRenderer.invoke(IPC.resize, rect),

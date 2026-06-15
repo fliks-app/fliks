@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metainfo: drives the App Center / GNOME Software listing (name,
+     developer/publisher, icon, description). Installed to
+     /usr/share/metainfo/ by electron-builder via deb.fpm. -->
+<component type="desktop-application">
+  <id>media.fliks.desktop</id>
+  <launchable type="desktop-id">fliks.desktop</launchable>
+  <name>Fliks</name>
+  <summary>Stream your Fliks media library</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+
+  <!-- Shown as the publisher in the App Center / GNOME Software. -->
+  <developer id="media.fliks">
+    <name>Clément Delestre</name>
+  </developer>
+  <developer_name>Clément Delestre</developer_name>
+
+  <icon type="stock">fliks</icon>
+
+  <description>
+    <p>
+      Fliks is a native desktop client for your personal Fliks media server.
+      Connect to your server and stream your movies and shows with
+      mpv-powered playback.
+    </p>
+  </description>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Player</category>
+  </categories>
+
+  <url type="homepage">https://github.com/fliks-app/fliks</url>
+  <content_rating type="oars-1.1"/>
+</component>

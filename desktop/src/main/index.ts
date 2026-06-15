@@ -5,19 +5,34 @@ import { createRequire } from 'node:module';
 import { registerAppSchemePrivileged, registerAppProtocol, APP_URL } from './protocol';
 import { installCorsBypass } from './cors';
 import { IPC, type DesktopEvent, type DesktopSubtitleStyle } from '../shared/contract';
+import { mpvSubtitleProps } from './mpv/subtitle-style';
 
 // Name the app before `ready` so Linux derives the WM class (and thus the
 // GNOME/Ubuntu top-bar + dock identity) from "Fliks" rather than "Electron".
 app.setName('Fliks');
 
-// Force software OSR: Chromium's GPU process can't init here, and a
-// GPU-composited OSR window never recovers from a GPU-process crash.
-app.disableHardwareAcceleration();
-if (process.platform === 'linux') app.commandLine.appendSwitch('ozone-platform', 'x11');
+// Linux uses the software OSR compositor (Chromium's GPU process can't init in
+// that path, and a GPU-composited OSR window never recovers from a GPU-process
+// crash), forced onto X11/XWayland. macOS/Windows use a normal GPU window with
+// mpv embedded natively, so they keep hardware acceleration.
+if (process.platform === 'linux') {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('ozone-platform', 'x11');
+}
 registerAppSchemePrivileged();
 
 process.on('uncaughtException', (e) => console.error('[main:uncaughtException]', e?.stack ?? e));
 process.on('unhandledRejection', (e) => console.error('[main:unhandledRejection]', e));
+
+// The desktop client connects to the user's self-hosted Fliks server, which
+// commonly uses a self-signed or private-CA TLS certificate the OS doesn't
+// trust — Chromium would otherwise refuse the HTTPS connection. Accept cert
+// errors: the app only ever loads its own fliks:// UI and talks to the server
+// the user explicitly configured (same trust model as the mobile apps).
+app.on('certificate-error', (event, _wc, _url, _error, _cert, callback) => {
+  event.preventDefault();
+  callback(true);
+});
 
 const WIDTH = 1280;
 const HEIGHT = 800;
@@ -94,64 +109,6 @@ function parseTracks(json: string | null): {
   return { audioTracks, subtitleTracks };
 }
 
-// Base subtitle size the app's fontScale presets multiply. mpv's own default
-// (55) renders far too large in the compositor window, so we calibrate lower —
-// at scale 1.0 this lands around a typical caption height once mpv scales it to
-// the window.
-const MPV_BASE_SUB_FONT_SIZE = 32;
-
-/** Translate the app's subtitle style presets to mpv `sub-*` property pairs.
- *  Both the app and mpv use #AARRGGBB with 00 = transparent / FF = opaque, so
- *  colours pass through unchanged. `sub-ass-override=force` lets the app style
- *  win over a subtitle track's embedded ASS/SSA styling, matching the mobile
- *  native player. `background-box` draws the configured backdrop behind the
- *  text; with no backdrop we fall back to outline-and-shadow so the edge effect
- *  is what's visible. */
-function mpvSubtitleProps(s: DesktopSubtitleStyle): Array<[string, string]> {
-  const hasBox = !!s.backgroundColor && s.backgroundColor !== 'transparent';
-  const props: Array<[string, string]> = [
-    ['sub-ass-override', 'force'],
-    ['sub-font-size', String(Math.round(MPV_BASE_SUB_FONT_SIZE * (s.fontScale || 1)))],
-    ['sub-color', s.foregroundColor || '#FFFFFF'],
-    ['sub-border-style', hasBox ? 'background-box' : 'outline-and-shadow'],
-    ['sub-back-color', hasBox ? s.backgroundColor : '#00000000'],
-    ['sub-pos', String(Math.max(0, Math.min(100, 100 - (s.bottomMarginPercent || 0))))],
-  ];
-  // Every branch sets outline-size / shadow-offset / blur explicitly: these are
-  // sticky mpv properties, so a preset that omits one would inherit a stale
-  // value from the previous preset.
-  switch (s.edgeType) {
-    case 'none':
-      props.push(['sub-outline-size', '0'], ['sub-shadow-offset', '0'], ['sub-blur', '0']);
-      break;
-    case 'outline':
-      props.push(
-        ['sub-outline-size', '3'], ['sub-outline-color', '#FF000000'],
-        ['sub-shadow-offset', '0'], ['sub-blur', '0'],
-      );
-      break;
-    case 'raised':
-      props.push(
-        ['sub-outline-size', '1'], ['sub-outline-color', '#FF000000'],
-        ['sub-shadow-offset', '1'], ['sub-shadow-color', '#FF000000'], ['sub-blur', '0'],
-      );
-      break;
-    case 'drop_shadow':
-    default:
-      // A soft glow behind the text with NO directional offset — a blurred,
-      // half-opacity black outline. The blur lands on the outline (not the
-      // fill), so the glyphs stay crisp; the offset is zero, so there's no
-      // displaced ghost copy. Opacity is kept low so it reads as a light shadow
-      // rather than a dark band around the text.
-      props.push(
-        ['sub-outline-size', '1.5'], ['sub-outline-color', '#4D000000'],
-        ['sub-shadow-offset', '0'], ['sub-shadow-color', '#00000000'], ['sub-blur', '0.5'],
-      );
-      break;
-  }
-  return props;
-}
-
 const KEYMAP: Record<string, string> = {
   Return: 'Enter',
   Backspace: 'Backspace',
@@ -181,7 +138,52 @@ function send(ev: DesktopEvent): void {
   if (uiWin && !uiWin.isDestroyed()) uiWin.webContents.send(IPC.event, ev);
 }
 
-app.whenReady().then(() => {
+function rendererUrl(haveApp: boolean): string {
+  return haveApp ? APP_URL : 'data:text/html,<body style="background:%231d232a"></body>';
+}
+
+// Windows: a framed master window carries the native chrome; mpv embeds (--wid)
+// into a frameless transparent window pinned over its content area, with the web
+// UI in a second transparent window above that. See PlayerSession for why the
+// frame and the see-through video layer are separate windows.
+async function startEmbedSession(haveApp: boolean): Promise<void> {
+  const { PlayerSession } = await import('./window/player-session');
+  const { registerPlayerIpc } = await import('./ipc');
+  const session = new PlayerSession();
+  // Register the IPC handlers BEFORE start() loads the renderer + emits 'ready',
+  // so the renderer can't invoke an unregistered channel.
+  registerPlayerIpc(session);
+  await session.start({
+    rendererUrl: rendererUrl(haveApp),
+    preloadPath: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
+    iconPath: windowIcon(),
+  });
+}
+
+// macOS (and any other non-Linux/Windows): playback is NOT implemented yet —
+// the SDL/GLES OSR compositor is Linux-only and mpv's subprocess --wid crashes
+// on macOS, which needs an in-process libmpv compositor (a native addon, like
+// Linux's). Open the web UI so the app launches + browses; playback IPC is
+// intentionally not wired, so attempting to play surfaces a clear error.
+async function startUiOnly(haveApp: boolean): Promise<void> {
+  console.warn(`[main] playback not implemented on ${process.platform} — UI-only (needs a native libmpv compositor)`);
+  uiWin = new BrowserWindow({
+    width: WIDTH,
+    height: HEIGHT,
+    title: 'Fliks',
+    icon: windowIcon(),
+    webPreferences: {
+      preload: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
+      contextIsolation: true,
+      sandbox: false,
+    },
+  });
+  uiWin.webContents.on('console-message', (_e, _l, m) => console.log('[renderer]', m));
+  await uiWin.loadURL(rendererUrl(haveApp));
+  send({ type: 'ready' });
+}
+
+app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   installCorsBypass();
 
@@ -189,11 +191,27 @@ app.whenReady().then(() => {
   const haveApp = fs.existsSync(path.join(dir, 'index.html'));
   if (haveApp) registerAppProtocol(dir);
 
+  if (process.platform === 'win32') {
+    await startEmbedSession(haveApp).catch((e) => console.error('[main] embed session failed', e));
+    return;
+  }
+  if (process.platform !== 'linux') {
+    await startUiOnly(haveApp).catch((e) => console.error('[main] ui-only failed', e));
+    return;
+  }
+
+  // The .node addon and the dlopen'd libmpv are asarUnpack'd, so in a packaged
+  // app they live under app.asar.unpacked — not inside app.asar (a file). The
+  // addon require survives the asar path via Electron's shim, but libmpv is
+  // dlopen'd natively (no shim) and must resolve to the unpacked path.
+  const nativeBase = app.isPackaged
+    ? app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked')
+    : app.getAppPath();
   if (!process.env.FLIKS_MPV_PATH) {
-    process.env.FLIKS_MPV_PATH = path.join(app.getAppPath(), 'native', 'vendor', 'libmpv.so.2');
+    process.env.FLIKS_MPV_PATH = path.join(nativeBase, 'native', 'vendor', 'libmpv.so.2');
   }
   const addon = nativeRequire(
-    path.join(app.getAppPath(), 'native', 'build', 'Release', 'fliks_compositor.node'),
+    path.join(nativeBase, 'native', 'build', 'Release', 'fliks_compositor.node'),
   ) as Addon;
 
   // The OFFSCREEN window renders the Angular UI to a transparent bitmap; the
@@ -211,6 +229,9 @@ app.whenReady().then(() => {
       preload: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
       contextIsolation: true,
       sandbox: false,
+      // Trusted client → reach the user's server regardless of CORS/mixed
+      // content (cors.ts still reflects ACAO). Same as the embed path + mobile.
+      webSecurity: false,
     },
   });
   uiWin.webContents.setFrameRate(60);
@@ -348,6 +369,13 @@ app.whenReady().then(() => {
       addon.setProperty('sub-visibility', 'yes');
     }
   });
+  // Sidecar subtitle: mpv parses the VTT once and seeks within it natively, so
+  // (unlike a single-segment HLS SUBTITLES rendition) cues don't re-inject and
+  // stack on seek. `cached` makes mpv reuse an already-loaded track for the same
+  // URL, so repeated picks of the same subtitle don't add duplicates.
+  ipcMain.handle(IPC.subAdd, (_e, url: string, label: string, language: string) =>
+    addon.command(['sub-add', url, 'cached', label ?? '', language ?? '']),
+  );
   ipcMain.handle(IPC.setFullscreen, (_e, enabled: boolean) => addon.setFullscreen(enabled));
   ipcMain.handle(IPC.setSubtitleStyle, (_e, s: DesktopSubtitleStyle) => {
     if (!s) return;

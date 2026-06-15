@@ -75,6 +75,9 @@ export interface FliksDesktopApi {
   selectAudioTrack(id: string): Promise<void>;
   getSubtitleTracks(): Promise<DesktopSubtitleTrack[]>;
   selectSubtitleTrack(id: string | null): Promise<void>;
+  /** Load a sidecar subtitle file (mpv `sub-add`). Idempotent per URL: mpv
+   *  reuses an already-loaded track for the same URL instead of duplicating. */
+  subAdd(url: string, label: string, language: string): Promise<void>;
   setSubtitleStyle(style: DesktopSubtitleStyle): Promise<void>;
   resize(rect: DesktopRect): Promise<void>;
   setFullscreen(enabled: boolean): Promise<void>;

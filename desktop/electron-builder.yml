@@ -66,6 +66,12 @@ linux:
 # but SDL2 + GL are expected on the host.
 # TODO: confirm this list against a real .deb install on a clean Ubuntu box.
 deb:
+  # Ship the AppStream metainfo so the App Center / GNOME Software shows the
+  # proper name (Fliks), publisher (Clément Delestre) and icon instead of the
+  # package name + "Unknown publisher". fpm `source=dest` adds the file at an
+  # absolute install path (source is relative to electron-builder's project dir).
+  fpm:
+    - "build/media.fliks.desktop.metainfo.xml=/usr/share/metainfo/media.fliks.desktop.metainfo.xml"
   depends:
     - libsdl2-2.0-0
     - libgles2
