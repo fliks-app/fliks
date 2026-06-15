@@ -814,10 +814,8 @@ export class StreamingController {
   stopLiveSession(@Param('sessionId') sessionId: string) {
     const live = this.liveSessions.get(sessionId);
     this.liveSessions.stop(sessionId);
-    // Clear the "now watching" tracker row immediately. DirectPlay has no
-    // profileHash, so the ffmpeg-kill path below is skipped and would never
-    // unregister this (user, file) — leaving the dashboard row up until the
-    // tracker's stale timeout.
+    // Release this (user, file)'s cached device name. The "now watching" row is
+    // the LiveSession itself, already stopped above.
     if (live?.userId != null) {
       this.activeStreamTracker.unregister(live.userId, live.mediaFileId);
     }

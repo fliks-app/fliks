@@ -19,7 +19,9 @@ export class ActiveStreamTracker {
    *  "iPhone", "Chromecast — Living Room"). Keyed per (user, file) so two users
    *  watching the same file from different devices don't collide. Shown on the
    *  admin streams dashboard as a fallback when the LiveSession has no raw
-   *  User-Agent label. */
+   *  User-Agent label. Cleared on stop ({@link unregister}); a playback that
+   *  never sends a clean stop leaves one small string entry until restart —
+   *  bounded by distinct (user, file) pairs and overwritten per key. */
   private readonly deviceNameCache = new Map<string, string>();
 
   setDeviceName(userId: number, mediaFileId: number, name: string) {
