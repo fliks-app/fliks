@@ -189,11 +189,18 @@ app.whenReady().then(() => {
   const haveApp = fs.existsSync(path.join(dir, 'index.html'));
   if (haveApp) registerAppProtocol(dir);
 
+  // The .node addon and the dlopen'd libmpv are asarUnpack'd, so in a packaged
+  // app they live under app.asar.unpacked — not inside app.asar (a file). The
+  // addon require survives the asar path via Electron's shim, but libmpv is
+  // dlopen'd natively (no shim) and must resolve to the unpacked path.
+  const nativeBase = app.isPackaged
+    ? app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked')
+    : app.getAppPath();
   if (!process.env.FLIKS_MPV_PATH) {
-    process.env.FLIKS_MPV_PATH = path.join(app.getAppPath(), 'native', 'vendor', 'libmpv.so.2');
+    process.env.FLIKS_MPV_PATH = path.join(nativeBase, 'native', 'vendor', 'libmpv.so.2');
   }
   const addon = nativeRequire(
-    path.join(app.getAppPath(), 'native', 'build', 'Release', 'fliks_compositor.node'),
+    path.join(nativeBase, 'native', 'build', 'Release', 'fliks_compositor.node'),
   ) as Addon;
 
   // The OFFSCREEN window renders the Angular UI to a transparent bitmap; the
