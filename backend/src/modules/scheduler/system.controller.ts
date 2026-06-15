@@ -149,6 +149,11 @@ function deriveAudioOutput(
   audioOutputCodec: string | null;
   audioOutputBitrateBps: number | null;
 } {
+  // DirectPlay serves the source file untouched — the audio is direct, not a
+  // Fliks copy/transcode, even though the session still carries a copy plan.
+  if (mode === 'directplay') {
+    return { audioMode: 'direct', audioOutputCodec: null, audioOutputBitrateBps: null };
+  }
   if (audioPlan) {
     return {
       audioMode: audioPlan.mode,
