@@ -19,6 +19,11 @@
         },
         {
           "type": "json",
+          "path": "desktop/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
           "path": "client/webos/appinfo.json",
           "jsonpath": "$.version"
         },

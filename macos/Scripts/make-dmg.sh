@@ -6,7 +6,7 @@
 #
 # Usage: ./make-dmg.sh
 #
-# Output: macos/build/Fliks-<version>-arm64.dmg
+# Output: macos/build/Fliks-Server-<version>-arm64.dmg
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -21,7 +21,7 @@ fi
 
 # Extract version from Info.plist.
 VERSION="$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || echo "1.0.0")"
-DMG_NAME="Fliks-${VERSION}-arm64"
+DMG_NAME="Fliks-Server-${VERSION}-arm64"
 DMG_PATH="$BUILD_DIR/$DMG_NAME.dmg"
 
 # Remove previous DMG if it exists.

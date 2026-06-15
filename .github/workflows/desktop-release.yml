@@ -25,9 +25,10 @@ name: Desktop release
 on:
   workflow_dispatch:
   push:
-    # Dedicated desktop tag namespace so this does not fire on release-please's
-    # `v*` tags (those drive the macos/ SwiftUI host's macos-dmg.yml).
-    tags: ['desktop-v*']
+    # release-please's `v*` tags ship the client installers on the main release
+    # alongside the SwiftUI server-host DMG (macos-dmg.yml). `desktop-v*` stays
+    # as a dedicated namespace for desktop-only test releases off-cycle.
+    tags: ['v*', 'desktop-v*']
 
 # Needed to attach installers to a GitHub Release on a tag push.
 permissions:
@@ -70,6 +71,8 @@ jobs:
         run: |
           if [[ "$GITHUB_REF" == refs/tags/desktop-v* ]]; then
             v="${GITHUB_REF#refs/tags/desktop-v}"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            v="${GITHUB_REF#refs/tags/v}"
           else
             base=$(node -p "require('./desktop/package.json').version")
             v="${base}-dev.$(git rev-parse --short HEAD)"
@@ -236,7 +239,7 @@ jobs:
 
       # ── Attach to the GitHub Release on a desktop tag push ──
       - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/desktop-v')
         uses: softprops/action-gh-release@v3
         with:
           files: ${{ matrix.artifact_glob }}

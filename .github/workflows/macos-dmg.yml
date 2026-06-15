@@ -101,7 +101,7 @@ jobs:
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Fliks-${{ steps.version.outputs.version }}-arm64.dmg
+          name: Fliks-Server-${{ steps.version.outputs.version }}-arm64.dmg
           path: macos/build/Fliks-*.dmg
           if-no-files-found: error
 
