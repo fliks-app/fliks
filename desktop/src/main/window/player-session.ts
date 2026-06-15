@@ -93,9 +93,14 @@ export class PlayerSession {
 
     // Keep the transparent UI exactly over the framed window's content area.
     const sync = () => {
-      if (!this.uiWin.isDestroyed() && !this.videoWin.isDestroyed()) {
-        this.uiWin.setBounds(this.videoWin.getContentBounds());
-      }
+      if (this.uiWin.isDestroyed() || this.videoWin.isDestroyed()) return;
+      const b = this.videoWin.getContentBounds();
+      // Windows turns a transparent window OPAQUE once it covers the full
+      // display (Electron #27286), which would black out the controls layer in
+      // fullscreen. Shave 1px so the overlay stays under display size + keeps
+      // its transparency; the video underneath still fills the screen.
+      if (process.platform === 'win32' && this.videoWin.isFullScreen()) b.height -= 1;
+      this.uiWin.setBounds(b);
     };
     // All these window events take a `() => void` listener; cast to one literal
     // so the overload resolves (a union of event names matches none).
