@@ -1383,6 +1383,34 @@ export class StreamingController {
       return;
     }
 
+    // 0-byte guard, mirroring the video routes (hlsSegment init/seg paths).
+    // var_stream_map writes the rendition init (`<idx+1>/init_<idx+1>.mp4`) with
+    // a `creat()`-then-moov-write gap and no `+temp_file` atomic rename for
+    // inits, so getSegmentPath can hand back a path the instant the entry
+    // appears — while it is still 0 bytes. Passing that straight to
+    // segmentPackaging.serve() makes readAndRewriteCmaf return null, which
+    // serve() turns into a SILENT 404 (no controller log). A native HLS demuxer
+    // (libmpv/ffmpeg) opens the whole master at once and treats a failed
+    // alt-audio EXT-X-MAP init as fatal — no retry — so that one 0-byte read
+    // crashes the load. Block the init read until the moov lands; on timeout
+    // surface a retryable 503 instead of letting serve() emit the fatal 404.
+    if (isInit) {
+      const ready = await awaitFileNonEmpty(segPath, 5000);
+      if (!ready) {
+        this.log.warn(
+          `Audio segment 503 (0-byte init): ${segment} (audioIndex=${audioIndex}, mfid=${mediaFileId})`,
+        );
+        sendTransientUnavailable(res);
+        return;
+      }
+    } else {
+      const segSize = statSizeOrNull(segPath);
+      if (segSize === null || segSize === 0) {
+        sendTransientUnavailable(res);
+        return;
+      }
+    }
+
     await this.segmentPackaging.serve(
       res,
       segPath,
