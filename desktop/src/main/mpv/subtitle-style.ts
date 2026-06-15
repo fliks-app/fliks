@@ -3,7 +3,7 @@ import type { DesktopSubtitleStyle } from '../../shared/contract';
 // Base subtitle size the app's fontScale presets multiply. mpv's own default
 // (55) renders far too large, so we calibrate lower — at scale 1.0 this lands
 // around a typical caption height once mpv scales it to the window.
-export const MPV_BASE_SUB_FONT_SIZE = 30;
+export const MPV_BASE_SUB_FONT_SIZE = 28;
 
 /** Translate the app's subtitle style presets to mpv `sub-*` property pairs.
  *  Shared by every playback backend (the Linux compositor and the embed
