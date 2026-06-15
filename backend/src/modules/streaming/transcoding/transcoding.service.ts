@@ -1198,6 +1198,22 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     await Promise.all(sessions.map((s) => this.killProcess(s.process)));
   }
 
+  /** Stop every ffmpeg variant (main / early / remux / per-audio) of one
+   *  client job — the sessions sharing `baseProfileHash` for this (file,
+   *  user). Scoped by hash so a second device on the same file with a
+   *  different profile keeps playing. The on-disk cache stays. Callers that
+   *  must keep the job warm for other viewers gate on the live-session count
+   *  themselves before calling. */
+  killSessionsForJob(
+    mediaFileId: number,
+    userId: number | undefined,
+    baseProfileHash: string,
+  ): void {
+    for (const s of this.getSessionsForFileUser(mediaFileId, userId)) {
+      if (s.baseProfileHash === baseProfileHash) this.killSessionById(s.id);
+    }
+  }
+
   /** Kill a session by its map key (used by admin dashboard). The cache
    *  directory stays — the admin can purge it separately via a future
    *  cache-eviction action; killing a job mid-stream just frees CPU. */

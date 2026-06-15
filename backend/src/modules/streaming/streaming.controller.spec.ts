@@ -19,8 +19,7 @@ describe('StreamingController.stopLiveSession', () => {
       unregister: jest.fn(),
     };
     const transcodingService = {
-      getSessionsForFileUser: jest.fn().mockReturnValue([]),
-      killSessionById: jest.fn(),
+      killSessionsForJob: jest.fn(),
     };
 
     const controller = new StreamingController(
@@ -95,18 +94,24 @@ describe('StreamingController.stopLiveSession', () => {
     // DirectPlay has no profileHash, so the ffmpeg-kill path is skipped —
     // the tracker row must still be cleared immediately.
     expect(activeStreamTracker.unregister).toHaveBeenCalledWith(7, 42);
-    expect(transcodingService.killSessionById).not.toHaveBeenCalled();
+    expect(transcodingService.killSessionsForJob).not.toHaveBeenCalled();
   });
 
   it('also unregisters for a transcode sid, then walks the ffmpeg-kill path', () => {
     const live = makeLive({ profileHash: 'abc123', userId: 7, mediaFileId: 42 });
-    const { controller, activeStreamTracker, liveSessions } =
+    const { controller, activeStreamTracker, liveSessions, transcodingService } =
       makeController(live);
 
     controller.stopLiveSession('sid-1');
 
     expect(activeStreamTracker.unregister).toHaveBeenCalledWith(7, 42);
     expect(liveSessions.listForJob).toHaveBeenCalledWith(7, 42, 'abc123');
+    // No other live session references the job → reap every ffmpeg variant.
+    expect(transcodingService.killSessionsForJob).toHaveBeenCalledWith(
+      42,
+      7,
+      'abc123',
+    );
   });
 
   it('is a no-op on an unknown sid', () => {

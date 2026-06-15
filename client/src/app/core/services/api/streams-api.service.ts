@@ -30,7 +30,6 @@ export interface ActiveStream {
   audioLanguage: string | null;
   outputContainer: string | null;
   outputBitrate: number | null;
-  videoPlaybackMode: string;
   /** Real audio output codec emitted by ffmpeg (e.g. `'aac'`, `'ac3'`).
    *  `null` when audio is direct-played / copy-remuxed without transcode. */
   audioOutputCodec: string | null;
@@ -51,12 +50,6 @@ export class StreamsApiService {
   list() {
     return firstValueFrom(
       this.http.get<ActiveStream[]>('/api/system/streams'),
-    );
-  }
-
-  kill(sessionId: string) {
-    return firstValueFrom(
-      this.http.delete<void>(`/api/system/streams/${sessionId}`),
     );
   }
 
