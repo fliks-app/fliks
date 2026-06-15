@@ -251,15 +251,22 @@ export class MpvPlayer extends EventEmitter {
 
   async load(opts: DesktopLoadOptions): Promise<void> {
     this.sawFirstFrame = false;
-    const fileOpts: string[] = [];
-    if (opts.startTime && opts.startTime > 0) fileOpts.push(`start=+${opts.startTime}`);
+    // Auth/other headers → the http-header-fields LIST property, set BEFORE
+    // loadfile. Don't cram them into the comma-separated loadfile options
+    // string — header values contain ',' and ':' that would break that parse.
     if (opts.headers && Object.keys(opts.headers).length) {
-      const fields = Object.entries(opts.headers)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join(',');
-      fileOpts.push(`http-header-fields=${fields}`);
+      await this.set(
+        'http-header-fields',
+        Object.entries(opts.headers).map(([k, v]) => `${k}: ${v}`),
+      );
     }
-    await this.command(['loadfile', opts.url, 'replace', fileOpts.join(',')]);
+    // mpv >= 0.38 loadfile signature is <url> <flags> <index> <options>; the
+    // bundled mpv is recent, so pass index 0 then the options. Append the start
+    // option only when set — an empty options string is otherwise parsed as the
+    // index and mpv rejects it ("invalid parameter").
+    const cmd: unknown[] = ['loadfile', opts.url, 'replace', 0];
+    if (opts.startTime && opts.startTime > 0) cmd.push(`start=${opts.startTime}`);
+    await this.command(cmd);
     for (const s of opts.subtitles ?? []) {
       await this.command(['sub-add', s.url, 'auto', s.label ?? '', s.language ?? '']);
     }

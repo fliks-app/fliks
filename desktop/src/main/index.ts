@@ -23,6 +23,16 @@ registerAppSchemePrivileged();
 process.on('uncaughtException', (e) => console.error('[main:uncaughtException]', e?.stack ?? e));
 process.on('unhandledRejection', (e) => console.error('[main:unhandledRejection]', e));
 
+// The desktop client connects to the user's self-hosted Fliks server, which
+// commonly uses a self-signed or private-CA TLS certificate the OS doesn't
+// trust — Chromium would otherwise refuse the HTTPS connection. Accept cert
+// errors: the app only ever loads its own fliks:// UI and talks to the server
+// the user explicitly configured (same trust model as the mobile apps).
+app.on('certificate-error', (event, _wc, _url, _error, _cert, callback) => {
+  event.preventDefault();
+  callback(true);
+});
+
 const WIDTH = 1280;
 const HEIGHT = 800;
 
@@ -276,6 +286,9 @@ app.whenReady().then(async () => {
       preload: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
       contextIsolation: true,
       sandbox: false,
+      // Trusted client → reach the user's server regardless of CORS/mixed
+      // content (cors.ts still reflects ACAO). Same as the embed path + mobile.
+      webSecurity: false,
     },
   });
   uiWin.webContents.setFrameRate(60);

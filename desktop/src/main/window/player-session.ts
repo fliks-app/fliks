@@ -75,6 +75,12 @@ export class PlayerSession {
         preload: preloadPath,
         contextIsolation: true,
         sandbox: false,
+        // Trusted client: the bundled Angular app (fliks://, a secure origin)
+        // must reach the user's server even when it's plain HTTP on a LAN —
+        // disable web security to allow that cross-origin/mixed-content fetch,
+        // the same bypass the mobile apps get via native HTTP. cors.ts still
+        // reflects the ACAO header for credentialed calls.
+        webSecurity: false,
       },
     });
 
