@@ -108,10 +108,12 @@ export class MpvPlayer extends EventEmitter {
 
     await this.connect();
     await this.setupObservers();
-    // Surface mpv's own warn/error log over IPC (ffmpeg HTTP/TLS/decode
-    // failures) — `--no-terminal` suppresses stderr, so this is how we see why
-    // a load failed.
-    await this.command(['request_log_messages', 'warn']).catch(() => {});
+    // Surface mpv's own log over IPC (ffmpeg HTTP/TLS/decode failures) —
+    // `--no-terminal` suppresses stderr, so this is how we see why a load
+    // failed. Defaults to warn; FLIKS_MPV_LOGLEVEL=v exposes ffmpeg's per-open
+    // 'Will reconnect' / HTTP-status lines for diagnosing segment failures.
+    const logLevel = process.env.FLIKS_MPV_LOGLEVEL || 'warn';
+    await this.command(['request_log_messages', logLevel]).catch(() => {});
     return this;
   }
 
