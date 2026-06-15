@@ -85,6 +85,14 @@ export class MpvPlayer extends EventEmitter {
       // The Fliks HLS references tokenised same-host segment/rendition URLs;
       // mpv's playlist safety check otherwise refuses them on the fallback path.
       '--load-unsafe-playlists=yes',
+      '--ytdl=no',
+      // A slow transcode (HDR tonemap re-encode) answers 404/503 for seg-0/init
+      // before ffmpeg has written them; mpv's HLS demuxer aborts on the first
+      // error unless told to reconnect. Retry on BOTH 4xx and 5xx with backoff,
+      // like the Linux compositor. The `4xx,5xx` value carries a comma, so it
+      // uses mpv's `%len%` escaping (7 = strlen("4xx,5xx")) to survive the
+      // key-value-list parser. Mirrors native/compositor/addon.cc.
+      '--demuxer-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_on_http_error=%7%4xx,5xx,reconnect_delay_max=30',
       `--input-ipc-server=${this.sockPath}`,
     ];
     console.log('[mpv] spawn:', this.mpvPath, args.join(' '));
