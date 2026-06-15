@@ -10,10 +10,14 @@ import { IPC, type DesktopEvent, type DesktopSubtitleStyle } from '../shared/con
 // GNOME/Ubuntu top-bar + dock identity) from "Fliks" rather than "Electron".
 app.setName('Fliks');
 
-// Force software OSR: Chromium's GPU process can't init here, and a
-// GPU-composited OSR window never recovers from a GPU-process crash.
-app.disableHardwareAcceleration();
-if (process.platform === 'linux') app.commandLine.appendSwitch('ozone-platform', 'x11');
+// Linux uses the software OSR compositor (Chromium's GPU process can't init in
+// that path, and a GPU-composited OSR window never recovers from a GPU-process
+// crash), forced onto X11/XWayland. macOS/Windows use a normal GPU window with
+// mpv embedded natively, so they keep hardware acceleration.
+if (process.platform === 'linux') {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('ozone-platform', 'x11');
+}
 registerAppSchemePrivileged();
 
 process.on('uncaughtException', (e) => console.error('[main:uncaughtException]', e?.stack ?? e));
@@ -181,13 +185,67 @@ function send(ev: DesktopEvent): void {
   if (uiWin && !uiWin.isDestroyed()) uiWin.webContents.send(IPC.event, ev);
 }
 
-app.whenReady().then(() => {
+function rendererUrl(haveApp: boolean): string {
+  return haveApp ? APP_URL : 'data:text/html,<body style="background:%231d232a"></body>';
+}
+
+// Windows: a framed GPU window with mpv embedded natively (--wid) and a
+// transparent child window for the web UI on top. UNTESTED on real Windows
+// hardware — the --wid GPU surface may punch through the transparent overlay,
+// and transparent-window resize/fullscreen behaviour needs on-device checks.
+async function startEmbedSession(haveApp: boolean): Promise<void> {
+  const { PlayerSession } = await import('./window/player-session');
+  const { registerPlayerIpc } = await import('./ipc');
+  const session = new PlayerSession();
+  // Register the IPC handlers BEFORE start() loads the renderer + emits 'ready',
+  // so the renderer can't invoke an unregistered channel.
+  registerPlayerIpc(session);
+  await session.start({
+    rendererUrl: rendererUrl(haveApp),
+    preloadPath: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
+    iconPath: windowIcon(),
+  });
+}
+
+// macOS (and any other non-Linux/Windows): playback is NOT implemented yet —
+// the SDL/GLES OSR compositor is Linux-only and mpv's subprocess --wid crashes
+// on macOS, which needs an in-process libmpv compositor (a native addon, like
+// Linux's). Open the web UI so the app launches + browses; playback IPC is
+// intentionally not wired, so attempting to play surfaces a clear error.
+async function startUiOnly(haveApp: boolean): Promise<void> {
+  console.warn(`[main] playback not implemented on ${process.platform} — UI-only (needs a native libmpv compositor)`);
+  uiWin = new BrowserWindow({
+    width: WIDTH,
+    height: HEIGHT,
+    title: 'Fliks',
+    icon: windowIcon(),
+    webPreferences: {
+      preload: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
+      contextIsolation: true,
+      sandbox: false,
+    },
+  });
+  uiWin.webContents.on('console-message', (_e, _l, m) => console.log('[renderer]', m));
+  await uiWin.loadURL(rendererUrl(haveApp));
+  send({ type: 'ready' });
+}
+
+app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   installCorsBypass();
 
   const dir = webDir();
   const haveApp = fs.existsSync(path.join(dir, 'index.html'));
   if (haveApp) registerAppProtocol(dir);
+
+  if (process.platform === 'win32') {
+    await startEmbedSession(haveApp).catch((e) => console.error('[main] embed session failed', e));
+    return;
+  }
+  if (process.platform !== 'linux') {
+    await startUiOnly(haveApp).catch((e) => console.error('[main] ui-only failed', e));
+    return;
+  }
 
   // The .node addon and the dlopen'd libmpv are asarUnpack'd, so in a packaged
   // app they live under app.asar.unpacked — not inside app.asar (a file). The

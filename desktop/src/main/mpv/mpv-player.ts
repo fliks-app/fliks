@@ -63,10 +63,14 @@ export class MpvPlayer extends EventEmitter {
     this.mpvPath = opts.mpvPath ?? 'mpv';
     this.baseArgs = opts.baseArgs;
     this.env = opts.env ?? process.env;
-    this.sockPath = path.join(
-      os.tmpdir(),
-      `fliks-mpv-${process.pid}-${this.reqId}-${Math.floor(performance.now())}.sock`,
-    );
+    // mpv's --input-ipc-server is a unix socket on POSIX but a NAMED PIPE on
+    // Windows; Node's net only accepts the \\.\pipe\ namespace there (a /tmp
+    // path is rejected), so build the path per-platform.
+    const stamp = `fliks-mpv-${process.pid}-${this.reqId}-${Math.floor(performance.now())}`;
+    this.sockPath =
+      process.platform === 'win32'
+        ? `\\\\.\\pipe\\${stamp}`
+        : path.join(os.tmpdir(), `${stamp}.sock`);
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
@@ -102,8 +106,11 @@ export class MpvPlayer extends EventEmitter {
 
   private async connect(): Promise<void> {
     const deadline = performance.now() + CONNECT_TIMEOUT_MS;
+    // A Windows named pipe is not a filesystem entry, so existsSync never sees
+    // it — connect directly and retry on error instead of gating on the file.
+    const isPipe = process.platform === 'win32';
     for (;;) {
-      if (fs.existsSync(this.sockPath)) {
+      if (isPipe || fs.existsSync(this.sockPath)) {
         try {
           await this.open();
           return;
