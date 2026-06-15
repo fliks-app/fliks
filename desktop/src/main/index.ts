@@ -199,10 +199,10 @@ function rendererUrl(haveApp: boolean): string {
   return haveApp ? APP_URL : 'data:text/html,<body style="background:%231d232a"></body>';
 }
 
-// Windows: a framed GPU window with mpv embedded natively (--wid) and a
-// transparent child window for the web UI on top. UNTESTED on real Windows
-// hardware — the --wid GPU surface may punch through the transparent overlay,
-// and transparent-window resize/fullscreen behaviour needs on-device checks.
+// Windows: a framed master window carries the native chrome; mpv embeds (--wid)
+// into a frameless transparent window pinned over its content area, with the web
+// UI in a second transparent window above that. See PlayerSession for why the
+// frame and the see-through video layer are separate windows.
 async function startEmbedSession(haveApp: boolean): Promise<void> {
   const { PlayerSession } = await import('./window/player-session');
   const { registerPlayerIpc } = await import('./ipc');
