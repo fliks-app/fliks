@@ -70,7 +70,6 @@ describe('SystemController.activeStreams recency filter', () => {
       list: jest.fn().mockReturnValue(snapshots),
     };
     const activeStreamTracker = {
-      getActive: jest.fn().mockReturnValue([]),
       getDeviceName: jest.fn().mockReturnValue(null),
     };
     const playbackService = {

@@ -814,10 +814,8 @@ export class StreamingController {
   stopLiveSession(@Param('sessionId') sessionId: string) {
     const live = this.liveSessions.get(sessionId);
     this.liveSessions.stop(sessionId);
-    // Clear the "now watching" tracker row immediately. DirectPlay has no
-    // profileHash, so the ffmpeg-kill path below is skipped and would never
-    // unregister this (user, file) — leaving the dashboard row up until the
-    // tracker's stale timeout.
+    // Release this (user, file)'s cached device name. The "now watching" row is
+    // the LiveSession itself, already stopped above.
     if (live?.userId != null) {
       this.activeStreamTracker.unregister(live.userId, live.mediaFileId);
     }
@@ -1877,25 +1875,23 @@ export class StreamingController {
       req.user as User,
     );
 
-    // Track direct play session
     const user = req.user;
-    if (user) {
-      this.activeStreamTracker.register(
-        user.id,
-        user.username,
-        mediaFileId,
-        resolved.media?.title ?? '',
-        resolved.media?.type ?? '',
-        resolved.media?.posterUrl ?? null,
-      );
-    }
-    // Keep the LiveSession alive while the Range chunks roll in —
-    // the heartbeat endpoint only fires on HLS/transcode paths, so
-    // without this every direct-play would get GC'd 30 s after
-    // playback-info and disappear from the dashboard.
+    // Keep the LiveSession alive while the Range chunks roll in — the
+    // heartbeat endpoint only fires on HLS/transcode paths, so without this
+    // every direct-play would get GC'd 30 s after playback-info and disappear
+    // from the dashboard. DirectPlay presence on the admin dashboard is the
+    // LiveSession itself (kind='directplay'), minted at playback-info.
     const sid = firstQueryString(req.query, 'sid');
     if (sid) {
       this.liveSessions.heartbeat(sid, {});
+    } else if (!firstQueryString(req.query, 'download')) {
+      // Canary for the removed direct-play tracker: a playback reaching this
+      // route without a sid never went through playback-info, so it has no
+      // LiveSession and won't appear on the activity dashboard. If this never
+      // logs in real use, the legacy no-playback-info path is confirmed dead.
+      this.log.warn(
+        `direct-play stream without sid (mediaFileId=${mediaFileId}, userId=${user?.id ?? 'anon'}) — no LiveSession, not shown on the activity dashboard`,
+      );
     }
 
     const duration = resolved.mediaFile.streamInfo?.durationSeconds;

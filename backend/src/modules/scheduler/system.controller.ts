@@ -371,18 +371,10 @@ export class SystemController {
       );
     };
 
-    // Legacy direct-play paths that bypass playback-info still surface here;
-    // their (user, file) pair isn't represented by any LiveSession so we read
-    // from the tracker. Snapshot once — the dashboard reads it twice.
-    const directPlaySessions = this.activeStreamTracker.getActive();
-
     // Collect lookups before the per-session loop so we batch DB hits.
-    const mediaFileIds = [
-      ...new Set([
-        ...live.map((s) => s.mediaFileId),
-        ...directPlaySessions.map((s) => s.mediaFileId),
-      ]),
-    ];
+    // DirectPlay is a LiveSession (kind='directplay') like any other mode, so
+    // the registry is the only source — no separate tracker to merge in.
+    const mediaFileIds = [...new Set(live.map((s) => s.mediaFileId))];
     const mediaFiles = mediaFileIds.length
       ? await this.mediaFileRepo.findByIds(mediaFileIds)
       : [];
@@ -457,39 +449,6 @@ export class SystemController {
         // it straight from memory instead of a per-row playback_states query.
         position: session.position,
         episodeId: mediaFileMap.get(session.mediaFileId)?.episodeId ?? null,
-      });
-    }
-
-    // Legacy direct-play fallback: tracker entries without a matching
-    // LiveSession (typically clients that hit /stream/:mediaFileId
-    // without a prior playback-info call).
-    const liveByKey = new Set(
-      live.map((s) => `${s.userId ?? 0}-${s.mediaFileId}`),
-    );
-    for (const dp of directPlaySessions) {
-      const key = `${dp.userId}-${dp.mediaFileId}`;
-      if (liveByKey.has(key)) continue;
-      work.push({
-        sessionId: `dp-${dp.userId}-${dp.mediaFileId}`,
-        userId: dp.userId,
-        username: dp.username,
-        mediaFileId: dp.mediaFileId,
-        mediaTitle: dp.mediaTitle,
-        mediaType: dp.mediaType,
-        posterUrl: dp.posterUrl,
-        mode: 'directplay',
-        quality: 'original',
-        hwAccelVal: 'none',
-        startedAt: dp.startedAt.toISOString(),
-        lastActivity: dp.lastActivity.toISOString(),
-        deviceLabel: this.activeStreamTracker.getDeviceName(
-          dp.userId,
-          dp.mediaFileId,
-        ),
-        transcodeSession: undefined,
-        audioPlan: null,
-        position: 0,
-        episodeId: null,
       });
     }
 
@@ -636,14 +595,14 @@ export class SystemController {
 
   /**
    * Resolve a dashboard `sessionId` to the (user, mediaFile) pair the
-   * command targets. The dashboard hands us three flavours of id:
-   *   - `dp-<userId>-<mediaFileId>` — legacy direct-play tracker entry.
-   *   - A `LiveSession.sessionId` UUID — the canonical id since #300.
+   * command targets. The dashboard hands us two flavours of id:
+   *   - A `LiveSession.sessionId` UUID — the canonical id (every mode,
+   *     DirectPlay included, is a LiveSession).
    *   - A `TranscodeSession.id` hash — left in for completeness; the
    *     dashboard hasn't emitted these in a while but a stale client
    *     tab could still send one.
-   * Returns null when none of the three lookups produces a (user, file)
-   * pair the command can act on.
+   * Returns null when neither lookup produces a (user, file) pair the
+   * command can act on.
    */
   private resolveStreamCommandTarget(sessionId: string): {
     userId: number;
@@ -651,13 +610,6 @@ export class SystemController {
     profileHash: string | null;
     isDirectPlay: boolean;
   } | null {
-    if (sessionId.startsWith('dp-')) {
-      const parts = sessionId.replace('dp-', '').split('-');
-      const userId = parseInt(parts[0], 10);
-      const mediaFileId = parseInt(parts[1], 10);
-      if (!userId || !mediaFileId) return null;
-      return { userId, mediaFileId, profileHash: null, isDirectPlay: true };
-    }
     const live = this.liveSessions.get(sessionId);
     if (live && live.userId != null) {
       return {
