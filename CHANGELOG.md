@@ -1,5 +1,63 @@
 # Changelog
 
+## [1.12.0](https://github.com/fliks-app/fliks/compare/v1.11.0...v1.12.0) (2026-06-15)
+
+
+### Features
+
+* **desktop:** native linux client with embedded mpv compositor ([ef3a30c](https://github.com/fliks-app/fliks/commit/ef3a30c4624208810bbc23d88b12b51a825884d4))
+* **downloads:** faithful multi-source status on the download badges ([#450](https://github.com/fliks-app/fliks/issues/450)) ([cd78c4d](https://github.com/fliks-app/fliks/commit/cd78c4d897a369f988aad06eca0c69dfdf331d2e))
+* **player:** add a direct-play arrow under the stats container line ([#476](https://github.com/fliks-app/fliks/issues/476)) ([ae80c9c](https://github.com/fliks-app/fliks/commit/ae80c9c084ec14752d457a5bc0a83800f0981545))
+* **player:** leaf icon by the quality value when an eco rung is active ([#455](https://github.com/fliks-app/fliks/issues/455)) ([5deccfa](https://github.com/fliks-app/fliks/commit/5deccfa01f61a71cad07ed493570909438fa650c))
+* **player:** show target channel layout on transcoded audio ([#469](https://github.com/fliks-app/fliks/issues/469)) ([943fe42](https://github.com/fliks-app/fliks/commit/943fe4278addede2eb3fac324255ecf63e09bd15))
+* **streaming:** report mobile audio decode capability, not the output sink ([#468](https://github.com/fliks-app/fliks/issues/468)) ([0b33d3e](https://github.com/fliks-app/fliks/commit/0b33d3eb3f714fff5ba7687f5a34db942388554b))
+
+
+### Bug Fixes
+
+* **auth:** reset credentials on server switch so streaming re-mints ([#490](https://github.com/fliks-app/fliks/issues/490)) ([2c82b7c](https://github.com/fliks-app/fliks/commit/2c82b7c2a5671ae74053cb7dfa8b53e99c8fdbe4))
+* **auth:** stop multi-tab refresh races from revoking every session ([#457](https://github.com/fliks-app/fliks/issues/457)) ([f8c1ec5](https://github.com/fliks-app/fliks/commit/f8c1ec5567e622cf91817500d2d28cfd05df253d))
+* **client:** restore spec-build compile after the desktop client merge ([#496](https://github.com/fliks-app/fliks/issues/496)) ([841add6](https://github.com/fliks-app/fliks/commit/841add6bdf8c6ce2dfa811bc3678e90a86eaad9e))
+* **desktop:** add homepage and author for the .deb package metadata ([#505](https://github.com/fliks-app/fliks/issues/505)) ([579d649](https://github.com/fliks-app/fliks/commit/579d649867e503bd3a155c3f92225fb07628b38e))
+* **desktop:** generate the app icon from fliks-icon.svg ([#502](https://github.com/fliks-app/fliks/issues/502)) ([b13798b](https://github.com/fliks-app/fliks/commit/b13798b05100b0613a4b176f3904eb226c785641))
+* **desktop:** move deb options to the config root for electron-builder ([#504](https://github.com/fliks-app/fliks/issues/504)) ([8d97209](https://github.com/fliks-app/fliks/commit/8d972091d6382b64c946a1b34e0e5d0f6e392bc5))
+* **desktop:** poll mpv time-pos so playback progress advances ([#498](https://github.com/fliks-app/fliks/issues/498)) ([edf3cf2](https://github.com/fliks-app/fliks/commit/edf3cf2fee4d20eba3b43cc433112afbd2cc5c14))
+* **desktop:** set the compositor window WM_CLASS and icon ([#500](https://github.com/fliks-app/fliks/issues/500)) ([16f9e53](https://github.com/fliks-app/fliks/commit/16f9e53974853be48ea8b1e72cf9517770df6500))
+* **desktop:** show Fliks icon in window, dock and packaging ([#497](https://github.com/fliks-app/fliks/issues/497)) ([a451b6a](https://github.com/fliks-app/fliks/commit/a451b6aefa96e0bfd25342f5ef9c039f24dc7c42))
+* **desktop:** use the transparent logo mark for the app icon ([#501](https://github.com/fliks-app/fliks/issues/501)) ([f6f4126](https://github.com/fliks-app/fliks/commit/f6f41263dedaf2d4b54514e6b5307aedf8787872))
+* **device-profile:** probe MP3 inside MP4 for the browser profile ([#461](https://github.com/fliks-app/fliks/issues/461)) ([ea5f6b2](https://github.com/fliks-app/fliks/commit/ea5f6b242478df79cce62e3cf547d425346b7c56))
+* **downloads:** show ∞ for a stalled torrent's ETA, colon in the i18n string ([#453](https://github.com/fliks-app/fliks/issues/453)) ([7334643](https://github.com/fliks-app/fliks/commit/7334643d6e1ba4430a0a2ab5af4a7ab8e164b51a))
+* **player:** add a colon to the stats overlay Reasons label ([#471](https://github.com/fliks-app/fliks/issues/471)) ([531d8eb](https://github.com/fliks-app/fliks/commit/531d8ebf317ebe2466c65fd565872c6dc63bbfff))
+* **player:** label untagged audio tracks by index instead of und ([#475](https://github.com/fliks-app/fliks/issues/475)) ([9005826](https://github.com/fliks-app/fliks/commit/9005826e32e2775764c79a84ad72d7aa36a8b9df))
+* **player:** lower default subtitle bottom margin to 5% ([#492](https://github.com/fliks-app/fliks/issues/492)) ([f807287](https://github.com/fliks-app/fliks/commit/f807287ffb245b3612eb261569aa2e607c3df584))
+* **player:** re-present iOS video layer on foreground and PiP exit ([#495](https://github.com/fliks-app/fliks/issues/495)) ([911851c](https://github.com/fliks-app/fliks/commit/911851c74d59e043c9c3a5d6a296727229e655e7))
+* **player:** seek preview and controls fixes on Tizen and keyboard ([c2f124a](https://github.com/fliks-app/fliks/commit/c2f124a9fe162bcc4cbbfde609a7cec0aeade34b))
+* **player:** send HLS subtitle renditions to Android TV ([#487](https://github.com/fliks-app/fliks/issues/487)) ([3aca66e](https://github.com/fliks-app/fliks/commit/3aca66ee0a09e81b919732e87d7f12207316907a))
+* **player:** Shaka subtitle select/disable, desktop Escape, buffer flicker and subtitle polish ([#512](https://github.com/fliks-app/fliks/issues/512)) ([250a153](https://github.com/fliks-app/fliks/commit/250a15349053b5a2969882bae081d8f5b36afa22))
+* **player:** stop sessions on close and cap the native reload loop ([#494](https://github.com/fliks-app/fliks/issues/494)) ([a9b5f4b](https://github.com/fliks-app/fliks/commit/a9b5f4b5d2c86bc491eacdd67d18d3d37d57f5a6))
+* **player:** stop Tizen pause→resume from reloading the whole stream ([#458](https://github.com/fliks-app/fliks/issues/458)) ([00c8be8](https://github.com/fliks-app/fliks/commit/00c8be8fd4a5b429e96a6e53ae5a6ccced1bc84c))
+* **seekbar:** keep position fill through seeks and show buffering sweep ([#460](https://github.com/fliks-app/fliks/issues/460)) ([89307fe](https://github.com/fliks-app/fliks/commit/89307fef01623559c06357580def17a87297ae2b))
+* **settings:** tab title as "page | layout" on own-layout shells ([#456](https://github.com/fliks-app/fliks/issues/456)) ([c07c2a1](https://github.com/fliks-app/fliks/commit/c07c2a1d36a3b85408be17f8112ad7def69d4929))
+* spatial-nav, library UX and direct-play binding ([#463](https://github.com/fliks-app/fliks/issues/463)) ([87cb39e](https://github.com/fliks-app/fliks/commit/87cb39e54408084e9b8f1e0192a8e88a06d4d126))
+* **spatial-nav:** make home request cards a single focus leaf ([#452](https://github.com/fliks-app/fliks/issues/452)) ([aeaf420](https://github.com/fliks-app/fliks/commit/aeaf420cb0ea1dfe77753907232ef95b40af26d2))
+* **streaming:** block the 0-byte audio rendition init to avoid a fatal 404 ([#507](https://github.com/fliks-app/fliks/issues/507)) ([73a014f](https://github.com/fliks-app/fliks/commit/73a014f8100316b2e4ac2d01dbe63e6fdc51ae55))
+* **streaming:** cap transcode bitrate to source, fix reduction reason ([#477](https://github.com/fliks-app/fliks/issues/477)) ([fc7c1a4](https://github.com/fliks-app/fliks/commit/fc7c1a4d3655c6641b1b02dbb14e90f9a65bc0f2))
+* **streaming:** decide audio copy/transcode per track, not just the default ([#466](https://github.com/fliks-app/fliks/issues/466)) ([9d41f3b](https://github.com/fliks-app/fliks/commit/9d41f3b06a750c7df705d831074247daaf13ce7c))
+* **streaming:** direct-play a requested rung at the source resolution ([#510](https://github.com/fliks-app/fliks/issues/510)) ([810de58](https://github.com/fliks-app/fliks/commit/810de58afdd00cf263bd9e77b9f69c3506cab904))
+* **streaming:** downmix every multi-audio rendition with -ac:a:i ([#473](https://github.com/fliks-app/fliks/issues/473)) ([8d6bfd2](https://github.com/fliks-app/fliks/commit/8d6bfd21d58a0b5253f76b2f8da07708cbb8929a))
+* **streaming:** multi-audio keeps surround via a uniform group codec ([#467](https://github.com/fliks-app/fliks/issues/467)) ([a3830a3](https://github.com/fliks-app/fliks/commit/a3830a34b7d2e89d61497670b8dfbf1465e52d13))
+* **streaming:** order low-consumption quality rungs after the normal one ([#454](https://github.com/fliks-app/fliks/issues/454)) ([6e2b083](https://github.com/fliks-app/fliks/commit/6e2b083624830f1d865a4dce06f0fed93e279da9))
+* **streaming:** preserve HDR for non-HEVC sources, not just HEVC ([#465](https://github.com/fliks-app/fliks/issues/465)) ([3c8d24a](https://github.com/fliks-app/fliks/commit/3c8d24aaeac3388d737f5f6c56ac5b43e3675162))
+* **streaming:** reap all stream variants on admin stop, trim the video-activity dashboard ([#509](https://github.com/fliks-app/fliks/issues/509)) ([9c2e5fd](https://github.com/fliks-app/fliks/commit/9c2e5fd2ff1c01bcf1845754ec96ac3d2aec96bf))
+* **streaming:** reap stale sessions and cap per-user concurrency ([#493](https://github.com/fliks-app/fliks/issues/493)) ([b66eff0](https://github.com/fliks-app/fliks/commit/b66eff0541be7de513ddc26de592c1dd5538d6d9))
+* **streaming:** respawn the early companion for audio renditions on resume ([0531565](https://github.com/fliks-app/fliks/commit/05315656f94c3810c4e84321daaaf0929c884026))
+* **streaming:** surface both audio transcode reasons when both apply ([#470](https://github.com/fliks-app/fliks/issues/470)) ([21dd729](https://github.com/fliks-app/fliks/commit/21dd7293a26a25f61e7e358968ade0810103baad))
+
+
+### Performance Improvements
+
+* **library:** faster TV card grid scroll and card UI fixes ([c8b7b60](https://github.com/fliks-app/fliks/commit/c8b7b60d5a90887a7f08f55e2e69f54602066157))
+
 ## [1.11.0](https://github.com/fliks-app/fliks/compare/v1.10.1...v1.11.0) (2026-06-10)
 
 
