@@ -17,6 +17,7 @@ import type {
   DesktopSubtitleStyle,
   DesktopSubtitleTrack,
 } from '../../shared/contract';
+import { mpvSubtitleProps } from './subtitle-style';
 
 const CONNECT_RETRY_MS = 30;
 const CONNECT_TIMEOUT_MS = 5000;
@@ -364,13 +365,7 @@ export class MpvPlayer extends EventEmitter {
   }
 
   async setSubtitleStyle(s: DesktopSubtitleStyle): Promise<void> {
-    await this.set('sub-font-size', Math.round(55 * (s.fontScale ?? 1)));
-    if (s.foregroundColor) await this.set('sub-color', s.foregroundColor);
-    if (s.backgroundColor && s.backgroundColor !== 'transparent') {
-      await this.set('sub-back-color', s.backgroundColor);
-      await this.set('sub-border-style', 'background-box');
-    }
-    if (s.bottomMarginPercent != null) await this.set('sub-pos', 100 - s.bottomMarginPercent);
+    for (const [name, value] of mpvSubtitleProps(s)) await this.set(name, value);
   }
 
   async destroy(): Promise<void> {
