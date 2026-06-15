@@ -2532,9 +2532,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (!this.isOfflinePlayback) await this.reloadStream();
       }
       const track = await this.engine.addTextTrack(sub.url, sub.language, sub.label, sub.forced);
+      // Keep the engine track's own id intact: Shaka's selectTextTrack matches
+      // the rendition by its numeric track id, so overriding it with the app's
+      // `sub.id` made the selection a no-op (subtitles only appeared after a
+      // quality switch, whose reload passes the raw track). Native/desktop/TV
+      // engines key off language/forced/embIndex, not id, so this is a no-op
+      // for them — embIndex is still threaded through for desktop embedded subs.
       this.engine.selectTextTrack({
         ...track,
-        id: sub.id,
         embIndex: sub.id.startsWith('emb-') ? Number(sub.id.slice(4)) : null,
       });
       try { this.engine.setTextVisibility(true); } catch {}
@@ -2700,6 +2705,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   };
 
   private onPlayerBackEvent = () => {
+    // Desktop: Escape leaves the native (SDL) compositor fullscreen first —
+    // before closing the controls bar or exiting the player — matching the
+    // universal "Escape exits fullscreen" convention.
+    if (
+      this.isDesktopNative &&
+      this.engine instanceof DesktopEngine &&
+      this.engine.fullscreen
+    ) {
+      this.engine.setFullscreen(false);
+      return;
+    }
     // TV remote Return and desktop Escape first close a visible controls bar,
     // then exit on the next press — back mirrors the on-screen close. (On
     // desktop this event only ever comes from Escape, a deliberate keyboard

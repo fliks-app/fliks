@@ -12,6 +12,14 @@ it is NOT the menu-bar server host under `macos/`.
   the single visible window. It composites **mpv video** (rendered into a GL FBO
   via libmpv's render API) under the **Angular UI bitmap**.
 - Embedded **mpv** comes from a self-contained static **libmpv** (render API).
+- ⚠️ **Two mpv backends — know which one you're debugging.** On **Linux**, mpv
+  runs **inside the native C++ addon** (libmpv render API); its property/event
+  plumbing (`time-pos`, `demuxer-cache-time`, `paused-for-cache`, `timeUpdate`,
+  `stateChanged`) lives in `native/compositor/addon.cc` + the `addon.onEvent` /
+  `emitPosition` wiring in `src/main/index.ts`. The `MpvPlayer` subprocess class
+  in `src/main/mpv/mpv-player.ts` is the **other** backend (Windows/macOS embed,
+  JSON-IPC) and is **NOT used on Linux** — editing it has no effect on the Linux
+  client. Both share `src/main/mpv/subtitle-style.ts` (`mpvSubtitleProps`).
 - This single-window compositor is the only model that works under **Mutter/X11**:
   an embedded mpv child window can't be composited beneath a sibling transparent
   overlay there, so we composite ourselves.

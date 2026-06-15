@@ -212,7 +212,10 @@ export class MpvPlayer extends EventEmitter {
         this.duration = data ?? 0;
         break;
       case 'demuxer-cache-time':
-        this.cacheEnd = data ?? 0;
+        // mpv reports null for this between HLS segments; keep the last value
+        // instead of zeroing it, otherwise the seekbar's buffered zone (drawn
+        // `@if (bufferedEnd())`) collapses to 0 and flickers on every gap.
+        if (data != null) this.cacheEnd = data;
         break;
       case 'pause':
         this.emit('stateChanged', { state: data ? 'paused' : 'playing' });
