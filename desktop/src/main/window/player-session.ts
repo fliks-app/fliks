@@ -46,13 +46,18 @@ export class PlayerSession {
       height: 800,
       minWidth: 800,
       minHeight: 500,
-      frame: true,
-      backgroundColor: '#1d232a', // Fliks brand background
+      // Transparent so the embedded mpv child window shows through its (empty)
+      // web content; otherwise the opaque page covers the video. On Windows a
+      // transparent window must be frameless. (UNTESTED — window chrome / drag
+      // will need handling in the UI if this is the right model.)
+      frame: false,
+      transparent: true,
+      backgroundColor: '#00000000',
       title: 'Fliks',
       ...(iconPath ? { icon: iconPath } : {}),
     });
     await this.videoWin.loadURL(
-      'data:text/html,<body style="margin:0;background:%231d232a"></body>',
+      'data:text/html,<body style="margin:0;background:transparent"></body>',
     );
 
     this.uiWin = new BrowserWindow({
