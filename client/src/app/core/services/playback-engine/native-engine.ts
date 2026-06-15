@@ -34,23 +34,6 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
 
   private listeners: Array<{ event: string; fn: EventListener }> = [];
 
-  /** Guards against double-emit of 'firstFrame' (engine listeners use
-   *  it to clear the loading veil — flipping it twice is harmless but
-   *  the position-advance fallback below would otherwise fire on every
-   *  later timeUpdate). Reset on each load(). */
-  private firstFrameEmitted = false;
-
-  /** One-shot guard for the optimistic-recovery branch in the
-   *  `nativePlayerError` bridge. ExoPlayer / AVPlayer can't tell us the
-   *  HTTP status that triggered the error, so the first error during
-   *  stable playback is routed to `sessionExpired` (which makes the
-   *  player call /playback-info + reload). A second error before the
-   *  guard is re-armed falls through to a real fatal `error` so the UI
-   *  isn't stuck retrying a broken stream. The guard is re-armed only by
-   *  {@link resetRecoveryGuard} — on a user-initiated (re)load or once a
-   *  recovery has sustained playback, never on every load() — so a
-   *  recovery reload that immediately re-fails can't loop forever. */
-  private recoveryAttempted = false;
   /** Last `timeUpdate.position` seen, used to detect that playback is
    *  actually advancing (Android's onRenderedFirstFrame is unreliable on
    *  some devices: it fires late or never on transcode → ABR switches,
@@ -115,20 +98,13 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   /** Mark next load() as offline — uses CacheDataSource on Android. */
   setOffline(offline: boolean) { this._offline = offline; }
 
-  /** Re-arm the one-shot {@link recoveryAttempted} guard so a fresh stream
-   *  gets its single optimistic recovery again. Called by the player on a
-   *  user-initiated (re)load and after a recovery sustains playback. */
-  resetRecoveryGuard(): void {
-    this.recoveryAttempted = false;
-  }
-
   async load(
     url: string,
     startTime?: number,
     _mimeType?: string,
     headers?: Record<string, string>,
   ): Promise<void> {
-    this.firstFrameEmitted = false;
+    this.resetFirstFrame();
     this.lastTimeUpdatePos = -1;
     // Subtitles are delivered as HLS SUBTITLES renditions in the master
     // playlist, not sidecar SubtitleConfigurations, so the player surfaces
@@ -400,8 +376,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
         this.lastTimeUpdatePos >= 0 &&
         d.position > this.lastTimeUpdatePos
       ) {
-        this.firstFrameEmitted = true;
-        this.emit('firstFrame', undefined);
+        this.emitFirstFrameOnce();
       }
       this.lastTimeUpdatePos = d.position;
     });
@@ -414,11 +389,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       // haven't tried recovery yet, treat the first error as a
       // possible session-expired and let the player attempt a single
       // /playback-info + reload before surfacing a fatal error.
-      if (this.firstFrameEmitted && !this.recoveryAttempted) {
-        this.recoveryAttempted = true;
-        this.emit('sessionExpired', undefined);
-        return;
-      }
+      if (this.maybeEmitSessionExpired()) return;
       this._state = 'error';
       this.emit('error', d);
     });
@@ -433,9 +404,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     });
 
     bind('nativePlayerFirstFrame', () => {
-      if (this.firstFrameEmitted) return;
-      this.firstFrameEmitted = true;
-      this.emit('firstFrame', undefined);
+      this.emitFirstFrameOnce();
     });
   }
 

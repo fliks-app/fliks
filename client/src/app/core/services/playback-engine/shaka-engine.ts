@@ -25,10 +25,6 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
   private videoListeners: Array<{ event: string; handler: EventListener }> = [];
   private shakaListeners: Array<{ event: string; handler: EventListener }> = [];
 
-  /** Tracks whether 'firstFrame' has been emitted for this load — fires
-   *  once per session, gated on requestVideoFrameCallback. */
-  private firstFrameEmitted = false;
-
   /** Set briefly after the 410 response filter has emitted
    *  `sessionExpired`. Shaka also surfaces the thrown filter error
    *  through its `error` event — we suppress the bridged `error`
@@ -160,7 +156,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   async load(url: string, startTime?: number, mimeType?: string, _headers?: Record<string, string>): Promise<void> {
     if (!this.player) throw new Error('ShakaEngine not initialised');
-    this.firstFrameEmitted = false;
+    this.resetFirstFrame();
     this.sessionExpiredInFlight = false;
     await this.player.load(url, startTime, mimeType);
   }
@@ -421,12 +417,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       // compositor (the DOM 'playing' event can precede the first paint).
       if (!this.firstFrameEmitted) {
         const rvfc = (video as any).requestVideoFrameCallback;
-        const fire = () => {
-          if (!this.firstFrameEmitted) {
-            this.firstFrameEmitted = true;
-            this.emit('firstFrame', undefined as any);
-          }
-        };
+        const fire = () => this.emitFirstFrameOnce();
         if (typeof rvfc === 'function') rvfc.call(video, fire);
         else fire();
       }
