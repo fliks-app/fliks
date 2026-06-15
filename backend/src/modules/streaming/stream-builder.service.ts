@@ -275,6 +275,17 @@ export class StreamBuilderService {
     // transcode ladder; "Auto" routes there too when the admin picked
     // autoQualityMode='abr'. HLS-only engines (Tizen AVPlay) can never open a
     // raw file, so they skip DirectPlay but still remux to HLS.
+    const deviceType: DeviceType = profile.deviceType ?? 'desktop';
+    const ladder = getLadderForDevice(deviceType);
+    // Quality ladder shown to the UI matches what the backend will
+    // actually serve: HDR sessions emit the HDR ladder (2160p/1080p/
+    // 720p/480p-hdr — no 360p/240p/144p rungs). Exposing the SDR
+    // ladder in HDR mode let users pick rungs that don't exist; the
+    // pin then failed to match, fell back to the full ladder, and the
+    // master ABR-ran across every HDR rung.
+    const qualityLadder = useHdrLadder
+      ? getHdrLadderForDevice(deviceType)
+      : ladder;
     const wantsSourceRung =
       requestedQuality == null ||
       requestedQuality === 'auto' ||
@@ -282,10 +293,22 @@ export class StreamBuilderService {
     const autoOnLadder =
       (requestedQuality == null || requestedQuality === 'auto') &&
       autoQualityMode === 'abr';
-    // Lower explicit rung OR ABR-on-auto: skip both DirectPlay and remux so the
-    // backend re-encodes at the requested rung (and the master carries the ABR
-    // ladder).
-    const forceLadder = autoOnLadder || !wantsSourceRung;
+    // An explicit rung only forces the transcode ladder when it actually steps
+    // below the source: a lower resolution, or an eco (same-resolution,
+    // reduced-bitrate) rung the user deliberately picked. A rung at the source
+    // resolution — e.g. a '1080p' id carried over from another title onto a
+    // 1080p source — is the source rung, so it stays DirectPlay-eligible
+    // instead of re-encoding 1080p→1080p for nothing. ABR-on-auto still routes
+    // to the ladder.
+    const explicitRung = wantsSourceRung
+      ? undefined
+      : qualityLadder.find((p) => p.name === requestedQuality);
+    const explicitDownscale =
+      !!explicitRung &&
+      (bucketResolutionHeight(explicitRung.maxWidth, explicitRung.maxHeight) <
+        bucketResolutionHeight(source.width, source.height) ||
+        isEcoProfile(explicitRung.name));
+    const forceLadder = autoOnLadder || explicitDownscale;
 
     // Whether the source can be served at its own resolution without
     // re-encoding (raw direct play or codec-copy remux). Independent of the
@@ -316,18 +339,6 @@ export class StreamBuilderService {
         reasons.push({ flag: 'VideoAbr', message: 'Adaptive bitrate (ABR) mode' });
       }
     }
-
-    const deviceType: DeviceType = profile.deviceType ?? 'desktop';
-    const ladder = getLadderForDevice(deviceType);
-    // Quality ladder shown to the UI matches what the backend will
-    // actually serve: HDR sessions emit the HDR ladder (2160p/1080p/
-    // 720p/480p-hdr — no 360p/240p/144p rungs). Exposing the SDR
-    // ladder in HDR mode let users pick rungs that don't exist; the
-    // pin then failed to match, fell back to the full ladder, and the
-    // master ABR-ran across every HDR rung.
-    const qualityLadder = useHdrLadder
-      ? getHdrLadderForDevice(deviceType)
-      : ladder;
 
     // Surface a quality-reduction reason only when the chosen explicit rung is
     // an ACTUAL downscale or bitrate cut vs the source — not merely because a
