@@ -1,4 +1,7 @@
-import { sortReleasesByRelevance } from './release-rejection.helper';
+import {
+  releaseContainsAnyTitle,
+  sortReleasesByRelevance,
+} from './release-rejection.helper';
 
 type Row = Parameters<typeof sortReleasesByRelevance>[0][number];
 
@@ -69,5 +72,28 @@ describe('sortReleasesByRelevance', () => {
     });
     const clean = row({ id: 'clean', rank: 100, seeders: 1 });
     expect(order([rejected, clean])).toEqual(['clean', 'rejected']);
+  });
+});
+
+describe('releaseContainsAnyTitle', () => {
+  const rickFr = {
+    title: 'Rick et Morty',
+    originalTitle: 'Rick and Morty',
+    alternativeTitles: null,
+  };
+
+  it('matches an English scene release when the library title is localized', () => {
+    expect(
+      releaseContainsAnyTitle(
+        'Rick.and.Morty.S09E04.1080p.WEB-DL.x264-GROUP',
+        rickFr,
+      ),
+    ).toBe(true);
+  });
+
+  it('does not match an unrelated show', () => {
+    expect(
+      releaseContainsAnyTitle('Abbott.Elementary.S05E10.1080p.x264-GROUP', rickFr),
+    ).toBe(false);
   });
 });
