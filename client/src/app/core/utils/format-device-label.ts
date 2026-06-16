@@ -32,26 +32,30 @@ export function parseDeviceLabel(ua: string | null | undefined): DeviceLabelKey 
     return { key: 'system.device_mobile_app_ios' };
   }
 
+  // Electron desktop client (Windows / macOS / Linux): Chromium UA still reads
+  // as "Chrome", but the Electron token is authoritative.
+  if (/\bElectron\//.test(ua)) {
+    const os = detectOs(ua);
+    if (os) return { key: 'system.device_desktop_app_on_os', params: { os } };
+    return { key: 'system.device_desktop_app' };
+  }
+
   const browser = detectBrowser(ua);
-  const os =
-    /iPad/.test(ua)
-      ? 'iPadOS'
-      : /iPhone|iPod/.test(ua)
-        ? 'iOS'
-        : /Android/.test(ua)
-          ? 'Android'
-          : /Windows/.test(ua)
-            ? 'Windows'
-            : /Mac OS X|Macintosh/.test(ua)
-              ? 'macOS'
-              : /CrOS/.test(ua)
-                ? 'ChromeOS'
-                : /Linux/.test(ua)
-                  ? 'Linux'
-                  : null;
+  const os = detectOs(ua);
 
   if (!os) return { key: 'system.device_browser_only', params: { browser } };
   return { key: 'system.device_browser_on_os', params: { browser, os } };
+}
+
+function detectOs(ua: string): string | null {
+  if (/iPad/.test(ua)) return 'iPadOS';
+  if (/iPhone|iPod/.test(ua)) return 'iOS';
+  if (/Android/.test(ua)) return 'Android';
+  if (/Windows/.test(ua)) return 'Windows';
+  if (/Mac OS X|Macintosh/.test(ua)) return 'macOS';
+  if (/CrOS/.test(ua)) return 'ChromeOS';
+  if (/Linux/.test(ua)) return 'Linux';
+  return null;
 }
 
 function detectBrowser(ua: string): string {
