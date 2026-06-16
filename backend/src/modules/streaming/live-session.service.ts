@@ -47,6 +47,9 @@ export interface LiveSession {
   quality: string | null;
   kind: SessionKind;
   deviceLabel: string | null;
+  /** SSE connection that owns this playback — admin remote-control is routed
+   *  here so a second device on the same (user, file) is left untouched. */
+  sseConnectionId: string | null;
   startedAt: number;
   lastBeat: number;
   position: number;
@@ -114,6 +117,7 @@ export interface CreateLiveSessionInput {
   quality?: string | null;
   kind: SessionKind;
   deviceLabel?: string | null;
+  sseConnectionId?: string | null;
   position?: number;
   useTs?: boolean;
   audioPlan?: AudioPlan | null;
@@ -218,6 +222,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       quality: input.quality ?? null,
       kind: input.kind,
       deviceLabel: input.deviceLabel ?? null,
+      sseConnectionId: input.sseConnectionId ?? null,
       startedAt: now,
       lastBeat: now,
       position: input.position ?? 0,
@@ -281,6 +286,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       quality?: string | null;
       audioTrackIndex?: number | null;
       subtitleTrackIndex?: number | null;
+      sseConnectionId?: string | null;
     },
   ): LiveSession | null {
     const session = this.sessions.get(sessionId);
@@ -294,6 +300,9 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
     }
     if (payload.subtitleTrackIndex !== undefined) {
       session.subtitleTrackIndex = payload.subtitleTrackIndex;
+    }
+    if (payload.sseConnectionId) {
+      session.sseConnectionId = payload.sseConnectionId;
     }
     return session;
   }

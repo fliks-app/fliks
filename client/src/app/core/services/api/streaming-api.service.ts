@@ -9,6 +9,9 @@ import {
   BrowserDeviceProfileService,
   DeviceProfile,
 } from '../browser-device-profile.service';
+import { SseService } from '../sse.service';
+
+const SSE_CONNECTION_HEADER = 'X-Fliks-Sse-Connection';
 
 export type PlayMethod = 'DirectPlay' | 'DirectStream' | 'Transcode';
 
@@ -209,6 +212,12 @@ export class StreamingApiService {
   private readonly serverConfig = inject(ServerConfigService);
   private readonly castService = inject(CastService);
   private readonly deviceProfileService = inject(BrowserDeviceProfileService);
+  private readonly sse = inject(SseService);
+
+  private sseConnectionHeaders(): Record<string, string> | undefined {
+    const id = this.sse.connectionId();
+    return id ? { [SSE_CONNECTION_HEADER]: id } : undefined;
+  }
 
   /**
    * Token embedded into every streaming URL (manifest, segment, subtitle,
@@ -426,6 +435,7 @@ export class StreamingApiService {
       this.http.post<PlaybackInfoResponse>(
         `/api/stream/${mediaFileId}/playback-info${params}`,
         deviceProfile,
+        { headers: this.sseConnectionHeaders() },
       ),
     );
   }
@@ -511,6 +521,7 @@ export class StreamingApiService {
       this.http.put<HeartbeatResponse | null>(
         `/api/playback/media/${mediaId}/state`,
         body,
+        { headers: this.sseConnectionHeaders() },
       ),
     );
   }

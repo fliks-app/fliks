@@ -354,6 +354,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const currentUserId = this.authService.user()?.id;
     if (cmd.mediaFileId !== this.mediaFileId || cmd.userId !== currentUserId) return;
 
+    // The same user can watch the same file on several devices at once —
+    // only the targeted live session should react.
+    if (cmd.sessionId) {
+      const sid = this.activeSessionId();
+      if (!sid || cmd.sessionId !== sid) return;
+    }
+
     if (cmd.action === 'message') {
       const text = (cmd.message as string)?.trim();
       if (text) this.showAdminMessage(text);

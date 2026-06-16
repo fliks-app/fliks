@@ -688,6 +688,7 @@ export class StreamingController {
           ? 'remux'
           : 'transcode';
     const deviceLabel: string | null = req.get('user-agent') ?? null;
+    const sseConnectionId = req.get('x-fliks-sse-connection') ?? null;
 
     // Seed the session playhead with the effective resume offset, not the raw
     // `startAt`: a client that resumes by relying on the saved position (no
@@ -714,6 +715,7 @@ export class StreamingController {
       quality: typeof startQuality === 'string' ? startQuality : null,
       kind,
       deviceLabel,
+      sseConnectionId,
       position: resumePosition,
       useTs: effectiveUseTs,
       audioPlan: response.audioPlan,
@@ -814,10 +816,15 @@ export class StreamingController {
   stopLiveSession(@Param('sessionId') sessionId: string) {
     const live = this.liveSessions.get(sessionId);
     this.liveSessions.stop(sessionId);
-    // Release this (user, file)'s cached device name. The "now watching" row is
-    // the LiveSession itself, already stopped above.
+    // Release this (user, file)'s cached device name only when no sibling
+    // session remains — multi-device viewers share the same user+file pair.
     if (live?.userId != null) {
-      this.activeStreamTracker.unregister(live.userId, live.mediaFileId);
+      const remainingForFile = [...this.liveSessions.list()].filter(
+        (s) => s.userId === live.userId && s.mediaFileId === live.mediaFileId,
+      );
+      if (remainingForFile.length === 0) {
+        this.activeStreamTracker.unregister(live.userId, live.mediaFileId);
+      }
     }
     if (!live || !live.profileHash) return;
     // Only kill the underlying ffmpeg job(s) when no other live

@@ -13,6 +13,7 @@ describe('StreamingController.stopLiveSession', () => {
     const liveSessions = {
       get: jest.fn().mockReturnValue(live),
       stop: jest.fn(),
+      list: jest.fn().mockReturnValue([]),
       listForJob: jest.fn().mockReturnValue([]),
     };
     const activeStreamTracker = {
@@ -55,6 +56,7 @@ describe('StreamingController.stopLiveSession', () => {
       quality: null,
       kind: 'directplay',
       deviceLabel: null,
+      sseConnectionId: null,
       startedAt: Date.now(),
       lastBeat: Date.now(),
       position: 0,
@@ -121,6 +123,18 @@ describe('StreamingController.stopLiveSession', () => {
     controller.stopLiveSession('missing');
 
     expect(liveSessions.stop).toHaveBeenCalledWith('missing');
+    expect(activeStreamTracker.unregister).not.toHaveBeenCalled();
+  });
+
+  it('skips unregister when another live session remains on the same file', () => {
+    const live = makeLive({ profileHash: null, userId: 7, mediaFileId: 42 });
+    const { controller, liveSessions, activeStreamTracker } = makeController(live);
+    liveSessions.list.mockReturnValue([
+      { sessionId: 'sid-2', userId: 7, mediaFileId: 42 },
+    ]);
+
+    controller.stopLiveSession('sid-1');
+
     expect(activeStreamTracker.unregister).not.toHaveBeenCalled();
   });
 

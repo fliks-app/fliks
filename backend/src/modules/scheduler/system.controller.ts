@@ -688,28 +688,55 @@ export class SystemController {
       throw new BadRequestException('Session not found');
     }
 
-    this.eventsService.emitToUser(target.userId, {
-      type: 'player.command',
+    const live = this.liveSessions.get(sessionId);
+    const cmdEvent = {
+      type: 'player.command' as const,
+      sessionId,
       mediaFileId: target.mediaFileId,
       userId: target.userId,
       action: body.action,
       message: body.message,
-    });
+    };
+    const sseConnectionId = live?.sseConnectionId;
+    if (sseConnectionId && this.eventsService.hasConnection(sseConnectionId)) {
+      this.eventsService.emitToConnection(sseConnectionId, cmdEvent);
+    } else {
+      // Legacy clients without a bound SSE connection: every tab/device for
+      // this user receives the command — they must filter on sessionId.
+      this.eventsService.emitToUser(target.userId, cmdEvent);
+    }
 
     if (body.action === 'stop') {
+      this.liveSessions.stop(sessionId);
       if (target.isDirectPlay) {
-        this.activeStreamTracker.unregister(target.userId, target.mediaFileId);
+        const remainingForFile = [...this.liveSessions.list()].filter(
+          (s) =>
+            s.userId === target.userId &&
+            s.mediaFileId === target.mediaFileId,
+        );
+        if (remainingForFile.length === 0) {
+          this.activeStreamTracker.unregister(
+            target.userId,
+            target.mediaFileId,
+          );
+        }
       } else if (target.profileHash) {
-        // Admin stop is a force-kill: reap every ffmpeg variant of the job
-        // (main / early / remux / per-audio), not just the main one — the
-        // companions would otherwise idle on until the reaper sweeps them.
-        this.transcodingService.killSessionsForJob(
-          target.mediaFileId,
+        const remaining = this.liveSessions.listForJob(
           target.userId,
+          target.mediaFileId,
           target.profileHash,
         );
+        if (remaining.length === 0) {
+          // Admin stop is a force-kill: reap every ffmpeg variant of the job
+          // (main / early / remux / per-audio), not just the main one — the
+          // companions would otherwise idle on until the reaper sweeps them.
+          this.transcodingService.killSessionsForJob(
+            target.mediaFileId,
+            target.userId,
+            target.profileHash,
+          );
+        }
       }
-      this.liveSessions.stop(sessionId);
     }
 
     return { ok: true };

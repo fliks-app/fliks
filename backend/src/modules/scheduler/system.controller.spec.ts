@@ -34,6 +34,7 @@ describe('SystemController.activeStreams recency filter', () => {
       quality: null,
       kind: 'directplay',
       deviceLabel: null,
+      sseConnectionId: null,
       startedAt: new Date(overrides.lastBeat),
       position: 0,
       state: 'playing',
@@ -131,5 +132,115 @@ describe('SystemController.activeStreams recency filter', () => {
     const streams = await controller.activeStreams();
 
     expect(streams).toHaveLength(0);
+  });
+});
+
+describe('SystemController.sendPlayerCommand', () => {
+  function makeCommandController(liveOverrides: Record<string, unknown> = {}) {
+    const eventsService = {
+      emitToUser: jest.fn(),
+      emitToConnection: jest.fn(),
+      hasConnection: jest.fn().mockReturnValue(false),
+    };
+    const liveSession = {
+      sessionId: 'linux-sid',
+      userId: 1,
+      mediaFileId: 42,
+      profileHash: 'profile-linux',
+      kind: 'directplay' as const,
+      sseConnectionId: null,
+      ...liveOverrides,
+    };
+    const liveSessions = {
+      get: jest.fn((id: string) =>
+        id === 'linux-sid' ? liveSession : null,
+      ),
+      stop: jest.fn().mockReturnValue(true),
+      list: jest.fn().mockReturnValue([
+        {
+          sessionId: 'android-sid',
+          userId: 1,
+          mediaFileId: 42,
+        },
+      ]),
+      listForJob: jest.fn().mockReturnValue([]),
+    };
+    const activeStreamTracker = { unregister: jest.fn() };
+    const transcodingService = {
+      getActiveSessions: jest.fn().mockReturnValue([]),
+      killSessionsForJob: jest.fn(),
+    };
+
+    const controller = new SystemController(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      eventsService as never,
+      transcodingService as never,
+      {} as never,
+      activeStreamTracker as never,
+      liveSessions as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    return {
+      controller,
+      eventsService,
+      liveSessions,
+      activeStreamTracker,
+      transcodingService,
+    };
+  }
+
+  it('includes sessionId in the player.command SSE payload', () => {
+    const { controller, eventsService } = makeCommandController();
+
+    controller.sendPlayerCommand('linux-sid', { action: 'pause' });
+
+    expect(eventsService.emitToUser).toHaveBeenCalledWith(1, {
+      type: 'player.command',
+      sessionId: 'linux-sid',
+      mediaFileId: 42,
+      userId: 1,
+      action: 'pause',
+      message: undefined,
+    });
+    expect(eventsService.emitToConnection).not.toHaveBeenCalled();
+  });
+
+  it('routes player.command to the bound SSE connection when present', () => {
+    const { controller, eventsService } = makeCommandController({
+      sseConnectionId: 'conn-1',
+    });
+    eventsService.hasConnection.mockReturnValue(true);
+
+    controller.sendPlayerCommand('linux-sid', { action: 'pause' });
+
+    expect(eventsService.emitToConnection).toHaveBeenCalledWith('conn-1', {
+      type: 'player.command',
+      sessionId: 'linux-sid',
+      mediaFileId: 42,
+      userId: 1,
+      action: 'pause',
+      message: undefined,
+    });
+    expect(eventsService.emitToUser).not.toHaveBeenCalled();
+  });
+
+  it('stops only the targeted live session and keeps sibling viewers', () => {
+    const { controller, liveSessions, activeStreamTracker, transcodingService } =
+      makeCommandController();
+
+    controller.sendPlayerCommand('linux-sid', { action: 'stop' });
+
+    expect(liveSessions.stop).toHaveBeenCalledWith('linux-sid');
+    expect(activeStreamTracker.unregister).not.toHaveBeenCalled();
+    expect(transcodingService.killSessionsForJob).not.toHaveBeenCalled();
   });
 });
