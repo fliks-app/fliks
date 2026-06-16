@@ -36,7 +36,11 @@ import {
   AutoGrabScoringContext,
 } from '../media/auto-grab-pipeline.service';
 import { MarkersService } from '../markers/markers.service';
-import { rankFromQualityString, resolveSearchTitles, releaseContainsAnyTitle } from '../media/release-rejection.helper';
+import {
+  rankFromQualityString,
+  resolveSearchTitles,
+  titleMatchesExpectation,
+} from '../media/release-rejection.helper';
 import { parseSeasonEpisode } from '../../common/release-parsing';
 
 // Note: scoring/profile/blocklist/quality-definition wiring lives in
@@ -476,7 +480,7 @@ export class SchedulerService implements OnModuleInit {
 
       if (!this.isAvailable(media, today)) continue;
 
-      const { searchTitle, expectedTitles } = resolveSearchTitles(media);
+      const { searchTitle } = resolveSearchTitles(media);
       const query = [searchTitle, media.year].filter(Boolean).join(' ');
       const batches = await Promise.allSettled(
         indexers.map((ix) =>
@@ -498,7 +502,6 @@ export class SchedulerService implements OnModuleInit {
         scoring,
         mediaType: 'movie',
         label: media.title,
-        expectedTitle: expectedTitles,
         runtimeMinutes: media.runtime ?? 0,
         pendingCheck: async () => {
           const pending = await this.historyRepo.findOne({
@@ -633,7 +636,7 @@ export class SchedulerService implements OnModuleInit {
         ? [{ quality: fileQualityByEpId.get(ep.id) ?? null }]
         : [];
 
-      const { searchTitle, expectedTitles } = resolveSearchTitles(media);
+      const { searchTitle } = resolveSearchTitles(media);
       const batches = await Promise.allSettled(
         indexers.map((ix) =>
           this.torznab.searchSeries(
@@ -657,7 +660,6 @@ export class SchedulerService implements OnModuleInit {
         scoring,
         mediaType: 'series',
         label: `${media.title} ${epLabel}`,
-        expectedTitle: expectedTitles,
         // Episodes are typically 20-60 min; 30 min fallback for size check.
         runtimeMinutes: media.runtime ?? 30,
         seasonNumber: season.seasonNumber,
@@ -751,7 +753,7 @@ export class SchedulerService implements OnModuleInit {
         continue;
       }
 
-      const { searchTitle, expectedTitles } = resolveSearchTitles(media);
+      const { searchTitle } = resolveSearchTitles(media);
       const packBatches = await Promise.allSettled(
         indexers.map((ix) =>
           this.torznab.searchSeasonPack(ix, searchTitle, season.seasonNumber, {
@@ -799,7 +801,6 @@ export class SchedulerService implements OnModuleInit {
         scoring,
         mediaType: 'series',
         label: `${media.title} ${seasonLabel} (pack)`,
-        expectedTitle: expectedTitles,
         runtimeMinutes: (media.runtime ?? 45) * epCount,
         seasonNumber: season.seasonNumber,
         seasonId: season.id,
@@ -1360,28 +1361,42 @@ export class SchedulerService implements OnModuleInit {
     await this.rescanMediaList(candidates, 'RescanMissingFiles');
   }
 
-  /** Substring + year guard. Short common titles ("Up", "It", "Heat",
-   *  "Cars") otherwise match dozens of unrelated releases. */
-  private matchMovieRelease(
+  /** Token match via {@link resolveSearchTitles} + year guard for movies.
+   *  Short common titles ("Up", "It", "Heat", "Cars") otherwise match
+   *  dozens of unrelated releases. Series skip the year guard — air-year
+   *  mismatch is common across multi-season shows; the caller already
+   *  requires a recognisable season in the release title. */
+  private matchReleaseToMedia(
     release: TorznabRelease,
     candidates: Media[],
+    yearGuard: boolean,
   ): Media | undefined {
-    const lower = release.title.toLowerCase();
     return candidates.find((m) => {
-      if (!lower.includes(m.title.toLowerCase())) return false;
-      if (!m.year) return true;
+      if (
+        !titleMatchesExpectation(
+          release.title,
+          resolveSearchTitles(m).expectedTitles,
+        )
+      ) {
+        return false;
+      }
+      if (!yearGuard || !m.year) return true;
       return release.title.includes(String(m.year));
     });
   }
 
-  /** Substring match only — series air-year mismatch is common across the
-   *  release scene (multi-season shows). The caller has already required
-   *  a recognisable season in the release title. */
+  private matchMovieRelease(
+    release: TorznabRelease,
+    candidates: Media[],
+  ): Media | undefined {
+    return this.matchReleaseToMedia(release, candidates, true);
+  }
+
   private matchSeriesRelease(
     release: TorznabRelease,
     candidates: Media[],
   ): Media | undefined {
-    return candidates.find((m) => releaseContainsAnyTitle(release.title, m));
+    return this.matchReleaseToMedia(release, candidates, false);
   }
 
   private releaseTooFresh(
@@ -1396,8 +1411,8 @@ export class SchedulerService implements OnModuleInit {
   }
 
   /** RSS auto-grab wrapper — fills in fields shared by every release in
-   *  the feed loop (expectedTitle from alt-titles, source-title dedup)
-   *  and forwards the rest to {@link AutoGrabPipelineService.tryAutoGrab}. */
+   *  the feed loop (source-title dedup) and forwards the rest to
+   *  {@link AutoGrabPipelineService.tryAutoGrab}. */
   private async grabRssRelease(args: {
     media: Media;
     files: { quality?: string | null }[];
@@ -1422,7 +1437,6 @@ export class SchedulerService implements OnModuleInit {
       scoring: args.scoring,
       mediaType: args.mediaType,
       label: args.label,
-      expectedTitle: resolveSearchTitles(args.media).expectedTitles,
       runtimeMinutes: args.runtimeMinutes,
       seasonNumber: args.seasonNumber,
       pendingCheck: async () => {

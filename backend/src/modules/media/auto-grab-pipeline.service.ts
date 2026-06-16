@@ -21,6 +21,7 @@ import {
   SizeLimits,
   buildIndexerMinSeeders,
   rankFromQualityString,
+  resolveSearchTitles,
   scoreAndSortReleases,
 } from './release-rejection.helper';
 
@@ -178,8 +179,9 @@ export class AutoGrabPipelineService {
     mediaType: 'movie' | 'series';
     /** Free-form label for logs — e.g. `"Dune (2021)"` or `"Show S01E03"`. */
     label: string;
-    /** Expected media title(s) — pass canonical + TMDB/TVDB alternatives
-     *  so localised release names still match. */
+    /** Expected media title(s) — defaults to {@link resolveSearchTitles}
+     *  (canonical + original + TMDB/TVDB alternatives). Pass explicitly
+     *  only when a custom query overrides the media title. */
     expectedTitle?: string | string[];
     runtimeMinutes: number;
     /** Per-source pending check (e.g. episode-scoped lookup). */
@@ -244,6 +246,8 @@ export class AutoGrabPipelineService {
     const { allowed, allowedLangs } = this.profiles.resolveAllowedForMedia(
       args.media,
     );
+    const expectedTitle =
+      args.expectedTitle ?? resolveSearchTitles(args.media).expectedTitles;
     const sorted = await scoreAndSortReleases(
       releases,
       {
@@ -253,7 +257,7 @@ export class AutoGrabPipelineService {
         indexerMinSeeders: args.scoring.indexerMinSeeders,
         indexerUnknownLang: args.scoring.indexerUnknownLang,
         runtimeMinutes: args.runtimeMinutes,
-        expectedTitle: args.expectedTitle,
+        expectedTitle,
       },
       {
         scoreCustomFormats: (title, meta) =>

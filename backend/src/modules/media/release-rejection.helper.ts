@@ -92,24 +92,6 @@ export function resolveSearchTitles(
   return { searchTitle, expectedTitles };
 }
 
-/** RSS / feed matching: true when the release title plausibly refers to the
- *  show under any of its known names (canonical, original, TMDB/TVDB aliases).
- *  Uses the same token logic as {@link titleMatchesExpectation} so dotted
- *  scene names like `Rick.and.Morty` match `Rick and Morty`. */
-export function releaseContainsAnyTitle(
-  releaseTitle: string,
-  media: {
-    title: string;
-    originalTitle?: string | null;
-    alternativeTitles?: string[] | null;
-  },
-): boolean {
-  return titleMatchesExpectation(
-    releaseTitle,
-    resolveSearchTitles(media).expectedTitles,
-  );
-}
-
 /**
  * Returns the codec-adjusted absolute deviation of a release's MB/h
  * rate from the quality's preferred MB/h, normalised by preferred.
