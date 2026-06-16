@@ -45,6 +45,7 @@ export class QualityProfilesComponent implements OnInit {
   readonly formName = signal('');
   readonly formCutoff = signal(16);
   readonly formUpgrade = signal(true);
+  readonly formResolutionUpgradeOnly = signal(false);
   readonly allowedIds = signal<Set<number>>(new Set());
 
   ngOnInit() {
@@ -84,6 +85,7 @@ export class QualityProfilesComponent implements OnInit {
     this.formName.set('');
     this.formCutoff.set(16);
     this.formUpgrade.set(true);
+    this.formResolutionUpgradeOnly.set(false);
     this.allowedIds.set(new Set());
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -93,6 +95,7 @@ export class QualityProfilesComponent implements OnInit {
     this.formName.set(p.name);
     this.formCutoff.set(p.cutoff);
     this.formUpgrade.set(p.upgradeAllowed);
+    this.formResolutionUpgradeOnly.set(p.resolutionUpgradeOnly ?? false);
     const allowed = new Set(
       p.items.filter((i) => i.allowed).map((i) => i.quality.id),
     );
@@ -122,6 +125,7 @@ export class QualityProfilesComponent implements OnInit {
       name: this.formName().trim(),
       cutoff: this.formCutoff(),
       upgradeAllowed: this.formUpgrade(),
+      resolutionUpgradeOnly: this.formResolutionUpgradeOnly(),
       items: defs.map((q, index) => ({
         qualityId: q.id,
         qualityName: q.name,

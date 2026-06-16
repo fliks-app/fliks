@@ -132,6 +132,7 @@ export class ProfilesService {
       name: dto.name,
       cutoff: dto.cutoff,
       upgradeAllowed: dto.upgradeAllowed ?? false,
+      resolutionUpgradeOnly: dto.resolutionUpgradeOnly ?? false,
       items: dto.items.map((i) => ({
         quality: {
           id: i.qualityId,
@@ -166,6 +167,8 @@ export class ProfilesService {
     profile.name = dto.name;
     profile.cutoff = dto.cutoff;
     profile.upgradeAllowed = dto.upgradeAllowed ?? profile.upgradeAllowed;
+    profile.resolutionUpgradeOnly =
+      dto.resolutionUpgradeOnly ?? profile.resolutionUpgradeOnly;
     profile.items = dto.items.map((i) => ({
       quality: {
         id: i.qualityId,

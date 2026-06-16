@@ -34,6 +34,7 @@ import {
   buildIndexerMinSeeders,
   buildAllowedQualityIds,
   allowedAudioLanguageIds,
+  maxResolutionFromQualityStrings,
   resolveSearchTitles,
   scoreAndSortReleases,
   sortReleasesByRelevance,
@@ -428,8 +429,19 @@ export class MovieDownloadService {
     );
 
     // Only keep releases that are strictly better than current AND within cutoff
+    const currentResolution = profile.resolutionUpgradeOnly
+      ? maxResolutionFromQualityStrings(files)
+      : 0;
     return sortReleasesByRelevance(
-      rows.filter((r) => r.rank > currentRank && r.rank <= cutoffRank),
+      rows.filter((r) => {
+        if (r.rank <= currentRank || r.rank > cutoffRank) return false;
+        if (profile.resolutionUpgradeOnly) {
+          const releaseResolution = parseReleaseQuality(r.title).quality
+            .resolution;
+          if (releaseResolution <= currentResolution) return false;
+        }
+        return true;
+      }),
     );
   }
 
@@ -520,6 +532,14 @@ export class MovieDownloadService {
       throw new BadRequestException(
         `This release (${parsed.quality.name}) is not better than the current quality`,
       );
+    }
+    if (profile.resolutionUpgradeOnly) {
+      const currentResolution = maxResolutionFromQualityStrings(files);
+      if (parsed.quality.resolution <= currentResolution) {
+        throw new BadRequestException(
+          `This release (${parsed.quality.resolution}p) does not increase resolution above the current file (${currentResolution}p)`,
+        );
+      }
     }
     if (parsed.quality.rank > cutoffRank) {
       throw new BadRequestException(

@@ -1296,6 +1296,7 @@
       "field_name": "Nom du profil",
       "field_cutoff": "Qualité seuil (cutoff)",
       "field_upgrade": "Autoriser les mises à jour de qualité",
+      "field_resolution_upgrade_only": "Mise à jour uniquement si la résolution augmente",
       "qualities_group": "Qualités autorisées pour la recherche",
       "save": "Enregistrer",
       "cancel": "Annuler",

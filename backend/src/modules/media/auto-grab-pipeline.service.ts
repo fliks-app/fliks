@@ -7,7 +7,7 @@ import { DownloadHistory } from './entities/download-history.entity';
 import { buildGrabHistoryRow } from './grab-history.util';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { TorznabRelease } from '../indexers/torznab.service';
-import { parseSeasonEpisode } from '../../common/release-parsing';
+import { parseReleaseQuality, parseSeasonEpisode } from '../../common/release-parsing';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
@@ -20,6 +20,7 @@ import {
   ScoredRelease,
   SizeLimits,
   buildIndexerMinSeeders,
+  maxResolutionFromQualityStrings,
   rankFromQualityString,
   resolveSearchTitles,
   scoreAndSortReleases,
@@ -265,12 +266,27 @@ export class AutoGrabPipelineService {
         isBlocked: (title) => this.blocklist.isBlocked(title),
       },
     );
-    const pick = sorted.find(
-      (r) =>
-        r.rejections.length === 0 &&
-        r.rank > decision.minRankExclusive &&
-        r.rank <= decision.maxRankInclusive,
-    );
+    const resolutionUpgradeOnly =
+      decision.mode === 'upgrade' &&
+      !!args.media.qualityProfile?.resolutionUpgradeOnly;
+    const currentResolution = resolutionUpgradeOnly
+      ? maxResolutionFromQualityStrings(args.files)
+      : 0;
+    const pick = sorted.find((r) => {
+      if (r.rejections.length > 0) return false;
+      if (
+        r.rank <= decision.minRankExclusive ||
+        r.rank > decision.maxRankInclusive
+      ) {
+        return false;
+      }
+      if (resolutionUpgradeOnly) {
+        const releaseResolution = parseReleaseQuality(r.title).quality
+          .resolution;
+        if (releaseResolution <= currentResolution) return false;
+      }
+      return true;
+    });
     if (!pick) {
       const topRejections = sorted
         .slice(0, 3)

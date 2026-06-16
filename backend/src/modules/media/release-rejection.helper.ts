@@ -23,6 +23,18 @@ export function rankFromQualityString(
   return parseReleaseQuality(quality).quality.rank;
 }
 
+/** Highest resolution (px height) among on-disk file quality strings. */
+export function maxResolutionFromQualityStrings(
+  files: { quality?: string | null }[],
+): number {
+  let max = 0;
+  for (const f of files) {
+    const res = parseReleaseQuality(f.quality ?? '').quality.resolution;
+    if (res > max) max = res;
+  }
+  return max;
+}
+
 /**
  * Convert a language profile's audio language items into a set of app-language IDs
  * for rejection checking. Empty set = no language restriction.

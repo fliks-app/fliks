@@ -97,7 +97,7 @@
             }
           </select>
         </label>
-        <label class="label cursor-pointer justify-start gap-3">
+        <label class="label cursor-pointer justify-start items-center gap-3">
           <input
             type="checkbox"
             class="toggle toggle-sm toggle-primary"
@@ -106,6 +106,17 @@
           />
           <span class="label-text">{{ 'settings.quality_profiles.field_upgrade' | translate }}</span>
         </label>
+        @if (formUpgrade()) {
+          <label class="label cursor-pointer justify-start items-center gap-3">
+            <input
+              type="checkbox"
+              class="toggle toggle-sm toggle-primary"
+              [ngModel]="formResolutionUpgradeOnly()"
+              (ngModelChange)="formResolutionUpgradeOnly.set($event)"
+            />
+            <span class="label-text">{{ 'settings.quality_profiles.field_resolution_upgrade_only' | translate }}</span>
+          </label>
+        }
         <div>
           <p class="text-sm font-medium mb-2">{{ 'settings.quality_profiles.qualities_group' | translate }}</p>
           <div class="rounded-lg border border-base-200 divide-y divide-base-200 max-h-[28rem] overflow-y-auto">
