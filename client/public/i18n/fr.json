@@ -977,6 +977,8 @@
     "device_browser_only": "{{browser}}",
     "device_mobile_app_android": "Application mobile (Android)",
     "device_mobile_app_ios": "Application mobile (iOS)",
+    "device_desktop_app": "Application de bureau",
+    "device_desktop_app_on_os": "Application {{os}}",
     "device_android_tv": "Android TV",
     "device_sony_bravia": "Sony Bravia",
     "device_nvidia_shield": "NVIDIA Shield",
