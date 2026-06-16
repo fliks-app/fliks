@@ -104,6 +104,33 @@ export function resolveSearchTitles(
   return { searchTitle, expectedTitles };
 }
 
+/** True when a release title plausibly refers to `media` under any of its
+ *  known names. Movies may pass `requireYearInTitle` so a same-year
+ *  unrelated hit (e.g. two 2004 theatricals) is rejected. */
+export function releaseMatchesMedia(
+  releaseTitle: string,
+  media: {
+    title: string;
+    originalTitle?: string | null;
+    alternativeTitles?: string[] | null;
+    year?: number | null;
+  },
+  options?: { requireYearInTitle?: boolean },
+): boolean {
+  if (
+    !titleMatchesExpectation(
+      releaseTitle,
+      resolveSearchTitles(media).expectedTitles,
+    )
+  ) {
+    return false;
+  }
+  if (options?.requireYearInTitle && media.year) {
+    return releaseTitle.includes(String(media.year));
+  }
+  return true;
+}
+
 /**
  * Returns the codec-adjusted absolute deviation of a release's MB/h
  * rate from the quality's preferred MB/h, normalised by preferred.

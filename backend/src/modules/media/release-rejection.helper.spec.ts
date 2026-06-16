@@ -1,4 +1,5 @@
 import {
+  releaseMatchesMedia,
   resolveSearchTitles,
   sortReleasesByRelevance,
   titleMatchesExpectation,
@@ -73,6 +74,35 @@ describe('sortReleasesByRelevance', () => {
     });
     const clean = row({ id: 'clean', rank: 100, seeders: 1 });
     expect(order([rejected, clean])).toEqual(['clean', 'rejected']);
+  });
+});
+
+describe('releaseMatchesMedia', () => {
+  const movie = {
+    title: 'Titre localisé',
+    originalTitle: 'Original Movie Title',
+    year: 2004,
+    alternativeTitles: null,
+  };
+
+  it('rejects an unrelated same-year theatrical', () => {
+    expect(
+      releaseMatchesMedia(
+        'Other.Movie.2004.2160p.UHD.BluRay.x265-GROUP',
+        movie,
+        { requireYearInTitle: true },
+      ),
+    ).toBe(false);
+  });
+
+  it('accepts a release named after the original title', () => {
+    expect(
+      releaseMatchesMedia(
+        'Original.Movie.Title.2004.1080p.WEB-DL.x264-GROUP',
+        movie,
+        { requireYearInTitle: true },
+      ),
+    ).toBe(true);
   });
 });
 
