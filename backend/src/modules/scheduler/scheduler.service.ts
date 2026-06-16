@@ -460,7 +460,15 @@ export class SchedulerService implements OnModuleInit {
     if (mediaIds?.length) {
       qb.andWhere('m.id IN (:...mediaIds)', { mediaIds });
     }
-    const candidates = await qb.getMany();
+    const allCandidates = await qb.getMany();
+    const candidates = allCandidates.filter((m) =>
+      this.autoGrab.shouldSearchMissing(m, m.files ?? []),
+    );
+    if (allCandidates.length !== candidates.length) {
+      this.log.log(
+        `SearchMissing[movies]: ${candidates.length}/${allCandidates.length} need a search (${allCandidates.length - candidates.length} at cutoff, unprofiled, or upgrades disabled)`,
+      );
+    }
 
     this.logTargetedCandidateCount('movies', mediaIds, candidates.length);
     if (!candidates.length) return;
@@ -552,7 +560,7 @@ export class SchedulerService implements OnModuleInit {
     if (mediaIds?.length) {
       qb.andWhere('media.id IN (:...mediaIds)', { mediaIds });
     }
-    const episodes = await qb
+    let episodes = await qb
       .select([
         'ep.id',
         'ep.episodeNumber',
@@ -578,12 +586,11 @@ export class SchedulerService implements OnModuleInit {
       .addSelect('lp')
       .getMany();
 
-    this.logTargetedCandidateCount('episodes', mediaIds, episodes.length);
-    if (!episodes.length) return;
-
     // Batch-load the linked MediaFile quality for upgrade-candidate episodes
-    // so the cutoff comparison runs in JS without an N+1.
-    const upgradeEpIds = episodes.filter((e) => e.hasFile).map((e) => e.id);
+    // so the cutoff comparison runs without an N+1.
+    const upgradeEpIds = episodes
+      .filter((e) => e.hasFile)
+      .map((e) => e.id);
     const fileQualityByEpId = new Map<number, string>();
     if (upgradeEpIds.length) {
       const fileRows = await this.mediaFileRepo
@@ -604,6 +611,25 @@ export class SchedulerService implements OnModuleInit {
           fileQualityByEpId.set(row.episodeId, row.quality);
       }
     }
+
+    const episodeFiles = (ep: Episode): { quality?: string | null }[] =>
+      ep.hasFile ? [{ quality: fileQualityByEpId.get(ep.id) ?? null }] : [];
+
+    const allEpisodes = episodes;
+    const filteredEpisodes = allEpisodes.filter((ep) => {
+      const media = (ep as unknown as { season: Season }).season
+        .media as Media;
+      return this.autoGrab.shouldSearchMissing(media, episodeFiles(ep));
+    });
+    if (allEpisodes.length !== filteredEpisodes.length) {
+      this.log.log(
+        `SearchMissing[episodes]: ${filteredEpisodes.length}/${allEpisodes.length} need a search (${allEpisodes.length - filteredEpisodes.length} at cutoff, unprofiled, or upgrades disabled)`,
+      );
+    }
+    episodes = filteredEpisodes;
+
+    this.logTargetedCandidateCount('episodes', mediaIds, episodes.length);
+    if (!episodes.length) return;
 
     // Season-pack-first: a season missing more than one episode is better
     // served by one (usually far better seeded) pack than by scattered
