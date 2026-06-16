@@ -38,8 +38,8 @@ import {
 import { MarkersService } from '../markers/markers.service';
 import {
   rankFromQualityString,
+  releaseMatchesMedia,
   resolveSearchTitles,
-  titleMatchesExpectation,
 } from '../media/release-rejection.helper';
 import { parseSeasonEpisode, matchesSeasonPack } from '../../common/release-parsing';
 
@@ -490,9 +490,11 @@ export class SchedulerService implements OnModuleInit {
           }),
         ),
       );
-      const releases = batches.flatMap((r) =>
-        r.status === 'fulfilled' ? r.value : [],
-      );
+      const releases = batches
+        .flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
+        .filter((r) =>
+          releaseMatchesMedia(r.title, media, { requireYearInTitle: true }),
+        );
 
       await this.autoGrab.tryAutoGrab({
         media,
@@ -1371,18 +1373,11 @@ export class SchedulerService implements OnModuleInit {
     candidates: Media[],
     yearGuard: boolean,
   ): Media | undefined {
-    return candidates.find((m) => {
-      if (
-        !titleMatchesExpectation(
-          release.title,
-          resolveSearchTitles(m).expectedTitles,
-        )
-      ) {
-        return false;
-      }
-      if (!yearGuard || !m.year) return true;
-      return release.title.includes(String(m.year));
-    });
+    return candidates.find((m) =>
+      releaseMatchesMedia(release.title, m, {
+        requireYearInTitle: yearGuard,
+      }),
+    );
   }
 
   private matchMovieRelease(

@@ -158,14 +158,14 @@ export class TorrentAutoMatcher {
       .where('m.type = :type', { type })
       .andWhere(
         `(
-          regexp_replace(LOWER(m.title), '[^a-z0-9]+', '', 'g') LIKE :key
-          OR regexp_replace(LOWER(COALESCE(m."originalTitle", '')), '[^a-z0-9]+', '', 'g') LIKE :key
+          regexp_replace(LOWER(m.title), '[^a-z0-9]+', '', 'g') = :key
+          OR regexp_replace(LOWER(COALESCE(m."originalTitle", '')), '[^a-z0-9]+', '', 'g') = :key
           OR EXISTS (
             SELECT 1 FROM jsonb_array_elements_text(m."alternativeTitles") alt
-            WHERE regexp_replace(LOWER(alt), '[^a-z0-9]+', '', 'g') LIKE :key
+            WHERE regexp_replace(LOWER(alt), '[^a-z0-9]+', '', 'g') = :key
           )
         )`,
-        { key: `%${parsed.searchKey}%`, type },
+        { key: parsed.searchKey, type },
       )
       .take(50)
       .getMany();
