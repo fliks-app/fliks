@@ -950,6 +950,7 @@
     "tab_logs": "Journaux",
     "tab_streams": "Activités vidéos",
     "streams_subtitle": "Sessions de lecture en cours sur l'ensemble des clients.",
+    "streams_container_direct": "Lecture directe",
     "streams_audio_direct": "Lecture directe",
     "streams_audio_copy": "Copie bitstream ({{codec}})",
     "streams_audio_transcode": "Transcodage ({{codec}})",

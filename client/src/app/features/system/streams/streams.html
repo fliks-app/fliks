@@ -55,7 +55,9 @@
             <div>
               <span class="font-medium">{{ (s.container ?? '?') | uppercase }}</span>
               @if (s.videoBitrate) { ({{ formatBitrate(s.videoBitrate) }}) }
-              @if (s.outputContainer) {
+              @if (s.mode === 'directplay') {
+                <div class="text-base-content/50">&rarr; {{ 'system.streams_container_direct' | translate }}</div>
+              } @else if (s.outputContainer) {
                 <div class="text-base-content/50">&rarr; {{ s.outputContainer }}
                   @if (s.outputBitrate) { ({{ formatBitrate(s.outputBitrate) }}) }
                 </div>
