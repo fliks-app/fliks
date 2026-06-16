@@ -165,6 +165,16 @@ export class AutoGrabPipelineService {
     };
   }
 
+  /** Whether SearchMissing should query indexers for this media/files pair.
+   *  False when already at cutoff, upgrades disabled, or unprofiled. */
+  shouldSearchMissing(
+    media: Media,
+    files: { quality?: string | null }[],
+  ): boolean {
+    const decision = this.classifyForSearch(media, files);
+    return decision.mode === 'missing' || decision.mode === 'upgrade';
+  }
+
   /**
    * High-level auto-grab attempt. Returns `true` when a release was sent to
    * qBittorrent + recorded in `DownloadHistory`, `false` when the media is
