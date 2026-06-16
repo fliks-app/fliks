@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Subject, Observable, Subscription } from 'rxjs';
-import { filter, map } from 'rxjs/operators';
+import { randomUUID } from 'crypto';
 
 export type SseEvent =
   | {
@@ -81,7 +81,14 @@ export type SseEvent =
     }
   | { type: 'rescan.failed'; mediaId: number; title: string; error: string }
   | {
+      // Handshake on SSE connect — tells the client which connection id to
+      // bind to its live sessions so admin remote-control targets one device.
+      type: 'sse.connected';
+      connectionId: string;
+    }
+  | {
       type: 'player.command';
+      sessionId: string;
       mediaFileId: number;
       userId: number;
       action: 'pause' | 'play' | 'stop' | 'message';
@@ -144,40 +151,86 @@ export type SseEvent =
     };
 
 /**
- * Wraps an `SseEvent` with its delivery audience. `audience: null` is a
- * broadcast (everyone connected); a numeric array restricts the SSE push to
- * those user IDs. Backend-internal `subscribe()` listeners ignore the audience
- * and always see the event — the audience only gates the client-facing stream.
+ * Wraps an `SseEvent` with its delivery audience.
+ *   - `audience: null` + `connectionIds: null` → every SSE connection.
+ *   - `audience: [userId, …]` → every connection owned by those users.
+ *   - `connectionIds: [id, …]` → only those specific SSE connections.
+ * Backend-internal `subscribe()` listeners ignore the audience and always see
+ * the event — the audience only gates the client-facing stream.
  */
 interface SseEnvelope {
   audience: number[] | null;
+  connectionIds: string[] | null;
   event: SseEvent;
 }
 
 @Injectable()
 export class EventsService {
   private readonly subject = new Subject<SseEnvelope>();
+  private readonly connections = new Map<string, { userId: number }>();
 
   /** Broadcast to every connected client. */
   emit(event: SseEvent): void {
-    this.subject.next({ audience: null, event });
+    this.subject.next({ audience: null, connectionIds: null, event });
   }
 
   /** Deliver only to the given user's SSE connections. */
   emitToUser(userId: number, event: SseEvent): void {
-    this.subject.next({ audience: [userId], event });
+    this.subject.next({ audience: [userId], connectionIds: null, event });
   }
 
   /** Deliver only to the given users' SSE connections. Empty list = nobody. */
   emitToUsers(userIds: number[], event: SseEvent): void {
-    this.subject.next({ audience: userIds, event });
+    this.subject.next({ audience: userIds, connectionIds: null, event });
+  }
+
+  /** Deliver only to one SSE connection (multi-device remote control). */
+  emitToConnection(connectionId: string, event: SseEvent): void {
+    if (!this.connections.has(connectionId)) return;
+    this.subject.next({
+      audience: null,
+      connectionIds: [connectionId],
+      event,
+    });
+  }
+
+  hasConnection(connectionId: string): boolean {
+    return this.connections.has(connectionId);
   }
 
   getStream(userId: number): Observable<MessageEvent> {
-    return this.subject.asObservable().pipe(
-      filter((env) => env.audience === null || env.audience.includes(userId)),
-      map((env) => ({ data: JSON.stringify(env.event) }) as MessageEvent),
-    );
+    return new Observable((subscriber) => {
+      const connectionId = randomUUID();
+      this.connections.set(connectionId, { userId });
+
+      subscriber.next({
+        data: JSON.stringify({
+          type: 'sse.connected',
+          connectionId,
+        } satisfies SseEvent),
+      } as MessageEvent);
+
+      const sub = this.subject.subscribe((env) => {
+        if (!this.shouldDeliver(env, userId, connectionId)) return;
+        subscriber.next({ data: JSON.stringify(env.event) } as MessageEvent);
+      });
+
+      return () => {
+        sub.unsubscribe();
+        this.connections.delete(connectionId);
+      };
+    });
+  }
+
+  private shouldDeliver(
+    env: SseEnvelope,
+    userId: number,
+    connectionId: string,
+  ): boolean {
+    if (env.audience === null && env.connectionIds === null) return true;
+    if (env.connectionIds?.includes(connectionId)) return true;
+    if (env.audience?.includes(userId)) return true;
+    return false;
   }
 
   /** Backend-internal listener — used by services that react to other modules' events. */

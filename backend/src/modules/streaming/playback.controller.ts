@@ -202,9 +202,12 @@ export class PlaybackController {
       quality?: string | null;
       audioTrackIndex?: number | null;
       subtitleTrackIndex?: number | null;
+      sseConnectionId?: string;
     },
   ): Promise<{ sessionLost?: true; state?: unknown } | null> {
     const user = req.user as User;
+    const sseConnectionId =
+      body.sseConnectionId ?? req.get('x-fliks-sse-connection') ?? undefined;
 
     let stateChanged = false;
     let sessionLost = false;
@@ -217,6 +220,7 @@ export class PlaybackController {
         quality: body.quality,
         audioTrackIndex: body.audioTrackIndex,
         subtitleTrackIndex: body.subtitleTrackIndex,
+        sseConnectionId,
       });
       stateChanged = !!updated && !!body.state && previousState !== body.state;
       // The client believes the session is alive but the registry

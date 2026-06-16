@@ -30,6 +30,9 @@ export class SseService implements OnDestroy {
 
   readonly activeProgress = signal<Map<string, TaskProgress>>(new Map());
   readonly lastEvent = signal<SseEvent | null>(null);
+  /** Issued by the backend on SSE connect — bound to live sessions so admin
+   *  remote-control reaches only this device/tab. */
+  readonly connectionId = signal<string | null>(null);
   private eventSource: EventSource | null = null;
   private retryDelay = 5000;
 
@@ -60,6 +63,13 @@ export class SseService implements OnDestroy {
     this.eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as SseEvent;
+        if (data.type === 'sse.connected') {
+          const id = data['connectionId'];
+          if (typeof id === 'string' && id) {
+            this.connectionId.set(id);
+          }
+          return;
+        }
         this.handleEvent(data);
         // Don't update lastEvent for high-frequency progress events
         // (handled via dedicated signals/stores instead)
@@ -73,6 +83,7 @@ export class SseService implements OnDestroy {
     this.eventSource.onerror = () => {
       this.eventSource?.close();
       this.eventSource = null;
+      this.connectionId.set(null);
       if (!navigator.onLine) {
         // Offline — wait for online event instead of polling
         window.addEventListener('online', () => this.connect(), { once: true });
