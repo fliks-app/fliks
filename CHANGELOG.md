@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.12.1](https://github.com/fliks-app/fliks/compare/v1.12.0...v1.12.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* **admin-streams:** label electron desktop clients as applications ([#516](https://github.com/fliks-app/fliks/issues/516)) ([5435925](https://github.com/fliks-app/fliks/commit/5435925df00b8075ab5636487a29f6ccca7a0af8))
+* **admin-streams:** show direct-play label under container row ([#514](https://github.com/fliks-app/fliks/issues/514)) ([077fd18](https://github.com/fliks-app/fliks/commit/077fd18b01a55af68b1d0c78714f5120054befb9))
+* **auto-grab:** match season packs and optional resolution upgrades ([#520](https://github.com/fliks-app/fliks/issues/520)) ([d05a0f6](https://github.com/fliks-app/fliks/commit/d05a0f62dab989f191fb60dd00d423c12e94a5ac))
+* **auto-grab:** reject wrong-movie hits in search missing ([#521](https://github.com/fliks-app/fliks/issues/521)) ([7989973](https://github.com/fliks-app/fliks/commit/79899737dd889e33f9b064d87659fd6b1dd48d94))
+* **scheduler:** skip at-cutoff media before indexer search ([#522](https://github.com/fliks-app/fliks/issues/522)) ([1417103](https://github.com/fliks-app/fliks/commit/141710336704d7c635ce30c97e381cc75adb7710))
+* **scheduler:** use original title for auto series grabs ([#518](https://github.com/fliks-app/fliks/issues/518)) ([f3bd0ab](https://github.com/fliks-app/fliks/commit/f3bd0ab43dcf27ffac2a7fe4b9ad464f97975796))
+* **streaming:** scope admin stop to one device session ([#517](https://github.com/fliks-app/fliks/issues/517)) ([1b639c1](https://github.com/fliks-app/fliks/commit/1b639c1ed8de84c9cb240b2ac7211549fd2a9e4e))
+
 ## [1.12.0](https://github.com/fliks-app/fliks/compare/v1.11.0...v1.12.0) (2026-06-15)
 
 
