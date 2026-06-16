@@ -36,7 +36,7 @@ import {
   AutoGrabScoringContext,
 } from '../media/auto-grab-pipeline.service';
 import { MarkersService } from '../markers/markers.service';
-import { rankFromQualityString } from '../media/release-rejection.helper';
+import { rankFromQualityString, resolveSearchTitles, releaseContainsAnyTitle } from '../media/release-rejection.helper';
 import { parseSeasonEpisode } from '../../common/release-parsing';
 
 // Note: scoring/profile/blocklist/quality-definition wiring lives in
@@ -476,7 +476,8 @@ export class SchedulerService implements OnModuleInit {
 
       if (!this.isAvailable(media, today)) continue;
 
-      const query = [media.title, media.year].filter(Boolean).join(' ');
+      const { searchTitle, expectedTitles } = resolveSearchTitles(media);
+      const query = [searchTitle, media.year].filter(Boolean).join(' ');
       const batches = await Promise.allSettled(
         indexers.map((ix) =>
           this.torznab.searchMovie(ix, query, {
@@ -497,7 +498,7 @@ export class SchedulerService implements OnModuleInit {
         scoring,
         mediaType: 'movie',
         label: media.title,
-        expectedTitle: [media.title, ...(media.alternativeTitles ?? [])],
+        expectedTitle: expectedTitles,
         runtimeMinutes: media.runtime ?? 0,
         pendingCheck: async () => {
           const pending = await this.historyRepo.findOne({
@@ -558,6 +559,7 @@ export class SchedulerService implements OnModuleInit {
       .addSelect([
         'media.id',
         'media.title',
+        'media.originalTitle',
         'media.year',
         'media.runtime',
         'media.tvdbId',
@@ -631,11 +633,12 @@ export class SchedulerService implements OnModuleInit {
         ? [{ quality: fileQualityByEpId.get(ep.id) ?? null }]
         : [];
 
+      const { searchTitle, expectedTitles } = resolveSearchTitles(media);
       const batches = await Promise.allSettled(
         indexers.map((ix) =>
           this.torznab.searchSeries(
             ix,
-            media.title,
+            searchTitle,
             season.seasonNumber,
             ep.episodeNumber,
             { tvdbId: media.tvdbId, imdbId: media.imdbId },
@@ -654,7 +657,7 @@ export class SchedulerService implements OnModuleInit {
         scoring,
         mediaType: 'series',
         label: `${media.title} ${epLabel}`,
-        expectedTitle: [media.title, ...(media.alternativeTitles ?? [])],
+        expectedTitle: expectedTitles,
         // Episodes are typically 20-60 min; 30 min fallback for size check.
         runtimeMinutes: media.runtime ?? 30,
         seasonNumber: season.seasonNumber,
@@ -748,9 +751,10 @@ export class SchedulerService implements OnModuleInit {
         continue;
       }
 
+      const { searchTitle, expectedTitles } = resolveSearchTitles(media);
       const packBatches = await Promise.allSettled(
         indexers.map((ix) =>
-          this.torznab.searchSeasonPack(ix, media.title, season.seasonNumber, {
+          this.torznab.searchSeasonPack(ix, searchTitle, season.seasonNumber, {
             tvdbId: media.tvdbId,
             imdbId: media.imdbId,
           }),
@@ -795,7 +799,7 @@ export class SchedulerService implements OnModuleInit {
         scoring,
         mediaType: 'series',
         label: `${media.title} ${seasonLabel} (pack)`,
-        expectedTitle: [media.title, ...(media.alternativeTitles ?? [])],
+        expectedTitle: expectedTitles,
         runtimeMinutes: (media.runtime ?? 45) * epCount,
         seasonNumber: season.seasonNumber,
         seasonId: season.id,
@@ -1377,8 +1381,7 @@ export class SchedulerService implements OnModuleInit {
     release: TorznabRelease,
     candidates: Media[],
   ): Media | undefined {
-    const lower = release.title.toLowerCase();
-    return candidates.find((m) => lower.includes(m.title.toLowerCase()));
+    return candidates.find((m) => releaseContainsAnyTitle(release.title, m));
   }
 
   private releaseTooFresh(
@@ -1419,10 +1422,7 @@ export class SchedulerService implements OnModuleInit {
       scoring: args.scoring,
       mediaType: args.mediaType,
       label: args.label,
-      expectedTitle: [
-        args.media.title,
-        ...(args.media.alternativeTitles ?? []),
-      ],
+      expectedTitle: resolveSearchTitles(args.media).expectedTitles,
       runtimeMinutes: args.runtimeMinutes,
       seasonNumber: args.seasonNumber,
       pendingCheck: async () => {
