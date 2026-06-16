@@ -14,6 +14,12 @@ export class QualityProfile extends BaseEntity {
 
   @Column({ default: false })
   upgradeAllowed: boolean;
+
+  /** When true, auto/manual upgrades only grab releases whose resolution
+   *  exceeds the best on-disk file — skips same-resolution tier hops
+   *  (e.g. WEBDL-1080p → Bluray-1080p). */
+  @Column({ default: false })
+  resolutionUpgradeOnly: boolean;
 }
 
 export interface QualityProfileItem {

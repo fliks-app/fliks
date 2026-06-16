@@ -77,27 +77,27 @@ describe('sortReleasesByRelevance', () => {
 });
 
 describe('resolveSearchTitles + titleMatchesExpectation', () => {
-  const rickFr = {
-    title: 'Rick et Morty',
-    originalTitle: 'Rick and Morty',
+  const localizedShow = {
+    title: 'Série localisée',
+    originalTitle: 'Original Show Title',
     alternativeTitles: null,
   };
 
   it('matches an English scene release when the library title is localized', () => {
-    const { expectedTitles } = resolveSearchTitles(rickFr);
+    const { expectedTitles } = resolveSearchTitles(localizedShow);
     expect(
       titleMatchesExpectation(
-        'Rick.and.Morty.S09E04.1080p.WEB-DL.x264-GROUP',
+        'Original.Show.Title.S09E04.1080p.WEB-DL.x264-GROUP',
         expectedTitles,
       ),
     ).toBe(true);
   });
 
   it('does not match an unrelated show', () => {
-    const { expectedTitles } = resolveSearchTitles(rickFr);
+    const { expectedTitles } = resolveSearchTitles(localizedShow);
     expect(
       titleMatchesExpectation(
-        'Abbott.Elementary.S05E10.1080p.x264-GROUP',
+        'Other.Series.S05E10.1080p.x264-GROUP',
         expectedTitles,
       ),
     ).toBe(false);

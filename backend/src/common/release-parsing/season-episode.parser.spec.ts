@@ -1,4 +1,4 @@
-import { parseSeasonEpisode } from './season-episode.parser';
+import { matchesSeasonPack, parseSeasonEpisode } from './season-episode.parser';
 
 describe('parseSeasonEpisode', () => {
   it('parses SxxExx', () => {
@@ -54,5 +54,35 @@ describe('parseSeasonEpisode', () => {
     expect(r.isFullSeason).toBe(false);
     expect(r.season).toBe(2);
     expect(r.episode).toBe(5);
+  });
+
+  it('parses season-only Sxx before x265 codec tags', () => {
+    expect(
+      parseSeasonEpisode('Show.Name.Spinoff.S01.1080p.x265-GROUP'),
+    ).toEqual({
+      season: 1,
+      episode: null,
+      isFullSeason: true,
+    });
+  });
+
+  it('does not treat x265 codec as a legacy season×episode tag', () => {
+    expect(parseSeasonEpisode('Show.Name.S09.1080p.x265-GROUP')).toEqual({
+      season: 9,
+      episode: null,
+      isFullSeason: true,
+    });
+  });
+});
+
+describe('matchesSeasonPack', () => {
+  const s01Pack = 'Show.Name.Spinoff.S01.1080p.x265-GROUP';
+
+  it('matches the parsed season', () => {
+    expect(matchesSeasonPack(s01Pack, 1)).toBe(true);
+  });
+
+  it('rejects a different target season', () => {
+    expect(matchesSeasonPack(s01Pack, 9)).toBe(false);
   });
 });

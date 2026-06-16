@@ -23,6 +23,7 @@ import {
   parseReleaseLanguage,
   parseReleaseQuality,
   parseSeasonEpisode,
+  matchesSeasonPack,
   resolveUnknownLanguage,
 } from '../../common/release-parsing';
 import { maxAllowedRank } from '../../common/constants/app-qualities';
@@ -683,7 +684,7 @@ export class EpisodeDownloadService {
     const packRows = await Promise.all(
       packBatches
         .flat()
-        .filter((r) => parseSeasonEpisode(r.title).isFullSeason)
+        .filter((r) => matchesSeasonPack(r.title, season.seasonNumber))
         .map((r) =>
           this.buildReleaseRow(
             r,

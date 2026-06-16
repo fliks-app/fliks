@@ -43,6 +43,10 @@ export class CreateQualityProfileDto {
   @IsOptional()
   upgradeAllowed?: boolean;
 
+  @IsBoolean()
+  @IsOptional()
+  resolutionUpgradeOnly?: boolean;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => QualityItemDto)

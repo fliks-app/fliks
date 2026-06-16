@@ -26,7 +26,9 @@ export interface ParsedSeasonEpisode {
 const SE_RE = /\bS(\d{1,2})E(\d{1,3})\b/i;
 const SEASON_ONLY_RE = /\bS(\d{1,2})(?!E\d)\b/i;
 const SEASON_KEYWORD_RE = /\bSeason[\s._-]?(\d{1,2})\b/i;
-const LEGACY_RE = /\b(\d{1,2})x(\d{1,3})\b/;
+/** Legacy `1x02` — require a digit before `x` so `x265` / `HEVCx265`
+ *  never parse as season 26 episode 5. */
+const LEGACY_RE = /(?<![a-zA-Z])(\d{1,2})x(\d{1,3})\b/i;
 
 export function parseSeasonEpisode(title: string): ParsedSeasonEpisode {
   // 1. SxxExx — most common.
@@ -66,4 +68,13 @@ export function parseSeasonEpisode(title: string): ParsedSeasonEpisode {
     };
   }
   return { season: null, episode: null, isFullSeason: false };
+}
+
+/** True when `title` is a full-season pack for the requested season. */
+export function matchesSeasonPack(
+  title: string,
+  seasonNumber: number,
+): boolean {
+  const p = parseSeasonEpisode(title);
+  return p.isFullSeason && p.season === seasonNumber;
 }

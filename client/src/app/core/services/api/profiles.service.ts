@@ -7,6 +7,7 @@ export interface QualityProfile {
   name: string;
   cutoff: number;
   upgradeAllowed: boolean;
+  resolutionUpgradeOnly: boolean;
   items: {
     quality: { id: number; name: string; resolution: number; source: string };
     allowed: boolean;
@@ -19,6 +20,7 @@ export interface CreateQualityProfilePayload {
   name: string;
   cutoff: number;
   upgradeAllowed?: boolean;
+  resolutionUpgradeOnly?: boolean;
   items: {
     qualityId: number;
     qualityName: string;

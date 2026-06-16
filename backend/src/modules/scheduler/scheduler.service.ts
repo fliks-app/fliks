@@ -41,7 +41,7 @@ import {
   resolveSearchTitles,
   titleMatchesExpectation,
 } from '../media/release-rejection.helper';
-import { parseSeasonEpisode } from '../../common/release-parsing';
+import { parseSeasonEpisode, matchesSeasonPack } from '../../common/release-parsing';
 
 // Note: scoring/profile/blocklist/quality-definition wiring lives in
 // AutoGrabPipelineService. This file only orchestrates the high-level
@@ -767,7 +767,7 @@ export class SchedulerService implements OnModuleInit {
       // never a stray single episode that slipped into the result set.
       const packs = packBatches
         .flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
-        .filter((r) => parseSeasonEpisode(r.title).isFullSeason);
+        .filter((r) => matchesSeasonPack(r.title, season.seasonNumber));
       if (!packs.length) continue;
 
       // Cutoff gate for the pack. The per-episode path hands each file's
