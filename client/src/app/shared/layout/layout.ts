@@ -127,9 +127,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   private readonly documentTitleEffect = effect(() => {
     this.langTick();
-    const app = this.translate.instant('app.name');
     const main = this.navbar.mobileNavTitle();
-    this.title.setTitle(main ? `${main} · ${app}` : app);
+    if (!main) return;
+    this.title.setTitle(`${main} · ${this.translate.instant('app.name')}`);
   });
   private lastScrollY = 0;
   private readonly onScroll = () => {
