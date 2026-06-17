@@ -168,13 +168,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Set the browser tab title from the loaded media. The player route lives
    *  outside the main layout, so the layout's title effect doesn't run here —
    *  without this the tab keeps whichever title the previous page set (e.g.
-   *  "Accueil" when launched from the home continue-watching row). */
+   *  "Accueil" when launched from the home continue-watching row). Keep that
+   *  previous title until the media name resolves so the tab doesn't flicker
+   *  through a bare app name in between. */
   private readonly tabTitleEffect = effect(() => {
     const media = this.mediaTitle();
     const episode = this.episodeTitle();
-    const app = this.translate.instant('app.name');
     const main = episode ? (media ? `${media} - ${episode}` : episode) : media;
-    this.title.setTitle(main ? `${main} · ${app}` : app);
+    if (!main) return;
+    this.title.setTitle(`${main} · ${this.translate.instant('app.name')}`);
   });
 
   // New extracted services
