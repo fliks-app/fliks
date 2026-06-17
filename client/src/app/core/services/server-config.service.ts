@@ -67,8 +67,32 @@ export class ServerConfigService {
 
   async save(url: string): Promise<void> {
     const cleaned = url.replace(/\/+$/, '');
-    this._serverUrl.set(cleaned);
-    await this.writePreference(STORAGE_KEY, cleaned);
+    const canonical = this.isNative
+      ? await this.resolveCanonicalUrl(cleaned)
+      : cleaned;
+    this._serverUrl.set(canonical);
+    await this.writePreference(STORAGE_KEY, canonical);
+  }
+
+  /**
+   * Follow any redirect the host issues on its first request (e.g. an
+   * http→https upgrade) and return the post-redirect base. A 301/302 downgrades
+   * a POST to GET, so a server reached through such a redirect would turn the
+   * login POST into `GET /api/auth/login`. Storing the canonical base makes
+   * every API call hit the final host directly. Best effort: the entered URL is
+   * kept on any network/CORS failure.
+   */
+  private async resolveCanonicalUrl(base: string): Promise<string> {
+    if (!base) return base;
+    const probe = '/api/auth/me';
+    try {
+      const res = await fetch(base + probe, { method: 'GET', redirect: 'follow' });
+      const idx = res.url.indexOf(probe);
+      if (idx > 0) return res.url.slice(0, idx);
+    } catch {
+      /* unreachable / blocked — keep the entered URL */
+    }
+    return base;
   }
 
   async clear(): Promise<void> {
