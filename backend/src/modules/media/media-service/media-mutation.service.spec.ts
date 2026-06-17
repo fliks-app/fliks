@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { MediaMutationService } from './media-mutation.service';
 import { Season } from '../entities/season.entity';
 
@@ -139,5 +141,90 @@ describe('MediaMutationService monitoring cascade', () => {
     await service.updateSeason(3, { preferredProvider: 'tvdb' });
 
     expect(episodeRecorders).toHaveLength(0);
+  });
+});
+
+describe('MediaMutationService remove disk cleanup', () => {
+  let mediaRepo: { remove: jest.Mock };
+  let mediaServers: { dispatch: jest.Mock };
+  let query: { findOne: jest.Mock };
+  let requestLifecycle: { onMediaRemoved: jest.Mock };
+  let rmSpy: jest.SpyInstance;
+  let service: MediaMutationService;
+
+  /** Build a media whose virtual `path` getter resolves to root/folderName. */
+  function mediaIn(root: string | undefined, folderName: string | undefined) {
+    return {
+      id: 1,
+      title: 'placeholder',
+      library: root ? { path: root } : undefined,
+      get path() {
+        return this.library?.path && folderName
+          ? path.join(this.library.path, folderName)
+          : null;
+      },
+    };
+  }
+
+  beforeEach(() => {
+    mediaRepo = { remove: jest.fn() };
+    mediaServers = { dispatch: jest.fn() };
+    query = { findOne: jest.fn() };
+    requestLifecycle = { onMediaRemoved: jest.fn() };
+    rmSpy = jest.spyOn(fs.promises, 'rm').mockResolvedValue(undefined);
+
+    service = new MediaMutationService(
+      mediaRepo as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      mediaServers as never,
+      query as never,
+      {} as never,
+      requestLifecycle as never,
+    );
+  });
+
+  afterEach(() => rmSpy.mockRestore());
+
+  it('deletes the media folder on disk before removing the DB record', async () => {
+    query.findOne.mockResolvedValue(mediaIn('/library/movies', 'Some Movie (2020)'));
+
+    await service.remove(1);
+
+    expect(rmSpy).toHaveBeenCalledWith(
+      path.resolve('/library/movies/Some Movie (2020)'),
+      { recursive: true, force: true },
+    );
+    expect(mediaRepo.remove).toHaveBeenCalled();
+  });
+
+  it('skips disk deletion when the media has no folder path', async () => {
+    query.findOne.mockResolvedValue(mediaIn('/library/movies', undefined));
+
+    await service.remove(1);
+
+    expect(rmSpy).not.toHaveBeenCalled();
+    expect(mediaRepo.remove).toHaveBeenCalled();
+  });
+
+  it('refuses to delete a path that escapes the library root', async () => {
+    query.findOne.mockResolvedValue(mediaIn('/library/movies', '../../etc'));
+
+    await service.remove(1);
+
+    expect(rmSpy).not.toHaveBeenCalled();
+    expect(mediaRepo.remove).toHaveBeenCalled();
+  });
+
+  it('refuses to delete the library root itself', async () => {
+    query.findOne.mockResolvedValue(mediaIn('/library/movies', '.'));
+
+    await service.remove(1);
+
+    expect(rmSpy).not.toHaveBeenCalled();
+    expect(mediaRepo.remove).toHaveBeenCalled();
   });
 });

@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { promises as fsp } from 'fs';
+import * as nodePath from 'path';
 import { Media } from '../entities/media.entity';
 import { MediaFile } from '../entities/media-file.entity';
 import { Season } from '../entities/season.entity';
@@ -198,11 +200,39 @@ export class MediaMutationService {
     const title = media.title;
     const mediaPath = media.path;
     await this.requestLifecycle.onMediaRemoved(media);
+    await this.removeMediaFolderFromDisk(media);
     await this.mediaRepo.remove(media);
     void this.mediaServers.dispatch('media.deleted', {
       title,
       path: mediaPath,
     });
+  }
+
+  /**
+   * Delete the media's own folder on disk so removing it from the library
+   * leaves no orphan video/subtitle/artwork files behind. Guarded to stay
+   * strictly inside the library root: it never touches the root itself and
+   * rejects a folderName that would escape it (e.g. via '..').
+   */
+  private async removeMediaFolderFromDisk(media: Media): Promise<void> {
+    const root = media.library?.path;
+    const dir = media.path;
+    if (!root || !dir) return;
+
+    const resolvedRoot = nodePath.resolve(root);
+    const resolvedDir = nodePath.resolve(dir);
+    if (
+      resolvedDir === resolvedRoot ||
+      !resolvedDir.startsWith(resolvedRoot + nodePath.sep)
+    ) {
+      this.log.warn(
+        `Refusing to delete media folder outside library root: ${resolvedDir}`,
+      );
+      return;
+    }
+
+    await fsp.rm(resolvedDir, { recursive: true, force: true });
+    this.log.log(`Deleted media folder on disk: ${resolvedDir}`);
   }
 
   async updateSeason(
