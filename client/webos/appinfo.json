@@ -1,6 +1,6 @@
 {
   "id": "media.fliks.app",
-  "version": "1.12.2",
+  "version": "1.12.3",
   "vendor": "Fliks",
   "type": "web",
   "main": "index.html",

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.3](https://github.com/fliks-app/fliks/compare/v1.12.2...v1.12.3) (2026-06-17)
+
+
+### Bug Fixes
+
+* **setup:** store the post-redirect server URL so login POST isn't downgraded ([#528](https://github.com/fliks-app/fliks/issues/528)) ([e8d20b0](https://github.com/fliks-app/fliks/commit/e8d20b0795ead610fa493e72ca5598546f7adbdc))
+
 ## [1.12.2](https://github.com/fliks-app/fliks/compare/v1.12.1...v1.12.2) (2026-06-17)
 
 

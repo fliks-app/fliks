@@ -12,7 +12,7 @@
   - `<access origin="*" subdomains="true"/>` lets the SPA reach any
     Fliks backend the user configured via pairing.
 -->
-<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="https://fliks.media/tizen" version="1.12.2" viewmodes="maximized">
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="https://fliks.media/tizen" version="1.12.3" viewmodes="maximized">
   <name>Fliks</name>
   <description>Fliks media app for Samsung Smart TV</description>
   <author email="dev@fliks.media" href="https://fliks.media">Fliks</author>
