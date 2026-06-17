@@ -80,6 +80,7 @@ export type SseEvent =
       subtitleRemovedDuplicates?: number;
     }
   | { type: 'rescan.failed'; mediaId: number; title: string; error: string }
+  | { type: 'media.files.delete_failed'; mediaId: number; title: string }
   | {
       // Handshake on SSE connect — tells the client which connection id to
       // bind to its live sessions so admin remote-control targets one device.

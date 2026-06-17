@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { MediaMutationService } from './media-mutation.service';
 import { Season } from '../entities/season.entity';
 
@@ -139,5 +141,98 @@ describe('MediaMutationService monitoring cascade', () => {
     await service.updateSeason(3, { preferredProvider: 'tvdb' });
 
     expect(episodeRecorders).toHaveLength(0);
+  });
+});
+
+describe('MediaMutationService remove disk cleanup', () => {
+  let mediaRepo: { remove: jest.Mock };
+  let mediaServers: { dispatch: jest.Mock };
+  let query: { findOne: jest.Mock };
+  let requestLifecycle: { onMediaRemoved: jest.Mock };
+  let rmSpy: jest.SpyInstance;
+  let service: MediaMutationService;
+
+  /** Build a media whose virtual `path` getter resolves to root/folderName. */
+  function mediaIn(root: string | undefined, folderName: string | undefined) {
+    return {
+      id: 1,
+      title: 'placeholder',
+      library: root ? { path: root } : undefined,
+      get path() {
+        return this.library?.path && folderName
+          ? path.join(this.library.path, folderName)
+          : null;
+      },
+    };
+  }
+
+  beforeEach(() => {
+    mediaRepo = { remove: jest.fn() };
+    mediaServers = { dispatch: jest.fn() };
+    query = { findOne: jest.fn() };
+    requestLifecycle = { onMediaRemoved: jest.fn() };
+    rmSpy = jest.spyOn(fs.promises, 'rm').mockResolvedValue(undefined);
+
+    service = new MediaMutationService(
+      mediaRepo as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      mediaServers as never,
+      query as never,
+      {} as never,
+      requestLifecycle as never,
+    );
+  });
+
+  afterEach(() => rmSpy.mockRestore());
+
+  it('removes the DB record and returns the folder to delete', async () => {
+    query.findOne.mockResolvedValue(mediaIn('/library/movies', 'Some Movie (2020)'));
+
+    const result = await service.remove(1);
+
+    expect(result.diskPath).toBe(path.resolve('/library/movies/Some Movie (2020)'));
+    expect(mediaRepo.remove).toHaveBeenCalled();
+    // Disk deletion is deferred to the caller, not done inside remove().
+    expect(rmSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns no folder when the media has no folder path', async () => {
+    query.findOne.mockResolvedValue(mediaIn('/library/movies', undefined));
+
+    const result = await service.remove(1);
+
+    expect(result.diskPath).toBeNull();
+    expect(mediaRepo.remove).toHaveBeenCalled();
+  });
+
+  it('returns no folder when the path escapes the library root', async () => {
+    query.findOne.mockResolvedValue(mediaIn('/library/movies', '../../etc'));
+
+    const result = await service.remove(1);
+
+    expect(result.diskPath).toBeNull();
+    expect(mediaRepo.remove).toHaveBeenCalled();
+  });
+
+  it('returns no folder when the path resolves to the library root', async () => {
+    query.findOne.mockResolvedValue(mediaIn('/library/movies', '.'));
+
+    const result = await service.remove(1);
+
+    expect(result.diskPath).toBeNull();
+    expect(mediaRepo.remove).toHaveBeenCalled();
+  });
+
+  it('deleteMediaFolder removes the folder recursively', async () => {
+    await service.deleteMediaFolder('/library/movies/Some Movie (2020)');
+
+    expect(rmSpy).toHaveBeenCalledWith('/library/movies/Some Movie (2020)', {
+      recursive: true,
+      force: true,
+    });
   });
 });

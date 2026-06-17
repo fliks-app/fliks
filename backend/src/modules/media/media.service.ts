@@ -160,6 +160,10 @@ export class MediaService {
     return this.mutation.remove(id);
   }
 
+  deleteMediaFolder(dir: string) {
+    return this.mutation.deleteMediaFolder(dir);
+  }
+
   updateSeason(
     seasonId: number,
     patch: { monitored?: boolean; preferredProvider?: 'tmdb' | 'tvdb' | null },
