@@ -283,6 +283,10 @@ export class MpvPlayer extends EventEmitter {
     const cmd: unknown[] = ['loadfile', opts.url, 'replace', 0];
     if (opts.startTime && opts.startTime > 0) cmd.push(`start=${opts.startTime}`);
     await this.command(cmd);
+    // The persistent mpv keeps its pause state across loads; force playback so a
+    // freshly opened file always autoplays. The JS side treats this engine like
+    // the mobile native player (playWhenReady) and never calls play() itself.
+    await this.set('pause', false);
     for (const s of opts.subtitles ?? []) {
       await this.command(['sub-add', s.url, 'auto', s.label ?? '', s.language ?? '']);
     }
