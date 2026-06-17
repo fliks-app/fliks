@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.12.2](https://github.com/fliks-app/fliks/compare/v1.12.1...v1.12.2) (2026-06-17)
+
+
+### Bug Fixes
+
+* **desktop:** force mpv unpause on load so reopened player autoplays ([#523](https://github.com/fliks-app/fliks/issues/523)) ([b6efe53](https://github.com/fliks-app/fliks/commit/b6efe53b9c711f9cddfd4d82039e56034ea36a04))
+* **media-detail:** show the full media path in the file info panel ([#526](https://github.com/fliks-app/fliks/issues/526)) ([f658b0b](https://github.com/fliks-app/fliks/commit/f658b0b06f33b0dea7df73000a0e2df02d7ce5ed))
+* **media:** delete on-disk files when removing media from the library ([#525](https://github.com/fliks-app/fliks/issues/525)) ([24967ce](https://github.com/fliks-app/fliks/commit/24967cededef2fcb5562904aa23a8e8f5a559138))
+* **player:** set tab title from playing media without flicker ([#527](https://github.com/fliks-app/fliks/issues/527)) ([945568b](https://github.com/fliks-app/fliks/commit/945568b522aae9676d59c40e9787466ce5e61956))
+
 ## [1.12.1](https://github.com/fliks-app/fliks/compare/v1.12.0...v1.12.1) (2026-06-16)
 
 
