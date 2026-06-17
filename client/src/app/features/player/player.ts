@@ -13,6 +13,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { Title } from '@angular/platform-browser';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
@@ -162,6 +163,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly navbar = inject(NavbarService);
   private readonly translate = inject(TranslateService);
+  private readonly title = inject(Title);
+
+  /** Set the browser tab title from the loaded media. The player route lives
+   *  outside the main layout, so the layout's title effect doesn't run here —
+   *  without this the tab keeps whichever title the previous page set (e.g.
+   *  "Accueil" when launched from the home continue-watching row). Keep that
+   *  previous title until the media name resolves so the tab doesn't flicker
+   *  through a bare app name in between. */
+  private readonly tabTitleEffect = effect(() => {
+    const media = this.mediaTitle();
+    const episode = this.episodeTitle();
+    const main = episode ? (media ? `${media} - ${episode}` : episode) : media;
+    if (!main) return;
+    this.title.setTitle(`${main} · ${this.translate.instant('app.name')}`);
+  });
 
   // New extracted services
   private readonly state = inject(PlayerStateService);
