@@ -8,6 +8,7 @@ import {
   RelationId,
   Index,
 } from 'typeorm';
+import { Expose } from 'class-transformer';
 import * as nodePath from 'path';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import {
@@ -102,6 +103,7 @@ export class Media extends BaseEntity {
   folderName: string;
 
   /** Virtual computed path: library.path + '/' + folderName */
+  @Expose()
   get path(): string | null {
     return this.library?.path && this.folderName
       ? nodePath.join(this.library.path, this.folderName)
