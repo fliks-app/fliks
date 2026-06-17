@@ -4,9 +4,6 @@
 
     <!-- File info from DB (always available) -->
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1 text-sm">
-      @if (mediaPath()) {
-        <div class="col-span-full"><span class="text-base-content/50">{{ 'file_info.folder' | translate }} :&nbsp;</span><span class="font-medium break-all">{{ mediaPath() }}</span></div>
-      }
       @if (fullPath()) {
         <div class="col-span-full"><span class="text-base-content/50">{{ 'file_info.path' | translate }} :&nbsp;</span><span class="font-medium break-all">{{ fullPath() }}</span></div>
       }
