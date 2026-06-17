@@ -189,42 +189,50 @@ describe('MediaMutationService remove disk cleanup', () => {
 
   afterEach(() => rmSpy.mockRestore());
 
-  it('deletes the media folder on disk before removing the DB record', async () => {
+  it('removes the DB record and returns the folder to delete', async () => {
     query.findOne.mockResolvedValue(mediaIn('/library/movies', 'Some Movie (2020)'));
 
-    await service.remove(1);
+    const result = await service.remove(1);
 
-    expect(rmSpy).toHaveBeenCalledWith(
-      path.resolve('/library/movies/Some Movie (2020)'),
-      { recursive: true, force: true },
-    );
+    expect(result.diskPath).toBe(path.resolve('/library/movies/Some Movie (2020)'));
     expect(mediaRepo.remove).toHaveBeenCalled();
+    // Disk deletion is deferred to the caller, not done inside remove().
+    expect(rmSpy).not.toHaveBeenCalled();
   });
 
-  it('skips disk deletion when the media has no folder path', async () => {
+  it('returns no folder when the media has no folder path', async () => {
     query.findOne.mockResolvedValue(mediaIn('/library/movies', undefined));
 
-    await service.remove(1);
+    const result = await service.remove(1);
 
-    expect(rmSpy).not.toHaveBeenCalled();
+    expect(result.diskPath).toBeNull();
     expect(mediaRepo.remove).toHaveBeenCalled();
   });
 
-  it('refuses to delete a path that escapes the library root', async () => {
+  it('returns no folder when the path escapes the library root', async () => {
     query.findOne.mockResolvedValue(mediaIn('/library/movies', '../../etc'));
 
-    await service.remove(1);
+    const result = await service.remove(1);
 
-    expect(rmSpy).not.toHaveBeenCalled();
+    expect(result.diskPath).toBeNull();
     expect(mediaRepo.remove).toHaveBeenCalled();
   });
 
-  it('refuses to delete the library root itself', async () => {
+  it('returns no folder when the path resolves to the library root', async () => {
     query.findOne.mockResolvedValue(mediaIn('/library/movies', '.'));
 
-    await service.remove(1);
+    const result = await service.remove(1);
 
-    expect(rmSpy).not.toHaveBeenCalled();
+    expect(result.diskPath).toBeNull();
     expect(mediaRepo.remove).toHaveBeenCalled();
+  });
+
+  it('deleteMediaFolder removes the folder recursively', async () => {
+    await service.deleteMediaFolder('/library/movies/Some Movie (2020)');
+
+    expect(rmSpy).toHaveBeenCalledWith('/library/movies/Some Movie (2020)', {
+      recursive: true,
+      force: true,
+    });
   });
 });

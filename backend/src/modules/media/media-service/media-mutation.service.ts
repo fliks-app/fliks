@@ -195,29 +195,35 @@ export class MediaMutationService {
     return { updated: result.affected ?? 0 };
   }
 
-  async remove(id: number): Promise<void> {
+  /**
+   * Remove the media's DB records and return the on-disk folder that should be
+   * deleted afterwards (or null when there is nothing safe to delete). Disk
+   * deletion is left to the caller so it can run after the HTTP response and
+   * report a failure back to the initiating client without blocking the UI.
+   */
+  async remove(id: number): Promise<{ title: string; diskPath: string | null }> {
     const media = await this.query.findOne(id);
     const title = media.title;
     const mediaPath = media.path;
+    const diskPath = this.resolveSafeMediaDir(media);
     await this.requestLifecycle.onMediaRemoved(media);
-    await this.removeMediaFolderFromDisk(media);
     await this.mediaRepo.remove(media);
     void this.mediaServers.dispatch('media.deleted', {
       title,
       path: mediaPath,
     });
+    return { title, diskPath };
   }
 
   /**
-   * Delete the media's own folder on disk so removing it from the library
-   * leaves no orphan video/subtitle/artwork files behind. Guarded to stay
-   * strictly inside the library root: it never touches the root itself and
-   * rejects a folderName that would escape it (e.g. via '..').
+   * Resolve the media's own folder, guarded to stay strictly inside the library
+   * root: it never returns the root itself and rejects a folderName that would
+   * escape it (e.g. via '..'). Returns null when there is no folder to delete.
    */
-  private async removeMediaFolderFromDisk(media: Media): Promise<void> {
+  private resolveSafeMediaDir(media: Media): string | null {
     const root = media.library?.path;
     const dir = media.path;
-    if (!root || !dir) return;
+    if (!root || !dir) return null;
 
     const resolvedRoot = nodePath.resolve(root);
     const resolvedDir = nodePath.resolve(dir);
@@ -228,11 +234,19 @@ export class MediaMutationService {
       this.log.warn(
         `Refusing to delete media folder outside library root: ${resolvedDir}`,
       );
-      return;
+      return null;
     }
+    return resolvedDir;
+  }
 
-    await fsp.rm(resolvedDir, { recursive: true, force: true });
-    this.log.log(`Deleted media folder on disk: ${resolvedDir}`);
+  /**
+   * Delete a media folder on disk so removing it from the library leaves no
+   * orphan video/subtitle/artwork files behind. Tolerates an already-missing
+   * folder; throws on any other filesystem error so the caller can notify.
+   */
+  async deleteMediaFolder(dir: string): Promise<void> {
+    await fsp.rm(dir, { recursive: true, force: true });
+    this.log.log(`Deleted media folder on disk: ${dir}`);
   }
 
   async updateSeason(

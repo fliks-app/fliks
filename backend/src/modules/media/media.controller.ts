@@ -782,7 +782,23 @@ export class MediaController {
     @CurrentUser() user: User,
   ) {
     await this.assertMediaAccessible(id, user);
-    return this.mediaService.remove(id);
+    const { title, diskPath } = await this.mediaService.remove(id);
+    // Delete the files after the response so the UI isn't blocked by disk I/O.
+    // On failure, notify only the client that triggered the deletion.
+    if (diskPath) {
+      void this.mediaService.deleteMediaFolder(diskPath).catch((err) => {
+        this.logger.error(
+          `Media file deletion failed — id=${id} title="${title}" path="${diskPath}" error=${(err as Error).message}`,
+          err instanceof Error ? err.stack : err,
+        );
+        this.eventsService.emitToUser(user.id, {
+          type: 'media.files.delete_failed',
+          mediaId: id,
+          title,
+        });
+      });
+    }
+    return { ok: true };
   }
 
   @Patch('seasons/:seasonId')

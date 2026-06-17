@@ -178,6 +178,13 @@ export class SseService implements OnDestroy {
           this.translate.instant('sse.rescan_failed', { title: event['title'] ?? '' }),
         );
         break;
+      case 'media.files.delete_failed':
+        this.toast.error(
+          this.translate.instant('sse.media_files_delete_failed', {
+            title: event['title'] ?? '',
+          }),
+        );
+        break;
     }
   }
 
