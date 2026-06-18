@@ -39,7 +39,11 @@ import {
   getSegmentDuration,
   secondsToSegmentIndex,
 } from './transcoding/constants';
-import { getRemuxSegmentDurations } from './transcoding/segment-boundaries';
+import {
+  getRemuxSegmentDurations,
+  boundariesFromDurations,
+  secondsToSegmentIndex as boundarySecondsToIndex,
+} from './transcoding/segment-boundaries';
 import { LiveSessionRegistry } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
@@ -324,11 +328,26 @@ export class StreamingController {
   private resumeFloor(
     live: { position: number } | null | undefined,
     existing: { startSegment?: number | null } | null | undefined,
+    boundaries?: number[],
   ): number {
-    return Math.max(
-      existing?.startSegment ?? 0,
-      live ? secondsToSegmentIndex(live.position) : 0,
-    );
+    const posIndex = live
+      ? boundaries
+        ? boundarySecondsToIndex(boundaries, live.position)
+        : secondsToSegmentIndex(live.position)
+      : 0;
+    return Math.max(existing?.startSegment ?? 0, posIndex);
+  }
+
+  /** Keyframe-aligned cumulative segment boundaries for the remux/copy path,
+   *  or null when keyframes can't be probed (fall back to the uniform grid).
+   *  Cached per file by {@link getRemuxSegmentDurations}; the playlist is
+   *  fetched before segments, so segment-time lookups hit the warm cache. */
+  private async remuxBoundaries(
+    absolutePath: string,
+    durationHint = 0,
+  ): Promise<number[] | null> {
+    const durations = await getRemuxSegmentDurations(absolutePath, durationHint);
+    return durations ? boundariesFromDurations(durations) : null;
   }
 
   /**
@@ -344,8 +363,9 @@ export class StreamingController {
     existing: { startSegment?: number | null } | null | undefined,
     isInit: boolean,
     segIndex: number,
+    boundaries?: number[],
   ): number {
-    return isInit ? this.resumeFloor(live, existing) : segIndex;
+    return isInit ? this.resumeFloor(live, existing, boundaries) : segIndex;
   }
 
   /**
@@ -1491,25 +1511,34 @@ export class StreamingController {
       const existing = this.sessionRouter.resolveSession(mediaFileId, req.user?.id, req);
       if (!existing || existing.process.exitCode !== null) {
         const startAtSec = parseInt(startAtRaw, 10);
-        const startSegment = secondsToSegmentIndex(startAtSec);
         const ctx = this.sessionContextBuilder.build(req, resolved, mediaFileId);
         ctx.spawnReason = 'variant-prespawn';
         if (quality === 'remux') {
           const copyAudio =
             firstQueryString(req.query, 'copyAudio') !== 'false';
+          // Copied video is keyframe-cut, so map the resume time to a segment
+          // (and seek) via the real keyframe boundaries, not the uniform grid.
+          const boundaries = await this.remuxBoundaries(
+            resolved.absolutePath,
+            duration,
+          );
+          const startSegment = boundaries
+            ? boundarySecondsToIndex(boundaries, startAtSec)
+            : secondsToSegmentIndex(startAtSec);
           void this.transcodingService.getOrCreateRemuxSession(
             mediaFileId,
             resolved.absolutePath,
             copyAudio,
             startSegment,
             ctx,
+            boundaries ?? undefined,
           );
         } else {
           void this.transcodingService.getOrCreateSession(
             mediaFileId,
             quality,
             resolved.absolutePath,
-            startSegment,
+            secondsToSegmentIndex(startAtSec),
             ctx,
           );
         }
@@ -1807,7 +1836,20 @@ export class StreamingController {
     // For remux sessions, copy audio only when the source codec is compatible
     // (captured at playback-info); otherwise transcode audio to AAC.
     const copyAudio = live?.canCopyAudio ?? false;
-    const anchorSeg = this.anchorSegment(live, existing, isInit, segIndex);
+    // Remux: anchor + seek on the real keyframe boundaries (cached) so a resume
+    // / forward seek lands on the right content and the post-seek playlist stays
+    // aligned. Non-remux keeps the uniform grid (force_key_frames makes it true).
+    const remuxBounds =
+      quality === 'remux'
+        ? ((await this.remuxBoundaries(resolved.absolutePath)) ?? undefined)
+        : undefined;
+    const anchorSeg = this.anchorSegment(
+      live,
+      existing,
+      isInit,
+      segIndex,
+      remuxBounds,
+    );
     const session =
       quality === 'remux'
         ? await this.transcodingService.getOrCreateRemuxSession(
@@ -1816,6 +1858,7 @@ export class StreamingController {
             copyAudio,
             anchorSeg,
             ctx,
+            remuxBounds,
           )
         : await this.transcodingService.getOrCreateSession(
             mediaFileId,

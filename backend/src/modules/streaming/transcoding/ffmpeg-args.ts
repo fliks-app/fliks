@@ -825,6 +825,11 @@ export function buildRemuxArgs(
   sourceVideoCodec?: string,
   /** Cached streamInfo audio array. See {@link AudioStreamMeta}. */
   audioStreams?: AudioStreamMeta[],
+  /** Keyframe-aligned segment start times (`boundaries[i]` = start of seg-`i`).
+   *  Copied video is cut at the source keyframes, so a resume/seek must seek to
+   *  the real start of `startSegment` — not the uniform-grid `index * segDur`,
+   *  which lands on the wrong content and desyncs the post-seek playlist. */
+  segmentBoundaries?: number[],
 ): string[] {
   const SEGMENT_DURATION = getSegmentDuration();
 
@@ -840,7 +845,10 @@ export function buildRemuxArgs(
   }
 
   const remuxSeekSeconds =
-    startSegment > 0 ? segmentIndexToSeconds(startSegment) : 0;
+    startSegment > 0
+      ? (segmentBoundaries?.[startSegment] ??
+        segmentIndexToSeconds(startSegment))
+      : 0;
   if (startSegment > 0) {
     args.push('-ss', String(remuxSeekSeconds));
   }
