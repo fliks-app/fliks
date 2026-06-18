@@ -39,6 +39,7 @@ import {
   getSegmentDuration,
   secondsToSegmentIndex,
 } from './transcoding/constants';
+import { getRemuxSegmentDurations } from './transcoding/segment-boundaries';
 import { LiveSessionRegistry } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
@@ -211,6 +212,36 @@ function buildVodPlaylist(
     const segLen = Math.min(SEG_DURATION, duration - segStart);
     if (segLen <= 0) break;
     lines.push(`#EXTINF:${segLen.toFixed(3)},`);
+    lines.push(segmentUrl(String(i).padStart(4, '0')));
+  }
+  lines.push('#EXT-X-ENDLIST');
+  return lines.join('\n');
+}
+
+/** VOD playlist with explicit per-segment durations. Used by the remux/copy
+ *  path, where ffmpeg cuts at source keyframes so segments are variable-length
+ *  and a uniform `EXTINF` grid would mislead strict players (AVPlayer) into a
+ *  progressive A/V drift. `durations` mirror ffmpeg's actual segment lengths
+ *  (see {@link getRemuxSegmentDurations}). */
+function buildVariableVodPlaylist(
+  durations: number[],
+  segmentUrl: (index: string) => string,
+  initUrl?: string,
+): string {
+  const target = Math.ceil(durations.reduce((m, d) => Math.max(m, d), 0));
+  const lines = [
+    '#EXTM3U',
+    '#EXT-X-VERSION:7',
+    `#EXT-X-TARGETDURATION:${target}`,
+    '#EXT-X-MEDIA-SEQUENCE:0',
+    '#EXT-X-PLAYLIST-TYPE:VOD',
+    '#EXT-X-INDEPENDENT-SEGMENTS',
+  ];
+  if (initUrl) {
+    lines.push(`#EXT-X-MAP:URI="${initUrl}"`);
+  }
+  for (let i = 0; i < durations.length; i++) {
+    lines.push(`#EXTINF:${durations[i].toFixed(3)},`);
     lines.push(segmentUrl(String(i).padStart(4, '0')));
   }
   lines.push('#EXT-X-ENDLIST');
@@ -1507,11 +1538,25 @@ export class StreamingController {
         ? 'init_0.mp4'
         : 'init.mp4';
 
-    const playlist = buildVodPlaylist(
-      duration,
-      (seg) => `${basePath}/seg-${seg}.${segExt}${tokenParam}`,
-      initName ? `${basePath}/${initName}${tokenParam}` : undefined,
-    );
+    const segmentUrl = (seg: string) =>
+      `${basePath}/seg-${seg}.${segExt}${tokenParam}`;
+    const initRef = initName ? `${basePath}/${initName}${tokenParam}` : undefined;
+
+    // Remux copies the source video, so ffmpeg cuts at its (irregular)
+    // keyframes — the uniform grid would emit wrong EXTINF durations and drift
+    // AVPlayer out of A/V sync. Emit the real keyframe-aligned durations; fall
+    // back to the uniform grid when keyframes can't be probed (no regression).
+    // fMP4 only — the Tizen MPEG-TS fallback keeps the uniform path.
+    let remuxDurations: number[] | null = null;
+    if (quality === 'remux' && !useTs) {
+      remuxDurations = await getRemuxSegmentDurations(
+        resolved.absolutePath,
+        duration,
+      );
+    }
+    const playlist = remuxDurations
+      ? buildVariableVodPlaylist(remuxDurations, segmentUrl, initRef)
+      : buildVodPlaylist(duration, segmentUrl, initRef);
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
