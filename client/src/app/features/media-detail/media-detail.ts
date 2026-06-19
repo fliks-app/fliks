@@ -424,8 +424,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   /** True iff every downloaded episode of `season` is watched. Drives the
-   *  watch/unwatch label on the season card menu. */
-  private seasonFullyWatched(season: Season): boolean {
+   *  watch/unwatch label on the season card menu and the card's watched badge. */
+  seasonFullyWatched(season: Season): boolean {
     const watched = this.watchedEpisodeIds();
     let total = 0;
     for (const ep of season.episodes ?? []) {
@@ -445,9 +445,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const fully = this.seasonFullyWatched(season);
     return [
       {
-        labelKey: fully
-          ? 'media_detail.mark_season_unwatched'
-          : 'media_detail.mark_season_watched',
+        labelKey: fully ? 'media_card.mark_unwatched' : 'media_card.mark_watched',
         icon: fully ? 'eye-off' : 'eye',
         run: () => {
           void this.onToggleSeasonWatched(
