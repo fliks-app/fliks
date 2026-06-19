@@ -16,10 +16,9 @@ import { FOCUSABLE_SELECTOR } from './focusable.constants';
  *    `[appTvSection]` (vertical) / `[appTvRow]` (horizontal). Each
  *    directive registers its element here, building a logical tree that
  *    groups focusables by intent. Within an annotated zone the focus
- *    walks the tree (last-active child memorised per container), so
- *    `↓` from the bottom-right card always lands on the next row's
- *    last-focused card — never on a sibling that just happens to be
- *    geometrically closer.
+ *    walks the tree (last-active child memorised per container). A
+ *    vertical step into a new row lands on that row's first item; a
+ *    horizontal step within a row still restores the last-focused card.
  *
  * 2. **Rect-based fallback** — for any focus that lives outside an
  *    annotated container the original three-pass scoring runs (in-line
@@ -522,7 +521,10 @@ export class TvSpatialNavService {
             nextIdx = (nextIdx + children.length) % children.length;
           }
           if (nextIdx >= 0 && nextIdx < children.length) {
-            return this.digDown(children[nextIdx]);
+            // A vertical step crosses into a different row: land on that row's
+            // first item, not wherever focus last sat there. A horizontal step
+            // walks to the literal sibling, so keep the leaf as-is.
+            return this.digDown(children[nextIdx], !horizontal);
           }
         }
       }
@@ -535,7 +537,9 @@ export class TvSpatialNavService {
     // the next logical region.
     if (topMost) {
       const peer = this.findPeerContainer(topMost, dir);
-      if (peer) return this.digDown(peer.el);
+      // Peer bridging only ever fires for up/down (see findPeerContainer), so
+      // entering the peer region lands on its first item.
+      if (peer) return this.digDown(peer.el, true);
     }
     return null;
   }
@@ -589,25 +593,30 @@ export class TvSpatialNavService {
   }
 
   /**
-   * Resolve a navigable child to a focusable leaf. Priority order:
+   * Resolve a navigable child to a focusable leaf. When `preferFirst` is
+   * false (horizontal entry), priority order:
    *   1. The container's remembered activeChild (last-focused memory).
    *   2. A descendant with the `autofocus` attribute — page authors mark
    *      the natural starting point (e.g. the "Reprendre" button on a
    *      detail page) with this, so on first entry we land directly there
    *      instead of crawling DOM-order to whichever focusable comes first.
    *   3. The first navigable child, recursed.
+   * When `preferFirst` is true (vertical entry into a new row/region),
+   * skip memory and autofocus and land on the first navigable child.
    */
-  private digDown(el: HTMLElement): HTMLElement | null {
+  private digDown(el: HTMLElement, preferFirst = false): HTMLElement | null {
     const c = this.containers.get(el);
     if (!c) return el; // it's a leaf focusable
-    if (c.activeChild && c.el.contains(c.activeChild) && isVisibleFocusable(c.activeChild)) {
+    if (!preferFirst && c.activeChild && c.el.contains(c.activeChild) && isVisibleFocusable(c.activeChild)) {
       return c.activeChild;
     }
-    const auto = c.el.querySelector<HTMLElement>('[autofocus]');
-    if (auto && isVisibleFocusable(auto)) return auto;
+    if (!preferFirst) {
+      const auto = c.el.querySelector<HTMLElement>('[autofocus]');
+      if (auto && isVisibleFocusable(auto)) return auto;
+    }
     const children = this.getNavigableChildren(c);
     for (const child of children) {
-      const dug = this.digDown(child);
+      const dug = this.digDown(child, preferFirst);
       if (dug) return dug;
     }
     return null;

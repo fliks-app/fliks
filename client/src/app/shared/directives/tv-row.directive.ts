@@ -5,8 +5,8 @@ import { TvService } from '../../core/services/tv.service';
 /**
  * Horizontal-orientation container in the spatial-nav tree. `←/→` step
  * between siblings, `↑/↓` exit the row and propagate to the parent
- * section. Last-active card is remembered, so re-entering the row from
- * above/below lands back on it instead of the first card.
+ * section. Last-active card is remembered for horizontal `←/→` moves;
+ * `↑/↓` into the row from another row lands on the first card.
  *
  * Apply on horizontal scrollers / card lanes:
  *
