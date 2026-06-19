@@ -53,7 +53,6 @@ import { MediaDetailLibraryModalComponent } from './components/media-detail-libr
 import { RequestModalComponent } from '../tmdb-preview/components/request-modal/request-modal.component';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
-import { CardAction } from '../../core/services/card-actions.service';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
@@ -436,27 +435,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return total > 0;
   }
 
-  /** Context-menu actions for an "other seasons" card: mark the whole season
-   *  watched / unwatched. Label flips on the season's current state — partially
-   *  watched still offers "mark watched". */
-  seasonCardActions(season: Season): CardAction[] {
-    const m = this.media();
-    if (!m) return [];
-    const fully = this.seasonFullyWatched(season);
-    return [
-      {
-        labelKey: fully ? 'media_card.mark_unwatched' : 'media_card.mark_watched',
-        icon: fully ? 'eye-off' : 'eye',
-        run: () => {
-          void this.onToggleSeasonWatched(
-            m.id,
-            season,
-            !this.seasonFullyWatched(season),
-          );
-        },
-      },
-    ];
-  }
 
   /**
    * When the focused episode changes on the episode detail page, bring the
