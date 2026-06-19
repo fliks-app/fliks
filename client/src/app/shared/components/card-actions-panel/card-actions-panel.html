@@ -17,7 +17,7 @@
         @if (imageUrl(); as img) {
           <img [src]="img | resolveUrl" alt="" loading="lazy"
             class="shrink-0 rounded object-cover bg-base-300"
-            [style.width.px]="imageAspect() === 'landscape' ? 80 : 44"
+            [style.width.px]="imageAspect() === 'landscape' ? 80 : 60"
             [style.aspect-ratio]="imageAspect() === 'landscape' ? '16 / 9' : '2 / 3'" />
         }
         <div class="min-w-0">
@@ -70,11 +70,11 @@
           @if (imageUrl(); as img) {
             <img [src]="img | resolveUrl" alt="" loading="lazy"
               class="shrink-0 rounded object-cover bg-white/10"
-              [style.width.px]="imageAspect() === 'landscape' ? 92 : 52"
+              [style.width.px]="imageAspect() === 'landscape' ? 92 : 70"
               [style.aspect-ratio]="imageAspect() === 'landscape' ? '16 / 9' : '2 / 3'" />
           }
           <div class="min-w-0">
-            <div class="text-white text-sm font-semibold line-clamp-2">{{ title() }}</div>
+            <div class="text-white text-base font-semibold line-clamp-2">{{ title() }}</div>
             @if (subtitle()) {
               <div class="text-white/60 text-sm line-clamp-2">{{ subtitle() }}</div>
             }
