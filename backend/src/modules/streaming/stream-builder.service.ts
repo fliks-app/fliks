@@ -127,6 +127,11 @@ export class StreamBuilderService {
     const sourceVideoCodec = (v?.codec ?? '').toLowerCase();
     const sourceAudioCodec = (a?.codec ?? '').toLowerCase();
 
+    // Admin auto-crop toggle. Gates both the play-method decision (needsCrop)
+    // and the crop surfaced in the response, so the stats overlay shows the
+    // crop actually applied — not merely the one cropdetect found at import.
+    const autoCropEnabled = this.activeStreamTracker.getAutoCropEnabled();
+
     const source = {
       container: sourceContainer,
       videoCodec: sourceVideoCodec,
@@ -149,7 +154,7 @@ export class StreamBuilderService {
       colorSpace: v?.colorSpace,
       colorTransfer: v?.colorTransfer,
       colorPrimaries: v?.colorPrimaries,
-      crop: v?.crop,
+      crop: autoCropEnabled ? v?.crop : undefined,
     };
 
     // HDR detection
@@ -205,7 +210,7 @@ export class StreamBuilderService {
     const needsBurnIn = !!burnInSubtitleId;
     // Cropping black bars forces a re-encode. When the admin disables auto-crop
     // (low-power servers), keep the bars and let the source Direct Play / remux.
-    const needsCrop = !!v?.crop && this.activeStreamTracker.getAutoCropEnabled();
+    const needsCrop = !!source.crop;
 
     const reasons: TranscodeReason[] = [];
 

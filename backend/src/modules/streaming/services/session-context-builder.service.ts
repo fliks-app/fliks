@@ -46,7 +46,12 @@ export class SessionContextBuilder {
       tonemap: live?.tonemapping ?? false,
       burnInSubtitle: live?.burnIn ?? undefined,
       audioStreamIndex: live?.audioStreamIndex ?? undefined,
-      crop: si?.video?.[0]?.crop ?? undefined,
+      // Honour the admin auto-crop toggle: when off, never feed a crop to the
+      // ffmpeg filter graph, so even a session that transcodes for another
+      // reason keeps the black bars instead of cropping them.
+      crop: this.activeStreamTracker.getAutoCropEnabled()
+        ? (si?.video?.[0]?.crop ?? undefined)
+        : undefined,
       // Multi-audio: produce video-only segments and let ffmpeg's var_stream_map
       // emit one audio rendition per track (subdirs 1..N) so Shaka can switch
       // client-side via EXT-X-MEDIA.
