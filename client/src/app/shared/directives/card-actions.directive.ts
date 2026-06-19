@@ -39,6 +39,10 @@ export class CardActionsDirective implements OnDestroy {
   readonly appCardActions = input<CardAction[] | null | undefined>([]);
   /** Optional title shown atop the panel (typically the card title). */
   readonly actionsTitle = input<string>('');
+  /** Optional poster/thumbnail shown in the panel header (Emby-style). */
+  readonly actionsImageUrl = input<string | null>(null);
+  /** Optional secondary line under the title in the panel header (e.g. year). */
+  readonly actionsSubtitle = input<string>('');
 
   private longPressTimer: number | null = null;
   private touchStartX = 0;
@@ -84,6 +88,8 @@ export class CardActionsDirective implements OnDestroy {
       actions,
       anchor: this.host.nativeElement,
       title: this.actionsTitle(),
+      imageUrl: this.actionsImageUrl(),
+      subtitle: this.actionsSubtitle(),
     });
   }
 
@@ -103,6 +109,8 @@ export class CardActionsDirective implements OnDestroy {
         actions,
         anchor: this.host.nativeElement,
         title: this.actionsTitle(),
+        imageUrl: this.actionsImageUrl(),
+        subtitle: this.actionsSubtitle(),
       });
       this.service.show();
       this.longPressTimer = null;

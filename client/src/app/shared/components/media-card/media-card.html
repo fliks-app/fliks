@@ -13,6 +13,8 @@
     [attr.aria-label]="_title()"
     [appCardActions]="cardActions()"
     [actionsTitle]="_title()"
+    [actionsImageUrl]="_img()"
+    [actionsSubtitle]="_subtitle() ?? ''"
     (click)="onCardClick()"
     (keydown.enter)="onCardClick()"
     (keydown.space)="onCardClick(); $event.preventDefault()"

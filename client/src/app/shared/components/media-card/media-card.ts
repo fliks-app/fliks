@@ -182,6 +182,8 @@ export class MediaCardComponent {
       actions: this.cardActions(),
       anchor: button,
       title: this._title(),
+      imageUrl: this._img(),
+      subtitle: this._subtitle(),
       placement: 'button',
     });
     this.cardActionsService.show();
