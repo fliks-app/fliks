@@ -111,6 +111,10 @@ export interface Media {
   minimumAvailability?: 'announced' | 'inCinemas' | 'released';
   sizeOnDisk?: number;
   episodeStats?: { totalEpisodes: number; downloadedEpisodes: number };
+  /** Fully watched (movie completed / series all episodes watched), per user. */
+  watched?: boolean;
+  /** Resume progress 0-100 (movies only; 0 for series). */
+  progressPercent?: number;
   preferredProvider?: 'tmdb' | 'tvdb' | null;
   imdbId?: string | null;
   metadata?: MediaMetadataBrief | null;

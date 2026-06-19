@@ -96,13 +96,7 @@ export class MediaController {
   async findAll(@Query() query: SearchMediaDto, @CurrentUser() user: User) {
     const accessibleLibraryIds =
       await this.libraries.getAccessibleLibraryIds(user);
-    return this.mediaService.findAll(
-      query,
-      query.excludeWatched || query.onlyWatched || query.requestedByMe
-        ? user?.id
-        : undefined,
-      accessibleLibraryIds,
-    );
+    return this.mediaService.findAll(query, user?.id, accessibleLibraryIds);
   }
 
   @Get('recently-added')

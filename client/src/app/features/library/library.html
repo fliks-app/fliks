@@ -313,6 +313,7 @@
                 <app-media-card
                   [media]="item"
                   [status]="watchedIds().has(item.id) ? 'watched' : null"
+                  [progressPercent]="item.progressPercent ?? 0"
                   [interactiveWatched]="canMarkMediaWatched(item)"
                   (watchedToggled)="toggleMediaWatched(item, $event)"
                 />
@@ -322,6 +323,7 @@
                 <app-media-card
                   [media]="item"
                   [status]="watchedIds().has(item.id) ? 'watched' : null"
+                  [progressPercent]="item.progressPercent ?? 0"
                   [interactiveWatched]="canMarkMediaWatched(item)"
                   (watchedToggled)="toggleMediaWatched(item, $event)"
                 />

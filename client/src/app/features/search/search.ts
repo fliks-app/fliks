@@ -15,7 +15,8 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
-import { MediaService } from '../../core/services/api/media.service';
+import { MediaService, Media } from '../../core/services/api/media.service';
+import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import {
   MetadataService,
   MetadataSearchResult,
@@ -48,6 +49,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly reuseStrategy = inject(CachingReuseStrategy);
   private readonly injector = inject(Injector);
+  private readonly streamingApi = inject(StreamingApiService);
   readonly state = inject(SearchStateService);
 
   readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
@@ -199,6 +201,32 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   clearQuery() {
     this.state.clear();
     this.searchInput()?.nativeElement.focus();
+  }
+
+  /** Series toggle via the bulk endpoint; movies need a local file. */
+  canMarkMediaWatched(m: Media): boolean {
+    return m.type === 'series' || !!m.files?.length;
+  }
+
+  async toggleMediaWatched(m: Media, watched: boolean) {
+    try {
+      if (m.type === 'series') {
+        await this.streamingApi.toggleSeriesWatched(m.id, watched);
+      } else {
+        const fileId = m.files?.[0]?.id;
+        if (!fileId) return;
+        await this.streamingApi.toggleWatched(m.id, fileId);
+      }
+      this.state.localResults.update((list) =>
+        list.map((x) =>
+          x.id === m.id
+            ? { ...x, watched, progressPercent: watched ? 0 : x.progressPercent }
+            : x,
+        ),
+      );
+    } catch {
+      /* global error toast */
+    }
   }
 
   private async runSearch() {

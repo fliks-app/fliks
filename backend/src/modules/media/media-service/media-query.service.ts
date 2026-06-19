@@ -356,7 +356,67 @@ export class MediaQueryService {
       });
     }
 
+    if (userId) await this.attachWatchedProgress(enriched, userId);
+
     return { data: enriched, total };
+  }
+
+  /**
+   * Annotate each result with `watched` (movie completed / series fully
+   * watched) and `progressPercent` (movie resume %, 0 for series). One query
+   * scoped to the current page's ids — mirrors {@link attachEpisodeStats}, so
+   * cost is bounded by the page, never the library or watched count.
+   */
+  private async attachWatchedProgress(
+    data: Media[],
+    userId: number,
+  ): Promise<void> {
+    if (data.length === 0) return;
+    const ids = data.map((m) => m.id);
+    const rows: { id: number; watched: boolean; progress: number }[] =
+      await this.mediaRepo.query(
+        `SELECT m.id::int AS id,
+           (
+             (m.type = 'movie' AND EXISTS (
+               SELECT 1 FROM playback_states ps
+               WHERE ps."userId" = $1 AND ps."mediaId" = m.id AND ps.completed = true
+             ))
+             OR
+             (m.type = 'series'
+               AND EXISTS (
+                 SELECT 1 FROM seasons s JOIN episodes e ON e."seasonId" = s.id
+                 WHERE s."mediaId" = m.id AND s."seasonNumber" > 0 AND e."hasFile" = true
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM seasons s JOIN episodes e ON e."seasonId" = s.id
+                 WHERE s."mediaId" = m.id AND s."seasonNumber" > 0 AND e."hasFile" = true
+                   AND NOT EXISTS (
+                     SELECT 1 FROM playback_states ps2
+                     WHERE ps2."userId" = $1 AND ps2."episodeId" = e.id AND ps2.completed = true
+                   )
+               )
+             )
+           ) AS watched,
+           CASE WHEN m.type = 'movie' THEN COALESCE((
+             SELECT ROUND((ps."positionSeconds" / ps."durationSeconds") * 100)::int
+             FROM playback_states ps
+             WHERE ps."userId" = $1 AND ps."mediaId" = m.id AND ps."episodeId" IS NULL
+               AND ps.completed = false AND ps."durationSeconds" > 0
+             ORDER BY ps."lastPlayedAt" DESC LIMIT 1
+           ), 0) ELSE 0 END AS progress
+         FROM media m
+         WHERE m.id = ANY($2::int[])`,
+        [userId, ids],
+      );
+    const byId = new Map(rows.map((r) => [Number(r.id), r]));
+    for (const m of data) {
+      const r = byId.get(m.id);
+      if (!r) continue;
+      Object.assign(m, {
+        watched: r.watched === true,
+        progressPercent: Number(r.progress) || 0,
+      });
+    }
   }
 
   /**
@@ -993,18 +1053,31 @@ export class MediaQueryService {
     qb: SelectQueryBuilder<Media>,
     searchTerm: string,
   ): void {
-    qb.addSelect(
-      `ts_rank(media."searchVector", plainto_tsquery('french', :q))`,
-      'rank',
-    );
+    // Prefix tsquery (`word:*`) so a partial last word still matches while
+    // typing — `plainto_tsquery` stems whole words, so "impos" would miss
+    // "impossible". Each word is stripped to alphanumerics to keep the
+    // generated tsquery free of operator characters. Falls back to a plain
+    // query when nothing tsquery-able remains.
+    const prefixTsq = searchTerm
+      .trim()
+      .split(/\s+/)
+      .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ''))
+      .filter(Boolean)
+      .map((w) => `${w}:*`)
+      .join(' & ');
+    const tsqExpr = prefixTsq
+      ? `to_tsquery('french', :tsq)`
+      : `plainto_tsquery('french', :q)`;
+
+    qb.addSelect(`ts_rank(media."searchVector", ${tsqExpr})`, 'rank');
     qb.andWhere(
       `(
-        media."searchVector" @@ plainto_tsquery('french', :q)
+        media."searchVector" @@ ${tsqExpr}
         OR media.title ILIKE :like
         OR media."originalTitle" ILIKE :like
         OR similarity(media.title, :q) > 0.8
       )`,
-      { q: searchTerm, like: `%${searchTerm}%` },
+      { q: searchTerm, like: `%${searchTerm}%`, tsq: prefixTsq },
     );
     qb.orderBy('rank', 'DESC');
   }
