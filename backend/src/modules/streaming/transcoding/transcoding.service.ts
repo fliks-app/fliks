@@ -1247,6 +1247,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     copyAudio: boolean,
     requestedSegment = 0,
     ctx?: SessionContext,
+    segmentBoundaries?: number[],
   ): Promise<TranscodeSession> {
     // Remux variant lives in its own session-map bucket so its cache
     // path doesn't collide with a main session for the same base
@@ -1265,6 +1266,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         copyAudio,
         requestedSegment,
         ctx,
+        segmentBoundaries,
       ),
     );
   }
@@ -1276,6 +1278,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     copyAudio: boolean,
     requestedSegment: number,
     ctx?: SessionContext,
+    segmentBoundaries?: number[],
   ): Promise<TranscodeSession> {
     const existing = this.sessions.get(key);
     if (existing) {
@@ -1319,6 +1322,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.log,
       ctx?.sourceVideoCodec,
       ctx?.audioStreams,
+      segmentBoundaries,
     );
 
     const session = this.spawnFfmpegSession({
