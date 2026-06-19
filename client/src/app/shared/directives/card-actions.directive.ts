@@ -39,7 +39,7 @@ export class CardActionsDirective implements OnDestroy {
   readonly appCardActions = input<CardAction[] | null | undefined>([]);
   /** Optional title shown atop the panel (typically the card title). */
   readonly actionsTitle = input<string>('');
-  /** Optional poster/thumbnail shown in the panel header (Emby-style). */
+  /** Optional poster/thumbnail shown in the panel header. */
   readonly actionsImageUrl = input<string | null>(null);
   /** Aspect of the header thumbnail (portrait poster vs landscape still). */
   readonly actionsImageAspect = input<'portrait' | 'landscape'>('portrait');

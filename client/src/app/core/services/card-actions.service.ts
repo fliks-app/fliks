@@ -61,7 +61,7 @@ export class CardActionsService {
   readonly placement = signal<CardActionsPlacement>('card');
   /** Title shown at the top of the panel (typically the card title). */
   readonly title = signal<string>('');
-  /** Poster/thumbnail shown in the panel header (Emby-style). Null = none. */
+  /** Poster/thumbnail shown in the panel header. Null = none. */
   readonly imageUrl = signal<string | null>(null);
   /** Aspect ratio of the header thumbnail — portrait posters (movie/series/
    *  season) vs landscape stills (episode). */
