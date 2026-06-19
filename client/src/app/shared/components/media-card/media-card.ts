@@ -112,6 +112,10 @@ export class MediaCardComponent {
    * change, otherwise the click does nothing.
    */
   readonly interactiveWatched = input(false);
+  /** Extra context-menu actions injected by the parent (e.g. "mark watched"
+   *  on recommendation cards). Appended after the built-in actions, before the
+   *  danger "remove" entry. Pure menu actions — no inline indicator. */
+  readonly extraActions = input<CardAction[]>([]);
 
   // Events
   readonly clicked = output<void>();
@@ -369,6 +373,7 @@ export class MediaCardComponent {
         run: () => this.watchedToggled.emit(!watched),
       });
     }
+    actions.push(...this.extraActions());
     if (this.dismissable()) {
       actions.push({
         labelKey: 'media_card.remove_from_list',

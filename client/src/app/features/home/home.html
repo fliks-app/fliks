@@ -68,6 +68,7 @@
                 [status]="rec.media.available ? null : 'missing'"
                 [playable]="rec.media.available"
                 [dismissable]="true"
+                [extraActions]="recommendationActions(rec)"
                 (played)="playRecommendation(rec)"
                 (dismissed)="dismissRecommendation(rec)"
               />
