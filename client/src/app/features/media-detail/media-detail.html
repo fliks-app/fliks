@@ -101,6 +101,9 @@
                 [subtitle]="other.episodes.length + ' ' + ('media_detail.episodes' | translate)"
                 [link]="seasonLink(m, other)"
                 [replaceUrl]="true"
+                [interactiveWatched]="true"
+                [status]="seasonFullyWatched(other) ? 'watched' : null"
+                (watchedToggled)="onToggleSeasonWatched(m.id, other, $event)"
               />
             }
           </app-horizontal-scroller>

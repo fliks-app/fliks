@@ -422,6 +422,20 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return ['/series', String(m.id), 'episode', String(first.id)];
   }
 
+  /** True iff every downloaded episode of `season` is watched. Drives the
+   *  watch/unwatch label on the season card menu and the card's watched badge. */
+  seasonFullyWatched(season: Season): boolean {
+    const watched = this.watchedEpisodeIds();
+    let total = 0;
+    for (const ep of season.episodes ?? []) {
+      if (!ep.hasFile) continue;
+      total++;
+      if (!watched.has(ep.id)) return false;
+    }
+    return total > 0;
+  }
+
+
   /**
    * When the focused episode changes on the episode detail page, bring the
    * "Plus de saison X" scroller to the episode AFTER the active one — the
