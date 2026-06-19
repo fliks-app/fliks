@@ -623,6 +623,7 @@ export class StreamingController {
     this.transcodingService.setSegmentDuration(ss.segmentDuration);
     this.activeStreamTracker.setQsvOptions({ lowPower: ss.qsvLowPower });
     this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
+    this.activeStreamTracker.setAutoCropEnabled(ss.autoCropEnabled);
     this.activeStreamTracker.setDeviceName(
       userId,
       mediaFileId,

@@ -1183,6 +1183,8 @@
       "auto_quality_mode_abr_help": "En « Auto », le serveur transcode en HLS adaptatif qui ajuste la qualité au débit réseau en temps réel. Inconvénient : chaque lecture « Auto » sollicite le transcodage (CPU/GPU) — à réserver aux serveurs avec accélération matérielle.",
       "segment_duration": "Durée des segments",
       "segment_duration_help": "Segments plus courts = démarrage plus rapide mais plus de requêtes HTTP. 3s est un bon compromis.",
+      "auto_crop": "Recadrage automatique des barres noires",
+      "auto_crop_help": "Détecte et supprime les barres noires (letterbox/pillarbox). Le recadrage force un ré-encodage : à désactiver sur les serveurs peu puissants pour lire la source telle quelle (barres noires conservées) sans transcoder.",
       "init_time": "Durée du premier segment",
       "init_time_help": "Le premier segment peut être plus court pour accélérer le démarrage. Les suivants utilisent la durée normale.",
       "qsv_preset": "Preset d'encodage (QSV / libx264)",

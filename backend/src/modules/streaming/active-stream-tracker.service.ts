@@ -57,6 +57,17 @@ export class ActiveStreamTracker {
     return this.tonemapAlgoCache;
   }
 
+  /** Whether detected black bars are cropped (admin-configurable, global).
+   *  Cropping forces a re-encode; disabling it lets letterboxed sources
+   *  Direct Play / remux untouched on low-power servers. Default on. */
+  private autoCropEnabledCache = true;
+  setAutoCropEnabled(enabled: boolean) {
+    this.autoCropEnabledCache = enabled;
+  }
+  getAutoCropEnabled(): boolean {
+    return this.autoCropEnabledCache;
+  }
+
   private segmentDurationCache = 3;
 
   setStreamingDuration(segDuration: number) {

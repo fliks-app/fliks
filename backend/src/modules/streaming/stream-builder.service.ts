@@ -203,7 +203,9 @@ export class StreamBuilderService {
       videoVariant: selectedVariant,
     });
     const needsBurnIn = !!burnInSubtitleId;
-    const needsCrop = !!v?.crop;
+    // Cropping black bars forces a re-encode. When the admin disables auto-crop
+    // (low-power servers), keep the bars and let the source Direct Play / remux.
+    const needsCrop = !!v?.crop && this.activeStreamTracker.getAutoCropEnabled();
 
     const reasons: TranscodeReason[] = [];
 
