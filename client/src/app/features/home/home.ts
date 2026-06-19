@@ -24,6 +24,7 @@ import { BackgroundService } from '../../core/services/background.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { HomeSettingsService } from '../../core/services/home-settings.service';
 import { TvService } from '../../core/services/tv.service';
+import { CardAction } from '../../core/services/card-actions.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { LucideIconComponent } from '../../shared/components/lucide-icon';
@@ -531,6 +532,39 @@ export class HomeComponent implements OnInit, OnDestroy {
       }, false);
     } catch {
       /* error handled by global interceptor */
+    }
+  }
+
+  /** Context-menu action(s) for a recommendation card: just "mark watched".
+   *  Recommendations are pre-filtered to unwatched media, so no inline watched
+   *  indicator is needed — only the menu action that marks it and drops it. */
+  recommendationActions(rec: RecommendationItem): CardAction[] {
+    return [
+      {
+        labelKey: 'media_card.mark_watched',
+        icon: 'eye',
+        run: () => void this.markRecommendationWatched(rec),
+      },
+    ];
+  }
+
+  /** Mark a recommended title watched (series → bulk; movie → its first file,
+   *  fetched on demand since the lean DTO carries no file id) and drop it from
+   *  the list, which is filtered to unwatched titles. */
+  private async markRecommendationWatched(rec: RecommendationItem) {
+    const id = rec.media.id;
+    try {
+      if (rec.media.type === 'series') {
+        await this.streamingApi.toggleSeriesWatched(id, true);
+      } else {
+        const media = await this.mediaService.getOne(id);
+        const fileId = media.files?.[0]?.id;
+        if (!fileId) return;
+        await this.streamingApi.toggleWatched(id, fileId);
+      }
+      this.recommendations.update((list) => list.filter((r) => r.media.id !== id));
+    } catch {
+      /* global error toast */
     }
   }
 
