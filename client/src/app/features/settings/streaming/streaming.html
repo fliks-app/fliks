@@ -31,6 +31,16 @@
       <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.segment_duration_help' | translate }}</span></label>
     </div>
 
+    <!-- Auto-crop black bars. Off = keep the bars and Direct Play / remux
+         instead of forcing a re-encode just to crop (low-power servers). -->
+    <div class="form-control">
+      <label class="label cursor-pointer justify-start gap-3">
+        <input type="checkbox" class="toggle" [ngModel]="autoCropEnabled()" (ngModelChange)="autoCropEnabled.set($event)" />
+        <span class="label-text font-medium">{{ 'settings.streaming.auto_crop' | translate }}</span>
+      </label>
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.auto_crop_help' | translate }}</span></label>
+    </div>
+
     <!-- QSV / libx264 encoder preset -->
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.qsv_preset' | translate }}</span></label>

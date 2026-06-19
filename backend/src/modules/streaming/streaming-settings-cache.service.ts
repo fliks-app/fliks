@@ -29,6 +29,13 @@ export interface StreamingSettings {
    * Explicit quality picks are unaffected either way.
    */
   autoQualityMode: AutoQualityMode;
+  /**
+   * Whether detected black bars (letterbox/pillarbox) are cropped during
+   * playback. Cropping forces a re-encode, so on low-power servers an admin
+   * can disable it (default `true`) to let otherwise-compatible sources
+   * Direct Play / remux with the black bars intact instead of transcoding.
+   */
+  autoCropEnabled: boolean;
 }
 
 export type AutoQualityMode = 'directplay' | 'abr';
@@ -39,6 +46,7 @@ const KEYS = [
   'streaming_qsv_low_power',
   'streaming_tonemap_algo',
   'streaming_auto_quality_mode',
+  'streaming_auto_crop_enabled',
 ] as const;
 
 const TONEMAP_ALGOS: TonemapAlgo[] = ['auto', 'opencl', 'vaapi', 'qsv'];
@@ -73,8 +81,14 @@ export class StreamingSettingsCache implements OnModuleInit {
 
   private async load(): Promise<StreamingSettings> {
     const values = await Promise.all(KEYS.map((k) => this.settings.get(k)));
-    const [duration, qsvPreset, qsvLowPower, tonemapAlgo, autoQualityMode] =
-      values;
+    const [
+      duration,
+      qsvPreset,
+      qsvLowPower,
+      tonemapAlgo,
+      autoQualityMode,
+      autoCropEnabled,
+    ] = values;
     return {
       segmentDuration: parseFloat(duration ?? '3') || 3,
       qsvPreset: (qsvPreset ?? 'faster') as StreamingSettings['qsvPreset'],
@@ -87,6 +101,9 @@ export class StreamingSettingsCache implements OnModuleInit {
       )
         ? (autoQualityMode as AutoQualityMode)
         : 'directplay',
+      // Default on (preserve current behaviour); only the explicit string
+      // 'false' disables cropping.
+      autoCropEnabled: autoCropEnabled !== 'false',
     };
   }
 }

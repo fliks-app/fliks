@@ -32,6 +32,9 @@ export class StreamingSettingsComponent implements OnInit {
   readonly qsvPreset = signal('faster');
   readonly qsvLowPower = signal(false);
   readonly tonemapAlgo = signal('auto');
+  /** When off, detected black bars are kept instead of cropped — avoids a
+   *  forced re-encode on low-power servers. Default on. */
+  readonly autoCropEnabled = signal(true);
   /** How the "Auto" quality resolves: 'directplay' tries Direct Play first
    *  (zero transcoding when compatible), 'abr' always uses the adaptive HLS
    *  ladder. Explicit quality picks are unaffected. */
@@ -54,6 +57,7 @@ export class StreamingSettingsComponent implements OnInit {
       this.segmentDuration.set(all['streaming_segment_duration'] ?? '3');
       this.qsvPreset.set(all['streaming_qsv_preset'] ?? 'faster');
       this.qsvLowPower.set(all['streaming_qsv_low_power'] === 'true');
+      this.autoCropEnabled.set(all['streaming_auto_crop_enabled'] !== 'false');
       this.autoQualityMode.set(
         all['streaming_auto_quality_mode'] === 'abr' ? 'abr' : 'directplay',
       );
@@ -79,6 +83,7 @@ export class StreamingSettingsComponent implements OnInit {
         streaming_qsv_low_power: String(this.qsvLowPower()),
         streaming_tonemap_algo: this.tonemapAlgo(),
         streaming_auto_quality_mode: this.autoQualityMode(),
+        streaming_auto_crop_enabled: String(this.autoCropEnabled()),
       });
       this.toast.success(this.translate.instant('settings.streaming.saved'));
     } catch { /* interceptor */ }

@@ -22,7 +22,11 @@ const req = { user: { id: 7, username: 'u' } } as unknown as Request;
 
 describe('SessionContextBuilder.build', () => {
   let sessionRouter: { findRequestSession: jest.Mock };
-  let tracker: { getQsvOptions: jest.Mock; getTonemapAlgo: jest.Mock };
+  let tracker: {
+    getQsvOptions: jest.Mock;
+    getTonemapAlgo: jest.Mock;
+    getAutoCropEnabled: jest.Mock;
+  };
   let builder: SessionContextBuilder;
 
   beforeEach(() => {
@@ -30,6 +34,7 @@ describe('SessionContextBuilder.build', () => {
     tracker = {
       getQsvOptions: jest.fn().mockReturnValue({ lowPower: false }),
       getTonemapAlgo: jest.fn().mockReturnValue('auto'),
+      getAutoCropEnabled: jest.fn().mockReturnValue(true),
     };
     builder = new SessionContextBuilder(tracker as never, sessionRouter as never);
   });
@@ -47,6 +52,28 @@ describe('SessionContextBuilder.build', () => {
     expect(ctx.sourceVideoCodec).toBe('hevc');
     expect(ctx.sourceFps).toBe(24);
     expect(ctx.userId).toBe(7);
+  });
+
+  it('gates the crop on the auto-crop toggle', () => {
+    const cropRect = { width: 3840, height: 1606, x: 0, y: 277 };
+    const withCrop = {
+      media: { title: 'T', type: 'movie', posterUrl: null },
+      mediaFile: {
+        streamInfo: {
+          video: [
+            { codec: 'hevc', width: 3840, height: 2160, frameRate: '24', crop: cropRect },
+          ],
+          audio: [{ language: 'en', bitRate: 128000 }],
+          formatBitRate: 50_000_000,
+        },
+      },
+    } as unknown as ResolvedFile;
+
+    tracker.getAutoCropEnabled.mockReturnValue(true);
+    expect(builder.build(req, withCrop, 1).crop).toEqual(cropRect);
+
+    tracker.getAutoCropEnabled.mockReturnValue(false);
+    expect(builder.build(req, withCrop, 1).crop).toBeUndefined();
   });
 
   it('threads the frozen decision off the LiveSession when present', () => {
