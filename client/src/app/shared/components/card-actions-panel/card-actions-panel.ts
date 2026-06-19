@@ -76,6 +76,7 @@ export class CardActionsPanelComponent {
   readonly actions = computed(() => this.service.actions() ?? []);
   readonly title = this.service.title;
   readonly imageUrl = this.service.imageUrl;
+  readonly imageAspect = this.service.imageAspect;
   readonly subtitle = this.service.subtitle;
   readonly isTv = this.tv.isTv;
   /**

@@ -13,15 +13,16 @@
     (keydown)="onMenuKey($event)"
   >
     @if (title()) {
-      <div class="flex items-center gap-3 px-4 py-3 border-b border-base-content/10">
+      <div class="flex items-start gap-3 px-4 py-3 border-b border-base-content/10">
         @if (imageUrl(); as img) {
           <img [src]="img | resolveUrl" alt="" loading="lazy"
-            class="h-12 w-9 shrink-0 rounded object-cover bg-base-300" />
+            class="h-12 shrink-0 rounded object-cover bg-base-300"
+            [style.aspect-ratio]="imageAspect() === 'landscape' ? '16 / 9' : '2 / 3'" />
         }
         <div class="min-w-0">
-          <div class="font-semibold truncate">{{ title() }}</div>
+          <div class="font-semibold line-clamp-2">{{ title() }}</div>
           @if (subtitle()) {
-            <div class="text-xs text-base-content/60 truncate">{{ subtitle() }}</div>
+            <div class="text-xs text-base-content/60 line-clamp-2">{{ subtitle() }}</div>
           }
         </div>
       </div>
@@ -64,15 +65,16 @@
   <app-bottom-sheet [open]="service.open()" (closed)="onClose()">
     <div #sheet data-tv-modal class="px-2 pb-2">
       @if (title()) {
-        <div class="flex items-center gap-3 px-4 py-3 mb-1 border-b border-white/10">
+        <div class="flex items-start gap-3 px-4 py-3 mb-1 border-b border-white/10">
           @if (imageUrl(); as img) {
             <img [src]="img | resolveUrl" alt="" loading="lazy"
-              class="h-14 w-10 shrink-0 rounded object-cover bg-white/10" />
+              class="h-14 shrink-0 rounded object-cover bg-white/10"
+              [style.aspect-ratio]="imageAspect() === 'landscape' ? '16 / 9' : '2 / 3'" />
           }
           <div class="min-w-0">
-            <div class="text-white font-semibold truncate">{{ title() }}</div>
+            <div class="text-white font-semibold line-clamp-2">{{ title() }}</div>
             @if (subtitle()) {
-              <div class="text-white/60 text-sm truncate">{{ subtitle() }}</div>
+              <div class="text-white/60 text-sm line-clamp-2">{{ subtitle() }}</div>
             }
           </div>
         </div>

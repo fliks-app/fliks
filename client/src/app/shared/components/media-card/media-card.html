@@ -14,6 +14,7 @@
     [appCardActions]="cardActions()"
     [actionsTitle]="_title()"
     [actionsImageUrl]="_img()"
+    [actionsImageAspect]="aspect()"
     [actionsSubtitle]="_subtitle() ?? ''"
     (click)="onCardClick()"
     (keydown.enter)="onCardClick()"

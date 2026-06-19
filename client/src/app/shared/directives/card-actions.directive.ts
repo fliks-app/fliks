@@ -41,6 +41,8 @@ export class CardActionsDirective implements OnDestroy {
   readonly actionsTitle = input<string>('');
   /** Optional poster/thumbnail shown in the panel header (Emby-style). */
   readonly actionsImageUrl = input<string | null>(null);
+  /** Aspect of the header thumbnail (portrait poster vs landscape still). */
+  readonly actionsImageAspect = input<'portrait' | 'landscape'>('portrait');
   /** Optional secondary line under the title in the panel header (e.g. year). */
   readonly actionsSubtitle = input<string>('');
 
@@ -89,6 +91,7 @@ export class CardActionsDirective implements OnDestroy {
       anchor: this.host.nativeElement,
       title: this.actionsTitle(),
       imageUrl: this.actionsImageUrl(),
+      imageAspect: this.actionsImageAspect(),
       subtitle: this.actionsSubtitle(),
     });
   }
@@ -110,6 +113,7 @@ export class CardActionsDirective implements OnDestroy {
         anchor: this.host.nativeElement,
         title: this.actionsTitle(),
         imageUrl: this.actionsImageUrl(),
+        imageAspect: this.actionsImageAspect(),
         subtitle: this.actionsSubtitle(),
       });
       this.service.show();

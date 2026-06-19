@@ -183,6 +183,7 @@ export class MediaCardComponent {
       anchor: button,
       title: this._title(),
       imageUrl: this._img(),
+      imageAspect: this.aspect(),
       subtitle: this._subtitle(),
       placement: 'button',
     });
