@@ -53,6 +53,7 @@ import { MediaDetailLibraryModalComponent } from './components/media-detail-libr
 import { RequestModalComponent } from '../tmdb-preview/components/request-modal/request-modal.component';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
+import { CardAction } from '../../core/services/card-actions.service';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
@@ -420,6 +421,43 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const first = season.episodes?.[0];
     if (!first) return null;
     return ['/series', String(m.id), 'episode', String(first.id)];
+  }
+
+  /** True iff every downloaded episode of `season` is watched. Drives the
+   *  watch/unwatch label on the season card menu. */
+  private seasonFullyWatched(season: Season): boolean {
+    const watched = this.watchedEpisodeIds();
+    let total = 0;
+    for (const ep of season.episodes ?? []) {
+      if (!ep.hasFile) continue;
+      total++;
+      if (!watched.has(ep.id)) return false;
+    }
+    return total > 0;
+  }
+
+  /** Context-menu actions for an "other seasons" card: mark the whole season
+   *  watched / unwatched. Label flips on the season's current state — partially
+   *  watched still offers "mark watched". */
+  seasonCardActions(season: Season): CardAction[] {
+    const m = this.media();
+    if (!m) return [];
+    const fully = this.seasonFullyWatched(season);
+    return [
+      {
+        labelKey: fully
+          ? 'media_detail.mark_season_unwatched'
+          : 'media_detail.mark_season_watched',
+        icon: fully ? 'eye-off' : 'eye',
+        run: () => {
+          void this.onToggleSeasonWatched(
+            m.id,
+            season,
+            !this.seasonFullyWatched(season),
+          );
+        },
+      },
+    ];
   }
 
   /**

@@ -101,6 +101,7 @@
                 [subtitle]="other.episodes.length + ' ' + ('media_detail.episodes' | translate)"
                 [link]="seasonLink(m, other)"
                 [replaceUrl]="true"
+                [extraActions]="seasonCardActions(other)"
               />
             }
           </app-horizontal-scroller>

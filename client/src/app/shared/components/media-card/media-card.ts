@@ -113,6 +113,11 @@ export class MediaCardComponent {
    */
   readonly interactiveWatched = input(false);
 
+  /** Extra context-menu actions the parent injects (e.g. season-level
+   *  mark-watched on the "other seasons" cards). Appended after the built-in
+   *  actions, before the danger "remove" entry. */
+  readonly extraActions = input<CardAction[]>([]);
+
   // Events
   readonly clicked = output<void>();
   readonly played = output<void>();
@@ -366,6 +371,7 @@ export class MediaCardComponent {
         run: () => this.watchedToggled.emit(!watched),
       });
     }
+    actions.push(...this.extraActions());
     if (this.dismissable()) {
       actions.push({
         labelKey: 'media_card.remove_from_list',
