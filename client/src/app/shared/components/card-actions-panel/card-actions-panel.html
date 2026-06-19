@@ -13,8 +13,19 @@
     (keydown)="onMenuKey($event)"
   >
     @if (title()) {
-      <div class="px-4 pt-3 pb-1 text-xs uppercase tracking-wider text-base-content/60 truncate">
-        {{ title() }}
+      <div class="flex items-start gap-3 px-4 py-3 border-b border-base-content/10">
+        @if (imageUrl(); as img) {
+          <img [src]="img | resolveUrl" alt="" loading="lazy"
+            class="shrink-0 rounded object-cover bg-base-300"
+            [style.width.px]="imageAspect() === 'landscape' ? 80 : 60"
+            [style.aspect-ratio]="imageAspect() === 'landscape' ? '16 / 9' : '2 / 3'" />
+        }
+        <div class="min-w-0">
+          <div class="text-sm font-semibold line-clamp-2">{{ title() }}</div>
+          @if (subtitle()) {
+            <div class="text-xs text-base-content/60 line-clamp-2">{{ subtitle() }}</div>
+          }
+        </div>
       </div>
     }
     <ul role="menu" class="menu p-2 gap-0.5 w-full">
@@ -55,7 +66,20 @@
   <app-bottom-sheet [open]="service.open()" (closed)="onClose()">
     <div #sheet data-tv-modal class="px-2 pb-2">
       @if (title()) {
-        <div class="px-4 py-2 text-white/60 text-sm font-medium truncate">{{ title() }}</div>
+        <div class="flex items-start gap-3 px-4 py-3 mb-1 border-b border-white/10">
+          @if (imageUrl(); as img) {
+            <img [src]="img | resolveUrl" alt="" loading="lazy"
+              class="shrink-0 rounded object-cover bg-white/10"
+              [style.width.px]="imageAspect() === 'landscape' ? 92 : 70"
+              [style.aspect-ratio]="imageAspect() === 'landscape' ? '16 / 9' : '2 / 3'" />
+          }
+          <div class="min-w-0">
+            <div class="text-white text-base font-semibold line-clamp-2">{{ title() }}</div>
+            @if (subtitle()) {
+              <div class="text-white/60 text-sm line-clamp-2">{{ subtitle() }}</div>
+            }
+          </div>
+        </div>
       }
       @for (a of actions(); track a) {
         <button

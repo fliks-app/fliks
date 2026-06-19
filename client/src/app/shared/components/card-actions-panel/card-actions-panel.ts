@@ -20,6 +20,7 @@ import { CardAction, CardActionsService } from '../../../core/services/card-acti
 import { TvService } from '../../../core/services/tv.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { BottomSheetComponent } from '../bottom-sheet';
+import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 
 /**
  * Singleton panel mounted once at the layout level. Picks its presentation
@@ -39,6 +40,7 @@ import { BottomSheetComponent } from '../bottom-sheet';
   imports: [
     TranslateModule,
     BottomSheetComponent,
+    ResolveUrlPipe,
     LucidePlay,
     LucideExternalLink,
     LucideEye,
@@ -73,6 +75,9 @@ export class CardActionsPanelComponent {
 
   readonly actions = computed(() => this.service.actions() ?? []);
   readonly title = this.service.title;
+  readonly imageUrl = this.service.imageUrl;
+  readonly imageAspect = this.service.imageAspect;
+  readonly subtitle = this.service.subtitle;
   readonly isTv = this.tv.isTv;
   /**
    * Anchored dropdown only on desktop with a mouse. TV and touch surfaces

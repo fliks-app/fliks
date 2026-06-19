@@ -61,6 +61,13 @@ export class CardActionsService {
   readonly placement = signal<CardActionsPlacement>('card');
   /** Title shown at the top of the panel (typically the card title). */
   readonly title = signal<string>('');
+  /** Poster/thumbnail shown in the panel header. Null = none. */
+  readonly imageUrl = signal<string | null>(null);
+  /** Aspect ratio of the header thumbnail — portrait posters (movie/series/
+   *  season) vs landscape stills (episode). */
+  readonly imageAspect = signal<'portrait' | 'landscape'>('portrait');
+  /** Secondary line under the title in the panel header (e.g. year). */
+  readonly subtitle = signal<string>('');
   /** Whether the panel is currently open. */
   readonly open = signal(false);
   readonly hasActions = computed(() => (this.actions()?.length ?? 0) > 0);
@@ -81,11 +88,17 @@ export class CardActionsService {
     actions: CardAction[];
     anchor: HTMLElement;
     title?: string;
+    imageUrl?: string | null;
+    imageAspect?: 'portrait' | 'landscape';
+    subtitle?: string;
     placement?: CardActionsPlacement;
   }) {
     this.actions.set(payload.actions);
     this.anchor.set(payload.anchor);
     this.title.set(payload.title ?? '');
+    this.imageUrl.set(payload.imageUrl ?? null);
+    this.imageAspect.set(payload.imageAspect ?? 'portrait');
+    this.subtitle.set(payload.subtitle ?? '');
     this.placement.set(payload.placement ?? 'card');
   }
 
@@ -99,6 +112,9 @@ export class CardActionsService {
       this.actions.set(null);
       this.anchor.set(null);
       this.title.set('');
+      this.imageUrl.set(null);
+      this.imageAspect.set('portrait');
+      this.subtitle.set('');
     }
   }
 
