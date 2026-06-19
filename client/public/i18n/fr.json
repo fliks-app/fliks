@@ -651,6 +651,8 @@
     "analyze_crop_hint": "Relance la détection des bandes noires (letterbox / pillarbox).",
     "analyze_subtitle_cache": "Reconstruire le cache de sous-titres",
     "analyze_subtitle_cache_hint": "Réextrait les sous-titres embarqués pour accélérer le premier lancement.",
+    "analyze_markers": "Recalculer les intros / outros",
+    "analyze_markers_hint": "Relance la détection automatique des génériques (intro / outro) sur les épisodes.",
     "analyze_apply": "Lancer",
     "analyze_launched": "Analyse lancée.",
     "analyze_launch_error": "Impossible de lancer l'analyse",

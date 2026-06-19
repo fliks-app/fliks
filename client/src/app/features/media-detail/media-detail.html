@@ -411,6 +411,19 @@
           <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_subtitle_cache_hint' | translate }}</span>
         </span>
       </label>
+      @if (analyzeShowMarkers()) {
+        <label class="flex items-start gap-3 cursor-pointer" [class.opacity-50]="analyzeOpts().rescan">
+          <input
+            type="checkbox" class="checkbox checkbox-primary mt-0.5"
+            [checked]="analyzeOpts().markers" [disabled]="analyzeOpts().rescan"
+            (change)="setAnalyzeOpt('markers', $any($event.target).checked)"
+          />
+          <span>
+            <span class="font-medium block">{{ 'media_detail.analyze_markers' | translate }}</span>
+            <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_markers_hint' | translate }}</span>
+          </span>
+        </label>
+      }
     </div>
     <div class="modal-action">
       <button type="button" class="btn btn-ghost" (click)="closeAnalyzeModal()">
