@@ -1148,12 +1148,25 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     sprites: boolean;
     crop: boolean;
     subtitleCache: boolean;
-  }>({ rescan: false, sprites: false, crop: false, subtitleCache: false });
+    markers: boolean;
+  }>({
+    rescan: false,
+    sprites: false,
+    crop: false,
+    subtitleCache: false,
+    markers: false,
+  });
 
   readonly analyzeHasSelection = computed(() => {
     const o = this.analyzeOpts();
-    return o.rescan || o.sprites || o.crop || o.subtitleCache;
+    return o.rescan || o.sprites || o.crop || o.subtitleCache || o.markers;
   });
+
+  /** Intro/outro detection is episode-based, so the analyze option only
+   *  applies to series. */
+  readonly analyzeShowMarkers = computed(
+    () => this.media()?.type === 'series',
+  );
 
   /** Refs to the native <dialog>. `showModal()` gives us focus trapping,
    *  Tab cycling and Escape-to-close for free — no manual keydown
@@ -1169,6 +1182,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       sprites: false,
       crop: false,
       subtitleCache: false,
+      markers: false,
     });
     const dlg = this.analyzeDialog()?.nativeElement;
     if (!dlg) return;
@@ -1184,7 +1198,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   setAnalyzeOpt(
-    key: 'rescan' | 'sprites' | 'crop' | 'subtitleCache',
+    key: 'rescan' | 'sprites' | 'crop' | 'subtitleCache' | 'markers',
     value: boolean,
   ) {
     this.analyzeOpts.update((o) => ({ ...o, [key]: value }));
@@ -1200,13 +1214,19 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // redundant because rescan re-runs everything. Hit /rescan alone so
       // the existing SSE event stream still fires.
       if (opts.rescan) {
+        // Rescan already re-runs intro/outro detection on completion.
         await this.mediaService.rescanFiles(m.id);
       } else {
-        await this.mediaService.analyzeMedia(m.id, {
-          sprites: opts.sprites,
-          crop: opts.crop,
-          subtitleCache: opts.subtitleCache,
-        });
+        if (opts.sprites || opts.crop || opts.subtitleCache) {
+          await this.mediaService.analyzeMedia(m.id, {
+            sprites: opts.sprites,
+            crop: opts.crop,
+            subtitleCache: opts.subtitleCache,
+          });
+        }
+        if (opts.markers) {
+          await this.markersApi.detectSeries(m.id);
+        }
       }
       this.toast.success(
         this.translate.instant('media_detail.analyze_launched'),
