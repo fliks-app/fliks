@@ -51,12 +51,17 @@ mac:
     - target: dmg
       arch: arm64
   category: public.app-category.entertainment
-  # TODO(signing): hardened runtime + notarization are intentionally omitted for
-  # iteration 1. Unsigned .dmg is fine for internal testing; production needs a
-  # Developer ID cert, CSC_LINK/CSC_KEY_PASSWORD, and notarytool credentials.
-  # NOTE: the vendored libmpv.dylib + its bundled deps are ad-hoc signed; a
-  # hardened-runtime/notarized build will need them signed with the Developer ID
-  # (or the disable-library-validation entitlement).
+  # Developer ID signed + hardened-runtime + notarized. electron-builder signs
+  # every nested Mach-O (the .node addon + the vendored libmpv.dylib & its bundled
+  # deps, overriding their ad-hoc signatures) with the Developer ID cert from
+  # CSC_LINK/CSC_KEY_PASSWORD, then notarizes via notarytool using the App Store
+  # Connect API key (APPLE_API_KEY / _ID / _ISSUER). All env is wired per-OS in
+  # desktop-release.yml so a notarized .dmg opens without the Gatekeeper warning.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: true
 win:
   target: [nsis]
   # TODO(signing): Authenticode signing omitted for now (WIN_CSC_LINK/…).
