@@ -48,11 +48,13 @@ export interface DesktopPositionInfo {
   buffered: number;
 }
 
-/** Host OS identity resolved natively in the main process (the browser UA can't
- *  give a real OS version). `systemName` is a human string like "macOS 26",
- *  "Windows 11" or "Ubuntu 24.04". */
+/** Host identity resolved natively in the main process (the browser UA can't
+ *  give a real OS version nor the machine name). `systemName` is a human OS
+ *  string like "macOS 26" / "Ubuntu 24.04"; `deviceName` is the user-assigned
+ *  computer name like "MacBook de Clément". */
 export interface DesktopSystemInfo {
   systemName: string;
+  deviceName: string;
 }
 
 /** main → renderer event envelope, sent on the single IPC.event channel. */
