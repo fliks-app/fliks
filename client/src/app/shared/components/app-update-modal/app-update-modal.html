@@ -23,7 +23,7 @@
 
       <div class="rounded-box bg-base-200 p-3 max-h-72 overflow-y-auto mb-4">
         @if (info.releaseNotes) {
-          <pre class="whitespace-pre-wrap break-words text-sm font-sans">{{ info.releaseNotes }}</pre>
+          <div class="changelog-md text-sm break-words" [innerHTML]="info.releaseNotes | markdown"></div>
         } @else {
           <p class="text-sm opacity-60">{{ 'update.no_notes' | translate }}</p>
         }
