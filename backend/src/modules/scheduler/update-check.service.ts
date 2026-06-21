@@ -4,6 +4,13 @@ import * as path from 'path';
 
 // Public repo (no token needed); overridable for forks / test repos.
 const GITHUB_REPO = process.env.FLIKS_GITHUB_REPO ?? 'fliks-app/fliks';
+
+/** Lets a self-hoster opt out of the GitHub update check entirely (no outbound
+ *  request). Read live so it can be toggled without a rebuild. */
+function updateCheckDisabled(): boolean {
+  const v = (process.env.FLIKS_DISABLE_UPDATE_CHECK ?? '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes';
+}
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 // Generous ceiling for a cold TLS handshake; the call is async + cached.
 const FETCH_TIMEOUT_MS = 15000;
@@ -73,6 +80,16 @@ export class UpdateCheckService {
   }
 
   async getStatus(): Promise<UpdateStatus> {
+    if (updateCheckDisabled()) {
+      return {
+        currentVersion: CURRENT_VERSION,
+        latestVersion: null,
+        updateAvailable: false,
+        releaseUrl: null,
+        releaseNotes: null,
+        publishedAt: null,
+      };
+    }
     if (this.cache && Date.now() - this.cache.fetchedAt < CACHE_TTL_MS) {
       return this.cache.status;
     }

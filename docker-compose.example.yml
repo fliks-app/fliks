@@ -55,6 +55,10 @@ services:
       DB_PASSWORD: changeme
       DB_NAME: fliks
       NODE_ENV: production
+      # Set to disable the GitHub update check: no outbound api.github.com
+      # request, and /api/system/update always reports "up to date". Default:
+      # enabled (a single cached read request, no token, no data sent).
+      # FLIKS_DISABLE_UPDATE_CHECK: '1'
       # ---- Streaming session tuning (optional) -----------------------
       # All values below have safe defaults baked in. Override only if
       # you know what you're doing.
