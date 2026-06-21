@@ -22,17 +22,22 @@ import { MarkdownPipe } from '../../pipes/markdown.pipe';
   templateUrl: './app-update-modal.html',
   styles: [
     `
-      .changelog-md h1, .changelog-md h2, .changelog-md h3 { font-weight: 700; margin: 0.75rem 0 0.35rem; line-height: 1.3; }
-      .changelog-md h1 { font-size: 1.05rem; }
-      .changelog-md h2 { font-size: 1rem; }
-      .changelog-md h3 { font-size: 0.9rem; opacity: 0.85; }
-      .changelog-md > :first-child { margin-top: 0; }
-      .changelog-md ul, .changelog-md ol { padding-left: 1.25rem; margin: 0.35rem 0; list-style: revert; }
-      .changelog-md li { margin: 0.15rem 0; }
-      .changelog-md p { margin: 0.4rem 0; }
-      .changelog-md a { color: var(--color-primary); text-decoration: underline; }
-      .changelog-md code { font-family: monospace; background: rgba(127, 127, 127, 0.18); padding: 0 0.25rem; border-radius: 0.25rem; }
-      .changelog-md hr { margin: 0.6rem 0; border-color: rgba(127, 127, 127, 0.3); }
+      /* ::ng-deep — the changelog HTML is injected via [innerHTML], so it
+         carries no encapsulation attribute and plain component styles miss it. */
+      :host ::ng-deep .changelog-md { line-height: 1.55; }
+      :host ::ng-deep .changelog-md > :first-child { margin-top: 0; }
+      :host ::ng-deep .changelog-md h1,
+      :host ::ng-deep .changelog-md h2 { font-size: 1.1rem; font-weight: 700; margin: 1rem 0 0.45rem; }
+      :host ::ng-deep .changelog-md h3 { font-size: 0.95rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.75; margin: 0.9rem 0 0.35rem; }
+      :host ::ng-deep .changelog-md ul,
+      :host ::ng-deep .changelog-md ol { list-style: disc; padding-left: 1.4rem; margin: 0.4rem 0; }
+      :host ::ng-deep .changelog-md ol { list-style: decimal; }
+      :host ::ng-deep .changelog-md li { margin: 0.3rem 0; padding-left: 0.15rem; }
+      :host ::ng-deep .changelog-md li::marker { color: var(--color-primary); }
+      :host ::ng-deep .changelog-md p { margin: 0.5rem 0; }
+      :host ::ng-deep .changelog-md a { color: var(--color-primary); text-decoration: underline; }
+      :host ::ng-deep .changelog-md code { font-family: monospace; font-size: 0.85em; background: rgba(127, 127, 127, 0.18); padding: 0.05rem 0.3rem; border-radius: 0.25rem; }
+      :host ::ng-deep .changelog-md hr { margin: 0.75rem 0; border: 0; border-top: 1px solid rgba(127, 127, 127, 0.3); }
     `,
   ],
 })
