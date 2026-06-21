@@ -18,6 +18,13 @@ const PERIODIC_CHECK_MS = 6 * 60 * 60 * 1000;
 
 /** electron-updater self-installs only from an NSIS exe, a signed .app zip, or
  *  an AppImage. A .deb (dpkg needs root) and dev runs fall back to a download. */
+/** Opt out of the update check entirely (no outbound api.github.com request),
+ *  matching the backend's FLIKS_DISABLE_UPDATE_CHECK. */
+function updateCheckDisabled(): boolean {
+  const v = (process.env.FLIKS_DISABLE_UPDATE_CHECK ?? '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
 function canSelfInstall(): boolean {
   if (!app.isPackaged) return false;
   if (process.platform === 'linux') return !!process.env.APPIMAGE;
@@ -59,6 +66,14 @@ export function setupUpdater(): void {
 
   ipcMain.handle(UPDATE_IPC.getCapability, () => capability());
   ipcMain.handle(UPDATE_IPC.openReleases, () => shell.openExternal(RELEASES_URL));
+
+  // Opted out: register no-op channels (so renderer calls resolve) and never
+  // contact GitHub. The check reports "up to date", so no update button shows.
+  if (updateCheckDisabled()) {
+    ipcMain.handle(UPDATE_IPC.check, () => broadcast({ state: 'not-available' }));
+    ipcMain.handle(UPDATE_IPC.install, () => shell.openExternal(RELEASES_URL));
+    return;
+  }
 
   if (installable) {
     autoUpdater.autoDownload = false;

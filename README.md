@@ -126,6 +126,18 @@ have `nvidia-container-toolkit` installed and a different Compose
 snippet — the [transcoding docs](docs/transcoding-pipelines.md) cover
 both paths.
 
+### Update checks
+
+Fliks checks for new releases via the **public GitHub releases API**
+(`api.github.com`): the server does it to tell admins when their server is
+behind the latest release, and the desktop app does it to offer in-app
+updates. It's a single read request (no token, no telemetry, no data sent),
+cached for hours.
+
+To turn it off on the server, set `FLIKS_DISABLE_UPDATE_CHECK=1` — the
+`/api/system/update` endpoint then always reports "up to date" and never
+contacts GitHub.
+
 ## Layout
 
 - **`backend/`** — NestJS + TypeORM + PostgreSQL + FFmpeg.
