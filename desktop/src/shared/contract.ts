@@ -95,6 +95,50 @@ export const IPC = {
   event: 'player:event',
 } as const;
 
+export interface DesktopUpdateInfo {
+  version: string;
+  releaseName: string | null;
+  releaseNotes: string | null;
+  releaseDate: string | null;
+  releaseUrl: string | null;
+}
+
+export type DesktopUpdateStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'available'; info: DesktopUpdateInfo }
+  | { state: 'not-available' }
+  | { state: 'downloading'; percent: number }
+  | { state: 'downloaded'; info: DesktopUpdateInfo }
+  | { state: 'error'; message: string };
+
+/** `canInstall` is false where electron-updater can't self-install (.deb, dev)
+ *  → the UI offers a download link to `releasesUrl` instead. */
+export interface DesktopUpdateCapability {
+  canInstall: boolean;
+  currentVersion: string;
+  releasesUrl: string;
+}
+
+export const UPDATE_IPC = {
+  check: 'update:check',
+  install: 'update:install',
+  openReleases: 'update:openReleases',
+  getCapability: 'update:getCapability',
+  /** main → renderer (discriminated by DesktopUpdateStatus.state). */
+  status: 'update:status',
+} as const;
+
+/** Exposed on `window.fliksUpdater` by the preload bridge. */
+export interface FliksUpdaterApi {
+  getCapability(): Promise<DesktopUpdateCapability>;
+  check(): Promise<void>;
+  /** Download + install + relaunch. No-op when !canInstall. */
+  install(): Promise<void>;
+  openReleases(): Promise<void>;
+  onStatus(handler: (status: DesktopUpdateStatus) => void): () => void;
+}
+
 /** The surface exposed on `window.fliksDesktop` by the preload bridge. */
 export interface FliksDesktopApi {
   runtime: 'electron';

@@ -9,18 +9,21 @@
   "main": "dist/main/index.cjs",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "build:main": "esbuild src/main/index.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --outfile=dist/main/index.cjs",
+    "build:main": "esbuild src/main/index.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --external:electron-updater --outfile=dist/main/index.cjs",
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --outfile=dist/preload/index.cjs",
     "build": "npm run build:main && npm run build:preload",
     "start": "npm run build && electron .",
     "dev:linux": "bash scripts/dev-linux.sh",
     "dist": "electron-builder",
-    "dist:linux": "electron-builder --linux deb",
-    "dist:mac": "electron-builder --mac dmg",
+    "dist:linux": "electron-builder --linux AppImage deb",
+    "dist:mac": "electron-builder --mac dmg zip",
     "dist:win": "electron-builder --win nsis"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",

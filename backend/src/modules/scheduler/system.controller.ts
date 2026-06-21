@@ -30,6 +30,7 @@ import { User } from '../users/entities/user.entity';
 import { BackupService } from './backup.service';
 import { LogBufferService } from './log-buffer.service';
 import { EventsService } from './events.service';
+import { UpdateCheckService, type UpdateStatus } from './update-check.service';
 import { Observable } from 'rxjs';
 import {
   type HwAccelType,
@@ -196,6 +197,7 @@ export class SystemController {
     private readonly mediaFileRepo: Repository<MediaFile>,
     @InjectRepository(Episode)
     private readonly episodeRepo: Repository<Episode>,
+    private readonly updateCheck: UpdateCheckService,
   ) {}
 
   @Sse('events')
@@ -219,6 +221,12 @@ export class SystemController {
       indexers,
       downloadClients: clients,
     };
+  }
+
+  @Get('update')
+  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  async update(): Promise<UpdateStatus> {
+    return this.updateCheck.getStatus();
   }
 
   private async checkDatabase(): Promise<ServiceStatus> {

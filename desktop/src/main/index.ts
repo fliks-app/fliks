@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { registerAppSchemePrivileged, registerAppProtocol, APP_URL } from './protocol';
 import { installCorsBypass } from './cors';
+import { setupUpdater } from './updater';
 import { IPC, type DesktopEvent, type DesktopSubtitleStyle } from '../shared/contract';
 import { mpvSubtitleProps } from './mpv/subtitle-style';
 
@@ -267,6 +268,11 @@ app.whenReady().then(async () => {
     systemName: systemName(),
     deviceName: deviceName(),
   }));
+
+  // In-app updater (electron-updater on installable builds, GitHub-release
+  // detect-only on .deb/dev). Registered on every platform path so the renderer
+  // can always query capability + listen for status.
+  setupUpdater();
 
   const dir = webDir();
   const haveApp = fs.existsSync(path.join(dir, 'index.html'));

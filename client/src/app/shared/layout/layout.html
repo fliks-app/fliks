@@ -69,6 +69,15 @@
         }
       </div>
       <div class="flex-none flex items-center gap-1 md:gap-1.5">
+        @if (appUpdate.available()) {
+          <button class="btn btn-ghost btn-circle" (click)="openUpdateModal()"
+                  [attr.aria-label]="'update.title' | translate">
+            <div class="indicator">
+              <span class="indicator-item badge badge-xs badge-primary"></span>
+              <svg lucideRocket class="h-5 w-5 md:h-6 md:w-6"></svg>
+            </div>
+          </button>
+        }
         @if (castPlayer.hasMedia()) {
           <button class="btn btn-ghost btn-sm gap-1" (click)="toggleCastOverlay()">
             <svg lucideCast class="h-5 w-5 text-info"></svg>
@@ -120,6 +129,15 @@
       </div>
       <!-- Cast + user (right) -->
       <div class="flex items-center gap-1.5">
+        @if (appUpdate.available()) {
+          <button class="btn btn-ghost btn-circle" (click)="openUpdateModal()"
+                  [attr.aria-label]="'update.title' | translate">
+            <div class="indicator">
+              <span class="indicator-item badge badge-xs badge-primary"></span>
+              <svg lucideRocket class="h-5 w-5 md:h-6 md:w-6"></svg>
+            </div>
+          </button>
+        }
         @if (castPlayer.hasMedia()) {
           <button class="btn btn-ghost btn-sm gap-2" (click)="toggleCastOverlay()">
             <svg lucideCast class="h-5 w-5 text-info"></svg>
@@ -259,6 +277,9 @@
         }
     }
   </div>
+
+  <!-- App-update changelog + install dialog (opened from the topbar button) -->
+  <app-update-modal />
 
   <!-- Cast overlay (chip + card) — global, persists across navigation -->
   <app-cast-overlay />

@@ -1,11 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   IPC,
+  UPDATE_IPC,
   type DesktopEvent,
   type DesktopLoadOptions,
   type DesktopRect,
   type DesktopSubtitleStyle,
+  type DesktopUpdateStatus,
   type FliksDesktopApi,
+  type FliksUpdaterApi,
 } from '../shared/contract';
 
 // Exposes the native player surface on `window.fliksDesktop`. The Angular-side
@@ -42,3 +45,19 @@ const api: FliksDesktopApi = {
 };
 
 contextBridge.exposeInMainWorld('fliksDesktop', api);
+
+// Exposes the in-app updater on `window.fliksUpdater`, consumed by the Angular
+// AppUpdateService to drive the update button + changelog modal.
+const updater: FliksUpdaterApi = {
+  getCapability: () => ipcRenderer.invoke(UPDATE_IPC.getCapability),
+  check: () => ipcRenderer.invoke(UPDATE_IPC.check),
+  install: () => ipcRenderer.invoke(UPDATE_IPC.install),
+  openReleases: () => ipcRenderer.invoke(UPDATE_IPC.openReleases),
+  onStatus: (handler: (status: DesktopUpdateStatus) => void) => {
+    const listener = (_e: unknown, status: DesktopUpdateStatus) => handler(status);
+    ipcRenderer.on(UPDATE_IPC.status, listener);
+    return () => ipcRenderer.removeListener(UPDATE_IPC.status, listener);
+  },
+};
+
+contextBridge.exposeInMainWorld('fliksUpdater', updater);
