@@ -34,6 +34,7 @@ describe('SystemController.activeStreams recency filter', () => {
       quality: null,
       kind: 'directplay',
       deviceLabel: null,
+      systemName: null,
       sseConnectionId: null,
       startedAt: new Date(overrides.lastBeat),
       position: 0,

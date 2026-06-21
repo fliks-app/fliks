@@ -136,8 +136,8 @@ export class SystemStreamsComponent implements OnInit, OnDestroy {
     return `/series/${s.mediaId}/episode/${s.episodeId}`;
   }
 
-  formatDevice(ua: string | null | undefined): string {
-    const label = parseDeviceLabel(ua ?? null);
+  formatDevice(ua: string | null | undefined, systemName?: string | null): string {
+    const label = parseDeviceLabel(ua ?? null, systemName);
     if (!label) return '';
     return this.translate.instant(label.key, label.params);
   }

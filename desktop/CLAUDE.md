@@ -12,19 +12,35 @@ it is NOT the menu-bar server host under `macos/`.
   the single visible window. It composites **mpv video** (rendered into a GL FBO
   via libmpv's render API) under the **Angular UI bitmap**.
 - Embedded **mpv** comes from a self-contained static **libmpv** (render API).
-- ⚠️ **Two mpv backends — know which one you're debugging.** On **Linux**, mpv
-  runs **inside the native C++ addon** (libmpv render API); its property/event
-  plumbing (`time-pos`, `demuxer-cache-time`, `paused-for-cache`, `timeUpdate`,
-  `stateChanged`) lives in `native/compositor/addon.cc` + the `addon.onEvent` /
-  `emitPosition` wiring in `src/main/index.ts`. The `MpvPlayer` subprocess class
-  in `src/main/mpv/mpv-player.ts` is the **other** backend (Windows/macOS embed,
-  JSON-IPC) and is **NOT used on Linux** — editing it has no effect on the Linux
-  client. Both share `src/main/mpv/subtitle-style.ts` (`mpvSubtitleProps`).
+- ⚠️ **Three mpv backends — know which one you're debugging.**
+  1. **Linux** — mpv runs **inside the native C++ addon** (`native/compositor/
+     addon.cc`, libmpv render API, self-compositing SDL/GLES window); its
+     property/event plumbing (`time-pos`, `demuxer-cache-time`,
+     `paused-for-cache`, `timeUpdate`, `stateChanged`) lives in addon.cc + the
+     `addon.onEvent` / `emitPosition` wiring in `src/main/index.ts`.
+  2. **Windows** — `MpvPlayer` (`src/main/mpv/mpv-player.ts`) spawns an mpv
+     **subprocess** embedded via `--wid` into a child HWND, controlled over
+     JSON-IPC. **NOT used on Linux or macOS.**
+  3. **macOS** — `MacMpvPlayer` (`src/main/mpv/mac-mpv-player.ts`) wraps the
+     **in-process** libmpv addon `native/player_mac/addon.mm`, which renders into
+     a `CAOpenGLLayer` on the videoWin's NSView (render API, `vo=libmpv`,
+     `hwdec=videotoolbox`, EDR/HDR-capable). mpv's subprocess `--wid` crashes on
+     macOS, so it CAN'T use backend #2; and the macOS window server composites
+     sibling windows correctly, so it doesn't need #1's self-compositor — it
+     reuses the Windows-style 3-window `PlayerSession` instead.
+
+  `PlayerSession.createPlayer()` picks #2/#3 by platform; both implement
+  `PlayerBackend` (`src/main/mpv/player-backend.ts`). All three share
+  `src/main/mpv/subtitle-style.ts` (`mpvSubtitleProps`) and `tracks.ts`
+  (`parseTracks`).
 - This single-window compositor is the only model that works under **Mutter/X11**:
   an embedded mpv child window can't be composited beneath a sibling transparent
   overlay there, so we composite ourselves.
 - Consequence: **HDR is SDR-tonemapped on Linux** (render API uses `vo_gpu`, not
-  gpu-next). Video plays; it just isn't true-HDR on screen.
+  gpu-next). Video plays; it just isn't true-HDR on screen. On **macOS** the
+  CAOpenGLLayer uses an RGBA16F backing + `wantsExtendedDynamicRangeContent` and
+  mpv `target-colorspace-hint=yes`, attempting true HDR/EDR passthrough (best
+  effort; `FLIKS_HDR=no` forces SDR).
 
 The three buildable units: **native addon** (C++), **main/preload bundle**
 (esbuild), **Angular client** (`../client`).
@@ -51,30 +67,50 @@ cd desktop && npm install
 
 ## Prerequisite: vendored libmpv (gitignored)
 
-`native/vendor/libmpv.so.2` is required but **not in git** (`vendor/` is ignored;
-it's a ~38 MB binary). It must be a *self-contained static* libmpv with hidden
-FFmpeg symbols, or Electron's bundled `libffmpeg.so` (libav 58) clashes with
-libmpv's libav 60 and crashes (`free(): invalid pointer` / abort).
+The runtime libmpv lives under `native/vendor/` and is **not in git** (`vendor/`
+is ignored; the Linux `.so` is the one committed exception). It must be
+*self-contained* with hidden FFmpeg symbols, or Electron's bundled libffmpeg
+clashes with libmpv's FFmpeg and crashes (`free(): invalid pointer` / abort).
+Override the path with `FLIKS_MPV_PATH`.
 
-Kill-switch check — this MUST print nothing:
+**Linux** — `native/vendor/libmpv.so.2` (~38 MB self-contained static).
+Kill-switch (MUST print nothing):
 ```bash
 nm -D native/vendor/libmpv.so.2 | grep ' av_'
 ```
-If the file is missing, rebuild/obtain it before anything else. Override its path
-with `FLIKS_MPV_PATH`.
+
+**macOS** — `native/vendor/libmpv.dylib` + its bundled deps. Produce them from a
+Homebrew mpv with the vendor script (relocates every dep to `@loader_path`; the
+two-level namespace keeps the bundled FFmpeg distinct from Electron's):
+```bash
+brew install mpv dylibbundler
+desktop/scripts/vendor-libmpv-mac.sh
+```
+Kill-switch (MUST print nothing — note the Mach-O leading underscore):
+```bash
+nm -gU native/vendor/libmpv.dylib | grep ' _av_'
+otool -L native/vendor/*.dylib | grep -E '/opt/homebrew|/usr/local'  # also empty
+```
 
 ## Build
 
 Run from the repo root unless noted. Use **absolute paths** or `cd` inside one
 compound command (a bare `cd` between tool calls can prompt for permission).
 
-1. **Native addon** (after editing `native/compositor/addon.cc` or `binding.gyp`).
-   Targets the Electron 42 ABI:
+1. **Native addon** (after editing `native/compositor/addon.cc`,
+   `native/player_mac/addon.mm`, or `binding.gyp`). Targets the Electron 42 ABI.
+   `binding.gyp` builds only the current OS's target (`fliks_compositor` on
+   Linux, `fliks_player_mac` on macOS):
    ```bash
+   # Linux:
    cd desktop/native && ../node_modules/.bin/node-gyp rebuild \
      --target=42.4.0 --dist-url=https://electronjs.org/headers --arch=x64
+   # macOS (Apple Silicon):
+   cd desktop/native && ../node_modules/.bin/node-gyp rebuild \
+     --target=42.4.0 --dist-url=https://electronjs.org/headers --arch=arm64
    ```
-   Output: `native/build/Release/fliks_compositor.node`.
+   Output: `native/build/Release/fliks_compositor.node` (Linux) or
+   `fliks_player_mac.node` (macOS).
 
 2. **Main + preload bundle** (after editing `src/main/**` or `src/preload/**`):
    ```bash

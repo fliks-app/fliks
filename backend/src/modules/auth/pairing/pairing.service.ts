@@ -24,6 +24,7 @@ export interface PendingRequestDto {
   pairingId: string;
   deviceId: string;
   deviceName: string;
+  systemName: string | null;
   requestedAt: Date;
   expiresAt: Date;
 }
@@ -54,6 +55,7 @@ export class PairingService {
     userId: number,
     deviceId: string,
     deviceName: string,
+    systemName?: string,
   ): Promise<{ pairingId: string; expiresIn: number }> {
     const user = await this.userRepo.findOne({
       where: { id: userId, enabled: true },
@@ -75,6 +77,7 @@ export class PairingService {
       userId,
       deviceId,
       deviceName: deviceName.slice(0, 80),
+      systemName: systemName?.slice(0, 60) ?? null,
       status: 'pending' as PairingStatus,
       accessToken: null,
       expiresAt: new Date(now + PAIRING_TTL_MS),
@@ -162,6 +165,7 @@ export class PairingService {
         pairingId: r.publicId,
         deviceId: r.deviceId,
         deviceName: r.deviceName,
+        systemName: r.systemName,
         requestedAt: r.createdAt,
         expiresAt: r.expiresAt,
       }));

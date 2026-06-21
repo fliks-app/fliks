@@ -124,7 +124,7 @@
         <!-- User + device -->
         <div class="text-center text-xs text-base-content/60 py-1.5">
           {{ s.username ?? '—' }}
-          @if (formatDevice(s.device); as deviceLabel) {
+          @if (formatDevice(s.device, s.systemName); as deviceLabel) {
             <div class="text-base-content/40">{{ deviceLabel }}</div>
           }
         </div>

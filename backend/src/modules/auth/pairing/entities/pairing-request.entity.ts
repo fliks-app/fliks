@@ -24,6 +24,11 @@ export class PairingRequest extends BaseEntity {
   @Column()
   deviceName: string;
 
+  /** Real host OS name+version ("macOS 26", "iOS 18.5") resolved natively by the
+   *  requester (the UA can't expose a version). Nullable for older clients. */
+  @Column({ type: 'varchar', length: 60, nullable: true })
+  systemName: string | null;
+
   @Column({ type: 'varchar', default: 'pending' })
   status: PairingStatus;
 

@@ -47,6 +47,12 @@ export interface DesktopPositionInfo {
   buffered: number;
 }
 
+/** Native host OS identity (e.g. { systemName: "macOS 26" }). The browser UA
+ *  can't give a real OS version, so the main process resolves it. */
+export interface DesktopSystemInfo {
+  systemName: string;
+}
+
 export type DesktopPlayerState = 'idle' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';
 
 export type DesktopEvent =
@@ -82,6 +88,8 @@ export interface FliksDesktopApi {
   resize(rect: DesktopRect): Promise<void>;
   setFullscreen(enabled: boolean): Promise<void>;
   destroy(): Promise<void>;
+  /** Native host OS identity (e.g. { systemName: "macOS 26" }). */
+  getSystemInfo(): Promise<DesktopSystemInfo>;
   on(handler: (event: DesktopEvent) => void): () => void;
 }
 

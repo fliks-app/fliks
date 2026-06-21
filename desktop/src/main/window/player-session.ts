@@ -2,6 +2,8 @@ import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { MpvPlayer } from '../mpv/mpv-player';
+import { MacMpvPlayer } from '../mpv/mac-mpv-player';
+import type { PlayerBackend } from '../mpv/player-backend';
 import { createEmbedBackend } from './backends';
 import { IPC, type DesktopEvent, type DesktopRect } from '../../shared/contract';
 
@@ -44,7 +46,7 @@ export class PlayerSession {
   private frameWin!: BrowserWindow;
   private videoWin!: BrowserWindow;
   private uiWin!: BrowserWindow;
-  private mpv: MpvPlayer | null = null;
+  private mpv: PlayerBackend | null = null;
 
   async start(opts: PlayerSessionOptions): Promise<void> {
     const { rendererUrl, preloadPath, iconPath } = opts;
@@ -159,15 +161,27 @@ export class PlayerSession {
     sync();
 
     // The video window's native handle is only valid once it has painted.
-    const backend = createEmbedBackend();
-    const { args, env } = backend.resolve(this.videoWin);
-    this.mpv = new MpvPlayer({ baseArgs: args, env, mpvPath: resolveBundledMpv() });
+    this.mpv = this.createPlayer();
     this.forwardEvents(this.mpv);
     await this.mpv.start();
     this.emit({ type: 'ready' });
   }
 
-  private forwardEvents(mpv: MpvPlayer): void {
+  /**
+   * Pick the playback backend for the current OS:
+   *   • macOS — in-process libmpv rendered into a CAOpenGLLayer on the video
+   *     window's NSView (mpv's subprocess --wid crashes there).
+   *   • Windows (and other --wid embed platforms) — an mpv subprocess embedded
+   *     via the platform EmbedBackend's args.
+   */
+  private createPlayer(): PlayerBackend {
+    if (process.platform === 'darwin') return new MacMpvPlayer(this.videoWin);
+    const backend = createEmbedBackend();
+    const { args, env } = backend.resolve(this.videoWin);
+    return new MpvPlayer({ baseArgs: args, env, mpvPath: resolveBundledMpv() });
+  }
+
+  private forwardEvents(mpv: PlayerBackend): void {
     mpv.on('log', (s: string) => process.stderr.write(`[mpv] ${s}`));
     mpv.on('exit', (e) => console.error('[mpv] process exit', JSON.stringify(e)));
     mpv.on('stateChanged', (p) => {
@@ -196,7 +210,7 @@ export class PlayerSession {
   }
 
   /** The mpv player; throws if accessed before start() completes. */
-  get player(): MpvPlayer {
+  get player(): PlayerBackend {
     if (!this.mpv) throw new Error('player not started');
     return this.mpv;
   }

@@ -56,6 +56,7 @@ describe('StreamingController.stopLiveSession', () => {
       quality: null,
       kind: 'directplay',
       deviceLabel: null,
+      systemName: null,
       sseConnectionId: null,
       startedAt: Date.now(),
       lastBeat: Date.now(),

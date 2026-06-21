@@ -1,5 +1,6 @@
 import { Preferences } from '@capacitor/preferences';
 import { Capacitor } from '@capacitor/core';
+import { detectBrowser, detectOs } from './ua-parser';
 
 const DEVICE_ID_KEY = 'fliks_device_id';
 
@@ -44,9 +45,9 @@ export function getDeviceName(): string {
   if (/iPad/.test(ua)) return 'iPad';
   if (/Android/.test(ua)) return parseAndroidModel(ua) ?? 'Android';
 
-  // Desktop — best-effort browser + OS.
-  const browser = /Firefox\//.test(ua) ? 'Firefox' : /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
-  const os = /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : '';
+  // Desktop — best-effort browser + OS (shared UA parser).
+  const browser = detectBrowser(ua);
+  const os = detectOs(ua) ?? '';
   return os ? `${browser} — ${os}` : browser;
 }
 

@@ -16,7 +16,11 @@ export interface ActiveStream {
   mode: 'transcode' | 'remux' | 'directplay';
   quality: string;
   hwAccel: string;
+  /** Raw User-Agent captured server-side; fed to the device-label formatter. */
   device: string | null;
+  /** Real host OS name+version ("macOS 26") sent by the client; overrides the
+   *  UA-derived OS (which the browser freezes) in the device label. */
+  systemName: string | null;
   startedAt: string;
   lastActivity: string;
   positionSeconds: number;

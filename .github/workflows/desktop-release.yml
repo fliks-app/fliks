@@ -124,6 +124,13 @@ jobs:
             build-essential python3 pkg-config \
             libsdl2-dev libgles2-mesa-dev libegl1-mesa-dev libmpv-dev
 
+      # macOS embeds in-process libmpv (no SDL/GLES addon). `mpv` provides the
+      # libmpv headers the addon compiles against + the dylib the vendor script
+      # bundles; `dylibbundler` makes it self-contained (see Vendor step below).
+      - name: Install macOS build deps
+        if: runner.os == 'macOS'
+        run: brew install mpv dylibbundler
+
       # ── Install node deps (desktop + client) ──
       - name: Install desktop deps
         working-directory: desktop
@@ -174,12 +181,32 @@ jobs:
           rm -f "$dest/libmpv.so.2"  # the committed Linux lib isn't used on Windows
           echo "vendored mpv.exe ($(du -h "$dest/mpv.exe" | cut -f1)) + $(ls "$dest"/*.dll 2>/dev/null | wc -l) DLLs"
 
-      # macOS is UI-only for now (no native compositor), so it ships no mpv —
-      # drop the committed Linux lib so it isn't carried into the .dmg.
-      - name: Drop unused vendor libs (macOS)
+      # macOS embeds in-process libmpv (CAOpenGLLayer on the videoWin NSView).
+      # Build a self-contained, relocatable libmpv.dylib (+ its deps) from the
+      # Homebrew mpv: dylibbundler copies every non-system dep next to it and
+      # rewrites load commands to @loader_path. macOS's two-level namespace keeps
+      # the bundled FFmpeg distinct from Electron's libffmpeg.dylib. The script
+      # also drops the committed Linux libmpv.so.2 (unused on mac). UNTESTED on a
+      # real release box — local bring-up only so far.
+      - name: Vendor libmpv (macOS)
         if: runner.os == 'macOS'
         shell: bash
-        run: rm -f desktop/native/vendor/libmpv.so.2
+        run: bash desktop/scripts/vendor-libmpv-mac.sh
+
+      - name: Verify vendored libmpv (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          f=desktop/native/vendor/libmpv.dylib
+          test -f "$f" || { echo "::error::vendored libmpv.dylib missing at $f"; exit 1; }
+          # libmpv must export no FFmpeg symbols (else it clashes with Electron's
+          # bundled libffmpeg.dylib) — the macOS analogue of the Linux av_* check.
+          test -z "$(nm -gU "$f" 2>/dev/null | grep ' _av_')" \
+            || { echo "::error::libmpv exports _av_ — not self-contained"; exit 1; }
+          # nothing in the tree may point outside @loader_path + the system dirs.
+          stray=$(otool -L desktop/native/vendor/*.dylib | grep -E '/opt/homebrew|/usr/local' || true)
+          test -z "$stray" || { echo "::error::stray non-bundled deps:"; echo "$stray"; exit 1; }
+          echo "vendored libmpv OK: $(du -sh desktop/native/vendor | cut -f1)"
 
       # ── Build the native compositor addon against the Electron 42 ABI ──
       # Linux-only: SDL2 + GLES/EGL OSR compositor (the Mutter/X11 model). macOS
@@ -194,6 +221,19 @@ jobs:
             --target=42.4.0 \
             --dist-url=https://electronjs.org/headers \
             --arch=x64
+
+      # macOS: build the in-process libmpv addon (fliks_player_mac) for arm64.
+      # binding.gyp gates this target on OS=='mac' and finds the libmpv headers
+      # under the Homebrew prefix (mpv installed above).
+      - name: Build native addon (macOS)
+        if: runner.os == 'macOS'
+        working-directory: desktop/native
+        shell: bash
+        run: |
+          ../node_modules/.bin/node-gyp rebuild \
+            --target=42.4.0 \
+            --dist-url=https://electronjs.org/headers \
+            --arch=arm64
 
       # ── Build the esbuild main/preload bundle (dist/**) ── CONFIDENT.
       - name: Build main + preload bundle

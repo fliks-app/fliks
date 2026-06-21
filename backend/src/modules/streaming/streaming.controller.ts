@@ -767,6 +767,7 @@ export class StreamingController {
       quality: typeof startQuality === 'string' ? startQuality : null,
       kind,
       deviceLabel,
+      systemName: deviceProfile.systemName ?? null,
       sseConnectionId,
       position: resumePosition,
       useTs: effectiveUseTs,

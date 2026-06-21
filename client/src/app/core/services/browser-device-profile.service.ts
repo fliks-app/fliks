@@ -4,6 +4,7 @@ import { PlayerSettingsService } from './player-settings.service';
 import { DeviceService } from './device.service';
 import { ServerConfigService } from './server-config.service';
 import { ENGINE_TRAITS, engineKindFor } from './engine-traits';
+import { SystemInfoService } from './system-info.service';
 import { getDeviceName } from '../utils/device-info';
 
 interface HdrPlugin {
@@ -87,6 +88,9 @@ export interface DeviceProfile {
   /** Human-readable device shown on the admin streams dashboard
    *  ("Chrome — macOS", "iPhone"). Cosmetic only. */
   deviceName?: string;
+  /** Real host OS name+version ("macOS 26", "iOS 18.5") resolved natively; the
+   *  admin label prefers this over the UA-derived OS (which the UA freezes). */
+  systemName?: string;
   /** Hard force MPEG-TS HLS for every transcode session of this client.
    *  Defaults to `false`; the only switch in shipping configs is the
    *  narrower `useTsOnSingleAudio` below. Opt-in via
@@ -139,6 +143,7 @@ export class BrowserDeviceProfileService {
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly device = inject(DeviceService);
   private readonly serverConfig = inject(ServerConfigService);
+  private readonly systemInfo = inject(SystemInfoService);
   private cachedProfile: DeviceProfile | null = null;
   private nativeHdr: boolean | null = null;
   private nativeAudio: {
@@ -186,9 +191,14 @@ export class BrowserDeviceProfileService {
     const forceDisableHdr = this.playerSettings.get().forceDisableHdr;
     const needsOverride =
       forceDisableHdr || useTsOverride !== !!this.cachedProfile.useTs;
-    if (!needsOverride) return this.cachedProfile;
+    // systemName resolves asynchronously (native bridge / Capacitor Device), so
+    // overlay the current value on every call rather than baking a possibly-empty
+    // value into the cache.
+    const systemName = this.systemInfo.systemName() || undefined;
+    if (!needsOverride) return { ...this.cachedProfile, systemName };
     return {
       ...this.cachedProfile,
+      systemName,
       supportsHdr: forceDisableHdr ? false : this.cachedProfile.supportsHdr,
       useTs: useTsOverride,
     };

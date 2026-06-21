@@ -47,6 +47,9 @@ export interface LiveSession {
   quality: string | null;
   kind: SessionKind;
   deviceLabel: string | null;
+  /** Real host OS name+version ("macOS 26") from the client DeviceProfile;
+   *  preferred over the UA-derived label in the admin streams dashboard. */
+  systemName: string | null;
   /** SSE connection that owns this playback — admin remote-control is routed
    *  here so a second device on the same (user, file) is left untouched. */
   sseConnectionId: string | null;
@@ -117,6 +120,7 @@ export interface CreateLiveSessionInput {
   quality?: string | null;
   kind: SessionKind;
   deviceLabel?: string | null;
+  systemName?: string | null;
   sseConnectionId?: string | null;
   position?: number;
   useTs?: boolean;
@@ -222,6 +226,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       quality: input.quality ?? null,
       kind: input.kind,
       deviceLabel: input.deviceLabel ?? null,
+      systemName: input.systemName ?? null,
       sseConnectionId: input.sseConnectionId ?? null,
       startedAt: now,
       lastBeat: now,

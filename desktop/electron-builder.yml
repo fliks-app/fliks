@@ -44,11 +44,19 @@ extraResources:
     to: web
     filter: ['**/*']
 mac:
-  target: [dmg]
+  # arm64 (Apple Silicon) only for this iteration. The vendored libmpv.dylib +
+  # the native addon are built arm64 (see desktop-release.yml); a universal build
+  # would need a lipo'd dylib + an x64 addon. Revisit for Intel support.
+  target:
+    - target: dmg
+      arch: arm64
   category: public.app-category.entertainment
   # TODO(signing): hardened runtime + notarization are intentionally omitted for
   # iteration 1. Unsigned .dmg is fine for internal testing; production needs a
   # Developer ID cert, CSC_LINK/CSC_KEY_PASSWORD, and notarytool credentials.
+  # NOTE: the vendored libmpv.dylib + its bundled deps are ad-hoc signed; a
+  # hardened-runtime/notarized build will need them signed with the Developer ID
+  # (or the disable-library-validation entitlement).
 win:
   target: [nsis]
   # TODO(signing): Authenticode signing omitted for now (WIN_CSC_LINK/…).
