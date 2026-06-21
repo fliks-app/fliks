@@ -47,10 +47,11 @@ export interface DesktopPositionInfo {
   buffered: number;
 }
 
-/** Native host OS identity (e.g. { systemName: "macOS 26" }). The browser UA
- *  can't give a real OS version, so the main process resolves it. */
+/** Native host identity. `systemName` = OS name+version ("macOS 26");
+ *  `deviceName` = the user-assigned computer name ("MacBook de Clément"). */
 export interface DesktopSystemInfo {
   systemName: string;
+  deviceName: string;
 }
 
 export type DesktopPlayerState = 'idle' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';

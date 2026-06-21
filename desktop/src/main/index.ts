@@ -124,6 +124,29 @@ function computeSystemName(): string {
   return process.platform;
 }
 
+// User-assigned machine name ("MacBook de Clément"), resolved natively. Cached.
+let cachedDeviceName: string | null = null;
+function deviceName(): string {
+  if (cachedDeviceName != null) return cachedDeviceName;
+  cachedDeviceName = computeDeviceName();
+  return cachedDeviceName;
+}
+function computeDeviceName(): string {
+  try {
+    if (process.platform === 'darwin') {
+      // The friendly name set in System Settings ("MacBook de Clément"), not the
+      // dotted local hostname.
+      const name = execFileSync('scutil', ['--get', 'ComputerName'], {
+        encoding: 'utf8',
+      }).trim();
+      if (name) return name;
+    }
+  } catch {
+    /* fall through to hostname */
+  }
+  return os.hostname().replace(/\.local$/, '');
+}
+
 function parseTracks(json: string | null): {
   audioTracks: unknown[];
   subtitleTracks: unknown[];
@@ -240,7 +263,10 @@ app.whenReady().then(async () => {
 
   // Available on every platform path (embed / compositor / ui-only) so the
   // renderer can label this device with its real OS + version.
-  ipcMain.handle(IPC.getSystemInfo, () => ({ systemName: systemName() }));
+  ipcMain.handle(IPC.getSystemInfo, () => ({
+    systemName: systemName(),
+    deviceName: deviceName(),
+  }));
 
   const dir = webDir();
   const haveApp = fs.existsSync(path.join(dir, 'index.html'));

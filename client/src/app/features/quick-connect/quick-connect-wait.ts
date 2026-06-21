@@ -71,6 +71,10 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
       // device name itself stays the recognizable getDeviceName() label.
       await this.systemInfo.ready();
       this.systemName.set(this.systemInfo.systemName());
+      // Prefer the real user-assigned device name ("MacBook de Clément") over the
+      // UA-derived model fallback when a native source provides it.
+      const realName = this.systemInfo.deviceName();
+      if (realName) this.deviceName.set(realName);
       const { pairingId, expiresIn } = await this.auth.pairingRequest(
         this.userId,
         this.deviceId,
