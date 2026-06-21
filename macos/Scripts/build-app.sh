@@ -173,16 +173,30 @@ cp -R "$REPO_ROOT/client/dist/client/browser/"* "$RESOURCES/client/"
 echo "    [done] All resources copied"
 
 # ── Code sign everything ──
-echo "==> Code signing..."
-# Sign all dylibs first.
-find "$RESOURCES" -name "*.dylib" -exec codesign --force --sign - {} \; 2>/dev/null
-# Sign binaries.
-codesign --force --sign - "$RESOURCES/node/bin/node"
-find "$RESOURCES/postgres/bin" -type f -perm +111 -exec codesign --force --sign - {} \;
-codesign --force --sign - "$RESOURCES/ffmpeg/bin/ffmpeg"
-[ -f "$RESOURCES/ffmpeg/bin/ffprobe" ] && codesign --force --sign - "$RESOURCES/ffmpeg/bin/ffprobe"
-# Re-sign the outer app bundle.
-codesign --force --sign - "$APP_BUNDLE"
+# Local dev signs ad-hoc ("-"). CI passes a Developer ID identity via
+# MAC_SIGN_IDENTITY for a NOTARIZABLE build: hardened runtime + secure timestamp
+# + entitlements. Sign inside-out — every nested Mach-O first, the .app last.
+SIGN_ID="${MAC_SIGN_IDENTITY:--}"
+ENTITLEMENTS="$MACOS_DIR/Fliks/Fliks.entitlements"
+echo "==> Code signing (identity: $SIGN_ID)..."
+sign() {
+    if [ "$SIGN_ID" = "-" ]; then
+        codesign --force --sign - "$1" 2>/dev/null || true
+    else
+        codesign --force --options runtime --timestamp \
+            --entitlements "$ENTITLEMENTS" --sign "$SIGN_ID" "$1"
+    fi
+}
+
+# Every Mach-O inside the bundle: dylibs, the node/postgres/ffmpeg helpers, AND
+# native .node addons under backend/node_modules — notarization rejects any
+# unsigned executable. `file` filters out the (many) non-binary files.
+while IFS= read -r -d '' f; do
+    if file "$f" 2>/dev/null | grep -q 'Mach-O'; then sign "$f"; fi
+done < <(find "$RESOURCES" -type f -print0)
+
+# Outer app bundle last (seals the signed contents).
+sign "$APP_BUNDLE"
 echo "    [done]"
 
 echo ""

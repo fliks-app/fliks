@@ -82,20 +82,65 @@ jobs:
         working-directory: macos
         run: xcodegen generate
 
+      # ── Import the Developer ID cert into a throwaway keychain ──
+      # build-app.sh signs the .app + every bundled binary with it (hardened
+      # runtime + entitlements), so the DMG can be notarized below.
+      - name: Import Developer ID certificate
+        env:
+          CERT_P12_BASE64: ${{ secrets.MAC_DEVELOPER_ID_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MAC_DEVELOPER_ID_CERT_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/devid.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PWD="$(openssl rand -base64 24)"
+          echo "$CERT_P12_BASE64" | base64 -d > "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" \
+            $(security list-keychains -d user | sed -e 's/^[[:space:]]*//' -e 's/"//g')
+          rm -f "$CERT_PATH"
+
       # ── Build .app + bundle resources + dylibs ──
       # API keys are baked into Info.plist via Xcode build settings,
-      # then read at runtime by BuildConfig.swift.
+      # then read at runtime by BuildConfig.swift. MAC_SIGN_IDENTITY tells
+      # build-app.sh to Developer ID sign (hardened runtime) instead of ad-hoc;
+      # the single imported cert matches the identity prefix uniquely.
       - name: Build Fliks.app
         working-directory: macos
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           TVDB_API_KEY: ${{ secrets.TVDB_API_KEY }}
+          MAC_SIGN_IDENTITY: Developer ID Application
         run: ./Scripts/build-app.sh --skip-web
 
       # ── Create DMG ──
       - name: Create DMG
         working-directory: macos
         run: ./Scripts/make-dmg.sh
+
+      # ── Notarize + staple the DMG ──
+      # Without notarization a downloaded DMG is blocked by Gatekeeper
+      # ("damaged" / "Apple cannot check it"). notarytool reuses the App Store
+      # Connect API key (same one the iOS build uses); --wait blocks on Apple's
+      # verdict, then the ticket is stapled so it opens offline.
+      - name: Notarize and staple DMG
+        env:
+          KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8_BASE64 }}
+          KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+        run: |
+          p8="$RUNNER_TEMP/notary.p8"
+          echo "$KEY_P8" | base64 -d > "$p8"
+          dmg="$(find macos/build -name 'Fliks-*.dmg' | head -1)"
+          test -n "$dmg" || { echo "::error::DMG not found for notarization"; exit 1; }
+          xcrun notarytool submit "$dmg" \
+            --key "$p8" --key-id "$KEY_ID" --issuer "$ISSUER_ID" --wait
+          xcrun stapler staple "$dmg"
+          xcrun stapler validate "$dmg"
+          rm -f "$p8"
 
       # ── Upload DMG as artifact (always) ──
       - name: Upload DMG artifact
