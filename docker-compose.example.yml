@@ -35,16 +35,21 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # `host` networking so Chromecast / DLNA mDNS discovery works on the
-    # LAN. Without this, Cast devices are invisible to the sender. The
-    # trade-off is that the `ports:` block below is ignored and Fliks
-    # binds directly to host port 4848 — change `PORT` env if that
-    # collides with anything else on the host.
-    network_mode: host
+    # Publish the web UI / API on host port 4848. The container runs on the
+    # default compose bridge network and reaches Postgres by its service name.
+    #
+    # Note: on a bridge network, LAN Chromecast / DLNA discovery (mDNS) does
+    # not reach the container. If you rely on Cast-device auto-discovery from
+    # this server, either run a host-network sidecar for discovery or switch
+    # this service to `network_mode: host` (then drop the `ports:` block and
+    # set DB_HOST to 127.0.0.1 with Postgres also reachable on the host).
+    ports:
+      - '4848:4848'
     environment:
-      # Default port. Override if 4848 is already used on the host.
+      # Default port. Override (and the published port above) if 4848 is
+      # already used on the host.
       PORT: 4848
-      DB_HOST: 127.0.0.1
+      DB_HOST: postgres
       DB_PORT: 5432
       DB_USERNAME: fliks
       DB_PASSWORD: changeme
