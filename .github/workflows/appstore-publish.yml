@@ -91,27 +91,35 @@ jobs:
       # On a blank runner keychain, `-allowProvisioningUpdates` cloud-signing
       # regenerates a cert each build and quickly hits Apple's cert cap. The
       # provisioning profile stays cloud-managed (profiles aren't capped).
-      - name: Import Apple Distribution certificate
+      # Import BOTH the team's Apple Distribution and Apple Development certs into
+      # a throwaway keychain so Xcode reuses them instead of minting fresh ones on
+      # every run (archive needs a Development cert + a Distribution cert; on a
+      # blank runner keychain -allowProvisioningUpdates regenerated each, climbing
+      # toward Apple's cert cap). The temp keychain is ADDED to the search list
+      # (login kept) so cloud-managed provisioning profiles still resolve.
+      - name: Import signing certificates
         env:
-          CERT_P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
-          CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          DIST_P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+          DIST_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          DEV_P12_BASE64: ${{ secrets.IOS_DEV_CERT_P12_BASE64 }}
+          DEV_PASSWORD: ${{ secrets.IOS_DEV_CERT_PASSWORD }}
         run: |
-          CERT_PATH="$RUNNER_TEMP/ios-dist.p12"
           KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
           KEYCHAIN_PWD="$(openssl rand -base64 24)"
-          echo "$CERT_P12_BASE64" | base64 -d > "$CERT_PATH"
           security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          import_p12() {
+            local path="$RUNNER_TEMP/cert.p12"
+            echo "$1" | base64 -d > "$path"
+            security import "$path" -P "$2" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+            rm -f "$path"
+          }
+          import_p12 "$DIST_P12_BASE64" "$DIST_PASSWORD"
+          import_p12 "$DEV_P12_BASE64" "$DEV_PASSWORD"
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
-          # ADD the temp keychain to the search list — don't replace it. Archive
-          # still needs the login keychain so -allowProvisioningUpdates can
-          # create/find the iOS Development cert; the temp keychain only supplies
-          # the (now reused) Apple Distribution cert.
           security list-keychains -d user -s "$KEYCHAIN_PATH" \
             $(security list-keychains -d user | sed -e 's/^[[:space:]]*//' -e 's/"//g')
-          rm -f "$CERT_PATH"
         working-directory: ${{ github.workspace }}
 
       - name: Install CocoaPods
