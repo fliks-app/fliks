@@ -86,6 +86,29 @@ jobs:
             > ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8
 
+      # Import the team's Apple Distribution cert into a throwaway keychain so
+      # Xcode REUSES it instead of minting a new signing certificate every run.
+      # On a blank runner keychain, `-allowProvisioningUpdates` cloud-signing
+      # regenerates a cert each build and quickly hits Apple's cert cap. The
+      # provisioning profile stays cloud-managed (profiles aren't capped).
+      - name: Import Apple Distribution certificate
+        env:
+          CERT_P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/ios-dist.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PWD="$(openssl rand -base64 24)"
+          echo "$CERT_P12_BASE64" | base64 -d > "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          rm -f "$CERT_PATH"
+        working-directory: ${{ github.workspace }}
+
       - name: Install CocoaPods
         run: pod install
         working-directory: client/ios/App
