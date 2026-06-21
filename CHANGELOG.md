@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.13.1](https://github.com/fliks-app/fliks/compare/v1.13.0...v1.13.1) (2026-06-21)
+
+
+### Bug Fixes
+
+* **desktop:** publish release assets onto the published GitHub release ([#550](https://github.com/fliks-app/fliks/issues/550)) ([0d5cd5a](https://github.com/fliks-app/fliks/commit/0d5cd5acd1867cf340d71cf5e614926ed8adc4dd))
+* **docker:** publish port 4848 instead of host networking in example compose ([#554](https://github.com/fliks-app/fliks/issues/554)) ([29ae72e](https://github.com/fliks-app/fliks/commit/29ae72e47213ed74cca690a9670a9446f2b6d47c))
+
 ## [1.13.0](https://github.com/fliks-app/fliks/compare/v1.12.3...v1.13.0) (2026-06-21)
 
 
