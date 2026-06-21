@@ -1,6 +1,7 @@
 import Foundation
 import Capacitor
-import UIKit
+import VideoToolbox
+import CoreMedia
 
 @objc(VideoCapabilitiesPlugin)
 public class VideoCapabilitiesPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -10,25 +11,32 @@ public class VideoCapabilitiesPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "getSupported", returnType: CAPPluginReturnPromise),
     ]
 
-    /// Reports the video codecs AVPlayer can decode on this device so the
-    /// profile reflects VideoToolbox capability rather than the WebView MSE
-    /// (which under-reports HEVC). H.264 is universal; HEVC — including Main10
-    /// — is hardware-decoded across the iOS 11+ device range (A9 and newer).
-    /// AVPlayer demuxes the ISO-BMFF family only, so MKV/WebM are never
-    /// advertised (those still remux/transcode server-side).
+    /// Reports the video codecs the device can hardware-decode, queried at
+    /// runtime from VideoToolbox rather than guessed from the OS version — H.264
+    /// is universal; HEVC and AV1 are asked of `VTIsHardwareDecodeSupported` so
+    /// only devices with the actual decoder (HEVC: A9+, AV1: A17 Pro / M3+) are
+    /// told they can Direct Play them. Their hardware decoders are 10-bit, so the
+    /// Main10 flags follow the codec. AVPlayer demuxes the ISO-BMFF family only,
+    /// so MKV/WebM are never advertised (those still remux/transcode server-side).
     @objc func getSupported(_ call: CAPPluginCall) {
         var codecs: [String] = ["h264"]
-        var hevcMain10 = false
+        var hevc = false
+        var av1 = false
 
         if #available(iOS 11.0, tvOS 11.0, *) {
-            codecs.append("hevc")
-            hevcMain10 = true
+            hevc = VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC)
+            if hevc { codecs.append("hevc") }
+        }
+
+        if #available(iOS 16.0, tvOS 16.0, *) {
+            av1 = VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1)
+            if av1 { codecs.append("av1") }
         }
 
         call.resolve([
             "videoCodecs": codecs,
-            "hevcMain10": hevcMain10,
-            "av1Main10": false,
+            "hevcMain10": hevc,
+            "av1Main10": av1,
             "containers": ["mp4", "m4v", "mov"],
         ])
     }
