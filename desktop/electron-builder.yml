@@ -20,17 +20,23 @@ productName: Fliks
 # Fliks-Server-<ver>-<arch>.dmg); both attach to the same release-please v*
 # release, so a shared filename would overwrite. e.g. Fliks-Client-1.2.3-x64.dmg.
 artifactName: ${productName}-Client-${version}-${arch}.${ext}
-# In-app auto-update source. With an explicit github provider, `--publish always`
-# (set on tag builds in desktop-release.yml) generates the update metadata
-# (latest.yml / latest-mac.yml / latest-linux.yml) and uploads it + the installers
-# to the matching GitHub Release; electron-updater in the app reads it from here.
-# The repo is public, so clients need no token. Declaring the provider also fixes
-# the earlier computeChannelNames crash that happened when a GH_TOKEN was present
-# without a configured publisher.
+# In-app auto-update source. `--publish always` (tag builds, see
+# desktop-release.yml) generates the update metadata (latest.yml /
+# latest-mac.yml / latest-linux.yml) and uploads it + the installers to the
+# GitHub Release; electron-updater reads it from here. The repo is public, so
+# clients need no token.
+#
+# releaseType: release is REQUIRED here. release-please publishes the v* release
+# (as a full, non-draft release) before this workflow runs, and electron-builder
+# defaults to publishingType=draft — which it considers incompatible with an
+# already-published release, so it SKIPS every asset ("existing type not
+# compatible with publishing type"). Matching releaseType=release lets it upload
+# onto release-please's published release instead.
 publish:
   provider: github
   owner: fliks-app
   repo: fliks
+  releaseType: release
 directories:
   output: release
   buildResources: build
