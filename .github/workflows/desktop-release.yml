@@ -44,18 +44,29 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Linux ships both .deb (no in-app update — dpkg needs root) and
+          # AppImage (electron-updater self-updates it). macOS ships the .dmg
+          # (first install) plus a .zip (the artifact Squirrel.Mac updates from).
           - os: ubuntu-latest
             label: deb
             dist_script: dist:linux
-            artifact_glob: desktop/release/*.deb
+            artifact_glob: |
+              desktop/release/*.deb
+              desktop/release/*.AppImage
+              desktop/release/latest-linux.yml
           - os: macos-latest
             label: dmg
             dist_script: dist:mac
-            artifact_glob: desktop/release/*.dmg
+            artifact_glob: |
+              desktop/release/*.dmg
+              desktop/release/*.zip
+              desktop/release/latest-mac.yml
           - os: windows-latest
             label: exe
             dist_script: dist:win
-            artifact_glob: desktop/release/*.exe
+            artifact_glob: |
+              desktop/release/*.exe
+              desktop/release/latest.yml
 
     steps:
       - uses: actions/checkout@v6
@@ -264,40 +275,42 @@ jobs:
         run: echo "$KEY_P8" | base64 -d > "$RUNNER_TEMP/notary-AuthKey.p8"
 
       # ── Package the installer for this OS ──
-      # electron-builder publishes to a Release when GH_TOKEN is set and the ref
-      # is a tag; we keep that explicit via the attach step below instead, so we
-      # disable auto-publish here and just produce the artifact.
-      # No GH_TOKEN here: with a token set, electron-builder auto-configures a
-      # GitHub publisher and tries to build auto-update metadata (latest*.yml),
-      # which crashes in computeChannelNames (Cannot read properties of null
-      # reading 'channel'). We don't auto-update via electron-builder — the
-      # release artifacts are attached by the softprops step below — so build
-      # with publishing fully off.
+      # With the github `publish` provider configured in electron-builder.yml,
+      # `--publish always` (tag builds) generates the auto-update metadata
+      # (latest.yml / latest-mac.yml / latest-linux.yml) and uploads it + the
+      # installers to the matching GitHub Release; electron-updater in the app
+      # reads it from there. Non-tag (workflow_dispatch / dev) runs build with
+      # `--publish never` and only produce workflow artifacts. The explicit
+      # provider also fixes the old computeChannelNames crash that happened when
+      # GH_TOKEN was set without a configured publisher.
       - name: Build installer
         working-directory: desktop
         shell: bash
         # macOS-only signing + notarization env. Empty strings on Linux/Windows
         # so electron-builder doesn't try to use the mac Developer ID cert as a
-        # Windows Authenticode cert (CSC_LINK is per-platform).
+        # Windows Authenticode cert (CSC_LINK is per-platform). GH_TOKEN lets
+        # electron-builder publish to the GitHub Release on tag builds.
         env:
           CSC_LINK: ${{ runner.os == 'macOS' && secrets.MAC_DEVELOPER_ID_CERT_P12_BASE64 || '' }}
           CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.MAC_DEVELOPER_ID_CERT_PASSWORD || '' }}
           APPLE_API_KEY: ${{ runner.os == 'macOS' && format('{0}/notary-AuthKey.p8', runner.temp) || '' }}
           APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPSTORE_API_KEY_ID || '' }}
           APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPSTORE_API_ISSUER_ID || '' }}
-        run: npm run ${{ matrix.dist_script }} -- --publish never -c.extraMetadata.version=${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* || "$GITHUB_REF" == refs/tags/desktop-v* ]]; then
+            publish=always
+          else
+            publish=never
+          fi
+          npm run ${{ matrix.dist_script }} -- --publish "$publish" -c.extraMetadata.version=${{ steps.version.outputs.version }}
 
-      # ── Upload the installer as a workflow artifact (always) ──
+      # ── Upload the installers + update metadata as a workflow artifact ──
+      # On tag builds electron-builder already attached these to the Release; the
+      # workflow artifact is for inspection / non-tag runs.
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: fliks-desktop-${{ matrix.label }}-${{ steps.version.outputs.version }}
           path: ${{ matrix.artifact_glob }}
-          if-no-files-found: error
-
-      # ── Attach to the GitHub Release on a desktop tag push ──
-      - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/desktop-v')
-        uses: softprops/action-gh-release@v3
-        with:
-          files: ${{ matrix.artifact_glob }}
+          if-no-files-found: warn

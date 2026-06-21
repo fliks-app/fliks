@@ -8,6 +8,7 @@ import {
   OnInit,
   OnDestroy,
   DestroyRef,
+  viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
@@ -31,6 +32,8 @@ import { NetworkService } from '../../core/services/network.service';
 import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
 import { UserMenuComponent } from '../components/user-menu';
+import { AppUpdateModalComponent } from '../components/app-update-modal/app-update-modal';
+import { AppUpdateService } from '../../core/services/app-update.service';
 import { LucideIconComponent } from '../components/lucide-icon';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { BackgroundComponent } from '../components/background/background';
@@ -50,6 +53,7 @@ import {
   LucideEllipsisVertical,
   LucideUsers,
   LucidePin,
+  LucideRocket,
 } from '@lucide/angular';
 
 
@@ -59,10 +63,11 @@ import {
     RouterOutlet, RouterLink, RouterLinkActive, TranslateModule,
     LucideMenu, LucideChevronLeft, LucideHome, LucideSearch,
     LucideClipboardList, LucideDownload, LucideCalendar, LucideCast,
-    LucideHistory, LucideEllipsisVertical, LucideUsers, LucidePin,
+    LucideHistory, LucideEllipsisVertical, LucideUsers, LucidePin, LucideRocket,
     CastOverlayComponent,
     CardActionsPanelComponent,
     UserMenuComponent,
+    AppUpdateModalComponent,
     LucideIconComponent,
     TvRowDirective,
     BackgroundComponent,
@@ -88,7 +93,13 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly tv = inject(TvService);
   readonly device = inject(DeviceService);
   readonly castPlayer = inject(CastPlayerService);
+  readonly appUpdate = inject(AppUpdateService);
+  private readonly updateModal = viewChild(AppUpdateModalComponent);
   private readonly title = inject(Title);
+
+  openUpdateModal(): void {
+    this.updateModal()?.open();
+  }
   private readonly translate = inject(TranslateService);
   private readonly destroyRef = inject(DestroyRef);
   /** Bumps when language changes so the document title effect re-reads `app.name`. */

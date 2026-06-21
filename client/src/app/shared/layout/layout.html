@@ -83,6 +83,15 @@
             }
           </button>
         }
+        @if (appUpdate.available()) {
+          <button class="btn btn-ghost btn-circle" (click)="openUpdateModal()"
+                  [attr.aria-label]="'update.title' | translate">
+            <div class="indicator">
+              <span class="indicator-item badge badge-xs badge-primary"></span>
+              <svg lucideRocket class="h-5 w-5 md:h-6 md:w-6"></svg>
+            </div>
+          </button>
+        }
         <app-user-menu />
       </div>
     </nav>
@@ -132,6 +141,15 @@
             } @else {
               <svg lucideCast class="h-5 w-5 md:h-6 md:w-6" [class.text-info]="castService.isConnected()"></svg>
             }
+          </button>
+        }
+        @if (appUpdate.available()) {
+          <button class="btn btn-ghost btn-circle" (click)="openUpdateModal()"
+                  [attr.aria-label]="'update.title' | translate">
+            <div class="indicator">
+              <span class="indicator-item badge badge-xs badge-primary"></span>
+              <svg lucideRocket class="h-5 w-5 md:h-6 md:w-6"></svg>
+            </div>
           </button>
         }
         <app-user-menu />
@@ -259,6 +277,9 @@
         }
     }
   </div>
+
+  <!-- App-update changelog + install dialog (opened from the topbar button) -->
+  <app-update-modal />
 
   <!-- Cast overlay (chip + card) — global, persists across navigation -->
   <app-cast-overlay />

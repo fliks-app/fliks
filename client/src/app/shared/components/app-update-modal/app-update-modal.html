@@ -1,0 +1,70 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-lg">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+    </form>
+
+    <div class="flex items-center gap-2 mb-1">
+      <svg lucideRocket class="h-5 w-5 text-primary"></svg>
+      <h3 class="text-lg font-bold">{{ 'update.title' | translate }}</h3>
+    </div>
+
+    @if (update.info(); as info) {
+      <p class="text-sm opacity-70 mb-3">
+        @if (update.currentVersion(); as current) {
+          {{ 'update.version_transition' | translate: { current: current, next: info.version } }}
+        } @else {
+          {{ 'update.version_available' | translate: { version: info.version } }}
+        }
+        @if (info.releaseDate) {
+          · {{ info.releaseDate | date: 'mediumDate' }}
+        }
+      </p>
+
+      <div class="rounded-box bg-base-200 p-3 max-h-72 overflow-y-auto mb-4">
+        @if (info.releaseNotes) {
+          <pre class="whitespace-pre-wrap break-words text-sm font-sans">{{ info.releaseNotes }}</pre>
+        } @else {
+          <p class="text-sm opacity-60">{{ 'update.no_notes' | translate }}</p>
+        }
+      </div>
+
+      @if (downloading()) {
+        <div class="mb-4">
+          <progress class="progress progress-primary w-full" [value]="update.progress()" max="100"></progress>
+          <p class="text-xs opacity-70 mt-1 text-center">
+            {{ 'update.downloading' | translate: { percent: update.progress() } }}
+          </p>
+        </div>
+      } @else if (update.errorMessage(); as err) {
+        <p class="text-sm text-error mb-3">{{ 'update.error' | translate }}: {{ err }}</p>
+      }
+
+      <div class="modal-action">
+        <form method="dialog">
+          <button class="btn btn-ghost">{{ 'common.close' | translate }}</button>
+        </form>
+
+        @if (installing()) {
+          <button class="btn btn-primary" disabled>
+            <span class="loading loading-spinner loading-sm"></span>
+            {{ 'update.installing' | translate }}
+          </button>
+        } @else if (canInstallInApp()) {
+          <button class="btn btn-primary" [disabled]="downloading()" (click)="onAction()">
+            <svg lucideDownload class="h-4 w-4"></svg>
+            {{ 'update.install' | translate }}
+          </button>
+        } @else {
+          <button class="btn btn-primary" (click)="onAction()">
+            <svg lucideExternalLink class="h-4 w-4"></svg>
+            {{ 'update.open_release' | translate }}
+          </button>
+        }
+      </div>
+    }
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>{{ 'common.close' | translate }}</button>
+  </form>
+</dialog>

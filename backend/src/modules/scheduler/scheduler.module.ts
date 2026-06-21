@@ -15,6 +15,7 @@ import { CompletionService } from './completion.service';
 import { NamingService } from './naming.service';
 import { BackupService } from './backup.service';
 import { LogBufferService } from './log-buffer.service';
+import { UpdateCheckService } from './update-check.service';
 import { CommandsController } from './commands.controller';
 import { SystemController } from './system.controller';
 import { IndexersModule } from '../indexers/indexers.module';
@@ -79,6 +80,7 @@ import { Library } from '../libraries/entities/library.entity';
     NamingService,
     BackupService,
     LogBufferService,
+    UpdateCheckService,
     SubtitleSchedulerService,
   ],
   exports: [
