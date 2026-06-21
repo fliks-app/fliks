@@ -9,11 +9,10 @@ import {
   signal,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { SystemInfoService } from '../../core/services/system-info.service';
 import { getDeviceName, getOrCreateDeviceId } from '../../core/utils/device-info';
-import { parseDeviceLabel } from '../../core/utils/format-device-label';
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -31,10 +30,12 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly systemInfo = inject(SystemInfoService);
-  private readonly translate = inject(TranslateService);
 
   readonly view = signal<View>('starting');
   readonly deviceName = signal(getDeviceName());
+  /** Real host OS name+version ("macOS 26", "Ubuntu 24.04"), shown as a second
+   *  line under the device name. Empty until resolved / on platforms without it. */
+  readonly systemName = signal('');
   readonly secondsLeft = signal(0);
 
   readonly minutesLeft = computed(() => Math.max(0, Math.ceil(this.secondsLeft() / 60)));
@@ -65,17 +66,16 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
     this.view.set('starting');
     try {
       this.deviceId = await getOrCreateDeviceId();
-      // Resolve the real OS name+version natively, then show the same label the
-      // approver + admin see ("Application macOS 26") and send it for storage.
+      // Resolve the real OS name+version natively (Electron bridge / Capacitor);
+      // shown as a second line and sent for the approver + admin dashboard. The
+      // device name itself stays the recognizable getDeviceName() label.
       await this.systemInfo.ready();
-      const systemName = this.systemInfo.systemName();
-      const label = parseDeviceLabel(navigator.userAgent, systemName);
-      if (label) this.deviceName.set(this.translate.instant(label.key, label.params));
+      this.systemName.set(this.systemInfo.systemName());
       const { pairingId, expiresIn } = await this.auth.pairingRequest(
         this.userId,
         this.deviceId,
         this.deviceName(),
-        systemName,
+        this.systemName() || undefined,
       );
       this.pairingId = pairingId;
       this.secondsLeft.set(expiresIn);

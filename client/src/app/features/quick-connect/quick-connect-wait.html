@@ -12,6 +12,11 @@
         <p class="text-sm">
           {{ 'quick_connect.device_name' | translate: { name: deviceName() } }}
         </p>
+        @if (systemName(); as sys) {
+          <p class="text-xs text-base-content/60">
+            {{ 'system.device_app_with_system' | translate: { system: sys } }}
+          </p>
+        }
         <p class="text-xs text-base-content/60">
           {{ 'quick_connect.expires_in' | translate: { minutes: minutesLeft() } }}
         </p>
