@@ -9,9 +9,11 @@ import {
   signal,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
+import { SystemInfoService } from '../../core/services/system-info.service';
 import { getDeviceName, getOrCreateDeviceId } from '../../core/utils/device-info';
+import { parseDeviceLabel } from '../../core/utils/format-device-label';
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -28,6 +30,8 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly systemInfo = inject(SystemInfoService);
+  private readonly translate = inject(TranslateService);
 
   readonly view = signal<View>('starting');
   readonly deviceName = signal(getDeviceName());
@@ -61,10 +65,17 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
     this.view.set('starting');
     try {
       this.deviceId = await getOrCreateDeviceId();
+      // Resolve the real OS name+version natively, then show the same label the
+      // approver + admin see ("Application macOS 26") and send it for storage.
+      await this.systemInfo.ready();
+      const systemName = this.systemInfo.systemName();
+      const label = parseDeviceLabel(navigator.userAgent, systemName);
+      if (label) this.deviceName.set(this.translate.instant(label.key, label.params));
       const { pairingId, expiresIn } = await this.auth.pairingRequest(
         this.userId,
         this.deviceId,
         this.deviceName(),
+        systemName,
       );
       this.pairingId = pairingId;
       this.secondsLeft.set(expiresIn);

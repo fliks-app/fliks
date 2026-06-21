@@ -4,19 +4,18 @@ import { Win32EmbedBackend } from './win32';
 
 export type { EmbedBackend } from './types';
 
-/** Pick the embed backend for the current OS. */
+/**
+ * Pick the subprocess-embed backend for the current OS. macOS is NOT handled
+ * here: it embeds in-process libmpv (MacMpvPlayer), which `PlayerSession`
+ * constructs directly from the video window, so it never routes through an
+ * `EmbedBackend` (mpv's subprocess --wid crashes on macOS anyway).
+ */
 export function createEmbedBackend(): EmbedBackend {
   switch (process.platform) {
     case 'linux':
       return new X11EmbedBackend();
     case 'win32':
       return new Win32EmbedBackend();
-    case 'darwin':
-      // mpv's subprocess --wid CRASHES on macOS (mpv: "--wid works only with
-      // libmpv there"). macOS needs an in-process libmpv compositor (a native
-      // addon like the Linux one) — not implemented. Callers route macOS to a
-      // UI-only window instead of here.
-      throw new Error('macOS playback needs an in-process libmpv compositor (not implemented)');
     default:
       throw new Error(`no embed backend for platform '${process.platform}' yet`);
   }

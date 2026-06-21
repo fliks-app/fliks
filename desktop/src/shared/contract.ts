@@ -48,6 +48,13 @@ export interface DesktopPositionInfo {
   buffered: number;
 }
 
+/** Host OS identity resolved natively in the main process (the browser UA can't
+ *  give a real OS version). `systemName` is a human string like "macOS 26",
+ *  "Windows 11" or "Ubuntu 24.04". */
+export interface DesktopSystemInfo {
+  systemName: string;
+}
+
 /** main → renderer event envelope, sent on the single IPC.event channel. */
 export type DesktopEvent =
   | { type: 'ready' }
@@ -80,6 +87,8 @@ export const IPC = {
   setSubtitleStyle: 'player:setSubtitleStyle',
   resize: 'player:resize',
   destroy: 'player:destroy',
+  /** Host OS identity (name + version), resolved natively. */
+  getSystemInfo: 'system:info',
   /** main → renderer (one channel, discriminated by DesktopEvent.type). */
   event: 'player:event',
 } as const;
@@ -108,5 +117,7 @@ export interface FliksDesktopApi {
   setSubtitleStyle(style: DesktopSubtitleStyle): Promise<void>;
   resize(rect: DesktopRect): Promise<void>;
   destroy(): Promise<void>;
+  /** Native host OS identity (e.g. { systemName: "macOS 26" }). */
+  getSystemInfo(): Promise<DesktopSystemInfo>;
   on(handler: (event: DesktopEvent) => void): () => void;
 }

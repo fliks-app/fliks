@@ -6,6 +6,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -131,6 +132,13 @@ export class DeviceProfileDto {
   @IsString()
   @IsOptional()
   deviceName?: string;
+
+  /** Real host OS name+version ("macOS 26", "iOS 18.5") resolved natively by the
+   *  client; the admin label prefers this over the frozen-UA OS. Cosmetic only. */
+  @IsString()
+  @IsOptional()
+  @MaxLength(60)
+  systemName?: string;
 
   /**
    * Force MPEG-TS segments for every transcode session of this device.

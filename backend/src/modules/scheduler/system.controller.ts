@@ -77,6 +77,9 @@ export interface ActiveStreamDto {
   quality: string;
   hwAccel: string;
   device: string | null;
+  /** Real host OS name+version ("macOS 26") from the client; overrides the
+   *  frozen-UA OS in the device label. */
+  systemName: string | null;
   startedAt: string;
   lastActivity: string;
   // Progress
@@ -394,6 +397,7 @@ export class SystemController {
       startedAt: string;
       lastActivity: string;
       deviceLabel: string | null;
+      systemName: string | null;
       transcodeSession: TranscodeSession | undefined;
       audioPlan: LiveSessionSnapshot['audioPlan'];
       position: number;
@@ -443,6 +447,7 @@ export class SystemController {
                 session.mediaFileId,
               )
             : null),
+        systemName: session.systemName,
         transcodeSession: ts,
         audioPlan: session.audioPlan,
         // The LiveSession keeps the playhead fresh on every heartbeat — read
@@ -511,6 +516,7 @@ export class SystemController {
         quality: s.quality,
         hwAccel: s.hwAccelVal,
         device: s.deviceLabel,
+        systemName: s.systemName,
         startedAt: s.startedAt,
         lastActivity: s.lastActivity,
         positionSeconds,

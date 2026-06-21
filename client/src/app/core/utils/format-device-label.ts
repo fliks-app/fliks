@@ -1,19 +1,33 @@
+import { detectBrowser, detectOs, isElectronUa } from './ua-parser';
+
 /**
  * Boil the raw User-Agent header into a translation key + interpolation
- * params for the admin streams dashboard. The actual rendering happens
- * via ngx-translate so the labels stay localised.
+ * params for device labels (admin streams dashboard, pairing requests). The
+ * actual rendering happens via ngx-translate so the labels stay localised.
  *
  * Browser and OS names ("Chrome", "macOS") are passed as interpolation
  * params rather than translated themselves — they're proper nouns that
  * stay identical across locales.
+ *
+ * `systemName` (optional) is the REAL OS name+version resolved natively
+ * (SystemInfoService) — "macOS 26", "Windows 11", "iOS 18.5". When provided it
+ * overrides the UA-derived OS (which Chromium freezes and can't version), so the
+ * label reads "Application macOS 26" instead of "Application macOS".
  */
 export interface DeviceLabelKey {
   key: string;
   params?: Record<string, string>;
 }
 
-export function parseDeviceLabel(ua: string | null | undefined): DeviceLabelKey | null {
-  if (!ua) return null;
+export function parseDeviceLabel(
+  ua: string | null | undefined,
+  systemName?: string | null,
+): DeviceLabelKey | null {
+  if (!ua) {
+    // No UA (e.g. a pairing request with only a native systemName): still show
+    // the system if we have one.
+    return systemName ? { key: 'system.device_app_with_system', params: { system: systemName } } : null;
+  }
 
   if (/AndroidTV/i.test(ua)) return { key: 'system.device_android_tv' };
   if (/BRAVIA/i.test(ua)) return { key: 'system.device_sony_bravia' };
@@ -25,46 +39,27 @@ export function parseDeviceLabel(ua: string | null | undefined): DeviceLabelKey 
 
   // Capacitor / WebView-hosted native apps: Android UAs are tagged "wv",
   // iOS WKWebView UAs ship without the trailing "Safari/" token.
-  if (/Android/.test(ua) && /\bwv\b/.test(ua)) {
-    return { key: 'system.device_mobile_app_android' };
-  }
-  if (/iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua)) {
-    return { key: 'system.device_mobile_app_ios' };
+  const isMobileApp =
+    (/Android/.test(ua) && /\bwv\b/.test(ua)) ||
+    (/iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua));
+  if (isMobileApp) {
+    if (systemName) return { key: 'system.device_mobile_app_on_os', params: { os: systemName } };
+    return /Android/.test(ua)
+      ? { key: 'system.device_mobile_app_android' }
+      : { key: 'system.device_mobile_app_ios' };
   }
 
   // Electron desktop client (Windows / macOS / Linux): Chromium UA still reads
   // as "Chrome", but the Electron token is authoritative.
-  if (/\bElectron\//.test(ua)) {
-    const os = detectOs(ua);
+  if (isElectronUa(ua)) {
+    const os = systemName ?? detectOs(ua);
     if (os) return { key: 'system.device_desktop_app_on_os', params: { os } };
     return { key: 'system.device_desktop_app' };
   }
 
   const browser = detectBrowser(ua);
-  const os = detectOs(ua);
+  const os = systemName ?? detectOs(ua);
 
   if (!os) return { key: 'system.device_browser_only', params: { browser } };
   return { key: 'system.device_browser_on_os', params: { browser, os } };
-}
-
-function detectOs(ua: string): string | null {
-  if (/iPad/.test(ua)) return 'iPadOS';
-  if (/iPhone|iPod/.test(ua)) return 'iOS';
-  if (/Android/.test(ua)) return 'Android';
-  if (/Windows/.test(ua)) return 'Windows';
-  if (/Mac OS X|Macintosh/.test(ua)) return 'macOS';
-  if (/CrOS/.test(ua)) return 'ChromeOS';
-  if (/Linux/.test(ua)) return 'Linux';
-  return null;
-}
-
-function detectBrowser(ua: string): string {
-  if (/Edg\//.test(ua)) return 'Edge';
-  if (/OPR\/|Opera\//.test(ua)) return 'Opera';
-  if (/Firefox\//.test(ua)) return 'Firefox';
-  if (/CriOS\//.test(ua)) return 'Chrome';
-  if (/FxiOS\//.test(ua)) return 'Firefox';
-  if (/Chrome\//.test(ua)) return 'Chrome';
-  if (/Safari\//.test(ua)) return 'Safari';
-  return 'Browser';
 }

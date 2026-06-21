@@ -40,7 +40,12 @@ export class PairingController {
     if (!deviceId) {
       throw new BadRequestException('Missing X-Device-Id header');
     }
-    return this.pairing.request(dto.userId, deviceId, dto.deviceName);
+    return this.pairing.request(
+      dto.userId,
+      deviceId,
+      dto.deviceName,
+      dto.systemName,
+    );
   }
 
   /**

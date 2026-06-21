@@ -55,7 +55,10 @@ export interface PairingStatusResponse {
 export interface PendingRequest {
   pairingId: string;
   deviceId: string;
+  /** Display label, already composed by the requester ("Application macOS 26"). */
   deviceName: string;
+  /** Real host OS name+version ("macOS 26"), resolved natively by the requester. */
+  systemName?: string;
   requestedAt: string;
   expiresAt: string;
 }
@@ -184,11 +187,12 @@ export class AuthService {
     userId: number,
     deviceId: string,
     deviceName: string,
+    systemName?: string,
   ): Promise<{ pairingId: string; expiresIn: number }> {
     return firstValueFrom(
       this.http.post<{ pairingId: string; expiresIn: number }>(
         '/api/auth/pairing/request',
-        { userId, deviceName },
+        { userId, deviceName, systemName },
         { headers: { 'X-Device-Id': deviceId } },
       ),
     );

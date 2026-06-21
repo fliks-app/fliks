@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { registerAppSchemePrivileged, registerAppProtocol, APP_URL } from './protocol';
 import { installCorsBypass } from './cors';
@@ -82,6 +84,46 @@ const num = (v: string | null): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+// Human host-OS name + version, resolved NATIVELY (the renderer's UA freezes the
+// OS version, so it can't produce these). Computed once and cached.
+let cachedSystemName: string | null = null;
+function systemName(): string {
+  if (cachedSystemName != null) return cachedSystemName;
+  cachedSystemName = computeSystemName();
+  return cachedSystemName;
+}
+function computeSystemName(): string {
+  try {
+    if (process.platform === 'darwin') {
+      // os.release() is the Darwin kernel version; the marketing version comes
+      // from sw_vers (e.g. "26.0" → "macOS 26").
+      const v = execFileSync('sw_vers', ['-productVersion'], { encoding: 'utf8' }).trim();
+      const major = v.split('.')[0];
+      return major ? `macOS ${major}` : 'macOS';
+    }
+    if (process.platform === 'win32') {
+      // os.release() → "10.0.22631"; build ≥ 22000 is Windows 11.
+      const build = parseInt(os.release().split('.')[2] ?? '0', 10);
+      return build >= 22000 ? 'Windows 11' : 'Windows 10';
+    }
+    if (process.platform === 'linux') {
+      // /etc/os-release PRETTY_NAME → "Ubuntu 24.04.1 LTS" → "Ubuntu 24.04".
+      const txt = fs.readFileSync('/etc/os-release', 'utf8');
+      const m = /^PRETTY_NAME="?([^"\n]+)"?/m.exec(txt);
+      if (m) {
+        return m[1]
+          .replace(/\s+LTS\b/i, '') // drop the LTS suffix
+          .replace(/(\d+\.\d+)\.\d+/, '$1') // 24.04.1 → 24.04
+          .trim();
+      }
+      return 'Linux';
+    }
+  } catch {
+    /* fall through to the platform id */
+  }
+  return process.platform;
+}
+
 function parseTracks(json: string | null): {
   audioTracks: unknown[];
   subtitleTracks: unknown[];
@@ -142,10 +184,12 @@ function rendererUrl(haveApp: boolean): string {
   return haveApp ? APP_URL : 'data:text/html,<body style="background:%231d232a"></body>';
 }
 
-// Windows: a framed master window carries the native chrome; mpv embeds (--wid)
-// into a frameless transparent window pinned over its content area, with the web
-// UI in a second transparent window above that. See PlayerSession for why the
-// frame and the see-through video layer are separate windows.
+// Windows / macOS: a framed master window carries the native chrome; the video
+// embeds into a frameless transparent window pinned over its content area, with
+// the web UI in a second transparent window above that. Windows embeds an mpv
+// subprocess via --wid; macOS embeds in-process libmpv (CAOpenGLLayer on the
+// video window's NSView) — PlayerSession.createPlayer() picks the backend. See
+// PlayerSession for why the frame and the see-through video layer are separate.
 async function startEmbedSession(haveApp: boolean): Promise<void> {
   const { PlayerSession } = await import('./window/player-session');
   const { registerPlayerIpc } = await import('./ipc');
@@ -160,11 +204,9 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
   });
 }
 
-// macOS (and any other non-Linux/Windows): playback is NOT implemented yet —
-// the SDL/GLES OSR compositor is Linux-only and mpv's subprocess --wid crashes
-// on macOS, which needs an in-process libmpv compositor (a native addon, like
-// Linux's). Open the web UI so the app launches + browses; playback IPC is
-// intentionally not wired, so attempting to play surfaces a clear error.
+// Fallback for any platform without a playback backend (not Linux/Windows/macOS,
+// which are all wired). Opens the web UI so the app launches + browses; playback
+// IPC is intentionally not wired, so attempting to play surfaces a clear error.
 async function startUiOnly(haveApp: boolean): Promise<void> {
   console.warn(`[main] playback not implemented on ${process.platform} — UI-only (needs a native libmpv compositor)`);
   uiWin = new BrowserWindow({
@@ -185,13 +227,29 @@ async function startUiOnly(haveApp: boolean): Promise<void> {
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
+
+  // macOS ignores a BrowserWindow's `icon`; the dock icon comes from the app
+  // bundle when packaged, but a dev `electron .` run shows Electron's default.
+  // Set it explicitly from build/icon.png so the dock shows the Fliks mark.
+  if (process.platform === 'darwin' && app.dock) {
+    const icon = windowIcon();
+    if (icon) app.dock.setIcon(icon);
+  }
+
   installCorsBypass();
+
+  // Available on every platform path (embed / compositor / ui-only) so the
+  // renderer can label this device with its real OS + version.
+  ipcMain.handle(IPC.getSystemInfo, () => ({ systemName: systemName() }));
 
   const dir = webDir();
   const haveApp = fs.existsSync(path.join(dir, 'index.html'));
   if (haveApp) registerAppProtocol(dir);
 
-  if (process.platform === 'win32') {
+  // Windows embeds an mpv subprocess (--wid) into the video window; macOS embeds
+  // in-process libmpv (CAOpenGLLayer on the video window's NSView). Both use the
+  // 3-window PlayerSession + the platform player factory in createPlayer().
+  if (process.platform === 'win32' || process.platform === 'darwin') {
     await startEmbedSession(haveApp).catch((e) => console.error('[main] embed session failed', e));
     return;
   }
