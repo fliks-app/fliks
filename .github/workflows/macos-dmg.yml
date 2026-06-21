@@ -4,7 +4,7 @@
 # Triggers:
 #   - release tag `v*` (from release-please) → attaches DMG to the release
 #   - manual workflow_dispatch               → uploads artifact for testing
-name: Build macOS DMG
+name: Build macOS server
 
 on:
   push:
