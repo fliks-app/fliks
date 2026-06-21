@@ -8,11 +8,8 @@ import {
   type DesktopUpdateStatus,
 } from '../plugins/desktop-updater.bridge';
 
-/** Where the "update available" signal comes from:
- *  - `desktop` — the Electron app updates itself (electron-updater / download).
- *  - `server`  — the connected server is behind the latest GitHub release
- *               (admin-only, informational; the server is updated out of band).
- *  - `none`    — nothing to surface (regular web user, or no update). */
+/** `desktop` = the Electron app updates itself; `server` = the connected
+ *  server is behind the latest release (admin-only, informational); `none`. */
 export type UpdateMode = 'desktop' | 'server' | 'none';
 
 export type UpdateState =
@@ -40,9 +37,8 @@ interface ServerUpdateStatus {
   publishedAt: string | null;
 }
 
-/** Drives the in-app update affordance (the topbar button + changelog modal).
- *  On the desktop app it wraps the Electron updater bridge; on web/mobile it
- *  surfaces "your server is behind the latest release" to admins only. */
+/** Drives the topbar update button + changelog modal: wraps the Electron
+ *  updater on desktop, or the admin-only server-version check on web/mobile. */
 @Injectable({ providedIn: 'root' })
 export class AppUpdateService {
   private readonly device = inject(DeviceService);
@@ -60,14 +56,13 @@ export class AppUpdateService {
   readonly state = signal<UpdateState>('idle');
   readonly info = signal<UpdateInfoView | null>(null);
   readonly progress = signal(0);
-  /** Whether the desktop build can self-install (false for .deb / dev → the
-   *  modal offers a download link instead). Always false in server mode. */
+  /** False for .deb / dev (→ download link) and always false in server mode. */
   readonly canInstall = signal(false);
   readonly currentVersion = signal<string | null>(null);
   readonly releasesUrl = signal<string | null>(null);
   readonly errorMessage = signal<string | null>(null);
 
-  /** The single gate for showing the topbar update button. */
+  /** Gate for showing the topbar update button. */
   readonly available = computed(
     () => this.state() === 'available' || this.state() === 'downloaded',
   );
@@ -77,9 +72,7 @@ export class AppUpdateService {
   constructor() {
     if (this.desktop) this.wireDesktop();
 
-    // Server-mode check runs once the user is known to be an admin. It re-runs
-    // if admin status flips (e.g. after login) but only the first successful
-    // fetch matters — the server version doesn't change mid-session.
+    // Server-mode check fires once the user is known to be an admin.
     effect(() => {
       if (this.mode() === 'server' && !this.serverChecked) {
         this.serverChecked = true;
@@ -98,8 +91,7 @@ export class AppUpdateService {
     }
   }
 
-  /** Apply the update. Desktop+installable → download & relaunch; otherwise
-   *  open the releases page / the server's release notes externally. */
+  /** Desktop+installable → download & relaunch; otherwise open the release. */
   async install(): Promise<void> {
     if (this.mode() === 'desktop' && this.desktop) {
       if (this.canInstall()) {
@@ -125,8 +117,6 @@ export class AppUpdateService {
       .catch(() => undefined);
 
     updater.onStatus((status) => this.applyDesktopStatus(status));
-    // Kick a check so the button can appear without waiting for the main
-    // process's own initial timer.
     void updater.check().catch(() => undefined);
   }
 
@@ -172,8 +162,7 @@ export class AppUpdateService {
         this.state.set('not-available');
       }
     } catch {
-      // A failed check is silent — no button, no toast (the global interceptor
-      // already toasts hard errors; a missed update check shouldn't nag).
+      // A failed check is silent — no button, no toast.
       this.state.set('error');
     }
   }

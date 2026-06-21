@@ -95,8 +95,6 @@ export const IPC = {
   event: 'player:event',
 } as const;
 
-/** Info about an available app update (from electron-updater, or the GitHub
- *  release on the .deb fallback path). */
 export interface DesktopUpdateInfo {
   version: string;
   releaseName: string | null;
@@ -105,7 +103,6 @@ export interface DesktopUpdateInfo {
   releaseUrl: string | null;
 }
 
-/** main → renderer update lifecycle, sent on the UPDATE_IPC.status channel. */
 export type DesktopUpdateStatus =
   | { state: 'idle' }
   | { state: 'checking' }
@@ -115,16 +112,14 @@ export type DesktopUpdateStatus =
   | { state: 'downloaded'; info: DesktopUpdateInfo }
   | { state: 'error'; message: string };
 
-/** What the renderer needs to render the right action button. `canInstall`
- *  is false on builds electron-updater can't self-install (Linux .deb, dev
- *  runs) — there the UI offers a download link to `releasesUrl` instead. */
+/** `canInstall` is false where electron-updater can't self-install (.deb, dev)
+ *  → the UI offers a download link to `releasesUrl` instead. */
 export interface DesktopUpdateCapability {
   canInstall: boolean;
   currentVersion: string;
   releasesUrl: string;
 }
 
-/** renderer → main update channels + the single main → renderer status channel. */
 export const UPDATE_IPC = {
   check: 'update:check',
   install: 'update:install',
@@ -134,15 +129,12 @@ export const UPDATE_IPC = {
   status: 'update:status',
 } as const;
 
-/** The surface exposed on `window.fliksUpdater` by the preload bridge. */
+/** Exposed on `window.fliksUpdater` by the preload bridge. */
 export interface FliksUpdaterApi {
-  /** Capability + current version, resolved natively. */
   getCapability(): Promise<DesktopUpdateCapability>;
-  /** Trigger a check now; results arrive via the status channel. */
   check(): Promise<void>;
-  /** Download (if needed) and install + relaunch. No-op when !canInstall. */
+  /** Download + install + relaunch. No-op when !canInstall. */
   install(): Promise<void>;
-  /** Open the GitHub releases page (the .deb / dev fallback). */
   openReleases(): Promise<void>;
   onStatus(handler: (status: DesktopUpdateStatus) => void): () => void;
 }

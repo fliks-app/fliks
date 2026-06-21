@@ -2,19 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 
-/** GitHub repo to poll for releases. Override with FLIKS_GITHUB_REPO for forks
- *  or test repositories. The repo is public, so the API needs no token. */
+// Public repo (no token needed); overridable for forks / test repos.
 const GITHUB_REPO = process.env.FLIKS_GITHUB_REPO ?? 'fliks-app/fliks';
-
-/** How long a successful GitHub lookup is reused before re-fetching. The latest
- *  release changes at most a few times a month, so a long TTL keeps the app off
- *  GitHub's unauthenticated rate limit (60 req/h per IP) while staying fresh. */
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-
-/** Cap the GitHub request so a slow or unreachable api.github.com never stalls
- *  the /system/update response. Generous enough to absorb a cold TLS handshake
- *  (observed >10s on a first connection) — the call is async + cached 6h, so a
- *  long ceiling only ever affects the single cold-cache request. */
+// Generous ceiling for a cold TLS handshake; the call is async + cached.
 const FETCH_TIMEOUT_MS = 15000;
 
 const CURRENT_VERSION: string = (() => {
@@ -47,8 +38,7 @@ interface GithubRelease {
   prerelease?: boolean;
 }
 
-/** Parse a "1.12.3" / "v1.12.3" string into numeric components, dropping any
- *  pre-release/build suffix. Returns null when nothing numeric can be read. */
+/** "1.12.3" / "v1.12.3" → numeric parts, dropping any pre-release/build suffix. */
 function parseVersion(raw: string | null | undefined): number[] | null {
   if (!raw) return null;
   const core = raw.trim().replace(/^v/i, '').split(/[-+]/)[0];
@@ -57,7 +47,6 @@ function parseVersion(raw: string | null | undefined): number[] | null {
   return parts;
 }
 
-/** True when `latest` is strictly greater than `current` (semantic order). */
 function isNewer(latest: string | null, current: string): boolean {
   const a = parseVersion(latest);
   const b = parseVersion(current);
@@ -72,15 +61,13 @@ function isNewer(latest: string | null, current: string): boolean {
   return false;
 }
 
-/** Resolves whether a newer Fliks release than the running server exists by
- *  polling the public GitHub releases API. Used by /system/update so the web
- *  client can tell an admin their server is behind the latest release. */
+/** Tells whether a newer Fliks release than the running server exists, by
+ *  polling the public GitHub releases API. Backs /system/update. */
 @Injectable()
 export class UpdateCheckService {
   private readonly logger = new Logger(UpdateCheckService.name);
   private cache: { status: UpdateStatus; fetchedAt: number } | null = null;
 
-  /** The version baked into the running server's package.json. */
   get currentVersion(): string {
     return CURRENT_VERSION;
   }
@@ -89,10 +76,8 @@ export class UpdateCheckService {
     if (this.cache && Date.now() - this.cache.fetchedAt < CACHE_TTL_MS) {
       return this.cache.status;
     }
-
     const status = await this.fetchStatus();
-    // Only cache a real lookup; a failed fetch falls back to "no update known"
-    // without poisoning the cache, so the next call retries.
+    // Don't cache a failed lookup, so the next call retries.
     if (status.latestVersion !== null) {
       this.cache = { status, fetchedAt: Date.now() };
     }

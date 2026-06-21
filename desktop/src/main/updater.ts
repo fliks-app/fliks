@@ -9,19 +9,15 @@ import {
 
 const { autoUpdater } = electronUpdater;
 
-// Public repo → the GitHub releases API and page need no token. Overridable for
-// forks / test repos (mirrors the backend's FLIKS_GITHUB_REPO).
+// Public repo (no token); overridable for forks / test repos.
 const GITHUB_REPO = process.env.FLIKS_GITHUB_REPO ?? 'fliks-app/fliks';
 const RELEASES_URL = `https://github.com/${GITHUB_REPO}/releases`;
 
-// Re-check periodically while the app stays open, plus once shortly after launch.
 const INITIAL_CHECK_DELAY_MS = 10_000;
 const PERIODIC_CHECK_MS = 6 * 60 * 60 * 1000;
 
-/** electron-updater can self-install only from an NSIS exe (Windows), a signed
- *  .app via a zip (macOS), or an AppImage (Linux). A .deb has no in-place update
- *  path (dpkg needs root), and dev runs aren't packaged. Those fall back to a
- *  "download from the releases page" flow. */
+/** electron-updater self-installs only from an NSIS exe, a signed .app zip, or
+ *  an AppImage. A .deb (dpkg needs root) and dev runs fall back to a download. */
 function canSelfInstall(): boolean {
   if (!app.isPackaged) return false;
   if (process.platform === 'linux') return !!process.env.APPIMAGE;
@@ -36,8 +32,7 @@ function capability(): DesktopUpdateCapability {
   };
 }
 
-/** electron-updater's release notes can be a string or an array of
- *  {version, note} blocks (fullChangelog). Flatten to plain text/HTML. */
+/** Release notes can be a string or an array of {version, note} blocks. */
 function normalizeNotes(notes: unknown): string | null {
   if (!notes) return null;
   if (typeof notes === 'string') return notes;
@@ -50,15 +45,9 @@ function normalizeNotes(notes: unknown): string | null {
   return null;
 }
 
-/**
- * Wires the in-app updater: registers the renderer-invokable channels
- * (check/install/openReleases/getCapability) and broadcasts status updates so
- * the Angular AppUpdateService can drive the update button + modal.
- *
- * On installable builds it uses electron-updater (autoDownload off so the user
- * confirms in the modal); on a .deb or in dev it does a lightweight GitHub
- * release lookup just to surface availability + a download link.
- */
+/** Wires the in-app updater: renderer-invokable channels + status broadcasts.
+ *  Installable builds use electron-updater (autoDownload off); .deb/dev do a
+ *  GitHub release lookup to surface availability + a download link. */
 export function setupUpdater(): void {
   const installable = canSelfInstall();
 
@@ -74,8 +63,7 @@ export function setupUpdater(): void {
   if (installable) {
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
-    // Differential downloads pull in lzma-native (a native module that isn't
-    // bundled); full-file downloads avoid it and are fine for our installer sizes.
+    // Avoid lzma-native (not bundled); full-file downloads are fine here.
     autoUpdater.disableDifferentialDownload = true;
 
     const toInfo = (u: electronUpdater.UpdateInfo): DesktopUpdateInfo => ({
