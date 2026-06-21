@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.13.0](https://github.com/fliks-app/fliks/compare/v1.12.3...v1.13.0) (2026-06-21)
+
+
+### Features
+
+* **card-actions:** poster + title + subtitle header on the card menu ([#536](https://github.com/fliks-app/fliks/issues/536)) ([e98b837](https://github.com/fliks-app/fliks/commit/e98b837555d2ae9ab7976066cbbf07f08fac6c18))
+* **home:** mark a recommendation watched from its card menu ([#537](https://github.com/fliks-app/fliks/issues/537)) ([34c7852](https://github.com/fliks-app/fliks/commit/34c7852bd422feb40822cffc50b632c9c0c98396))
+* **ios:** advertise native codec support from the OS decode APIs ([#532](https://github.com/fliks-app/fliks/issues/532)) ([3a8562e](https://github.com/fliks-app/fliks/commit/3a8562efc04af88f98f94f00367ddea6b4a3bb4c))
+* **media-detail:** mark a season watched from the other-seasons cards ([#535](https://github.com/fliks-app/fliks/issues/535)) ([14525ad](https://github.com/fliks-app/fliks/commit/14525adb158f1aad0b6140e18ecdd658ce003a00))
+* **media-detail:** recompute intros/outros option in the analyze modal ([#538](https://github.com/fliks-app/fliks/issues/538)) ([4976419](https://github.com/fliks-app/fliks/commit/49764190b31d9ce914478ff6dc4cd8a8ad7bb32a))
+* native macOS player and real device OS labels ([#542](https://github.com/fliks-app/fliks/issues/542)) ([772c7d8](https://github.com/fliks-app/fliks/commit/772c7d83e9ba5d9e6b1857c92bc89be119d4f765))
+* **quick-connect:** use the real device name, not the UA model ([#547](https://github.com/fliks-app/fliks/issues/547)) ([d312213](https://github.com/fliks-app/fliks/commit/d3122135a6103de414e6f544ea2cd04980dde3f9))
+* **streaming:** admin toggle to keep black bars instead of cropping ([#533](https://github.com/fliks-app/fliks/issues/533)) ([6e9c8c7](https://github.com/fliks-app/fliks/commit/6e9c8c7d9612e0d3b7d47cf5323e259943d714af))
+* **updates:** in-app update awareness for desktop and web ([#549](https://github.com/fliks-app/fliks/issues/549)) ([78ad9be](https://github.com/fliks-app/fliks/commit/78ad9beda691db7fcb4bc8682fcd04c759a985a9))
+
+
+### Bug Fixes
+
+* **quick-connect:** restore device name and add an OS info line ([#546](https://github.com/fliks-app/fliks/issues/546)) ([30cf0a2](https://github.com/fliks-app/fliks/commit/30cf0a2312254e177249b1dc07c374630df1a24c))
+* **search:** prefix-match local search, add watched + progress to cards ([#540](https://github.com/fliks-app/fliks/issues/540)) ([447b470](https://github.com/fliks-app/fliks/commit/447b4706e9dcf5d1eaf922432177086ba6a16fdd))
+* **spatial-nav:** land on first item when changing rows ([#541](https://github.com/fliks-app/fliks/issues/541)) ([eff829f](https://github.com/fliks-app/fliks/commit/eff829f55cde5649e8cd9ff906db5803aa7e8431))
+* **streaming:** keyframe-aligned segment durations for the remux HLS playlist ([#530](https://github.com/fliks-app/fliks/issues/530)) ([6c23e94](https://github.com/fliks-app/fliks/commit/6c23e941ddc251e63d49c9dee0962356af91e87f))
+
 ## [1.12.3](https://github.com/fliks-app/fliks/compare/v1.12.2...v1.12.3) (2026-06-17)
 
 
