@@ -156,7 +156,9 @@ async function githubFallbackCheck(
 ): Promise<void> {
   broadcast({ state: 'checking' });
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
+  // Generous ceiling for a cold TLS handshake to api.github.com (the check is
+  // async + retried on the periodic timer, so a long timeout is harmless).
+  const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const res = await fetch(
       `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,

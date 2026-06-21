@@ -12,8 +12,10 @@ const GITHUB_REPO = process.env.FLIKS_GITHUB_REPO ?? 'fliks-app/fliks';
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 /** Cap the GitHub request so a slow or unreachable api.github.com never stalls
- *  the /system/update response. */
-const FETCH_TIMEOUT_MS = 5000;
+ *  the /system/update response. Generous enough to absorb a cold TLS handshake
+ *  (observed >10s on a first connection) — the call is async + cached 6h, so a
+ *  long ceiling only ever affects the single cold-cache request. */
+const FETCH_TIMEOUT_MS = 15000;
 
 const CURRENT_VERSION: string = (() => {
   try {
