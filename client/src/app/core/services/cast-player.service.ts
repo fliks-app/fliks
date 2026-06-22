@@ -67,7 +67,9 @@ export interface CastQualityOption {
  *  derived from the rung id itself (`parseInt('Np')`) so adding a new
  *  rung server-side requires no client change. */
 export function buildCastQualityOptions(
-  qualities: { id: string; label: string; height: number }[] | undefined,
+  qualities:
+    | { id: string; label: string; height: number; lowBandwidth?: boolean }[]
+    | undefined,
   maxQuality: string | undefined,
 ): CastQualityOption[] {
   if (!qualities?.length) return [];
@@ -77,7 +79,7 @@ export function buildCastQualityOptions(
       : Infinity;
   return qualities
     .filter(q => q.id !== 'original' && q.height <= heightCap)
-    .map(q => ({ id: q.id, label: q.label }));
+    .map(q => ({ id: q.id, label: q.label, lowBandwidth: q.lowBandwidth }));
 }
 
 interface SubtitleInfo {
