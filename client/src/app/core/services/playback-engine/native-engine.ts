@@ -56,6 +56,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   private _desiredSubtitle: {
     language: string;
     forced: boolean;
+    image: boolean;
   } | null = null;
   /** Text tracks the player currently reports, refreshed on track changes. */
   private _nativeSubtitleTracks: {
@@ -63,6 +64,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     language: string;
     label: string;
     forced?: boolean;
+    image?: boolean;
   }[] = [];
 
   // ── Lifecycle ──
@@ -264,6 +266,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
         ? {
             language: track.language,
             forced: !!track.forced,
+            image: !!track.image,
           }
         : null;
     this.resolveSubtitle();
@@ -284,14 +287,21 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
    *  (fixes "subtitle selected by default but hidden" on ExoPlayer). */
   private resolveSubtitle(): void {
     if (!this._desiredSubtitle) return;
-    const { language, forced } = this._desiredSubtitle;
+    const { language, forced, image } = this._desiredSubtitle;
     const want = normalizeLangCode(language);
     const tracks = this._nativeSubtitleTracks;
-    // Match by (language + forced) → language → a lone track, so selection
-    // still works on a tag mismatch.
+    // Match image-ness first so a same-language text track isn't picked over
+    // the chosen image one (or vice versa), then narrow by forced, then fall
+    // back to language alone / a lone track on a tag mismatch.
     const id =
       tracks.find(
-        (t) => normalizeLangCode(t.language) === want && !!t.forced === !!forced,
+        (t) =>
+          normalizeLangCode(t.language) === want &&
+          !!t.image === !!image &&
+          !!t.forced === !!forced,
+      ) ??
+      tracks.find(
+        (t) => normalizeLangCode(t.language) === want && !!t.image === !!image,
       ) ??
       tracks.find((t) => normalizeLangCode(t.language) === want) ??
       (tracks.length === 1 ? tracks[0] : undefined);

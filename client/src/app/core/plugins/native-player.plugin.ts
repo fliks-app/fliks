@@ -18,6 +18,8 @@ export interface NativeSubtitleTrack {
   label: string;
   /** True if the track carries only forced (foreign-dialogue) cues. */
   forced?: boolean;
+  /** True for bitmap (PGS/VOBSUB/DVB) tracks ExoPlayer renders as images. */
+  image?: boolean;
 }
 
 export interface NativePlayerPosition {

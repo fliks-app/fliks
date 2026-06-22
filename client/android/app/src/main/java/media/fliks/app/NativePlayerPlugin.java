@@ -585,12 +585,12 @@ public class NativePlayerPlugin extends Plugin {
                     if (group.getType() == C.TRACK_TYPE_TEXT) {
                         for (int i = 0; i < group.length; i++) {
                             var fmt = group.getTrackFormat(i);
-                            if (isImageSubtitle(fmt)) continue;
                             JSObject t = new JSObject();
                             t.put("id", "text-" + idx);
                             t.put("language", fmt.language != null ? fmt.language : "und");
                             t.put("label", fmt.label != null ? fmt.label : (fmt.language != null ? fmt.language : "Track " + idx));
                             t.put("forced", (fmt.selectionFlags & C.SELECTION_FLAG_FORCED) != 0);
+                            t.put("image", isImageSubtitle(fmt));
                             tracks.put(t);
                             idx++;
                         }
@@ -825,12 +825,10 @@ public class NativePlayerPlugin extends Plugin {
         try { targetIndex = Integer.parseInt(id.replace("text-", "")); }
         catch (NumberFormatException e) { return false; }
 
-        // "text-N" is the Nth non-image text group, matching getSubtitleTracks'
-        // enumeration order (in-container tracks then injected sidecars).
+        // "text-N" is the Nth text group, matching getSubtitleTracks' order.
         int idx = 0;
         for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
             if (group.getType() == C.TRACK_TYPE_TEXT) {
-                if (isImageSubtitle(group.getTrackFormat(0))) continue;
                 if (idx == targetIndex) {
                     player.setTrackSelectionParameters(
                             player.getTrackSelectionParameters().buildUpon()

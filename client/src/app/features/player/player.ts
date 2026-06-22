@@ -2545,7 +2545,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    if (sub.burnIn && sub.subtitleDbId) {
+    // Direct play on the native engine renders bitmap (PGS/VOBSUB) tracks in
+    // ExoPlayer's own subtitle view — select them like any track, no burn-in
+    // reload. Burn-in (a transcode reload) is only needed when the engine
+    // can't render image subs itself (web) or there's no in-container track
+    // (transcode/remux).
+    const nativeDirectImage =
+      this.isNativeEngine() && this.playbackMode() === 'direct';
+
+    if (sub.burnIn && sub.subtitleDbId && !nativeDirectImage) {
       this.activeBurnInId = sub.subtitleDbId;
       this.activeSubtitleId.set(sub.id);
       this.subtitlePickerOpen.set(false);
@@ -2576,6 +2584,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.engine.selectTextTrack({
         ...track,
         embIndex: sub.id.startsWith('emb-') ? Number(sub.id.slice(4)) : null,
+        image: sub.burnIn,
       });
       try { this.engine.setTextVisibility(true); } catch {}
     } catch (e) {
