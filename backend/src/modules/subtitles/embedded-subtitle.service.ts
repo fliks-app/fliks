@@ -36,7 +36,9 @@ export class EmbeddedSubtitleService {
 
     const streams = await this.ffprobe.detectEmbeddedSubtitles(videoPath);
     if (!streams.length) {
-      this.logger.log(`No embedded subtitles in "${path.basename(videoPath)}"`);
+      this.logger.debug(
+        `No embedded subtitles in "${path.basename(videoPath)}"`,
+      );
       return [];
     }
 
