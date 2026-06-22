@@ -18,6 +18,7 @@ import type {
   DesktopSubtitleTrack,
 } from '../../shared/contract';
 import { mpvSubtitleProps } from './subtitle-style';
+import { isImageBasedSubtitleCodec } from './tracks';
 
 const CONNECT_RETRY_MS = 30;
 const CONNECT_TIMEOUT_MS = 5000;
@@ -25,6 +26,7 @@ const CONNECT_TIMEOUT_MS = 5000;
 interface MpvTrack {
   id: number;
   type: string;
+  codec?: string;
   lang?: string;
   title?: string;
   selected?: boolean;
@@ -347,7 +349,7 @@ export class MpvPlayer extends EventEmitter {
           label: t.title ?? '',
           selected: !!t.selected,
         });
-      else if (t.type === 'sub')
+      else if (t.type === 'sub' && !isImageBasedSubtitleCodec(t.codec))
         subtitleTracks.push({
           id: String(t.id),
           language: t.lang ?? '',

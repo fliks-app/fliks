@@ -15,7 +15,7 @@ import { SubtitleFile } from './entities/subtitle-file.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleProviderType } from '../../common/enums/subtitle-provider-type.enum';
-import { SubtitleStatus } from '../../common/enums';
+import { hasServableTextSub } from '../../common/constants/subtitle-codecs';
 import { SubtitleProviderService } from './subtitle-provider.service';
 import { SubtitleProviderFactory } from './providers/subtitle-provider.factory';
 import { SubtitlesService } from './subtitles.service';
@@ -205,11 +205,9 @@ export class SubtitleActivityController {
         });
 
         for (const lang of subtitleLangs) {
-          const hasSub = existingSubs.some(
-            (s) =>
-              s.language === lang.isoCode && s.status !== SubtitleStatus.FAILED,
-          );
-          if (hasSub) continue;
+          // Image-based tracks don't satisfy a language — they still need OCR
+          // to become servable text, so the language stays "missing" until then.
+          if (hasServableTextSub(existingSubs, lang.isoCode)) continue;
 
           // Build episode label
           let episodeLabel: string | null = null;

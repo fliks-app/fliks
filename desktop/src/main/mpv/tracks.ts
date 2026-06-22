@@ -3,10 +3,26 @@ import type { DesktopAudioTrack, DesktopSubtitleTrack } from '../../shared/contr
 interface MpvTrack {
   id: number;
   type: string;
+  codec?: string;
   lang?: string;
   title?: string;
   selected?: boolean;
   forced?: boolean;
+}
+
+/** Bitmap subtitle codecs (PGS / VOBSUB / DVB / XSUB) carry rendered images,
+ *  not text. mpv would render them as burned-in overlays; they're handled by
+ *  server-side burn-in/OCR, never as selectable tracks. Mirrors
+ *  isImageBasedSubtitleCodec on the web/android clients. */
+const IMAGE_BASED_SUBTITLE_CODECS = new Set([
+  'hdmv_pgs_subtitle',
+  'dvd_subtitle',
+  'dvb_subtitle',
+  'xsub',
+]);
+
+export function isImageBasedSubtitleCodec(codec: string | undefined): boolean {
+  return IMAGE_BASED_SUBTITLE_CODECS.has(codec ?? '');
 }
 
 /** Parse mpv's `track-list` JSON (as returned by get_property_string) into the
@@ -33,7 +49,7 @@ export function parseTracks(json: string | null): {
         label: t.title ?? '',
         selected: !!t.selected,
       });
-    else if (t.type === 'sub')
+    else if (t.type === 'sub' && !isImageBasedSubtitleCodec(t.codec))
       subtitleTracks.push({
         id: String(t.id),
         language: t.lang ?? '',

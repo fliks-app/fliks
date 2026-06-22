@@ -585,6 +585,9 @@ public class NativePlayerPlugin extends Plugin {
                     if (group.getType() == C.TRACK_TYPE_TEXT) {
                         for (int i = 0; i < group.length; i++) {
                             var fmt = group.getTrackFormat(i);
+                            // Image-based tracks (PGS/VOBSUB/DVB) can't be shown
+                            // as text — keep them out of the selectable list.
+                            if (isImageSubtitleMime(fmt.sampleMimeType)) continue;
                             JSObject t = new JSObject();
                             t.put("id", "text-" + idx);
                             t.put("language", fmt.language != null ? fmt.language : "und");
@@ -832,7 +835,10 @@ public class NativePlayerPlugin extends Plugin {
         // enumerates them in the same order, so the offset must be 0.
         int totalTextGroups = 0;
         for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
-            if (group.getType() == C.TRACK_TYPE_TEXT) totalTextGroups++;
+            if (group.getType() == C.TRACK_TYPE_TEXT
+                    && !isImageSubtitleMime(group.getTrackFormat(0).sampleMimeType)) {
+                totalTextGroups++;
+            }
         }
         int sidecarOffset = subtitleConfigs.isEmpty()
                 ? 0
@@ -842,6 +848,9 @@ public class NativePlayerPlugin extends Plugin {
         int idx = 0;
         for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
             if (group.getType() == C.TRACK_TYPE_TEXT) {
+                // Skip image tracks so "text-N" stays aligned with the filtered
+                // list emitted by getSubtitleTracks.
+                if (isImageSubtitleMime(group.getTrackFormat(0).sampleMimeType)) continue;
                 if (idx == exoIndex) {
                     player.setTrackSelectionParameters(
                             player.getTrackSelectionParameters().buildUpon()
@@ -855,6 +864,15 @@ public class NativePlayerPlugin extends Plugin {
             }
         }
         return false;
+    }
+
+    /** Bitmap subtitle codecs (PGS / VOBSUB / DVB) carry rendered images, not
+     *  text, so they're burn-in-only and must never surface as selectable text
+     *  tracks. Mirrors isImageBasedSubtitleCodec on the web/desktop clients. */
+    private static boolean isImageSubtitleMime(String mime) {
+        return MimeTypes.APPLICATION_PGS.equals(mime)
+                || MimeTypes.APPLICATION_VOBSUB.equals(mime)
+                || MimeTypes.APPLICATION_DVBSUBS.equals(mime);
     }
 
     private JSArray buildAudioTrackList() {
