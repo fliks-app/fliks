@@ -4,6 +4,7 @@ import { PlayerSettingsService, normalizeLang } from './player-settings.service'
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { AppSettingsService } from './app-settings.service';
+import { BrowserDeviceProfileService } from './browser-device-profile.service';
 import { formatSubtitleLabel } from '../utils/player.utils';
 import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
@@ -14,7 +15,10 @@ export interface SubtitleOption {
   label: string;
   url: string;
   language: string;
-  /** True for bitmap subs (PGS/VOBSUB) that need server-side burn-in */
+  /** True for bitmap subs (PGS/VOBSUB), regardless of how they're shown. */
+  isImage?: boolean;
+  /** True when this bitmap sub must be burned in server-side (the device can't
+   *  render image subtitles natively). */
   burnIn: boolean;
   /** Database subtitle ID (for burn-in request) */
   subtitleDbId?: number;
@@ -27,6 +31,7 @@ export class TrackManagerService {
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly appSettings = inject(AppSettingsService);
+  private readonly deviceProfile = inject(BrowserDeviceProfileService);
   private readonly translate = inject(TranslateService);
 
   // ── Audio track methods ──
@@ -141,6 +146,10 @@ export class TrackManagerService {
     try {
       await this.appSettings.ensureLoaded();
       const hideBurnIn = this.appSettings.hideBurnInSubtitles();
+      // Devices whose player renders bitmap subs itself (ExoPlayer, mpv) show
+      // them natively; others burn them into the video server-side.
+      const rendersImageNatively =
+        !!this.deviceProfile.getProfile().supportsImageSubtitles;
       const subs = await this.subtitlesApi.getForMedia(mediaId);
       const tracks = buildSubtitleTracks(subs, mediaFileId, { hideBurnIn });
       const options: SubtitleOption[] = tracks.map((t) => ({
@@ -153,7 +162,8 @@ export class TrackManagerService {
               ? ''
               : streamingApi.getEmbeddedSubtitleUrl(mediaFileId, t.streamIndex!),
         language: t.language,
-        burnIn: t.kind === 'embedded' && t.isImage,
+        isImage: t.isImage,
+        burnIn: t.kind === 'embedded' && t.isImage && !rendersImageNatively,
         subtitleDbId: t.subtitleId,
         forced: t.forced,
       }));
@@ -211,7 +221,7 @@ export class TrackManagerService {
     // During init the transcode just started (possibly with a seek), so reloading would
     // spawn a 3rd ffmpeg process and cause Shaka error 1003. Users can still pick burn-in
     // subs manually from the subtitle menu.
-    const subs = subtitles.filter((s) => !s.burnIn);
+    const subs = subtitles.filter((s) => !s.isImage);
     if (!subs.length && !subtitles.length) return;
 
     // Priority 1: remembered selection by "language[:forced][:embedded]" or "off"
@@ -225,7 +235,7 @@ export class TrackManagerService {
         const wantEmbedded = parts.includes('embedded');
         const wantImage = parts.includes('image');
         const isEmbedded = (s: SubtitleOption) => s.id.startsWith('emb-');
-        const sameImage = (s: SubtitleOption) => !!s.burnIn === wantImage;
+        const sameImage = (s: SubtitleOption) => !!s.isImage === wantImage;
         // Restore image picks too — selectSubtitle renders them natively
         // (direct play) or burns them in (web / transcode).
         const pool = wantImage ? subtitles : subs;

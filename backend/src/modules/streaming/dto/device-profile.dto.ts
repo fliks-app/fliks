@@ -111,6 +111,16 @@ export class DeviceProfileDto {
   supportsHlsSubtitles?: boolean;
 
   /**
+   * Engine renders bitmap (PGS/VOBSUB) subtitles itself (ExoPlayer, mpv), so
+   * they're shown natively rather than burned in. Client-side hint; the backend
+   * accepts it for forward-compat (burn-in is client-initiated via
+   * `burnInSubtitleId`), so it's whitelisted here even though unused.
+   */
+  @IsBoolean()
+  @IsOptional()
+  supportsImageSubtitles?: boolean;
+
+  /**
    * Engine fetches the first VOD segment (seg-0) when it loads the playlist
    * and then seeks to the resume point — Shaka (web) and the Cast receiver do
    * this. The backend pre-spawns a short seg-0 "early-start" companion next to

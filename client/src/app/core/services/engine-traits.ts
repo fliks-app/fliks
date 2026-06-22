@@ -38,6 +38,9 @@ export interface EngineTraits {
   useTsOnSingleAudio?: boolean;
   /** Engine consumes HLS `SUBTITLES` renditions natively. */
   supportsHlsSubtitles?: boolean;
+  /** Engine renders bitmap (PGS/VOBSUB) subtitle tracks itself, so they're
+   *  shown natively instead of burned into the video server-side. */
+  supportsImageSubtitles?: boolean;
   /** Engine fetches seg-0 on a load-then-seek (web/Shaka + Cast receiver). */
   probesSegZero?: boolean;
   /** Engine can play a raw progressive file as DirectPlay. */
@@ -57,12 +60,14 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
   [EngineKind.WEB]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
+    supportsImageSubtitles: false,
     probesSegZero: true,
     supportsDirectPlay: true,
   },
   [EngineKind.NATIVE]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
+    supportsImageSubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
   },
@@ -79,24 +84,28 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
   [EngineKind.DESKTOP]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: false,
+    supportsImageSubtitles: true,
     probesSegZero: true,
     supportsDirectPlay: true,
   },
   [EngineKind.ANDROID_TV]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
+    supportsImageSubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
   },
   [EngineKind.TIZEN]: {
     useTsOnSingleAudio: true,
     supportsHlsSubtitles: false,
+    supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: false,
   },
   [EngineKind.WEBOS]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: false,
+    supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: true,
   },

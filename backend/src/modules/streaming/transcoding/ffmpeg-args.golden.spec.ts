@@ -323,6 +323,28 @@ describe('buildFfmpegArgs — CPU golden argv (characterization)', () => {
      ]
     `);
   });
+
+  it('image subtitle burn-in: overlay via -filter_complex, no -vf, maps [vout]', () => {
+    const args = buildFfmpegArgs(
+      opts({ burnIn: { filter: null, type: 'image', streamIndex: 3 } }),
+      silentLog,
+    );
+    expect(args).not.toContain('-vf');
+    const fcIdx = args.indexOf('-filter_complex');
+    expect(fcIdx).toBeGreaterThan(-1);
+    const fc = args[fcIdx + 1];
+    // Reuses the encoder's video chain, composites the sub in RGB, back to YUV.
+    expect(fc).toContain(
+      '[0:v]scale=1920:ceil(ih*1920/iw/2)*2:flags=lanczos,format=yuv420p,format=rgb24[v]',
+    );
+    expect(fc).toContain(
+      '[0:3]scale=1920:1080:flags=lanczos,format=rgba,colorlevels=rimax=0.6:gimax=0.6:bimax=0.6[s]',
+    );
+    expect(fc).toContain('[v][s]overlay[ov]');
+    expect(fc).toContain('[ov]format=yuv420p[vout]');
+    expect(args).toContain('[vout]');
+    expect(args).not.toContain('0:v:0');
+  });
 });
 
 describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', () => {

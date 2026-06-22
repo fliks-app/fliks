@@ -115,6 +115,11 @@ export interface DeviceProfile {
    *  whose AVPlay/webOS cue APIs are limited so they keep a DOM overlay. */
   supportsHlsSubtitles?: boolean;
 
+  /** Engine renders bitmap (PGS/VOBSUB) subtitles itself (ExoPlayer, mpv), so
+   *  they're shown natively rather than burned into the video. False engines
+   *  (web/Shaka, Tizen, webOS) burn them in. */
+  supportsImageSubtitles?: boolean;
+
   /** Engine fetches seg-0 when it loads the playlist and then seeks to the
    *  resume point — true for the web/Shaka path (and the Cast receiver). The
    *  backend uses it to decide whether to pre-spawn the seg-0 early-start
@@ -484,6 +489,7 @@ export class BrowserDeviceProfileService {
       // AVPlay/webOS cue APIs are limited, so those engines drive a DOM
       // overlay fed by sidecar VTT instead of the HLS renditions.
       supportsHlsSubtitles: traits.supportsHlsSubtitles,
+      supportsImageSubtitles: traits.supportsImageSubtitles,
       // Only the web/Shaka path probes seg-0 on a load-then-seek; that is
       // exactly the `!isNative` engine branch (Capacitor mobile + every TV go
       // through native players that seek straight to the resume segment). The
