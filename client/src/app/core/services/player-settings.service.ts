@@ -20,6 +20,8 @@ export interface PlayerSettings {
   preferredSubtitleLanguage: string;
   subtitleMode: 'off' | 'intelligent' | 'always';
   rememberSubtitleSelections: boolean;
+  // Hide image-based (PGS/VOBSUB) subtitles from the pickers and native player
+  hideImageSubtitles: boolean;
   // Subtitle appearance
   subtitleSize: string;
   subtitleColor: string;
@@ -46,6 +48,7 @@ const DEFAULTS: PlayerSettings = {
   preferredSubtitleLanguage: '',
   subtitleMode: 'intelligent',
   rememberSubtitleSelections: true,
+  hideImageSubtitles: true,
   subtitleSize: 'normal',
   subtitleColor: 'white',
   subtitleShadow: 'drop',

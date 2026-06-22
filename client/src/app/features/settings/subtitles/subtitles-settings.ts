@@ -34,7 +34,6 @@ export class SubtitlesSettingsComponent implements OnInit {
   readonly autoSync = signal('false');
   readonly encodeUtf8 = signal('true');
   readonly removeHiTags = signal('false');
-  readonly hideBurnIn = signal('true');
   readonly ocrBurnInAuto = signal('false');
   readonly deleteBurnInSource = signal('false');
   readonly customExclusions = signal('');
@@ -50,7 +49,6 @@ export class SubtitlesSettingsComponent implements OnInit {
       this.autoSync.set(map['subtitle_auto_sync'] ?? 'false');
       this.encodeUtf8.set(map['subtitle_encode_utf8'] ?? 'true');
       this.removeHiTags.set(map['subtitle_remove_hi_tags'] ?? 'false');
-      this.hideBurnIn.set(map['subtitle_hide_burn_in'] ?? 'true');
       this.ocrBurnInAuto.set(map['subtitle_ocr_burn_in_auto'] ?? 'false');
       this.deleteBurnInSource.set(map['subtitle_ocr_delete_source'] ?? 'false');
       this.customExclusions.set(map['subtitle_custom_exclusions'] ?? '');
@@ -73,7 +71,6 @@ export class SubtitlesSettingsComponent implements OnInit {
         subtitle_auto_sync: this.autoSync(),
         subtitle_encode_utf8: this.encodeUtf8(),
         subtitle_remove_hi_tags: this.removeHiTags(),
-        subtitle_hide_burn_in: this.hideBurnIn(),
         subtitle_ocr_burn_in_auto: this.ocrBurnInAuto(),
         subtitle_ocr_delete_source: this.deleteBurnInSource(),
         subtitle_custom_exclusions: this.customExclusions(),

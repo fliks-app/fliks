@@ -1,5 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { SettingsApiService } from './api/settings-api.service';
+import { PlayerSettingsService } from './player-settings.service';
 
 /**
  * Lazily-cached read access to server-side application settings for surfaces
@@ -9,6 +10,7 @@ import { SettingsApiService } from './api/settings-api.service';
 @Injectable({ providedIn: 'root' })
 export class AppSettingsService {
   private readonly api = inject(SettingsApiService);
+  private readonly playerSettings = inject(PlayerSettingsService);
   private readonly all = signal<Record<string, string | null> | null>(null);
   private loadPromise: Promise<Record<string, string | null>> | null = null;
 
@@ -28,12 +30,11 @@ export class AppSettingsService {
   }
 
   /**
-   * Hide burn-required (image-based) subtitles from the player / cast pickers
-   * and the media-detail header. Defaults to `true` — burn-in is currently
-   * non-functional, so a visible-but-unusable track is worse than hidden.
+   * Hide image-based (PGS/VOBSUB) subtitles from the pickers and native player.
+   * A per-device client preference (image subs can't render as text — they need
+   * burn-in or OCR).
    */
-  readonly hideBurnInSubtitles = computed(() => {
-    const v = this.all()?.['subtitle_hide_burn_in'];
-    return v == null ? true : v !== 'false';
-  });
+  readonly hideBurnInSubtitles = computed(
+    () => this.playerSettings.settings().hideImageSubtitles,
+  );
 }

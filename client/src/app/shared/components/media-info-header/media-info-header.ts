@@ -67,6 +67,8 @@ export interface MediaInfoHeaderSubtitle {
   label: string;
   language: string;
   forced?: boolean;
+  /** Bitmap (PGS/VOBSUB) track. */
+  image?: boolean;
 }
 
 export interface MediaInfoHeaderBadge {
@@ -310,10 +312,14 @@ export class MediaInfoHeaderComponent {
 
     const saved = this.playerSettings.getRememberedSubtitleTrack(mediaId);
     if (saved && saved !== 'off') {
-      const [lang, type] = saved.split(':');
-      const wantForced = type === 'forced';
+      const parts = saved.split(':');
+      const lang = parts[0];
+      const wantForced = parts.includes('forced');
+      const wantImage = parts.includes('image');
       const subs = this.subtitles();
-      const match = subs.find(s => s.language === lang && !!s.forced === wantForced)
+      const match =
+        subs.find(s => s.language === lang && !!s.image === wantImage && !!s.forced === wantForced)
+        ?? subs.find(s => s.language === lang && !!s.image === wantImage)
         ?? subs.find(s => s.language === lang && !s.forced);
       this.selectedSubtitleId.set(match?.id ?? null);
     } else {
@@ -395,7 +401,7 @@ export class MediaInfoHeaderComponent {
       this.trackManager.saveSubtitleSelection(mediaId, null);
     } else {
       const sub = this.subtitles().find(s => s.id === id);
-      if (sub) this.trackManager.saveSubtitleSelection(mediaId, sub.language, sub.forced);
+      if (sub) this.trackManager.saveSubtitleSelection(mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'), sub.image);
     }
   }
 

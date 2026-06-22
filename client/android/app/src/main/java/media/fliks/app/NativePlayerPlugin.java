@@ -585,14 +585,12 @@ public class NativePlayerPlugin extends Plugin {
                     if (group.getType() == C.TRACK_TYPE_TEXT) {
                         for (int i = 0; i < group.length; i++) {
                             var fmt = group.getTrackFormat(i);
-                            // Image-based tracks (PGS/VOBSUB/DVB) can't be shown
-                            // as text — keep them out of the selectable list.
-                            if (isImageSubtitleMime(fmt.sampleMimeType)) continue;
                             JSObject t = new JSObject();
                             t.put("id", "text-" + idx);
                             t.put("language", fmt.language != null ? fmt.language : "und");
                             t.put("label", fmt.label != null ? fmt.label : (fmt.language != null ? fmt.language : "Track " + idx));
                             t.put("forced", (fmt.selectionFlags & C.SELECTION_FLAG_FORCED) != 0);
+                            t.put("image", isImageSubtitle(fmt));
                             tracks.put(t);
                             idx++;
                         }
@@ -827,31 +825,11 @@ public class NativePlayerPlugin extends Plugin {
         try { targetIndex = Integer.parseInt(id.replace("text-", "")); }
         catch (NumberFormatException e) { return false; }
 
-        // When sidecar SubtitleConfigurations are present, ExoPlayer may
-        // auto-detect extra text tracks (CEA-608 from HLS) before them, so
-        // text-0 must skip those. With subtitles delivered as HLS SUBTITLES
-        // renditions (no sidecar), the text groups ARE the renditions and
-        // "text-N" maps straight to the Nth text group — getSubtitleTracks
-        // enumerates them in the same order, so the offset must be 0.
-        int totalTextGroups = 0;
-        for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
-            if (group.getType() == C.TRACK_TYPE_TEXT
-                    && !isImageSubtitleMime(group.getTrackFormat(0).sampleMimeType)) {
-                totalTextGroups++;
-            }
-        }
-        int sidecarOffset = subtitleConfigs.isEmpty()
-                ? 0
-                : Math.max(0, totalTextGroups - subtitleConfigs.size());
-        int exoIndex = targetIndex + sidecarOffset;
-
+        // "text-N" is the Nth text group, matching getSubtitleTracks' order.
         int idx = 0;
         for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
             if (group.getType() == C.TRACK_TYPE_TEXT) {
-                // Skip image tracks so "text-N" stays aligned with the filtered
-                // list emitted by getSubtitleTracks.
-                if (isImageSubtitleMime(group.getTrackFormat(0).sampleMimeType)) continue;
-                if (idx == exoIndex) {
+                if (idx == targetIndex) {
                     player.setTrackSelectionParameters(
                             player.getTrackSelectionParameters().buildUpon()
                                     .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
@@ -866,13 +844,17 @@ public class NativePlayerPlugin extends Plugin {
         return false;
     }
 
-    /** Bitmap subtitle codecs (PGS / VOBSUB / DVB) carry rendered images, not
-     *  text, so they're burn-in-only and must never surface as selectable text
-     *  tracks. Mirrors isImageBasedSubtitleCodec on the web/desktop clients. */
     private static boolean isImageSubtitleMime(String mime) {
         return MimeTypes.APPLICATION_PGS.equals(mime)
                 || MimeTypes.APPLICATION_VOBSUB.equals(mime)
                 || MimeTypes.APPLICATION_DVBSUBS.equals(mime);
+    }
+
+    /** Bitmap (burn-in-only) subtitle track. The modern subtitle pipeline
+     *  rewrites sampleMimeType to application/x-media3-cues and preserves the
+     *  original codec in `codecs`, so check both. */
+    private static boolean isImageSubtitle(androidx.media3.common.Format fmt) {
+        return isImageSubtitleMime(fmt.sampleMimeType) || isImageSubtitleMime(fmt.codecs);
     }
 
     private JSArray buildAudioTrackList() {

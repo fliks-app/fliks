@@ -1042,6 +1042,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
           this.applyNativeSubtitleStyle();
 
+          // Direct play plays the raw container, so external/OCR sidecar subs
+          // must be injected — transcode/remux carry them as HLS renditions.
+          if (this.isNative) {
+            const ext =
+              mode === 'direct'
+                ? (await subsPromise)
+                    .filter((s) => !s.burnIn && !!s.url && s.id.startsWith('ext-'))
+                    .map((s) => ({ url: s.url, language: s.language, label: s.label }))
+                : [];
+            (this.engine as NativeEngine).setPreloadedSubtitles(ext);
+          }
+
           const token =
             this.authService.streamToken() ?? this.authService.accessToken;
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
@@ -2533,7 +2545,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    if (sub.burnIn && sub.subtitleDbId) {
+    // Direct play on the native engine renders bitmap (PGS/VOBSUB) tracks in
+    // ExoPlayer's own subtitle view — select them like any track, no burn-in
+    // reload. Burn-in (a transcode reload) is only needed when the engine
+    // can't render image subs itself (web) or there's no in-container track
+    // (transcode/remux).
+    const nativeDirectImage =
+      this.isNativeEngine() && this.playbackMode() === 'direct';
+
+    if (sub.burnIn && sub.subtitleDbId && !nativeDirectImage) {
       this.activeBurnInId = sub.subtitleDbId;
       this.activeSubtitleId.set(sub.id);
       this.subtitlePickerOpen.set(false);
@@ -2544,6 +2564,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         sub.language,
         sub.forced,
         sub.id.startsWith('emb-'),
+        true,
       );
       await this.reloadStream();
       return;
@@ -2564,6 +2585,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.engine.selectTextTrack({
         ...track,
         embIndex: sub.id.startsWith('emb-') ? Number(sub.id.slice(4)) : null,
+        image: sub.burnIn,
       });
       try { this.engine.setTextVisibility(true); } catch {}
     } catch (e) {
@@ -2573,7 +2595,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.activeSubtitleId.set(sub.id);
     this.subtitlePickerOpen.set(false);
 
-    this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'));
+    this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'), sub.burnIn);
   }
 
   // Bound DOM handlers kept as stable references so ngOnDestroy can remove
