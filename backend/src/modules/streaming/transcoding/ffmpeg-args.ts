@@ -27,6 +27,7 @@ import { hevcMainTierCapBps } from './codec/codec-strings';
 import { varStreamMapLayout } from './audio-layout';
 import { resolveEncodePipeline } from './encode-pipeline';
 import { buildVideoFilters } from './ffmpeg-filter-graph';
+import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
 
 /**
  * Probe ceiling (bytes) for the trusted-streamInfo fast path. Paired with
@@ -381,6 +382,11 @@ export function buildFfmpegArgs(
   const variant: CodecVariant = videoVariant;
   const isHdrOutput = variant.hdr !== null;
 
+  // Image-based subtitle burn-in (PGS/VOBSUB) is composited via -filter_complex
+  // below, reusing the encoder's video chain so the accelerated scale/tonemap
+  // is preserved (the overlay is grafted onto it, no CPU forcing).
+  const imageBurnIn = burnIn?.type === 'image' && burnIn.streamIndex != null;
+
   // Resolve the encode pipeline once via the shared resolver that stream-builder
   // also uses (so the stats hwAccel can't drift from the encoder that runs):
   // the requested-vs-effective hwAccel, the encoder (with registry CPU
@@ -572,6 +578,29 @@ export function buildFfmpegArgs(
   };
   args.push(...encoder.buildArgs(encoderInput));
 
+  // Bitmap subtitle burn-in: lift the encoder's `-vf` (the accelerated
+  // scale/tonemap chain) into a `-filter_complex` and graft the subtitle
+  // overlay onto it, so the HW pipeline (and HDR tone-map) is preserved. The
+  // output is mapped from `[vout]` below.
+  if (imageBurnIn) {
+    const vfIdx = args.indexOf('-vf');
+    const videoFilter = vfIdx !== -1 ? args[vfIdx + 1] : '';
+    if (vfIdx !== -1) args.splice(vfIdx, 2);
+    args.push(
+      '-filter_complex',
+      buildImageBurnInFilterComplex({
+        hwAccel: effectiveHwAccel,
+        videoFilter,
+        streamIndex: burnIn!.streamIndex!,
+        width: w,
+        height: h,
+        bitDepth: variant.bitDepth,
+        crop,
+      }),
+    );
+  }
+  const videoMapSpec = imageBurnIn ? '[vout]' : '0:v:0';
+
   // Force BT.709 limited-range SPS VUI on every SDR output.
   //
   // Two failure modes this prevents:
@@ -632,7 +661,7 @@ export function buildFfmpegArgs(
   if (useVarStreamMap) {
     // Single FFmpeg process for video + all audio renditions (perfect sync).
     if (!args.some((a) => a === '-map')) {
-      args.push('-map', '0:v:0');
+      args.push('-map', videoMapSpec);
     }
     for (let i = 0; i < audioStreams.length; i++) {
       args.push('-map', audioMapSpec(audioStreams, i));
@@ -686,12 +715,12 @@ export function buildFfmpegArgs(
     // emit a `-map` for audio — FFmpeg fails with "Stream map matches no
     // streams" otherwise.
     if (hasNoAudio(audioStreams)) {
-      args.push('-map', '0:v:0', '-an');
+      args.push('-map', videoMapSpec, '-an');
     } else {
       const pickedRel = userPickedAudio ? audioStreamIndex! : 0;
       args.push(
         '-map',
-        '0:v:0',
+        videoMapSpec,
         '-map',
         audioMapSpec(audioStreams, pickedRel),
       );

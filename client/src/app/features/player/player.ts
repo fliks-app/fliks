@@ -2545,15 +2545,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    // Direct play on the native engine renders bitmap (PGS/VOBSUB) tracks in
-    // ExoPlayer's own subtitle view — select them like any track, no burn-in
-    // reload. Burn-in (a transcode reload) is only needed when the engine
-    // can't render image subs itself (web) or there's no in-container track
-    // (transcode/remux).
-    const nativeDirectImage =
-      this.isNativeEngine() && this.playbackMode() === 'direct';
-
-    if (sub.burnIn && sub.subtitleDbId && !nativeDirectImage) {
+    // `burnIn` is already device-gated by the track manager: it's only true
+    // when the engine can't render bitmap subs itself. Engines that can
+    // (ExoPlayer, mpv) get burnIn=false and render the image track natively via
+    // the select path below; the rest burn it into the video (transcode reload).
+    if (sub.burnIn && sub.subtitleDbId) {
       this.activeBurnInId = sub.subtitleDbId;
       this.activeSubtitleId.set(sub.id);
       this.subtitlePickerOpen.set(false);
@@ -2585,7 +2581,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.engine.selectTextTrack({
         ...track,
         embIndex: sub.id.startsWith('emb-') ? Number(sub.id.slice(4)) : null,
-        image: sub.burnIn,
+        image: sub.isImage,
       });
       try { this.engine.setTextVisibility(true); } catch {}
     } catch (e) {
@@ -2595,7 +2591,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.activeSubtitleId.set(sub.id);
     this.subtitlePickerOpen.set(false);
 
-    this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'), sub.burnIn);
+    this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'), sub.isImage);
   }
 
   // Bound DOM handlers kept as stable references so ngOnDestroy can remove

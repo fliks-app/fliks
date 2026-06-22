@@ -33,6 +33,7 @@ import {
   computeProfileHash,
   buildPlaybackProfileFromContext,
   resolveSourceVideoBitrateBps,
+  type BurnInSubtitle,
 } from './transcoding';
 import {
   EARLY_PROBE_SEGMENTS,
@@ -753,6 +754,29 @@ export class StreamingController {
       episodeId ?? undefined,
     );
 
+    // Resolve the burn-in subtitle BEFORE creating the session: the transcode
+    // pre-spawns synchronously below, so resolving it async and patching the
+    // session afterwards raced the spawn and the first ffmpeg never carried the
+    // burn-in. For text subs this also extracts the sidecar up front.
+    let burnIn: BurnInSubtitle | null = null;
+    if (burnInSubtitleId) {
+      try {
+        const info = await this.subtitleBurnIn.resolve(
+          burnInSubtitleId,
+          mediaFileId,
+        );
+        burnIn = {
+          filter: this.subtitleBurnIn.buildFilter(info),
+          streamIndex: info.streamIndex,
+          type: info.type,
+        };
+      } catch (err) {
+        this.log.warn(
+          `Burn-in resolve failed for subtitle #${burnInSubtitleId}: ${err}`,
+        );
+      }
+    }
+
     // The LiveSession owns every per-playback setting: future HLS
     // requests resolve it via `?sid=...` and read settings straight off
     // this entry — no shared per-file mutable state to clobber.
@@ -788,30 +812,12 @@ export class StreamingController {
       videoVariant,
       tonemapping: response.tonemapping,
       transcodeReasons: response.transcodeReasons,
-      burnIn: null,
+      burnIn,
       encoderPreset: ss.qsvPreset,
       canCopyVideo: response.videoCopyStream,
       canCopyAudio: response.audioCopyStream,
       pinned: isDownload,
     });
-
-    // Burn-in subtitle resolves async (PGS extraction + filter build);
-    // patch the LiveSession when ready.
-    if (burnInSubtitleId) {
-      this.subtitleBurnIn
-        .resolve(burnInSubtitleId, mediaFileId)
-        .then((info) => {
-          const filter = this.subtitleBurnIn.buildFilter(info);
-          this.liveSessions.update(liveSession.sessionId, {
-            burnIn: {
-              filter,
-              streamIndex: info.streamIndex,
-              type: info.type,
-            },
-          });
-        })
-        .catch(() => {});
-    }
 
     // Pre-spawn ffmpeg as early as possible — the client will GET master.m3u8
     // next (~100–300ms later) and then seg-0. Starting ffmpeg here overlaps

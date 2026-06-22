@@ -38,7 +38,6 @@ import java.util.ArrayList;
 import java.util.List;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.CaptionStyleCompat;
-import androidx.media3.ui.SubtitleView;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -65,7 +64,7 @@ public class NativePlayerPlugin extends Plugin {
     /** Pending video height to force. -1 = none, 0 = auto (clear override). */
     private int pendingVideoHeight = -1;
     private SurfaceView surfaceView;
-    private SubtitleView subtitleView;
+    private SubtitleOverlay subtitles;
     private DefaultHttpDataSource.Factory httpFactory;
     private String currentHlsUrl;
     private int lastAudioTrackCount = -1;
@@ -137,7 +136,8 @@ public class NativePlayerPlugin extends Plugin {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     Gravity.CENTER));
 
-            // Z-order: 0=wrapper (video) → 1=subtitleView → 2+=WebView (controls)
+            // Z-order: 0=wrapper (video) → 1/2=SubtitleOverlay layers
+            //          → 3+=WebView (controls)
             android.webkit.WebView webView = getBridge().getWebView();
             ViewGroup webViewParent = (ViewGroup) webView.getParent();
             // Black on the parent ViewGroup covers the single-frame gap on
@@ -152,10 +152,7 @@ public class NativePlayerPlugin extends Plugin {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
 
-            subtitleView = new SubtitleView(getContext());
-            webViewParent.addView(subtitleView, 1, new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT));
+            subtitles = new SubtitleOverlay(getContext(), webViewParent, wrapper, surfaceView);
 
             // Transparent WebView so native player shows through
             webView.setBackgroundColor(Color.TRANSPARENT);
@@ -184,10 +181,9 @@ public class NativePlayerPlugin extends Plugin {
                 player.release();
                 player = null;
             }
-            if (subtitleView != null) {
-                ViewGroup subParent = (ViewGroup) subtitleView.getParent();
-                if (subParent != null) subParent.removeView(subtitleView);
-                subtitleView = null;
+            if (subtitles != null) {
+                subtitles.detach();
+                subtitles = null;
             }
             if (wrapper != null) {
                 ViewGroup parent = (ViewGroup) wrapper.getParent();
@@ -235,9 +231,7 @@ public class NativePlayerPlugin extends Plugin {
             // disabled by default. The stale cue then sits on screen until the
             // user manually seeks (which already clears it below) — clear here
             // too so a load looks identical from the user's perspective.
-            if (subtitleView != null) {
-                subtitleView.setCues(java.util.Collections.emptyList());
-            }
+            if (this.subtitles != null) this.subtitles.clear();
 
             // HTTP data source with auth headers
             Map<String, String> headerMap = new HashMap<>();
@@ -445,9 +439,7 @@ public class NativePlayerPlugin extends Plugin {
                 }
 
                 @Override public void onCues(@NonNull androidx.media3.common.text.CueGroup cueGroup) {
-                    if (subtitleView != null) {
-                        subtitleView.setCues(cueGroup.cues);
-                    }
+                    if (NativePlayerPlugin.this.subtitles != null) NativePlayerPlugin.this.subtitles.onCues(cueGroup);
                 }
 
             });
@@ -514,9 +506,7 @@ public class NativePlayerPlugin extends Plugin {
                 // several hundred ms to emit new cues for an external VTT after
                 // seekTo — leaving the previous line visible and reading as
                 // "subtitles shifted" until the next cue lands.
-                if (subtitleView != null) {
-                    subtitleView.setCues(java.util.Collections.emptyList());
-                }
+                if (subtitles != null) subtitles.clear();
                 player.seekTo((long) (position * 1000));
             }
             call.resolve();
@@ -635,7 +625,7 @@ public class NativePlayerPlugin extends Plugin {
         int bottomMargin = call.getInt("bottomMarginPercent", 10);
 
         mainHandler.post(() -> {
-            if (subtitleView == null) { call.resolve(); return; }
+            if (subtitles == null) { call.resolve(); return; }
 
             int fg = parseColor(fgColor, Color.WHITE);
             int bg = bgColor.equals("transparent") ? Color.TRANSPARENT : parseColor(bgColor, Color.TRANSPARENT);
@@ -655,13 +645,10 @@ public class NativePlayerPlugin extends Plugin {
                     Color.BLACK,                     // edge color
                     null);                           // typeface (null = default)
 
-            subtitleView.setStyle(style);
-            subtitleView.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 18f * fontScale);
-
             // Bottom margin via padding
             int screenH = getActivity().getWindow().getDecorView().getHeight();
             int paddingBottom = (int) (screenH * bottomMargin / 100f);
-            subtitleView.setPadding(0, 0, 0, paddingBottom);
+            subtitles.applyStyle(style, fontScale, paddingBottom);
 
             call.resolve();
         });
@@ -686,8 +673,8 @@ public class NativePlayerPlugin extends Plugin {
             getActivity().getWindow().setAttributes(lp);
 
             // Dim subtitle view when screen is at max brightness (HDR mode)
-            if (subtitleView != null) {
-                subtitleView.setAlpha(brightness >= 1.0f ? 0.5f : 1.0f);
+            if (subtitles != null) {
+                subtitles.setTextAlpha(brightness >= 1.0f ? 0.5f : 1.0f);
             }
 
             call.resolve();
@@ -844,6 +831,11 @@ public class NativePlayerPlugin extends Plugin {
         return false;
     }
 
+    /** Draw a bitmap (PGS/VOBSUB) cue ourselves, pinned near the bottom of the
+     *  screen, aspect preserved — the built-in SubtitleView stretches/squishes
+     *  bitmaps. Sized from the video WIDTH so it stays consistent across
+     *  orientations (the letterboxed video height is tiny in portrait). Null
+     *  hides it. */
     private static boolean isImageSubtitleMime(String mime) {
         return MimeTypes.APPLICATION_PGS.equals(mime)
                 || MimeTypes.APPLICATION_VOBSUB.equals(mime)
