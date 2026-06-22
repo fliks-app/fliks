@@ -12,6 +12,10 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SettingsService } from '../settings/settings.service';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import {
+  hasServableTextSub,
+  isImageBasedSubtitleCodec,
+} from '../../common/constants/subtitle-codecs';
+import {
   SubtitleLanguageItem,
   resolveHearingImpairedMode,
 } from '../profiles/entities/language-profile.entity';
@@ -140,12 +144,16 @@ export class SubtitleSchedulerService {
     const downloaded: string[] = [];
 
     for (const langItem of subtitleLangs) {
-      const hasSub = existingSubs.some(
-        (s) =>
-          s.language === langItem.isoCode &&
-          s.status !== SubtitleStatus.FAILED,
-      );
-      if (hasSub) continue;
+      if (hasServableTextSub(existingSubs, langItem.isoCode)) continue;
+
+      // OCR-first: an embedded image track in this language is converted to
+      // text in preference to a provider download — it's perfectly synced to
+      // this exact file and costs no provider quota. Falls through to the
+      // providers when there's no image track (or OCR is disabled).
+      if (await this.tryOcrFirst(existingSubs, langItem.isoCode)) {
+        downloaded.push(langItem.isoCode);
+        continue;
+      }
 
       try {
         const results = await this.subtitlesService.searchSubtitles({
@@ -208,11 +216,51 @@ export class SubtitleSchedulerService {
       }
     }
 
-    // Convert any remaining image-based (burn-required) tracks to text via OCR
-    // when enabled; self-gated on the `subtitle_ocr_burn_in_auto` setting.
-    void this.subtitleOcr.autoOcrForFile(file.id);
-
     return downloaded;
+  }
+
+  /**
+   * OCR-first source for one wanted language. Kicks off a background OCR of an
+   * embedded image track in `isoCode` and returns true when OCR handles the
+   * language (a run started, or one is already in progress/done) so the caller
+   * skips the provider search. Returns false when OCR is disabled, no image
+   * track exists, or the run couldn't start — letting providers take over.
+   * Gated by `subtitle_ocr_burn_in_auto`. Untagged ('und') tracks are excluded
+   * since auto can't pick the OCR language; those stay to the manual flow.
+   */
+  private async tryOcrFirst(
+    existingSubs: SubtitleFile[],
+    isoCode: string,
+  ): Promise<boolean> {
+    if ((await this.settings.get('subtitle_ocr_burn_in_auto')) !== 'true') {
+      return false;
+    }
+    if (!isoCode || isoCode === 'und') return false;
+
+    const alreadyHandled = existingSubs.some(
+      (s) =>
+        s.language === isoCode &&
+        s.providerType === SubtitleProviderType.OCR &&
+        s.status !== SubtitleStatus.FAILED,
+    );
+    if (alreadyHandled) return true;
+
+    const imageSub = existingSubs.find(
+      (s) =>
+        s.language === isoCode &&
+        isImageBasedSubtitleCodec(s.codec) &&
+        s.streamIndex != null &&
+        s.status !== SubtitleStatus.FAILED,
+    );
+    if (!imageSub) return false;
+
+    try {
+      await this.subtitleOcr.ocrSubtitle(imageSub.id, isoCode);
+      return true;
+    } catch (err) {
+      this.log.warn(`SubtitleOcr: OCR-first failed for ${isoCode}: ${err}`);
+      return false;
+    }
   }
 
   /**
@@ -414,103 +462,26 @@ export class SubtitleSchedulerService {
     // auto_search is disabled (or no languages are configured) used to
     // leave embedded tracks invisible in the subtitle_files table even
     // though ffprobe sees them.
-    const embeddedSubs = await this.embeddedSubtitle.detectAndStore(
-      mediaId,
-      mediaFileId,
-      episodeId,
-    );
-    const embeddedLangs = new Set(embeddedSubs.map((s) => s.language));
-
-    // OCR image-based tracks to servable text (self-gated on its own setting),
-    // independent of the auto-search toggle below.
-    void this.subtitleOcr.autoOcrForFile(mediaFileId);
+    await this.embeddedSubtitle.detectAndStore(mediaId, mediaFileId, episodeId);
 
     const autoSearch = await this.settings.get('subtitle_auto_search');
     if (autoSearch === 'false') return;
 
     const media = await this.mediaRepo.findOne({
       where: { id: mediaId },
-      relations: ['languageProfile'],
+      relations: [
+        'languageProfile',
+        'files',
+        'files.episode',
+        'files.episode.season',
+      ],
     });
-    if (!media) return;
+    const file = media?.files?.find((f) => f.id === mediaFileId);
+    if (!media || !file) return;
 
-    const subtitleLangs: SubtitleLanguageItem[] =
-      media.languageProfile?.subtitleLanguages ?? [];
-    if (!subtitleLangs.length) return;
-
-    const mediaFile = await this.mediaFileRepo.findOne({
-      where: { id: mediaFileId },
-      relations: ['episode', 'episode.season'],
-    });
-    if (!mediaFile) return;
-
-    const minScore = Number(
-      (await this.settings.get('subtitle_min_score')) ?? '70',
-    );
-    const autoSyncEnabled =
-      (await this.settings.get('subtitle_auto_sync')) === 'true';
-    const encodeUtf8 =
-      (await this.settings.get('subtitle_encode_utf8')) !== 'false';
-
-    const videoReleaseName = path.basename(
-      mediaFile.relativePath,
-      path.extname(mediaFile.relativePath),
-    );
-    const fileSeason = mediaFile.episode?.season?.seasonNumber ?? undefined;
-    const fileEpisode = mediaFile.episode?.episodeNumber ?? undefined;
-
-    for (const langItem of subtitleLangs) {
-      if (embeddedLangs.has(langItem.isoCode)) {
-        this.log.log(
-          `PostImport: skipping ${langItem.isoCode} for "${media.title}" — embedded subtitle found`,
-        );
-        continue;
-      }
-      try {
-        const results = await this.subtitlesService.searchSubtitles({
-          imdbId: media.imdbId ?? undefined,
-          tmdbId: media.tmdbId,
-          title: media.title,
-          year: media.year ?? undefined,
-          language: langItem.isoCode,
-          season: fileSeason,
-          episode: fileEpisode,
-          videoReleaseName,
-          moviehash: mediaFile.osdbHash ?? undefined,
-          moviebytesize: mediaFile.osdbBytesize ?? undefined,
-          hearingImpairedMode: resolveHearingImpairedMode(langItem),
-        });
-
-        const best = results.find((r) => r.score >= minScore);
-        if (!best) {
-          this.log.log(
-            `PostImport: no ${langItem.isoCode} subtitle for "${media.title}" cleared min score ${minScore} (best candidate ${results[0]?.score ?? 'none'})`,
-          );
-          continue;
-        }
-
-        const sub = await this.subtitlesService.downloadSubtitle(
-          mediaId,
-          mediaFileId,
-          episodeId,
-          best,
-        );
-
-        if (encodeUtf8) {
-          await this.subtitleSync.reencodeToUtf8(sub.id);
-        }
-        if (autoSyncEnabled) {
-          await this.subtitleSync.syncSubtitle(sub.id);
-        }
-
-        this.log.log(
-          `PostImport subtitle: ${langItem.isoCode} for "${media.title}"`,
-        );
-      } catch (err) {
-        this.log.warn(
-          `PostImport subtitle failed for "${media.title}" [${langItem.isoCode}]: ${err}`,
-        );
-      }
-    }
+    // Same gap-filling as the scheduled pass: servable-text gate, OCR-first on
+    // embedded image tracks, then providers. Keeps the post-import and periodic
+    // paths from drifting.
+    await this.searchMissingForFile(media, file, await this.resolveSearchOpts());
   }
 }

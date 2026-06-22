@@ -48,6 +48,12 @@ export class SubtitleOcrService {
   private readonly log = new Logger(SubtitleOcrService.name);
   private readonly tmpDir = '/tmp/fliks-ocr';
 
+  // OCR is CPU-heavy (ffmpeg extract + tesseract). A library-wide sweep can
+  // claim a PROCESSING row for every image track at once; this gate keeps the
+  // number of heavy runs actually executing in parallel bounded.
+  private ocrActive = 0;
+  private readonly ocrWaiters: Array<() => void> = [];
+
   constructor(
     @InjectRepository(SubtitleFile)
     private readonly repo: Repository<SubtitleFile>,
@@ -112,38 +118,24 @@ export class SubtitleOcrService {
     return placeholder;
   }
 
-  /**
-   * Auto path used after import / during the missing-search pass: OCR every
-   * image-based embedded subtitle on the file that has no text counterpart yet.
-   * Gated by the `subtitle_ocr_burn_in_auto` setting. Language-untagged ('und')
-   * tracks are left to the manual flow — auto can't pick the OCR language.
-   */
-  async autoOcrForFile(mediaFileId: number): Promise<void> {
-    if ((await this.settings.get('subtitle_ocr_burn_in_auto')) !== 'true') return;
+  /** Max OCR runs allowed to execute their heavy stage at once. */
+  private async ocrConcurrencyLimit(): Promise<number> {
+    const raw = Number(
+      (await this.settings.get('subtitle_ocr_max_concurrency')) ?? '1',
+    );
+    return Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
+  }
 
-    const subs = await this.repo.find({
-      where: { mediaFile: { id: mediaFileId } },
-    });
-    const hasText = (lang: string) =>
-      subs.some(
-        (s) =>
-          s.language === lang &&
-          !isImageBasedSubtitleCodec(s.codec) &&
-          s.status !== SubtitleStatus.FAILED,
-      );
-
-    for (const sub of subs) {
-      if (sub.streamIndex == null) continue;
-      if (!isImageBasedSubtitleCodec(sub.codec)) continue;
-      const lang = (sub.language ?? '').toLowerCase();
-      if (!lang || lang === 'und' || lang === 'undefined') continue;
-      if (hasText(sub.language)) continue;
-      try {
-        await this.ocrSubtitle(sub.id);
-      } catch (err) {
-        this.log.warn(`Auto-OCR skipped sub #${sub.id}: ${err}`);
-      }
+  private async acquireOcrSlot(limit: number): Promise<void> {
+    while (this.ocrActive >= limit) {
+      await new Promise<void>((resolve) => this.ocrWaiters.push(resolve));
     }
+    this.ocrActive++;
+  }
+
+  private releaseOcrSlot(): void {
+    this.ocrActive = Math.max(0, this.ocrActive - 1);
+    this.ocrWaiters.shift()?.();
   }
 
   private async runOcr(placeholderId: number, source: SubtitleFile): Promise<void> {
@@ -153,12 +145,19 @@ export class SubtitleOcrService {
     try {
       if (!media?.path) throw new Error('media root folder not set');
       const videoPath = path.join(media.path, source.mediaFile.relativePath);
-      const srt = await this.extractAndOcr(
-        videoPath,
-        source.streamIndex as number,
-        source.codec ?? '',
-        source.language,
-      );
+      const limit = await this.ocrConcurrencyLimit();
+      await this.acquireOcrSlot(limit);
+      let srt: string;
+      try {
+        srt = await this.extractAndOcr(
+          videoPath,
+          source.streamIndex as number,
+          source.codec ?? '',
+          source.language,
+        );
+      } finally {
+        this.releaseOcrSlot();
+      }
 
       const cleaned = cleanSubtitle(Buffer.from(srt, 'utf-8'), {
         removeAds: true,
