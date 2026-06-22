@@ -40,13 +40,19 @@ export class SystemStatusComponent implements OnInit {
     | { type: 'single'; name: string; label: string }
     | { type: 'group'; label: string; items: { name: string; label: string }[] }
   )[] = [
-    { type: 'single', name: 'RssSync', label: 'system.cmd_rss_sync' },
-    { type: 'single', name: 'SearchMissing', label: 'system.cmd_search_missing' },
+    { type: 'group', label: 'system.cmd_group_media', items: [
+      { name: 'SearchMissing', label: 'system.cmd_search_missing' },
+      { name: 'RssSync', label: 'system.cmd_rss_sync' },
+      { name: 'ImportCompleted', label: 'system.cmd_import_completed' },
+    ]},
     { type: 'group', label: 'system.cmd_group_metadata', items: [
       { name: 'RefreshMetadata', label: 'system.cmd_refresh_metadata' },
       { name: 'RefreshMissingMetadata', label: 'system.cmd_refresh_missing_metadata' },
     ]},
-    { type: 'single', name: 'ImportCompleted', label: 'system.cmd_import_completed' },
+    { type: 'group', label: 'system.cmd_group_subtitle', items: [
+      { name: 'SubtitleSearch', label: 'system.cmd_subtitle_search' },
+      { name: 'SubtitleUpgrade', label: 'system.cmd_subtitle_upgrade' },
+    ]},
     { type: 'group', label: 'system.cmd_group_rescan', items: [
       { name: 'RescanAll', label: 'system.cmd_rescan_all' },
       { name: 'RescanMissingFiles', label: 'system.cmd_rescan_missing_files' },
@@ -68,8 +74,6 @@ export class SystemStatusComponent implements OnInit {
     ),
     // Non-triggerable commands (background-only) that still appear in history.
     { name: 'IntroDetection', label: 'system.cmd_intro_detection' },
-    { name: 'SubtitleSearch', label: 'system.cmd_subtitle_search' },
-    { name: 'SubtitleUpgrade', label: 'system.cmd_subtitle_upgrade' },
   ];
 
   constructor() {
