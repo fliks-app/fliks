@@ -29,6 +29,7 @@ export class SubtitleSettingsPageComponent implements OnInit {
   readonly preferredSubtitleLanguage = signal('');
   readonly subtitleMode = signal<'off' | 'intelligent' | 'always'>('intelligent');
   readonly rememberSubtitleSelections = signal(false);
+  readonly hideImageSubtitles = signal(true);
   readonly subtitleSize = signal('normal');
   readonly subtitleColor = signal('white');
   readonly subtitleShadow = signal('drop');
@@ -41,6 +42,7 @@ export class SubtitleSettingsPageComponent implements OnInit {
     this.preferredSubtitleLanguage.set(p.preferredSubtitleLanguage);
     this.subtitleMode.set(p.subtitleMode);
     this.rememberSubtitleSelections.set(p.rememberSubtitleSelections);
+    this.hideImageSubtitles.set(p.hideImageSubtitles);
     this.subtitleSize.set(p.subtitleSize);
     this.subtitleColor.set(p.subtitleColor);
     this.subtitleShadow.set(p.subtitleShadow);
@@ -61,6 +63,7 @@ export class SubtitleSettingsPageComponent implements OnInit {
       preferredSubtitleLanguage: this.preferredSubtitleLanguage(),
       subtitleMode: this.subtitleMode(),
       rememberSubtitleSelections: this.rememberSubtitleSelections(),
+      hideImageSubtitles: this.hideImageSubtitles(),
       subtitleSize: this.subtitleSize(),
       subtitleColor: this.subtitleColor(),
       subtitleShadow: this.subtitleShadow(),

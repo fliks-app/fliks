@@ -271,6 +271,8 @@
     "sub_mode_always": "Toujours",
     "sub_remember": "Se souvenir des sélections de sous-titres",
     "sub_remember_hint": "Les sélections de sous-titres seront enregistrées pour chaque vidéo et réappliquées si la vidéo est de nouveau lue.",
+    "sub_hide_image": "Masquer les sous-titres image",
+    "sub_hide_image_hint": "Les sous-titres image (PGS, VOBSUB…) ne peuvent pas être affichés comme du texte. Quand activé, ils sont masqués du sélecteur et du lecteur (sur cet appareil).",
     "sub_clear_saved": "Vider les sélections de piste enregistrées",
     "sub_appearance_title": "Apparence des sous-titres",
     "sub_appearance_hint": "Ces paramètres ne s'appliqueront pas aux sous-titres graphiques (PGS, DVD etc) ou aux sous-titres qui ont leurs propres styles incorporés (ASS/SSA).",
