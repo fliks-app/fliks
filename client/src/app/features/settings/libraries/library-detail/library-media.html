@@ -27,9 +27,14 @@
     <div class="divider my-0"></div>
 
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <h2 class="card-title text-lg">
-        {{ 'settings.libraries.media_count' | translate: { count: total() } }}
-      </h2>
+      <div class="flex items-center gap-3">
+        <h2 class="card-title text-lg">
+          {{ 'settings.libraries.media_count' | translate: { count: total() } }}
+        </h2>
+        <button type="button" class="btn btn-outline btn-sm" (click)="openScan()">
+          {{ 'settings.libraries.scan_folder' | translate }}
+        </button>
+      </div>
       <div class="relative w-full max-w-xs">
         <svg lucideSearch class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/40 pointer-events-none z-10"></svg>
         <input
@@ -96,3 +101,5 @@
     }
   </div>
 </div>
+
+<app-orphan-scan-modal #scanModal (linked)="load()" />

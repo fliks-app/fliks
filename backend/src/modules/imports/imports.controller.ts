@@ -1,9 +1,20 @@
-import { Body, Controller, Logger, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Logger,
+  Param,
+  ParseIntPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { User } from '../users/entities/user.entity';
 import { Action } from '../auth/casl/actions.enum';
 import { Media } from '../media/entities/media.entity';
+import { RelinkOrphansDto } from './dto/relink-orphans.dto';
 import { EventsService } from '../scheduler/events.service';
 import { ImportRadarrService, ApiImportResult } from './radarr.service';
 import { ImportSonarrService } from './sonarr.service';
@@ -148,5 +159,21 @@ export class ImportsController {
   @CheckPolicies((ability) => ability.can(Action.Create, Media))
   diskConfirm(@Body() dto: ConfirmDiskImportDto) {
     return this.diskImport.confirmImport(dto.imports, dto.method);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Library orphan scan & re-link
+  // ---------------------------------------------------------------------------
+
+  @Post('library/:libraryId/orphans/scan')
+  @CheckPolicies((ability) => ability.can(Action.Create, Media))
+  scanOrphans(@Param('libraryId', ParseIntPipe) libraryId: number) {
+    return this.diskImport.scanLibraryOrphans(libraryId);
+  }
+
+  @Post('library/orphans/relink')
+  @CheckPolicies((ability) => ability.can(Action.Create, Media))
+  relinkOrphans(@Body() dto: RelinkOrphansDto, @CurrentUser() user: User) {
+    return this.diskImport.relinkOrphans(dto, user?.id ?? null);
   }
 }

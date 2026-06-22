@@ -1,0 +1,178 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-3xl flex flex-col max-h-[85vh] overflow-hidden">
+    <button type="button" class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+      (click)="close()" [attr.aria-label]="'common.close' | translate">✕</button>
+
+    <!-- Header (fixed) -->
+    <div class="shrink-0">
+      <h2 class="text-lg font-bold">{{ 'settings.libraries.scan_title' | translate }}</h2>
+
+      @if (!scanning() && !scanError()) {
+        <p class="text-sm text-base-content/60 mt-1">
+          {{ 'settings.libraries.scan_orphan_count' | translate: { count: orphanCount() } }}
+        </p>
+
+        @if (hasLinkable()) {
+          <div class="flex items-center justify-between gap-3 mt-4">
+            <label class="label cursor-pointer justify-start gap-3 max-w-max">
+              <input type="checkbox" class="toggle toggle-sm toggle-primary"
+                [ngModel]="reorganize()" (ngModelChange)="reorganize.set($event)" />
+              <span class="label-text">{{ 'settings.libraries.scan_reorganize' | translate }}</span>
+            </label>
+            @if (groups().length > 0) {
+              <button type="button" class="btn btn-ghost btn-sm gap-1" (click)="toggleAll()">
+                @if (allExpanded()) {
+                  <svg lucideChevronsDownUp class="h-4 w-4"></svg>
+                  {{ 'settings.libraries.scan_collapse_all' | translate }}
+                } @else {
+                  <svg lucideChevronsUpDown class="h-4 w-4"></svg>
+                  {{ 'settings.libraries.scan_expand_all' | translate }}
+                }
+              </button>
+            }
+          </div>
+        }
+      }
+    </div>
+
+    <!-- Body (scrollable) -->
+    <div class="flex-1 overflow-y-auto mt-4 -mx-1 px-1">
+      @if (scanning()) {
+        <div class="flex flex-col items-center gap-3 py-12">
+          <span class="loading loading-spinner loading-lg"></span>
+          <p class="text-sm text-base-content/60">{{ 'settings.libraries.scan_scanning' | translate }}</p>
+        </div>
+      } @else if (scanError()) {
+        <div role="alert" class="alert alert-error">{{ scanError() }}</div>
+      } @else if (groups().length === 0) {
+        <p class="text-center py-10 text-base-content/50">{{ 'settings.libraries.scan_no_orphans' | translate }}</p>
+      } @else {
+        <div class="flex flex-col gap-3">
+          @for (vm of groups(); track vm.group.groupKey; let i = $index) {
+            <div class="collapse collapse-arrow bg-base-200/40 border border-base-200"
+              [class.collapse-open]="!vm.collapsed" [class.collapse-close]="vm.collapsed">
+              <div class="collapse-title cursor-pointer flex items-center justify-between gap-2 flex-wrap pr-12"
+                (click)="toggleCollapse(i)">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="badge badge-sm" [class.badge-info]="vm.group.mediaType === 'series'">
+                    {{ (vm.group.mediaType === 'series'
+                      ? 'settings.libraries.scan_group_series'
+                      : 'settings.libraries.scan_group_movie') | translate }}
+                  </span>
+                  <span class="font-mono text-sm text-base-content/70 truncate">{{ vm.group.folderName }}</span>
+                  <span class="text-xs text-base-content/50 shrink-0">
+                    {{ 'settings.libraries.scan_files' | translate: { count: vm.group.files.length } }}
+                  </span>
+                </div>
+                @if (vm.done) {
+                  <span class="badge badge-success badge-sm">{{ 'common.saved' | translate }}</span>
+                } @else if (vm.pick) {
+                  <span class="badge badge-primary badge-sm truncate max-w-40">{{ vm.pick.title }}</span>
+                }
+              </div>
+              <div class="collapse-content">
+                <div class="flex flex-col gap-3 pt-1">
+                  <div class="flex flex-col gap-0.5">
+                    @for (f of vm.group.files; track f.filePath) {
+                      <p class="font-mono text-xs text-base-content/50 break-all">{{ f.filePath }}</p>
+                    }
+                  </div>
+
+                  @if (!vm.done) {
+                    <div class="flex flex-wrap items-end gap-2">
+                      <label class="form-control flex-1 min-w-48">
+                        <input type="text" class="input input-bordered input-sm w-full"
+                          [placeholder]="'settings.libraries.scan_search_placeholder' | translate"
+                          [ngModel]="vm.query" (ngModelChange)="vm.query = $event"
+                          (keydown.enter)="search(i)" />
+                      </label>
+                      <input type="number" class="input input-bordered input-sm w-24"
+                        [ngModel]="vm.year" (ngModelChange)="vm.year = $event" placeholder="—" />
+                      <button type="button" class="btn btn-sm btn-ghost" (click)="search(i)" [disabled]="vm.searching">
+                        @if (vm.searching) { <span class="loading loading-spinner loading-xs"></span> }
+                        {{ 'settings.libraries.scan_search' | translate }}
+                      </button>
+                    </div>
+
+                    @if (vm.error) {
+                      <div role="alert" class="alert alert-error text-sm py-2">{{ vm.error }}</div>
+                    }
+
+                    @if (vm.searched && vm.results.length === 0 && !vm.searching) {
+                      <p class="text-sm text-base-content/50 italic">{{ 'settings.libraries.scan_no_match' | translate }}</p>
+                    }
+
+                    <div class="flex flex-col gap-1 max-h-60 overflow-auto">
+                      @for (r of vm.results; track r.tmdbId) {
+                        <button type="button"
+                          class="flex items-center gap-3 p-2 rounded text-left hover:bg-base-300/50"
+                          [class.bg-base-300]="vm.pick?.tmdbId === r.tmdbId"
+                          (click)="pick(i, r)">
+                          @if (r.posterUrl) {
+                            <img [src]="r.posterUrl | resolveUrl: 'thumb'" alt="" loading="lazy"
+                              class="h-14 w-auto rounded shrink-0" />
+                          } @else {
+                            <div class="h-14 w-9 rounded bg-base-300 shrink-0"></div>
+                          }
+                          <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                              <span class="font-medium truncate">{{ r.title }}</span>
+                              @if (vm.fromNfo && vm.pick?.tmdbId === r.tmdbId) {
+                                <span class="badge badge-ghost badge-xs">{{ 'settings.libraries.scan_from_nfo' | translate }}</span>
+                              }
+                            </div>
+                            <div class="text-xs text-base-content/50">
+                              {{ r.year || '—' }} · {{ r.provider | uppercase }}
+                              @if (r.existingMediaId) {
+                                · <span class="text-warning">{{ 'settings.libraries.scan_already' | translate }}</span>
+                              }
+                            </div>
+                          </div>
+                        </button>
+                      }
+                    </div>
+
+                    <div class="flex justify-end">
+                      <button type="button" class="btn btn-sm btn-primary"
+                        (click)="link(i)" [disabled]="!vm.pick || vm.linking">
+                        @if (vm.linking) { <span class="loading loading-spinner loading-xs"></span> }
+                        {{ (vm.pick?.existingMediaId
+                          ? 'settings.libraries.scan_relink_existing'
+                          : 'settings.libraries.scan_link') | translate }}
+                      </button>
+                    </div>
+                  }
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+
+        @if (looseCount() > 0) {
+          <p class="text-xs text-base-content/50 mt-4">
+            {{ 'settings.libraries.scan_loose_skipped' | translate: { count: looseCount() } }}
+          </p>
+        }
+      }
+    </div>
+
+    <!-- Footer (fixed) -->
+    <div class="modal-action mt-4 shrink-0">
+      @if (!scanning() && !scanError() && hasLinkable()) {
+        <button type="button" class="btn btn-secondary btn-sm" (click)="autoImportAll()" [disabled]="autoImporting()">
+          @if (autoImporting()) { <span class="loading loading-spinner loading-xs"></span> }
+          {{ 'settings.libraries.scan_auto_import' | translate }}
+        </button>
+      }
+      @if (pendingGroups().length > 1) {
+        <button type="button" class="btn btn-ghost btn-sm" (click)="linkAll()">
+          {{ 'settings.libraries.scan_link_all' | translate }}
+        </button>
+      }
+      <button type="button" class="btn btn-sm" (click)="close()">{{ 'common.close' | translate }}</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="close()" [attr.aria-label]="'common.close' | translate">close</button>
+  </form>
+</dialog>

@@ -17,8 +17,16 @@ import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { Library } from '../libraries/entities/library.entity';
 import { MediaType } from '../../common/enums';
-import { parseReleaseQuality } from '../../common/release-parsing';
+import { parseReleaseQuality, extractMediaTitle } from '../../common/release-parsing';
 import { ImportFileEntry } from './dto/confirm-disk-import.dto';
+import { RelinkOrphansDto } from './dto/relink-orphans.dto';
+import {
+  OrphanScanResult,
+  OrphanGroup,
+  OrphanFileEntry,
+  RelinkResult,
+} from './dto/orphan-scan.dto';
+import { NfoMetadataService } from './nfo-metadata.service';
 import { MediaService } from '../media/media.service';
 import { MediaMetadataService } from '../media/media-service/media-metadata.service';
 import { NamingService } from '../scheduler/naming.service';
@@ -79,7 +87,305 @@ export class DiskImportService {
     private readonly fileTransfer: FileTransferService,
     @Inject(forwardRef(() => MediaMetadataService))
     private readonly metadata: MediaMetadataService,
+    private readonly nfo: NfoMetadataService,
   ) {}
+
+  /**
+   * Walk a library's own root folder and surface video files not yet linked
+   * to any media in that library (orphans), grouped so each unit can be
+   * re-created from TMDB/TVDB and linked in place. Cheap: filename + .nfo
+   * hints only, no ffprobe.
+   */
+  async scanLibraryOrphans(libraryId: number): Promise<OrphanScanResult> {
+    const library = await this.libraries.requirePathFor(libraryId);
+    const root = path.resolve(library.path!);
+    this.logger.log(`Orphan scan started — library #${libraryId} root="${root}"`);
+
+    const allFiles = this.collectVideoFiles(root, 0);
+
+    // Build the set of absolute paths already linked in this library.
+    const linkedRows = await this.fileRepo.find({
+      where: { media: { library: { id: libraryId } } },
+      relations: ['media', 'media.library'],
+    });
+    const linkedSet = new Set<string>();
+    for (const f of linkedRows) {
+      const base = f.media?.path ?? library.path!;
+      linkedSet.add(
+        path.resolve(path.join(base, f.relativePath.replace(/\\/g, '/'))),
+      );
+    }
+
+    const suggestedProvider = library.preferredProvider ?? 'tmdb';
+    const groups = new Map<string, OrphanGroup>();
+    const looseFiles: OrphanFileEntry[] = [];
+    let orphanCount = 0;
+
+    for (const abs of allFiles) {
+      if (linkedSet.has(path.resolve(abs))) continue;
+
+      const filename = path.basename(abs);
+      const epNums = this.naming.parseEpisodeNumbers(filename);
+      // Skip files whose inferred type the library doesn't accept (e.g. a
+      // series file under a movies-only library) — they can't be re-linked here.
+      const inferredType = epNums ? MediaType.SERIES : MediaType.MOVIE;
+      if (!library.mediaTypes?.includes(inferredType)) continue;
+      orphanCount++;
+
+      const { quality } = parseReleaseQuality(filename);
+      let size = 0;
+      try {
+        size = fs.statSync(abs).size;
+      } catch {
+        /* ignore */
+      }
+      const entry: OrphanFileEntry = {
+        filePath: abs,
+        filename,
+        size,
+        qualityName: quality.name,
+        qualityId: quality.id,
+        seasonNumber: epNums?.season ?? null,
+        episodeNumber: epNums?.episode ?? null,
+        episodeEnd: epNums?.episodeEnd ?? null,
+      };
+
+      const rel = relativePathUnderMediaRoot(root, abs);
+      const segments = rel ? rel.split('/') : [];
+      // A file directly at the library root has a single segment (its name).
+      const folderName = segments.length > 1 ? segments[0] : '';
+      if (!folderName) {
+        looseFiles.push(entry);
+        continue;
+      }
+
+      if (epNums) {
+        // Series: one group per show folder.
+        const key = `series:${folderName}`;
+        let group = groups.get(key);
+        if (!group) {
+          const extracted = extractMediaTitle(filename);
+          const nfo = await this.nfo.readForVideoFile(abs);
+          group = {
+            groupKey: key,
+            mediaType: MediaType.SERIES,
+            folderName,
+            guessTitle: nfo?.title ?? extracted.title ?? folderName,
+            guessYear: nfo?.year ?? extracted.year ?? null,
+            nfo,
+            suggestedProvider,
+            files: [],
+          };
+          groups.set(key, group);
+        }
+        group.files.push(entry);
+      } else {
+        // Movie: one group per file.
+        const extracted = extractMediaTitle(filename);
+        const nfo = await this.nfo.readForVideoFile(abs);
+        groups.set(`movie:${abs}`, {
+          groupKey: `movie:${abs}`,
+          mediaType: MediaType.MOVIE,
+          folderName,
+          guessTitle: nfo?.title ?? extracted.title ?? folderName,
+          guessYear: nfo?.year ?? extracted.year ?? null,
+          nfo,
+          suggestedProvider,
+          files: [entry],
+        });
+      }
+    }
+
+    this.logger.log(
+      `Orphan scan finished — library #${libraryId} scanned=${allFiles.length} orphans=${orphanCount} groups=${groups.size} loose=${looseFiles.length}`,
+    );
+    return {
+      libraryId,
+      libraryPath: library.path!,
+      groups: [...groups.values()],
+      looseFiles,
+      scannedFiles: allFiles.length,
+      orphanCount,
+    };
+  }
+
+  /**
+   * Re-create a media from the chosen TMDB/TVDB match and link the orphan
+   * file(s) to it IN PLACE (no move). Reuses an existing media when the
+   * external id is already present.
+   */
+  async relinkOrphans(
+    dto: RelinkOrphansDto,
+    addedByUserId: number | null,
+  ): Promise<RelinkResult> {
+    const library = await this.libraries.requirePathFor(dto.libraryId);
+    if (!library.mediaTypes?.includes(dto.type)) {
+      throw new BadRequestException(
+        `La bibliothèque "${library.name}" n'accepte pas ${dto.type}`,
+      );
+    }
+
+    const externalIdNum = Number(dto.externalId);
+    const where =
+      dto.provider === 'tvdb'
+        ? { tvdbId: externalIdNum, type: dto.type }
+        : { tmdbId: externalIdNum, type: dto.type };
+
+    let media = await this.mediaRepo.findOne({
+      where,
+      relations: ['library', 'files'],
+    });
+    let created = false;
+    if (!media) {
+      try {
+        const imported = await this.mediaService.importMedia(
+          {
+            type: dto.type,
+            externalId: dto.externalId,
+            provider: dto.provider,
+            libraryId: dto.libraryId,
+            qualityProfileId: dto.qualityProfileId,
+            languageProfileId: dto.languageProfileId,
+          },
+          addedByUserId,
+        );
+        media = await this.mediaRepo.findOne({
+          where: { id: imported.id },
+          relations: ['library', 'files'],
+        });
+        created = true;
+      } catch (e) {
+        // Two orphan files of the same title (e.g. multiple editions, or the
+        // auto-import linking siblings in parallel) can both reach the create
+        // branch before either insert lands, tripping the unique (type,tmdbId)
+        // constraint. Re-fetch and reuse the row the other request created.
+        media = await this.mediaRepo.findOne({
+          where,
+          relations: ['library', 'files'],
+        });
+        if (!media) throw e;
+      }
+    }
+    if (!media) {
+      throw new BadRequestException('Média introuvable après import');
+    }
+    if (media.library && media.library.id !== dto.libraryId) {
+      throw new BadRequestException(
+        `Ce média est déjà rattaché à une autre bibliothèque ("${media.library.name}")`,
+      );
+    }
+
+    let linked = 0;
+    let slotCreated = false;
+    const errors: string[] = [];
+
+    if (dto.reorganize) {
+      // Move + rename into the library's naming layout by delegating to the
+      // existing disk-import pipeline (handles folder/file naming, companions,
+      // MediaFile creation, ffprobe enrich and subtitle scheduling).
+      if (!media.library) media.library = library;
+      const entries: ImportFileEntry[] = [];
+      for (const f of dto.files) {
+        const filename = path.basename(f.filePath);
+        let episodeId: number | undefined;
+        if (media.type === MediaType.SERIES) {
+          const epNums =
+            f.seasonNumber != null && f.episodeNumber != null
+              ? {
+                  season: f.seasonNumber,
+                  episode: f.episodeNumber,
+                  episodeEnd: f.episodeEnd ?? null,
+                }
+              : this.naming.parseEpisodeNumbers(filename);
+          if (!epNums) {
+            errors.push(`${filename}: aucun motif SxxEyy détecté`);
+            continue;
+          }
+          const ep = await this.mediaService.ensureSeriesEpisode(media, epNums);
+          episodeId = ep.episodeId ?? undefined;
+          slotCreated ||= ep.created;
+        }
+        entries.push({
+          filePath: f.filePath,
+          mediaId: media.id,
+          episodeId,
+          quality: parseReleaseQuality(filename).quality.name,
+          targetLibraryId: dto.libraryId,
+        });
+      }
+      if (entries.length) {
+        const res = await this.confirmImport(entries, 'move', {
+          uniquifyOnCollision: true,
+        });
+        linked = res.imported;
+        errors.push(...res.errors);
+      }
+    } else {
+      // Link in place — pin the media to the orphan's on-disk folder so
+      // `relativePath` stays valid, but only when it has no files yet.
+      if (
+        (media.files?.length ?? 0) === 0 &&
+        media.folderName !== dto.folderName
+      ) {
+        await this.mediaRepo.update(media.id, {
+          library: { id: library.id } as Library,
+          folderName: dto.folderName,
+        });
+        media.folderName = dto.folderName;
+      }
+      if (!media.library) media.library = library;
+
+      for (const f of dto.files) {
+        const absPath = path.resolve(f.filePath);
+        const epNums =
+          f.seasonNumber != null && f.episodeNumber != null
+            ? {
+                season: f.seasonNumber,
+                episode: f.episodeNumber,
+                episodeEnd: f.episodeEnd ?? null,
+              }
+            : undefined;
+        const res = await this.mediaService.linkExistingFileInPlace({
+          media,
+          absPath,
+          epNums,
+        });
+        if ('error' in res) {
+          errors.push(`${path.basename(f.filePath)}: ${res.error}`);
+          continue;
+        }
+        linked++;
+        slotCreated ||= res.created;
+        try {
+          await this.subtitleScheduler.onMediaFileImported(
+            media.id,
+            res.fileId,
+            res.episodeId ?? undefined,
+          );
+        } catch (e) {
+          this.logger.warn(
+            `Orphan relink: post-link subtitle pipeline failed — ${(e as Error).message}`,
+          );
+        }
+      }
+    }
+
+    // Backfill metadata for any season/episode slot invented while linking.
+    if (media.type === MediaType.SERIES && slotCreated) {
+      try {
+        await this.metadata.refreshSeriesEpisodes(media);
+      } catch (e) {
+        this.logger.warn(
+          `Orphan relink: refreshSeriesEpisodes failed — ${(e as Error).message}`,
+        );
+      }
+    }
+
+    this.logger.log(
+      `Orphan relink — media #${media.id} created=${created} linked=${linked} errors=${errors.length}`,
+    );
+    return { mediaId: media.id, created, linked, errors };
+  }
 
   async scanFolder(folderPath: string): Promise<ScanCandidate[]> {
     const resolved = path.resolve(folderPath);
@@ -141,6 +447,7 @@ export class DiskImportService {
   async confirmImport(
     imports: ImportFileEntry[],
     method: TransferMethod,
+    opts: { uniquifyOnCollision?: boolean } = {},
   ): Promise<{ imported: number; errors: string[] }> {
     let imported = 0;
     const errors: string[] = [];
@@ -260,28 +567,48 @@ export class DiskImportService {
           destDir = path.join(media.path!, seasonFolder);
         }
 
-        const destPath = path.join(destDir, newBaseName + ext);
+        let destPath = path.join(destDir, newBaseName + ext);
 
-        // Skip if the destination already holds a row for this media —
-        // re-running the same import twice should be safe / no-op.
-        const relativePath = relativePathUnderMediaRoot(
-          library.path!,
-          destPath,
-        );
+        // `relativePath` is stored relative to the MEDIA root (library.path +
+        // folderName), matching how the grab/rescan paths store it and how
+        // `enrichMediaFileFromDisk` resolves it. Computing it against the
+        // library root instead double-counts the media folder and leaves the
+        // file unresolvable on disk.
+        let relativePath = relativePathUnderMediaRoot(media.path!, destPath);
         if (!relativePath) {
           this.logger.error(
-            `Disk import: computed dest outside library root — root=${library.path!} dest=${destPath}`,
+            `Disk import: computed dest outside media folder — root=${media.path!} dest=${destPath}`,
           );
           errors.push(
-            `${path.basename(entry.filePath)}: destination en dehors du dossier racine`,
+            `${path.basename(entry.filePath)}: destination en dehors du dossier du média`,
           );
           continue;
         }
-        const existing = await this.fileRepo.findOne({
-          where: { media: { id: media.id }, relativePath },
-        });
-        if (existing && !entry.force) {
-          continue;
+        const collides = async (rel: string, abs: string) =>
+          fs.existsSync(abs) ||
+          !!(await this.fileRepo.findOne({
+            where: { media: { id: media.id }, relativePath: rel },
+          }));
+        if ((await collides(relativePath, destPath)) && !entry.force) {
+          if (!opts.uniquifyOnCollision) {
+            // Re-running the same import is a safe no-op.
+            continue;
+          }
+          // A different orphan file maps to a name already taken by this media
+          // (e.g. a second copy of the same quality). Append " (n)" so it is
+          // linked as an additional file instead of being silently skipped.
+          let n = 2;
+          let base: string;
+          let rel: string | null;
+          do {
+            base = `${newBaseName} (${n})`;
+            destPath = path.join(destDir, base + ext);
+            rel = relativePathUnderMediaRoot(media.path!, destPath);
+            n++;
+          } while (rel && (await collides(rel, destPath)) && n < 100);
+          if (!rel) continue;
+          newBaseName = base;
+          relativePath = rel;
         }
 
         // Filesystem write. mkdir + copy/move handled by FileTransferService.

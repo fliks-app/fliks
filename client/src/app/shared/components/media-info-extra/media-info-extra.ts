@@ -51,12 +51,8 @@ export class MediaInfoExtraComponent {
     return typeof t === 'string' && t !== key ? t : s;
   });
 
-  /** Original-title row hidden when it equals the displayed title (TMDB
-   *  returns the same value when no localised title exists). */
-  readonly originalTitle = computed(() => {
-    const m = this.media();
-    return m.originalTitle && m.originalTitle !== m.title ? m.originalTitle : '';
-  });
+  /** Original title as returned by the provider; shown whenever present. */
+  readonly originalTitle = computed(() => this.media().originalTitle ?? '');
 
   readonly originalLanguage = computed(() =>
     localizeLanguage(this.media().metadata?.originalLanguage, this.translate),

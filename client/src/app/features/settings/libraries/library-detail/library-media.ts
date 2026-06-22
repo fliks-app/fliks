@@ -1,4 +1,12 @@
-import { Component, ChangeDetectionStrategy, computed, inject, signal, OnInit } from '@angular/core';
+import {
+  Component,
+  ChangeDetectionStrategy,
+  computed,
+  inject,
+  signal,
+  viewChild,
+  OnInit,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
@@ -7,18 +15,29 @@ import { PaginationComponent } from '../../../../shared/components/pagination/pa
 import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
 import { MediaService, Media } from '../../../../core/services/api/media.service';
 import { LibraryDetailState } from './library-detail.state';
+import { OrphanScanModalComponent } from './orphan-scan-modal/orphan-scan-modal';
 
 const PAGE_SIZE = 30;
 
 @Component({
   selector: 'app-library-media',
-  imports: [FormsModule, TranslateModule, RouterLink, LucideSearch, ResolveUrlPipe, PaginationComponent],
+  imports: [
+    FormsModule,
+    TranslateModule,
+    RouterLink,
+    LucideSearch,
+    ResolveUrlPipe,
+    PaginationComponent,
+    OrphanScanModalComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library-media.html',
 })
 export class LibraryMediaComponent implements OnInit {
   private readonly mediaService = inject(MediaService);
   readonly state = inject(LibraryDetailState);
+
+  private readonly scanModal = viewChild<OrphanScanModalComponent>('scanModal');
 
   readonly items = signal<Media[]>([]);
   readonly total = signal(0);
@@ -73,6 +92,10 @@ export class LibraryMediaComponent implements OnInit {
 
   save() {
     void this.state.save();
+  }
+
+  openScan() {
+    this.scanModal()?.open(this.state.libraryId());
   }
 
   mediaLink(m: Media): string[] {
