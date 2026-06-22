@@ -1,0 +1,98 @@
+<div class="card bg-base-100 border border-base-200">
+  <div class="card-body gap-5">
+    <h2 class="card-title text-lg">{{ 'settings.libraries.section_storage' | translate }}</h2>
+
+    <div class="flex flex-wrap items-end gap-3">
+      <label class="form-control flex-1 min-w-64">
+        <div class="label">
+          <span class="label-text text-base">{{ 'settings.libraries.path' | translate }}</span>
+        </div>
+        <input type="text" class="input input-bordered w-full font-mono"
+          [ngModel]="state.formPath()" (ngModelChange)="state.formPath.set($event)"
+          placeholder="/medias/movies" />
+        <div class="label">
+          <span class="label-text-alt text-sm text-base-content/50">{{ 'settings.libraries.path_hint' | translate }}</span>
+        </div>
+      </label>
+      <button type="button" class="btn btn-primary mb-6" (click)="save()" [disabled]="state.saving()">
+        @if (state.saving()) { <span class="loading loading-spinner loading-sm"></span> }
+        {{ 'common.save' | translate }}
+      </button>
+    </div>
+
+    @if (state.saveError()) {
+      <div role="alert" class="alert alert-error text-base">{{ state.saveError() }}</div>
+    }
+
+    <div class="divider my-0"></div>
+
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="card-title text-lg">
+        {{ 'settings.libraries.media_count' | translate: { count: total() } }}
+      </h2>
+      <div class="relative w-full max-w-xs">
+        <svg lucideSearch class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/40 pointer-events-none z-10"></svg>
+        <input
+          type="text"
+          [placeholder]="'common.search' | translate"
+          class="input input-bordered w-full pl-9"
+          [ngModel]="search()"
+          (ngModelChange)="onSearch($event)"
+        />
+      </div>
+    </div>
+
+    @if (loading()) {
+      <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+    } @else if (loadError()) {
+      <div role="alert" class="alert alert-error">{{ 'settings.libraries.media_load_error' | translate }}</div>
+    } @else if (items().length === 0) {
+      <p class="text-center py-12 text-base-content/50">{{ 'settings.libraries.media_empty' | translate }}</p>
+    } @else {
+      <div class="overflow-x-auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th class="w-16"></th>
+              <th>{{ 'settings.libraries.media_title' | translate }}</th>
+              <th class="w-24">{{ 'settings.libraries.media_year' | translate }}</th>
+              <th class="w-28">{{ 'settings.libraries.media_type' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of items(); track item.id) {
+              <tr class="hover cursor-pointer" [routerLink]="mediaLink(item)">
+                <td>
+                  @if (item.posterUrl) {
+                    <img [src]="item.posterUrl | resolveUrl: 'thumb'" alt="" loading="lazy"
+                      class="h-16 w-auto max-w-none rounded shrink-0" />
+                  } @else {
+                    <div class="h-16 w-11 rounded bg-base-300 shrink-0"></div>
+                  }
+                </td>
+                <td class="text-lg font-semibold">{{ item.title }}</td>
+                <td class="text-base">{{ item.year || '—' }}</td>
+                <td class="text-base">
+                  @if (item.type === 'movie') {
+                    {{ 'settings.libraries.media_type_movie' | translate }}
+                  } @else {
+                    {{ 'settings.libraries.media_type_series' | translate }}
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (pageCount() > 1) {
+        <app-pagination
+          class="pt-1 self-center"
+          [current]="page()"
+          [total]="pageCount()"
+          (pageChange)="goToPage($event)"
+        />
+      }
+    }
+  </div>
+</div>

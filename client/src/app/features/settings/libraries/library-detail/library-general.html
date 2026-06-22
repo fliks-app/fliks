@@ -1,0 +1,138 @@
+<div class="flex flex-col gap-4">
+  <div class="card bg-base-100 border border-base-200">
+    <div class="card-body gap-5">
+      <h2 class="card-title text-lg">{{ 'settings.libraries.section_general' | translate }}</h2>
+
+      <label class="form-control w-full max-w-md">
+        <div class="label">
+          <span class="label-text text-base">{{ 'settings.libraries.name' | translate }}</span>
+        </div>
+        <input type="text" class="input input-bordered w-full"
+          [ngModel]="state.formName()" (ngModelChange)="state.formName.set($event)" />
+      </label>
+
+      <div class="flex flex-wrap gap-4 max-w-md">
+        <label class="form-control flex-1 min-w-40">
+          <div class="label">
+            <span class="label-text text-base">{{ 'settings.libraries.icon' | translate }}</span>
+          </div>
+          <select class="select select-bordered w-full"
+            [ngModel]="state.formIcon()" (ngModelChange)="state.formIcon.set($event || null)">
+            @for (opt of iconOptions; track opt.value) {
+              <option [ngValue]="opt.value">{{ opt.label }}</option>
+            }
+          </select>
+        </label>
+        <label class="form-control flex-1 min-w-40">
+          <div class="label">
+            <span class="label-text text-base">{{ 'settings.libraries.color' | translate }}</span>
+          </div>
+          <select class="select select-bordered w-full"
+            [ngModel]="state.formColor()" (ngModelChange)="state.formColor.set($event || null)">
+            @for (opt of colorOptions; track opt.value) {
+              <option [ngValue]="opt.value">{{ opt.label }}</option>
+            }
+          </select>
+        </label>
+      </div>
+
+      <div>
+        <div class="label">
+          <span class="label-text text-base">{{ 'settings.libraries.media_types' | translate }}</span>
+        </div>
+        <div class="flex flex-col gap-2">
+          <label class="label cursor-pointer justify-start gap-3 max-w-max">
+            <input type="checkbox" class="toggle"
+              [ngModel]="state.formMovies()" (ngModelChange)="state.formMovies.set($event)" />
+            <span class="label-text text-base">{{ 'settings.libraries.media_type_movie' | translate }}</span>
+          </label>
+          <label class="label cursor-pointer justify-start gap-3 max-w-max">
+            <input type="checkbox" class="toggle"
+              [ngModel]="state.formSeries()" (ngModelChange)="state.formSeries.set($event)" />
+            <span class="label-text text-base">{{ 'settings.libraries.media_type_series' | translate }}</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="divider my-0"></div>
+      <h2 class="card-title text-lg">{{ 'settings.libraries.section_metadata' | translate }}</h2>
+
+      <label class="form-control w-full max-w-md">
+        <div class="label">
+          <span class="label-text text-base">{{ 'settings.libraries.preferred_provider' | translate }}</span>
+        </div>
+        <select class="select select-bordered w-full"
+          [ngModel]="state.formProvider()" (ngModelChange)="state.formProvider.set($event || null)">
+          @for (opt of providerOptions; track opt.value) {
+            <option [ngValue]="opt.value">{{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="form-control w-full max-w-md">
+        <div class="label">
+          <span class="label-text text-base">{{ 'settings.libraries.stalled_cleanup' | translate }}</span>
+        </div>
+        <select class="select select-bordered w-full"
+          [ngModel]="state.formCleanup()" (ngModelChange)="state.formCleanup.set($event)">
+          @for (opt of cleanupOptions; track opt.value) {
+            <option [ngValue]="opt.value">{{ opt.labelKey | translate }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="form-control w-full max-w-md">
+        <div class="label">
+          <span class="label-text text-base">{{ 'settings.libraries.default_quality_profile' | translate }}</span>
+        </div>
+        <select class="select select-bordered w-full"
+          [ngModel]="state.formQualityProfileId()" (ngModelChange)="state.formQualityProfileId.set($event)">
+          <option [ngValue]="null">—</option>
+          @for (qp of state.qualityProfiles(); track qp.id) {
+            <option [ngValue]="qp.id">{{ qp.name }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="form-control w-full max-w-md">
+        <div class="label">
+          <span class="label-text text-base">{{ 'settings.libraries.default_language_profile' | translate }}</span>
+        </div>
+        <select class="select select-bordered w-full"
+          [ngModel]="state.formLanguageProfileId()" (ngModelChange)="state.formLanguageProfileId.set($event)">
+          <option [ngValue]="null">—</option>
+          @for (lp of state.languageProfiles(); track lp.id) {
+            <option [ngValue]="lp.id">{{ lp.name }}</option>
+          }
+        </select>
+      </label>
+
+      <div class="divider my-0"></div>
+      <h2 class="card-title text-lg">{{ 'settings.libraries.section_defaults' | translate }}</h2>
+
+      <div class="flex flex-col gap-2">
+        <label class="label cursor-pointer justify-start gap-3 max-w-max">
+          <input type="checkbox" class="toggle"
+            [ngModel]="state.formDefaultMovies()" (ngModelChange)="state.formDefaultMovies.set($event)" />
+          <span class="label-text text-base">{{ 'settings.libraries.default_for_movies' | translate }}</span>
+        </label>
+        <label class="label cursor-pointer justify-start gap-3 max-w-max">
+          <input type="checkbox" class="toggle"
+            [ngModel]="state.formDefaultSeries()" (ngModelChange)="state.formDefaultSeries.set($event)" />
+          <span class="label-text text-base">{{ 'settings.libraries.default_for_series' | translate }}</span>
+        </label>
+      </div>
+
+      @if (state.saveError()) {
+        <div role="alert" class="alert alert-error text-base">{{ state.saveError() }}</div>
+      }
+
+      <div class="card-actions justify-end">
+        <button type="button" class="btn btn-primary" (click)="save()" [disabled]="state.saving()">
+          @if (state.saving()) { <span class="loading loading-spinner loading-sm"></span> }
+          {{ 'common.save' | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

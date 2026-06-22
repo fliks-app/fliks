@@ -1,0 +1,68 @@
+@if (state.library(); as lib) {
+  <div class="flex flex-col gap-6">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between gap-4">
+      <div class="flex items-center gap-4 min-w-0">
+        <a routerLink="/admin/settings/libraries" class="btn btn-ghost btn-sm btn-circle">
+          <svg lucideChevronLeft class="h-5 w-5"></svg>
+        </a>
+        <div class="min-w-0">
+          <h1 class="text-2xl font-bold truncate">{{ lib.name }}</h1>
+          <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+            @if (lib.isDefaultForMovies) {
+              <span class="badge badge-sm badge-info">{{ 'settings.libraries.default_for_movies' | translate }}</span>
+            }
+            @if (lib.isDefaultForSeries) {
+              <span class="badge badge-sm badge-info">{{ 'settings.libraries.default_for_series' | translate }}</span>
+            }
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-2 shrink-0">
+        <button type="button" class="btn btn-sm btn-ghost text-error" (click)="remove()">
+          {{ 'common.delete' | translate }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex flex-col gap-1">
+    <div role="tablist" class="tabs tabs-bordered">
+      <a
+        role="tab"
+        class="tab"
+        [routerLink]="['/admin/settings/libraries', state.libraryId(), 'general']"
+        routerLinkActive="tab-active"
+      >
+        {{ 'settings.libraries.tab_general' | translate }}
+      </a>
+      <a
+        role="tab"
+        class="tab"
+        [routerLink]="['/admin/settings/libraries', state.libraryId(), 'media']"
+        routerLinkActive="tab-active"
+      >
+        {{ 'settings.libraries.tab_media' | translate }}
+      </a>
+      <a
+        role="tab"
+        class="tab"
+        [routerLink]="['/admin/settings/libraries', state.libraryId(), 'users']"
+        routerLinkActive="tab-active"
+      >
+        {{ 'settings.libraries.tab_users' | translate }}
+      </a>
+    </div>
+
+    <!-- Tab content -->
+    <router-outlet />
+    </div>
+
+  </div>
+} @else {
+  <div class="text-center py-16">
+    <p class="text-lg text-base-content/50">{{ 'settings.libraries.not_found' | translate }}</p>
+    <a routerLink="/admin/settings/libraries" class="btn btn-ghost btn-sm mt-4">{{ 'settings.libraries.back' | translate }}</a>
+  </div>
+}
