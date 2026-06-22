@@ -5,6 +5,7 @@ import { PlayerSettingsService } from '../../../core/services/player-settings.se
 import { ToastService } from '../../../core/services/toast.service';
 import { LucideTrash2 } from '@lucide/angular';
 import { SubtitleAppearanceComponent } from '../../../shared/components/subtitle-appearance/subtitle-appearance';
+import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import {
   LANGUAGE_OPTIONS, SUBTITLE_MODE_OPTIONS,
   BOTTOM_MARGIN_OPTIONS, TOP_MARGIN_OPTIONS,
@@ -12,7 +13,7 @@ import {
 
 @Component({
   selector: 'app-subtitle-settings',
-  imports: [FormsModule, TranslateModule, LucideTrash2, SubtitleAppearanceComponent],
+  imports: [FormsModule, TranslateModule, LucideTrash2, SubtitleAppearanceComponent, ToggleFieldComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitle-settings.html',
 })

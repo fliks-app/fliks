@@ -1173,6 +1173,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.mediaFileId,
         (sub) => this.selectSubtitle(sub),
         this.mediaId,
+        this.isNativeEngine() && this.playbackMode() === 'direct',
       );
 
       // If Cast is already connected, send to Cast
@@ -2564,6 +2565,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         sub.language,
         sub.forced,
         sub.id.startsWith('emb-'),
+        true,
       );
       await this.reloadStream();
       return;
@@ -2594,7 +2596,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.activeSubtitleId.set(sub.id);
     this.subtitlePickerOpen.set(false);
 
-    this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'));
+    this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'), sub.burnIn);
   }
 
   // Bound DOM handlers kept as stable references so ngOnDestroy can remove

@@ -111,10 +111,10 @@ export class TrackManagerService {
   }
 
   /** Save subtitle selection for this media. Pass null = user explicitly disabled.
-   *  Stores "language:forced:embedded", or "off" when disabled. */
-  saveSubtitleSelection(mediaId: number, language: string | null, forced = false, embedded = false): void {
+   *  Stores "language[:forced][:embedded][:image]", or "off" when disabled. */
+  saveSubtitleSelection(mediaId: number, language: string | null, forced = false, embedded = false, image = false): void {
     if (!this.playerSettings.get().rememberSubtitleSelections || !mediaId) return;
-    const flags = [forced ? 'forced' : '', embedded ? 'embedded' : ''].filter(Boolean).join(':');
+    const flags = [forced ? 'forced' : '', embedded ? 'embedded' : '', image ? 'image' : ''].filter(Boolean).join(':');
     const value = language ? `${language}${flags ? ':' + flags : ''}` : 'off';
     this.playerSettings.saveRememberedSubtitleTrack(mediaId, value);
   }
@@ -203,6 +203,7 @@ export class TrackManagerService {
     mediaFileId: number,
     onSelect: (sub: SubtitleOption | null) => Promise<void>,
     mediaId = 0,
+    allowImageSubs = false,
   ): Promise<void> {
     const settings = this.playerSettings.get();
 
@@ -223,11 +224,17 @@ export class TrackManagerService {
         const savedLang = parts[0];
         const wantForced = parts.includes('forced');
         const wantEmbedded = parts.includes('embedded');
+        const wantImage = parts.includes('image');
         const isEmbedded = (s: SubtitleOption) => s.id.startsWith('emb-');
-        // Best match: same language + same type (embedded/external) + same forced flag
+        const sameImage = (s: SubtitleOption) => !!s.burnIn === wantImage;
+        // Restore an image pick only when the engine can show it without a
+        // reload (native direct play); otherwise fall back to text.
+        const pool = wantImage && allowImageSubs ? subtitles : subs;
+        // Best match: language + image-ness + type (embedded/external) + forced.
         const match =
-          subs.find((s) => s.language === savedLang && !!s.forced === wantForced && isEmbedded(s) === wantEmbedded)
-          ?? subs.find((s) => s.language === savedLang && !!s.forced === wantForced)
+          pool.find((s) => s.language === savedLang && sameImage(s) && !!s.forced === wantForced && isEmbedded(s) === wantEmbedded)
+          ?? pool.find((s) => s.language === savedLang && sameImage(s) && !!s.forced === wantForced)
+          ?? pool.find((s) => s.language === savedLang && sameImage(s))
           ?? subs.find((s) => s.language === savedLang && !s.forced);
         if (match) { await onSelect(match); return; }
       }

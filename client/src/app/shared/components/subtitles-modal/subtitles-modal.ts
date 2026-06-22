@@ -282,6 +282,7 @@ export class SubtitlesModalComponent {
         label: formatSubtitleLabel(s, this.translate),
         language: s.language,
         forced: s.forced,
+        image: isImageBasedSubtitleCodec(s.codec),
       };
     });
   });
