@@ -595,6 +595,7 @@ export function buildFfmpegArgs(
         width: w,
         height: h,
         bitDepth: variant.bitDepth,
+        crop,
       }),
     );
   }

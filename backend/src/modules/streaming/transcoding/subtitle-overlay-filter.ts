@@ -27,8 +27,12 @@ export function buildImageBurnInFilterComplex(ctx: {
   height: number;
   /** Output bit depth — picks the HW surface / pixel formats (8 vs 10 bit). */
   bitDepth: number;
+  /** Letterbox crop applied to the video, in source pixels. The PGS overlay is
+   *  authored against the full source frame, so it must be cropped identically
+   *  before scaling or the subtitle ends up oversized and mispositioned. */
+  crop?: { width: number; height: number; x: number; y: number };
 }): string {
-  const { hwAccel, videoFilter, streamIndex: s, width: w, height: h } = ctx;
+  const { hwAccel, videoFilter, streamIndex: s, width: w, height: h, crop } = ctx;
   const tenBit = ctx.bitDepth >= 10;
   const video = videoFilter ? `[0:v]${videoFilter}` : '[0:v]null';
 
@@ -36,7 +40,10 @@ export function buildImageBurnInFilterComplex(ctx: {
   // size so the overlay lines up; keep its alpha. SDR: pull the grey fill up to
   // white (dark outline stays black). HDR: leave it untouched.
   const whiten = tenBit ? '' : ',colorlevels=rimax=0.6:gimax=0.6:bimax=0.6';
-  const sub = `[0:${s}]scale=${w}:${h}:flags=lanczos,format=rgba${whiten}[s]`;
+  const subCrop = crop
+    ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},`
+    : '';
+  const sub = `[0:${s}]${subCrop}scale=${w}:${h}:flags=lanczos,format=rgba${whiten}[s]`;
 
   const hwFmt = tenBit ? 'p010le' : 'nv12';
 

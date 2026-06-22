@@ -345,6 +345,22 @@ describe('buildFfmpegArgs — CPU golden argv (characterization)', () => {
     expect(args).toContain('[vout]');
     expect(args).not.toContain('0:v:0');
   });
+
+  it('image subtitle burn-in: crops the overlay identically to the video', () => {
+    const args = buildFfmpegArgs(
+      opts({
+        crop: CROP_4K,
+        sourceWidth: 3840,
+        sourceHeight: 2160,
+        burnIn: { filter: null, type: 'image', streamIndex: 3 },
+      }),
+      silentLog,
+    );
+    const fc = args[args.indexOf('-filter_complex') + 1];
+    // The PGS overlay is authored against the full source frame, so it gets the
+    // same crop as the video before scaling — otherwise it reads oversized.
+    expect(fc).toContain('[0:3]crop=3840:1632:0:264,scale=');
+  });
 });
 
 describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', () => {
