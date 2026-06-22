@@ -585,7 +585,12 @@ public class NativePlayerPlugin extends Plugin {
                     if (group.getType() == C.TRACK_TYPE_TEXT) {
                         for (int i = 0; i < group.length; i++) {
                             var fmt = group.getTrackFormat(i);
-                            if (!isTextSubtitleMime(fmt.sampleMimeType)) continue;
+                            android.util.Log.d("NativePlayer",
+                                    "sub track lang=" + fmt.language
+                                            + " sampleMime=" + fmt.sampleMimeType
+                                            + " codecs=" + fmt.codecs
+                                            + " image=" + isImageSubtitle(fmt));
+                            if (isImageSubtitle(fmt)) continue;
                             JSObject t = new JSObject();
                             t.put("id", "text-" + idx);
                             t.put("language", fmt.language != null ? fmt.language : "und");
@@ -830,7 +835,7 @@ public class NativePlayerPlugin extends Plugin {
         int idx = 0;
         for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
             if (group.getType() == C.TRACK_TYPE_TEXT) {
-                if (!isTextSubtitleMime(group.getTrackFormat(0).sampleMimeType)) continue;
+                if (isImageSubtitle(group.getTrackFormat(0))) continue;
                 if (idx == targetIndex) {
                     player.setTrackSelectionParameters(
                             player.getTrackSelectionParameters().buildUpon()
@@ -846,19 +851,17 @@ public class NativePlayerPlugin extends Plugin {
         return false;
     }
 
-    /** Whitelist of renderable text subtitle MIME types. Anything else
-     *  (bitmap PGS/VOBSUB/DVB, or an unknown/unrenderable format) is never
-     *  surfaced as a selectable track. */
-    private static boolean isTextSubtitleMime(String mime) {
-        if (mime == null) return false;
-        return MimeTypes.TEXT_VTT.equals(mime)
-                || MimeTypes.APPLICATION_SUBRIP.equals(mime)
-                || MimeTypes.TEXT_SSA.equals(mime)
-                || MimeTypes.APPLICATION_TTML.equals(mime)
-                || MimeTypes.APPLICATION_MP4VTT.equals(mime)
-                || MimeTypes.APPLICATION_TX3G.equals(mime)
-                || MimeTypes.APPLICATION_CEA608.equals(mime)
-                || MimeTypes.APPLICATION_CEA708.equals(mime);
+    private static boolean isImageSubtitleMime(String mime) {
+        return MimeTypes.APPLICATION_PGS.equals(mime)
+                || MimeTypes.APPLICATION_VOBSUB.equals(mime)
+                || MimeTypes.APPLICATION_DVBSUBS.equals(mime);
+    }
+
+    /** Bitmap (burn-in-only) subtitle track. The modern subtitle pipeline
+     *  rewrites sampleMimeType to application/x-media3-cues and preserves the
+     *  original codec in `codecs`, so check both. */
+    private static boolean isImageSubtitle(androidx.media3.common.Format fmt) {
+        return isImageSubtitleMime(fmt.sampleMimeType) || isImageSubtitleMime(fmt.codecs);
     }
 
     private JSArray buildAudioTrackList() {
