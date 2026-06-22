@@ -27,6 +27,12 @@ const MENU_FOCUSABLE_SELECTOR =
   },
 })
 export class DropdownToggleDirective implements OnDestroy {
+  /** Close handler of the dropdown currently open, if any. Opening a
+   *  dropdown closes this one first so only one stays open — the trigger's
+   *  `stopPropagation` otherwise stops an open dropdown's outside-click
+   *  handler from firing when another trigger is clicked. */
+  private static openClose: (() => void) | null = null;
+
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly dismissStack = inject(DismissableStackService);
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
@@ -64,6 +70,9 @@ export class DropdownToggleDirective implements OnDestroy {
   }
 
   private open(dropdown: HTMLElement) {
+    // Close any other dropdown already open before opening this one.
+    DropdownToggleDirective.openClose?.();
+
     dropdown.classList.add('dropdown-open');
     const content = dropdown.querySelector<HTMLElement>('.dropdown-content');
     // Move focus into the menu so arrow keys step between items
@@ -80,6 +89,7 @@ export class DropdownToggleDirective implements OnDestroy {
       this.cleanup();
     };
     this.currentClose = close;
+    DropdownToggleDirective.openClose = close;
     this.dismissStack.push(close);
     this.outsideClickHandler = (e: MouseEvent) => {
       // Close on any click that isn't the trigger itself: outside the
@@ -142,6 +152,9 @@ export class DropdownToggleDirective implements OnDestroy {
     }
     if (this.currentClose) {
       this.dismissStack.remove(this.currentClose);
+      if (DropdownToggleDirective.openClose === this.currentClose) {
+        DropdownToggleDirective.openClose = null;
+      }
       this.currentClose = null;
     }
   }
