@@ -106,10 +106,15 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   ): Promise<void> {
     this.resetFirstFrame();
     this.lastTimeUpdatePos = -1;
-    // Subtitles are delivered as HLS SUBTITLES renditions in the master
-    // playlist, not sidecar SubtitleConfigurations, so the player surfaces
-    // them as native text tracks — nothing to preload here.
-    await NativePlayer.load({ url, startTime, headers, offline: this._offline });
+    // Direct play / offline inject external sidecars via setPreloadedSubtitles
+    // (empty for transcode/remux, which carry subs as HLS renditions).
+    await NativePlayer.load({
+      url,
+      startTime,
+      headers,
+      offline: this._offline,
+      subtitles: this._preloadedSubtitles,
+    });
 
     // Apply subtitle style settings
     if (this._subtitleStyle) {

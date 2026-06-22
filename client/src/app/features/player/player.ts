@@ -1042,6 +1042,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
           this.applyNativeSubtitleStyle();
 
+          // Direct play plays the raw container, so external/OCR sidecar subs
+          // must be injected — transcode/remux carry them as HLS renditions.
+          if (this.isNative) {
+            const ext =
+              mode === 'direct'
+                ? (await subsPromise)
+                    .filter((s) => !s.burnIn && !!s.url && s.id.startsWith('ext-'))
+                    .map((s) => ({ url: s.url, language: s.language, label: s.label }))
+                : [];
+            (this.engine as NativeEngine).setPreloadedSubtitles(ext);
+          }
+
           const token =
             this.authService.streamToken() ?? this.authService.accessToken;
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;

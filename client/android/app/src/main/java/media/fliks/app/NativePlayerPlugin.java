@@ -827,31 +827,13 @@ public class NativePlayerPlugin extends Plugin {
         try { targetIndex = Integer.parseInt(id.replace("text-", "")); }
         catch (NumberFormatException e) { return false; }
 
-        // When sidecar SubtitleConfigurations are present, ExoPlayer may
-        // auto-detect extra text tracks (CEA-608 from HLS) before them, so
-        // text-0 must skip those. With subtitles delivered as HLS SUBTITLES
-        // renditions (no sidecar), the text groups ARE the renditions and
-        // "text-N" maps straight to the Nth text group — getSubtitleTracks
-        // enumerates them in the same order, so the offset must be 0.
-        int totalTextGroups = 0;
-        for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
-            if (group.getType() == C.TRACK_TYPE_TEXT
-                    && !isImageSubtitleMime(group.getTrackFormat(0).sampleMimeType)) {
-                totalTextGroups++;
-            }
-        }
-        int sidecarOffset = subtitleConfigs.isEmpty()
-                ? 0
-                : Math.max(0, totalTextGroups - subtitleConfigs.size());
-        int exoIndex = targetIndex + sidecarOffset;
-
+        // "text-N" is the Nth non-image text group, matching getSubtitleTracks'
+        // enumeration order (in-container tracks then injected sidecars).
         int idx = 0;
         for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
             if (group.getType() == C.TRACK_TYPE_TEXT) {
-                // Skip image tracks so "text-N" stays aligned with the filtered
-                // list emitted by getSubtitleTracks.
                 if (isImageSubtitleMime(group.getTrackFormat(0).sampleMimeType)) continue;
-                if (idx == exoIndex) {
+                if (idx == targetIndex) {
                     player.setTrackSelectionParameters(
                             player.getTrackSelectionParameters().buildUpon()
                                     .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
