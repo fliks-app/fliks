@@ -733,11 +733,25 @@ export class StreamBuilderService {
     }
 
     // Low-consumption rungs at every fitting resolution (4K eco, 1080p eco,
-    // 720p eco…). Same on every device. Only listed when genuinely lighter
-    // than the source — no point offering an eco rung heavier than the file.
+    // 720p eco…). Same on every device. Gated on the source VIDEO bitrate: an
+    // eco rung is only worth a forced re-encode when it genuinely shrinks the
+    // video. Comparing against the source TOTAL would wrongly offer an eco rung
+    // whose only "saving" is a fat audio track (downmixed on any rung anyway),
+    // re-encoding the video for no gain. Falls back to total-vs-total when the
+    // source video bitrate is unknown.
+    const sourceVideoBps = resolveSourceVideoBitrateBps(
+      source.videoBitRate,
+      source.formatBitRate,
+      source.audioBitRate ?? 0,
+    );
     const savingRef = sourceTotal > 0 ? sourceTotal : totalOf(topProfile);
     for (const p of available) {
-      if (!isEcoProfile(p.name) || totalOf(p) >= savingRef) continue;
+      if (!isEcoProfile(p.name)) continue;
+      const reducesVideo =
+        sourceVideoBps && sourceVideoBps > 0
+          ? cappedRungVideoBitrateBps(p, rungCtx) < sourceVideoBps
+          : totalOf(p) < savingRef;
+      if (!reducesVideo) continue;
       entries.push({
         option: {
           id: p.name,
