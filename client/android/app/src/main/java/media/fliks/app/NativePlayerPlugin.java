@@ -38,7 +38,6 @@ import java.util.ArrayList;
 import java.util.List;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.CaptionStyleCompat;
-import androidx.media3.ui.SubtitleView;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -65,8 +64,7 @@ public class NativePlayerPlugin extends Plugin {
     /** Pending video height to force. -1 = none, 0 = auto (clear override). */
     private int pendingVideoHeight = -1;
     private SurfaceView surfaceView;
-    private SubtitleView subtitleView;
-    private android.widget.ImageView imageSubtitleView;
+    private SubtitleOverlay subtitles;
     private DefaultHttpDataSource.Factory httpFactory;
     private String currentHlsUrl;
     private int lastAudioTrackCount = -1;
@@ -138,7 +136,7 @@ public class NativePlayerPlugin extends Plugin {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     Gravity.CENTER));
 
-            // Z-order: 0=wrapper (video) → 1=subtitleView → 2=imageSubtitleView
+            // Z-order: 0=wrapper (video) → 1/2=SubtitleOverlay layers
             //          → 3+=WebView (controls)
             android.webkit.WebView webView = getBridge().getWebView();
             ViewGroup webViewParent = (ViewGroup) webView.getParent();
@@ -154,24 +152,7 @@ public class NativePlayerPlugin extends Plugin {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
 
-            // Text cues: ExoPlayer's SubtitleView, full-screen, bottom-anchored
-            // (unchanged behaviour).
-            subtitleView = new SubtitleView(getContext());
-            webViewParent.addView(subtitleView, 1, new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT));
-
-            // Bitmap cues (PGS/VOBSUB): our own view so we control size/aspect
-            // and pin them to the bottom of the screen (SubtitleView stretches
-            // and squishes bitmaps). Sized per-cue in onCues. Added to `wrapper`
-            // (a FrameLayout we own) so the FrameLayout.LayoutParams gravity/cast
-            // is valid regardless of the host WebView parent's layout type.
-            imageSubtitleView = new android.widget.ImageView(getContext());
-            imageSubtitleView.setVisibility(View.GONE);
-            wrapper.addView(imageSubtitleView, new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+            subtitles = new SubtitleOverlay(getContext(), webViewParent, wrapper, surfaceView);
 
             // Transparent WebView so native player shows through
             webView.setBackgroundColor(Color.TRANSPARENT);
@@ -200,15 +181,9 @@ public class NativePlayerPlugin extends Plugin {
                 player.release();
                 player = null;
             }
-            if (subtitleView != null) {
-                ViewGroup subParent = (ViewGroup) subtitleView.getParent();
-                if (subParent != null) subParent.removeView(subtitleView);
-                subtitleView = null;
-            }
-            if (imageSubtitleView != null) {
-                ViewGroup imgParent = (ViewGroup) imageSubtitleView.getParent();
-                if (imgParent != null) imgParent.removeView(imageSubtitleView);
-                imageSubtitleView = null;
+            if (subtitles != null) {
+                subtitles.detach();
+                subtitles = null;
             }
             if (wrapper != null) {
                 ViewGroup parent = (ViewGroup) wrapper.getParent();
@@ -256,10 +231,7 @@ public class NativePlayerPlugin extends Plugin {
             // disabled by default. The stale cue then sits on screen until the
             // user manually seeks (which already clears it below) — clear here
             // too so a load looks identical from the user's perspective.
-            if (subtitleView != null) {
-                subtitleView.setCues(java.util.Collections.emptyList());
-            }
-            renderImageCue(null);
+            if (this.subtitles != null) this.subtitles.clear();
 
             // HTTP data source with auth headers
             Map<String, String> headerMap = new HashMap<>();
@@ -467,14 +439,7 @@ public class NativePlayerPlugin extends Plugin {
                 }
 
                 @Override public void onCues(@NonNull androidx.media3.common.text.CueGroup cueGroup) {
-                    java.util.List<androidx.media3.common.text.Cue> textCues = new java.util.ArrayList<>();
-                    androidx.media3.common.text.Cue bitmapCue = null;
-                    for (androidx.media3.common.text.Cue c : cueGroup.cues) {
-                        if (c.bitmap != null) { if (bitmapCue == null) bitmapCue = c; }
-                        else textCues.add(c);
-                    }
-                    if (subtitleView != null) subtitleView.setCues(textCues);
-                    renderImageCue(bitmapCue);
+                    if (NativePlayerPlugin.this.subtitles != null) NativePlayerPlugin.this.subtitles.onCues(cueGroup);
                 }
 
             });
@@ -541,10 +506,7 @@ public class NativePlayerPlugin extends Plugin {
                 // several hundred ms to emit new cues for an external VTT after
                 // seekTo — leaving the previous line visible and reading as
                 // "subtitles shifted" until the next cue lands.
-                if (subtitleView != null) {
-                    subtitleView.setCues(java.util.Collections.emptyList());
-                }
-                renderImageCue(null);
+                if (subtitles != null) subtitles.clear();
                 player.seekTo((long) (position * 1000));
             }
             call.resolve();
@@ -663,7 +625,7 @@ public class NativePlayerPlugin extends Plugin {
         int bottomMargin = call.getInt("bottomMarginPercent", 10);
 
         mainHandler.post(() -> {
-            if (subtitleView == null) { call.resolve(); return; }
+            if (subtitles == null) { call.resolve(); return; }
 
             int fg = parseColor(fgColor, Color.WHITE);
             int bg = bgColor.equals("transparent") ? Color.TRANSPARENT : parseColor(bgColor, Color.TRANSPARENT);
@@ -683,13 +645,10 @@ public class NativePlayerPlugin extends Plugin {
                     Color.BLACK,                     // edge color
                     null);                           // typeface (null = default)
 
-            subtitleView.setStyle(style);
-            subtitleView.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 18f * fontScale);
-
             // Bottom margin via padding
             int screenH = getActivity().getWindow().getDecorView().getHeight();
             int paddingBottom = (int) (screenH * bottomMargin / 100f);
-            subtitleView.setPadding(0, 0, 0, paddingBottom);
+            subtitles.applyStyle(style, fontScale, paddingBottom);
 
             call.resolve();
         });
@@ -714,8 +673,8 @@ public class NativePlayerPlugin extends Plugin {
             getActivity().getWindow().setAttributes(lp);
 
             // Dim subtitle view when screen is at max brightness (HDR mode)
-            if (subtitleView != null) {
-                subtitleView.setAlpha(brightness >= 1.0f ? 0.5f : 1.0f);
+            if (subtitles != null) {
+                subtitles.setTextAlpha(brightness >= 1.0f ? 0.5f : 1.0f);
             }
 
             call.resolve();
@@ -877,58 +836,6 @@ public class NativePlayerPlugin extends Plugin {
      *  bitmaps. Sized from the video WIDTH so it stays consistent across
      *  orientations (the letterboxed video height is tiny in portrait). Null
      *  hides it. */
-    private void renderImageCue(androidx.media3.common.text.Cue cue) {
-        if (imageSubtitleView == null) return;
-        if (cue == null || cue.bitmap == null) {
-            imageSubtitleView.setImageBitmap(null);
-            imageSubtitleView.setVisibility(View.GONE);
-            return;
-        }
-        android.graphics.Bitmap bmp = cue.bitmap;
-        ViewGroup parent = (ViewGroup) imageSubtitleView.getParent();
-        int screenH = parent != null && parent.getHeight() > 0 ? parent.getHeight() : 0;
-        int screenW = parent != null && parent.getWidth() > 0 ? parent.getWidth() : 0;
-        int videoW = surfaceView != null && surfaceView.getWidth() > 0
-                ? surfaceView.getWidth() : screenW;
-        int videoH = surfaceView != null && surfaceView.getHeight() > 0
-                ? surfaceView.getHeight() : screenH;
-        int targetW, targetH;
-        if (cue.size != androidx.media3.common.text.Cue.DIMEN_UNSET && videoW > 0) {
-            targetW = Math.round(cue.size * videoW);
-            targetH = Math.round(targetW * (float) bmp.getHeight() / bmp.getWidth());
-        } else if (cue.bitmapHeight != androidx.media3.common.text.Cue.DIMEN_UNSET && videoH > 0) {
-            targetH = Math.round(cue.bitmapHeight * videoH);
-            targetW = Math.round(targetH * (float) bmp.getWidth() / bmp.getHeight());
-        } else {
-            targetW = bmp.getWidth();
-            targetH = bmp.getHeight();
-        }
-        // Portrait video is ~half as wide as landscape, so the proportional
-        // size reads as tiny — boost it (capped to the screen width).
-        if (screenW > 0 && screenH > screenW) {
-            targetW = Math.round(targetW * 1.6f);
-            targetH = Math.round(targetH * 1.6f);
-            if (targetW > screenW) {
-                targetH = Math.round(targetH * (float) screenW / targetW);
-                targetW = screenW;
-            }
-        }
-        targetW = Math.max(1, targetW);
-        targetH = Math.max(1, targetH);
-        ViewGroup.LayoutParams raw = imageSubtitleView.getLayoutParams();
-        FrameLayout.LayoutParams lp = raw instanceof FrameLayout.LayoutParams
-                ? (FrameLayout.LayoutParams) raw
-                : new FrameLayout.LayoutParams(targetW, targetH,
-                        Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        lp.width = targetW;
-        lp.height = targetH;
-        lp.bottomMargin = screenH > 0 ? Math.round(screenH * 0.06f) : 0;
-        imageSubtitleView.setLayoutParams(lp);
-        imageSubtitleView.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
-        imageSubtitleView.setImageBitmap(bmp);
-        imageSubtitleView.setVisibility(View.VISIBLE);
-    }
-
     private static boolean isImageSubtitleMime(String mime) {
         return MimeTypes.APPLICATION_PGS.equals(mime)
                 || MimeTypes.APPLICATION_VOBSUB.equals(mime)
