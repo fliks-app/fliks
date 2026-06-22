@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { UpperCasePipe } from '@angular/common';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   Library,
@@ -22,7 +23,6 @@ import {
   QualityProfile,
   LanguageProfile,
 } from '../../../core/services/api/profiles.service';
-import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { METADATA_PROVIDER_OPTIONS_LIBRARY } from '../../../core/constants/metadata-providers';
 
@@ -37,8 +37,9 @@ export class LibrariesSettingsComponent implements OnInit {
   private readonly usersApi = inject(UsersApiService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly translate = inject(TranslateService);
-  private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
@@ -50,8 +51,7 @@ export class LibrariesSettingsComponent implements OnInit {
   readonly listError = signal('');
   readonly saving = signal(false);
 
-  // Editor state
-  readonly editingId = signal<number | null>(null);
+  // Create-editor state
   readonly formName = signal('');
   readonly formIcon = signal<string | null>(null);
   readonly formColor = signal<string | null>(null);
@@ -130,7 +130,6 @@ export class LibrariesSettingsComponent implements OnInit {
   }
 
   openCreate() {
-    this.editingId.set(null);
     this.formName.set('');
     this.formIcon.set(null);
     this.formColor.set(null);
@@ -149,22 +148,7 @@ export class LibrariesSettingsComponent implements OnInit {
   }
 
   openEdit(lib: Library) {
-    this.editingId.set(lib.id);
-    this.formName.set(lib.name);
-    this.formIcon.set(lib.icon);
-    this.formColor.set(lib.color);
-    this.formMovies.set(lib.mediaTypes.includes('movie'));
-    this.formSeries.set(lib.mediaTypes.includes('series'));
-    this.formProvider.set(lib.preferredProvider);
-    this.formCleanup.set(lib.stalledCleanupProfile);
-    this.formQualityProfileId.set(lib.defaultQualityProfileId);
-    this.formLanguageProfileId.set(lib.defaultLanguageProfileId);
-    this.formDefaultMovies.set(lib.isDefaultForMovies);
-    this.formDefaultSeries.set(lib.isDefaultForSeries);
-    this.formPath.set(lib.path ?? '');
-    this.formUserIds.set(new Set(lib.userIds));
-    this.saveError.set('');
-    this.editorDialog()?.nativeElement.showModal();
+    void this.router.navigate([lib.id], { relativeTo: this.route });
   }
 
   closeEditor() {
@@ -212,19 +196,10 @@ export class LibrariesSettingsComponent implements OnInit {
         path,
       };
 
-      const id = this.editingId();
-      let libraryId: number;
-      if (id == null) {
-        const created = await this.api.create({
-          ...payload,
-          userIds: Array.from(this.formUserIds()),
-        });
-        libraryId = created.id;
-      } else {
-        await this.api.update(id, payload);
-        libraryId = id;
-        await this.api.setAccess(libraryId, Array.from(this.formUserIds()));
-      }
+      await this.api.create({
+        ...payload,
+        userIds: Array.from(this.formUserIds()),
+      });
 
       this.closeEditor();
       this.toast.success(this.translate.instant('settings.libraries.saved'));
@@ -237,25 +212,6 @@ export class LibrariesSettingsComponent implements OnInit {
       this.saveError.set(msg ?? this.translate.instant('settings.libraries.save_error'));
     } finally {
       this.saving.set(false);
-    }
-  }
-
-  async remove(lib: Library) {
-    if (!(await this.confirmation.confirm({
-      title: this.translate.instant('common.confirm'),
-      message: this.translate.instant('settings.libraries.confirm_delete', { name: lib.name }),
-      variant: 'danger',
-    }))) return;
-    try {
-      await this.api.remove(lib.id);
-      await this.reload();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      void this.confirmation.alert({
-        title: this.translate.instant('common.error'),
-        message: httpErr.error?.message ?? 'Error',
-        variant: 'danger',
-      });
     }
   }
 

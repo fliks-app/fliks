@@ -336,6 +336,16 @@ export const routes: Routes = [
           { path: 'media-servers', loadComponent: () => import('./features/settings/media-servers/media-servers').then((m) => m.MediaServersSettingsComponent) },
           { path: 'data-imports', loadComponent: () => import('./features/settings/data-imports/data-imports').then((m) => m.DataImportsSettingsComponent) },
           { path: 'libraries', loadComponent: () => import('./features/settings/libraries/libraries').then((m) => m.LibrariesSettingsComponent) },
+          {
+            path: 'libraries/:id',
+            loadComponent: () => import('./features/settings/libraries/library-detail/library-detail').then((m) => m.LibraryDetailComponent),
+            children: [
+              { path: '', pathMatch: 'full', redirectTo: 'general' },
+              { path: 'general', loadComponent: () => import('./features/settings/libraries/library-detail/library-general').then((m) => m.LibraryGeneralComponent) },
+              { path: 'media', loadComponent: () => import('./features/settings/libraries/library-detail/library-media').then((m) => m.LibraryMediaComponent) },
+              { path: 'users', loadComponent: () => import('./features/settings/libraries/library-detail/library-users').then((m) => m.LibraryUsersComponent) },
+            ],
+          },
           { path: 'users', loadComponent: () => import('./features/settings/users/users').then((m) => m.UsersSettingsComponent) },
           { path: 'roles', loadComponent: () => import('./features/settings/roles/roles').then((m) => m.RolesSettingsComponent) },
           { path: 'subtitle-providers', loadComponent: () => import('./features/settings/subtitle-providers/subtitle-providers').then((m) => m.SubtitleProvidersSettingsComponent) },

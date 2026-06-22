@@ -13,21 +13,23 @@ import { TranslateModule } from '@ngx-translate/core';
         <p class="text-sm text-base-content/60 mt-1">{{ 'settings.subtitles.subtitle' | translate }}</p>
       </div>
 
-      <div role="tablist" class="tabs tabs-bordered">
-        <a role="tab" class="tab"
-          routerLink="./"
-          routerLinkActive="tab-active"
-          [routerLinkActiveOptions]="{ exact: true }">
-          {{ 'settings.subtitles.tab_settings' | translate }}
-        </a>
-        <a role="tab" class="tab"
-          routerLink="./stats"
-          routerLinkActive="tab-active">
-          {{ 'settings.subtitles.tab_stats' | translate }}
-        </a>
-      </div>
+      <div class="flex flex-col gap-1">
+        <div role="tablist" class="tabs tabs-bordered">
+          <a role="tab" class="tab"
+            routerLink="./"
+            routerLinkActive="tab-active"
+            [routerLinkActiveOptions]="{ exact: true }">
+            {{ 'settings.subtitles.tab_settings' | translate }}
+          </a>
+          <a role="tab" class="tab"
+            routerLink="./stats"
+            routerLinkActive="tab-active">
+            {{ 'settings.subtitles.tab_stats' | translate }}
+          </a>
+        </div>
 
-      <router-outlet />
+        <router-outlet />
+      </div>
     </div>
   `,
 })
