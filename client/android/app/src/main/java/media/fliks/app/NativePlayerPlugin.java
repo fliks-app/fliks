@@ -585,11 +585,6 @@ public class NativePlayerPlugin extends Plugin {
                     if (group.getType() == C.TRACK_TYPE_TEXT) {
                         for (int i = 0; i < group.length; i++) {
                             var fmt = group.getTrackFormat(i);
-                            android.util.Log.d("NativePlayer",
-                                    "sub track lang=" + fmt.language
-                                            + " sampleMime=" + fmt.sampleMimeType
-                                            + " codecs=" + fmt.codecs
-                                            + " image=" + isImageSubtitle(fmt));
                             if (isImageSubtitle(fmt)) continue;
                             JSObject t = new JSObject();
                             t.put("id", "text-" + idx);
