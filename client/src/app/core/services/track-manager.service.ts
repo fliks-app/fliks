@@ -203,7 +203,6 @@ export class TrackManagerService {
     mediaFileId: number,
     onSelect: (sub: SubtitleOption | null) => Promise<void>,
     mediaId = 0,
-    allowImageSubs = false,
   ): Promise<void> {
     const settings = this.playerSettings.get();
 
@@ -227,9 +226,9 @@ export class TrackManagerService {
         const wantImage = parts.includes('image');
         const isEmbedded = (s: SubtitleOption) => s.id.startsWith('emb-');
         const sameImage = (s: SubtitleOption) => !!s.burnIn === wantImage;
-        // Restore an image pick only when the engine can show it without a
-        // reload (native direct play); otherwise fall back to text.
-        const pool = wantImage && allowImageSubs ? subtitles : subs;
+        // Restore image picks too — selectSubtitle renders them natively
+        // (direct play) or burns them in (web / transcode).
+        const pool = wantImage ? subtitles : subs;
         // Best match: language + image-ness + type (embedded/external) + forced.
         const match =
           pool.find((s) => s.language === savedLang && sameImage(s) && !!s.forced === wantForced && isEmbedded(s) === wantEmbedded)

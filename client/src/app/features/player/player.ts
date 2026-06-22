@@ -1173,7 +1173,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.mediaFileId,
         (sub) => this.selectSubtitle(sub),
         this.mediaId,
-        this.isNativeEngine() && this.playbackMode() === 'direct',
       );
 
       // If Cast is already connected, send to Cast
