@@ -37,7 +37,7 @@ describe('AutoGrabPipelineService.shouldSearchMissing', () => {
     const noUpgrade = {
       ...media,
       qualityProfile: { ...profile, upgradeAllowed: false },
-    } as Media;
+    } as unknown as Media;
     expect(
       service.shouldSearchMissing(noUpgrade, [{ quality: 'HDTV-720p' }]),
     ).toBe(false);

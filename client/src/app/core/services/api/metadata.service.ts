@@ -51,9 +51,10 @@ export interface SeasonStub {
 export class MetadataService {
   private readonly http = inject(HttpClient);
 
-  searchMovie(q: string, year?: number) {
+  searchMovie(q: string, year?: number, provider?: string) {
     let params = new HttpParams().set('q', q);
     if (year != null) params = params.set('year', String(year));
+    if (provider) params = params.set('provider', provider);
     return firstValueFrom(
       this.http.get<MetadataSearchResult[]>('/api/metadata/search/movie', {
         params,
@@ -61,9 +62,10 @@ export class MetadataService {
     );
   }
 
-  searchTv(q: string, year?: number) {
+  searchTv(q: string, year?: number, provider?: string) {
     let params = new HttpParams().set('q', q);
     if (year != null) params = params.set('year', String(year));
+    if (provider) params = params.set('provider', provider);
     return firstValueFrom(
       this.http.get<MetadataSearchResult[]>('/api/metadata/search/tv', {
         params,

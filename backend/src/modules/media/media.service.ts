@@ -204,6 +204,25 @@ export class MediaService {
     return this.rescan.enrichMediaFileFromDisk(mediaFileId);
   }
 
+  linkExistingFileInPlace(p: {
+    media: import('./entities/media.entity').Media;
+    absPath: string;
+    epNums?: {
+      season: number;
+      episode: number;
+      episodeEnd?: number | null;
+    } | null;
+  }) {
+    return this.rescan.linkExistingFileInPlace(p);
+  }
+
+  ensureSeriesEpisode(
+    media: import('./entities/media.entity').Media,
+    epNums: { season: number; episode: number; episodeEnd?: number | null },
+  ) {
+    return this.rescan.ensureSeriesEpisode(media, epNums);
+  }
+
   finalizeImportedFile(
     file: import('./entities/media-file.entity').MediaFile,
     absPath: string,

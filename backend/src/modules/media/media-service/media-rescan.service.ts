@@ -14,6 +14,7 @@ import { Season } from '../entities/season.entity';
 import { Episode } from '../entities/episode.entity';
 import { MediaType } from '../../../common/enums';
 import { APP_QUALITIES } from '../../../common/constants/app-qualities';
+import { parseReleaseQuality } from '../../../common/release-parsing';
 import { AnalyzeMediaDto } from '../dto/analyze-media.dto';
 import { computeMovieHash } from '../../subtitles/moviehash';
 import { NamingService } from '../../scheduler/naming.service';
@@ -124,6 +125,101 @@ export class MediaRescanService {
       title: dbFile.media.title,
       path: dbFile.media.path,
     });
+  }
+
+  /**
+   * Upsert the season + episode rows a series file maps to, returning the
+   * episode id (and whether a bare slot was just created). Used by the orphan
+   * move/rename path, which needs the episode id to drive the naming format
+   * before delegating the file move to the disk-import pipeline.
+   */
+  async ensureSeriesEpisode(
+    media: Media,
+    epNums: { season: number; episode: number; episodeEnd?: number | null },
+  ): Promise<{ episodeId: number | null; created: boolean }> {
+    const { ep, created } = await this.ensureSeasonAndEpisode(
+      media,
+      epNums,
+      media.id,
+    );
+    return { episodeId: ep?.id ?? null, created };
+  }
+
+  /**
+   * Register a video file that already lives under `media.path` as a MediaFile
+   * row WITHOUT moving it (orphan re-link). Reuses the rescan season/episode
+   * upsert and the shared probe/enrich pipeline. Returns the new (or existing)
+   * file id, or an `error` string when the file is outside the media folder or
+   * a series file has no parsable SxxEyy.
+   */
+  async linkExistingFileInPlace(p: {
+    media: Media;
+    absPath: string;
+    epNums?: { season: number; episode: number; episodeEnd?: number | null } | null;
+  }): Promise<
+    | { fileId: number; episodeId: number | null; created: boolean }
+    | { error: string }
+  > {
+    const { media, absPath } = p;
+    const relativePath = relativePathUnderMediaRoot(media.path, absPath);
+    if (!relativePath) {
+      return { error: 'fichier en dehors du dossier du média' };
+    }
+
+    const existing = await this.mediaFileRepo.findOne({
+      where: { media: { id: media.id }, relativePath },
+    });
+    if (existing) {
+      return {
+        fileId: existing.id,
+        episodeId: existing.episodeId ?? null,
+        created: false,
+      };
+    }
+
+    const filename = path.basename(absPath);
+    let episodeId: number | null = null;
+    let created = false;
+    if (media.type === MediaType.SERIES) {
+      const epNums = p.epNums ?? this.naming.parseEpisodeNumbers(filename);
+      if (!epNums) {
+        return { error: 'aucun motif SxxEyy détecté' };
+      }
+      const { ep, created: c } = await this.ensureSeasonAndEpisode(
+        media,
+        epNums,
+        media.id,
+      );
+      episodeId = ep?.id ?? null;
+      created = c;
+    }
+
+    let size = 0;
+    try {
+      size = fs.statSync(absPath).size;
+    } catch {
+      /* keep 0 — enrich re-stats anyway */
+    }
+
+    const saved = await this.mediaFileRepo.save(
+      this.mediaFileRepo.create({
+        media,
+        episode: episodeId != null ? ({ id: episodeId } as Episode) : null,
+        relativePath,
+        size,
+        // Provisional from the filename; enrich overwrites from ffprobe.
+        quality: parseReleaseQuality(filename).quality.name,
+      }),
+    );
+
+    // Full probe + crop + osdb + subtitle cache warmup + quality from resolution.
+    await this.enrichMediaFileFromDisk(saved.id);
+
+    if (episodeId != null) {
+      await this.episodeRepo.update(episodeId, { hasFile: true });
+    }
+
+    return { fileId: saved.id, episodeId, created };
   }
 
   /**

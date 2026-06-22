@@ -15,6 +15,7 @@ import { ImportSonarrService } from './sonarr.service';
 import { SeerrService } from './seerr.service';
 import { SeerrRequestImportService } from './seerr-request-import.service';
 import { DiskImportService } from './disk-import.service';
+import { NfoMetadataService } from './nfo-metadata.service';
 import { ImportsController } from './imports.controller';
 import { AuthModule } from '../auth/auth.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -49,6 +50,7 @@ import { FliksSchedulerModule } from '../scheduler/scheduler.module';
     SeerrService,
     SeerrRequestImportService,
     DiskImportService,
+    NfoMetadataService,
   ],
 })
 export class ImportsModule {}
