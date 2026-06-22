@@ -24,6 +24,7 @@ import {
   rankFromQualityString,
   resolveSearchTitles,
   scoreAndSortReleases,
+  formatRejectionForLog,
 } from './release-rejection.helper';
 
 /**
@@ -302,7 +303,7 @@ export class AutoGrabPipelineService {
         .slice(0, 3)
         .map(
           (r) =>
-            `"${r.title}" → ${r.rejections.length ? r.rejections.join(', ') : `rank ${r.rank} out of [${decision.minRankExclusive + 1}..${decision.maxRankInclusive}]`}`,
+            `"${r.title}" → ${r.rejections.length ? r.rejections.map(formatRejectionForLog).join(', ') : `rank ${r.rank} out of [${decision.minRankExclusive + 1}..${decision.maxRankInclusive}]`}`,
         )
         .join(' | ');
       logSkip(

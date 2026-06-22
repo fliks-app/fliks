@@ -38,6 +38,7 @@ import {
   resolveSearchTitles,
   scoreAndSortReleases,
   sortReleasesByRelevance,
+  formatRejectionForLog,
 } from './release-rejection.helper';
 
 function inferTitleFromTorrentUrl(url: string): string {
@@ -229,7 +230,10 @@ export class MovieDownloadService {
     if (accepted === 0 && withinProfile.length > 0) {
       const sample = withinProfile
         .slice(0, 5)
-        .map((r) => `"${r.title}" [${r.rejections.join(', ')}]`);
+        .map(
+          (r) =>
+            `"${r.title}" [${r.rejections.map(formatRejectionForLog).join(', ')}]`,
+        );
       this.log.warn(
         `[searchMovieReleases] all releases rejected — sample: ${sample.join(' | ')}`,
       );

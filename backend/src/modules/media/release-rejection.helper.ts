@@ -58,6 +58,18 @@ export interface ReleaseRejection {
   params?: Record<string, number | string>;
 }
 
+/** Render a rejection as a readable `code (k=v, …)` string for backend logs —
+ *  the i18n rendering lives on the frontend, so logs show the raw code/params
+ *  rather than `[object Object]`. */
+export function formatRejectionForLog(rejection: ReleaseRejection): string {
+  const params = rejection.params
+    ? Object.entries(rejection.params)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(', ')
+    : '';
+  return params ? `${rejection.code} (${params})` : rejection.code;
+}
+
 /**
  * Detect the video codec from a release title and return a size scaling
  * factor relative to x264 (= 1.0). Quality definition size limits are
