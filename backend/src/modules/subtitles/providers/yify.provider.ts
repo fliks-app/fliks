@@ -73,7 +73,7 @@ export class YifyProvider implements SubtitleProviderInterface {
     const html = await res.text();
     const targetLang = LANG_MAP[params.language]?.toLowerCase();
 
-    return this.parseResults(html, targetLang);
+    return this.parseResults(html, targetLang, params.language);
   }
 
   async download(result: SubtitleSearchResult): Promise<Buffer> {
@@ -133,6 +133,7 @@ export class YifyProvider implements SubtitleProviderInterface {
   private parseResults(
     html: string,
     targetLang: string | undefined,
+    isoCode: string,
   ): SubtitleSearchResult[] {
     const results: SubtitleSearchResult[] = [];
 
@@ -184,7 +185,7 @@ export class YifyProvider implements SubtitleProviderInterface {
         providerFileId: pagePath,
         title: releaseName,
         releaseName,
-        language,
+        language: isoCode,
         forced: false,
         hearingImpaired,
         score: 0,

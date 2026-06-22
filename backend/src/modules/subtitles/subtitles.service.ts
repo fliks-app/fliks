@@ -113,9 +113,22 @@ export class SubtitlesService {
     const blacklistSet = new Set(
       blacklisted.map((b) => `${b.providerType}:${b.providerFileId}`),
     );
-    const filtered = allResults.filter(
+    const blacklistFiltered = allResults.filter(
       (r) => !blacklistSet.has(`${r.providerType}:${r.providerFileId}`),
     );
+
+    // Keep only candidates whose language, folded to canonical ISO 639-1,
+    // matches the requested one.
+    const wantedLang = normalizeLanguageCode(params.language);
+    const filtered = blacklistFiltered.filter(
+      (r) => normalizeLanguageCode(r.language) === wantedLang,
+    );
+    const droppedForLang = blacklistFiltered.length - filtered.length;
+    if (droppedForLang > 0) {
+      this.logger.debug(
+        `Subtitle search [${params.language}]: dropped ${droppedForLang} candidate(s) in other languages`,
+      );
+    }
 
     // Hearing-impaired hard filter. `require` keeps only HI candidates,
     // `forbid` drops them; `prefer` / `avoid` leave the candidate set
