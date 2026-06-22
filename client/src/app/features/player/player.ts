@@ -1045,9 +1045,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           // Direct play plays the raw container, so external/OCR sidecar subs
           // must be injected — transcode/remux carry them as HLS renditions.
           if (this.isNative) {
-            (this.engine as NativeEngine).setHideImageSubtitles(
-              this.playerSettings.get().hideImageSubtitles,
-            );
             const ext =
               mode === 'direct'
                 ? (await subsPromise)

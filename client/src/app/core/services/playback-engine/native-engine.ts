@@ -114,7 +114,6 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       headers,
       offline: this._offline,
       subtitles: this._preloadedSubtitles,
-      hideImageSubtitles: this._hideImageSubtitles,
     });
 
     // Apply subtitle style settings
@@ -160,17 +159,11 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   }
 
   private _preloadedSubtitles: { url: string; language: string; label: string }[] = [];
-  private _hideImageSubtitles = true;
 
   /** Set subtitles to include in the native MediaItem at load time. */
   setPreloadedSubtitles(subs: { url: string; language: string; label: string }[]): void {
     this._preloadedSubtitles = subs;
     this._subtitleUrls = subs.map((s) => s.url);
-  }
-
-  /** Whether bitmap subtitle tracks are dropped from the selectable list. */
-  setHideImageSubtitles(hide: boolean): void {
-    this._hideImageSubtitles = hide;
   }
 
   async unload(): Promise<void> {

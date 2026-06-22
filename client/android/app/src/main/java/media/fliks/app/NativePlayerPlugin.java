@@ -69,8 +69,6 @@ public class NativePlayerPlugin extends Plugin {
     private DefaultHttpDataSource.Factory httpFactory;
     private String currentHlsUrl;
     private int lastAudioTrackCount = -1;
-    /** Drop bitmap (PGS/VOBSUB/DVB) subtitle tracks from the selectable list. */
-    private boolean hideImageSubtitles = true;
     // Cold-prepare bug bootstrap state. Media3 1.10.1's HLS source has
     // a race on initial track surfacing when the variant carries EAC3
     // (and especially EAC3-JOC Atmos) audio next to an fMP4 video
@@ -221,7 +219,6 @@ public class NativePlayerPlugin extends Plugin {
         JSObject headers = call.getObject("headers", new JSObject());
         JSArray subtitles = call.getArray("subtitles", new JSArray());
         boolean offline = call.getBoolean("offline", false);
-        hideImageSubtitles = call.getBoolean("hideImageSubtitles", true);
 
         if (url == null) {
             call.reject("URL is required");
@@ -588,7 +585,7 @@ public class NativePlayerPlugin extends Plugin {
                     if (group.getType() == C.TRACK_TYPE_TEXT) {
                         for (int i = 0; i < group.length; i++) {
                             var fmt = group.getTrackFormat(i);
-                            if (hideImageSubtitles && isImageSubtitle(fmt)) continue;
+                            if (isImageSubtitle(fmt)) continue;
                             JSObject t = new JSObject();
                             t.put("id", "text-" + idx);
                             t.put("language", fmt.language != null ? fmt.language : "und");
@@ -833,7 +830,7 @@ public class NativePlayerPlugin extends Plugin {
         int idx = 0;
         for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
             if (group.getType() == C.TRACK_TYPE_TEXT) {
-                if (hideImageSubtitles && isImageSubtitle(group.getTrackFormat(0))) continue;
+                if (isImageSubtitle(group.getTrackFormat(0))) continue;
                 if (idx == targetIndex) {
                     player.setTrackSelectionParameters(
                             player.getTrackSelectionParameters().buildUpon()

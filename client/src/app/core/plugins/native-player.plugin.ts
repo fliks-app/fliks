@@ -71,8 +71,6 @@ export interface NativePlayerPlugin {
     startTime?: number;
     headers?: Record<string, string>;
     subtitles?: { url: string; language: string; label: string }[];
-    /** Drop bitmap (PGS/VOBSUB/DVB) tracks from the selectable list. */
-    hideImageSubtitles?: boolean;
     /** Use CacheDataSource for offline playback (Android). */
     offline?: boolean;
   }): Promise<void>;
