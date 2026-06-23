@@ -334,7 +334,7 @@
         </li>
 
         <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_library' | translate }}</li>
-        @for (lib of libraries(); track lib.id) {
+        @for (lib of displayLibraries(); track lib.id) {
           <li>
             <a [routerLink]="libraryUrl(lib)" routerLinkActive="active" class="justify-between">
               <span class="flex items-center gap-2">

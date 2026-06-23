@@ -1,8 +1,10 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   inject,
   signal,
+  viewChild,
   OnInit,
 } from '@angular/core';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -18,6 +20,9 @@ import {
   LucideGripVertical,
   LucideArrowUp,
   LucideArrowDown,
+  LucideSettings,
+  LucideEye,
+  LucideEyeOff,
 } from '@lucide/angular';
 import {
   HomeSettingsService,
@@ -25,6 +30,7 @@ import {
   RecentlyAddedMode,
 } from '../../../core/services/home-settings.service';
 import { LibrariesApiService } from '../../../core/services/api/libraries-api.service';
+import { LibraryPrefsService } from '../../../core/services/library-prefs.service';
 import { TvService } from '../../../core/services/tv.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
@@ -43,6 +49,9 @@ import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-fi
     LucideGripVertical,
     LucideArrowUp,
     LucideArrowDown,
+    LucideSettings,
+    LucideEye,
+    LucideEyeOff,
     SelectFieldComponent,
     ToggleFieldComponent,
   ],
@@ -52,6 +61,7 @@ import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-fi
 export class HomeSettingsPageComponent implements OnInit {
   private readonly home = inject(HomeSettingsService);
   private readonly librariesApi = inject(LibrariesApiService);
+  private readonly libraryPrefs = inject(LibraryPrefsService);
   private readonly displaySettings = inject(DisplaySettingsService);
   private readonly auth = inject(AuthService);
   private readonly confirmation = inject(ConfirmationService);
@@ -65,6 +75,16 @@ export class HomeSettingsPageComponent implements OnInit {
 
   /** Cached so reset/rebuild can re-resolve without refetching libraries. */
   private libs: { id: number; name: string }[] = [];
+
+  // --- Library order + visibility modal ---
+  private readonly libraryDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('libraryDialog');
+  /** Working copy edited in the modal: every accessible library in the user's
+   *  order, each flagged hidden. Persisted only on save. */
+  readonly libraryRows = signal<
+    { id: number; name: string; hidden: boolean }[]
+  >([]);
+  readonly librarySaving = signal(false);
 
   private readonly BUILTIN_LABELS: Record<string, string> = {
     libraries: 'home_settings.section.libraries',
@@ -149,6 +169,53 @@ export class HomeSettingsPageComponent implements OnInit {
     next[index] = { ...next[index], visible };
     this.rows.set(next);
     this.persist();
+  }
+
+  /** Open the library order + visibility modal, seeded from saved prefs. */
+  openLibraryReorder() {
+    this.libraryRows.set(this.libraryPrefs.ordered(this.libs));
+    this.libraryDialog()?.nativeElement.showModal();
+  }
+
+  closeLibraryReorder() {
+    this.libraryDialog()?.nativeElement.close();
+  }
+
+  dropLibrary(event: CdkDragDrop<unknown[]>) {
+    const next = [...this.libraryRows()];
+    moveItemInArray(next, event.previousIndex, event.currentIndex);
+    this.libraryRows.set(next);
+  }
+
+  /** Reorder via arrows (TV remote / keyboard path). */
+  moveLibrary(index: number, delta: number) {
+    const next = [...this.libraryRows()];
+    const target = index + delta;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    this.libraryRows.set(next);
+  }
+
+  toggleLibraryHidden(index: number) {
+    const next = [...this.libraryRows()];
+    next[index] = { ...next[index], hidden: !next[index].hidden };
+    this.libraryRows.set(next);
+  }
+
+  async saveLibraryOrder() {
+    this.librarySaving.set(true);
+    try {
+      const rows = this.libraryRows();
+      await this.libraryPrefs.save(
+        rows.map((r) => r.id),
+        rows.filter((r) => r.hidden).map((r) => r.id),
+      );
+      this.closeLibraryReorder();
+    } catch {
+      /* error toast handled by global interceptor */
+    } finally {
+      this.librarySaving.set(false);
+    }
   }
 
   onModeChange(mode: RecentlyAddedMode) {

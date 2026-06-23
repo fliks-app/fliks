@@ -68,6 +68,23 @@ export class User extends BaseEntity {
   @Column({ type: 'int', default: 7 })
   quotaPeriodDays: number;
 
+  /**
+   * Per-user library display order (library ids, first to last). Drives the
+   * home page and sidebar ordering for this account across devices. Empty
+   * means no custom order — surfaces fall back to the default name ordering.
+   * Ids absent from this list sort after the ordered ones.
+   */
+  @Column({ type: 'jsonb', default: [] })
+  libraryOrder: number[];
+
+  /**
+   * Per-user hidden libraries (ids), kept out of the home page and sidebar for
+   * this account. A display preference only — it doesn't change library access
+   * or request targeting.
+   */
+  @Column({ type: 'jsonb', default: [] })
+  hiddenLibraryIds: number[];
+
   /** Computed permissions from the linked role (isAdmin overrides with all). */
   get permissions(): string[] {
     if (this.isAdmin) {

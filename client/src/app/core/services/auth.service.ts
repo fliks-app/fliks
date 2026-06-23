@@ -17,6 +17,10 @@ export interface User {
   avatar: string | null;
   /** Admin-set: when true the route guard pins the user on /forced-password-change. */
   requirePasswordChange: boolean;
+  /** Per-user library display order (library ids, first to last). */
+  libraryOrder: number[];
+  /** Per-user libraries hidden from the home page and sidebar. */
+  hiddenLibraryIds: number[];
 }
 
 interface LoginResponse {
@@ -416,6 +420,12 @@ export class AuthService {
     } catch {
       // Keep the previous user — refresh is best-effort.
     }
+  }
+
+  /** Locally merge fields into the current user after a self-update, so signal
+   *  consumers react without a round-trip to /auth/me. */
+  patchUser(partial: Partial<User>): void {
+    this._user.update((u) => (u ? { ...u, ...partial } : u));
   }
 
   /** Pour le garde de route : vérifie le cookie/token et charge l'utilisateur si besoin. */
