@@ -22,6 +22,10 @@ import {
   FliksRequestStatus,
 } from '../../core/services/api/requests.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
+import {
+  LibrariesApiService,
+  LibrarySummary,
+} from '../../core/services/api/libraries-api.service';
 import { ToastService } from '../../core/services/toast.service';
 import { AppResumeService } from '../../core/services/app-resume.service';
 import { RequestPosterComponent } from './request-poster';
@@ -62,6 +66,7 @@ import { LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angu
 export class RequestsComponent implements OnInit, OnDestroy {
   private readonly requestsService = inject(RequestsService);
   private readonly profilesApi = inject(ProfilesService);
+  private readonly librariesApi = inject(LibrariesApiService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
@@ -106,10 +111,21 @@ export class RequestsComponent implements OnInit, OnDestroy {
   // Edit modal
   readonly qualityProfiles = signal<{ id: number; name: string }[]>([]);
   readonly languageProfiles = signal<{ id: number; name: string }[]>([]);
+  /** Libraries the caller can target — used by the edit modal's picker. */
+  readonly libraries = signal<LibrarySummary[]>([]);
   readonly editingRequest = signal<FliksRequestRow | null>(null);
   readonly editQualityProfileId = signal<number | null>(null);
   readonly editLanguageProfileId = signal<number | null>(null);
+  readonly editLibraryId = signal<number | null>(null);
   readonly editSaving = signal(false);
+
+  /** Libraries compatible with the request being edited (filtered by its
+   *  media type), the set offered in the edit modal's library picker. */
+  readonly compatibleLibraries = computed(() => {
+    const row = this.editingRequest();
+    if (!row) return [];
+    return this.libraries().filter((l) => l.mediaTypes.includes(row.mediaType));
+  });
 
   private page = 1;
 
@@ -127,12 +143,14 @@ export class RequestsComponent implements OnInit, OnDestroy {
       this.seedProgress();
     });
     try {
-      const [qp, lp] = await Promise.all([
+      const [qp, lp, libs] = await Promise.all([
         this.profilesApi.getQualityProfiles(),
         this.profilesApi.getLanguageProfiles(),
+        this.librariesApi.listMine(),
       ]);
       this.qualityProfiles.set(qp.map((p) => ({ id: p.id, name: p.name })));
       this.languageProfiles.set(lp.map((p) => ({ id: p.id, name: p.name })));
+      this.libraries.set(libs);
     } catch { /* profiles optional */ }
   }
 
@@ -326,6 +344,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.editingRequest.set(row);
     this.editQualityProfileId.set(row.qualityProfileId);
     this.editLanguageProfileId.set(row.languageProfileId);
+    this.editLibraryId.set(row.libraryId);
     this.editModal()?.showModal();
   }
 
@@ -339,9 +358,13 @@ export class RequestsComponent implements OnInit, OnDestroy {
     if (!row) return;
     this.editSaving.set(true);
     try {
+      // Only send libraryId when it actually changed: re-sending an unchanged
+      // value would re-run the backend access check on a plain profile edit.
+      const libraryChanged = this.editLibraryId() !== row.libraryId;
       const updated = await this.requestsService.update(row.id, {
         qualityProfileId: this.editQualityProfileId() ?? undefined,
         languageProfileId: this.editLanguageProfileId() ?? undefined,
+        ...(libraryChanged ? { libraryId: this.editLibraryId() } : {}),
       });
       this.patchRow(updated);
       this.toast.success(this.translate.instant('requests.edit_success'));

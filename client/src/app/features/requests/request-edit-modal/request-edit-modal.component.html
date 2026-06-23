@@ -37,6 +37,21 @@
             </select>
           </label>
         }
+        @if (libraries().length > 1) {
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.libraries.title' | translate }}</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              [ngModel]="libraryId()"
+              (ngModelChange)="libraryIdChange.emit($event ? +$event : null)"
+            >
+              <option [ngValue]="null">—</option>
+              @for (l of libraries(); track l.id) {
+                <option [ngValue]="l.id">{{ l.name }}</option>
+              }
+            </select>
+          </label>
+        }
       </div>
 
       <div class="modal-action mt-2">

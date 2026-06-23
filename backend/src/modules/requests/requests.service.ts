@@ -17,6 +17,7 @@ import { User } from '../users/entities/user.entity';
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../profiles/entities/language-profile.entity';
 import { Library } from '../libraries/entities/library.entity';
+import { LibrariesService } from '../libraries/libraries.service';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { ListRequestsDto } from './dto/list-requests.dto';
 import { UpdateRequestDto } from './dto/update-request.dto';
@@ -62,6 +63,7 @@ export class RequestsService {
     private readonly caslAbilityFactory: CaslAbilityFactory,
     private readonly imageService: ImageService,
     private readonly tmdb: TmdbProvider,
+    private readonly libraries: LibrariesService,
   ) {}
 
   private readonly logger = new Logger(RequestsService.name);
@@ -71,6 +73,52 @@ export class RequestsService {
     return this.caslAbilityFactory
       .createForUser(user)
       .can(Action.Manage, FliksRequest);
+  }
+
+  /** Super-admins see every library, so the per-library scoping is a no-op. */
+  private isSuperAdmin(user: User): boolean {
+    return user.isAdmin || user.permissions.includes('manage:all');
+  }
+
+  /**
+   * A user may only target a library they have access to. Used when a request
+   * is created or edited with an explicit `libraryId` — both the requester and
+   * a validator can only point a request at a library in their own access set.
+   */
+  private async assertCanUseLibrary(
+    user: User,
+    libraryId: number,
+  ): Promise<void> {
+    if (this.isSuperAdmin(user)) return;
+    const accessible = await this.libraries.getAccessibleLibraryIds(user);
+    if (!accessible.includes(libraryId)) {
+      throw new ForbiddenException(
+        'You do not have access to the selected library',
+      );
+    }
+  }
+
+  /**
+   * Gate a validator's visibility/actions on a request by its target library:
+   * a request anchored to a library the validator can't access is off-limits.
+   * Unassigned requests (`libraryId === null`) target no library yet and stay
+   * visible to every validator; a user always retains access to their own
+   * requests regardless of library access.
+   */
+  private async assertCanAccessRequestLibrary(
+    user: User,
+    libraryId: number | null,
+    ownerId: number | null,
+  ): Promise<void> {
+    if (libraryId == null) return;
+    if (this.isSuperAdmin(user)) return;
+    if (ownerId != null && ownerId === user.id) return;
+    const accessible = await this.libraries.getAccessibleLibraryIds(user);
+    if (!accessible.includes(libraryId)) {
+      throw new ForbiddenException(
+        "You do not have access to this request's target library",
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -177,6 +225,9 @@ export class RequestsService {
   async create(user: User, dto: CreateRequestDto): Promise<FliksRequest> {
     await this.checkQuota(user, dto.mediaType);
     await this.assertNoActiveDuplicate(dto);
+    if (dto.libraryId != null) {
+      await this.assertCanUseLibrary(user, dto.libraryId);
+    }
 
     // Series share one profile set across seasons: a later-season request
     // inherits the quality and language profiles fixed by the first request
@@ -466,8 +517,20 @@ export class RequestsService {
 
     if (!this.canManageRequests(user)) {
       qb.andWhere('r.userId = :uid', { uid: user.id });
-    } else if (query.userId) {
-      qb.andWhere('r.userId = :uid', { uid: query.userId });
+    } else {
+      // A validator only sees requests whose target library they can access.
+      // Unassigned requests (libraryId IS NULL) target no library yet and stay
+      // visible to every validator. Super-admins skip the scope entirely.
+      if (!this.isSuperAdmin(user)) {
+        const accessible = await this.libraries.getAccessibleLibraryIds(user);
+        qb.andWhere(
+          '(r."libraryId" IS NULL OR r."libraryId" IN (:...libs))',
+          { libs: accessible.length ? accessible : [0] },
+        );
+      }
+      if (query.userId) {
+        qb.andWhere('r.userId = :uid', { uid: query.userId });
+      }
     }
     if (query.status) {
       qb.andWhere('r.status = :st', { st: query.status });
@@ -487,9 +550,11 @@ export class RequestsService {
       relations: ['user', 'approvedBy', 'media', 'comments', 'comments.user'],
     });
     if (!row) throw new NotFoundException(`Request #${id} not found`);
-    if (!this.canManageRequests(user) && row.userId !== user.id) {
+    const isOwner = row.userId === user.id;
+    if (!this.canManageRequests(user) && !isOwner) {
       throw new ForbiddenException();
     }
+    await this.assertCanAccessRequestLibrary(user, row.libraryId, row.userId);
     return this.projectEmbeddedUsers(row);
   }
 
@@ -544,6 +609,9 @@ export class RequestsService {
         : null;
     }
     if (dto.libraryId !== undefined) {
+      if (dto.libraryId != null) {
+        await this.assertCanUseLibrary(user, dto.libraryId);
+      }
       row.library = dto.libraryId ? ({ id: dto.libraryId } as Library) : null;
     }
     return this.requestRepo.save(row);
@@ -569,6 +637,7 @@ export class RequestsService {
     if (!this.canManageRequests(admin)) throw new ForbiddenException();
     const row = await this.requestRepo.findOne({ where: { id } });
     if (!row) throw new NotFoundException(`Request #${id} not found`);
+    await this.assertCanAccessRequestLibrary(admin, row.libraryId, row.userId);
     if (row.status !== RequestStatus.PENDING) {
       throw new ConflictException('Request is not pending');
     }
@@ -746,6 +815,7 @@ export class RequestsService {
     if (!this.canManageRequests(admin)) throw new ForbiddenException();
     const row = await this.requestRepo.findOne({ where: { id } });
     if (!row) throw new NotFoundException(`Request #${id} not found`);
+    await this.assertCanAccessRequestLibrary(admin, row.libraryId, row.userId);
     if (row.status !== RequestStatus.PENDING) {
       throw new ConflictException('Request is not pending');
     }
@@ -778,6 +848,11 @@ export class RequestsService {
     if (!this.canManageRequests(user) && request.userId !== user.id) {
       throw new ForbiddenException();
     }
+    await this.assertCanAccessRequestLibrary(
+      user,
+      request.libraryId,
+      request.userId,
+    );
     const comment = this.commentRepo.create({
       request,
       user,
@@ -798,6 +873,11 @@ export class RequestsService {
     if (!this.canManageRequests(user) && request.userId !== user.id) {
       throw new ForbiddenException();
     }
+    await this.assertCanAccessRequestLibrary(
+      user,
+      request.libraryId,
+      request.userId,
+    );
     const comments = await this.commentRepo.find({
       where: { request: { id: requestId } },
       relations: ['user'],
@@ -818,6 +898,13 @@ export class RequestsService {
       throw new NotFoundException(`Comment #${commentId} not found`);
     if (!this.canManageRequests(user) && comment.userId !== user.id) {
       throw new ForbiddenException();
+    }
+    if (comment.request) {
+      await this.assertCanAccessRequestLibrary(
+        user,
+        comment.request.libraryId,
+        comment.request.userId,
+      );
     }
     await this.commentRepo.remove(comment);
   }
