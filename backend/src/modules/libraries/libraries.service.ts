@@ -301,9 +301,15 @@ export class LibrariesService {
     if (lib.path === trimmed) return;
 
     if (!fs.existsSync(trimmed)) {
-      throw new BadRequestException(
-        `Path "${trimmed}" does not exist on the server`,
-      );
+      try {
+        await fs.promises.mkdir(trimmed, { recursive: true });
+      } catch (err) {
+        throw new BadRequestException(
+          `Path "${trimmed}" could not be created on the server: ${
+            (err as Error).message
+          }`,
+        );
+      }
     }
     const conflict = await m.findOne(Library, { where: { path: trimmed } });
     if (conflict && conflict.id !== libraryId) {
