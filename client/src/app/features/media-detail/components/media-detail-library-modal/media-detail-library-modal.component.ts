@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
-import { Library } from '../../../../core/services/api/libraries-api.service';
+import { LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { METADATA_PROVIDER_OPTIONS_OVERRIDE } from '../../../../core/constants/metadata-providers';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 
@@ -19,7 +19,7 @@ import { TvSelectDirective } from '../../../../shared/directives/tv-select.direc
   templateUrl: './media-detail-library-modal.component.html',
 })
 export class MediaDetailLibraryModalComponent {
-  readonly libraries = input<Library[]>([]);
+  readonly libraries = input<LibrarySummary[]>([]);
   readonly selectedLibraryId = input<number | null>(null);
   readonly selectedProvider = input<'tmdb' | 'tvdb' | null>(null);
   readonly saving = input(false);

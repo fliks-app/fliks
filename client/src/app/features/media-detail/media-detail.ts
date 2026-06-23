@@ -27,7 +27,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
 import {
   LibrariesApiService,
-  Library,
+  LibrarySummary,
 } from '../../core/services/api/libraries-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
@@ -612,7 +612,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly profilesOk = signal('');
   readonly profilesErr = signal('');
 
-  readonly libraries = signal<Library[]>([]);
+  readonly libraries = signal<LibrarySummary[]>([]);
   readonly selectedLibraryId = signal<number | null>(null);
   readonly selectedProvider = signal<'tmdb' | 'tvdb' | null>(null);
   readonly libraryPatchSaving = signal(false);
@@ -744,7 +744,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         const [q, l, libs] = await Promise.all([
           this.profilesApi.getQualityProfiles(),
           this.profilesApi.getLanguageProfiles(),
-          this.librariesApi.list(),
+          this.librariesApi.listMine(),
         ]);
         this.qualityProfileOptions.set(q.map((p) => ({ id: p.id, name: p.name })));
         this.languageProfiles.set(l);

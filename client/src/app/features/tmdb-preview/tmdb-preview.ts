@@ -19,7 +19,7 @@ import {
   MetadataDetails,
 } from '../../core/services/api/metadata.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
-import { LibrariesApiService, Library } from '../../core/services/api/libraries-api.service';
+import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { RequestsService, TitleRequestState } from '../../core/services/api/requests.service';
@@ -66,7 +66,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
 
   readonly qualityProfiles = signal<{ id: number; name: string }[]>([]);
   readonly languageProfiles = signal<{ id: number; name: string }[]>([]);
-  readonly libraries = signal<Library[]>([]);
+  readonly libraries = signal<LibrarySummary[]>([]);
 
   readonly type = computed(() => {
     const url = this.router.url;
@@ -125,7 +125,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
       const [qp, lp, libs] = await Promise.all([
         this.profilesApi.getQualityProfiles(),
         this.profilesApi.getLanguageProfiles(),
-        this.librariesApi.list(),
+        this.librariesApi.listMine(),
       ]);
       this.qualityProfiles.set(qp.map((p) => ({ id: p.id, name: p.name })));
       this.languageProfiles.set(lp.map((p) => ({ id: p.id, name: p.name })));
