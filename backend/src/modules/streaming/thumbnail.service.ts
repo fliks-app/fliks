@@ -549,6 +549,36 @@ export class ThumbnailService {
         `Too many frame extractions failed (${failed}/${count}) — sprite would be mostly empty`,
       );
     }
+
+    // A transient seek failure leaves a hole in the frame-NNNN sequence; the
+    // image2 tiler stops at the first gap and blanks every later tile. Fill
+    // missing indices from the nearest present frame so the tiler reads a
+    // contiguous sequence.
+    if (failed > 0) await this.backfillMissingFrames(framesDir, count);
+  }
+
+  /** Copy the nearest extracted frame into any missing `frame-NNNN.jpg` slot so
+   *  the tiler's image2 input stays gap-free. No-op when nothing is missing. */
+  private async backfillMissingFrames(
+    framesDir: string,
+    count: number,
+  ): Promise<void> {
+    const frameFile = (i: number) =>
+      path.join(framesDir, `frame-${String(i).padStart(4, '0')}.jpg`);
+    const present = Array.from({ length: count + 1 }, (_, i) =>
+      i === 0 ? false : existsSync(frameFile(i)),
+    );
+    for (let i = 1; i <= count; i++) {
+      if (present[i]) continue;
+      let src = -1;
+      for (let d = 1; d < count && src === -1; d++) {
+        if (i - d >= 1 && present[i - d]) src = i - d;
+        else if (i + d <= count && present[i + d]) src = i + d;
+      }
+      if (src === -1) return; // nothing extracted at all
+      await fsp.copyFile(frameFile(src), frameFile(i));
+      present[i] = true;
+    }
   }
 
   /**
@@ -616,6 +646,8 @@ export class ThumbnailService {
         '-hide_banner',
         '-loglevel',
         'error',
+        '-start_number',
+        '1',
         '-i',
         path.join(framesDir, 'frame-%04d.jpg'),
         '-vf',
