@@ -44,6 +44,10 @@ export interface VideoStreamInfo {
   displayAspectRatio?: string;
   pixelFormat?: string;
   frameRate?: string;
+  /** Container start PTS of the video stream (seconds). Non-zero on TS / PVR
+   *  rips; the `-copyts` transcode keeps the first frame at this time, so
+   *  0-based sidecar/embedded subtitle cues must be shifted by it. */
+  startTimeSeconds?: number;
   bitRate?: number;
   bitDepth?: number;
   colorSpace?: string;
@@ -110,6 +114,7 @@ interface FfprobeStream {
   display_aspect_ratio?: string;
   pix_fmt?: string;
   r_frame_rate?: string;
+  start_time?: string;
   bit_rate?: string;
   bits_per_raw_sample?: string;
   color_space?: string;
@@ -350,6 +355,7 @@ export class FfprobeService {
           displayAspectRatio: s.display_aspect_ratio,
           pixelFormat: s.pix_fmt,
           frameRate: this.parseFrameRate(s.r_frame_rate),
+          startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
           bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
           bitDepth: s.bits_per_raw_sample
             ? Number(s.bits_per_raw_sample)

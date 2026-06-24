@@ -86,10 +86,13 @@ export class SubtitleStreamService {
   /**
    * Get an external subtitle file converted to WebVTT.
    */
-  async getSubtitleAsVtt(subtitleId: number, user?: User): Promise<string> {
+  async getSubtitleAsVtt(
+    subtitleId: number,
+    user?: User,
+  ): Promise<{ vtt: string; startTimeSeconds: number }> {
     const sub = await this.subtitleFileRepo.findOne({
       where: { id: subtitleId },
-      relations: ['media', 'media.library'],
+      relations: ['media', 'media.library', 'mediaFile'],
     });
     // Library ACL on the subtitle's OWN media, so a foreign subtitle id can't
     // be read regardless of the mediaFileId in the request path (IDOR).
@@ -125,13 +128,17 @@ export class SubtitleStreamService {
 
     const content = await fs.readFile(realSubPath, 'utf-8');
     const ext = path.extname(realSubPath).toLowerCase();
-
-    if (ext === '.vtt') return content;
-    if (ext === '.srt') return this.srtToVtt(content);
-    if (ext === '.ass' || ext === '.ssa') return this.assToVtt(content);
-
-    // Fallback: try SRT conversion
-    return this.srtToVtt(content);
+    // Sidecar cues are authored 0-based; the player aligns them via the
+    // X-TIMESTAMP-MAP offset, which the caller derives from this start PTS.
+    const startTimeSeconds =
+      sub.mediaFile?.streamInfo?.video?.[0]?.startTimeSeconds ?? 0;
+    const vtt =
+      ext === '.vtt'
+        ? content
+        : ext === '.ass' || ext === '.ssa'
+          ? this.assToVtt(content)
+          : this.srtToVtt(content); // .srt + unknown fallback
+    return { vtt, startTimeSeconds };
   }
 
   /**

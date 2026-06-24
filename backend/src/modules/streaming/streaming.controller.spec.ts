@@ -1,5 +1,23 @@
-import { StreamingController } from './streaming.controller';
+import { StreamingController, withTimestampMap } from './streaming.controller';
 import type { LiveSession } from './live-session.service';
+
+describe('withTimestampMap', () => {
+  const mapLine = (vtt: string): string | undefined =>
+    vtt.split('\n').find((l) => l.startsWith('X-TIMESTAMP-MAP'));
+
+  it('emits MPEGTS:0 (no-op) for a zero start time', () => {
+    expect(mapLine(withTimestampMap('WEBVTT\n\n'))).toBe(
+      'X-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000',
+    );
+  });
+
+  it('offsets cues by the source start PTS on the 90kHz clock', () => {
+    // 1.4s × 90000 → the cue at LOCAL 0 maps to the first frame, not 1.4s early.
+    expect(mapLine(withTimestampMap('WEBVTT\n\n', 1.4))).toBe(
+      'X-TIMESTAMP-MAP=MPEGTS:126000,LOCAL:00:00:00.000',
+    );
+  });
+});
 
 /**
  * Focused unit tests for the sid-scoped stop handler. The controller is
