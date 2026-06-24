@@ -19,6 +19,7 @@ import {
   parseBitrateToBps,
   profileFitsSource,
   resolveSourceVideoBitrateBps,
+  SURROUND_TRANSCODE_BITRATE_BPS,
 } from './transcoding';
 import {
   cappedRungVideoBitrateBps,
@@ -558,7 +559,7 @@ export class StreamBuilderService {
       canCopyAudio = true;
     } else if (surroundPossible && surroundCodec) {
       outputAudioCodec = surroundCodec;
-      outputAudioBitrateBps = 640_000;
+      outputAudioBitrateBps = SURROUND_TRANSCODE_BITRATE_BPS;
     } else {
       outputAudioCodec = 'aac';
       outputAudioBitrateBps = parseBitrateToBps(

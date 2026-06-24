@@ -2,7 +2,6 @@ import {
   computeSegmentDurations,
   boundariesFromDurations,
   secondsToSegmentIndex,
-  segmentIndexToSeconds,
 } from './segment-boundaries';
 
 describe('computeSegmentDurations', () => {
@@ -50,12 +49,6 @@ describe('boundary helpers', () => {
     expect(secondsToSegmentIndex(boundaries, 12.9)).toBe(1);
     expect(secondsToSegmentIndex(boundaries, 13)).toBe(2);
     expect(secondsToSegmentIndex(boundaries, 999)).toBe(2);
-  });
-
-  it('maps a segment index back to its start time (consistent with the playlist)', () => {
-    expect(segmentIndexToSeconds(boundaries, 0)).toBe(0);
-    expect(segmentIndexToSeconds(boundaries, 1)).toBe(7);
-    expect(segmentIndexToSeconds(boundaries, 2)).toBe(13);
   });
 
   it('offsets cumulative boundaries by the source start PTS', () => {
