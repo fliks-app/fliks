@@ -1,5 +1,54 @@
-import { StreamingController, withTimestampMap } from './streaming.controller';
+import {
+  StreamingController,
+  withTimestampMap,
+  buildVodPlaylist,
+  buildVariableVodPlaylist,
+} from './streaming.controller';
 import type { LiveSession } from './live-session.service';
+
+describe('buildVodPlaylist', () => {
+  const url = (i: string): string => `seg-${i}.m4s`;
+  const lines = (m: string, prefix: string): string[] =>
+    m.split('\n').filter((l) => l.startsWith(prefix));
+
+  it('drops the phantom last segment from float-imprecise durations', () => {
+    // 120.001 / 3 naively ceils to 41, but ffmpeg writes 40 — the epsilon trims it.
+    expect(lines(buildVodPlaylist(120.001, url, undefined, 3), '#EXTINF')).toHaveLength(40);
+  });
+
+  it('clamps the final EXTINF to the remainder and sets TARGETDURATION', () => {
+    const m = buildVodPlaylist(10, url, undefined, 3);
+    const extinf = lines(m, '#EXTINF');
+    expect(extinf).toEqual([
+      '#EXTINF:3.000,',
+      '#EXTINF:3.000,',
+      '#EXTINF:3.000,',
+      '#EXTINF:1.000,',
+    ]);
+    expect(m).toContain('#EXT-X-TARGETDURATION:3');
+    expect(m).not.toContain('#EXT-X-MAP'); // no initUrl
+  });
+
+  it('rounds TARGETDURATION up for fractional segment durations + emits the map', () => {
+    const m = buildVodPlaylist(9.009, url, 'init.mp4', 3.003);
+    expect(m).toContain('#EXT-X-TARGETDURATION:4');
+    expect(m).toContain('#EXT-X-MAP:URI="init.mp4"');
+    expect(lines(m, '#EXTINF')[0]).toBe('#EXTINF:3.003,');
+  });
+});
+
+describe('buildVariableVodPlaylist', () => {
+  const url = (i: string): string => `seg-${i}.m4s`;
+  it('emits one EXTINF per real duration and TARGETDURATION = ceil(max)', () => {
+    const m = buildVariableVodPlaylist([3.003, 2.961, 4.2], url);
+    expect(m.split('\n').filter((l) => l.startsWith('#EXTINF'))).toEqual([
+      '#EXTINF:3.003,',
+      '#EXTINF:2.961,',
+      '#EXTINF:4.200,',
+    ]);
+    expect(m).toContain('#EXT-X-TARGETDURATION:5');
+  });
+});
 
 describe('withTimestampMap', () => {
   const mapLine = (vtt: string): string | undefined =>

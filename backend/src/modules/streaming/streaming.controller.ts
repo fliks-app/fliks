@@ -39,6 +39,7 @@ import {
 import {
   EARLY_PROBE_SEGMENTS,
   getSegmentDuration,
+  parseSourceFps,
   realSegmentSeconds,
   secondsToSegmentIndex,
 } from './transcoding/constants';
@@ -197,7 +198,7 @@ function statSizeOrNull(filePath: string): number | null {
  *  seg-N covers `[N*segDuration, (N+1)*segDuration)`, so the EXTINF values
  *  mirror what FFmpeg actually emits and the presentation timeline stays
  *  aligned with the moof PTS the segments carry. */
-function buildVodPlaylist(
+export function buildVodPlaylist(
   duration: number,
   segmentUrl: (index: string) => string,
   initUrl?: string,
@@ -238,7 +239,7 @@ function buildVodPlaylist(
  *  and a uniform `EXTINF` grid would mislead strict players (AVPlayer) into a
  *  progressive A/V drift. `durations` mirror ffmpeg's actual segment lengths
  *  (see {@link getRemuxSegmentGrid}). */
-function buildVariableVodPlaylist(
+export function buildVariableVodPlaylist(
   durations: number[],
   segmentUrl: (index: string) => string,
   initUrl?: string,
@@ -1043,7 +1044,7 @@ export class StreamingController {
         : undefined;
 
     const sdrVariant = liveVariant;
-    const sourceFrameRate = parseFloat(v?.frameRate ?? '') || undefined;
+    const sourceFrameRate = parseSourceFps(v?.frameRate);
     // CODECS audio entry. With EXT-X-MEDIA renditions every track shares one
     // output codec (the audio group is uniform — see buildAudioTracks), so the
     // master must advertise THAT codec, not the default track's audioPlan
@@ -1286,9 +1287,9 @@ export class StreamingController {
     const segExt = useTs ? 'ts' : 'm4s';
     // var_stream_map audio renditions are cut on the video GOP grid, so they
     // share the video's real per-segment duration.
-    const sourceFps =
-      parseFloat(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate ?? '') ||
-      undefined;
+    const sourceFps = parseSourceFps(
+      resolved.mediaFile.streamInfo?.video?.[0]?.frameRate,
+    );
     const audioSegDuration =
       useExtXMedia && !useTs ? realSegmentSeconds(sourceFps) : getSegmentDuration();
     const playlist = buildVodPlaylist(
@@ -1620,9 +1621,9 @@ export class StreamingController {
     // Transcoded fMP4 segments span one GOP each — declare their real length
     // so fractional-fps streams stay in A/V sync. Remux (variable) and TS keep
     // their own paths.
-    const sourceFps =
-      parseFloat(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate ?? '') ||
-      undefined;
+    const sourceFps = parseSourceFps(
+      resolved.mediaFile.streamInfo?.video?.[0]?.frameRate,
+    );
     const transcodeFmp4 = quality !== 'remux' && !useTs;
     const playlist = remuxDurations
       ? buildVariableVodPlaylist(remuxDurations, segmentUrl, initRef)
