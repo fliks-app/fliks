@@ -11,23 +11,15 @@ function hdrMaster(
   opts: { hdrFormat?: 'HDR10' | 'HLG'; canEmitHdrLadder?: boolean } = {},
 ): string {
   const { hdrFormat = 'HDR10', canEmitHdrLadder = true } = opts;
-  return generateMasterPlaylist(
-    1, // mediaFileId
-    3840, // sourceWidth
-    2160, // sourceHeight
-    '', // tokenParam
-    false, // includeRemux
-    undefined, // sourceBitrate
-    undefined, // audioStreams
-    undefined, // onlyQuality
-    0, // defaultAudioIndex
-    'desktop', // deviceType
-    'aac', // outputAudioCodec
-    { hdrFormat, hdrVariant }, // hdrPassThrough
+  return generateMasterPlaylist({
+    mediaFileId: 1,
+    sourceWidth: 3840,
+    sourceHeight: 2160,
+    tokenParam: '',
+    hdrPassThrough: { hdrFormat, hdrVariant },
     canEmitHdrLadder,
-    undefined, // sdrVariant
-    24, // sourceFrameRate
-  );
+    sourceFrameRate: 24,
+  });
 }
 
 const streamInfLines = (m: string): string[] =>
@@ -67,5 +59,58 @@ describe('generateMasterPlaylist — HDR ladder is variant-driven (#464)', () =>
       hdrMaster(AV1_HDR10, { canEmitHdrLadder: false }),
     );
     expect(lines).toHaveLength(0);
+  });
+});
+
+describe('generateMasterPlaylist — audio rendition CHANNELS', () => {
+  const mediaLines = (m: string): string[] =>
+    m.split('\n').filter((l) => l.startsWith('#EXT-X-MEDIA:TYPE=AUDIO'));
+
+  it('declares the resolved output channels, not the source layout', () => {
+    // 7.1 (8ch) source: track 0 transcoded to E-AC-3 ships 6, track 1 copied keeps 8.
+    const m = generateMasterPlaylist({
+      mediaFileId: 1,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      tokenParam: '',
+      outputAudioCodec: 'eac3',
+      audioStreams: [{ channels: 8 }, { channels: 8 }],
+      audioOutputChannels: [6, 8],
+    });
+    const media = mediaLines(m);
+    expect(media[0]).toContain('CHANNELS="6"');
+    expect(media[1]).toContain('CHANNELS="8"');
+  });
+
+  it('falls back to the codec-derived count when output channels are absent', () => {
+    const m = generateMasterPlaylist({
+      mediaFileId: 1,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      tokenParam: '',
+      outputAudioCodec: 'eac3',
+      audioStreams: [{ channels: 6 }],
+    });
+    expect(mediaLines(m)[0]).toContain('CHANNELS="6"');
+  });
+});
+
+describe('generateMasterPlaylist — audio bitrate in BANDWIDTH', () => {
+  const maxAvgBandwidth = (m: string): number =>
+    Math.max(
+      ...[...m.matchAll(/AVERAGE-BANDWIDTH=(\d+)/g)].map((x) => Number(x[1])),
+    );
+
+  it('folds the real output audio bitrate into AVERAGE-BANDWIDTH', () => {
+    const base = {
+      mediaFileId: 1,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      tokenParam: '',
+    };
+    const hi = generateMasterPlaylist({ ...base, audioOutputBitrateBps: 640_000 });
+    const lo = generateMasterPlaylist({ ...base, audioOutputBitrateBps: 100_000 });
+    // Same video rungs; only the audio component differs by the exact delta.
+    expect(maxAvgBandwidth(hi) - maxAvgBandwidth(lo)).toBe(540_000);
   });
 });

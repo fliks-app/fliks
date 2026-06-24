@@ -55,11 +55,12 @@ export function buildUniqueAudioNames(
 }
 
 /** Emit one `EXT-X-MEDIA:TYPE=AUDIO` rendition per source audio stream, sharing
- *  the `audio` group. CHANNELS reports the rendition's real output layout (AAC
- *  downmixes to 2 via `-ac 2`; copy / AC-3 / E-AC-3 keep the source layout) —
+ *  the `audio` group. CHANNELS reports the rendition's real output layout —
  *  Tizen AVPlay needs the hint to pre-allocate the decoder before fetching the
  *  rendition, else the single-audio fMP4 path never follows the rendition link
- *  (issue #148). */
+ *  (issue #148). `outputChannels[i]` is the resolved per-track output count
+ *  (copy keeps the source, transcode downmixes); falls back to a codec-derived
+ *  guess when the plan isn't threaded. */
 export function emitAudioRenditions(
   lines: string[],
   audioStreams: AudioStreamMeta[],
@@ -67,6 +68,7 @@ export function emitAudioRenditions(
   outputAudioCodec: string,
   mediaFileId: number,
   tokenParam: string,
+  outputChannels?: (number | undefined)[],
 ): void {
   const pickedIdx =
     defaultAudioIndex >= 0 && defaultAudioIndex < audioStreams.length
@@ -77,8 +79,10 @@ export function emitAudioRenditions(
     const a = audioStreams[i];
     const lang = a.language || 'und';
     const isDefault = i === pickedIdx ? 'YES' : 'NO';
+    const channels =
+      outputChannels?.[i] ?? audioRenditionChannels(outputAudioCodec, a.channels);
     lines.push(
-      `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="${audioRenditionChannels(outputAudioCodec, a.channels)}",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
+      `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="${channels}",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
     );
   }
 }
@@ -90,6 +94,10 @@ export interface VariantLadderOptions {
   /** VIDEO-RANGE attribute value; omitted (SDR) leaves the attribute off. */
   range?: 'PQ' | 'HLG';
   audioAttr: string;
+  /** Real output audio bitrate (bps) for the BANDWIDTH/AVERAGE-BANDWIDTH sum.
+   *  Falls back to the per-rung profile nominal when absent — which undercounts
+   *  AC-3/E-AC-3 (encoded at a fixed 640k, far above the nominal). */
+  audioBitrateBps?: number;
   subsAttr: string;
   frameRateAttr: string;
   codecsTail: string;
@@ -117,6 +125,7 @@ export function emitVariantLadder(
     variant,
     range,
     audioAttr,
+    audioBitrateBps,
     subsAttr,
     frameRateAttr,
     codecsTail,
@@ -143,7 +152,8 @@ export function emitVariantLadder(
       sourceVideoBitrateBps,
       sourceVideoCodec,
     });
-    const avg = cappedVideo + parseBitrateToBps(p.audioBitrate);
+    const avg =
+      cappedVideo + (audioBitrateBps ?? parseBitrateToBps(p.audioBitrate));
     // BANDWIDTH ~1.5x nominal: with -maxrate == -b:v the encoder is near-CBR but
     // VBV bursts push segments ~30% above nominal; the margin gives AVPlayer ABR
     // stable hysteresis.

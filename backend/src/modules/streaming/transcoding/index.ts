@@ -32,6 +32,7 @@ export type { SessionVariant } from './variant';
 export {
   generateMasterPlaylist,
   getAvailableProfiles,
+  type MasterPlaylistOptions,
 } from './master-playlist';
 export { TranscodingService } from './transcoding.service';
 export { TranscodeCacheService } from './transcode-cache.service';

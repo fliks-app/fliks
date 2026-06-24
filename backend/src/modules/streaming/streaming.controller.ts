@@ -1054,36 +1054,47 @@ export class StreamingController {
       useExtXMedia && live?.audioTrackPlans?.length
         ? live.audioTrackPlans[0].outputCodec
         : (live?.audioPlan?.codec ?? 'aac');
-    const playlist = this.transcodingService.generateMasterPlaylist(
+    const playlist = this.transcodingService.generateMasterPlaylist({
       mediaFileId,
-      w,
-      h,
+      sourceWidth: w,
+      sourceHeight: h,
       tokenParam,
       includeRemux,
-      sourceBitrate || undefined,
+      sourceBitrate: sourceBitrate || undefined,
       // Pass the array when we want EXT-X-MEDIA renditions, OR when the
       // source has zero audio streams — the empty array signals
       // `noAudio` to the master-playlist builder so CODECS drops the
       // audio entry (otherwise Shaka / ExoPlayer reject the variant).
       // `undefined` keeps the muxed single-audio layout for everyone else.
-      useExtXMedia || audioStreams.length === 0 ? audioStreams : undefined,
+      audioStreams:
+        useExtXMedia || audioStreams.length === 0 ? audioStreams : undefined,
+      // Real per-track output channels (copy keeps source, transcode downmixes)
+      // so the rendition CHANNELS hint matches the bytes; aligned with the
+      // source audio order the session produces renditions in.
+      audioOutputChannels: live?.audioTrackPlans?.map((p) => p.outputChannels),
       onlyQuality,
-      pickedIdx ?? 0,
+      defaultAudioIndex: pickedIdx ?? 0,
       deviceType,
-      masterAudioCodec,
+      outputAudioCodec: masterAudioCodec,
+      // Real output audio bitrate so the BANDWIDTH sum reflects the 640k
+      // AC-3/E-AC-3 path, not the profile nominal; copy renditions fall back.
+      audioOutputBitrateBps:
+        live?.audioPlan?.mode === 'transcode'
+          ? live.audioPlan.bitrateBps
+          : undefined,
       hdrPassThrough,
       // Only the SDR ladder branch consumes this — the HDR branch
       // already drives its codec strings from `hdrPassThrough`.
-      sdrVariant && sdrVariant.hdr == null ? sdrVariant : undefined,
+      sdrVariant: sdrVariant && sdrVariant.hdr == null ? sdrVariant : undefined,
       sourceFrameRate,
       subtitleRenditions,
-      resolveSourceVideoBitrateBps(
+      sourceVideoBitrateBps: resolveSourceVideoBitrateBps(
         v?.bitRate,
         si?.formatBitRate,
         (si?.audio ?? []).reduce((sum, a) => sum + (a?.bitRate ?? 0), 0),
       ),
-      (v?.codec ?? '').toLowerCase() || undefined,
-    );
+      sourceVideoCodec: (v?.codec ?? '').toLowerCase() || undefined,
+    });
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
