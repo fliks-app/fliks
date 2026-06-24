@@ -253,6 +253,9 @@ export interface TranscodeSession {
    *  whether a cache gap is ahead of (reachable) or behind (unreachable)
    *  the current encoding position. */
   startSegment?: number;
+  /** Source frame rate this session encodes at. Lets the segment-serve path
+   *  resolve the real segment-duration grid without re-probing streamInfo. */
+  sourceFps?: number;
   /** Marks the session as killed intentionally (seek restart, quality
    *  change, etc.) so the close handler doesn't log a spurious "exited
    *  WITHOUT producing first segment" warning. */

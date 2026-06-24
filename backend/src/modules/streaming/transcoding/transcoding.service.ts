@@ -1598,6 +1598,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     )
       ? 'var-stream-map'
       : 'inline';
+    session.sourceFps = ctx.sourceFps;
     if (!session.startedAt) session.startedAt = new Date();
   }
 
