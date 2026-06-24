@@ -45,6 +45,7 @@ import {
 import {
   generateMasterPlaylist,
   getAvailableProfiles,
+  type MasterPlaylistOptions,
 } from './master-playlist';
 import {
   fileExists,
@@ -406,63 +407,20 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return getAvailableProfiles(sourceWidth, sourceHeight, deviceType);
   }
 
-  /** Generate the HLS master playlist listing available qualities. */
+  /** Generate the HLS master playlist listing available qualities. The HDR
+   *  ladder is gated here on the registry having a probed-OK encoder for the
+   *  resolved variant (codec + HDR format, with CPU fallback) so the manifest
+   *  never advertises HDR rungs the host can't actually emit. */
   generateMasterPlaylist(
-    mediaFileId: number,
-    sourceWidth: number,
-    sourceHeight: number,
-    tokenParam: string,
-    includeRemux = false,
-    sourceBitrate?: number,
-    audioStreams?: { language?: string; title?: string }[],
-    onlyQuality?: string,
-    defaultAudioIndex = 0,
-    deviceType: DeviceType = 'desktop',
-    outputAudioCodec: string = 'aac',
-    hdrPassThrough?: {
-      hdrFormat: 'HDR10' | 'HLG';
-      hdrVariant: import('./codec/types').CodecVariant;
-      videoBitRateBps?: number;
-      audioBitRateBps?: number;
-    },
-    sdrVariant?: import('./codec/types').CodecVariant,
-    sourceFrameRate?: number,
-    subtitleRenditions?: import('./types').SubtitleRenditionMeta[],
-    sourceVideoBitrateBps?: number,
-    sourceVideoCodec?: string,
+    opts: Omit<MasterPlaylistOptions, 'canEmitHdrLadder'>,
   ): string {
-    // Gate the HDR ladder on the registry having a probed-OK encoder for the
-    // variant the selector actually resolved — the chosen codec (HEVC or AV1)
-    // AND the source's HDR format (HDR10 or HLG), with automatic CPU fallback.
-    // The manifest then advertises only HDR rungs the host can emit; a `hvc1.*`
-    // / `av01.*` CODECS claim with no matching encoder would otherwise reject
-    // on MSE append (or crash Media3 on ExoPlayer).
-    const canEmitHdrLadder = hdrPassThrough
+    const canEmitHdrLadder = opts.hdrPassThrough
       ? !!encoderRegistry.resolve(
-          hdrPassThrough.hdrVariant,
+          opts.hdrPassThrough.hdrVariant,
           this.detectedHwAccel,
         )
       : false;
-    return generateMasterPlaylist(
-      mediaFileId,
-      sourceWidth,
-      sourceHeight,
-      tokenParam,
-      includeRemux,
-      sourceBitrate,
-      audioStreams,
-      onlyQuality,
-      defaultAudioIndex,
-      deviceType,
-      outputAudioCodec,
-      hdrPassThrough,
-      canEmitHdrLadder,
-      sdrVariant,
-      sourceFrameRate,
-      subtitleRenditions,
-      sourceVideoBitrateBps,
-      sourceVideoCodec,
-    );
+    return generateMasterPlaylist({ ...opts, canEmitHdrLadder });
   }
 
   /**

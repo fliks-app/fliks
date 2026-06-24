@@ -1054,36 +1054,37 @@ export class StreamingController {
       useExtXMedia && live?.audioTrackPlans?.length
         ? live.audioTrackPlans[0].outputCodec
         : (live?.audioPlan?.codec ?? 'aac');
-    const playlist = this.transcodingService.generateMasterPlaylist(
+    const playlist = this.transcodingService.generateMasterPlaylist({
       mediaFileId,
-      w,
-      h,
+      sourceWidth: w,
+      sourceHeight: h,
       tokenParam,
       includeRemux,
-      sourceBitrate || undefined,
+      sourceBitrate: sourceBitrate || undefined,
       // Pass the array when we want EXT-X-MEDIA renditions, OR when the
       // source has zero audio streams — the empty array signals
       // `noAudio` to the master-playlist builder so CODECS drops the
       // audio entry (otherwise Shaka / ExoPlayer reject the variant).
       // `undefined` keeps the muxed single-audio layout for everyone else.
-      useExtXMedia || audioStreams.length === 0 ? audioStreams : undefined,
+      audioStreams:
+        useExtXMedia || audioStreams.length === 0 ? audioStreams : undefined,
       onlyQuality,
-      pickedIdx ?? 0,
+      defaultAudioIndex: pickedIdx ?? 0,
       deviceType,
-      masterAudioCodec,
+      outputAudioCodec: masterAudioCodec,
       hdrPassThrough,
       // Only the SDR ladder branch consumes this — the HDR branch
       // already drives its codec strings from `hdrPassThrough`.
-      sdrVariant && sdrVariant.hdr == null ? sdrVariant : undefined,
+      sdrVariant: sdrVariant && sdrVariant.hdr == null ? sdrVariant : undefined,
       sourceFrameRate,
       subtitleRenditions,
-      resolveSourceVideoBitrateBps(
+      sourceVideoBitrateBps: resolveSourceVideoBitrateBps(
         v?.bitRate,
         si?.formatBitRate,
         (si?.audio ?? []).reduce((sum, a) => sum + (a?.bitRate ?? 0), 0),
       ),
-      (v?.codec ?? '').toLowerCase() || undefined,
-    );
+      sourceVideoCodec: (v?.codec ?? '').toLowerCase() || undefined,
+    });
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');

@@ -11,23 +11,15 @@ function hdrMaster(
   opts: { hdrFormat?: 'HDR10' | 'HLG'; canEmitHdrLadder?: boolean } = {},
 ): string {
   const { hdrFormat = 'HDR10', canEmitHdrLadder = true } = opts;
-  return generateMasterPlaylist(
-    1, // mediaFileId
-    3840, // sourceWidth
-    2160, // sourceHeight
-    '', // tokenParam
-    false, // includeRemux
-    undefined, // sourceBitrate
-    undefined, // audioStreams
-    undefined, // onlyQuality
-    0, // defaultAudioIndex
-    'desktop', // deviceType
-    'aac', // outputAudioCodec
-    { hdrFormat, hdrVariant }, // hdrPassThrough
+  return generateMasterPlaylist({
+    mediaFileId: 1,
+    sourceWidth: 3840,
+    sourceHeight: 2160,
+    tokenParam: '',
+    hdrPassThrough: { hdrFormat, hdrVariant },
     canEmitHdrLadder,
-    undefined, // sdrVariant
-    24, // sourceFrameRate
-  );
+    sourceFrameRate: 24,
+  });
 }
 
 const streamInfLines = (m: string): string[] =>

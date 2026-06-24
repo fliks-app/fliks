@@ -48,26 +48,21 @@ function master(opts: MasterOpts = {}): string {
     sourceFrameRate = 24,
     sourceVideoCodec = 'hevc',
   } = opts;
-  return generateMasterPlaylist(
-    7, // mediaFileId
-    width,
-    height,
-    '', // tokenParam
-    false, // includeRemux
-    undefined, // sourceBitrate
+  return generateMasterPlaylist({
+    mediaFileId: 7,
+    sourceWidth: width,
+    sourceHeight: height,
+    tokenParam: '',
     audioStreams,
-    undefined, // onlyQuality
-    0, // defaultAudioIndex
     deviceType,
     outputAudioCodec,
-    hdrVariant ? { hdrFormat, hdrVariant } : undefined,
-    !!hdrVariant, // canEmitHdrLadder
+    hdrPassThrough: hdrVariant ? { hdrFormat, hdrVariant } : undefined,
+    canEmitHdrLadder: !!hdrVariant,
     sdrVariant,
     sourceFrameRate,
-    undefined, // subtitleRenditions
-    SRC_BITRATE,
+    sourceVideoBitrateBps: SRC_BITRATE,
     sourceVideoCodec,
-  );
+  });
 }
 
 describe('generateMasterPlaylist — golden manifests (characterization)', () => {

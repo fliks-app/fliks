@@ -83,79 +83,65 @@ export function getAvailableProfiles(
   );
 }
 
-/**
- * Generate the HLS master playlist listing available qualities.
- */
-export function generateMasterPlaylist(
-  mediaFileId: number,
-  sourceWidth: number,
-  sourceHeight: number,
-  tokenParam: string,
-  includeRemux = false,
-  sourceBitrate?: number,
-  audioStreams?: AudioStreamMeta[],
-  onlyQuality?: string,
-  defaultAudioIndex = 0,
-  deviceType: DeviceType = 'desktop',
-  /** Output audio codec actually emitted by ffmpeg. The CODECS attribute
-   *  must match or the receiver rejects the segment at MSE chunk-demuxer
-   *  append. Recognised values: `'aac'` (AAC-LC), `'ac3'` (Dolby Digital),
-   *  `'eac3'` (Dolby Digital Plus). Defaults to AAC for legacy callers. */
-  outputAudioCodec: string = 'aac',
-  /** When set, the master emits an HDR ladder instead of the SDR transcode
-   *  ladder. `hdrVariant` is the codec the encoder pipeline resolved for this
-   *  HDR source on the host (HEVC Main10 on QSV/VAAPI/NVENC/VideoToolbox,
-   *  native AV1 HDR on NVENC Ada / libsvtav1); every rung's CODECS string is
-   *  derived from it (`hvc1.2.4.*` for HEVC, `av01.*.10` for AV1). iOS
-   *  AVPlayer / ExoPlayer use the `VIDEO-RANGE` attribute + the codec string
-   *  to dispatch to the HDR rendering path. */
+export interface MasterPlaylistOptions {
+  mediaFileId: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  tokenParam: string;
+  includeRemux?: boolean;
+  sourceBitrate?: number;
+  audioStreams?: AudioStreamMeta[];
+  onlyQuality?: string;
+  defaultAudioIndex?: number;
+  deviceType?: DeviceType;
+  /** Output audio codec ffmpeg emits; the CODECS attribute must match it or the
+   *  receiver rejects the segment on MSE append. `aac` | `ac3` | `eac3`. */
+  outputAudioCodec?: string;
+  /** When set, emit an HDR ladder (gated by `canEmitHdrLadder`); `hdrVariant`
+   *  drives every rung's CODECS + VIDEO-RANGE. */
   hdrPassThrough?: {
     hdrFormat: 'HDR10' | 'HLG';
     hdrVariant: CodecVariant;
     videoBitRateBps?: number;
     audioBitRateBps?: number;
-  },
-  /** True when the registry has a probed-OK encoder for `hdrPassThrough.
-   *  hdrVariant` on this host (the resolved codec + HDR format, with CPU
-   *  fallback). When false the HDR ladder is skipped so the master never
-   *  advertises HDR rungs whose segments the host can't actually produce —
-   *  a `hvc1.*`/`av01.*` CODECS claim with no matching encoder trips a
-   *  Media3 fallback-options crash on ExoPlayer / an MSE append reject. */
-  canEmitHdrLadder = false,
-  /** SDR-ladder output codec, picked by the codec selector. When the
-   *  selector promoted HEVC (source codec match, or efficiency
-   *  ranking on HEVC-capable clients), every SDR rung emits a
-   *  `hvc1.*` CODECS string instead of `avc1.*` so MSE doesn't reject
-   *  the appended segments. Absent for legacy callers that haven't
-   *  threaded the variant through — falls back to H.264 codec strings. */
-  sdrVariant?: CodecVariant,
-  /** Source frame rate in fps (e.g. 23.976, 24, 29.97). Emitted as the
-   *  HLS `FRAME-RATE` attribute on every `#EXT-X-STREAM-INF` and fed
-   *  into the codec-string level computation. REQUIRED on HDR variants:
-   *  Apple's HLS parser rejects PQ/HLG rungs missing `FRAME-RATE` with
-   *  `HDR alternate is missing FRAME-RATE` (CoreMedia -12642), and when
-   *  every HDR variant is filtered out AVPlayer surfaces the empty
-   *  playable set as `NSURLErrorUnsupportedURL -1002`. Defaults to 24
-   *  so legacy callers without source info still produce a valid
-   *  manifest. */
-  sourceFrameRate = 24,
-  /** Text subtitle tracks to advertise as an HLS `SUBTITLES` rendition
-   *  group. When non-empty, a `#EXT-X-MEDIA:TYPE=SUBTITLES` line is emitted
-   *  per track and every `#EXT-X-STREAM-INF` gains `SUBTITLES="subs"`, so a
-   *  native HLS player (AVPlayer, ExoPlayer, AVPlay, webOS) renders cues
-   *  inside its own pipeline — visible in PiP / AirPlay / lock-screen.
-   *  Empty / undefined keeps the manifest subtitle-free (web + older
-   *  clients keep fetching sidecar VTT). The renditions are decoupled from
-   *  the video transcode: each URI points at a tiny media playlist wrapping
-   *  the WebVTT the subtitle service already extracts, so the HEVC
-   *  `var_stream_map` is untouched (no decoder-buffer regression). */
-  subtitleRenditions?: SubtitleRenditionMeta[],
-  /** Probed (or estimated) source video bitrate + codec. Each transcode
-   *  rung's declared BANDWIDTH is capped to the source (no upward inflation),
-   *  matching the encode cap in `buildFfmpegArgs`. Omitted → no cap. */
-  sourceVideoBitrateBps?: number,
-  sourceVideoCodec?: string,
-): string {
+  };
+  /** Host has a probed-OK encoder for `hdrPassThrough.hdrVariant`; false skips
+   *  the HDR ladder so the master never advertises rungs it can't produce. */
+  canEmitHdrLadder?: boolean;
+  /** SDR-ladder output codec from the selector (HEVC promotion → `hvc1.*`). */
+  sdrVariant?: CodecVariant;
+  /** Source fps for the `FRAME-RATE` attribute — required on HDR rungs (Apple
+   *  rejects PQ/HLG rungs without it). */
+  sourceFrameRate?: number;
+  /** Text subtitle tracks to advertise as a `SUBTITLES` rendition group. */
+  subtitleRenditions?: SubtitleRenditionMeta[];
+  /** Source video bitrate + codec; caps each rung's declared BANDWIDTH. */
+  sourceVideoBitrateBps?: number;
+  sourceVideoCodec?: string;
+}
+
+/** Generate the HLS master playlist listing available qualities. */
+export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
+  const {
+    mediaFileId,
+    sourceWidth,
+    sourceHeight,
+    tokenParam,
+    includeRemux = false,
+    sourceBitrate,
+    audioStreams,
+    onlyQuality,
+    defaultAudioIndex = 0,
+    deviceType = 'desktop',
+    outputAudioCodec = 'aac',
+    hdrPassThrough,
+    canEmitHdrLadder = false,
+    sdrVariant,
+    sourceFrameRate = 24,
+    subtitleRenditions,
+    sourceVideoBitrateBps,
+    sourceVideoCodec,
+  } = opts;
   // The "multi-audio" flag is really an "EXT-X-MEDIA layout" toggle —
   // the caller decided whether to split audio into renditions. Single-
   // audio sources can opt-in (Tizen fMP4 needs it; see issue #148), so
