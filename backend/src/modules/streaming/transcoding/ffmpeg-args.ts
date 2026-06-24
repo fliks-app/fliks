@@ -820,10 +820,6 @@ export function buildAudioOnlyFfmpegArgs(
   // anchored to the same timeline as the main video output.
   args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
 
-  if (startSegment > 0) {
-    args.push('-ss', String(seekSeconds));
-  }
-
   args.push('-map', audioMapSpec(audioStreams, audioStreamIndex));
   args.push('-vn');
   args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
