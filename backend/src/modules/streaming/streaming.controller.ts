@@ -1068,6 +1068,10 @@ export class StreamingController {
       // `undefined` keeps the muxed single-audio layout for everyone else.
       audioStreams:
         useExtXMedia || audioStreams.length === 0 ? audioStreams : undefined,
+      // Real per-track output channels (copy keeps source, transcode downmixes)
+      // so the rendition CHANNELS hint matches the bytes; aligned with the
+      // source audio order the session produces renditions in.
+      audioOutputChannels: live?.audioTrackPlans?.map((p) => p.outputChannels),
       onlyQuality,
       defaultAudioIndex: pickedIdx ?? 0,
       deviceType,

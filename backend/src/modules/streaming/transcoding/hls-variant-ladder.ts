@@ -55,11 +55,12 @@ export function buildUniqueAudioNames(
 }
 
 /** Emit one `EXT-X-MEDIA:TYPE=AUDIO` rendition per source audio stream, sharing
- *  the `audio` group. CHANNELS reports the rendition's real output layout (AAC
- *  downmixes to 2 via `-ac 2`; copy / AC-3 / E-AC-3 keep the source layout) —
+ *  the `audio` group. CHANNELS reports the rendition's real output layout —
  *  Tizen AVPlay needs the hint to pre-allocate the decoder before fetching the
  *  rendition, else the single-audio fMP4 path never follows the rendition link
- *  (issue #148). */
+ *  (issue #148). `outputChannels[i]` is the resolved per-track output count
+ *  (copy keeps the source, transcode downmixes); falls back to a codec-derived
+ *  guess when the plan isn't threaded. */
 export function emitAudioRenditions(
   lines: string[],
   audioStreams: AudioStreamMeta[],
@@ -67,6 +68,7 @@ export function emitAudioRenditions(
   outputAudioCodec: string,
   mediaFileId: number,
   tokenParam: string,
+  outputChannels?: (number | undefined)[],
 ): void {
   const pickedIdx =
     defaultAudioIndex >= 0 && defaultAudioIndex < audioStreams.length
@@ -77,8 +79,10 @@ export function emitAudioRenditions(
     const a = audioStreams[i];
     const lang = a.language || 'und';
     const isDefault = i === pickedIdx ? 'YES' : 'NO';
+    const channels =
+      outputChannels?.[i] ?? audioRenditionChannels(outputAudioCodec, a.channels);
     lines.push(
-      `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="${audioRenditionChannels(outputAudioCodec, a.channels)}",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
+      `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},CHANNELS="${channels}",URI="/api/stream/${mediaFileId}/audio/${i}/index.m3u8${tokenParam}"`,
     );
   }
 }

@@ -61,3 +61,36 @@ describe('generateMasterPlaylist — HDR ladder is variant-driven (#464)', () =>
     expect(lines).toHaveLength(0);
   });
 });
+
+describe('generateMasterPlaylist — audio rendition CHANNELS', () => {
+  const mediaLines = (m: string): string[] =>
+    m.split('\n').filter((l) => l.startsWith('#EXT-X-MEDIA:TYPE=AUDIO'));
+
+  it('declares the resolved output channels, not the source layout', () => {
+    // 7.1 (8ch) source: track 0 transcoded to E-AC-3 ships 6, track 1 copied keeps 8.
+    const m = generateMasterPlaylist({
+      mediaFileId: 1,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      tokenParam: '',
+      outputAudioCodec: 'eac3',
+      audioStreams: [{ channels: 8 }, { channels: 8 }],
+      audioOutputChannels: [6, 8],
+    });
+    const media = mediaLines(m);
+    expect(media[0]).toContain('CHANNELS="6"');
+    expect(media[1]).toContain('CHANNELS="8"');
+  });
+
+  it('falls back to the codec-derived count when output channels are absent', () => {
+    const m = generateMasterPlaylist({
+      mediaFileId: 1,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      tokenParam: '',
+      outputAudioCodec: 'eac3',
+      audioStreams: [{ channels: 6 }],
+    });
+    expect(mediaLines(m)[0]).toContain('CHANNELS="6"');
+  });
+});

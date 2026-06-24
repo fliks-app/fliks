@@ -91,6 +91,10 @@ export interface MasterPlaylistOptions {
   includeRemux?: boolean;
   sourceBitrate?: number;
   audioStreams?: AudioStreamMeta[];
+  /** Resolved per-track output channel count (aligned with `audioStreams`):
+   *  source count when copied, downmix target when transcoded. Drives the
+   *  rendition CHANNELS attribute; codec-derived fallback when absent. */
+  audioOutputChannels?: (number | undefined)[];
   onlyQuality?: string;
   defaultAudioIndex?: number;
   deviceType?: DeviceType;
@@ -130,6 +134,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     includeRemux = false,
     sourceBitrate,
     audioStreams,
+    audioOutputChannels,
     onlyQuality,
     defaultAudioIndex = 0,
     deviceType = 'desktop',
@@ -266,6 +271,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
       outputAudioCodec,
       mediaFileId,
       tokenParam,
+      audioOutputChannels,
     );
   }
 
