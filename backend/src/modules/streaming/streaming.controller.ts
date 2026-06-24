@@ -42,8 +42,7 @@ import {
   secondsToSegmentIndex,
 } from './transcoding/constants';
 import {
-  getRemuxSegmentDurations,
-  boundariesFromDurations,
+  getRemuxSegmentGrid,
   secondsToSegmentIndex as boundarySecondsToIndex,
 } from './transcoding/segment-boundaries';
 import { LiveSessionRegistry } from './live-session.service';
@@ -229,7 +228,7 @@ function buildVodPlaylist(
  *  path, where ffmpeg cuts at source keyframes so segments are variable-length
  *  and a uniform `EXTINF` grid would mislead strict players (AVPlayer) into a
  *  progressive A/V drift. `durations` mirror ffmpeg's actual segment lengths
- *  (see {@link getRemuxSegmentDurations}). */
+ *  (see {@link getRemuxSegmentGrid}). */
 function buildVariableVodPlaylist(
   durations: number[],
   segmentUrl: (index: string) => string,
@@ -346,14 +345,14 @@ export class StreamingController {
 
   /** Keyframe-aligned cumulative segment boundaries for the remux/copy path,
    *  or null when keyframes can't be probed (fall back to the uniform grid).
-   *  Cached per file by {@link getRemuxSegmentDurations}; the playlist is
+   *  Cached per file by {@link getRemuxSegmentGrid}; the playlist is
    *  fetched before segments, so segment-time lookups hit the warm cache. */
   private async remuxBoundaries(
     absolutePath: string,
     durationHint = 0,
   ): Promise<number[] | null> {
-    const durations = await getRemuxSegmentDurations(absolutePath, durationHint);
-    return durations ? boundariesFromDurations(durations) : null;
+    const grid = await getRemuxSegmentGrid(absolutePath, durationHint);
+    return grid ? grid.boundaries : null;
   }
 
   /**
@@ -1602,10 +1601,9 @@ export class StreamingController {
     // fMP4 only — the Tizen MPEG-TS fallback keeps the uniform path.
     let remuxDurations: number[] | null = null;
     if (quality === 'remux' && !useTs) {
-      remuxDurations = await getRemuxSegmentDurations(
-        resolved.absolutePath,
-        duration,
-      );
+      remuxDurations =
+        (await getRemuxSegmentGrid(resolved.absolutePath, duration))
+          ?.durations ?? null;
     }
     // Transcoded fMP4 segments span one GOP each — declare their real length
     // so fractional-fps streams stay in A/V sync. Remux (variable) and TS keep

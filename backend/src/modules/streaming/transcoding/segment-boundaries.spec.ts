@@ -22,6 +22,15 @@ describe('computeSegmentDurations', () => {
     expect(durs.every((d) => d > 0)).toBe(true);
   });
 
+  it('anchors at the first keyframe for sources with a non-zero start PTS', () => {
+    // TS rip: first PTS 1.4s. SEG=3, duration 10.4. Cuts advance from 1.4, so
+    // the first segment is firstCut - start (= 3.0), not firstCut (= 4.4).
+    const durs = computeSegmentDurations([1.4, 4.4, 7.4], 10.4, 3);
+    expect(durs).toHaveLength(3);
+    durs.forEach((d) => expect(d).toBeCloseTo(3, 6));
+    expect(durs.reduce((a, b) => a + b, 0)).toBeCloseTo(9, 6); // total - start
+  });
+
   it('returns empty when there are no keyframes', () => {
     expect(computeSegmentDurations([], 100, 6)).toEqual([]);
   });
@@ -47,5 +56,12 @@ describe('boundary helpers', () => {
     expect(segmentIndexToSeconds(boundaries, 0)).toBe(0);
     expect(segmentIndexToSeconds(boundaries, 1)).toBe(7);
     expect(segmentIndexToSeconds(boundaries, 2)).toBe(13);
+  });
+
+  it('offsets cumulative boundaries by the source start PTS', () => {
+    // Content durations [3,3,3] from a TS rip starting at 1.4s seek to the
+    // absolute keyframes 1.4 / 4.4 / 7.4, ending at the real total 10.4.
+    const b = boundariesFromDurations([3, 3, 3], 1.4);
+    [1.4, 4.4, 7.4, 10.4].forEach((v, i) => expect(b[i]).toBeCloseTo(v, 6));
   });
 });
