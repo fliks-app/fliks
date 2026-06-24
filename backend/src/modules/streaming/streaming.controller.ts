@@ -33,6 +33,7 @@ import {
   computeProfileHash,
   buildPlaybackProfileFromContext,
   resolveSourceVideoBitrateBps,
+  parseBitrateToBps,
   type BurnInSubtitle,
 } from './transcoding';
 import {
@@ -92,8 +93,8 @@ export function withTimestampMap(
   return text.replace(/^(WEBVTT[^\n]*)\n/, `$1\n${map}\n`);
 }
 
-/** Default segment duration — overridden by admin streaming settings. */
-let SEG_DURATION = 3;
+/** Accepted HLS segment / init filenames (fMP4 init, fMP4 or TS segment). */
+const SEGMENT_NAME_RE = /^(init(_\d+)?\.mp4|seg-\d{3,4}\.(m4s|ts))$/;
 
 /**
  * Compose / append the `token=...` + `sid=...` query pair that every
@@ -200,7 +201,7 @@ function buildVodPlaylist(
   duration: number,
   segmentUrl: (index: string) => string,
   initUrl?: string,
-  segDuration: number = SEG_DURATION,
+  segDuration: number = getSegmentDuration(),
 ): string {
   // Subtract small epsilon before ceil to avoid phantom last segment when
   // ffprobe duration has floating-point imprecision (e.g. 120.001 → ceil
@@ -517,18 +518,18 @@ export class StreamingController {
     );
     const info = resolved.mediaFile.streamInfo;
     const fileSize = resolved.size;
-    const video = (info as any)?.video?.[0];
+    const video = info?.video?.[0];
     const sourceWidth = video?.width ?? 1920;
     const sourceHeight = video?.height ?? 1080;
-    const sourceBitrate = (info as any)?.formatBitRate ?? 0;
+    const sourceBitrate = info?.formatBitRate ?? 0;
 
     const qualities: { key: string; label: string; estimatedSize: number }[] =
       [];
     for (const p of PROFILES) {
       if (!profileFitsSource(p, sourceWidth, sourceHeight)) continue;
-      const videoBps = this.parseBitrateString(p.videoBitrate);
-      const audioBps = this.parseBitrateString(p.audioBitrate);
-      const duration = (info as any)?.durationSeconds ?? 0;
+      const videoBps = parseBitrateToBps(p.videoBitrate);
+      const audioBps = parseBitrateToBps(p.audioBitrate);
+      const duration = info?.durationSeconds ?? 0;
       const estimated =
         duration > 0
           ? Math.floor(((videoBps + audioBps) * duration) / 8)
@@ -550,15 +551,6 @@ export class StreamingController {
     return qualities;
   }
 
-  private parseBitrateString(s: string): number {
-    const match = s.match(/^(\d+(?:\.\d+)?)\s*(k|m)?$/i);
-    if (!match) return 0;
-    const n = parseFloat(match[1]);
-    const unit = (match[2] ?? '').toLowerCase();
-    if (unit === 'k') return n * 1000;
-    if (unit === 'm') return n * 1_000_000;
-    return n;
-  }
 
   /** Current hardware acceleration type detected by the server. */
   @Get('info/hw-accel')
@@ -634,8 +626,6 @@ export class StreamingController {
 
     // File-scoped + global tracker state (kept in the tracker because
     // these don't vary per playback session).
-    this.activeStreamTracker.setStreamingDuration(ss.segmentDuration);
-    SEG_DURATION = ss.segmentDuration;
     this.transcodingService.setSegmentDuration(ss.segmentDuration);
     this.activeStreamTracker.setQsvOptions({ lowPower: ss.qsvLowPower });
     this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
@@ -1300,7 +1290,7 @@ export class StreamingController {
       parseFloat(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate ?? '') ||
       undefined;
     const audioSegDuration =
-      useExtXMedia && !useTs ? realSegmentSeconds(sourceFps) : SEG_DURATION;
+      useExtXMedia && !useTs ? realSegmentSeconds(sourceFps) : getSegmentDuration();
     const playlist = buildVodPlaylist(
       duration,
       (seg) => `${basePath}/seg-${seg}.${segExt}${tokenParam}`,
@@ -1328,8 +1318,7 @@ export class StreamingController {
     // Enforce the library ACL on every segment serve (the cached fast path
     // below otherwise serves a revoked-mid-stream session — see hlsSegment).
     await this.streamingService.resolveFile(mediaFileId, user);
-    const AUDIO_SEG_RE = /^(init(_\d+)?\.mp4|seg-\d{3,4}\.(m4s|ts))$/;
-    if (!AUDIO_SEG_RE.test(segment)) {
+    if (!SEGMENT_NAME_RE.test(segment)) {
       throw new BadRequestException(`Invalid audio segment name: ${segment}`);
     }
 
@@ -1641,7 +1630,7 @@ export class StreamingController {
           duration,
           segmentUrl,
           initRef,
-          transcodeFmp4 ? realSegmentSeconds(sourceFps) : SEG_DURATION,
+          transcodeFmp4 ? realSegmentSeconds(sourceFps) : getSegmentDuration(),
         );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -1668,8 +1657,7 @@ export class StreamingController {
     // below otherwise keeps serving a session whose owner lost access
     // mid-stream (only the slow create path checked, not the fast path).
     await this.streamingService.resolveFile(mediaFileId, user);
-    const VIDEO_SEG_RE = /^(seg-\d{3,4}\.(m4s|ts)|init(_\d+)?\.mp4)$/;
-    if (!VIDEO_SEG_RE.test(segment)) {
+    if (!SEGMENT_NAME_RE.test(segment)) {
       throw new BadRequestException(`Invalid segment name: ${segment}`);
     }
     if (
