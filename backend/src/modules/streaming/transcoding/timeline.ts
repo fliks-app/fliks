@@ -188,6 +188,12 @@ export function rewriteSegmentTfdt(
       buf.writeBigUInt64BE(BigInt(value), f.valueOffset);
     } else if (value <= 0xffffffff) {
       buf.writeUInt32BE(value, f.valueOffset);
+    } else {
+      // Widening a version-0 tfdt would change the box size (forbidden here);
+      // fail loudly rather than silently leave a colliding run-relative tfdt.
+      throw new RangeError(
+        `tfdt ${value} exceeds the 32-bit version-0 box at offset ${f.valueOffset}`,
+      );
     }
   }
   return buf;
