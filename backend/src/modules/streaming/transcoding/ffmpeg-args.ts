@@ -1,6 +1,10 @@
 import { Logger } from '@nestjs/common';
 import * as path from 'path';
-import { getSegmentDuration, segmentIndexToSeconds } from './constants';
+import {
+  getSegmentDuration,
+  realSegmentSeconds,
+  segmentIndexToSeconds,
+} from './constants';
 import {
   cappedTranscodeVideoBitrateBps,
   isHdrProfile,
@@ -260,18 +264,21 @@ export function buildFfmpegArgs(
   // Fallback to 24 fps when source fps is unknown (safe for most content).
   const fps = sourceFps && sourceFps > 0 ? sourceFps : 24;
   const gopSize = Math.max(1, Math.round(SEGMENT_DURATION * fps));
+  // Real segment length on the wire (gop/fps). The seek grid, the force-IDR
+  // cadence, the playlist EXTINF and the fMP4 tfdt all anchor on this so they
+  // agree on fractional-fps sources. Equals SEGMENT_DURATION for integer fps.
+  const realSeg = realSegmentSeconds(sourceFps);
 
   // Resume point for mid-file seek (`startSegment > 0`). Seek to T,
   // then `-copyts` (set after `-i` below) threads source PTS through
   // to the muxer so the first segment lands at tfdt = T × timescale.
   const seekSeconds =
-    startSegment > 0 ? segmentIndexToSeconds(startSegment) : 0;
+    startSegment > 0 ? segmentIndexToSeconds(startSegment, sourceFps) : 0;
 
-  // Force an IDR every `SEGMENT_DURATION` seconds so the HLS muxer can
-  // cut segments on a uniform grid. On a seek-resume we use `-copyts`
-  // so the encoder's `t` is in source time — the expression anchors at
-  // `seekSeconds` and IDRs land on the same grid as before the seek.
-  const forceKeyframesExpr = `expr:gte(t,${seekSeconds}+n_forced*${SEGMENT_DURATION})`;
+  // Force an IDR every `realSeg` seconds so the HLS muxer cuts on the same grid
+  // the playlist declares. `-copyts` keeps the encoder's `t` in source time, so
+  // the expression anchors at `seekSeconds` and IDRs survive a seek-resume.
+  const forceKeyframesExpr = `expr:gte(t,${seekSeconds}+n_forced*${realSeg})`;
   // Closed-GOP, deterministic IDR placement on h264_qsv:
   //  - `-forced_idr 1` : every `force_key_frames` tick lands as a real
   //    IDR (without it, qsvenc emits some as plain I, breaking HLS

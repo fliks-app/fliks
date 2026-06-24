@@ -38,6 +38,7 @@ import {
 import {
   EARLY_PROBE_SEGMENTS,
   getSegmentDuration,
+  realSegmentSeconds,
   secondsToSegmentIndex,
 } from './transcoding/constants';
 import {
@@ -184,20 +185,10 @@ function statSizeOrNull(filePath: string): number | null {
 }
 
 /** Generate a VOD HLS playlist for a given duration and segment URL pattern.
- *  Uniform segment grid: each segment is SEG_DURATION seconds, seg-N covers
- *  `[N*SEG, (N+1)*SEG)`. The EXTINF values mirror what FFmpeg actually emits
- *  so Shaka's presentation timeline stays aligned with the moof PTS the
- *  segments carry. */
-/** On-disk length of a uniform transcoded segment: the encoder pins one GOP of
- *  `round(SEGMENT_DURATION · fps)` frames per segment, so it spans `gop / fps`
- *  seconds — equal to SEGMENT_DURATION for integer fps, longer for fractional
- *  rates (24000/1001 → 3.003s at a 3s setting). */
-function transcodeSegmentSeconds(fps: number | undefined): number {
-  if (!fps || fps <= 0) return SEG_DURATION;
-  const gop = Math.max(1, Math.round(SEG_DURATION * fps));
-  return gop / fps;
-}
-
+ *  `segDuration` is the real per-segment length (see `realSegmentSeconds`);
+ *  seg-N covers `[N*segDuration, (N+1)*segDuration)`, so the EXTINF values
+ *  mirror what FFmpeg actually emits and the presentation timeline stays
+ *  aligned with the moof PTS the segments carry. */
 function buildVodPlaylist(
   duration: number,
   segmentUrl: (index: string) => string,
@@ -339,13 +330,16 @@ export class StreamingController {
    */
   private resumeFloor(
     live: { position: number } | null | undefined,
-    existing: { startSegment?: number | null } | null | undefined,
+    existing:
+      | { startSegment?: number | null; sourceFps?: number }
+      | null
+      | undefined,
     boundaries?: number[],
   ): number {
     const posIndex = live
       ? boundaries
         ? boundarySecondsToIndex(boundaries, live.position)
-        : secondsToSegmentIndex(live.position)
+        : secondsToSegmentIndex(live.position, existing?.sourceFps)
       : 0;
     return Math.max(existing?.startSegment ?? 0, posIndex);
   }
@@ -433,7 +427,10 @@ export class StreamingController {
         (session?.hdrLadder ?? false) && !startQuality.endsWith('-hdr')
           ? `${startQuality}-hdr`
           : startQuality;
-      const startSegment = Math.max(0, secondsToSegmentIndex(effectiveStartAt));
+      const startSegment = Math.max(
+        0,
+        secondsToSegmentIndex(effectiveStartAt, ctx.sourceFps),
+      );
 
       // The seg-0 early-start companion runs in parallel with main and serves
       // seg-0 instantly while main encodes forward from seg-K. It only earns
@@ -1281,7 +1278,7 @@ export class StreamingController {
       parseFloat(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate ?? '') ||
       undefined;
     const audioSegDuration =
-      useExtXMedia && !useTs ? transcodeSegmentSeconds(sourceFps) : SEG_DURATION;
+      useExtXMedia && !useTs ? realSegmentSeconds(sourceFps) : SEG_DURATION;
     const playlist = buildVodPlaylist(
       duration,
       (seg) => `${basePath}/seg-${seg}.${segExt}${tokenParam}`,
@@ -1493,7 +1490,7 @@ export class StreamingController {
       segPath,
       segmentContentType(segment),
       {
-        segDuration: SEG_DURATION,
+        segDuration: realSegmentSeconds(videoSession.sourceFps),
       },
     );
   }
@@ -1565,7 +1562,7 @@ export class StreamingController {
             mediaFileId,
             quality,
             resolved.absolutePath,
-            secondsToSegmentIndex(startAtSec),
+            secondsToSegmentIndex(startAtSec, ctx.sourceFps),
             ctx,
           );
         }
@@ -1623,7 +1620,7 @@ export class StreamingController {
           duration,
           segmentUrl,
           initRef,
-          transcodeFmp4 ? transcodeSegmentSeconds(sourceFps) : SEG_DURATION,
+          transcodeFmp4 ? realSegmentSeconds(sourceFps) : SEG_DURATION,
         );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -1731,7 +1728,7 @@ export class StreamingController {
           res,
           initPath,
           segmentContentType(segment),
-          { segDuration: SEG_DURATION },
+          { segDuration: realSegmentSeconds(src.sourceFps) },
         );
         return;
       }
@@ -1767,7 +1764,7 @@ export class StreamingController {
           segPath,
           segmentContentType(segment),
           {
-            segDuration: SEG_DURATION,
+            segDuration: realSegmentSeconds(existing.sourceFps),
           },
         );
         return;
@@ -1860,7 +1857,7 @@ export class StreamingController {
             segPath,
             segmentContentType(segment),
             {
-              segDuration: SEG_DURATION,
+              segDuration: realSegmentSeconds(earlySession.sourceFps),
             },
           );
           return;
@@ -1950,7 +1947,7 @@ export class StreamingController {
       segPath,
       segmentContentType(segment),
       {
-        segDuration: SEG_DURATION,
+        segDuration: realSegmentSeconds(session.sourceFps),
         skipTimelineRewrite: quality === 'remux',
       },
     );

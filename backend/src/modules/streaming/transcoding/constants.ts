@@ -40,16 +40,24 @@ export function setSegmentDuration(seg: number): void {
   segmentDuration = seg;
 }
 
-/** Convert a presentation time (seconds) to the FFmpeg segment number
- *  that contains it. Uniform grid: every segment is `segmentDuration`
- *  long, seg-N covers `[N*SEG, (N+1)*SEG)`. */
-export function secondsToSegmentIndex(seconds: number): number {
+/** Real length of one transcoded segment = a pinned GOP of
+ *  `round(segmentDuration · fps)` frames = `gop / fps` seconds. Equals
+ *  `segmentDuration` for integer / unknown fps; differs only for fractional
+ *  rates (24000/1001 → 3.003s at a 3s setting). */
+export function realSegmentSeconds(fps?: number): number {
+  if (!fps || fps <= 0) return segmentDuration;
+  return Math.max(1, Math.round(segmentDuration * fps)) / fps;
+}
+
+/** Presentation time (seconds) → containing FFmpeg segment number, on the
+ *  `fps`-aware real-duration grid. */
+export function secondsToSegmentIndex(seconds: number, fps?: number): number {
   if (seconds <= 0) return 0;
-  return Math.floor(seconds / segmentDuration);
+  return Math.floor(seconds / realSegmentSeconds(fps));
 }
 
 /** Inverse of `secondsToSegmentIndex` — start time of an FFmpeg segment. */
-export function segmentIndexToSeconds(segment: number): number {
+export function segmentIndexToSeconds(segment: number, fps?: number): number {
   if (segment <= 0) return 0;
-  return segment * segmentDuration;
+  return segment * realSegmentSeconds(fps);
 }
