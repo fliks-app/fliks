@@ -24,10 +24,20 @@ const log = new Logger('SegmentBoundaries');
  * boundaries to within a few milliseconds.
  */
 
+/** Real per-segment content durations (for the playlist EXTINF) plus the
+ *  absolute cut times in source PTS (for resume seeking). Kept together because
+ *  both come from one keyframe walk and a source whose first PTS is non-zero
+ *  (TS / PVR rips) must declare content-relative durations while still seeking
+ *  to the absolute keyframe. */
+export interface SegmentGrid {
+  durations: number[];
+  boundaries: number[];
+}
+
 interface CacheEntry {
   mtimeMs: number;
   segDur: number;
-  durations: number[];
+  grid: SegmentGrid;
 }
 
 const cache = new Map<string, CacheEntry>();
@@ -76,9 +86,14 @@ export function computeSegmentDurations(
   const total = Math.max(totalDuration, last);
   if (total <= 0) return [];
 
+  // Anchor at the first keyframe: ffmpeg measures each segment's elapsed time
+  // from its own first packet, so on a source with start PTS > 0 (TS / PVR
+  // rips) cuts advance from `start`, not 0, and the first segment's real
+  // duration is `firstCut - start`. For start === 0 this is unchanged.
+  const start = keyframeTimes[0];
   const durations: number[] = [];
-  let lastCut = 0;
-  let target = segDur;
+  let lastCut = start;
+  let target = start + segDur;
   for (const kf of keyframeTimes) {
     if (kf >= target) {
       durations.push(kf - lastCut);
@@ -91,10 +106,14 @@ export function computeSegmentDurations(
   return durations;
 }
 
-/** Cumulative segment start times; `boundaries[i]` is the start of seg-`i`,
- *  the last entry is the total end. */
-export function boundariesFromDurations(durations: number[]): number[] {
-  const boundaries = [0];
+/** Cumulative segment start times from `start`; `boundaries[i]` is the start of
+ *  seg-`i`, the last entry is the total end. `start` is the source's first PTS
+ *  (0 for MP4/MKV) so the boundaries stay in absolute source time for seeking. */
+export function boundariesFromDurations(
+  durations: number[],
+  start = 0,
+): number[] {
+  const boundaries = [start];
   for (const d of durations) {
     boundaries.push(boundaries[boundaries.length - 1] + d);
   }
@@ -123,15 +142,16 @@ export function segmentIndexToSeconds(
 }
 
 /**
- * Resolve (and cache) the keyframe-aligned segment durations for a source.
+ * Resolve (and cache) the keyframe-aligned segment grid for a source: real
+ * per-segment durations (playlist EXTINF) and absolute cut times (seeking).
  * Returns null when keyframes can't be read — the caller then falls back to the
  * uniform grid (no regression). Cache is keyed by path + mtime + segment length.
  */
-export async function getRemuxSegmentDurations(
+export async function getRemuxSegmentGrid(
   filePath: string,
   totalDuration: number,
   segDur: number = getSegmentDuration(),
-): Promise<number[] | null> {
+): Promise<SegmentGrid | null> {
   let mtimeMs = 0;
   try {
     mtimeMs = statSync(filePath).mtimeMs;
@@ -140,14 +160,18 @@ export async function getRemuxSegmentDurations(
   }
   const hit = cache.get(filePath);
   if (hit && hit.mtimeMs === mtimeMs && hit.segDur === segDur) {
-    return hit.durations;
+    return hit.grid;
   }
   try {
     const keyframes = await extractKeyframeTimes(filePath);
     const durations = computeSegmentDurations(keyframes, totalDuration, segDur);
     if (durations.length === 0) return null;
-    cache.set(filePath, { mtimeMs, segDur, durations });
-    return durations;
+    const grid: SegmentGrid = {
+      durations,
+      boundaries: boundariesFromDurations(durations, keyframes[0]),
+    };
+    cache.set(filePath, { mtimeMs, segDur, grid });
+    return grid;
   } catch (err) {
     log.warn(
       `Keyframe probe failed for ${filePath}; falling back to uniform grid: ${(err as Error).message}`,
