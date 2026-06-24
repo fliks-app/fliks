@@ -71,6 +71,21 @@
       <div class="mt-6">
         <h3 class="text-base font-semibold mb-3">{{ 'discover.advanced_options' | translate }}</h3>
         <div class="flex flex-col gap-3">
+          @if (compatibleLibraries().length > 1) {
+            <label class="form-control w-full">
+              <span class="label-text text-base-content/60">{{ 'settings.libraries.title' | translate }}</span>
+              <select
+                class="select select-bordered select-sm w-full"
+                [ngModel]="libraryId()"
+                (ngModelChange)="libraryId.set($event ? +$event : null)"
+              >
+                <option [ngValue]="null">—</option>
+                @for (l of compatibleLibraries(); track l.id) {
+                  <option [ngValue]="l.id">{{ l.name }}</option>
+                }
+              </select>
+            </label>
+          }
           @if (qualityProfiles().length && !profilesLocked()) {
             <label class="form-control w-full">
               <span class="label-text text-base-content/60">{{ 'discover.quality_profile' | translate }}</span>
@@ -95,21 +110,6 @@
               >
                 @for (p of languageProfiles(); track p.id) {
                   <option [ngValue]="p.id">{{ p.name }}</option>
-                }
-              </select>
-            </label>
-          }
-          @if (compatibleLibraries().length > 1) {
-            <label class="form-control w-full">
-              <span class="label-text text-base-content/60">{{ 'settings.libraries.title' | translate }}</span>
-              <select
-                class="select select-bordered select-sm w-full"
-                [ngModel]="libraryId()"
-                (ngModelChange)="libraryId.set($event ? +$event : null)"
-              >
-                <option [ngValue]="null">—</option>
-                @for (l of compatibleLibraries(); track l.id) {
-                  <option [ngValue]="l.id">{{ l.name }}</option>
                 }
               </select>
             </label>

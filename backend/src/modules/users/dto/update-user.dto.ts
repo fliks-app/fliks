@@ -63,4 +63,16 @@ export class UpdateUserDto {
   @ArrayNotContains([0])
   @IsOptional()
   libraryIds?: number[];
+
+  /** Self-editable: preferred library display order (library ids, first to last). */
+  @IsArray()
+  @IsInt({ each: true })
+  @IsOptional()
+  libraryOrder?: number[];
+
+  /** Self-editable: library ids to hide from the home page and sidebar. */
+  @IsArray()
+  @IsInt({ each: true })
+  @IsOptional()
+  hiddenLibraryIds?: number[];
 }

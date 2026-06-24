@@ -7,6 +7,21 @@
       <p class="text-sm text-base-content/60 mt-1">{{ editRow.title }}</p>
 
       <div class="flex flex-col gap-4 mt-4">
+        @if (libraries().length > 1) {
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.libraries.title' | translate }}</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              [ngModel]="libraryId()"
+              (ngModelChange)="libraryIdChange.emit($event ? +$event : null)"
+            >
+              <option [ngValue]="null">—</option>
+              @for (l of libraries(); track l.id) {
+                <option [ngValue]="l.id">{{ l.name }}</option>
+              }
+            </select>
+          </label>
+        }
         @if (qualityProfiles().length) {
           <label class="form-control w-full">
             <span class="label-text">{{ 'discover.quality_profile' | translate }}</span>

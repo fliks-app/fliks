@@ -227,6 +227,12 @@ export class UsersService implements OnModuleInit {
     if (dto.quotaPeriodDays !== undefined)
       target.quotaPeriodDays = dto.quotaPeriodDays;
 
+    // Per-user library display preferences — editable by the user themselves
+    // (and managers acting on their behalf). Pure presentation, no ACL impact.
+    if (dto.libraryOrder !== undefined) target.libraryOrder = dto.libraryOrder;
+    if (dto.hiddenLibraryIds !== undefined)
+      target.hiddenLibraryIds = dto.hiddenLibraryIds;
+
     await this.userRepo.save(target);
 
     // Library access replace (manager-only). Done after the user row save so

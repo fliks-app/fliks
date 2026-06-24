@@ -17,6 +17,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
+import { LibraryPrefsService } from '../../core/services/library-prefs.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { CountsApiService } from '../../core/services/api/counts-api.service';
 import { ServerCacheService } from '../../core/services/server-cache.service';
@@ -80,6 +81,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly librariesApi = inject(LibrariesApiService);
+  private readonly libraryPrefs = inject(LibraryPrefsService);
   private readonly countsApi = inject(CountsApiService);
   readonly serverConfig = inject(ServerConfigService);
   private readonly serverCache = inject(ServerCacheService);
@@ -151,13 +153,17 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.lastScrollY = y;
   };
 
-  /** Accessible libraries for the sidebar. */
+  /** Accessible libraries for the sidebar (raw, as fetched). */
   readonly libraries = signal<LibrarySummary[]>([]);
+  /** Sidebar-facing list: the user's chosen order with hidden ones removed. */
+  readonly displayLibraries = computed(() =>
+    this.libraryPrefs.present(this.libraries()),
+  );
   /** Libraries excluding the default Films / Séries — those have their own
    *  shortcut elsewhere (or are deliberately omitted from the mobile More
    *  menu to keep it short). Custom libraries (Anime, Docs, …) stay. */
   readonly customLibraries = computed(() =>
-    this.libraries().filter(
+    this.displayLibraries().filter(
       (lib) => !lib.isDefaultForMovies && !lib.isDefaultForSeries,
     ),
   );

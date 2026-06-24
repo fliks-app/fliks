@@ -23,6 +23,7 @@ import { AppResumeService } from '../../core/services/app-resume.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { HomeSettingsService } from '../../core/services/home-settings.service';
+import { LibraryPrefsService } from '../../core/services/library-prefs.service';
 import { TvService } from '../../core/services/tv.service';
 import { CardAction } from '../../core/services/card-actions.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
@@ -101,6 +102,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly backgroundService = inject(BackgroundService);
   private readonly displaySettings = inject(DisplaySettingsService);
   private readonly home = inject(HomeSettingsService);
+  private readonly libraryPrefs = inject(LibraryPrefsService);
   readonly auth = inject(AuthService);
   private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
@@ -153,11 +155,17 @@ export class HomeComponent implements OnInit, OnDestroy {
     return this.auth.hasPermission('requests.manage');
   }
 
+  /** Accessible libraries in the user's chosen order, with hidden ones
+   *  removed — the set surfaced on the home page (cards + per-library zones). */
+  readonly displayLibraries = computed(() =>
+    this.libraryPrefs.present(this.libraries()),
+  );
+
   /** The user's resolved home layout (order + visibility), reconciled with
    *  the libraries they can currently access. Drives template rendering. */
   readonly sections = computed(() =>
     this.home.resolve(
-      this.libraries().map((l) => ({ id: l.id, name: l.name })),
+      this.displayLibraries().map((l) => ({ id: l.id, name: l.name })),
       { requests: this.requestsAllowed },
     ),
   );

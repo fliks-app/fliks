@@ -30,7 +30,9 @@ export interface CreateRequestBody {
 export interface UpdateRequestBody {
   qualityProfileId?: number;
   languageProfileId?: number;
-  libraryId?: number;
+  /** `null` clears the target library (falls back to the type default at
+   *  approval); omit to leave it unchanged. */
+  libraryId?: number | null;
 }
 
 export interface RequestMedia {

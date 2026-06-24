@@ -7,6 +7,7 @@ import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { SettingsModule } from '../settings/settings.module';
 import { MediaModule } from '../media/media.module';
+import { LibrariesModule } from '../libraries/libraries.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { FliksSchedulerModule } from '../scheduler/scheduler.module';
 import { ImageModule } from '../images/image.module';
@@ -26,6 +27,7 @@ import { AutoApprovalRulesController } from './auto-approval-rules.controller';
     // import / remove / unmonitor hooks, and we inject MediaService here
     // for the monitoring + 409 fallback lookups.
     forwardRef(() => MediaModule),
+    LibrariesModule,
     ProfilesModule,
     // forwardRef because FliksSchedulerModule itself imports MediaModule,
     // which already imports RequestsModule via forwardRef — defensive to

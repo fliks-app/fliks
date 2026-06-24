@@ -157,6 +157,12 @@
                     {{ 'requests.type_series' | translate }}
                   }
                 </span>
+                @if (targetLibraryBadge(row); as libraryName) {
+                  <span class="badge badge-outline badge-sm gap-1 max-w-full">
+                    <svg lucideLibrary class="h-3 w-3 shrink-0"></svg>
+                    <span class="truncate">{{ libraryName }}</span>
+                  </span>
+                }
               </div>
 
               <div class="flex flex-col">
@@ -320,11 +326,14 @@
   [row]="editingRequest()"
   [qualityProfiles]="qualityProfiles()"
   [languageProfiles]="languageProfiles()"
+  [libraries]="compatibleLibraries()"
   [qualityProfileId]="editQualityProfileId()"
   [languageProfileId]="editLanguageProfileId()"
+  [libraryId]="editLibraryId()"
   [saving]="editSaving()"
   (qualityProfileIdChange)="editQualityProfileId.set($event)"
   (languageProfileIdChange)="editLanguageProfileId.set($event)"
+  (libraryIdChange)="editLibraryId.set($event)"
   (dismissed)="closeEdit()"
   (save)="saveEdit()"
 />

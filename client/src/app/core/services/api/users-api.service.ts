@@ -32,6 +32,10 @@ export interface UpdateUserBody {
   enabled?: boolean;
   requirePasswordChange?: boolean;
   libraryIds?: number[];
+  /** Self-editable: preferred library display order (library ids). */
+  libraryOrder?: number[];
+  /** Self-editable: library ids hidden from the home page and sidebar. */
+  hiddenLibraryIds?: number[];
 }
 
 /** Aggregated stats payload for the admin user-detail Statistics tab. */

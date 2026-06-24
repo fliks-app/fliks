@@ -13,7 +13,7 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MetadataService, SeasonStub } from '../../../../core/services/api/metadata.service';
 import { RequestsService } from '../../../../core/services/api/requests.service';
-import { Library } from '../../../../core/services/api/libraries-api.service';
+import { LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
 
@@ -31,7 +31,7 @@ export class RequestModalComponent {
 
   readonly qualityProfiles = input<{ id: number; name: string }[]>([]);
   readonly languageProfiles = input<{ id: number; name: string }[]>([]);
-  readonly libraries = input<Library[]>([]);
+  readonly libraries = input<LibrarySummary[]>([]);
   readonly requested = output<void>();
 
   readonly compatibleLibraries = computed(() =>

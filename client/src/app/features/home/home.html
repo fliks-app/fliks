@@ -10,9 +10,9 @@
 
       <!-- Libraries -->
       @case ('libraries') {
-        @if (libraries().length) {
+        @if (displayLibraries().length) {
           <app-horizontal-scroller [title]="'home.libraries' | translate">
-            @for (lib of libraries(); track lib.id) {
+            @for (lib of displayLibraries(); track lib.id) {
               <a [routerLink]="libraryUrl(lib)"
                  [attr.data-home-focus]="'library:' + lib.id"
                  class="shrink-0 w-36 h-20 sm:w-48 sm:h-28 rounded-xl border flex items-center gap-3 px-4 sm:px-5 hover:shadow-lg transition-shadow"
