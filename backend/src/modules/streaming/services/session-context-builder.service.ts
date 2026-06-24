@@ -3,6 +3,7 @@ import type { Request } from 'express';
 import { resolveSourceVideoBitrateBps } from '../transcoding';
 import type { SessionContext } from '../transcoding';
 import { pickAudioLayout } from '../transcoding/audio-layout';
+import { parseSourceFps } from '../transcoding/constants';
 import { ActiveStreamTracker } from '../active-stream-tracker.service';
 import { SessionRouter } from './session-router.service';
 import type { ResolvedFile } from '../streaming.service';
@@ -69,7 +70,7 @@ export class SessionContextBuilder {
       // Source framerate (e.g. "24", "23.976", "29.97") — used to compute an
       // accurate GOP so IDR frames fall on the same boundary regardless of
       // source fps. Falls back to 24 when unknown.
-      sourceFps: parseFloat(si?.video?.[0]?.frameRate ?? '') || undefined,
+      sourceFps: parseSourceFps(si?.video?.[0]?.frameRate),
       // ffprobe ran at import/rescan and the result is cached in streamInfo —
       // tell FFmpeg to skip its own redundant avformat_find_stream_info scan.
       trustedStreamInfo: !!si?.video?.[0]?.codec,

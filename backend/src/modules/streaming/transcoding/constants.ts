@@ -49,6 +49,14 @@ export function realSegmentSeconds(fps?: number): number {
   return Math.max(1, Math.round(segmentDuration * fps)) / fps;
 }
 
+/** Parse a ffprobe `frameRate` string to fps, or `undefined` when unknown.
+ *  Single rule for the transcode/playlist callers that feed
+ *  {@link realSegmentSeconds} — a divergent parse would declare a different
+ *  segment length for one surface and reintroduce fractional-fps A/V drift. */
+export function parseSourceFps(frameRate: string | undefined): number | undefined {
+  return parseFloat(frameRate ?? '') || undefined;
+}
+
 /** Presentation time (seconds) → containing FFmpeg segment number, on the
  *  `fps`-aware real-duration grid. */
 export function secondsToSegmentIndex(seconds: number, fps?: number): number {
