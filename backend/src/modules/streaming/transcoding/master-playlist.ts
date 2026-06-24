@@ -101,6 +101,9 @@ export interface MasterPlaylistOptions {
   /** Output audio codec ffmpeg emits; the CODECS attribute must match it or the
    *  receiver rejects the segment on MSE append. `aac` | `ac3` | `eac3`. */
   outputAudioCodec?: string;
+  /** Real output audio bitrate (bps) for each rung's BANDWIDTH; profile nominal
+   *  fallback when absent (undercounts the fixed-640k AC-3/E-AC-3 path). */
+  audioOutputBitrateBps?: number;
   /** When set, emit an HDR ladder (gated by `canEmitHdrLadder`); `hdrVariant`
    *  drives every rung's CODECS + VIDEO-RANGE. */
   hdrPassThrough?: {
@@ -139,6 +142,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     defaultAudioIndex = 0,
     deviceType = 'desktop',
     outputAudioCodec = 'aac',
+    audioOutputBitrateBps,
     hdrPassThrough,
     canEmitHdrLadder = false,
     sdrVariant,
@@ -247,6 +251,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
         variant: hdrVariant,
         range,
         audioAttr: hdrAudioAttr,
+        audioBitrateBps: hdrPassThrough.audioBitRateBps ?? audioOutputBitrateBps,
         subsAttr,
         frameRateAttr,
         codecsTail,
@@ -305,6 +310,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     profiles,
     variant: sdrVariant ?? SDR_H264_VARIANT,
     audioAttr,
+    audioBitrateBps: audioOutputBitrateBps,
     subsAttr,
     frameRateAttr,
     codecsTail,

@@ -1076,6 +1076,12 @@ export class StreamingController {
       defaultAudioIndex: pickedIdx ?? 0,
       deviceType,
       outputAudioCodec: masterAudioCodec,
+      // Real output audio bitrate so the BANDWIDTH sum reflects the 640k
+      // AC-3/E-AC-3 path, not the profile nominal; copy renditions fall back.
+      audioOutputBitrateBps:
+        live?.audioPlan?.mode === 'transcode'
+          ? live.audioPlan.bitrateBps
+          : undefined,
       hdrPassThrough,
       // Only the SDR ladder branch consumes this — the HDR branch
       // already drives its codec strings from `hdrPassThrough`.

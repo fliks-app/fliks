@@ -94,3 +94,23 @@ describe('generateMasterPlaylist — audio rendition CHANNELS', () => {
     expect(mediaLines(m)[0]).toContain('CHANNELS="6"');
   });
 });
+
+describe('generateMasterPlaylist — audio bitrate in BANDWIDTH', () => {
+  const maxAvgBandwidth = (m: string): number =>
+    Math.max(
+      ...[...m.matchAll(/AVERAGE-BANDWIDTH=(\d+)/g)].map((x) => Number(x[1])),
+    );
+
+  it('folds the real output audio bitrate into AVERAGE-BANDWIDTH', () => {
+    const base = {
+      mediaFileId: 1,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      tokenParam: '',
+    };
+    const hi = generateMasterPlaylist({ ...base, audioOutputBitrateBps: 640_000 });
+    const lo = generateMasterPlaylist({ ...base, audioOutputBitrateBps: 100_000 });
+    // Same video rungs; only the audio component differs by the exact delta.
+    expect(maxAvgBandwidth(hi) - maxAvgBandwidth(lo)).toBe(540_000);
+  });
+});
