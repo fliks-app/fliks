@@ -188,10 +188,21 @@ function statSizeOrNull(filePath: string): number | null {
  *  `[N*SEG, (N+1)*SEG)`. The EXTINF values mirror what FFmpeg actually emits
  *  so Shaka's presentation timeline stays aligned with the moof PTS the
  *  segments carry. */
+/** On-disk length of a uniform transcoded segment: the encoder pins one GOP of
+ *  `round(SEGMENT_DURATION · fps)` frames per segment, so it spans `gop / fps`
+ *  seconds — equal to SEGMENT_DURATION for integer fps, longer for fractional
+ *  rates (24000/1001 → 3.003s at a 3s setting). */
+function transcodeSegmentSeconds(fps: number | undefined): number {
+  if (!fps || fps <= 0) return SEG_DURATION;
+  const gop = Math.max(1, Math.round(SEG_DURATION * fps));
+  return gop / fps;
+}
+
 function buildVodPlaylist(
   duration: number,
   segmentUrl: (index: string) => string,
   initUrl?: string,
+  segDuration: number = SEG_DURATION,
 ): string {
   // Subtract small epsilon before ceil to avoid phantom last segment when
   // ffprobe duration has floating-point imprecision (e.g. 120.001 → ceil
@@ -199,12 +210,12 @@ function buildVodPlaylist(
   const epsilon = 0.05;
   const segCount = Math.max(
     1,
-    Math.ceil(Math.max(0, duration - epsilon) / SEG_DURATION),
+    Math.ceil(Math.max(0, duration - epsilon) / segDuration),
   );
   const lines = [
     '#EXTM3U',
     '#EXT-X-VERSION:7',
-    `#EXT-X-TARGETDURATION:${Math.ceil(SEG_DURATION)}`,
+    `#EXT-X-TARGETDURATION:${Math.ceil(segDuration)}`,
     '#EXT-X-MEDIA-SEQUENCE:0',
     '#EXT-X-PLAYLIST-TYPE:VOD',
     '#EXT-X-INDEPENDENT-SEGMENTS',
@@ -213,8 +224,8 @@ function buildVodPlaylist(
     lines.push(`#EXT-X-MAP:URI="${initUrl}"`);
   }
   for (let i = 0; i < segCount; i++) {
-    const segStart = i * SEG_DURATION;
-    const segLen = Math.min(SEG_DURATION, duration - segStart);
+    const segStart = i * segDuration;
+    const segLen = Math.min(segDuration, duration - segStart);
     if (segLen <= 0) break;
     lines.push(`#EXTINF:${segLen.toFixed(3)},`);
     lines.push(segmentUrl(String(i).padStart(4, '0')));
@@ -1264,10 +1275,18 @@ export class StreamingController {
     const basePath = `/api/stream/${mediaFileId}/audio/${audioIndex}`;
     const useTs = live?.useTs ?? false;
     const segExt = useTs ? 'ts' : 'm4s';
+    // var_stream_map audio renditions are cut on the video GOP grid, so they
+    // share the video's real per-segment duration.
+    const sourceFps =
+      parseFloat(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate ?? '') ||
+      undefined;
+    const audioSegDuration =
+      useExtXMedia && !useTs ? transcodeSegmentSeconds(sourceFps) : SEG_DURATION;
     const playlist = buildVodPlaylist(
       duration,
       (seg) => `${basePath}/seg-${seg}.${segExt}${tokenParam}`,
       useTs ? undefined : `${basePath}/init_${audioIndex + 1}.mp4${tokenParam}`,
+      audioSegDuration,
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -1591,9 +1610,21 @@ export class StreamingController {
         duration,
       );
     }
+    // Transcoded fMP4 segments span one GOP each — declare their real length
+    // so fractional-fps streams stay in A/V sync. Remux (variable) and TS keep
+    // their own paths.
+    const sourceFps =
+      parseFloat(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate ?? '') ||
+      undefined;
+    const transcodeFmp4 = quality !== 'remux' && !useTs;
     const playlist = remuxDurations
       ? buildVariableVodPlaylist(remuxDurations, segmentUrl, initRef)
-      : buildVodPlaylist(duration, segmentUrl, initRef);
+      : buildVodPlaylist(
+          duration,
+          segmentUrl,
+          initRef,
+          transcodeFmp4 ? transcodeSegmentSeconds(sourceFps) : SEG_DURATION,
+        );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
