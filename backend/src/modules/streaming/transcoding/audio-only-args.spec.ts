@@ -6,14 +6,14 @@ describe('buildAudioOnlyFfmpegArgs', () => {
 
   it('applies a single input-side -ss on resume (no double seek)', () => {
     const args = buildAudioOnlyFfmpegArgs(
-      '/in.mkv',
-      '/out',
-      0,
-      '192k',
-      5, // startSegment
-      true,
+      {
+        inputPath: '/in.mkv',
+        outputDir: '/out',
+        audioStreamIndex: 0,
+        startSegment: 5,
+        trustedStreamInfo: true,
+      },
       log,
-      false,
     );
     // Exactly one -ss: a second (output-side, after -copyts) would re-discard
     // the resume offset and start the audio at 2×T.
@@ -24,14 +24,13 @@ describe('buildAudioOnlyFfmpegArgs', () => {
 
   it('emits no -ss for a fresh start', () => {
     const args = buildAudioOnlyFfmpegArgs(
-      '/in.mkv',
-      '/out',
-      0,
-      '192k',
-      0,
-      true,
+      {
+        inputPath: '/in.mkv',
+        outputDir: '/out',
+        audioStreamIndex: 0,
+        trustedStreamInfo: true,
+      },
       log,
-      false,
     );
     expect(args).not.toContain('-ss');
   });

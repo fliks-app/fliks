@@ -771,24 +771,38 @@ export function buildFfmpegArgs(
   return args;
 }
 
+export interface BuildAudioOnlyArgsOptions {
+  inputPath: string;
+  outputDir: string;
+  audioStreamIndex: number;
+  audioBitrate?: string;
+  startSegment?: number;
+  trustedStreamInfo?: boolean;
+  useTs?: boolean;
+  /** Cached streamInfo audio array. Used to resolve `audioStreamIndex`
+   *  (relative) to its absolute ffprobe index so `-map 0:<abs>` skips
+   *  FFmpeg's audio enumeration. */
+  audioStreams?: AudioStreamMeta[];
+}
+
 /**
  * Build FFmpeg args for audio-only HLS output (used for multi-audio EXT-X-MEDIA renditions).
  * Lightweight: no video encoding, no HW accel needed.
  */
 export function buildAudioOnlyFfmpegArgs(
-  inputPath: string,
-  outputDir: string,
-  audioStreamIndex: number,
-  audioBitrate = '192k',
-  startSegment = 0,
-  trustedStreamInfo = false,
+  opts: BuildAudioOnlyArgsOptions,
   log: Logger,
-  useTs = false,
-  /** Cached streamInfo audio array. Used to resolve `audioStreamIndex`
-   *  (relative) to its absolute ffprobe index so `-map 0:<abs>` skips
-   *  FFmpeg's audio enumeration. */
-  audioStreams?: AudioStreamMeta[],
 ): string[] {
+  const {
+    inputPath,
+    outputDir,
+    audioStreamIndex,
+    audioBitrate = '192k',
+    startSegment = 0,
+    trustedStreamInfo = false,
+    useTs = false,
+    audioStreams,
+  } = opts;
   const segType = useTs ? 'mpegts' : 'fmp4';
   const segExt = useTs ? 'ts' : 'm4s';
   const SEGMENT_DURATION = getSegmentDuration();
@@ -851,31 +865,48 @@ export function buildAudioOnlyFfmpegArgs(
  * Build FFmpeg args for remux mode: copy video stream, optionally transcode audio.
  * This is much cheaper than full transcoding — no video re-encoding.
  */
-export function buildRemuxArgs(
-  inputPath: string,
-  outputDir: string,
-  copyAudio: boolean,
-  audioBitrate = '192k',
-  startSegment = 0,
-  videoOnly = false,
-  trustedStreamInfo = false,
-  audioStreamIndex?: number,
-  log?: Logger,
+export interface BuildRemuxArgsOptions {
+  inputPath: string;
+  outputDir: string;
+  copyAudio: boolean;
+  audioBitrate?: string;
+  startSegment?: number;
+  videoOnly?: boolean;
+  trustedStreamInfo?: boolean;
+  audioStreamIndex?: number;
   /** Source video codec (ffprobe `codec_name`, lowercased). Drives the
    *  `-tag:v hvc1` flag for HEVC inputs — FFmpeg's mov muxer otherwise
    *  defaults to `hev1`, which Apple HLS rejects: the spec requires
    *  parameter sets in the moov sample description (`hvc1`), not inline
    *  in the bitstream (`hev1`). Without this, iOS AVPlayer fails the
    *  variant with error -12927 on the first segment fetch. */
-  sourceVideoCodec?: string,
+  sourceVideoCodec?: string;
   /** Cached streamInfo audio array. See {@link AudioStreamMeta}. */
-  audioStreams?: AudioStreamMeta[],
+  audioStreams?: AudioStreamMeta[];
   /** Keyframe-aligned segment start times (`boundaries[i]` = start of seg-`i`).
    *  Copied video is cut at the source keyframes, so a resume/seek must seek to
    *  the real start of `startSegment` — not the uniform-grid `index * segDur`,
    *  which lands on the wrong content and desyncs the post-seek playlist. */
-  segmentBoundaries?: number[],
+  segmentBoundaries?: number[];
+}
+
+export function buildRemuxArgs(
+  opts: BuildRemuxArgsOptions,
+  log?: Logger,
 ): string[] {
+  const {
+    inputPath,
+    outputDir,
+    copyAudio,
+    audioBitrate = '192k',
+    startSegment = 0,
+    videoOnly = false,
+    trustedStreamInfo = false,
+    audioStreamIndex,
+    sourceVideoCodec,
+    audioStreams,
+    segmentBoundaries,
+  } = opts;
   const SEGMENT_DURATION = getSegmentDuration();
 
   const args = ['-hide_banner', '-loglevel', 'warning'];

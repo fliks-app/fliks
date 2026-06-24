@@ -1237,16 +1237,14 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
   it('remux: copy audio, HEVC source → -c:v copy + -tag:v hvc1', () => {
     expect(
       buildRemuxArgs(
-        '/media/in.mkv',
-        '/cache/out',
-        true,
-        '192k',
-        0,
-        false,
-        true,
-        undefined,
+        {
+          inputPath: '/media/in.mkv',
+          outputDir: '/cache/out',
+          copyAudio: true,
+          trustedStreamInfo: true,
+          sourceVideoCodec: 'hevc',
+        },
         silentLog,
-        'hevc',
       ),
     ).toMatchInlineSnapshot(`
      [
@@ -1300,18 +1298,16 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
   it('remux: resume seeks to the keyframe boundary, transcodes incompatible audio', () => {
     expect(
       buildRemuxArgs(
-        '/media/in.mkv',
-        '/cache/out',
-        false,
-        '192k',
-        2,
-        false,
-        true,
-        undefined,
+        {
+          inputPath: '/media/in.mkv',
+          outputDir: '/cache/out',
+          copyAudio: false,
+          startSegment: 2,
+          trustedStreamInfo: true,
+          sourceVideoCodec: 'h264',
+          segmentBoundaries: [0, 3.003, 6.006, 9.009],
+        },
         silentLog,
-        'h264',
-        undefined,
-        [0, 3.003, 6.006, 9.009],
       ),
     ).toMatchInlineSnapshot(`
      [
@@ -1365,14 +1361,14 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
   it('audio-only: resume applies a single input -ss', () => {
     expect(
       buildAudioOnlyFfmpegArgs(
-        '/media/in.mkv',
-        '/cache/out',
-        0,
-        '192k',
-        4,
-        true,
+        {
+          inputPath: '/media/in.mkv',
+          outputDir: '/cache/out',
+          audioStreamIndex: 0,
+          startSegment: 4,
+          trustedStreamInfo: true,
+        },
         silentLog,
-        false,
       ),
     ).toMatchInlineSnapshot(`
      [
@@ -1427,14 +1423,14 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
   it('audio-only: Tizen TS variant', () => {
     expect(
       buildAudioOnlyFfmpegArgs(
-        '/media/in.mkv',
-        '/cache/out',
-        0,
-        '192k',
-        0,
-        true,
+        {
+          inputPath: '/media/in.mkv',
+          outputDir: '/cache/out',
+          audioStreamIndex: 0,
+          trustedStreamInfo: true,
+          useTs: true,
+        },
         silentLog,
-        true,
       ),
     ).toMatchInlineSnapshot(`
      [

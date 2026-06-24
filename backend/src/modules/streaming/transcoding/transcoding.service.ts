@@ -27,6 +27,7 @@ import {
   buildAudioOnlyFfmpegArgs,
   buildFfmpegArgs,
   buildRemuxArgs,
+  type BuildFfmpegArgsOptions,
 } from './ffmpeg-args';
 import { varStreamMapLayout } from './audio-layout';
 import { detectHwAccel } from './hw-detect';
@@ -733,35 +734,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }
 
       const args = buildFfmpegArgs(
-        {
+        this.buildArgsOptionsFromCtx(ctx, {
           inputPath: absolutePath,
-          profile,
           outputDir: sessionDir,
+          profile,
           hwAccel: this.detectedHwAccel,
           startSegment: 0,
-          tonemap: ctx?.tonemap ?? false,
-          burnIn: ctx?.burnInSubtitle,
-          audioStreamIndex: ctx?.audioStreamIndex,
-          crop: ctx?.crop,
           videoOnly: isVideoOnly,
           audioStreams: ctxAudioStreams,
-          audioPlan: ctx?.audioPlan,
-          audioTrackPlans: ctx?.audioTrackPlans,
-          encoderPreset: ctx?.encoderPreset,
-          qsvOptions: ctx?.qsvOptions,
-          tonemapAlgo: ctx?.tonemapAlgo,
-          sourceFps: ctx?.sourceFps,
-          trustedStreamInfo: ctx?.trustedStreamInfo,
           early: true,
-          useTs: ctx?.useTs ?? false,
-          videoVariant: ctx?.videoVariant,
-          sourceVideoCodec: ctx?.sourceVideoCodec,
-          sourceVideoBitrateBps: ctx?.sourceVideoBitrateBps,
-          sourceBitDepth: ctx?.isSourceHdr ? 10 : 8,
-          sourceWidth: ctx?.sourceWidth,
-          sourceHeight: ctx?.sourceHeight,
-          sourceHdrMetadata: ctx?.hdrMetadata,
-        },
+        }),
         this.log,
       );
       // Bound the input read so the early session writes EARLY_PROBE_SEGMENTS
@@ -1061,34 +1043,15 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const audioStreams = ctx?.audioStreams;
 
     const args = buildFfmpegArgs(
-      {
+      this.buildArgsOptionsFromCtx(ctx, {
         inputPath: absolutePath,
-        profile,
         outputDir: sessionDir,
+        profile,
         hwAccel,
         startSegment,
-        tonemap: ctx?.tonemap ?? false,
-        burnIn: ctx?.burnInSubtitle,
-        audioStreamIndex: ctx?.audioStreamIndex,
-        crop: ctx?.crop,
         videoOnly: isVideoOnly,
         audioStreams,
-        audioPlan: ctx?.audioPlan,
-        audioTrackPlans: ctx?.audioTrackPlans,
-        encoderPreset: ctx?.encoderPreset,
-        qsvOptions: ctx?.qsvOptions,
-        tonemapAlgo: ctx?.tonemapAlgo,
-        sourceFps: ctx?.sourceFps,
-        trustedStreamInfo: ctx?.trustedStreamInfo,
-        useTs: ctx?.useTs ?? false,
-        videoVariant: ctx?.videoVariant,
-        sourceVideoCodec: ctx?.sourceVideoCodec,
-        sourceVideoBitrateBps: ctx?.sourceVideoBitrateBps,
-        sourceBitDepth: ctx?.isSourceHdr ? 10 : 8,
-        sourceWidth: ctx?.sourceWidth,
-        sourceHeight: ctx?.sourceHeight,
-        sourceHdrMetadata: ctx?.hdrMetadata,
-      },
+      }),
       this.log,
     );
 
@@ -1269,18 +1232,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     const isVideoOnly = ctx?.videoOnly ?? false;
     const args = buildRemuxArgs(
-      absolutePath,
-      sessionDir,
-      copyAudio,
-      '192k',
-      requestedSegment,
-      isVideoOnly,
-      ctx?.trustedStreamInfo,
-      ctx?.audioStreamIndex,
+      {
+        inputPath: absolutePath,
+        outputDir: sessionDir,
+        copyAudio,
+        startSegment: requestedSegment,
+        videoOnly: isVideoOnly,
+        trustedStreamInfo: ctx?.trustedStreamInfo,
+        audioStreamIndex: ctx?.audioStreamIndex,
+        sourceVideoCodec: ctx?.sourceVideoCodec,
+        audioStreams: ctx?.audioStreams,
+        segmentBoundaries,
+      },
       this.log,
-      ctx?.sourceVideoCodec,
-      ctx?.audioStreams,
-      segmentBoundaries,
     );
 
     const session = this.spawnFfmpegSession({
@@ -1379,15 +1343,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     await fsp.mkdir(sessionDir, { recursive: true });
 
     const args = buildAudioOnlyFfmpegArgs(
-      absolutePath,
-      sessionDir,
-      audioIndex,
-      '192k',
-      requestedSegment,
-      ctx?.trustedStreamInfo ?? false,
+      {
+        inputPath: absolutePath,
+        outputDir: sessionDir,
+        audioStreamIndex: audioIndex,
+        startSegment: requestedSegment,
+        trustedStreamInfo: ctx?.trustedStreamInfo ?? false,
+        useTs: ctx?.useTs ?? false,
+        audioStreams: ctx?.audioStreams,
+      },
       this.log,
-      ctx?.useTs ?? false,
-      ctx?.audioStreams,
     );
 
     const session = this.spawnFfmpegSession({
@@ -1533,6 +1498,55 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     await fsp.rm(dirPath, { recursive: true, force: true });
+  }
+
+  /** Assemble the buildFfmpegArgs options from the session context. The
+   *  ~20 ctx-derived fields are identical across the main and early-start spawn
+   *  paths; only the call-specific fields below differ. One source keeps the two
+   *  spawns from drifting when a field is added (the "fix one, miss the other"
+   *  trap). */
+  private buildArgsOptionsFromCtx(
+    ctx: SessionContext | undefined,
+    call: {
+      inputPath: string;
+      outputDir: string;
+      profile: TranscodeProfile;
+      hwAccel: HwAccelType;
+      startSegment: number;
+      videoOnly: boolean;
+      audioStreams: BuildFfmpegArgsOptions['audioStreams'];
+      early?: boolean;
+    },
+  ): BuildFfmpegArgsOptions {
+    return {
+      inputPath: call.inputPath,
+      profile: call.profile,
+      outputDir: call.outputDir,
+      hwAccel: call.hwAccel,
+      startSegment: call.startSegment,
+      videoOnly: call.videoOnly,
+      audioStreams: call.audioStreams,
+      early: call.early,
+      tonemap: ctx?.tonemap ?? false,
+      burnIn: ctx?.burnInSubtitle,
+      audioStreamIndex: ctx?.audioStreamIndex,
+      crop: ctx?.crop,
+      audioPlan: ctx?.audioPlan,
+      audioTrackPlans: ctx?.audioTrackPlans,
+      encoderPreset: ctx?.encoderPreset,
+      qsvOptions: ctx?.qsvOptions,
+      tonemapAlgo: ctx?.tonemapAlgo,
+      sourceFps: ctx?.sourceFps,
+      trustedStreamInfo: ctx?.trustedStreamInfo,
+      useTs: ctx?.useTs ?? false,
+      videoVariant: ctx?.videoVariant,
+      sourceVideoCodec: ctx?.sourceVideoCodec,
+      sourceVideoBitrateBps: ctx?.sourceVideoBitrateBps,
+      sourceBitDepth: ctx?.isSourceHdr ? 10 : 8,
+      sourceWidth: ctx?.sourceWidth,
+      sourceHeight: ctx?.sourceHeight,
+      sourceHdrMetadata: ctx?.hdrMetadata,
+    };
   }
 
   private applyContext(session: TranscodeSession, ctx?: SessionContext) {
