@@ -78,10 +78,18 @@ const VALID_QUALITIES = new Set([
  * time treat VTT time as relative to playback start, which drifts after
  * any seek that doesn't land on an exact keyframe (-noaccurate_seek).
  */
-const VTT_TIMESTAMP_MAP = 'X-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000';
-function withTimestampMap(vtt: string | Buffer): string {
+export function withTimestampMap(
+  vtt: string | Buffer,
+  startSeconds = 0,
+): string {
   const text = typeof vtt === 'string' ? vtt : vtt.toString('utf-8');
-  return text.replace(/^(WEBVTT[^\n]*)\n/, `$1\n${VTT_TIMESTAMP_MAP}\n`);
+  // `-copyts` keeps the first video frame at the source start PTS, so 0-based
+  // cue times (sidecar SRT/ASS and embedded extracts alike) must be offset by
+  // it on the 90kHz MPEGTS clock — else cues lead the video by `startSeconds`
+  // on TS/PVR rips. `startSeconds` 0 → MPEGTS:0, the no-op for MP4/MKV.
+  const mpegts = Math.round(Math.max(0, startSeconds) * 90000);
+  const map = `X-TIMESTAMP-MAP=MPEGTS:${mpegts},LOCAL:00:00:00.000`;
+  return text.replace(/^(WEBVTT[^\n]*)\n/, `$1\n${map}\n`);
 }
 
 /** Default segment duration — overridden by admin streaming settings. */
@@ -1127,6 +1135,12 @@ export class StreamingController {
     @CurrentUser() user: User | undefined,
     @Res() res: Response,
   ) {
+    // ffmpeg extracts these cues without `-copyts`, so they come out 0-based —
+    // same as sidecar subs — and need the source start-PTS offset to line up
+    // with the video on TS/PVR rips. resolveFile also re-checks library access.
+    const resolved = await this.streamingService.resolveFile(mediaFileId, user);
+    const startTimeSeconds =
+      resolved.mediaFile.streamInfo?.video?.[0]?.startTimeSeconds ?? 0;
     const stream = await this.subtitleStreamService.extractEmbeddedSubtitle(
       mediaFileId,
       streamIndex,
@@ -1141,7 +1155,7 @@ export class StreamingController {
     const vtt = Buffer.concat(chunks);
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(withTimestampMap(vtt));
+    res.send(withTimestampMap(vtt, startTimeSeconds));
   }
 
   /** Serve an external subtitle as WebVTT. */
@@ -1151,13 +1165,11 @@ export class StreamingController {
     @CurrentUser() user: User | undefined,
     @Res() res: Response,
   ) {
-    const vtt = await this.subtitleStreamService.getSubtitleAsVtt(
-      subtitleId,
-      user,
-    );
+    const { vtt, startTimeSeconds } =
+      await this.subtitleStreamService.getSubtitleAsVtt(subtitleId, user);
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(withTimestampMap(vtt));
+    res.send(withTimestampMap(vtt, startTimeSeconds));
   }
 
   // HLS subtitle media playlists (single WebVTT segment) — referenced by the
