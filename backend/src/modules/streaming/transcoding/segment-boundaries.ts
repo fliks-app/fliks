@@ -132,15 +132,6 @@ export function secondsToSegmentIndex(
   return boundaries.length - 2;
 }
 
-/** Start time (seconds) of segment `index`. */
-export function segmentIndexToSeconds(
-  boundaries: number[],
-  index: number,
-): number {
-  if (index <= 0) return 0;
-  return boundaries[Math.min(index, boundaries.length - 1)] ?? 0;
-}
-
 /**
  * Resolve (and cache) the keyframe-aligned segment grid for a source: real
  * per-segment durations (playlist EXTINF) and absolute cut times (seeking).

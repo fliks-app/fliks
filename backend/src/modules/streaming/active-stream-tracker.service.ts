@@ -68,16 +68,6 @@ export class ActiveStreamTracker {
     return this.autoCropEnabledCache;
   }
 
-  private segmentDurationCache = 3;
-
-  setStreamingDuration(segDuration: number) {
-    this.segmentDurationCache = segDuration;
-  }
-
-  getSegmentDuration(): number {
-    return this.segmentDurationCache;
-  }
-
   // Source dimensions describe the underlying file — identical across
   // users, kept here for cheap lookups in HLS routes.
   private readonly sourceWidthCache = new Map<number, number>();

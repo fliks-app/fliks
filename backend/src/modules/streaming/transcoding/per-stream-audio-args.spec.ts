@@ -48,6 +48,9 @@ describe('perStreamAudioArgs', () => {
     expect(joined).toContain('-c:a:0 eac3');
     expect(joined).toContain('-ac:a:0 6');
     expect(joined).toContain('-ac:a:1 6');
+    // Surround bitrate is the named constant (640k), pinned here so it can't
+    // drift from the master-playlist BANDWIDTH that honours the same value.
+    expect(joined).toContain('-b:a:0 640k');
   });
 
   it('copies a fitting rendition without a channel arg', () => {

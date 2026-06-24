@@ -10,6 +10,7 @@ import {
   isHdrProfile,
   parseBitrateToBps,
   profileResolution,
+  SURROUND_TRANSCODE_BITRATE_BPS,
 } from './profiles';
 import type {
   AudioStreamMeta,
@@ -193,8 +194,13 @@ export function perStreamAudioArgs(
       }
       return;
     }
-    // EAC-3 / AC-3 at 640 kbps, downmixed to the planned channel count (≤ 5.1).
-    out.push(`-c:a:${i}`, p.outputCodec, `-b:a:${i}`, '640k');
+    // EAC-3 / AC-3 at the surround ceiling, downmixed to the planned count (≤ 5.1).
+    out.push(
+      `-c:a:${i}`,
+      p.outputCodec,
+      `-b:a:${i}`,
+      `${SURROUND_TRANSCODE_BITRATE_BPS / 1000}k`,
+    );
     if (p.outputChannels != null) {
       out.push(`-ac:a:${i}`, String(p.outputChannels));
     }
@@ -254,10 +260,17 @@ export function buildFfmpegArgs(
     if (codec === 'aac') {
       return ['-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2'];
     }
-    // EAC-3 / AC-3 at 640 kbps, downmixed to 5.1 (the encoders' max): keeps
-    // surround while staying within the device cap, and stops a 7.1 source
-    // from failing to open (FFmpeg's eac3/ac3 encoders reject > 6 channels).
-    return ['-c:a', codec, '-b:a', '640k', '-ac', '6'];
+    // EAC-3 / AC-3 at the surround ceiling, downmixed to 5.1 (the encoders'
+    // max): keeps surround within the device cap and stops a 7.1 source from
+    // failing to open (FFmpeg's eac3/ac3 encoders reject > 6 channels).
+    return [
+      '-c:a',
+      codec,
+      '-b:a',
+      `${SURROUND_TRANSCODE_BITRATE_BPS / 1000}k`,
+      '-ac',
+      '6',
+    ];
   })();
 
   // GOP = segment_duration × fps so each segment starts exactly on an IDR.
