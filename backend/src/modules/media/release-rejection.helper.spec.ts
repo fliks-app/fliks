@@ -132,4 +132,44 @@ describe('resolveSearchTitles + titleMatchesExpectation', () => {
       ),
     ).toBe(false);
   });
+
+  // Release groups drop the English possessive apostrophe and glue the
+  // letters ("Owner's" → "Owners"), so the stored original title must still
+  // match a release spelled without it — and vice-versa for the French
+  // elision, which splits on the apostrophe ("l'éditeur" → "l editeur").
+  const possessiveShow = {
+    title: "Titre localisé de l'éditeur",
+    originalTitle: "Owner's Original Title",
+    alternativeTitles: null,
+  };
+
+  it('matches a release that drops the possessive apostrophe', () => {
+    const { expectedTitles } = resolveSearchTitles(possessiveShow);
+    expect(
+      titleMatchesExpectation(
+        'Owners.Original.Title.S01E04.1080p.HDTV.x264-GROUP',
+        expectedTitles,
+      ),
+    ).toBe(true);
+  });
+
+  it('matches an English-titled release even when its audio is localized', () => {
+    const { expectedTitles } = resolveSearchTitles(possessiveShow);
+    expect(
+      titleMatchesExpectation(
+        'Owners.Original.Title.S01E04.MULTI.VF.1080p.HDTV-GROUP',
+        expectedTitles,
+      ),
+    ).toBe(true);
+  });
+
+  it('still matches the localized title with an elided article', () => {
+    const { expectedTitles } = resolveSearchTitles(possessiveShow);
+    expect(
+      titleMatchesExpectation(
+        'Titre.localise.de.l.editeur.S01E04.AD.HDTV.x264-GROUP',
+        expectedTitles,
+      ),
+    ).toBe(true);
+  });
 });
