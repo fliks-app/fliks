@@ -1042,16 +1042,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
           this.applyNativeSubtitleStyle();
 
-          // Direct play plays the raw container, so external/OCR sidecar subs
-          // must be injected — transcode/remux carry them as HLS renditions.
-          if (this.isNative) {
+          // Capacitor native players preload sidecar subs into the MediaItem for
+          // direct play; HLS modes and the desktop mpv engine handle subs themselves.
+          if (this.engine instanceof NativeEngine) {
             const ext =
               mode === 'direct'
                 ? (await subsPromise)
                     .filter((s) => !s.burnIn && !!s.url && s.id.startsWith('ext-'))
                     .map((s) => ({ url: s.url, language: s.language, label: s.label }))
                 : [];
-            (this.engine as NativeEngine).setPreloadedSubtitles(ext);
+            this.engine.setPreloadedSubtitles(ext);
           }
 
           const token =
