@@ -783,6 +783,8 @@ export interface BuildAudioOnlyArgsOptions {
    *  (relative) to its absolute ffprobe index so `-map 0:<abs>` skips
    *  FFmpeg's audio enumeration. */
   audioStreams?: AudioStreamMeta[];
+  /** Source fps, so the resume seek lands on the same fps-aware grid as video. */
+  sourceFps?: number;
 }
 
 /**
@@ -802,6 +804,7 @@ export function buildAudioOnlyFfmpegArgs(
     trustedStreamInfo = false,
     useTs = false,
     audioStreams,
+    sourceFps,
   } = opts;
   const segType = useTs ? 'mpegts' : 'fmp4';
   const segExt = useTs ? 'ts' : 'm4s';
@@ -821,7 +824,7 @@ export function buildAudioOnlyFfmpegArgs(
   }
 
   const seekSeconds =
-    startSegment > 0 ? segmentIndexToSeconds(startSegment) : 0;
+    startSegment > 0 ? segmentIndexToSeconds(startSegment, sourceFps) : 0;
 
   if (startSegment > 0) {
     args.push('-ss', String(seekSeconds));

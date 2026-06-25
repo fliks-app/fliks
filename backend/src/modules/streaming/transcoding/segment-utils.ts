@@ -31,6 +31,31 @@ export async function segmentNearby(
 }
 
 /**
+ * True when a produced segment exists within `lookback` positions at or below
+ * `from` — i.e. the encoder frontier is at most `lookback` segments behind the
+ * request. Distinguishes a client buffering just ahead of a live encode (wait)
+ * from a genuine seek far past the frontier (restart).
+ */
+export async function segmentWithinReach(
+  cachePath: string,
+  from: number,
+  lookback: number,
+): Promise<boolean> {
+  const exts = ['.m4s', '.ts'];
+  const dirs = [cachePath, path.join(cachePath, '0')];
+  const lowest = Math.max(0, from - lookback);
+  for (let seg = from; seg >= lowest; seg--) {
+    const num = String(seg).padStart(4, '0');
+    for (const dir of dirs) {
+      for (const ext of exts) {
+        if (await fileExists(path.join(dir, `seg-${num}${ext}`))) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
  * Delete cached segments numbered `>= fromSegment` across the flat layout and
  * any var_stream_map numeric subdirs (`0/`, `1/`, …). Called when a run
  * (re)starts at a new seek point: each run's segments carry a tfdt that is
