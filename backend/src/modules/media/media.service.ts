@@ -42,8 +42,12 @@ export class MediaService {
 
   // -- Imports ----------------------------------------------------------------
 
-  importFromTmdb(dto: ImportTmdbDto, addedByUserId: number | null = null) {
-    return this.imports.importFromTmdb(dto, addedByUserId);
+  importFromTmdb(
+    dto: ImportTmdbDto,
+    addedByUserId: number | null = null,
+    monitoredSeasons: number[] | null = null,
+  ) {
+    return this.imports.importFromTmdb(dto, addedByUserId, monitoredSeasons);
   }
 
   /**

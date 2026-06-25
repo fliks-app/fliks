@@ -771,6 +771,7 @@ export class RequestsService {
           libraryId: spec.libraryId ?? undefined,
         },
         addedByUserId,
+        spec.seasons,
       );
     } catch (err: any) {
       if (err?.status !== 409) throw err;
