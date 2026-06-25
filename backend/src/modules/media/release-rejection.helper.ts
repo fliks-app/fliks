@@ -280,39 +280,56 @@ const TITLE_STOPWORDS = new Set([
   'for',
 ]);
 
-/** Normalize a title for matching: lowercase, strip accents, replace any
- *  non-alphanumeric with a space, collapse whitespace. */
-function normalizeForMatch(s: string): string {
+/** Strip accents and lowercase, leaving punctuation for the tokenizer. */
+function foldCase(s: string): string {
   return s
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+    .toLowerCase();
 }
 
-/** Significant tokens of a title — tokens that must appear in the release
- *  title for it to be considered a match. Excludes stopwords and very short
- *  tokens (1 char). Falls back to the full normalized title when filtering
- *  leaves nothing (e.g. titles made entirely of stopwords). */
-function significantTokens(title: string): string[] {
-  const normalized = normalizeForMatch(title);
-  if (!normalized) return [];
-  const tokens = normalized
+/** Split a case-folded string into alphanumeric tokens. */
+function tokenize(s: string): string[] {
+  return s
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
     .split(' ')
-    .filter((t) => t.length > 1 && !TITLE_STOPWORDS.has(t));
-  return tokens.length ? tokens : normalized.split(' ').filter(Boolean);
+    .filter(Boolean);
+}
+
+/**
+ * Two tokenizations of a title that differ only in how the apostrophe reads.
+ * Release groups are inconsistent: an English possessive loses the apostrophe
+ * and glues the letters (`X's` → `Xs`), while a French elision splits on it
+ * (`d'eau` → `d eau`). Emitting both readings — apostrophe removed, then
+ * apostrophe as a separator — lets one expected title match either spelling.
+ */
+function titleReadings(title: string): string[][] {
+  const folded = foldCase(title);
+  return [
+    tokenize(folded.replace(/['‘’ʼ]/g, '')),
+    tokenize(folded),
+  ];
+}
+
+/** Significant tokens of one reading — drops stopwords and 1-char tokens, but
+ *  falls back to the raw tokens when that filter empties the list (e.g. a
+ *  title made entirely of stopwords). */
+function significantTokens(tokens: string[]): string[] {
+  const filtered = tokens.filter(
+    (t) => t.length > 1 && !TITLE_STOPWORDS.has(t),
+  );
+  return filtered.length ? filtered : tokens;
 }
 
 /**
  * Return true when a release title plausibly matches *any* of the expected
- * titles. Every significant token of one expected variant must appear as
- * a whole-word substring in the normalized release title.
+ * titles. A candidate matches when, under either apostrophe reading, all of
+ * its significant tokens appear as whole tokens in the release title.
  *
- * Multiple expected titles is the normal case: an "Au service de la France"
- * release indexed under its international name "A Very Secret Service"
- * still passes when both forms are in the candidate list (TMDB's
- * `alternative_titles` / TVDB's `aliases`).
+ * Multiple expected titles is the normal case: a release indexed under its
+ * international name still passes when both the localized and original forms
+ * are in the candidate list (TMDB's `alternative_titles` / TVDB's `aliases`).
  *
  * Used as a backend safety net for indexers that ignore `q=` and return any
  * S01 / category-2000 release regardless of what we asked for.
@@ -325,11 +342,13 @@ export function titleMatchesExpectation(
     (s): s is string => !!s && s.trim().length > 0,
   );
   if (!candidates.length) return true; // nothing meaningful to match
-  const releaseTokens = new Set(normalizeForMatch(releaseTitle).split(' '));
+  const releaseTokens = new Set(titleReadings(releaseTitle).flat());
   for (const cand of candidates) {
-    const tokens = significantTokens(cand);
-    if (!tokens.length) return true; // pathological — treat as match
-    if (tokens.every((t) => releaseTokens.has(t))) return true;
+    for (const reading of titleReadings(cand)) {
+      const tokens = significantTokens(reading);
+      if (!tokens.length) return true; // pathological — treat as match
+      if (tokens.every((t) => releaseTokens.has(t))) return true;
+    }
   }
   return false;
 }
