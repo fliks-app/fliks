@@ -53,6 +53,7 @@ import {
   firstMissingSegment,
   purgeSegmentsFrom,
   segmentNearby,
+  segmentWithinReach,
 } from './segment-utils';
 import { sessionKey } from './session-key';
 import {
@@ -333,11 +334,15 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     existing.lastAccess = Date.now();
 
     if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
-      if (requestedSegment >= (existing.startSegment ?? 0)) {
-        const gap = requestedSegment - (existing.startSegment ?? 0);
-        if (gap <= SEEK_WAIT_THRESHOLD) {
-          return existing;
-        }
+      // Within reach of the encoder frontier: buffer-ahead, wait. Beyond it: seek.
+      if (
+        await segmentWithinReach(
+          existing.cachePath,
+          requestedSegment,
+          SEEK_WAIT_THRESHOLD,
+        )
+      ) {
+        return existing;
       }
       this.log.log(
         `Seek: restarting [${key}] from segment ${requestedSegment} (not cached)`,
@@ -1311,6 +1316,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         existing.lastAccess = Date.now();
 
         if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
+          // Same wait/restart call as video, so the two sessions stay in step.
+          if (
+            await segmentWithinReach(
+              existing.cachePath,
+              requestedSegment,
+              SEEK_WAIT_THRESHOLD,
+            )
+          ) {
+            return existing;
+          }
           this.log.log(
             `Seek: restarting audio session [${key}] from segment ${requestedSegment} (not cached)`,
           );
@@ -1351,6 +1366,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         trustedStreamInfo: ctx?.trustedStreamInfo ?? false,
         useTs: ctx?.useTs ?? false,
         audioStreams: ctx?.audioStreams,
+        sourceFps: ctx?.sourceFps,
       },
       this.log,
     );
