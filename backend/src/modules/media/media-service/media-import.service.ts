@@ -61,6 +61,7 @@ export class MediaImportService {
   async importFromTmdb(
     dto: ImportTmdbDto,
     addedByUserId: number | null = null,
+    monitoredSeasons: number[] | null = null,
   ): Promise<Media> {
     const key = this.config.get<string>('TMDB_API_KEY', '');
     if (!key?.trim()) {
@@ -138,6 +139,7 @@ export class MediaImportService {
       folderName,
       libraryId,
       addedByUserId,
+      monitoredSeasons,
     );
   }
 
@@ -363,6 +365,7 @@ export class MediaImportService {
     folderName?: string,
     libraryId?: number,
     addedByUserId?: number | null,
+    monitoredSeasons?: number[] | null,
   ): Promise<Media> {
     const row = this.mediaRepo.create({
       ...buildMediaFieldsFromTmdb(details, MediaType.SERIES),
@@ -382,12 +385,18 @@ export class MediaImportService {
     this.logLibraryAdded('series', saved, `seasons=${seasons.length}`);
     this.metadata.downloadMediaImagesInBackground(saved.id, details);
 
+    // A season-scoped request only monitors the seasons it asked for; the rest
+    // import unmonitored so the auto-grab leaves them alone. An empty/absent
+    // scope (whole-series request or admin add) monitors every season.
+    const inScope = (n: number) =>
+      !monitoredSeasons?.length || monitoredSeasons.includes(n);
+
     for (const sd of seasons) {
       const sSaved = await this.seasonRepo.save(
         this.seasonRepo.create({
           media: saved,
           seasonNumber: sd.seasonNumber,
-          monitored: true,
+          monitored: inScope(sd.seasonNumber),
         }),
       );
       // Reuse the same per-season routine the metadata refresh uses so import
