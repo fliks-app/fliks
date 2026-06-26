@@ -2052,9 +2052,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const canReloadInPlace =
       !!this.engine && !this.isOfflinePlayback && !this.castService.isConnected();
     if (canReloadInPlace) {
-      // Keep the URL in step (refresh / back stay correct). replaceUrl drops
-      // the old episode's /watch entry; the route reuses the component, so no
-      // remount fires and reloadForEpisode does the actual swap.
+      // replaceUrl + markAsBackNavigation keep both histories clear of the old
+      // episode so Back never reopens the player. Route reuse → no remount.
+      this.navbar.markAsBackNavigation();
       void this.router.navigate(['/watch', next.mediaFileId], {
         queryParams: { mediaId, episodeId: next.episodeId },
         replaceUrl: true,
