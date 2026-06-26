@@ -1241,17 +1241,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   }
 
-  async detectIntros(mediaId: number) {
-    try {
-      await this.markersApi.detectSeries(mediaId);
-      this.toast.success(
-        this.translate.instant('markers.detection_started'),
-      );
-    } catch {
-      this.toast.error(this.translate.instant('common.error'));
-    }
-  }
-
   private async reloadAfterRescan(mediaId: number) {
     try {
       const updated = await this.mediaService.getOne(mediaId);

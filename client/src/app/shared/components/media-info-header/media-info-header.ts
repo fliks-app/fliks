@@ -30,7 +30,6 @@ import {
   LucideScanLine,
   LucideSearch,
   LucideSettings,
-  LucideSkipForward,
   LucideTrash2,
 } from '@lucide/angular';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
@@ -103,7 +102,7 @@ interface AudioTrack {
     LucideCaptions, LucideCheck, LucideClipboardList, LucideDownload,
     LucideEllipsisVertical, LucideEye, LucideEyeOff,
     LucideFilm, LucideFolder, LucideListChecks, LucidePlay, LucideRotateCcw, LucideScanLine,
-    LucideSearch, LucideSettings, LucideSkipForward, LucideTrash2,
+    LucideSearch, LucideSettings, LucideTrash2,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-info-header.html',
@@ -198,7 +197,6 @@ export class MediaInfoHeaderComponent {
   readonly loadReleases = output<void>();
   readonly grabBest = output<void>();
   readonly openAnalyze = output<void>();
-  readonly detectIntros = output<void>();
   readonly editSubtitles = output<void>();
   /** Open the tracking-status modal scoped to this header's context
    *  (whole series / the movie / the current episode). */

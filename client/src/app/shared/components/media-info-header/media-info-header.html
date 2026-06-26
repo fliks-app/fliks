@@ -475,12 +475,6 @@
       <svg lucideScanLine class="h-5 w-5 shrink-0 opacity-80"></svg>
       <span class="flex-1">{{ 'media_detail.analyze' | translate }}</span>
     </button>
-    @if (mediaType() === 'series') {
-      <button type="button" class="dropdown-item text-white" (click)="detectIntros.emit()">
-        <svg lucideSkipForward class="h-5 w-5 shrink-0 opacity-80"></svg>
-        <span class="flex-1">{{ 'markers.detect_intros' | translate }}</span>
-      </button>
-    }
     <button type="button" [disabled]="monitoredLoading()" class="dropdown-item text-white" (click)="toggleMonitored.emit()">
       @if (monitored()) { <svg lucideEyeOff class="h-5 w-5 shrink-0 opacity-80"></svg> }
       @else { <svg lucideEye class="h-5 w-5 shrink-0 opacity-80"></svg> }
