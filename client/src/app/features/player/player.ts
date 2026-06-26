@@ -928,23 +928,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (media.fanartUrl) this.fanartUrl.set(this.serverConfig.resolveUrl(media.fanartUrl));
 
         const file = media.files?.find((f: any) => f.id === this.mediaFileId);
-        if (this.episodeId && media.seasons) {
-          for (const season of media.seasons) {
-            const ep = season.episodes?.find(e => e.id === this.episodeId);
-            if (ep) {
-              const label = `S${season.seasonNumber}:E${ep.episodeNumber}`;
-              this.episodeTitle.set(ep.title ? `${label} - ${ep.title}` : label);
-              // Prefer the episode still (full quality stored locally
-              // by ImageService.downloadAndStore('episode', ...)) over
-              // the series fanart so the loading backdrop matches
-              // exactly what's about to play.
-              if (ep.stillUrl) {
-                this.fanartUrl.set(this.serverConfig.resolveUrl(ep.stillUrl));
-              }
-              break;
-            }
-          }
-        }
+        this.applyEpisodeMetadata();
 
         // Use duration from streamInfo (reliable, from ffprobe)
         const si = file?.streamInfo as any;
@@ -1894,11 +1878,151 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   });
 
-  /** Navigate to the next episode identified by {@link nextEpisodeContext}.
-   *  Marks the current episode as watched (position := duration) before
-   *  navigating. Detour through `/` forces Angular to remount this same
-   *  route with fresh params (default router reuses the component and
-   *  only snapshot-params are read once in ngAfterViewInit). */
+  /** Set the episode label + still backdrop from {@link media} and the current
+   *  {@link episodeId} (no-op for movies). Shared by the initial load and the
+   *  in-place episode switch so the loading backdrop matches what's about to
+   *  play — the episode still (stored locally) is preferred over series fanart. */
+  private applyEpisodeMetadata(): void {
+    if (!this.episodeId || !this.media?.seasons) return;
+    for (const season of this.media.seasons) {
+      const ep = season.episodes?.find((e) => e.id === this.episodeId);
+      if (!ep) continue;
+      const label = `S${season.seasonNumber}:E${ep.episodeNumber}`;
+      this.episodeTitle.set(ep.title ? `${label} - ${ep.title}` : label);
+      if (ep.stillUrl) {
+        this.fanartUrl.set(this.serverConfig.resolveUrl(ep.stillUrl));
+      }
+      return;
+    }
+  }
+
+  /** Switch to another episode of the open series without tearing the player
+   *  down: reuse the engine and swap the source (same path as
+   *  {@link doReloadStream}), refreshing the episode-scoped state — markers,
+   *  chapters, subtitles, sprites, metadata and resume position. The only
+   *  visible change is the new episode's backdrop during the brief reload, so
+   *  there's no close/reopen flash. Serialised against quality / audio reloads
+   *  via {@link reloadingStream}. */
+  private async reloadForEpisode(
+    mediaFileId: number,
+    mediaId: number,
+    episodeId: number | undefined,
+  ): Promise<void> {
+    if (!this.engine || this.reloadingStream || mediaFileId === this.mediaFileId) return;
+    this.reloadingStream = true;
+    this.engine.resetRecoveryGuard();
+    const previousFileId = this.mediaFileId;
+    const previousSessionId = this.playbackInfo?.sessionId;
+    try {
+      // Surface the loading backdrop (set to the new episode's still below)
+      // over the outgoing frame and rewind the playhead UI to the start.
+      this.state.reset();
+
+      // Native engines must be stopped before a fresh load to avoid a freeze;
+      // release the outgoing file's session (other devices on it stay alive).
+      if (this.isNativeEngine()) await NativePlayer.stop().catch(() => {});
+      await this.streamingApi
+        .stopSessions(previousFileId, previousSessionId)
+        .catch(() => {});
+
+      this.mediaFileId = mediaFileId;
+      this.episodeId = episodeId;
+      this.activeBurnInId = null;
+      // Same series → media is unchanged; reload it only if the id differs.
+      if (mediaId && mediaId !== this.mediaId) {
+        this.mediaId = mediaId;
+        this.media = await this.mediaService.getOne(mediaId);
+      }
+      // Recompute next-episode context + refresh the episode label / backdrop.
+      this.mediaLoadedTick.update((v) => v + 1);
+      this.applyEpisodeMetadata();
+
+      const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
+      const knownDuration = (file?.streamInfo as any)?.durationSeconds;
+      if (knownDuration && knownDuration > 0) this.state.duration.set(knownDuration);
+
+      // Resume point of the incoming episode (usually the start).
+      let startTime: number | undefined;
+      const playbackState = await this.streamingApi
+        .getPlaybackState(this.mediaId, this.episodeId)
+        .catch(() => null);
+      if (playbackState && !playbackState.completed && playbackState.positionSeconds > 10) {
+        startTime = playbackState.positionSeconds;
+      }
+
+      // Audio preference for the new file (UI/state; the backend picks the
+      // default during playback-info negotiation).
+      const audioStreams: { language?: string }[] = (file?.streamInfo as any)?.audio ?? [];
+      this.activeAudioStreamIndex = this.playerSettings.resolveAudioStreamIndex(
+        this.mediaFileId, audioStreams, this.mediaId,
+      );
+
+      // Re-negotiate the stream for the new file (DirectPlay vs the ladder).
+      await this.authService.ensureStreamToken();
+      const deviceProfile = this.deviceProfileService.getProfile();
+      const activeQuality = this.activeQualityId();
+      const requestedQuality =
+        activeQuality && activeQuality !== 'auto' ? activeQuality : undefined;
+      this.playbackInfo = await this.streamingApi.getPlaybackInfo(
+        this.mediaFileId,
+        deviceProfile,
+        undefined,
+        this.activeAudioStreamIndex,
+        requestedQuality,
+      );
+      const pi = this.playbackInfo;
+      this.introMarker.set(pi.markers?.intro ?? null);
+      this.outroMarker.set(pi.markers?.outro ?? null);
+      this.chapters.set(pi.chapters ?? []);
+      this.state.playbackMode.set(
+        pi.playMethod === 'DirectPlay'
+          ? 'direct'
+          : pi.playMethod === 'DirectStream'
+            ? 'remux'
+            : 'transcode',
+      );
+      this.state.hwAccel.set(pi.hwAccel);
+      this.qualityManager.buildQualityOptions(pi);
+
+      const { url, mimeType } = this.buildPlayUrl({ startTime });
+      await this.engine.load(url, startTime, mimeType);
+      this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
+
+      // Fresh subtitle + audio track lists for the new file, then auto-select.
+      const subs = await this.trackManager.loadSubtitles(
+        this.mediaId, this.mediaFileId, this.streamingApi, this.media,
+      );
+      this.availableSubtitles.set(subs);
+      this.loadAudioTracks();
+      await this.trackManager.autoSelectSubtitle(
+        this.availableSubtitles(),
+        this.availableAudioTracks(),
+        this.activeAudioTrackId(),
+        this.mediaFileId,
+        (sub) => this.selectSubtitle(sub),
+        this.mediaId,
+      );
+
+      // Refresh the seek-preview sprites for the new file.
+      this.spriteAbort?.abort();
+      void this.loadSpriteMetadata();
+
+      if (!this.isNativeEngine()) this.engine.play().catch(() => {});
+      this.resetHideTimer();
+    } catch (e: any) {
+      this.state.error.set(e?.message ?? String(e));
+    } finally {
+      this.reloadingStream = false;
+      this.state.loading.set(false);
+    }
+  }
+
+  /** Advance to the next episode ({@link nextEpisodeContext}), marking the
+   *  current one watched first. Reloads in place — reusing the mounted player
+   *  so there's no close/reopen flash — and updates the URL to the new episode
+   *  (the /watch route is reused, so this triggers no remount). Offline and
+   *  Cast keep the full remount: their source isn't a re-negotiable local
+   *  stream. */
   async goToNextEpisode(): Promise<void> {
     const next = this.nextEpisodeContext();
     if (!next || !this.mediaId) return;
@@ -1921,16 +2045,30 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           episodeId: this.episodeId,
         });
       } catch {
-        /* non-blocking — navigate even if the update fails */
+        /* non-blocking — switch even if the update fails */
       }
     }
 
+    const canReloadInPlace =
+      !!this.engine && !this.isOfflinePlayback && !this.castService.isConnected();
+    if (canReloadInPlace) {
+      // Keep the URL in step (refresh / back stay correct). replaceUrl drops
+      // the old episode's /watch entry; the route reuses the component, so no
+      // remount fires and reloadForEpisode does the actual swap.
+      void this.router.navigate(['/watch', next.mediaFileId], {
+        queryParams: { mediaId, episodeId: next.episodeId },
+        replaceUrl: true,
+      });
+      await this.reloadForEpisode(next.mediaFileId, mediaId, next.episodeId);
+      return;
+    }
+
+    // Offline / Cast fallback: detour through `/` to force a fresh remount
+    // (the default router would otherwise reuse the component and never re-read
+    // the snapshot params).
     void this.router
       .navigateByUrl('/', { skipLocationChange: true })
       .then(() =>
-        // replaceUrl so the previous episode's /watch entry is overwritten
-        // instead of stacked — otherwise closing the player leaves the old
-        // episode in history and back reopens it.
         this.router.navigate(['/watch', next.mediaFileId], {
           queryParams: { mediaId, episodeId: next.episodeId },
           replaceUrl: true,
