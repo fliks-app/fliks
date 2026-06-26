@@ -232,6 +232,44 @@ body.native.hero-page {
   }
 }
 
+/* Floating player cues (skip-intro / next-episode) carry an in-button
+   countdown: a dimmed overlay anchored to the right edge that retracts from
+   full width to nothing, "filling" the button as its on-screen window elapses.
+   The duration is bound inline so it tracks the parent's retract timer. */
+@keyframes player-cue-sweep {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+.player-cue-progress {
+  animation-name: player-cue-sweep;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+
+/* Reduced-motion: skip the sweep, leaving the button at full brightness; the
+   parent timer still retracts the cue on schedule. */
+@media (prefers-reduced-motion: reduce) {
+  .player-cue-progress {
+    animation: none;
+    width: 0;
+  }
+}
+
+/* Mobile landscape: the viewport is short, so the cue's portrait 8rem offset
+   strands it high on screen (most visible once the controls bar auto-hides).
+   Short + wide identifies a phone in landscape; drop the cue nearer the
+   bottom edge there. --cue-bottom feeds the button's inline bottom offset. */
+@media (orientation: landscape) and (max-height: 600px) {
+  .player-floating-cue {
+    --cue-bottom: 4.5rem;
+  }
+}
+
 /* ============================================================================
    Android TV / 10-foot UI overrides — body.tv toggled by TvService
    ============================================================================ */
@@ -345,6 +383,15 @@ body:not(.keyboard-modality):not(.tv) app-mosaic-card button:focus-visible .mosa
     0 0 0 4px var(--color-primary, #7a3ff2);
   z-index: 1;
   position: relative;
+}
+/* The floating player cues position themselves absolutely via inline right /
+   bottom offsets. The generic ring above forces `position: relative` (and a low
+   z-index), which would re-anchor those offsets to the cue's in-flow origin and
+   fling it off-screen — re-assert its own placement so the ring decorates it in
+   situ. Same specificity as the rule above, so source order settles it. */
+.player-floating-cue:focus-visible {
+  position: absolute;
+  z-index: 50;
 }
 /* Opt-out for focusables that paint their own focus affordance (e.g.
    round avatar with a ring-primary on the inner div). The default
