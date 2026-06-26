@@ -1,5 +1,43 @@
 # Changelog
 
+## [1.14.0](https://github.com/fliks-app/fliks/compare/v1.13.1...v1.14.0) (2026-06-26)
+
+
+### Features
+
+* **libraries:** folder auto-create, request access scoping, per-user order ([f0451a2](https://github.com/fliks-app/fliks/commit/f0451a2464e077f42e431409fbab4ccccb43ed74))
+* **libraries:** move library editing to a dedicated tabbed page ([#566](https://github.com/fliks-app/fliks/issues/566)) ([8de08cf](https://github.com/fliks-app/fliks/commit/8de08cfdc587b98f2cba9e8dcced05f738aa8d7a))
+* **libraries:** scan a library folder and re-link orphan files to TMDB/TVDB ([#567](https://github.com/fliks-app/fliks/issues/567)) ([bd9cb70](https://github.com/fliks-app/fliks/commit/bd9cb70405acd63a90655cbb62dc03ee78e9965f))
+* **player:** keyboard/TV-friendly skip cue and default focus ([#586](https://github.com/fliks-app/fliks/issues/586)) ([0903f3d](https://github.com/fliks-app/fliks/commit/0903f3df5f21de44d64876b7765c830e89107f59))
+* **player:** switch episodes in place instead of remounting ([#587](https://github.com/fliks-app/fliks/issues/587)) ([4cb7628](https://github.com/fliks-app/fliks/commit/4cb7628fdf61c0701480bcbacfd341067a428a5d))
+* **subtitles:** image subtitle burn-in and native rendering by device ([#565](https://github.com/fliks-app/fliks/issues/565)) ([7692a17](https://github.com/fliks-app/fliks/commit/7692a17825ff3746a320ad6e4921a49966859d41))
+* **subtitles:** prefer OCR for image tracks and hide them in players ([#559](https://github.com/fliks-app/fliks/issues/559)) ([475be2c](https://github.com/fliks-app/fliks/commit/475be2cc5dfa817dc22886d3e14eb6321ebfaf7a))
+* **system:** group manual commands into per-domain dropdowns ([#561](https://github.com/fliks-app/fliks/issues/561)) ([722809a](https://github.com/fliks-app/fliks/commit/722809a75ec265cd5d09e9123ebc62fcc4fe91c1))
+* **updates:** document the GitHub update check and add an opt-out flag ([#555](https://github.com/fliks-app/fliks/issues/555)) ([fe95de3](https://github.com/fliks-app/fliks/commit/fe95de371d1b659393ab30a534cdf6ace1ccad0c))
+
+
+### Bug Fixes
+
+* **auth:** derive cookie Secure flag from request protocol, not NODE_ENV ([#557](https://github.com/fliks-app/fliks/issues/557)) ([c387670](https://github.com/fliks-app/fliks/commit/c38767078eedf40d6235c72bd7ec874873dc3181))
+* **auto-grab:** format release rejections in logs instead of [object Object] ([#560](https://github.com/fliks-app/fliks/issues/560)) ([c9ca790](https://github.com/fliks-app/fliks/commit/c9ca790871247044f785c02dfadc52e75e499c88))
+* **cast:** show the eco indicator in the Chromecast quality dropdown ([#569](https://github.com/fliks-app/fliks/issues/569)) ([a07b681](https://github.com/fliks-app/fliks/commit/a07b6811c7a1e531c3131af341f14c65e7822656))
+* **dropdown-menu:** close other open menus when opening one ([#562](https://github.com/fliks-app/fliks/issues/562)) ([229118b](https://github.com/fliks-app/fliks/commit/229118b3790e0674c2713b7a7c5723c48265ff03))
+* **player:** gate sidecar sub preload on NativeEngine not isNative ([#581](https://github.com/fliks-app/fliks/issues/581)) ([c1e67fd](https://github.com/fliks-app/fliks/commit/c1e67fdc2ec5374d61206516524255456d1c89b8))
+* **player:** keep the previous episode out of the back stack ([#588](https://github.com/fliks-app/fliks/issues/588)) ([4fb2ff1](https://github.com/fliks-app/fliks/commit/4fb2ff116b5ef280f64bc4750e5518860b5f36e7))
+* **player:** native direct-play subtitle selection and image handling ([96f2614](https://github.com/fliks-app/fliks/commit/96f261443ea8aa4caf9cd77a31ed3177e2c4c37d))
+* **releases:** match titles when groups drop the possessive apostrophe ([#584](https://github.com/fliks-app/fliks/issues/584)) ([36954d4](https://github.com/fliks-app/fliks/commit/36954d427ad41a7b90bce0964b306f1a68ce10cf))
+* **requests:** monitor only the requested seasons on a scoped import ([#583](https://github.com/fliks-app/fliks/issues/583)) ([0fd2a68](https://github.com/fliks-app/fliks/commit/0fd2a68a90188582c3817c3825e45f65ac66234f))
+* **scroller:** keep nav arrow above a card's hover play overlay ([#570](https://github.com/fliks-app/fliks/issues/570)) ([cade276](https://github.com/fliks-app/fliks/commit/cade276a665b4e53d0eb1749f1a1f47ca96f0508))
+* **streaming:** A/V timing fixes — fps-aware seek/tfdt grid, tfdt overflow, sprite backfill ([d8a3dc7](https://github.com/fliks-app/fliks/commit/d8a3dc760a257daf15ffa1c9b0cbf81016e416d2))
+* **streaming:** anchor remux segment grid at the source start PTS ([5373104](https://github.com/fliks-app/fliks/commit/537310478e9c8296faac1fa95fffffa563694041))
+* **streaming:** declare real transcoded segment duration to stop A/V drift ([8ac8461](https://github.com/fliks-app/fliks/commit/8ac84613705ad875cd588e47dc15bd5ad2f3c114))
+* **streaming:** drop the duplicate -ss in audio-only resume ([a3a93d5](https://github.com/fliks-app/fliks/commit/a3a93d505105d477bdac013196e7c15813f17426))
+* **streaming:** gate eco quality rungs on source video bitrate ([#568](https://github.com/fliks-app/fliks/issues/568)) ([3ce2acd](https://github.com/fliks-app/fliks/commit/3ce2acd52d5b271aac231177769788c827a597dd))
+* **streaming:** offset subtitle cues by the source start PTS on TS rips ([8c3cc4e](https://github.com/fliks-app/fliks/commit/8c3cc4e76e2aff4aa9d85faa502f4be36f185346))
+* **streaming:** stop spurious mid-stream transcode respawns that desync A/V ([#582](https://github.com/fliks-app/fliks/issues/582)) ([a775063](https://github.com/fliks-app/fliks/commit/a775063e2c2aaf1489e2e8ebfc9c82cf54642e0a))
+* **subtitles:** demote no-embedded-subtitles log to debug ([#563](https://github.com/fliks-app/fliks/issues/563)) ([80693d2](https://github.com/fliks-app/fliks/commit/80693d213b96be74ae35b432b89fb60b275cd0cc))
+* **subtitles:** drop provider results outside the requested language ([#558](https://github.com/fliks-app/fliks/issues/558)) ([59b8b9e](https://github.com/fliks-app/fliks/commit/59b8b9ea1e2fe338d1699db7cf85517a10971eb0))
+
 ## [1.13.1](https://github.com/fliks-app/fliks/compare/v1.13.0...v1.13.1) (2026-06-21)
 
 
