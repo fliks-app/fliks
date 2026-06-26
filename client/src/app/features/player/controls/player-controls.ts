@@ -115,15 +115,11 @@ export class PlayerControlsComponent {
       const visible = this.visible();
       const wasVisible = this.lastVisible;
       this.lastVisible = visible;
-      // Focus play/pause when the bar appears under keyboard / D-pad — on TV
-      // (always) and on the browser in keyboard modality — so the next
-      // Enter/Space toggles playback. Skipped for pointer (mouse-revealed
+      // Focus play/pause when the bar appears under keyboard / D-pad so the
+      // next Enter/Space toggles playback. Skipped for pointer (mouse-revealed
       // controls shouldn't steal focus). An arrow-seek re-focuses the seekbar
       // afterwards (player.focusSeekbar), which wins the deferred race.
-      const keyboardModality =
-        typeof document !== 'undefined' &&
-        document.body.classList.contains('keyboard-modality');
-      if (visible && !wasVisible && (this.isTv() || keyboardModality)) {
+      if (visible && !wasVisible && this.autoFocusModality()) {
         this.closeDropdown();
         this.playPauseBtn()?.nativeElement.focus({ preventScroll: true });
       }
@@ -136,6 +132,38 @@ export class PlayerControlsComponent {
       this.lastPanelOpen = open;
       this.panelOpenChange.emit(open);
     });
+    // Skip-intro cue countdown — mirrors the progress sweep numerically.
+    // Reset to the full window each time the cue (re)appears.
+    effect(() => {
+      if (this.showSkipIntro()) {
+        this.skipIntroCountdown.set(Math.ceil(this.cueDurationMs() / 1000));
+      }
+    });
+    // Tick down to 1, but hold while the cue is "engaged" — the controls bar is
+    // up or the cue itself is focused. The parent freezes the retract timer on
+    // the same conditions, so the number stays in lockstep. The cleanup stops
+    // the tick on pause and on retract alike.
+    effect((onCleanup) => {
+      if (!this.showSkipIntro() || this.visible() || this.cueFocused()) return;
+      const id = setInterval(
+        () => this.skipIntroCountdown.update((n) => (n > 1 ? n - 1 : 1)),
+        1000,
+      );
+      onCleanup(() => clearInterval(id));
+    });
+    // A cue removed while focused can swallow its blur, leaving the flag stuck;
+    // clear it whenever no cue is shown so the next one isn't born frozen.
+    effect(() => {
+      if (!this.showSkipIntro() && !this.showNextEpisode()) {
+        this.cueFocused.set(false);
+      }
+    });
+    // Focus a floating cue the instant it mounts so a TV / keyboard user can
+    // act on it without first hunting for it with the D-pad. Each effect is
+    // driven by its cue's view-query signal, which holds the element while the
+    // cue's @if is live and is undefined otherwise.
+    effect(() => this.autoFocusCue(this.skipIntroBtn()));
+    effect(() => this.autoFocusCue(this.nextEpisodeBtn()));
   }
   private lastPanelOpen = false;
   private lastVisible = true;
@@ -209,6 +237,16 @@ export class PlayerControlsComponent {
   readonly statsVisible = input(false);
   readonly showSkipIntro = input(false);
   readonly showNextEpisode = input(false);
+  /** How long a floating cue stays up, in ms — drives the in-button progress
+   *  sweep so it finishes exactly as the parent retracts the cue. */
+  readonly cueDurationMs = input(6000);
+  /** Seconds left before the skip-intro cue retracts, shown in the button as a
+   *  live countdown next to its progress sweep. */
+  readonly skipIntroCountdown = signal(0);
+  /** True while a floating cue holds focus. The player reads it to freeze the
+   *  retract timer, and the sweep / countdown freeze on it here — a cue the
+   *  user has navigated to (keyboard / D-pad) must not vanish from under them. */
+  readonly cueFocused = signal(false);
   readonly togglePlay = output<void>();
   readonly skipIntro = output<void>();
   readonly skipToNextEpisode = output<void>();
@@ -272,6 +310,30 @@ export class PlayerControlsComponent {
   /** Desktop/TV play-pause button — focused on TV every time the controls
    *  bar reappears, so the next D-pad center triggers play/pause. */
   private readonly playPauseBtn = viewChild<ElementRef<HTMLButtonElement>>('playPauseBtn');
+  /** Floating skip-intro / next-episode cues — focused the instant they mount
+   *  (see the constructor effects) so TV / keyboard users can act on them. */
+  private readonly skipIntroBtn = viewChild<ElementRef<HTMLButtonElement>>('skipIntroBtn');
+  private readonly nextEpisodeBtn = viewChild<ElementRef<HTMLButtonElement>>('nextEpisodeBtn');
+
+  /** True under keyboard / D-pad input — the only modality where stealing focus
+   *  is wanted (mouse and touch users are left alone, matching the CSS ring
+   *  gate). TV is always keyboard-like; the browser flags it on `body`. */
+  private autoFocusModality(): boolean {
+    return (
+      this.isTv() ||
+      (typeof document !== 'undefined' &&
+        document.body.classList.contains('keyboard-modality'))
+    );
+  }
+
+  /** Pull focus onto a floating cue the moment it appears — but only for TV
+   *  and keyboard navigation, where there's no pointer to reach it. A
+   *  mouse-revealed cue shouldn't steal focus. */
+  private autoFocusCue(btn: ElementRef<HTMLButtonElement> | undefined): void {
+    if (btn && this.autoFocusModality()) {
+      btn.nativeElement.focus({ preventScroll: true });
+    }
+  }
   readonly hostEl: ElementRef<HTMLElement> = inject(ElementRef);
   private readonly injector = inject(Injector);
   private dropdownTrigger: HTMLElement | null = null;

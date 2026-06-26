@@ -5,6 +5,7 @@ import {
   ElementRef,
   OnDestroy,
   ViewEncapsulation,
+  WritableSignal,
   computed,
   effect,
   inject,
@@ -73,9 +74,61 @@ const Pip = registerPlugin<PipPlugin>('Pip');
 import { LucideCircleAlert, LucideInfo, LucideX } from '@lucide/angular';
 import { PlayerControlsComponent } from './controls/player-controls';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
+import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
+
+/**
+ * A one-shot timer that can be paused and resumed without losing the time it
+ * has left. Backs the floating cues' auto-retract: the countdown freezes while
+ * the controls bar is up (the user is plainly engaged) and resumes the instant
+ * it hides, so a cue never vanishes out from under an interacting viewer.
+ */
+class PausableTimeout {
+  private handle: ReturnType<typeof setTimeout> | null = null;
+  private remainingMs = 0;
+  private resumedAt = 0;
+
+  constructor(private readonly onElapsed: () => void) {}
+
+  /** (Re)start from a full duration, discarding any prior run. */
+  start(durationMs: number): void {
+    this.cancel();
+    this.remainingMs = durationMs;
+    this.run();
+  }
+
+  /** Freeze the countdown, banking the time left. No-op unless running. */
+  pause(): void {
+    if (this.handle === null) return;
+    clearTimeout(this.handle);
+    this.handle = null;
+    this.remainingMs -= Date.now() - this.resumedAt;
+  }
+
+  /** Resume a paused countdown from where it stopped. No-op unless paused. */
+  resume(): void {
+    if (this.handle !== null || this.remainingMs <= 0) return;
+    this.run();
+  }
+
+  /** Stop and forget — the cue is gone for good. */
+  cancel(): void {
+    if (this.handle !== null) clearTimeout(this.handle);
+    this.handle = null;
+    this.remainingMs = 0;
+  }
+
+  private run(): void {
+    this.resumedAt = Date.now();
+    this.handle = setTimeout(() => {
+      this.handle = null;
+      this.remainingMs = 0;
+      this.onElapsed();
+    }, this.remainingMs);
+  }
+}
 
 @Component({
-  imports: [TranslateModule, LucideCircleAlert, LucideInfo, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent],
+  imports: [TranslateModule, LucideCircleAlert, LucideInfo, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, DefaultFocusDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player.html',
   encapsulation: ViewEncapsulation.None,
@@ -225,6 +278,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private saveInterval: ReturnType<typeof setInterval> | null = null;
   private controlsTimeout: ReturnType<typeof setTimeout> | null = null;
+  private readonly skipIntroCue = new PausableTimeout(() => this.skipIntroVisible.set(false));
+  private readonly nextEpisodeCue = new PausableTimeout(() => this.nextEpisodeVisible.set(false));
   private seekDragging = false;
   private statsInterval: ReturnType<typeof setInterval> | null = null;
   private subtitleStyleEl: HTMLStyleElement | null = null;
@@ -1302,6 +1357,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.spriteAbort?.abort();
     if (this.saveInterval) clearInterval(this.saveInterval);
     if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
+    this.skipIntroCue.cancel();
+    this.nextEpisodeCue.cancel();
     if (this.statsInterval) clearInterval(this.statsInterval);
     if (this.recoverRetryTimer) clearTimeout(this.recoverRetryTimer);
     if (this.adminMessageTimer) clearTimeout(this.adminMessageTimer);
@@ -1517,7 +1574,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // them deliberately.
     if (typeof document !== 'undefined') {
       const active = document.activeElement as HTMLElement | null;
-      if (active && active.closest('app-player-controls')) {
+      // A floating cue outlives the bar's auto-hide — it stays on screen and
+      // operable — so keep its focus; only blur controls that are hiding.
+      if (
+        active &&
+        active.closest('app-player-controls') &&
+        !active.closest('.player-floating-cue')
+      ) {
         active.blur();
       }
     }
@@ -1683,6 +1746,66 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return t >= m.startSeconds && t < m.endSeconds - 1;
   });
 
+  // ── Timed reveal of the floating intro / next-episode cues ──
+  // A cue surfaces for a short window when the playhead enters its marker
+  // range, then retracts on its own; a progress sweep inside the button counts
+  // that window down. Revealing once per range entry (latched via the *Armed
+  // flags) stops the cue re-popping every frame while the playhead sits inside
+  // the range — the latch only re-arms once the playhead has left and re-entered.
+
+  /** Lifetime of a floating cue, in ms — also the duration of its progress
+   *  sweep, forwarded to the controls so the timer and the animation stay in
+   *  lockstep. */
+  readonly cueRevealMs = 6000;
+  readonly skipIntroVisible = signal(false);
+  readonly nextEpisodeVisible = signal(false);
+  private skipIntroCueArmed = false;
+  private nextEpisodeCueArmed = false;
+
+  /** Show a cue and arm its retract, replacing any pending one. The retract
+   *  starts frozen if the controls bar is already up — the cue waits for the
+   *  viewer's attention to leave before counting itself down. */
+  private revealCue(visible: WritableSignal<boolean>, cue: PausableTimeout): void {
+    visible.set(true);
+    cue.start(this.cueRevealMs);
+    if (untracked(this.controlsVisible)) cue.pause();
+  }
+
+  /** Hide a cue and cancel its pending retract. */
+  private hideCue(visible: WritableSignal<boolean>, cue: PausableTimeout): void {
+    cue.cancel();
+    visible.set(false);
+  }
+
+  /** Freeze both cues' retract timers while the cue is engaged — the controls
+   *  bar is up, or the cue itself holds focus (a keyboard / D-pad user has
+   *  navigated to it) — and resume them once it isn't. The sweep and countdown
+   *  in the controls component freeze on the same conditions, so all three
+   *  representations of the window stay in lockstep. */
+  private readonly cueTimerPauseEffect = effect(() => {
+    const engaged =
+      this.controlsVisible() || (this.controls()?.cueFocused() ?? false);
+    if (engaged) {
+      this.skipIntroCue.pause();
+      this.nextEpisodeCue.pause();
+    } else {
+      this.skipIntroCue.resume();
+      this.nextEpisodeCue.resume();
+    }
+  });
+
+  /** Reveal the skip-intro cue once each time the playhead enters the intro. */
+  private readonly skipIntroCueEffect = effect(() => {
+    if (this.inIntroRange()) {
+      if (this.skipIntroCueArmed) return;
+      this.skipIntroCueArmed = true;
+      this.revealCue(this.skipIntroVisible, this.skipIntroCue);
+    } else if (this.skipIntroCueArmed) {
+      this.skipIntroCueArmed = false;
+      this.hideCue(this.skipIntroVisible, this.skipIntroCue);
+    }
+  });
+
   /** Player-controls click handler — seek to the end of the intro. */
   skipIntro(): void {
     const m = this.introMarker();
@@ -1753,10 +1876,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.currentTime() >= m.startSeconds;
   });
 
-  /** Drives visibility of the floating "Épisode suivant" button. */
+  /** True when the playhead is in the outro and a next episode exists —
+   *  gates the timed reveal of the floating "Épisode suivant" cue. */
   readonly showNextEpisodeButton = computed(
     () => this.inOutroRange() && this.nextEpisodeContext() !== null,
   );
+
+  /** Reveal the next-episode cue once each time the playhead enters the outro. */
+  private readonly nextEpisodeCueEffect = effect(() => {
+    if (this.showNextEpisodeButton()) {
+      if (this.nextEpisodeCueArmed) return;
+      this.nextEpisodeCueArmed = true;
+      this.revealCue(this.nextEpisodeVisible, this.nextEpisodeCue);
+    } else if (this.nextEpisodeCueArmed) {
+      this.nextEpisodeCueArmed = false;
+      this.hideCue(this.nextEpisodeVisible, this.nextEpisodeCue);
+    }
+  });
 
   /** Navigate to the next episode identified by {@link nextEpisodeContext}.
    *  Marks the current episode as watched (position := duration) before
@@ -2626,6 +2762,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // keep clear of the lib.dom `keyCode` deprecation.
     const legacyKeyCode = (e as { keyCode: number }).keyCode;
     const isBackKey = legacyKeyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack' || e.key === 'Escape';
+
+    // A floating cue (skip-intro / next-episode) stays visible and actionable
+    // even while the controls bar is hidden. So — unlike a hidden bar control —
+    // a focused cue must receive its activation key directly rather than have
+    // the press swallowed to merely wake the bar. The guards below honour this.
+    const activeEl = document.activeElement as HTMLElement | null;
+    const cueFocused = !!activeEl?.closest('.player-floating-cue');
+
     // Controls hidden + Left/Right: wake the bar, seek, and land focus on the
     // seekbar so the next presses scrub it — on every device (keyboard + TV
     // remote), matching the seekbar-focused scrub when the bar is already up.
@@ -2643,8 +2787,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     // TV only: any other key while the bar is hidden just WAKES it — never
     // activates the invisible focused button (e.g. OK would hit the back arrow
-    // and quit). The back key bubbles to app.ts so the user can still exit.
-    if (!isBackKey && !this.controlsVisible() && this.device.isTv()) {
+    // and quit). A focused cue is exempt: it's visible, so OK should act on it.
+    // The back key bubbles to app.ts so the user can still exit.
+    if (!isBackKey && !cueFocused && !this.controlsVisible() && this.device.isTv()) {
       this.showControls();
       e.preventDefault();
       e.stopPropagation();
@@ -2654,8 +2799,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // ArrowLeft/Right are claimed by the seekbar when it owns focus, and used
     // for D-pad navigation between controls otherwise. Skip them here unless
     // no control has focus (in which case keep the legacy "background" seek).
-    const active = document.activeElement as HTMLElement | null;
-    const arrowSeekAllowed = !active || active === document.body;
+    const arrowSeekAllowed = !activeEl || activeEl === document.body;
 
     switch (e.key) {
       case ' ':
@@ -2667,10 +2811,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // it always toggles playback.
         if (
           e.key === ' ' &&
-          this.controlsVisible() &&
-          active &&
-          active !== document.body &&
-          active.closest('app-player-controls')
+          (cueFocused ||
+            (this.controlsVisible() &&
+              activeEl &&
+              activeEl !== document.body &&
+              activeEl.closest('app-player-controls')))
         ) {
           return; // fall through to native activation
         }
@@ -2735,8 +2880,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // which (with no controls shown) goes straight to `onBack()`.
     // Without this guard, the trailing `showControls()` fired first,
     // `onPlayerBackEvent` then saw controls visible and only hid them
-    // — so Return-on-TV looked stuck.
-    if (!isBackKey) this.showControls();
+    // — so Return-on-TV looked stuck. A focused cue is likewise left
+    // alone: acting on it shouldn't drag the whole bar onto the screen.
+    if (!isBackKey && !cueFocused) this.showControls();
   };
 
   // ── Event handlers ──
