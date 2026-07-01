@@ -1,6 +1,11 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import type { PlaybackEngine } from './playback-engine/playback-engine';
+import {
+  isUndecodableError,
+  userMessageKeyFor,
+  type PlaybackError,
+} from './playback-engine/playback-error';
 
 /**
  * Shared playback state signals that any UI component can read.
@@ -12,7 +17,12 @@ import type { PlaybackEngine } from './playback-engine/playback-engine';
 export class PlayerStateService {
   readonly loading = signal(true);
   readonly videoStarted = signal(false);
-  readonly error = signal<string | null>(null);
+  readonly error = signal<PlaybackError | null>(null);
+  /** True when the current error is a stream-level decode/format failure a
+   *  fresh session cannot fix (see {@link isUndecodableError}). The stall
+   *  watchdog reads it to stop looping lost-session recovery on a codec the
+   *  browser can't decode — that only flaps the card/spinner. */
+  readonly fatalNoRetry = signal(false);
   readonly paused = signal(true);
   readonly currentTime = signal(0);
   readonly duration = signal(0);
@@ -54,6 +64,22 @@ export class PlayerStateService {
     if (value) this.error.set(null);
   }
 
+  /** Set the error card from a translated one-liner plus optional
+   *  diagnostics (code / category / variant / data). Central writer so the
+   *  fatal-no-retry classification stays in one place. */
+  setError(
+    userMessage: string,
+    extra?: Partial<Omit<PlaybackError, 'userMessage'>>,
+  ): void {
+    const err: PlaybackError = {
+      userMessage,
+      source: extra?.source ?? 'engine',
+      ...extra,
+    };
+    this.error.set(err);
+    this.fatalNoRetry.set(isUndecodableError(err));
+  }
+
   /** Bind a playback engine's events to our signals. Call this when the engine changes. */
   bindEngine(engine: PlaybackEngine): void {
     this.engine = engine;
@@ -61,8 +87,13 @@ export class PlayerStateService {
     engine.on('stateChanged', (e) => {
       this.paused.set(e.state === 'paused' || e.state === 'idle');
       this.buffering.set(e.state === 'buffering' || (this.recovering && e.state === 'error'));
-      if (e.state === 'error' && !this.recovering) {
-        this.error.set(this.translate.instant('player.playback_error'));
+      // Only a generic fallback: the `error` event (below) fires alongside
+      // this and already set the detailed PlaybackError, so don't clobber it.
+      if (e.state === 'error' && !this.recovering && !this.error()) {
+        this.error.set({
+          userMessage: this.translate.instant('player.playback_error'),
+          source: 'engine',
+        });
       }
       // videoStarted is intentionally NOT flipped here — Shaka emits 'playing'
       // on DOM 'play' (= play() called), well before the first frame is
@@ -96,13 +127,24 @@ export class PlayerStateService {
         this.buffering.set(true);
         return;
       }
-      // Prefer the engine's i18n key (Tizen/webOS surface platform strings);
-      // fall back to the raw message, then a generic translated error.
-      this.error.set(
-        e.errorKey
-          ? this.translate.instant(e.errorKey)
-          : e.message || this.translate.instant('player.playback_error'),
-      );
+      const source = e.source ?? 'engine';
+      // Prefer the engine's explicit i18n key (Tizen/webOS surface platform
+      // strings); otherwise map the source/code/category to a category
+      // message. The raw fields are kept for the diagnostics block.
+      const userMessage = e.errorKey
+        ? this.translate.instant(e.errorKey)
+        : this.translate.instant(
+            userMessageKeyFor({ source, code: e.code, category: e.category }),
+          );
+      this.setError(userMessage, {
+        source,
+        code: e.code,
+        category: e.category,
+        severity: e.severity,
+        data: e.data,
+        variant: e.variant,
+        message: e.message,
+      });
     });
   }
 
@@ -111,6 +153,7 @@ export class PlayerStateService {
     this.loading.set(true);
     this.videoStarted.set(false);
     this.error.set(null);
+    this.fatalNoRetry.set(false);
     this.paused.set(true);
     this.currentTime.set(0);
     this.duration.set(0);

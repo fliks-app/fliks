@@ -446,11 +446,30 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       const e = video.error;
       console.error('[Shaka] Video element error:', e?.code, e?.message);
       this.emit('error', {
+        source: 'media',
         code: e?.code ?? 0,
         message: e?.message ?? `Video error code ${e?.code}`,
+        variant: this.activeVariantString(),
       });
       this.emit('stateChanged', { state: 'error' });
     });
+  }
+
+  /** Human-readable summary of the variant playing at error time —
+   *  `hvc1.1.6.L120 1920×1080 @3.0Mb/s · ec-3`. Surfaced on the error card
+   *  so a decode failure shows exactly which codec/level/tier the browser
+   *  choked on (the whole point of the Safari HEVC diagnosis). */
+  private activeVariantString(): string | undefined {
+    const v = this.player?.getVariantTracks?.().find((t: any) => t.active);
+    if (!v) return undefined;
+    const parts: string[] = [];
+    if (v.videoCodec) parts.push(String(v.videoCodec));
+    if (v.width && v.height) parts.push(`${v.width}×${v.height}`);
+    if (v.videoBandwidth || v.bandwidth) {
+      parts.push(`@${((v.videoBandwidth || v.bandwidth) / 1e6).toFixed(1)}Mb/s`);
+    }
+    if (v.audioCodec) parts.push(`· ${v.audioCodec}`);
+    return parts.length ? parts.join(' ') : undefined;
   }
 
   private bridgeShakaEvents(): void {
@@ -465,8 +484,13 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       }
       console.error('[Shaka] Player error:', detail?.code, detail?.category, detail?.message, detail?.data);
       this.emit('error', {
+        source: 'shaka',
         code: detail?.code ?? 0,
-        message: detail?.message ?? 'Shaka playback error',
+        category: detail?.category,
+        severity: detail?.severity,
+        data: detail?.data,
+        message: detail?.message ?? `Shaka error ${detail?.code}`,
+        variant: this.activeVariantString(),
       });
       this.emit('stateChanged', { state: 'error' });
     });
