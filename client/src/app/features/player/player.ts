@@ -38,6 +38,7 @@ import { NavigationHistoryService } from '../../core/services/navigation-history
 import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { audioChannelsLabel, formatAudioLabel, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
+import { formatErrorDiagnostics, userMessageKeyFor } from '../../core/services/playback-engine/playback-error';
 import {
   PlayerSettingsService, normalizeLang,
   SUBTITLE_SIZE_MAP, SUBTITLE_COLOR_MAP, SUBTITLE_SHADOW_MAP, SUBTITLE_BG_MAP,
@@ -295,6 +296,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly loading = this.state.loading;
   readonly videoStarted = this.state.videoStarted;
   readonly error = this.state.error;
+  /** Transient "copied ✓" feedback for the error card's copy button. */
+  readonly errorCopied = signal(false);
   readonly paused = this.state.paused;
   readonly currentTime = this.state.currentTime;
   readonly duration = this.state.duration;
@@ -873,7 +876,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (qp['offline'] === '1') {
         offlineCheck = await this.offlineStorage.getLocalUrl(`download-${this.mediaFileId}`).catch(() => null);
         if (!offlineCheck) {
-          this.state.error.set(this.translate.instant('player.offline_not_found'));
+          this.state.setError(this.translate.instant('player.offline_not_found'), {
+            source: 'session',
+          });
           return;
         }
         this.isOfflinePlayback = true;
@@ -1261,7 +1266,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } catch (e: any) {
       console.error('[Player] Init error:', e?.code, e?.category, e?.data, e);
       const msg = e?.message ?? String(e);
-      this.state.error.set(msg);
+      // Shaka-shaped init errors carry code/category — map to a category
+      // message and keep the raw fields for the diagnostics block.
+      const isShaka = e?.category != null;
+      this.state.setError(
+        isShaka
+          ? this.translate.instant(
+              userMessageKeyFor({ source: 'shaka', code: e?.code, category: e?.category }),
+            )
+          : msg,
+        {
+          source: isShaka ? 'shaka' : 'engine',
+          code: e?.code,
+          category: e?.category,
+          severity: e?.severity,
+          data: e?.data,
+          message: msg,
+        },
+      );
       // TV / Tizen engine path: the AVPlay <object> + the hidden <video>
       // both stay parked on top of the error overlay if the engine dies
       // during load(). Force the player UI back into a visible-DOM state
@@ -2010,7 +2032,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (!this.isNativeEngine()) this.engine.play().catch(() => {});
       this.resetHideTimer();
     } catch (e: any) {
-      this.state.error.set(e?.message ?? String(e));
+      this.state.setError(e?.message ?? String(e), {
+        source: 'engine',
+        code: e?.code,
+        category: e?.category,
+        data: e?.data,
+      });
     } finally {
       this.reloadingStream = false;
       this.state.loading.set(false);
@@ -2405,6 +2432,31 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.lastProgressAt = Date.now();
   }
 
+  /** Full technical dump shown in the error card's details block and copied
+   *  by the "copy diagnostics" button — the Shaka code/category/severity,
+   *  the failing variant, playback context, and any Shaka `data[]`. */
+  errorDiagnostics(): string {
+    const err = this.state.error();
+    if (!err) return '';
+    return formatErrorDiagnostics(err, {
+      currentTime: this.state.currentTime(),
+      mode: this.state.playbackMode(),
+      hwAccel: this.state.hwAccel(),
+    });
+  }
+
+  async copyErrorDiagnostics(): Promise<void> {
+    const text = this.errorDiagnostics();
+    if (!text || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      this.errorCopied.set(true);
+      setTimeout(() => this.errorCopied.set(false), 2000);
+    } catch {
+      // Clipboard blocked (insecure context / denied permission) — no-op.
+    }
+  }
+
   /** Ticked once a second from the stats interval. Detects a frozen playhead
    *  during intended playback and routes it through the same recovery as a
    *  lost session (re-mint sid + reload at position). */
@@ -2413,9 +2465,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.castService.isConnected()) return;
     // Not trying to play, or not playing yet → no stall to detect; keep the
     // baseline fresh so resuming/finishing-load doesn't trip the timer.
+    // A fatal-no-retry error (undecodable stream) also bails: a fresh sid
+    // can't fix a codec the browser rejects, so recovering only flaps the
+    // card/spinner — show the terminal error instead.
     if (
       this.paused() ||
       this.state.loading() ||
+      this.state.fatalNoRetry() ||
       this.recoveringFromLostSession ||
       this.reloadingStream
     ) {
@@ -2465,7 +2521,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.destroyed) return;
     if (this.recoveringFromLostSession) return;
     if (this.recoverRetryTimer) return; // a backoff retry is already queued
-    if (this.recoverAttempts >= this.maxRecoverAttempts) return; // gave up
+    if (this.recoverAttempts >= this.maxRecoverAttempts) {
+      // Exhausted recovery — surface a terminal error card instead of
+      // returning silently, which would leave a stuck spinner (recovering
+      // still veiled) or a stale overlay with no way out.
+      this.state.setRecovering(false);
+      if (!this.state.error()) {
+        this.state.setError(this.translate.instant('player.playback_error'), {
+          source: 'session',
+        });
+      }
+      return;
+    }
     if (this.castService.isConnected()) return;
     if (!this.engine || !this.mediaFileId) return;
     this.recoveringFromLostSession = true;
@@ -2500,7 +2567,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } catch {
       if (this.recoverAttempts >= this.maxRecoverAttempts) {
         this.state.setRecovering(false);
-        this.state.error.set(this.translate.instant('player.playback_error'));
+        this.state.setError(this.translate.instant('player.playback_error'), {
+          source: 'session',
+        });
       } else {
         // Hold the recovering veil up across the backoff so the user sees a
         // reconnect, not a flash of the fatal overlay between attempts.
@@ -2530,7 +2599,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } catch {
       // No retry path after a Cast disconnect — surface a terminal error
       // instead of leaving the local player silently dead.
-      this.state.error.set(this.translate.instant('player.playback_error'));
+      this.state.setError(this.translate.instant('player.playback_error'), {
+        source: 'session',
+      });
     }
   }
 

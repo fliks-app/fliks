@@ -49,7 +49,19 @@ export type EngineEventMap = {
   // from (raw `message` stays for the console). Engines that surface
   // platform-specific strings (Tizen AVPlay, webOS MediaError) set it so the
   // overlay shows translated text instead of an untranslated native string.
-  error: { code: number; message: string; errorKey?: string };
+  // The optional diagnostic fields (`source`/`category`/`severity`/`data`/
+  // `variant`) let Shaka/media errors carry their full context to the error
+  // card — the raw Shaka `error.data[]`, the failing variant codec, etc.
+  error: {
+    code: number;
+    message: string;
+    errorKey?: string;
+    source?: 'shaka' | 'media' | 'session' | 'engine';
+    category?: number;
+    severity?: number;
+    data?: unknown[];
+    variant?: string;
+  };
   audioTracksChanged: { tracks: AudioTrack[] };
   ended: void;
   /** Fires when the first video frame is presented to the screen.
