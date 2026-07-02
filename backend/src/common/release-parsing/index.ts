@@ -8,5 +8,6 @@
 export * from './attributes.parser';
 export * from './language.parser';
 export * from './quality.parser';
+export * from './quality-from-resolution';
 export * from './season-episode.parser';
 export * from './title.extractor';

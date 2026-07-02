@@ -13,8 +13,10 @@ import { MediaFile } from '../entities/media-file.entity';
 import { Season } from '../entities/season.entity';
 import { Episode } from '../entities/episode.entity';
 import { MediaType } from '../../../common/enums';
-import { APP_QUALITIES } from '../../../common/constants/app-qualities';
-import { parseReleaseQuality } from '../../../common/release-parsing';
+import {
+  parseReleaseQuality,
+  qualityFromResolution,
+} from '../../../common/release-parsing';
 import { AnalyzeMediaDto } from '../dto/analyze-media.dto';
 import { computeMovieHash } from '../../subtitles/moviehash';
 import { NamingService } from '../../scheduler/naming.service';
@@ -30,7 +32,6 @@ import { MediaServersService } from '../../media-servers/media-servers.service';
 import { MediaMetadataService } from './media-metadata.service';
 import { clearMediaCache } from '../../../common/utils/media-cache.util';
 import { relativePathUnderMediaRoot } from '../../../common/utils/media-path.util';
-import { bucketResolutionHeight } from '../../../common/utils/resolution.util';
 
 type ProbeResult = Awaited<ReturnType<FfprobeService['detectMediaFileInfo']>>;
 
@@ -909,10 +910,10 @@ export class MediaRescanService {
         );
       }
     }
-    const quality = this.resolveQuality(
+    const quality = qualityFromResolution(
       filename,
-      streamInfo?.video?.[0]?.height,
       streamInfo?.video?.[0]?.width,
+      streamInfo?.video?.[0]?.height,
     );
     return { streamInfo, quality };
   }
@@ -956,36 +957,4 @@ export class MediaRescanService {
     return files;
   }
 
-  /**
-   * Determine quality from ffprobe resolution (source of truth) + filename source tag.
-   */
-  private resolveQuality(
-    filename: string,
-    actualHeight?: number,
-    actualWidth?: number,
-  ): string {
-    // Bucket by dimensions, clamped to APP_QUALITIES' supported resolutions
-    // (480 / 720 / 1080 / 2160). Tiny sub-480 sources fall back to 480 here
-    // because we don't ship 144/240/360 entries in APP_QUALITIES.
-    const bucket = bucketResolutionHeight(actualWidth, actualHeight);
-    const resolution = bucket >= 2160 ? 2160 : bucket <= 480 ? 480 : bucket;
-
-    // Determine source from filename (bluray, web, remux, etc.)
-    const t = filename.replace(/\./g, ' ').toLowerCase();
-    let source = 'hdtv';
-    if (/\bremux\b/.test(t)) source = 'remux';
-    else if (/\b(bluray|blu-?ray|bdrip|brrip)\b/.test(t)) source = 'bluray';
-    else if (/\bweb-?dl\b/.test(t)) source = 'web';
-    else if (/\bweb-?rip\b/.test(t)) source = 'web';
-    else if (/\b(dvd|dvdrip)\b/.test(t)) source = 'dvd';
-
-    const match = APP_QUALITIES.find(
-      (q) => q.resolution === resolution && q.source === source,
-    );
-    if (match) return match.name;
-
-    // Fallback: any quality with correct resolution
-    const fallback = APP_QUALITIES.find((q) => q.resolution === resolution);
-    return fallback?.name ?? `HDTV-${resolution}p`;
-  }
 }

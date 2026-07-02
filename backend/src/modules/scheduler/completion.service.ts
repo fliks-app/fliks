@@ -40,7 +40,10 @@ import { Library } from '../libraries/entities/library.entity';
 import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
 import { TorrentAutoMatcher } from '../media/torrent-auto-matcher.service';
 import { buildGrabHistoryRow } from '../media/grab-history.util';
-import { parseReleaseQuality } from '../../common/release-parsing';
+import {
+  parseReleaseQuality,
+  qualityFromResolution,
+} from '../../common/release-parsing';
 import { MarkersService } from '../markers/markers.service';
 import { FileTransferService } from '../../common/services/file-transfer.service';
 import { MediaService } from '../media/media.service';
@@ -694,6 +697,24 @@ export class CompletionService {
       const ext = path.extname(videoFile.filePath);
       const filename = path.basename(videoFile.filePath, ext);
 
+      // Derive quality from the real pixels, not the (sometimes mislabeled)
+      // release name: a torrent tagged "2160p" that is actually 1920×804 must
+      // be named + tracked as 1080p (drives the filename, the badge, and the
+      // upgrade cutoff). The source tag still comes from the release name. Falls
+      // back to the grabbed quality when probing yields no dimensions.
+      const streamInfo = await this.ffprobe.detectMediaFileInfo(
+        videoFile.filePath,
+      );
+      const srcVideo = streamInfo?.video?.[0];
+      const fileQuality =
+        srcVideo?.width && srcVideo?.height
+          ? qualityFromResolution(
+              history.sourceTitle,
+              srcVideo.width,
+              srcVideo.height,
+            )
+          : history.quality;
+
       let newFilename: string;
       let destDir: string;
       let episodeId: number | undefined;
@@ -704,7 +725,7 @@ export class CompletionService {
           title: media.title,
           originalTitle: media.originalTitle,
           year: media.year,
-          quality: history.quality,
+          quality: fileQuality,
           releaseGroup,
           tmdbId: media.tmdbId,
         });
@@ -756,7 +777,7 @@ export class CompletionService {
           season: epNums?.season ?? 1,
           episode: epNums?.episode ?? 1,
           episodeTitle: epTitle,
-          quality: history.quality,
+          quality: fileQuality,
           releaseGroup,
           airDate,
         });
@@ -805,8 +826,6 @@ export class CompletionService {
         );
         continue;
       }
-      const streamInfo = await this.ffprobe.detectMediaFileInfo(destPath);
-
       // Avoid duplicate: update existing record if same path already tracked
       const existingFile = await this.mediaFileRepo.findOne({
         where: { media: { id: media.id }, relativePath },
@@ -817,7 +836,7 @@ export class CompletionService {
               episode:
                 episodeId != null ? ({ id: episodeId } as Episode) : null,
               size: videoFile.size,
-              quality: history.quality,
+              quality: fileQuality,
               streamInfo,
             }),
           )
@@ -828,7 +847,7 @@ export class CompletionService {
                 episodeId != null ? ({ id: episodeId } as Episode) : null,
               relativePath,
               size: videoFile.size,
-              quality: history.quality,
+              quality: fileQuality,
               streamInfo,
             }),
           );
