@@ -844,6 +844,7 @@ export class MediaQueryService {
     if (!dto.type || dto.type === MediaType.MOVIE) {
       const moviesQb = this.mediaRepo
         .createQueryBuilder('m')
+        .leftJoinAndSelect('m.files', 'files')
         .where('m.type = :type', { type: MediaType.MOVIE })
         .andWhere(
           new Brackets((qb) => {
@@ -881,6 +882,7 @@ export class MediaQueryService {
       ];
 
       for (const m of movies) {
+        const hasFile = (m.files ?? []).length > 0;
         let hasSpecificDate = false;
         for (const { field, event } of eventFields) {
           const d = toDateStr(m[field]);
@@ -896,6 +898,7 @@ export class MediaQueryService {
               posterUrl: m.posterUrl,
               status: m.status,
               year: m.year,
+              hasFile,
             });
           }
         }
@@ -912,6 +915,7 @@ export class MediaQueryService {
             posterUrl: m.posterUrl,
             status: m.status,
             year: m.year,
+            hasFile,
           });
         }
       }
