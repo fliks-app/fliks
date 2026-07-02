@@ -1,37 +1,35 @@
-<div class="toast toast-top toast-end z-[9999]" aria-live="polite" style="top: env(safe-area-inset-top); right: env(safe-area-inset-right)">
+<div #popover popover="manual" class="toast toast-top toast-end z-[9999]" aria-live="polite">
   @for (toast of toastService.toasts(); track toast.id) {
     <div
-      class="alert shadow-lg max-w-sm animate-slide-in"
+      class="alert shadow-lg w-full animate-slide-in"
       [class.alert-success]="toast.type === 'success'"
       [class.alert-error]="toast.type === 'error'"
       [class.alert-warning]="toast.type === 'warning'"
       [class.alert-info]="toast.type === 'info'"
       role="alert"
     >
-      <div class="flex items-start gap-2 w-full">
-        @switch (toast.type) {
-          @case ('success') {
-            <svg lucideCircleCheck class="h-5 w-5 shrink-0"></svg>
-          }
-          @case ('error') {
-            <svg lucideCircleX class="h-5 w-5 shrink-0"></svg>
-          }
-          @case ('warning') {
-            <svg lucideTriangleAlert class="h-5 w-5 shrink-0"></svg>
-          }
-          @case ('info') {
-            <svg lucideInfo class="h-5 w-5 shrink-0"></svg>
-          }
+      @switch (toast.type) {
+        @case ('success') {
+          <svg lucideCircleCheck class="h-5 w-5 shrink-0"></svg>
         }
-        <span class="text-sm flex-1">{{ toast.message }}</span>
-        <button
-          class="btn btn-ghost btn-xs btn-square"
-          (click)="toastService.dismiss(toast.id)"
-          [attr.aria-label]="'common.close_notification' | translate"
-        >
-          <svg lucideX class="h-4 w-4"></svg>
-        </button>
-      </div>
+        @case ('error') {
+          <svg lucideCircleX class="h-5 w-5 shrink-0"></svg>
+        }
+        @case ('warning') {
+          <svg lucideTriangleAlert class="h-5 w-5 shrink-0"></svg>
+        }
+        @case ('info') {
+          <svg lucideInfo class="h-5 w-5 shrink-0"></svg>
+        }
+      }
+      <span class="text-sm flex-1">{{ toast.message }}</span>
+      <button
+        class="btn btn-ghost btn-xs btn-square shrink-0"
+        (click)="toastService.dismiss(toast.id)"
+        [attr.aria-label]="'common.close_notification' | translate"
+      >
+        <svg lucideX class="h-4 w-4"></svg>
+      </button>
     </div>
   }
 </div>
