@@ -369,6 +369,8 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   M::set_option_string(g_state.mpv, "ytdl", "no");
   M::set_option_string(g_state.mpv, "terminal", "no");
   M::set_option_string(g_state.mpv, "load-unsafe-playlists", "yes");
+  // The app drives subtitle selection; don't let mpv auto-pick a track.
+  M::set_option_string(g_state.mpv, "sid", "no");
   // Let mpv adapt its output to the layer's (HDR-capable) colorspace instead of
   // hard-tonemapping to SDR — best-effort HDR passthrough.
   M::set_option_string(g_state.mpv, "target-colorspace-hint", "yes");
