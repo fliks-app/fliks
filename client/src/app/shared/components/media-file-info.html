@@ -50,6 +50,16 @@
           @if (v.bitDepth) {
             <div><span class="text-base-content/50">{{ 'file_info.bit_depth' | translate }} :&nbsp;</span><span class="font-medium">{{ v.bitDepth }} bit</span></div>
           }
+          <div><span class="text-base-content/50">{{ 'file_info.video_range' | translate }} :&nbsp;</span><span class="font-medium">{{ videoRange() }}</span></div>
+          @if (v.dvProfile != null) {
+            <div><span class="text-base-content/50">{{ 'file_info.dolby_profile' | translate }} :&nbsp;</span><span class="font-medium">{{ formatDolbyProfile(v) }}</span></div>
+          }
+          @if (v.colorSpace) {
+            <div><span class="text-base-content/50">{{ 'file_info.color_space' | translate }} :&nbsp;</span><span class="font-medium">{{ v.colorSpace }}</span></div>
+          }
+          @if (v.colorPrimaries) {
+            <div><span class="text-base-content/50">{{ 'file_info.color_primaries' | translate }} :&nbsp;</span><span class="font-medium">{{ v.colorPrimaries }}</span></div>
+          }
         </div>
       </div>
     }
