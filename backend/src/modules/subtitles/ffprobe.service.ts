@@ -54,6 +54,10 @@ export interface VideoStreamInfo {
   colorTransfer?: string;
   colorPrimaries?: string;
   hdrFormat?: HdrFormat;
+  /** Dolby Vision profile from the stream's DOVI configuration record (e.g. 5,
+   *  8), with its base-layer signal compatibility id (e.g. 8.1, 8.4). */
+  dvProfile?: number;
+  dvBlSignalCompatId?: number;
   /** Source HDR10 static metadata (SMPTE ST 2086 mastering display + CTA-861.3
    *  content light), probed via frame side-data for HDR10 sources. Drives the
    *  encoder's master-display / max-cll so the display tonemaps to the source's
@@ -120,6 +124,11 @@ interface FfprobeStream {
   color_space?: string;
   color_transfer?: string;
   color_primaries?: string;
+  side_data_list?: {
+    side_data_type?: string;
+    dv_profile?: number;
+    dv_bl_signal_compatibility_id?: number;
+  }[];
   channels?: number;
   channel_layout?: string;
   sample_rate?: string;
@@ -345,26 +354,33 @@ export class FfprobeService {
 
       const video: VideoStreamInfo[] = streams
         .filter((s) => s.codec_type === 'video')
-        .map((s) => ({
-          streamIndex: s.index,
-          codec: s.codec_name ?? 'unknown',
-          profile: s.profile,
-          level: s.level,
-          width: s.width,
-          height: s.height,
-          displayAspectRatio: s.display_aspect_ratio,
-          pixelFormat: s.pix_fmt,
-          frameRate: this.parseFrameRate(s.r_frame_rate),
-          startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
-          bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
-          bitDepth: s.bits_per_raw_sample
-            ? Number(s.bits_per_raw_sample)
-            : undefined,
-          colorSpace: s.color_space,
-          colorTransfer: s.color_transfer,
-          colorPrimaries: s.color_primaries,
-          hdrFormat: this.deriveHdrFormat(s.color_transfer, s.color_primaries),
-        }));
+        .map((s) => {
+          const dovi = (s.side_data_list ?? []).find(
+            (d) => typeof d.dv_profile === 'number',
+          );
+          return {
+            streamIndex: s.index,
+            codec: s.codec_name ?? 'unknown',
+            profile: s.profile,
+            level: s.level,
+            width: s.width,
+            height: s.height,
+            displayAspectRatio: s.display_aspect_ratio,
+            pixelFormat: s.pix_fmt,
+            frameRate: this.parseFrameRate(s.r_frame_rate),
+            startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
+            bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
+            bitDepth: s.bits_per_raw_sample
+              ? Number(s.bits_per_raw_sample)
+              : undefined,
+            colorSpace: s.color_space,
+            colorTransfer: s.color_transfer,
+            colorPrimaries: s.color_primaries,
+            hdrFormat: this.deriveHdrFormat(s.color_transfer, s.color_primaries),
+            dvProfile: dovi?.dv_profile,
+            dvBlSignalCompatId: dovi?.dv_bl_signal_compatibility_id,
+          };
+        });
 
       // HDR10 sources: probe the first frame's side-data for mastering-display
       // + content-light so the encoder signals the source's real peak luminance

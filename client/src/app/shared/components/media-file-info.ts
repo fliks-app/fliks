@@ -2,9 +2,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
 } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucideVideo, LucideVolume2 } from '@lucide/angular';
 import {
   MediaFileInfo,
@@ -26,6 +27,7 @@ type FileInput = {
   templateUrl: './media-file-info.html',
 })
 export class MediaFileInfoComponent {
+  private readonly translate = inject(TranslateService);
   readonly file = input.required<FileInput | null>();
   /** Absolute folder path of the parent media (library.path + folderName).
    *  Concatenated with `file.relativePath` so the panel exposes the
@@ -34,6 +36,14 @@ export class MediaFileInfoComponent {
 
   readonly videoStream = computed(() => this.file()?.streamInfo?.video[0] ?? null);
   readonly audioStreams = computed(() => this.file()?.streamInfo?.audio ?? []);
+
+  /** SDR / HDR10 / HLG / Dolby Vision, from the probed HDR format + DV profile. */
+  readonly videoRange = computed(() => {
+    const v = this.videoStream();
+    if (!v) return '';
+    if (v.dvProfile != null) return 'Dolby Vision';
+    return v.hdrFormat ?? 'SDR';
+  });
 
   readonly fullPath = computed(() => {
     const f = this.file();
@@ -89,6 +99,17 @@ export class MediaFileInfoComponent {
       return `${ratio}:1`;
     }
     return v.displayAspectRatio ?? '';
+  }
+
+  /** e.g. "Profil 8.1 (compatible HDR10)". The base-layer compatibility id
+   *  labels the fallback signal: 1 = HDR10, 2 = SDR, 4 = HLG. */
+  formatDolbyProfile(v: VideoStreamInfo): string {
+    if (v.dvProfile == null) return '';
+    const compat = v.dvBlSignalCompatId;
+    const word = this.translate.instant('file_info.profile');
+    const base = compat ? `${word} ${v.dvProfile}.${compat}` : `${word} ${v.dvProfile}`;
+    const key = { 1: 'hdr10', 2: 'sdr', 4: 'hlg' }[compat ?? 0];
+    return key ? `${base} (${this.translate.instant('file_info.dolby_compat_' + key)})` : base;
   }
 
   formatChannels(a: AudioStreamInfo): string {

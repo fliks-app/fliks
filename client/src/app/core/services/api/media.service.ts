@@ -243,6 +243,12 @@ export interface VideoStreamInfo {
   frameRate?: string;
   bitRate?: number;
   bitDepth?: number;
+  colorSpace?: string;
+  colorTransfer?: string;
+  colorPrimaries?: string;
+  hdrFormat?: string;
+  dvProfile?: number;
+  dvBlSignalCompatId?: number;
 }
 
 export interface AudioStreamInfo {
