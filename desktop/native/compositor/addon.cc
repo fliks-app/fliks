@@ -495,6 +495,8 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
     M::set_option_string(g_state.mpv, "ytdl", "no");
     M::set_option_string(g_state.mpv, "terminal", "no");
     M::set_option_string(g_state.mpv, "load-unsafe-playlists", "yes");
+    // The app drives subtitle selection; don't let mpv auto-pick a track.
+    M::set_option_string(g_state.mpv, "sid", "no");
     // The backend produces transcode segments on demand: it answers 404 (seg-0/
     // init on a resume, before the early companion writes them) or 503 (the
     // resume segment while ffmpeg is still encoding it), and a late multi-audio

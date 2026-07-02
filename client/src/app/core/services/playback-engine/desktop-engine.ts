@@ -226,7 +226,13 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   }
 
   private resolveSubtitle(): void {
-    if (!this._desiredSubtitle) return;
+    if (!this._desiredSubtitle) {
+      // No subtitle wanted → assert off. mpv auto-selects one otherwise; the
+      // app is the sole source of truth for subtitle selection.
+      this._activeTrackId = null;
+      this.bridge.selectSubtitleTrack(null).catch(() => {});
+      return;
+    }
     const { language, forced, embIndex } = this._desiredSubtitle;
     const want = normalizeLangCode(language);
     const tracks = this._nativeSubtitleTracks;

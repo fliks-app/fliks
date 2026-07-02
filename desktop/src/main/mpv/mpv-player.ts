@@ -85,6 +85,8 @@ export class MpvPlayer extends EventEmitter {
       '--no-config',
       '--no-terminal',
       '--keep-open=yes',
+      // The app drives subtitle selection; don't let mpv auto-pick a track.
+      '--sid=no',
       // The Fliks HLS references tokenised same-host segment/rendition URLs;
       // mpv's playlist safety check otherwise refuses them on the fallback path.
       '--load-unsafe-playlists=yes',
