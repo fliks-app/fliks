@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { registerAppSchemePrivileged, registerAppProtocol, APP_URL } from './protocol';
 import { installCorsBypass } from './cors';
 import { setupUpdater } from './updater';
+import { setPlaybackKeepAwake, keepAwakeForState } from './power';
 import { IPC, type DesktopEvent, type DesktopSubtitleStyle } from '../shared/contract';
 import { mpvSubtitleProps } from './mpv/subtitle-style';
 
@@ -386,6 +387,7 @@ app.whenReady().then(async () => {
         // player can't keep emitting (and leaking the interval).
         if (raw.state === 'playing') startPositionTimer();
         else stopPositionTimer();
+        setPlaybackKeepAwake(keepAwakeForState(raw.state));
         send({ type: 'stateChanged', payload: { state: raw.state } });
         break;
       case 'tracksChanged':
@@ -396,10 +398,12 @@ app.whenReady().then(async () => {
         // pause-property change, so the playing stateChanged can be missing on
         // a fresh load — arm the timer on the first frame as well.
         startPositionTimer();
+        setPlaybackKeepAwake(true);
         send({ type: 'firstFrame' });
         break;
       case 'error':
         stopPositionTimer();
+        setPlaybackKeepAwake(false);
         send({ type: 'error', payload: { code: -1, message: raw.message ?? 'error' } });
         break;
     }

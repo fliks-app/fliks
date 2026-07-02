@@ -5,6 +5,7 @@ import { MpvPlayer } from '../mpv/mpv-player';
 import { MacMpvPlayer } from '../mpv/mac-mpv-player';
 import type { PlayerBackend } from '../mpv/player-backend';
 import { createEmbedBackend } from './backends';
+import { setPlaybackKeepAwake, keepAwakeForState } from '../power';
 import { IPC, type DesktopEvent, type DesktopRect } from '../../shared/contract';
 
 /**
@@ -185,7 +186,9 @@ export class PlayerSession {
     mpv.on('log', (s: string) => process.stderr.write(`[mpv] ${s}`));
     mpv.on('exit', (e) => console.error('[mpv] process exit', JSON.stringify(e)));
     mpv.on('stateChanged', (p) => {
-      console.log('[player] state:', (p as { state?: string }).state);
+      const state = (p as { state?: string }).state;
+      console.log('[player] state:', state);
+      setPlaybackKeepAwake(keepAwakeForState(state));
       this.emit({ type: 'stateChanged', payload: p });
     });
     mpv.on('timeUpdate', (p) => this.emit({ type: 'timeUpdate', payload: p }));
@@ -195,10 +198,12 @@ export class PlayerSession {
     });
     mpv.on('firstFrame', () => {
       console.log('[player] firstFrame');
+      setPlaybackKeepAwake(true);
       this.emit({ type: 'firstFrame' });
     });
     mpv.on('error', (p) => {
       console.log('[player] error:', JSON.stringify(p));
+      setPlaybackKeepAwake(false);
       this.emit({ type: 'error', payload: p });
     });
   }
@@ -226,6 +231,7 @@ export class PlayerSession {
   }
 
   async destroy(): Promise<void> {
+    setPlaybackKeepAwake(false);
     await this.mpv?.destroy();
     this.mpv = null;
     if (this.uiWin && !this.uiWin.isDestroyed()) this.uiWin.destroy();
