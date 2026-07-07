@@ -1118,7 +1118,9 @@
     "failed": "Échec",
     "offline": "Hors ligne",
     "confirm_delete": "Supprimer ce téléchargement ? Le fichier sera supprimé de cet appareil.",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "notif_complete": "Téléchargement terminé",
+    "notif_failed": "Échec du téléchargement"
   },
   "setup_checklist": {
     "title": "Configuration",

@@ -2,9 +2,10 @@ import UIKit
 import Capacitor
 import AVFoundation
 import GoogleCast
+import UserNotifications
 
 @UIApplicationMain
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
 
     var window: UIWindow?
 
@@ -20,6 +21,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         } catch {
             print("Audio session configuration failed: \(error)")
         }
+
+        // Present download completion banners even while the app is foregrounded
+        // (default iOS behaviour suppresses them when the app is active).
+        UNUserNotificationCenter.current().delegate = self
 
         // Initialize Google Cast SDK early (required for device discovery)
         let castOptions = GCKCastOptions(discoveryCriteria:
@@ -61,6 +66,31 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func applicationWillTerminate(_ application: UIApplication) {
         // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
+    }
+
+    // iOS relaunches the app in the background when our background download
+    // session has events to deliver. Stash the completion handler so the
+    // DownloadPlugin's session delegate can call it once all events are flushed
+    // (urlSessionDidFinishEvents). Not calling it makes the OS throttle us.
+    func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        if identifier == BackgroundDownloadCompletion.sessionIdentifier {
+            BackgroundDownloadCompletion.handler = completionHandler
+        } else {
+            completionHandler()
+        }
+    }
+
+    // Show download banners as alerts while the app is in the foreground.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {

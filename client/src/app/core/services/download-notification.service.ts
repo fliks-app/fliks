@@ -9,11 +9,22 @@ export interface NativeDownloadEvent {
   seq: number;
 }
 
+/** Pre-translated notification copy shown by the native download daemon (iOS). */
+export interface DownloadNotifStrings {
+  notifTitle: string;
+  notifComplete: string;
+  notifFailed: string;
+}
+
 interface DownloadNotificationPlugin {
-  startDownload(opts: { id: string; hlsUrl: string; token: string }): Promise<void>;
+  startDownload(
+    opts: { id: string; hlsUrl: string; token: string } & Partial<DownloadNotifStrings>,
+  ): Promise<void>;
   removeDownload(opts: { id: string }): Promise<void>;
   getDownloads(): Promise<{ downloads: string }>;
   isDownloaded(opts: { id: string }): Promise<{ downloaded: boolean }>;
+  /** iOS: local `file://` URL of the downloaded .movpkg, or null. Unused on Android. */
+  getOfflineUrl(opts: { id: string }): Promise<{ url: string | null }>;
   pauseDownloads(): Promise<void>;
   resumeDownloads(): Promise<void>;
   addListener(event: string, cb: (data: any) => void): Promise<any>;
@@ -53,10 +64,30 @@ export class DownloadNotificationService {
     }
   }
 
-  /** Start an HLS download via the native platform's download manager. */
-  startDownload(id: string, hlsUrl: string, token: string): void {
+  /**
+   * Start an HLS download via the native platform's download manager.
+   * `notif` carries pre-translated banner copy for iOS completion/failure
+   * notifications (ignored on Android, which builds its own foreground-service
+   * notification).
+   */
+  startDownload(id: string, hlsUrl: string, token: string, notif?: DownloadNotifStrings): void {
     if (!this.isNative || !DownloadNotification) return;
-    DownloadNotification.startDownload({ id, hlsUrl, token }).catch(() => {});
+    DownloadNotification.startDownload({ id, hlsUrl, token, ...(notif ?? {}) }).catch(() => {});
+  }
+
+  /**
+   * iOS: resolve the local `file://` URL of a completed download for offline
+   * playback. Returns null on Android (offline playback there replays the
+   * remote HLS URL through ExoPlayer's CacheDataSource) or when not found.
+   */
+  async getOfflineUrl(id: string): Promise<string | null> {
+    if (!DownloadNotification || !DownloadNotification.getOfflineUrl) return null;
+    try {
+      const result = await DownloadNotification.getOfflineUrl({ id });
+      return result.url ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /** Remove a download (cancel + delete cached data). */

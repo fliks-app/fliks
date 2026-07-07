@@ -2663,7 +2663,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.mediaId) {
       target = '/';
     } else {
-      const kind = this.media?.type === 'series' ? 'series' : 'movies';
+      // Offline playback never loads `this.media`; fall back to the type stored
+      // on the download task so a downloaded series routes to /series, not
+      // /movies (a wrong-kind URL redirects and breaks the topbar back button).
+      const offlineType = this.isOfflinePlayback
+        ? this.dlCache
+            .load()
+            .find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready')
+            ?.media?.type
+        : undefined;
+      const kind = (this.media?.type ?? offlineType) === 'series' ? 'series' : 'movies';
       if (this.episodeId && kind === 'series') {
         // A finished episode returns to the NEXT episode's detail page so the
         // user lands ready to continue; an episode left mid-watch returns to
