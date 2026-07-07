@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.15.0](https://github.com/fliks-app/fliks/compare/v1.14.1...v1.15.0) (2026-07-07)
+
+
+### Features
+
+* **downloads:** implement ios offline downloads ([846855b](https://github.com/fliks-app/fliks/commit/846855bbc438c0df6a349d000a4b951f4dd313cc))
+* **downloads:** implement ios offline downloads ([#607](https://github.com/fliks-app/fliks/issues/607)) ([846855b](https://github.com/fliks-app/fliks/commit/846855bbc438c0df6a349d000a4b951f4dd313cc))
+
+
+### Bug Fixes
+
+* **desktop:** content-adaptive macOS color pipeline ([#606](https://github.com/fliks-app/fliks/issues/606)) ([f833484](https://github.com/fliks-app/fliks/commit/f833484776cd462a3c149f7ac9aa586fe734acda))
+* **player:** webOS subtitle margin and remote control wake ([#603](https://github.com/fliks-app/fliks/issues/603)) ([015f661](https://github.com/fliks-app/fliks/commit/015f661a5f1545b91b2a353b9899897b1ce1e6ea))
+* **update:** hide topbar update check on native apps ([#608](https://github.com/fliks-app/fliks/issues/608)) ([e04e269](https://github.com/fliks-app/fliks/commit/e04e2692f2e2b6a0aeee2224adeeca5da0362ac7))
+
 ## [1.14.1](https://github.com/fliks-app/fliks/compare/v1.14.0...v1.14.1) (2026-07-07)
 
 
