@@ -7,6 +7,8 @@
   [class.native-player]="!!nativeEngine"
   [class.hidden]="castService.isConnected()"
   (mousemove)="device.isTouch() || device.isDpad() ? null : showControls()"
+  (wheel)="wakeControlsFromPointer()"
+  (click)="wakeControlsFromPointer()"
 >
   <!-- Backdrop until video renders its first frame. Rendered for both
        web (Shaka) and native (ExoPlayer) — on native the WebView is

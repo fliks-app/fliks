@@ -497,7 +497,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       bump kicks in. Browser playback uses CSS instead — see styles below. */
   private readonly subtitleControlsMarginEffect = effect(() => {
     this.controlsVisible();
-    if (this.isNativeEngine() && this.engine) {
+    // webOS drives the same DOM subtitle overlay as the native engines but
+    // reports isNativeEngine=false (it keeps the Shaka UX), so it needs an
+    // explicit branch — otherwise the margin stays pinned at its load-time
+    // value (controls visible → offset) and never settles flush on hide.
+    if ((this.isNativeEngine() || this.isWebOs) && this.engine) {
       this.applyNativeSubtitleStyle();
     }
   });
@@ -1560,6 +1564,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   showControls() {
     this.controlsVisible.set(true);
     this.resetHideTimer();
+  }
+
+  /** The webOS Magic Remote's scroll wheel and center-button press arrive as
+   *  `wheel` / `click` events at the pointer, not `keydown`, so the D-pad wake
+   *  path in `onKeyDown` never sees them — and `mousemove` is intentionally
+   *  muted on dpad input to avoid pointer-drift waking the bar. Wake the
+   *  controls for those discrete, intentional pointer gestures. */
+  wakeControlsFromPointer() {
+    if (this.device.isDpad() && !this.controlsVisible()) this.showControls();
   }
 
   /** Move focus to the seekbar after the controls bar has rendered/become
@@ -2738,7 +2751,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /**
    * Apply user's subtitle style settings to native engine. When the player
-   * controls are visible, bumps the bottom margin by 5% so cues don't sit
+   * controls are visible, bumps the bottom margin by 10vh so cues don't sit
    * under the controls bar — the WebKit `::cue` shift used in browser mode
    * doesn't apply on ExoPlayer/AVPlayer.
    */
