@@ -1274,7 +1274,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           ? this.translate.instant(
               userMessageKeyFor({ source: 'shaka', code: e?.code, category: e?.category }),
             )
-          : msg,
+          : this.translate.instant('player.playback_error'),
         {
           source: isShaka ? 'shaka' : 'engine',
           code: e?.code,
@@ -2032,12 +2032,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (!this.isNativeEngine()) this.engine.play().catch(() => {});
       this.resetHideTimer();
     } catch (e: any) {
-      this.state.setError(e?.message ?? String(e), {
-        source: 'engine',
-        code: e?.code,
-        category: e?.category,
-        data: e?.data,
-      });
+      // Map to a translated line (Shaka-shaped errors keep their category
+      // message) and keep the raw engine/exception text in the diagnostics
+      // `message` field only — the card body never shows an untranslated string.
+      const isShaka = e?.category != null;
+      this.state.setError(
+        isShaka
+          ? this.translate.instant(
+              userMessageKeyFor({ source: 'shaka', code: e?.code, category: e?.category }),
+            )
+          : this.translate.instant('player.playback_error'),
+        {
+          source: isShaka ? 'shaka' : 'engine',
+          code: e?.code,
+          category: e?.category,
+          data: e?.data,
+          message: e?.message ?? String(e),
+        },
+      );
     } finally {
       this.reloadingStream = false;
       this.state.loading.set(false);
