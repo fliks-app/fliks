@@ -118,6 +118,10 @@ struct State {
   std::mutex renderMutex;       // guards rc_render vs rc_free
   std::atomic<bool> run{false};
   std::atomic<bool> dirty{true};  // force a redraw (resize / first paint)
+  // Whether the layer actually got a half-float (RGBA16F) backing. EDR/PQ/HLG
+  // tagging is meaningless on an 8-bit unorm FBO (can't carry values >1.0), so
+  // ApplyLayerColorConfig gates the HDR branch on this, not just display headroom.
+  std::atomic<bool> hdrBacking{false};
   std::thread eventThread;
   double duration = 0;
 };
@@ -173,9 +177,11 @@ void Emit(const std::string& json) {
   CGLPixelFormatObj pf = nullptr;
   GLint n = 0;
   if (wantHdr && CGLChoosePixelFormat(hdr, &pf, &n) == kCGLNoError && pf) {
+    g_state.hdrBacking.store(true);
     fprintf(stderr, "[player-mac] GL pixel format: RGBA16F (HDR-capable)\n");
     return pf;
   }
+  g_state.hdrBacking.store(false);  // no float backing → EDR/PQ tagging would band
   if (CGLChoosePixelFormat(sdr, &pf, &n) == kCGLNoError && pf) {
     fprintf(stderr, "[player-mac] GL pixel format: 8-bit (SDR)\n");
     return pf;
@@ -187,6 +193,12 @@ void Emit(const std::string& json) {
                 pixelFormat:(CGLPixelFormatObj)pf
                forLayerTime:(CFTimeInterval)t
                 displayTime:(const CVTimeStamp*)ts {
+  // Hold renderMutex for the same reason drawInCGLContext does: this runs on the
+  // layer's CVDisplayLink thread, while Stop() frees mpvGl under the mutex on the
+  // main thread. Without the lock, rc_update could poll a handle Stop just freed
+  // (run.load() at the top races the free that happens right after it). The mpv
+  // update callback (OnMpvUpdate) is a no-op, so there is no re-entrant deadlock.
+  std::lock_guard<std::mutex> lk(g_state.renderMutex);
   if (!g_state.run.load()) return NO;
   if (!g_state.mpvGl) return YES;  // first draw creates the render context
   if (g_state.dirty.load()) return YES;
@@ -252,6 +264,16 @@ MpvGLLayer* g_layer = nil;
 NSView* g_view = nil;  // not owned (Electron's content view)
 id g_backingObserver = nil;
 id g_frameObserver = nil;
+id g_screenObserver = nil;        // window moved onto/off a screen
+id g_screenParamsObserver = nil;  // display config / EDR headroom changed
+
+// Color class derived from the decoded stream's video-params. Drives the matched
+// {mpv target, CALayer colorspace, EDR} triple in ApplyLayerColorConfig, and is
+// reclassified on every video-reconfig.
+enum ContentColorClass { CC_SDR_709, CC_SDR_P3, CC_HDR_PQ, CC_HLG };
+// Last class applied, so a display change (EDR headroom differs per screen) can
+// re-evaluate the config without waiting for the next video-params event.
+std::atomic<int> g_lastColorClass{CC_SDR_709};
 
 void UpdateLayerGeometry() {
   if (!g_layer || !g_view) return;
@@ -263,19 +285,138 @@ void UpdateLayerGeometry() {
   [g_layer setNeedsDisplay];
 }
 
-// Configure the layer for HDR/EDR passthrough (best effort). The display + media
-// decide whether HDR is actually used; SDR content simply renders unaffected.
-void ConfigureHdr(MpvGLLayer* layer) {
-  const char* forceSdr = getenv("FLIKS_HDR");
-  if (forceSdr && std::strcmp(forceSdr, "no") == 0) return;
-  if (@available(macOS 10.15, *)) {
-    layer.wantsExtendedDynamicRangeContent = YES;
-    CGColorSpaceRef cs = CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearDisplayP3);
-    if (cs) {
-      layer.colorspace = cs;
-      CGColorSpaceRelease(cs);
-    }
+// Boot the layer into a safe SDR (BT.709 / sRGB) state that matches mpv's default
+// gamma-encoded FBO output. The per-content colorspace + EDR decision is deferred
+// to ApplyLayerColorConfig, taken once the stream's video-params are decoded (see
+// ReconfigureColorForCurrentVideo). Tagging a fixed HDR colorspace here — before
+// any file loads, and independent of the content — washed out SDR: an
+// extended-linear tag on mpv's gamma-encoded pixels made the compositor skip the
+// gamma decode and blow out the midtones.
+void BootLayerColorDefaults(MpvGLLayer* layer) {
+  if (@available(macOS 10.15, *)) layer.wantsExtendedDynamicRangeContent = NO;
+  CGColorSpaceRef cs = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  if (cs) {
+    layer.colorspace = cs;
+    CGColorSpaceRelease(cs);
   }
+}
+
+// Apply the color configuration for a classified content class. MUST run on the
+// main queue: it mutates CALayer state (colorspace / wantsEDR) and reads NSScreen,
+// both AppKit-main-thread only. The mpv target properties are set here as well
+// (thread-safe from any thread) so the FBO encoding and the layer tag — which must
+// describe the SAME transfer + primaries — always change together.
+//
+// Invariant: CALayer.colorspace declares what the framebuffer pixels ALREADY are;
+// it does not convert them. So each class pairs an mpv target-trc/-prim with the
+// CGColorSpace of that exact encoding. HDR (PQ/HLG) engages EDR only when the
+// display has headroom; otherwise mpv tone-maps down to the SDR pair.
+void ApplyLayerColorConfig(int clsInt) {
+  if (!g_state.run.load() || !g_layer) return;  // torn down (Stop clears g_layer)
+  g_lastColorClass.store(clsInt);
+  const ContentColorClass cls = static_cast<ContentColorClass>(clsInt);
+
+  // EDR needs BOTH a display with headroom AND a float backing: PQ/HLG + wantsEDR
+  // on an 8-bit unorm FBO only bands (can't represent >1.0), so fall back to the
+  // SDR tone-map pair there just as on a non-EDR display.
+  double headroom = 1.0;
+  bool edrOK = false;
+  if (@available(macOS 10.15, *)) {
+    NSScreen* screen = g_view.window.screen ?: [NSScreen mainScreen];
+    headroom = screen.maximumPotentialExtendedDynamicRangeColorComponentValue;
+    edrOK = headroom > 1.0 && g_state.hdrBacking.load();
+  }
+
+  // SDR-709 defaults — also the fall-back for HDR content on a non-EDR display,
+  // where mpv tone-maps the HDR source down to this SDR pair.
+  const char* prim = "bt.709";
+  const char* trc = "srgb";
+  const char* peak = "auto";
+  CFStringRef csName = kCGColorSpaceSRGB;
+  BOOL wantsEDR = NO;
+
+  if (cls == CC_SDR_P3) {
+    prim = "display-p3";  // wide-gamut SDR; sRGB transfer matches Display-P3
+    csName = kCGColorSpaceDisplayP3;
+  } else if ((cls == CC_HDR_PQ || cls == CC_HLG) && edrOK) {
+    if (@available(macOS 11.0, *)) {
+      prim = "bt.2020";
+      wantsEDR = YES;
+      if (cls == CC_HDR_PQ) {
+        // target-peak=10000 keeps mpv from tone-mapping, so the full PQ signal
+        // reaches the system EDR tonemapper (which soft-clips to the live display
+        // headroom); a lower peak would tone-map twice.
+        trc = "pq";
+        peak = "10000";
+        csName = kCGColorSpaceITUR_2100_PQ;
+      } else {
+        trc = "hlg";  // scene-referred; the system applies the OOTF for the panel
+        csName = kCGColorSpaceITUR_2100_HLG;
+      }
+    }
+    // Pre-macOS 11 has no PQ/HLG CGColorSpace → keep the SDR tone-map defaults.
+  }
+
+  M::set_property_string(g_state.mpv, "target-prim", prim);
+  M::set_property_string(g_state.mpv, "target-trc", trc);
+  M::set_property_string(g_state.mpv, "target-peak", peak);
+
+  if (@available(macOS 10.15, *)) g_layer.wantsExtendedDynamicRangeContent = wantsEDR;
+  CGColorSpaceRef cs = CGColorSpaceCreateWithName(csName);
+  if (cs) {
+    g_layer.colorspace = cs;
+    CGColorSpaceRelease(cs);
+  }
+
+  // Repaint even when paused (no fresh mpv frame) — mirrors UpdateLayerGeometry.
+  g_state.dirty.store(true);
+  [g_layer setNeedsDisplay];
+  static const char* kClassName[] = {"SDR-709", "SDR-P3", "HDR-PQ", "HLG"};
+  const char* name = (clsInt >= 0 && clsInt <= CC_HLG) ? kClassName[clsInt] : "?";
+  fprintf(stderr,
+          "[player-mac] color: class=%s prim=%s trc=%s peak=%s edr=%d "
+          "headroom=%.2f hdrBacking=%d\n",
+          name, prim, trc, peak, static_cast<int>(wantsEDR), headroom,
+          static_cast<int>(g_state.hdrBacking.load()));
+}
+
+// Classify the freshly-decoded stream from mpv's video-params and hand the class
+// to the main queue. Runs on the event thread; reads mpv properties only. Classify
+// on TRANSFER (gamma), never primaries alone — BT.2020-primaries SDR is still SDR.
+void ReconfigureColorForCurrentVideo() {
+  if (!g_state.mpv) return;
+  auto readProp = [](const char* name) -> std::string {
+    char* v = M::get_property_string(g_state.mpv, name);
+    if (!v) return std::string();
+    std::string s(v);
+    M::mpv_free(v);
+    return s;
+  };
+  const std::string gamma = readProp("video-params/gamma");
+  if (gamma.empty()) return;  // params not ready yet — a later reconfig re-fires
+  const std::string primaries = readProp("video-params/primaries");
+
+  const char* forceSdr = getenv("FLIKS_HDR");
+  const bool sdrOnly = forceSdr && std::strcmp(forceSdr, "no") == 0;
+
+  ContentColorClass cls;
+  if (!sdrOnly && gamma == "pq") {
+    cls = CC_HDR_PQ;
+  } else if (!sdrOnly && gamma == "hlg") {
+    cls = CC_HLG;
+  } else if (primaries == "display-p3" || primaries == "dci-p3" || primaries == "bt.2020") {
+    cls = CC_SDR_P3;  // present wide gamut on the P3 layer; mpv gamut-maps 2020→P3
+  } else {
+    cls = CC_SDR_709;
+  }
+
+  const int clsInt = static_cast<int>(cls);
+  // Log the raw mpv enum strings the classification keyed off: the vendored
+  // libmpv's exact video-params values must be confirmed on device (see #605), and
+  // these are the only place they surface.
+  fprintf(stderr, "[player-mac] video-params: gamma=%s primaries=%s -> class=%d\n",
+          gamma.c_str(), primaries.c_str(), clsInt);
+  dispatch_async(dispatch_get_main_queue(), ^{ ApplyLayerColorConfig(clsInt); });
 }
 
 // ── mpv event loop → JS (lifted from addon.cc EventThreadMain) ───────────────
@@ -290,6 +431,10 @@ void EventThreadMain(State* s) {
         if (!p) break;
         if (std::strcmp(p->name, "track-list") == 0) {
           Emit("{\"type\":\"tracksChanged\"}");
+          break;
+        }
+        if (std::strcmp(p->name, "video-params") == 0) {
+          ReconfigureColorForCurrentVideo();
           break;
         }
         if (!p->data) break;
@@ -371,9 +516,11 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   M::set_option_string(g_state.mpv, "load-unsafe-playlists", "yes");
   // The app drives subtitle selection; don't let mpv auto-pick a track.
   M::set_option_string(g_state.mpv, "sid", "no");
-  // Let mpv adapt its output to the layer's (HDR-capable) colorspace instead of
-  // hard-tonemapping to SDR — best-effort HDR passthrough.
-  M::set_option_string(g_state.mpv, "target-colorspace-hint", "yes");
+  // Color management is content-adaptive: target-prim/-trc/-peak are set per
+  // decoded stream in ApplyLayerColorConfig, matched to the CALayer colorspace.
+  // target-colorspace-hint is deliberately NOT set — it is inert on the render
+  // API (it needs vo=gpu-next plus a Wayland/D3D11/winvk swapchain, none of which
+  // exist for a host-owned CAOpenGLLayer FBO).
   // Same on-demand-transcode reconnect policy as the Linux addon (see addon.cc):
   // retry seg-0/init 404s, in-progress 503s and transport-level open failures.
   M::set_option_string(g_state.mpv, "demuxer-lavf-o",
@@ -384,6 +531,9 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   M::observe_property(g_state.mpv, 3, "pause", MPV_FORMAT_FLAG);
   M::observe_property(g_state.mpv, 4, "track-list", MPV_FORMAT_NONE);
   M::observe_property(g_state.mpv, 5, "paused-for-cache", MPV_FORMAT_FLAG);
+  // Fires on video-reconfig once decode produces color params — drives the
+  // content-adaptive colorspace/EDR reconfiguration.
+  M::observe_property(g_state.mpv, 6, "video-params", MPV_FORMAT_NONE);
   M::request_log_messages(g_state.mpv,
       getenv("FLIKS_MPV_LOGLEVEL") ? getenv("FLIKS_MPV_LOGLEVEL") : "v");
   fprintf(stderr, "[player-mac] mpv ready (hwdec=videotoolbox)\n");
@@ -395,7 +545,7 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   g_layer.opaque = YES;
   g_layer.asynchronous = YES;  // drives its own CVDisplayLink render loop
   g_layer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
-  ConfigureHdr(g_layer);
+  BootLayerColorDefaults(g_layer);
   g_layer.frame = g_view.bounds;
   g_layer.contentsScale = g_view.window ? g_view.window.backingScaleFactor : 2.0;
   [g_view.layer addSublayer:g_layer];
@@ -407,11 +557,33 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
                   object:g_view
                    queue:[NSOperationQueue mainQueue]
               usingBlock:^(NSNotification*) { UpdateLayerGeometry(); }];
-  g_backingObserver = [[NSNotificationCenter defaultCenter]
-      addObserverForName:NSWindowDidChangeBackingPropertiesNotification
-                  object:g_view.window
-                   queue:[NSOperationQueue mainQueue]
-              usingBlock:^(NSNotification*) { UpdateLayerGeometry(); }];
+  // Re-evaluate the colorspace/EDR config for the current content whenever the
+  // display situation changes. Three notifications, because none covers every case:
+  //   • backing-properties — scale/colorspace change on the SAME screen;
+  //   • window-did-change-screen — the window moves onto/off a screen (fires even
+  //     when the two screens share scale + colorspace, which backing-properties
+  //     misses);
+  //   • app screen-parameters — headroom changes with no window move (display
+  //     brightness, system-HDR toggle, panel entering/leaving reference mode).
+  void (^reeval)(NSNotification*) = ^(NSNotification*) {
+    UpdateLayerGeometry();
+    ApplyLayerColorConfig(g_lastColorClass.load());
+  };
+  NSNotificationCenter* nc = [NSNotificationCenter defaultCenter];
+  g_backingObserver = [nc addObserverForName:NSWindowDidChangeBackingPropertiesNotification
+                                      object:g_view.window
+                                       queue:[NSOperationQueue mainQueue]
+                                  usingBlock:reeval];
+  g_screenObserver = [nc addObserverForName:NSWindowDidChangeScreenNotification
+                                     object:g_view.window
+                                      queue:[NSOperationQueue mainQueue]
+                                 usingBlock:reeval];
+  // object:nil — headroom is a display-global property, not window-scoped.
+  g_screenParamsObserver =
+      [nc addObserverForName:NSApplicationDidChangeScreenParametersNotification
+                     object:nil
+                      queue:[NSOperationQueue mainQueue]
+                 usingBlock:reeval];
 
   g_state.run.store(true);
   g_state.eventThread = std::thread(EventThreadMain, &g_state);
@@ -523,6 +695,11 @@ Napi::Value Resize(const Napi::CallbackInfo& info) {
 }
 
 Napi::Value Stop(const Napi::CallbackInfo& info) {
+  // run.store(false) MUST stay first: a still-queued ApplyLayerColorConfig block
+  // (posted from the event thread) is only safe because it early-returns on
+  // !run, and it runs on this same main thread so it can't interleave with the
+  // g_layer=nil below. mpv itself is destroyed only after eventThread.join(), so
+  // the event thread has stopped reading g_state.mpv by then.
   g_state.run.store(false);
   // Stop the layer's render loop before freeing the render context.
   if (g_layer) {
@@ -536,6 +713,14 @@ Napi::Value Stop(const Napi::CallbackInfo& info) {
   if (g_backingObserver) {
     [[NSNotificationCenter defaultCenter] removeObserver:g_backingObserver];
     g_backingObserver = nil;
+  }
+  if (g_screenObserver) {
+    [[NSNotificationCenter defaultCenter] removeObserver:g_screenObserver];
+    g_screenObserver = nil;
+  }
+  if (g_screenParamsObserver) {
+    [[NSNotificationCenter defaultCenter] removeObserver:g_screenParamsObserver];
+    g_screenParamsObserver = nil;
   }
   if (g_state.eventThread.joinable()) g_state.eventThread.join();
   if (g_tsfnReady.exchange(false)) g_tsfn.Release();

@@ -36,11 +36,19 @@ it is NOT the menu-bar server host under `macos/`.
 - This single-window compositor is the only model that works under **Mutter/X11**:
   an embedded mpv child window can't be composited beneath a sibling transparent
   overlay there, so we composite ourselves.
-- Consequence: **HDR is SDR-tonemapped on Linux** (render API uses `vo_gpu`, not
-  gpu-next). Video plays; it just isn't true-HDR on screen. On **macOS** the
-  CAOpenGLLayer uses an RGBA16F backing + `wantsExtendedDynamicRangeContent` and
-  mpv `target-colorspace-hint=yes`, attempting true HDR/EDR passthrough (best
-  effort; `FLIKS_HDR=no` forces SDR).
+- Consequence: **HDR is SDR-tonemapped on Linux/Windows** (render API uses
+  `vo_gpu`, not gpu-next). Video plays; it just isn't true-HDR on screen. On
+  **macOS** the CAOpenGLLayer uses an RGBA16F backing + a **content-adaptive color
+  pipeline** (`ApplyLayerColorConfig` in `native/player_mac/addon.mm`): on each
+  video-reconfig it classifies the stream from `video-params/gamma`+`primaries`
+  (SDR-709 / SDR-P3 / HDR10-PQ / HLG) and sets a matched
+  {mpv `target-prim`/`-trc`/`-peak` ↔ `CALayer.colorspace` ↔
+  `wantsExtendedDynamicRangeContent`} triple. EDR engages only when the display
+  reports headroom **and** the float backing was obtained; otherwise mpv
+  tone-maps down to the SDR pair. `target-colorspace-hint` is deliberately **not**
+  set — it is inert on the render API (needs `vo=gpu-next` + a compatible
+  swapchain). `FLIKS_HDR=no` forces the whole pipeline to SDR. On-device
+  validation + a `CAMetalLayer` migration for `CAEDRMetadata` are tracked in #605.
 
 The three buildable units: **native addon** (C++), **main/preload bundle**
 (esbuild), **Angular client** (`../client`).
@@ -152,8 +160,9 @@ can't init on this box, so OSR uses CPU readback.
 |-----|---------|---------|
 | `FLIKS_WEB_DIR` | packaged `web/` | dir of the built Angular `index.html` |
 | `FLIKS_MPV_PATH` | `native/vendor/libmpv.so.2` | self-contained libmpv |
-| `FLIKS_HWDEC` | `no` | mpv `hwdec` (e.g. `auto-copy`) |
+| `FLIKS_HWDEC` | `no` (Linux) / `videotoolbox` (macOS) | mpv `hwdec` (e.g. `auto-copy`) |
 | `FLIKS_MPV_LOGLEVEL` | `v` | libmpv log level (`warn` to quiet, `debug` for more) |
+| `FLIKS_HDR` | enabled | macOS only: set to `no` to force SDR end-to-end (8-bit backing, no EDR, no PQ/HLG targets). Any other value enables the content-adaptive HDR pipeline. |
 
 ## Process management
 
@@ -181,7 +190,9 @@ pkill -x electron        # NOT  pkill -f .../desktop
 
 ## Known constraints / gotchas
 
-- **HDR** → SDR tonemap only (see Architecture). Expected, not a bug.
+- **HDR** → SDR tonemap only on **Linux/Windows** (see Architecture). Expected
+  there, not a bug. **macOS** attempts EDR passthrough for PQ/HLG on displays with
+  headroom and falls back to SDR tonemap otherwise.
 - **Resume into a transcode** (seek to a high segment): the backend produces
   seg-0/init a beat after the playlist. mpv's ffmpeg HLS demuxer is configured to
   **reconnect on HTTP 4xx/5xx** (`demuxer-lavf-o` in `addon.cc`) so it retries
