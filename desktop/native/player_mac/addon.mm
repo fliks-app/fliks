@@ -118,6 +118,10 @@ struct State {
   std::mutex renderMutex;       // guards rc_render vs rc_free
   std::atomic<bool> run{false};
   std::atomic<bool> dirty{true};  // force a redraw (resize / first paint)
+  // Whether the layer actually got a half-float (RGBA16F) backing. EDR/PQ/HLG
+  // tagging is meaningless on an 8-bit unorm FBO (can't carry values >1.0), so
+  // ApplyLayerColorConfig gates the HDR branch on this, not just display headroom.
+  std::atomic<bool> hdrBacking{false};
   std::thread eventThread;
   double duration = 0;
 };
@@ -173,9 +177,11 @@ void Emit(const std::string& json) {
   CGLPixelFormatObj pf = nullptr;
   GLint n = 0;
   if (wantHdr && CGLChoosePixelFormat(hdr, &pf, &n) == kCGLNoError && pf) {
+    g_state.hdrBacking.store(true);
     fprintf(stderr, "[player-mac] GL pixel format: RGBA16F (HDR-capable)\n");
     return pf;
   }
+  g_state.hdrBacking.store(false);  // no float backing → EDR/PQ tagging would band
   if (CGLChoosePixelFormat(sdr, &pf, &n) == kCGLNoError && pf) {
     fprintf(stderr, "[player-mac] GL pixel format: 8-bit (SDR)\n");
     return pf;
@@ -252,6 +258,8 @@ MpvGLLayer* g_layer = nil;
 NSView* g_view = nil;  // not owned (Electron's content view)
 id g_backingObserver = nil;
 id g_frameObserver = nil;
+id g_screenObserver = nil;        // window moved onto/off a screen
+id g_screenParamsObserver = nil;  // display config / EDR headroom changed
 
 // Color class derived from the decoded stream's video-params. Drives the matched
 // {mpv target, CALayer colorspace, EDR} triple in ApplyLayerColorConfig, and is
@@ -302,10 +310,15 @@ void ApplyLayerColorConfig(int clsInt) {
   g_lastColorClass.store(clsInt);
   const ContentColorClass cls = static_cast<ContentColorClass>(clsInt);
 
+  // EDR needs BOTH a display with headroom AND a float backing: PQ/HLG + wantsEDR
+  // on an 8-bit unorm FBO only bands (can't represent >1.0), so fall back to the
+  // SDR tone-map pair there just as on a non-EDR display.
+  double headroom = 1.0;
   bool edrOK = false;
   if (@available(macOS 10.15, *)) {
     NSScreen* screen = g_view.window.screen ?: [NSScreen mainScreen];
-    edrOK = screen.maximumPotentialExtendedDynamicRangeColorComponentValue > 1.0;
+    headroom = screen.maximumPotentialExtendedDynamicRangeColorComponentValue;
+    edrOK = headroom > 1.0 && g_state.hdrBacking.load();
   }
 
   // SDR-709 defaults — also the fall-back for HDR content on a non-EDR display,
@@ -352,8 +365,13 @@ void ApplyLayerColorConfig(int clsInt) {
   // Repaint even when paused (no fresh mpv frame) — mirrors UpdateLayerGeometry.
   g_state.dirty.store(true);
   [g_layer setNeedsDisplay];
-  fprintf(stderr, "[player-mac] color: class=%d prim=%s trc=%s peak=%s edr=%d\n",
-          clsInt, prim, trc, peak, static_cast<int>(wantsEDR));
+  static const char* kClassName[] = {"SDR-709", "SDR-P3", "HDR-PQ", "HLG"};
+  const char* name = (clsInt >= 0 && clsInt <= CC_HLG) ? kClassName[clsInt] : "?";
+  fprintf(stderr,
+          "[player-mac] color: class=%s prim=%s trc=%s peak=%s edr=%d "
+          "headroom=%.2f hdrBacking=%d\n",
+          name, prim, trc, peak, static_cast<int>(wantsEDR), headroom,
+          static_cast<int>(g_state.hdrBacking.load()));
 }
 
 // Classify the freshly-decoded stream from mpv's video-params and hand the class
@@ -387,6 +405,11 @@ void ReconfigureColorForCurrentVideo() {
   }
 
   const int clsInt = static_cast<int>(cls);
+  // Log the raw mpv enum strings the classification keyed off: the vendored
+  // libmpv's exact video-params values must be confirmed on device (see #605), and
+  // these are the only place they surface.
+  fprintf(stderr, "[player-mac] video-params: gamma=%s primaries=%s -> class=%d\n",
+          gamma.c_str(), primaries.c_str(), clsInt);
   dispatch_async(dispatch_get_main_queue(), ^{ ApplyLayerColorConfig(clsInt); });
 }
 
@@ -528,16 +551,33 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
                   object:g_view
                    queue:[NSOperationQueue mainQueue]
               usingBlock:^(NSNotification*) { UpdateLayerGeometry(); }];
-  g_backingObserver = [[NSNotificationCenter defaultCenter]
-      addObserverForName:NSWindowDidChangeBackingPropertiesNotification
-                  object:g_view.window
-                   queue:[NSOperationQueue mainQueue]
-              usingBlock:^(NSNotification*) {
-                UpdateLayerGeometry();
-                // A move to another screen changes EDR headroom — re-evaluate the
-                // colorspace/EDR config for the current content on the new display.
-                ApplyLayerColorConfig(g_lastColorClass.load());
-              }];
+  // Re-evaluate the colorspace/EDR config for the current content whenever the
+  // display situation changes. Three notifications, because none covers every case:
+  //   • backing-properties — scale/colorspace change on the SAME screen;
+  //   • window-did-change-screen — the window moves onto/off a screen (fires even
+  //     when the two screens share scale + colorspace, which backing-properties
+  //     misses);
+  //   • app screen-parameters — headroom changes with no window move (display
+  //     brightness, system-HDR toggle, panel entering/leaving reference mode).
+  void (^reeval)(NSNotification*) = ^(NSNotification*) {
+    UpdateLayerGeometry();
+    ApplyLayerColorConfig(g_lastColorClass.load());
+  };
+  NSNotificationCenter* nc = [NSNotificationCenter defaultCenter];
+  g_backingObserver = [nc addObserverForName:NSWindowDidChangeBackingPropertiesNotification
+                                      object:g_view.window
+                                       queue:[NSOperationQueue mainQueue]
+                                  usingBlock:reeval];
+  g_screenObserver = [nc addObserverForName:NSWindowDidChangeScreenNotification
+                                     object:g_view.window
+                                      queue:[NSOperationQueue mainQueue]
+                                 usingBlock:reeval];
+  // object:nil — headroom is a display-global property, not window-scoped.
+  g_screenParamsObserver =
+      [nc addObserverForName:NSApplicationDidChangeScreenParametersNotification
+                     object:nil
+                      queue:[NSOperationQueue mainQueue]
+                 usingBlock:reeval];
 
   g_state.run.store(true);
   g_state.eventThread = std::thread(EventThreadMain, &g_state);
@@ -649,6 +689,11 @@ Napi::Value Resize(const Napi::CallbackInfo& info) {
 }
 
 Napi::Value Stop(const Napi::CallbackInfo& info) {
+  // run.store(false) MUST stay first: a still-queued ApplyLayerColorConfig block
+  // (posted from the event thread) is only safe because it early-returns on
+  // !run, and it runs on this same main thread so it can't interleave with the
+  // g_layer=nil below. mpv itself is destroyed only after eventThread.join(), so
+  // the event thread has stopped reading g_state.mpv by then.
   g_state.run.store(false);
   // Stop the layer's render loop before freeing the render context.
   if (g_layer) {
@@ -662,6 +707,14 @@ Napi::Value Stop(const Napi::CallbackInfo& info) {
   if (g_backingObserver) {
     [[NSNotificationCenter defaultCenter] removeObserver:g_backingObserver];
     g_backingObserver = nil;
+  }
+  if (g_screenObserver) {
+    [[NSNotificationCenter defaultCenter] removeObserver:g_screenObserver];
+    g_screenObserver = nil;
+  }
+  if (g_screenParamsObserver) {
+    [[NSNotificationCenter defaultCenter] removeObserver:g_screenParamsObserver];
+    g_screenParamsObserver = nil;
   }
   if (g_state.eventThread.joinable()) g_state.eventThread.join();
   if (g_tsfnReady.exchange(false)) g_tsfn.Release();
