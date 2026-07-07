@@ -929,6 +929,7 @@
     "fstatus_imported": "Importé",
     "fstatus_import_failed": "Échec de l'import",
     "msg_no_video_file": "Aucun fichier vidéo valide dans ce téléchargement",
+    "msg_blocked_from_queue": "Bloqué depuis la file d'activité",
     "stall_strikes_tooltip": "Nettoyage : {{current}} sur {{required}} vérifications sans progression",
     "search_another": "Chercher un autre torrent",
     "search_no_target": "Impossible de déterminer la cible de recherche pour cet élément.",

@@ -520,6 +520,9 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
     if (msg.includes('no valid video file')) {
       return this.translate.instant('activity.msg_no_video_file');
     }
+    if (msg === 'Blocked from the activity queue') {
+      return this.translate.instant('activity.msg_blocked_from_queue');
+    }
     return msg;
   }
 }
