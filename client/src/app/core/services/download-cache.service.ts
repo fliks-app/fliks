@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, untracked } from '@angular/core';
 
 /** Client-side download task tracked in localStorage. */
 export interface DownloadTask {
@@ -49,7 +49,9 @@ export class DownloadCacheService {
   }
 
   private persistLocalIds() {
-    localStorage.setItem(LOCAL_IDS_KEY, JSON.stringify([...this.localTaskIds()]));
+    // untracked: markLocal/removeLocal run inside effects that also write
+    // localTaskIds — a tracked read here would create a mutual-invalidation loop.
+    localStorage.setItem(LOCAL_IDS_KEY, JSON.stringify([...untracked(() => this.localTaskIds())]));
   }
 
   markLocal(taskId: number) {

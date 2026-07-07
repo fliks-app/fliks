@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { AuthService } from './auth.service';
+import { DownloadNotificationService } from './download-notification.service';
 
 const CACHE_NAME = 'offline-media';
 
@@ -28,13 +29,12 @@ async function getShaka() {
 @Injectable({ providedIn: 'root' })
 export class OfflineStorageService {
   private readonly isNative = Capacitor.isNativePlatform();
+  private readonly platform = Capacitor.getPlatform();
   private readonly auth = inject(AuthService);
+  private readonly notif = inject(DownloadNotificationService);
 
   async getLocalUrl(key: string): Promise<string | null> {
     if (this.isNative) {
-      // ExoPlayer stores content in SimpleCache, not filesystem.
-      // Return the stored HLS URL — native player uses CacheDataSource to
-      // read from cache. The URL is stored in the DownloadTask.
       return this.getNativeOfflineUrl(key);
     }
     // Web: check Shaka offline URI (stored in localStorage)
@@ -43,14 +43,28 @@ export class OfflineStorageService {
     return offlineUri ?? null;
   }
 
-  /** Look up the stored HLS URL for a native download from localStorage. */
-  private getNativeOfflineUrl(key: string): string | null {
+  /**
+   * Resolve the playable offline source for a native download.
+   *
+   * The two native platforms store offline HLS very differently:
+   *   - iOS (AVAssetDownloadTask) writes a local `.movpkg` bundle; the player
+   *     loads that file directly. Its path is resolved fresh from the native
+   *     plugin so it survives sandbox container-path changes across app updates.
+   *   - Android (ExoPlayer) keeps segments in SimpleCache and replays the
+   *     original remote HLS URL through a CacheDataSource, so we hand back the
+   *     `hlsUrl` stored on the DownloadTask.
+   */
+  private async getNativeOfflineUrl(key: string): Promise<string | null> {
     try {
       const mfid = Number(key.replace('download-', ''));
       const raw = localStorage.getItem('fliks.downloads.cache');
       const tasks: any[] = raw ? JSON.parse(raw) : [];
       const task = tasks.find((t: any) => t.mediaFileId === mfid && t.status === 'ready');
-      return task?.hlsUrl ?? null;
+      if (!task) return null;
+      if (this.platform === 'ios') {
+        return await this.notif.getOfflineUrl(String(task.id));
+      }
+      return task.hlsUrl ?? null;
     } catch {
       return null;
     }
@@ -186,26 +200,41 @@ export class OfflineStorageService {
     await this.shakaRemove(mfid);
   }
 
-  /** Download a small text file (VTT subtitle) and store locally. */
-  async downloadSmallFile(url: string, key: string): Promise<void> {
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${this.auth.accessToken}` },
-    });
-    if (!response.ok) return;
-    const text = await response.text();
-
-    if (this.isNative) {
-      const { Filesystem, Directory } = await getFs();
-      await this.ensureDir();
-      await Filesystem.writeFile({
-        path: `fliks-downloads/${key}`,
-        data: text,
-        directory: Directory.Data,
-        encoding: 'utf8' as any,
+  /**
+   * Download a small text file (VTT subtitle) and store locally.
+   * Returns true only when the file was actually fetched and written — callers
+   * must not record a subtitle entry for a file that failed, otherwise offline
+   * playback points the native player at a non-existent file and renders nothing.
+   */
+  async downloadSmallFile(url: string, key: string): Promise<boolean> {
+    try {
+      // Downloads can finish hours after the 1h access token was minted, so
+      // authenticate with the long-lived stream token (same token baked into
+      // the subtitle URL's ?token=), falling back to the access token.
+      const token = this.auth.streamToken() ?? this.auth.accessToken ?? '';
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-    } else {
-      const cache = await caches.open(CACHE_NAME);
-      await cache.put(key, new Response(text, { headers: { 'Content-Type': 'text/vtt' } }));
+      if (!response.ok) return false;
+      const text = await response.text();
+      if (!text) return false;
+
+      if (this.isNative) {
+        const { Filesystem, Directory } = await getFs();
+        await this.ensureDir();
+        await Filesystem.writeFile({
+          path: `fliks-downloads/${key}`,
+          data: text,
+          directory: Directory.Data,
+          encoding: 'utf8' as any,
+        });
+      } else {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.put(key, new Response(text, { headers: { 'Content-Type': 'text/vtt' } }));
+      }
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -242,6 +271,10 @@ export class OfflineStorageService {
     if (!this.isNative) return this.getSmallFileUrl(key);
     try {
       const { Filesystem, Directory } = await getFs();
+      // Confirm the file exists — getUri only builds a path, it never checks.
+      // Returning a URI for a missing file makes the native player attach a
+      // dead subtitle track that renders nothing.
+      await Filesystem.stat({ path: `fliks-downloads/${key}`, directory: Directory.Data });
       const result = await Filesystem.getUri({
         path: `fliks-downloads/${key}`,
         directory: Directory.Data,
@@ -254,8 +287,8 @@ export class OfflineStorageService {
 
   async has(key: string): Promise<boolean> {
     if (this.isNative) {
-      // ExoPlayer stores in SimpleCache, not filesystem — check localStorage.
-      return this.getNativeOfflineUrl(key) !== null;
+      // Native offline content — resolve via the platform-specific path.
+      return (await this.getNativeOfflineUrl(key)) !== null;
     }
     // Web: check Shaka offline URI
     const mfid = key.replace('download-', '');

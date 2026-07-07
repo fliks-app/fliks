@@ -19,6 +19,7 @@ class FlksViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(ImmersivePlugin())
         bridge?.registerPluginInstance(PipPlugin())
         bridge?.registerPluginInstance(CastPlugin())
+        bridge?.registerPluginInstance(DownloadPlugin())
     }
 
     func updateStatusBar(hidden: Bool) {

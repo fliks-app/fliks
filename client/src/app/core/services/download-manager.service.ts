@@ -9,6 +9,8 @@ import { DownloadCacheService, DownloadTask } from './download-cache.service';
 import { DownloadNotificationService } from './download-notification.service';
 import { AuthService } from './auth.service';
 import { BrowserDeviceProfileService } from './browser-device-profile.service';
+import { TranslateService } from '@ngx-translate/core';
+import { formatSubtitleLabel } from '../utils/player.utils';
 
 export interface DownloadEvent {
   type: 'progress' | 'ready' | 'failed' | 'complete';
@@ -41,6 +43,7 @@ export class DownloadManagerService {
   private readonly notif = inject(DownloadNotificationService);
   private readonly auth = inject(AuthService);
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
+  private readonly translate = inject(TranslateService);
 
   private readonly titles = new Map<number, { title: string; episode?: string }>();
   private activeCount = 0;
@@ -150,7 +153,15 @@ export class DownloadManagerService {
     if (this.isNative) {
       const token =
         this.auth.streamToken() ?? this.auth.accessToken ?? '';
-      this.notif.startDownload(String(taskId), hlsUrl, token);
+      // Pre-translated banner copy for the iOS completion/failure notification
+      // (ngx-translate is the single source of user-facing strings; the native
+      // side never hardcodes text). Ignored on Android.
+      const notifTitle = episode ? `${title} · ${episode}` : title;
+      this.notif.startDownload(String(taskId), hlsUrl, token, {
+        notifTitle,
+        notifComplete: this.translate.instant('downloads.notif_complete'),
+        notifFailed: this.translate.instant('downloads.notif_failed'),
+      });
     } else {
       void this.handleWebDownload(task, hlsUrl);
     }
@@ -240,11 +251,16 @@ export class DownloadManagerService {
             : null;
         if (!url) continue;
         const key = `sub-${task.mediaFileId}-${sub.id}`;
-        await this.storage.downloadSmallFile(url, key);
+        // Only record the subtitle if its VTT was actually written — a dangling
+        // entry makes offline playback attach a subtitle track that renders nothing.
+        const stored = await this.storage.downloadSmallFile(url, key);
+        if (!stored) continue;
         offlineSubs.push({
           key,
           language: sub.language,
-          label: `${sub.language}${sub.hearingImpaired ? ' (HI)' : ''}${sub.forced ? ' (Forced)' : ''}${sub.streamIndex != null ? ' [embedded]' : ''}`,
+          // Same normalized label as online playback (localized language name +
+          // HI/Forced/codec) instead of the raw language code.
+          label: formatSubtitleLabel(sub, this.translate),
           forced: sub.forced,
         });
       }

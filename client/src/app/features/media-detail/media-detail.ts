@@ -771,6 +771,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         return;
       }
       this.media.set(m);
+      // Paint from the cache-served media immediately; the uncacheable
+      // playback-state calls below must not gate first paint.
+      this.loading.set(false);
+      this.draftQualityProfileId.set(m.qualityProfile?.id ?? null);
+      this.draftLanguageProfileId.set(m.languageProfile?.id ?? null);
+      this.selectedLibraryId.set(m.libraryId ?? null);
+      this.selectedProvider.set(m.preferredProvider ?? null);
       queueMicrotask(() => {
         void this.mediaService
           .getOne(id, { force: true })
@@ -800,88 +807,87 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       ) {
         void this.downloadProgress.seed();
       }
-      // Load resume + watched episodes + per-episode progress for series
-      const [resumeInfo, watchedIds, progress] = await Promise.all([
-        this.streamingApi.getMediaResumeInfo(m.id).catch(() => null),
-        m.type === 'series'
-          ? this.streamingApi.getWatchedEpisodeIds(m.id).catch(() => [] as number[])
-          : Promise.resolve([] as number[]),
-        m.type === 'series'
-          ? this.streamingApi
-              .getEpisodeProgress(m.id)
-              .catch(() => ({}) as Record<number, number>)
-          : Promise.resolve({} as Record<number, number>),
-      ]);
-      this.resumeInfo.set(resumeInfo);
-      const watchedSet = new Set(watchedIds);
-      this.watchedEpisodeIds.set(watchedSet);
-      this.episodeProgress.set(progress);
+      // Resume/watched/progress hit uncacheable /api/playback/media/* — load
+      // them off the render path so a slow server never holds the spinner.
+      void (async () => {
+        const [resumeInfo, watchedIds, progress] = await Promise.all([
+          this.streamingApi.getMediaResumeInfo(m.id).catch(() => null),
+          m.type === 'series'
+            ? this.streamingApi.getWatchedEpisodeIds(m.id).catch(() => [] as number[])
+            : Promise.resolve([] as number[]),
+          m.type === 'series'
+            ? this.streamingApi
+                .getEpisodeProgress(m.id)
+                .catch(() => ({}) as Record<number, number>)
+            : Promise.resolve({} as Record<number, number>),
+        ]);
+        this.resumeInfo.set(resumeInfo);
+        const watchedSet = new Set(watchedIds);
+        this.watchedEpisodeIds.set(watchedSet);
+        this.episodeProgress.set(progress);
 
-      // Pre-select the last-played file if available
-      if (resumeInfo?.mediaFileId) {
-        const files = m.files ?? [];
-        if (files.some((f) => f.id === resumeInfo.mediaFileId)) {
-          this.selectedFileId.set(resumeInfo.mediaFileId);
-        }
-      }
-
-      // Series: preselect the season the user is currently watching.
-      //   1. Latest in-progress episode (resumeInfo).
-      //   2. Season of the first unwatched-with-file episode — handles the
-      //      between-episodes case (last ep completed, next not started yet)
-      //      where resumeInfo is null.
-      let resumeHandled = false;
-      if (m.type === 'series' && m.seasons?.length) {
-        let targetSeasonId: number | null = null;
-        if (resumeInfo?.episodeId) {
-          targetSeasonId =
-            m.seasons.find((s) =>
-              s.episodes?.some((e) => e.id === resumeInfo.episodeId),
-            )?.id ?? null;
-        }
-        if (targetSeasonId == null) {
-          targetSeasonId =
-            m.seasons.find((s) =>
-              s.episodes?.some(
-                (e) => e.hasFile && !watchedSet.has(e.id),
-              ),
-            )?.id ?? null;
-        }
-        if (targetSeasonId != null) {
-          this.activeSeasonId.set(targetSeasonId);
-          this.persistActiveSeason(targetSeasonId);
-          resumeHandled = true;
-        }
-      }
-
-      if (m.type === 'series' && m.seasons?.length) {
-        if (!resumeHandled) this.syncActiveSeasonForSeriesFilter();
-        // Scroll to first unwatched episode in active season
-        const seasonId = this.activeSeasonId();
-        const activeSeason = m.seasons.find((s) => s.id === seasonId);
-        if (activeSeason?.episodes?.length) {
-          const firstUnwatched = activeSeason.episodes.find((e) => e.hasFile && !watchedSet.has(e.id));
-          if (firstUnwatched) {
-            requestAnimationFrame(() => {
-              const el = document.getElementById(`episode-${firstUnwatched.id}`);
-              if (!el) return;
-              const scroller = el.parentElement;
-              if (scroller && scroller.scrollWidth > scroller.clientWidth) {
-                const elRect = el.getBoundingClientRect();
-                const scrollerRect = scroller.getBoundingClientRect();
-                const offset = elRect.left - scrollerRect.left + scroller.scrollLeft - scroller.clientWidth / 2 + el.offsetWidth / 2;
-                scroller.scrollTo({ left: offset, behavior: 'smooth' });
-              }
-            });
+        // Pre-select the last-played file if available
+        if (resumeInfo?.mediaFileId) {
+          const files = m.files ?? [];
+          if (files.some((f) => f.id === resumeInfo.mediaFileId)) {
+            this.selectedFileId.set(resumeInfo.mediaFileId);
           }
         }
-      } else {
-        this.activeSeasonId.set(null);
-      }
-      this.draftQualityProfileId.set(m.qualityProfile?.id ?? null);
-      this.draftLanguageProfileId.set(m.languageProfile?.id ?? null);
-      this.selectedLibraryId.set(m.libraryId ?? null);
-      this.selectedProvider.set(m.preferredProvider ?? null);
+
+        // Series: preselect the season the user is currently watching.
+        //   1. Latest in-progress episode (resumeInfo).
+        //   2. Season of the first unwatched-with-file episode — handles the
+        //      between-episodes case (last ep completed, next not started yet)
+        //      where resumeInfo is null.
+        let resumeHandled = false;
+        if (m.type === 'series' && m.seasons?.length) {
+          let targetSeasonId: number | null = null;
+          if (resumeInfo?.episodeId) {
+            targetSeasonId =
+              m.seasons.find((s) =>
+                s.episodes?.some((e) => e.id === resumeInfo.episodeId),
+              )?.id ?? null;
+          }
+          if (targetSeasonId == null) {
+            targetSeasonId =
+              m.seasons.find((s) =>
+                s.episodes?.some(
+                  (e) => e.hasFile && !watchedSet.has(e.id),
+                ),
+              )?.id ?? null;
+          }
+          if (targetSeasonId != null) {
+            this.activeSeasonId.set(targetSeasonId);
+            this.persistActiveSeason(targetSeasonId);
+            resumeHandled = true;
+          }
+        }
+
+        if (m.type === 'series' && m.seasons?.length) {
+          if (!resumeHandled) this.syncActiveSeasonForSeriesFilter();
+          // Scroll to first unwatched episode in active season
+          const seasonId = this.activeSeasonId();
+          const activeSeason = m.seasons.find((s) => s.id === seasonId);
+          if (activeSeason?.episodes?.length) {
+            const firstUnwatched = activeSeason.episodes.find((e) => e.hasFile && !watchedSet.has(e.id));
+            if (firstUnwatched) {
+              requestAnimationFrame(() => {
+                const el = document.getElementById(`episode-${firstUnwatched.id}`);
+                if (!el) return;
+                const scroller = el.parentElement;
+                if (scroller && scroller.scrollWidth > scroller.clientWidth) {
+                  const elRect = el.getBoundingClientRect();
+                  const scrollerRect = scroller.getBoundingClientRect();
+                  const offset = elRect.left - scrollerRect.left + scroller.scrollLeft - scroller.clientWidth / 2 + el.offsetWidth / 2;
+                  scroller.scrollTo({ left: offset, behavior: 'smooth' });
+                }
+              });
+            }
+          }
+        } else {
+          this.activeSeasonId.set(null);
+        }
+      })();
     } catch {
       this.notFound.set(true);
     } finally {
