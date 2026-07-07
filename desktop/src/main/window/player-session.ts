@@ -152,10 +152,24 @@ export class PlayerSession {
       'unmaximize',
       'restore',
       'enter-full-screen',
-      'leave-full-screen',
     ] as const) {
       this.frameWin.on(ev as 'resize', sync);
     }
+    // On Windows, 'leave-full-screen' fires BEFORE the windowed frame is
+    // restored (Electron applies the size after notifying), so a synchronous
+    // getContentBounds() still returns the full-display rect. sync() would then
+    // pin the transparent video/UI overlays over the title bar, covering the
+    // native caption buttons, with no later event guaranteed to correct it.
+    // Re-fit once the restore has committed. macOS reports settled bounds at the
+    // event already, so it needs only the synchronous pass; the deferred ones
+    // are idempotent no-ops (sync() guards isDestroyed()).
+    this.frameWin.on('leave-full-screen', () => {
+      sync();
+      if (process.platform === 'win32') {
+        setTimeout(sync, 0);
+        setTimeout(sync, 150);
+      }
+    });
     this.frameWin.on('closed', () => this.destroy());
 
     await this.uiWin.loadURL(rendererUrl);
