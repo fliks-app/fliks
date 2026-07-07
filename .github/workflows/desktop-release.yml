@@ -173,14 +173,23 @@ jobs:
       - name: Vendor mpv (Windows)
         if: runner.os == 'Windows'
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           dest=desktop/native/vendor
           mkdir -p "$dest"
-          url=$(curl -fsSL https://api.github.com/repos/zhongfly/mpv-winbuild/releases/latest \
-            | grep -oE 'https://[^"]+' \
-            | grep -E 'mpv-x86_64-[0-9][^"]*\.7z$' | head -1)
-          test -n "$url" || { echo "::error::no mpv x86_64 .7z asset found"; exit 1; }
+          # zhongfly/mpv-winbuild sometimes cuts an arch-specific (e.g.
+          # aarch64-only) release, which `releases/latest` then points at,
+          # leaving no x86_64 asset. Scan the recent releases and take the
+          # newest x86_64 build instead. The `|| true` keeps `set -e` from
+          # firing on a grep-no-match / head SIGPIPE; the explicit guard below
+          # reports the failure clearly. The API call is authenticated to avoid
+          # the unauthenticated shared-runner-IP rate limit.
+          url=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/zhongfly/mpv-winbuild/releases?per_page=20" \
+            | grep -oE 'https://[^"]+mpv-x86_64-[0-9][^"]*\.7z' | head -1) || true
+          test -n "$url" || { echo "::error::no mpv-x86_64 .7z asset in the last 20 releases"; exit 1; }
           echo "Downloading mpv: $url"
           curl -fsSL -o "$RUNNER_TEMP/mpv.7z" "$url"
           7z x -y -o"$dest" "$RUNNER_TEMP/mpv.7z" >/dev/null
