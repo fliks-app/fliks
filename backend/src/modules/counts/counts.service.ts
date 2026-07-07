@@ -51,9 +51,8 @@ export class CountsService {
 
   /**
    * Downloads still doing work, from the history table. `grabbed` and
-   * `importing` are the states the queue badge counts; `warning` maps to
-   * "Quality not upgraded" and `failed`/`completed` are terminal, all three
-   * excluded from the badge.
+   * `importing` are the states the queue badge counts; `warning`, `failed`
+   * and `completed` are excluded from the badge.
    *
    * Known drift vs the live queue, accepted in exchange for skipping the
    * client fan-out (the badge links to the queue page, where truth lives):

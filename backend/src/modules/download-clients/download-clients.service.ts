@@ -434,11 +434,8 @@ export class DownloadClientsService {
           entry.status = 'Imported';
         } else if (match.status === 'importing') {
           entry.status = 'Importing';
-        } else if (match.status === 'failed') {
+        } else if (match.status === 'failed' || match.status === 'warning') {
           entry.status = 'Import failed';
-          entry.statusMessage = match.statusMessage ?? undefined;
-        } else if (match.status === 'warning') {
-          entry.status = 'Quality not upgraded';
           entry.statusMessage = match.statusMessage ?? undefined;
         } else if (entry.progress >= 1) {
           entry.status = 'Awaiting import';
