@@ -1,5 +1,6 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { Capacitor } from '@capacitor/core';
 import { firstValueFrom } from 'rxjs';
 import { DeviceService } from './device.service';
 import { AuthService } from './auth.service';
@@ -49,6 +50,9 @@ export class AppUpdateService {
 
   readonly mode = computed<UpdateMode>(() => {
     if (this.device.isDesktopNative() && this.desktop) return 'desktop';
+    // Native apps (iOS/Android/TV) update through their store — no in-app
+    // update path, so the topbar update check doesn't apply there.
+    if (Capacitor.isNativePlatform()) return 'none';
     if (this.auth.canAccessSettings()) return 'server';
     return 'none';
   });
