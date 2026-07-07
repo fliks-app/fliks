@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.14.1](https://github.com/fliks-app/fliks/compare/v1.14.0...v1.14.1) (2026-07-07)
+
+
+### Features
+
+* **desktop:** keep the screen awake during playback ([#592](https://github.com/fliks-app/fliks/issues/592)) ([d0daeda](https://github.com/fliks-app/fliks/commit/d0daeda156a7c1d43f8a9139b84e1c525bd0807d))
+* **file-info:** add video range, Dolby profile and color fields ([#596](https://github.com/fliks-app/fliks/issues/596)) ([100b746](https://github.com/fliks-app/fliks/commit/100b746498f281163a72e130f11f935c4981616c))
+* **player:** error diagnostics card + fail-fast on undecodable streams ([#589](https://github.com/fliks-app/fliks/issues/589)) ([87cbed0](https://github.com/fliks-app/fliks/commit/87cbed02eef05795cd1a0a55d84ec35e14b4f58d))
+
+
+### Bug Fixes
+
+* **activity:** drop no-video downloads and fix queue labels and links ([#598](https://github.com/fliks-app/fliks/issues/598)) ([0fe9c1f](https://github.com/fliks-app/fliks/commit/0fe9c1fb367174e85a40d2d956883649028f03bd))
+* **activity:** translate the blocked-from-queue status message ([#602](https://github.com/fliks-app/fliks/issues/602)) ([5e4d610](https://github.com/fliks-app/fliks/commit/5e4d610d8c5806591d8903cdd441fdaff2b6585a))
+* **desktop:** restore caption buttons after exit-fullscreen on windows ([#601](https://github.com/fliks-app/fliks/issues/601)) ([87e57aa](https://github.com/fliks-app/fliks/commit/87e57aadce1015bffb309494cb9be41b49e4f498))
+* **imports:** derive imported file quality from real resolution ([#597](https://github.com/fliks-app/fliks/issues/597)) ([c205be0](https://github.com/fliks-app/fliks/commit/c205be0a3af9df0e697d81e0331f7e6843f45753))
+* **media:** exclude owned movies from coming-soon ([#594](https://github.com/fliks-app/fliks/issues/594)) ([649f4d3](https://github.com/fliks-app/fliks/commit/649f4d3d428d8778b10b16081e35751914d09cd8))
+* **player:** keep subtitles off on desktop when disabled in controls ([#590](https://github.com/fliks-app/fliks/issues/590)) ([f50beb1](https://github.com/fliks-app/fliks/commit/f50beb167869714641f5d969c42c0c6ea7f9fb6d))
+* **player:** translate reload/init error card, never show raw text ([#599](https://github.com/fliks-app/fliks/issues/599)) ([7169090](https://github.com/fliks-app/fliks/commit/71690907728b3cd08bfa74d7223f2741928cbc2f))
+* **toast:** add top gap, show above modals, pin close button right ([#595](https://github.com/fliks-app/fliks/issues/595)) ([ef7613f](https://github.com/fliks-app/fliks/commit/ef7613f3188e0eb91f6838036b1d9e0d59365a8d))
+
+
+### Miscellaneous Chores
+
+* set next release version to 1.14.1 ([#593](https://github.com/fliks-app/fliks/issues/593)) ([015f0bf](https://github.com/fliks-app/fliks/commit/015f0bf36943ce87826be275ec79e4e45176a75e))
+
 ## [1.14.0](https://github.com/fliks-app/fliks/compare/v1.13.1...v1.14.0) (2026-06-26)
 
 
