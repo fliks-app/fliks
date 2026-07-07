@@ -86,8 +86,7 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
     'Error', 'Unknown',
   ];
   readonly fliksStatusOptions = [
-    'Awaiting import', 'Importing', 'Imported', 'Quality not upgraded',
-    'Import failed',
+    'Awaiting import', 'Importing', 'Imported', 'Import failed',
   ];
 
   readonly totalPages = computed(() =>
@@ -460,11 +459,7 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
     if (item.status === 'Import failed') return 'error';
     if (item.trackerStatus === 'Seeding' || item.status === 'Imported')
       return 'success';
-    if (
-      item.trackerStatus === 'Stalled' ||
-      item.status === 'Importing' ||
-      item.status === 'Quality not upgraded'
-    )
+    if (item.trackerStatus === 'Stalled' || item.status === 'Importing')
       return 'warning';
     if (item.trackerStatus === 'Paused' || item.trackerStatus === 'Stopped')
       return 'neutral';
@@ -481,7 +476,6 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
       case 'Awaiting import':
       case 'Importing': return 'badge-warning';
       case 'Imported': return 'badge-success';
-      case 'Quality not upgraded': return 'badge-warning';
       case 'Import failed': return 'badge-error';
       default: return 'badge-ghost';
     }
@@ -504,5 +498,28 @@ export class ActivityQueueComponent implements OnInit, OnDestroy {
 
   fliksStatusLabel(status: string): string {
     return this.statusLabel('fstatus', status);
+  }
+
+  /** Router link for a queue row: the episode page for a single-episode
+   *  grab, the series page for a season pack, the movie page otherwise. */
+  itemLink(item: QueueItem): (string | number)[] {
+    if (item.mediaType === 'series') {
+      if (item.episodeId != null) {
+        return ['/series', item.mediaId!, 'episode', item.episodeId];
+      }
+      return ['/series', item.mediaId!];
+    }
+    return ['/movies', item.mediaId!];
+  }
+
+  /** Translate the known backend status messages; arbitrary errors (raw
+   *  exception text) are shown as received. */
+  statusMessageLabel(item: QueueItem): string {
+    const msg = item.statusMessage;
+    if (!msg) return '';
+    if (msg.includes('no valid video file')) {
+      return this.translate.instant('activity.msg_no_video_file');
+    }
+    return msg;
   }
 }

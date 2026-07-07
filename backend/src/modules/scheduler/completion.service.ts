@@ -588,12 +588,52 @@ export class CompletionService {
     }
 
     if (!videoFiles.length) {
-      const statusMessage = `Import blocked: no valid video file found for "${torrent.name}"`;
+      // The download completed but carries no playable video — archived
+      // (RAR/ISO), sample-only, or a non-video payload. Treat it as a failed
+      // import: blocklist the release so the next search skips it, then drop
+      // the dud torrent and its files so it leaves the queue and stops
+      // re-triggering this import each tick. SearchMissing grabs a working
+      // release on its normal cadence.
+      const statusMessage = `Import failed: no valid video file in the download "${torrent.name}"`;
       this.log.warn(`Import[${history.sourceTitle}]: ${statusMessage}`);
       await this.historyRepo.update(history.id, {
-        status: 'warning',
+        status: 'failed',
         statusMessage,
       });
+
+      try {
+        await this.blocklist.createFromHistory(
+          history,
+          'Auto-blocklist: no valid video file in the download',
+        );
+        this.log.log(`Import[${history.sourceTitle}]: auto-blocklisted`);
+      } catch {
+        // Already blocklisted — carry on with removal.
+      }
+      if (torrent._client) {
+        try {
+          await this.qbittorrent.deleteTorrent(
+            torrent._client,
+            torrent.hash,
+            true,
+          );
+        } catch (e) {
+          this.log.warn(
+            `Import[${history.sourceTitle}]: failed to remove dud torrent: ${(e as Error).message}`,
+          );
+        }
+      }
+
+      const failRecipients = await this.sseAudience.recipientsForMedia(
+        history.mediaId,
+      );
+      this.events.emitToUsers(failRecipients, {
+        type: 'import.failed',
+        mediaId: history.mediaId,
+        title: history.sourceTitle,
+        error: statusMessage,
+      });
+      this.events.emit({ type: 'queue.updated' });
       return;
     }
 
