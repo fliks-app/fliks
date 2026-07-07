@@ -193,6 +193,12 @@ void Emit(const std::string& json) {
                 pixelFormat:(CGLPixelFormatObj)pf
                forLayerTime:(CFTimeInterval)t
                 displayTime:(const CVTimeStamp*)ts {
+  // Hold renderMutex for the same reason drawInCGLContext does: this runs on the
+  // layer's CVDisplayLink thread, while Stop() frees mpvGl under the mutex on the
+  // main thread. Without the lock, rc_update could poll a handle Stop just freed
+  // (run.load() at the top races the free that happens right after it). The mpv
+  // update callback (OnMpvUpdate) is a no-op, so there is no re-entrant deadlock.
+  std::lock_guard<std::mutex> lk(g_state.renderMutex);
   if (!g_state.run.load()) return NO;
   if (!g_state.mpvGl) return YES;  // first draw creates the render context
   if (g_state.dirty.load()) return YES;
