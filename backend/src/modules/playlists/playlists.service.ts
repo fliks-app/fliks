@@ -542,18 +542,34 @@ export class PlaylistsService {
     const rows: { playlistId: number; count: number; posters: string[] }[] =
       await this.dataSource.query(
         `
-        SELECT pi."playlistId" AS "playlistId",
-               COUNT(*)::int    AS count,
-               COALESCE(
-                 (ARRAY_AGG(m."posterUrl" ORDER BY pi."position")
-                  FILTER (WHERE m."posterUrl" IS NOT NULL))[1:4],
-                 ARRAY[]::text[]
-               ) AS posters
-        FROM playlist_items pi
-        JOIN media m ON m.id = pi."mediaId"
-        WHERE pi."playlistId" = ANY($1)
-          AND m."libraryId" = ANY($2)
-        GROUP BY pi."playlistId"
+        SELECT c."playlistId" AS "playlistId",
+               c.count         AS count,
+               COALESCE(p.posters, ARRAY[]::text[]) AS posters
+        FROM (
+          SELECT pi."playlistId" AS "playlistId", COUNT(*)::int AS count
+          FROM playlist_items pi
+          JOIN media m ON m.id = pi."mediaId"
+          WHERE pi."playlistId" = ANY($1)
+            AND m."libraryId" = ANY($2)
+          GROUP BY pi."playlistId"
+        ) c
+        LEFT JOIN (
+          -- One poster per distinct media (a series counts once, not once per
+          -- episode), ordered by its first position, capped at 4 for the mosaic.
+          SELECT "playlistId", (ARRAY_AGG(poster ORDER BY minpos))[1:4] AS posters
+          FROM (
+            SELECT pi."playlistId" AS "playlistId",
+                   m."posterUrl"   AS poster,
+                   MIN(pi."position") AS minpos
+            FROM playlist_items pi
+            JOIN media m ON m.id = pi."mediaId"
+            WHERE pi."playlistId" = ANY($1)
+              AND m."libraryId" = ANY($2)
+              AND m."posterUrl" IS NOT NULL
+            GROUP BY pi."playlistId", m."posterUrl"
+          ) d
+          GROUP BY "playlistId"
+        ) p ON p."playlistId" = c."playlistId"
         `,
         [playlistIds, accessibleLibraryIds],
       );
