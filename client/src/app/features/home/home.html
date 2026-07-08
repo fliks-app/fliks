@@ -40,6 +40,7 @@
                 [progressPercent]="item.progressPercent"
                 [playable]="true"
                 [link]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId]"
+                [playlistMediaId]="item.mediaId"
                 [subtitleLink]="item.episodeId ? ['/series', '' + item.mediaId, 'episode', '' + item.episodeId] : null"
                 [dismissable]="true"
                 [interactiveWatched]="true"
@@ -65,6 +66,7 @@
                 [title]="rec.media.title"
                 [subtitle]="'' + rec.media.year"
                 [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
+                [playlistMediaId]="rec.media.id"
                 [status]="rec.media.available ? null : 'missing'"
                 [playable]="rec.media.available"
                 [dismissable]="true"
@@ -108,6 +110,7 @@
                 [title]="entry.title"
                 [subtitle]="entry.date"
                 [link]="['/' + (entry.type === 'series' ? 'series' : 'movies'), '' + entry.mediaId]"
+                [playlistMediaId]="entry.mediaId"
               />
             }
           </app-horizontal-scroller>

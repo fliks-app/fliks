@@ -118,6 +118,10 @@ export class MediaCardComponent {
    *  on recommendation cards). Appended after the built-in actions, before the
    *  danger "remove" entry. Pure menu actions — no inline indicator. */
   readonly extraActions = input<CardAction[]>([]);
+  /** Library media id used for the "add to playlist" action when the card is
+   *  fed by individual inputs rather than `[media]` (continue-watching,
+   *  recommendations, coming-soon). Falls back to `media().id`. */
+  readonly playlistMediaId = input<number | null>(null);
 
   // Events
   readonly clicked = output<void>();
@@ -377,7 +381,7 @@ export class MediaCardComponent {
     }
     // Library media can be added to a playlist from any card. Gated on a real
     // media id so TMDB/discover previews (no library id) don't offer it.
-    const mediaId = this.media()?.id;
+    const mediaId = this.media()?.id ?? this.playlistMediaId();
     if (mediaId != null) {
       actions.push({
         labelKey: 'playlists.add_to_playlist',
