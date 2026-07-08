@@ -11,6 +11,7 @@ import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { User } from '../users/entities/user.entity';
 import { PlaybackState } from './entities/playback-state.entity';
+import { PlaylistsService } from '../playlists/playlists.service';
 
 export interface WatchHistoryItem {
   id: number;
@@ -88,7 +89,33 @@ export class PlaybackService implements OnModuleInit {
     private readonly mediaFileRepo: Repository<MediaFile>,
     @InjectRepository(Episode)
     private readonly episodeRepo: Repository<Episode>,
+    private readonly playlists: PlaylistsService,
   ) {}
+
+  /**
+   * Fire the playlist auto-remove hook for an item the user just finished,
+   * isolating any failure: a playlist write must never break recording a
+   * watch. `episodeIds` is `null` for a movie, or the finished episode ids.
+   */
+  private async autoRemoveFromPlaylists(
+    userId: number,
+    mediaId: number,
+    episodeIds: number[] | null,
+  ): Promise<void> {
+    try {
+      await this.playlists.removeWatchedFromAutoPlaylists(
+        userId,
+        mediaId,
+        episodeIds,
+      );
+    } catch (err) {
+      this.log.warn(
+        `Playlist auto-remove failed for media #${mediaId}: ${
+          (err as Error).message
+        }`,
+      );
+    }
+  }
 
   async onModuleInit() {
     await this.deduplicateAndCreateIndexes();
@@ -273,6 +300,7 @@ export class PlaybackService implements OnModuleInit {
       throw new BadRequestException('mediaId and mediaFileId are required');
     }
     let state = await this.findState(userId, mediaId, body.episodeId);
+    const wasCompleted = state?.completed ?? false;
 
     const dur = body.durationSeconds ?? 0;
     const pos = body.positionSeconds ?? 0;
@@ -308,7 +336,15 @@ export class PlaybackService implements OnModuleInit {
     }
 
     try {
-      return await this.repo.save(state);
+      const saved = await this.repo.save(state);
+      if (completed && !wasCompleted) {
+        await this.autoRemoveFromPlaylists(
+          userId,
+          mediaId,
+          body.episodeId != null ? [body.episodeId] : null,
+        );
+      }
+      return saved;
     } catch (err) {
       if ((err as { code?: string })?.code === PG_FK_VIOLATION) return null;
       throw err;
@@ -627,6 +663,13 @@ export class PlaybackService implements OnModuleInit {
         `,
         [userId, mediaId],
       );
+      const completedStates = await this.repo.find({
+        where: { user: { id: userId }, media: { id: mediaId }, completed: true },
+      });
+      const episodeIds = completedStates
+        .map((s) => s.episodeId)
+        .filter((id): id is number => id != null);
+      await this.autoRemoveFromPlaylists(userId, mediaId, episodeIds);
     } else {
       await this.repo.query(
         `
@@ -706,6 +749,11 @@ export class PlaybackService implements OnModuleInit {
         .filter((r): r is NonNullable<typeof r> => r !== null);
       if (rows.length) {
         await this.repo.save(rows as Partial<PlaybackState>[]);
+        await this.autoRemoveFromPlaylists(
+          userId,
+          mediaId,
+          rows.map((r) => r.episode.id),
+        );
       }
     } else {
       await this.repo.update(
@@ -778,7 +826,15 @@ export class PlaybackService implements OnModuleInit {
       }
     }
 
-    return this.repo.save(state);
+    const saved = await this.repo.save(state);
+    if (willBeCompleted) {
+      await this.autoRemoveFromPlaylists(
+        userId,
+        mediaId,
+        episodeId != null ? [episodeId] : null,
+      );
+    }
+    return saved;
   }
 
   async hideFromContinueWatching(

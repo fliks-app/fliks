@@ -492,6 +492,42 @@ export class PlaylistsService {
     return { removed: res.affected ?? 0 };
   }
 
+  /**
+   * Auto-remove hook for finished playback: drop the matching row(s) from every
+   * playlist the user *owns* that has `autoRemoveWatched` on. Scoped to owned
+   * playlists so one member finishing an item never mutates a shared list for
+   * the others. Called from the playback path when a `PlaybackState` transitions
+   * to completed; the caller isolates failures so a playlist write can't break
+   * recording the watch.
+   *
+   * `episodeIds` picks the target: `null` matches the movie row (episode NULL);
+   * a list matches those episode rows (a single toggle passes one id, a
+   * season/series mark-watched passes many). An empty list is a no-op.
+   */
+  async removeWatchedFromAutoPlaylists(
+    userId: number,
+    mediaId: number,
+    episodeIds: number[] | null,
+  ): Promise<void> {
+    if (episodeIds != null && !episodeIds.length) return;
+    const playlists = await this.repo.find({
+      where: { owner: { id: userId }, autoRemoveWatched: true },
+    });
+    if (!playlists.length) return;
+
+    const qb = this.itemRepo
+      .createQueryBuilder()
+      .delete()
+      .from(PlaylistItem)
+      .where('"playlistId" IN (:...playlistIds)', {
+        playlistIds: playlists.map((p) => p.id),
+      })
+      .andWhere('"mediaId" = :mediaId', { mediaId });
+    if (episodeIds == null) qb.andWhere('"episodeId" IS NULL');
+    else qb.andWhere('"episodeId" IN (:...episodeIds)', { episodeIds });
+    await qb.execute();
+  }
+
   async reorder(
     user: User,
     playlistId: number,
