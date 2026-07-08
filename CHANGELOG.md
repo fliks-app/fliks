@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.15.2](https://github.com/fliks-app/fliks/compare/v1.15.1...v1.15.2) (2026-07-08)
+
+
+### Bug Fixes
+
+* **media:** stop non-Latin alt titles from bypassing title match ([#614](https://github.com/fliks-app/fliks/issues/614)) ([a9d4b4f](https://github.com/fliks-app/fliks/commit/a9d4b4f9c4e80b192fb929a1e095c4343a2911a5))
+* **subtitles:** make vobsub ocr work and hide in-progress extractions ([#612](https://github.com/fliks-app/fliks/issues/612)) ([a196afe](https://github.com/fliks-app/fliks/commit/a196afecd576f22db248d04ac6f53461a38ff7f0))
+
 ## [1.15.1](https://github.com/fliks-app/fliks/compare/v1.15.0...v1.15.1) (2026-07-08)
 
 
