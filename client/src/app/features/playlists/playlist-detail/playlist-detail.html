@@ -159,7 +159,7 @@
             <img
               [src]="(group.media.fanartUrl ?? group.media.posterUrl) | resolveUrl: 'thumb'"
               alt=""
-              class="w-24 aspect-video object-cover rounded bg-base-300 shrink-0"
+              class="w-36 sm:w-44 aspect-video object-cover rounded bg-base-300 shrink-0"
             />
             <span class="font-semibold flex-1 truncate">{{ group.media.title }}</span>
             <span class="text-sm text-base-content/50 shrink-0">
