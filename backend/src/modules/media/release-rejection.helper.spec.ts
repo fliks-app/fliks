@@ -104,6 +104,37 @@ describe('releaseMatchesMedia', () => {
       ),
     ).toBe(true);
   });
+
+  // A movie routinely carries TMDB alternative titles in other scripts. Those
+  // tokenize to nothing, and must not turn the matcher into a wildcard that
+  // claims every same-year release — otherwise RSS/SearchMissing grab an
+  // unrelated film that merely shares the year.
+  const withNonLatinAlt = {
+    title: 'Original Movie Title',
+    originalTitle: 'Original Movie Title',
+    year: 1985,
+    alternativeTitles: ['作品タイトル', 'Original Movie Title'],
+  };
+
+  it('rejects an unrelated same-year release despite a non-Latin alternative title', () => {
+    expect(
+      releaseMatchesMedia(
+        'Unrelated.Other.Film.1985.1080p.BluRay.x264-GROUP',
+        withNonLatinAlt,
+        { requireYearInTitle: true },
+      ),
+    ).toBe(false);
+  });
+
+  it('still accepts the real title when a non-Latin alternative title is stored', () => {
+    expect(
+      releaseMatchesMedia(
+        'Original.Movie.Title.1985.1080p.BluRay.x264-GROUP',
+        withNonLatinAlt,
+        { requireYearInTitle: true },
+      ),
+    ).toBe(true);
+  });
 });
 
 describe('resolveSearchTitles + titleMatchesExpectation', () => {
@@ -170,6 +201,26 @@ describe('resolveSearchTitles + titleMatchesExpectation', () => {
         'Titre.localise.de.l.editeur.S01E04.AD.HDTV.x264-GROUP',
         expectedTitles,
       ),
+    ).toBe(true);
+  });
+
+  it('skips a non-Latin candidate instead of matching everything', () => {
+    expect(
+      titleMatchesExpectation('Unrelated.Other.Film.1985.1080p.x264-GROUP', [
+        'Original Movie Title',
+        '作品タイトル',
+      ]),
+    ).toBe(false);
+  });
+
+  it('stays permissive when every candidate is non-Latin', () => {
+    // A work stored only under a non-Latin name yields no comparable tokens;
+    // acceptance falls back to permissive so it remains grabbable.
+    expect(
+      titleMatchesExpectation('Anything.1985.1080p.x264-GROUP', [
+        '作品タイトル',
+        '作品',
+      ]),
     ).toBe(true);
   });
 });
