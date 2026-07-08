@@ -437,6 +437,18 @@ export class PlaylistDetailComponent {
   async removeItem(item: PlaylistItem): Promise<void> {
     const id = this.playlist()?.id;
     if (id == null) return;
+    const title = item.episode
+      ? this.episodeLabel(item.episode)
+      : item.media.title;
+    const confirmed = await this.confirmation.confirm({
+      title: this.translate.instant('playlists.remove_item_title'),
+      message: this.translate.instant('playlists.remove_item_confirm', {
+        title,
+      }),
+      confirmLabel: this.translate.instant('playlists.remove_item_action'),
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     this.items.update((list) => list.filter((i) => i.itemId !== item.itemId));
     try {
       await this.api.removeItem(id, item.itemId);
