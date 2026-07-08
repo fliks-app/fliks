@@ -239,7 +239,7 @@ export class PlaylistsService {
     const existing = await this.itemRepo.findOne({
       where: { playlist: { id: playlistId }, media: { id: dto.mediaId } },
     });
-    if (existing) throw new BadRequestException('Media already in playlist');
+    if (existing) throw new BadRequestException('errors.media_already_in_playlist');
 
     const max = await this.itemRepo
       .createQueryBuilder('i')
@@ -261,7 +261,7 @@ export class PlaylistsService {
       // Unique(playlist, media): a concurrent add raced past the pre-check —
       // surface the same clean 400 rather than a raw DB error.
       if ((err as { code?: string }).code === '23505') {
-        throw new BadRequestException('Media already in playlist');
+        throw new BadRequestException('errors.media_already_in_playlist');
       }
       throw err;
     }
