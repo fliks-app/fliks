@@ -111,6 +111,7 @@
   "sse": {
     "subtitle_synced": "Sous-titre synchronisé avec succès.",
     "subtitle_downloaded": "Sous-titre téléchargé : {{title}} [{{lang}}]",
+    "subtitle_failed": "Échec de l'extraction OCR ({{lang}})",
     "import_complete": "Import terminé : {{title}}",
     "stalled_removed": "Torrent bloqué supprimé : {{title}}",
     "rescan_started": "Scan en cours : {{title}}",
@@ -783,6 +784,9 @@
     "action_convert_srt": "Convertir en SRT",
     "action_ocr_extract": "Extraire en texte (OCR)",
     "ocr_started": "Extraction OCR lancée — le sous-titre apparaîtra une fois prêt.",
+    "ocr_in_progress": "Extraction OCR en cours : {{langs}}",
+    "ocr_processing": "OCR en cours",
+    "ocr_unavailable": "OCR indisponible pour ce format",
     "ocr_language_title": "Langue du sous-titre",
     "ocr_language_hint": "La langue de cette piste n'a pas pu être déterminée. Choisissez-la pour l'OCR — elle sert à reconnaître le texte et à étiqueter le sous-titre.",
     "change_language": "Changer la langue",

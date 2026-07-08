@@ -94,13 +94,19 @@
                       }
                     </td>
                     <td class="text-center text-xs">
+                      @if (sub.status === 'processing') {
+                        <span class="badge badge-xs badge-warning gap-1">
+                          <span class="loading loading-spinner loading-xs"></span>
+                          {{ 'media_detail.ocr_processing' | translate }}
+                        </span>
+                      }
                       @if (sub.forced) { <span class="badge badge-xs badge-outline mr-1">F</span> }
                       @if (sub.hearingImpaired) { <span class="badge badge-xs badge-outline">HI</span> }
                       @if (sub.synced) { <span class="badge badge-xs badge-info ml-1">Synced</span> }
                       @if (sub.codec) { <span class="badge badge-xs badge-ghost ml-1">{{ sub.codec }}</span> }
                     </td>
                     <td class="text-end">
-                      @if (canManage() && rowHasActions(sub)) {
+                      @if (canManage() && rowHasActions(sub) && sub.status !== 'processing') {
                         <button
                           #actionsTrigger
                           type="button"
@@ -143,10 +149,17 @@
       (closed)="closeSubActions()"
     >
       @if (actionsSubIsImage()) {
-        <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => ocrSubtitle(s))">
-          <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-          {{ 'media_detail.action_ocr_extract' | translate }}
-        </button>
+        @if (actionsSubIsOcrable()) {
+          <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => ocrSubtitle(s))">
+            <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+            {{ 'media_detail.action_ocr_extract' | translate }}
+          </button>
+        } @else {
+          <div class="dropdown-item text-white opacity-50 cursor-default">
+            <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+            {{ 'media_detail.ocr_unavailable' | translate }}
+          </div>
+        }
       } @else {
       <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => changeLanguage(s))">
         <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>

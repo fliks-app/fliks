@@ -79,6 +79,14 @@
       </div>
     }
 
+    <!-- OCR extraction in progress -->
+    @if (ocrLanguages().length) {
+      <div class="mt-3 flex items-center justify-center gap-2 text-sm text-base-content/60">
+        <span class="loading loading-spinner loading-xs"></span>
+        <span>{{ 'media_detail.ocr_in_progress' | translate:{ langs: ocrLanguages().join(', ') } }}</span>
+      </div>
+    }
+
     <!-- Action icons row -->
     <div
       class="flex items-center gap-6 mt-4"
@@ -294,6 +302,14 @@
           @if (remainingLabel()) {
             <p class="text-sm text-base-content/50 mt-1">{{ remainingLabel() }}</p>
           }
+        </div>
+      }
+
+      <!-- OCR extraction in progress -->
+      @if (ocrLanguages().length) {
+        <div class="mt-3 flex items-center gap-2 text-sm text-base-content/60">
+          <span class="loading loading-spinner loading-xs"></span>
+          <span>{{ 'media_detail.ocr_in_progress' | translate:{ langs: ocrLanguages().join(', ') } }}</span>
         </div>
       }
 

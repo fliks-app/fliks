@@ -29,7 +29,11 @@ import {
 } from '@lucide/angular';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
 import { formatSubtitleLabel } from '../../../core/utils/player.utils';
-import { isImageBasedSubtitleCodec } from '../../../core/utils/subtitle-codecs';
+import { localizeLanguage } from '../../../core/utils/language.utils';
+import {
+  isImageBasedSubtitleCodec,
+  isOcrSupportedSubtitleCodec,
+} from '../../../core/utils/subtitle-codecs';
 import { AppSettingsService } from '../../../core/services/app-settings.service';
 import { SubtitleFilenamePipe } from '../../pipes/subtitle-filename.pipe';
 import {
@@ -142,6 +146,11 @@ export class SubtitlesModalComponent {
    *  of the text-only post-processing actions. */
   readonly actionsSubIsImage = computed(() =>
     isImageBasedSubtitleCodec(this.actionsSub()?.codec),
+  );
+  /** The open image track has an OCR path (PGS/VobSub) — offer extraction.
+   *  Image codecs without one (DVB/XSUB) only get the burn-in note. */
+  readonly actionsSubIsOcrable = computed(() =>
+    isOcrSupportedSubtitleCodec(this.actionsSub()?.codec),
   );
   /** Embedded tracks have no sidecar file: blacklist/delete don't apply. */
   readonly actionsSubIsEmbedded = computed(
@@ -269,11 +278,24 @@ export class SubtitlesModalComponent {
     this.page.set(Math.max(0, Math.min(p, this.totalPages() - 1)));
   }
 
+  /** Localized languages of OCR runs still in progress, surfaced by the detail
+   *  page as an "extraction en cours" indicator. */
+  readonly ocrInProgress = computed<string[]>(() =>
+    this.filteredSubtitles()
+      .filter((s) => s.status === 'processing')
+      .map((s) => localizeLanguage(s.language, this.translate)),
+  );
+
   /** Formatted subtitles for the media-info-header dropdown */
   readonly headerSubtitles = computed<MediaInfoHeaderSubtitle[]>(() => {
     const hideBurnIn = this.appSettings.hideBurnInSubtitles();
+    // A subtitle only belongs in the header selector once it's a servable
+    // file: an OCR run still processing (or one that failed) isn't playable.
     const subs = this.filteredSubtitles().filter(
-      (s) => !(hideBurnIn && isImageBasedSubtitleCodec(s.codec)),
+      (s) =>
+        s.status !== 'processing' &&
+        s.status !== 'failed' &&
+        !(hideBurnIn && isImageBasedSubtitleCodec(s.codec)),
     );
     return subs.map((s) => {
       const id = s.streamIndex != null ? `emb-${s.streamIndex}` : `ext-${s.id}`;
@@ -418,6 +440,13 @@ export class SubtitlesModalComponent {
       this.toast.success(
         this.translate.instant('sse.subtitle_downloaded', {
           title: event['title'] ?? '',
+          lang: event['language'] ?? '',
+        }),
+      );
+      void this.loadSubtitles(mediaId);
+    } else if (event.type === 'subtitle.failed') {
+      this.toast.error(
+        this.translate.instant('sse.subtitle_failed', {
           lang: event['language'] ?? '',
         }),
       );

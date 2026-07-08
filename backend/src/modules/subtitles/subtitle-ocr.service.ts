@@ -17,15 +17,18 @@ import { SettingsService } from '../settings/settings.service';
 import { EventsService } from '../scheduler/events.service';
 import { cleanSubtitle } from './subtitle-cleaner';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
-import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codecs';
+import {
+  isImageBasedSubtitleCodec,
+  isOcrSupportedSubtitleCodec,
+} from '../../common/constants/subtitle-codecs';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
 
 const execFileAsync = promisify(execFile);
 
-/** ISO 639-1 → tesseract (ISO 639-2/T) traineddata names, for vobsub2srt's
- *  `--tesseract-lang`. All packs ship via `tesseract-ocr-all`. Falls back to
- *  `eng`. (pgsrip derives its own language from the staged .sup filename.) */
+/** ISO 639-1 → tesseract (ISO 639-2/T) traineddata names, for subtile-ocr's
+ *  `-l`. All packs ship via `tesseract-ocr-all`. Falls back to `eng`.
+ *  (pgsrip derives its own language from the staged .sup filename.) */
 const TESSERACT_LANG: Record<string, string> = {
   en: 'eng', fr: 'fra', es: 'spa', de: 'deu', it: 'ita', pt: 'por',
   nl: 'nld', sv: 'swe', da: 'dan', no: 'nor', fi: 'fin', pl: 'pol',
@@ -82,6 +85,13 @@ export class SubtitleOcrService {
     if (!source) throw new NotFoundException(`Subtitle #${subtitleId} not found`);
     if (!isImageBasedSubtitleCodec(source.codec)) {
       throw new BadRequestException('Subtitle is not image-based');
+    }
+    // Reject codecs with no OCR path (DVB, XSUB) up front so no PROCESSING
+    // placeholder is ever created for work that can't complete.
+    if (!isOcrSupportedSubtitleCodec(source.codec)) {
+      throw new BadRequestException(
+        `OCR is not available for "${source.codec}" subtitles`,
+      );
     }
     if (source.streamIndex == null) {
       throw new BadRequestException(
@@ -211,7 +221,6 @@ export class SubtitleOcrService {
       this.log.warn(
         `OCR end (failed) — sub #${placeholderId} "${media?.title ?? ''}" [${source.language}]: ${err}`,
       );
-      await this.repo.update(placeholderId, { status: SubtitleStatus.FAILED });
       this.events.emit({
         type: 'subtitle.failed',
         mediaId: source.mediaId,
@@ -219,6 +228,10 @@ export class SubtitleOcrService {
         language: source.language,
         error: String(err),
       });
+      // Leave nothing behind: drop the PROCESSING placeholder so a failed run
+      // never lingers in the subtitle list (temp artefacts are already removed
+      // by extractAndOcr's finally).
+      await this.repo.delete(placeholderId);
     }
   }
 
@@ -235,7 +248,7 @@ export class SubtitleOcrService {
     // filename — so the filename and `--language` must carry the same IETF
     // code. These tracks are usually untagged ('und'); default to English.
     const ietf = lower.length === 2 ? lower : 'en';
-    // vobsub2srt wants the tesseract (alpha-3) pack name instead.
+    // subtile-ocr wants the tesseract (alpha-3) pack name instead.
     const tess = TESSERACT_LANG[lower] ?? 'eng';
     const base = path.join(this.tmpDir, `ocr-${streamIndex}-${process.hrtime.bigint()}`);
 
@@ -262,15 +275,26 @@ export class SubtitleOcrService {
       }
 
       if (codec === 'dvd_subtitle') {
-        // ffmpeg emits the paired .idx/.sub from the .idx output path;
-        // vobsub2srt takes the basename and writes "<base>.srt".
-        await execFileAsync('ffmpeg', [
-          '-y', '-i', videoPath, '-map', `0:${streamIndex}`, '-c:s', 'copy', `${base}.idx`,
-        ], { timeout: 120_000 });
-        await execFileAsync('vobsub2srt', ['--tesseract-lang', tess, base], {
-          timeout: 600_000,
-          maxBuffer: 1 << 24,
-        });
+        // ffmpeg carries no vobsub muxer, so mkvextract writes the paired
+        // .idx/.sub. Its track IDs match ffmpeg's stream index (both number
+        // Matroska tracks 0-based in file order), so streamIndex selects it.
+        // mkvextract only reads Matroska, so a non-mkv source can't be OCR'd.
+        if (!/\.(mkv|mka|webm)$/i.test(videoPath)) {
+          throw new Error('VobSub OCR requires a Matroska (.mkv) source');
+        }
+        try {
+          await execFileAsync('mkvextract', [
+            'tracks', videoPath, `${streamIndex}:${base}.idx`,
+          ], { timeout: 120_000 });
+        } catch (err) {
+          // mkvextract exits non-zero on warnings too; only fatal when the
+          // VobSub pair it should have written is missing.
+          if (!(await this.exists(`${base}.sub`))) throw err;
+        }
+        // subtile-ocr reads the .idx (+ paired .sub) and writes "<base>.srt".
+        await execFileAsync('subtile-ocr', [
+          '-l', tess, '-o', `${base}.srt`, `${base}.idx`,
+        ], { timeout: 600_000, maxBuffer: 1 << 24 });
         return await fs.readFile(`${base}.srt`, 'utf-8');
       }
 

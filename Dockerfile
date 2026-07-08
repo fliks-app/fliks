@@ -18,6 +18,19 @@ RUN npm ci
 COPY backend/ .
 RUN npm run build
 
+# --- Stage 2b: Build subtile-ocr (VobSub → SRT) ---
+# No prebuilt binary is published, so compile it against the same tesseract /
+# leptonica the runtime ships (same ubuntu:24.04 base → matching lib ABI).
+# buildx runs this per target arch, so it works on amd64 and arm64 alike.
+FROM ubuntu:24.04 AS vobsub-ocr-build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  ca-certificates curl build-essential pkg-config clang libclang-dev \
+  libtesseract-dev libleptonica-dev \
+  && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
+  && . "$HOME/.cargo/env" \
+  && cargo install subtile-ocr --version 0.2.6 --root /opt/subtile-ocr \
+  && rm -rf /var/lib/apt/lists/* "$HOME/.cargo/registry" "$HOME/.rustup"
+
 # --- Stage 3: Production runtime ---
 FROM ubuntu:24.04
 
@@ -45,6 +58,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3-venv \
   ffmpeg \
   libchromaprint-tools \
+  mkvtoolnix \
   tesseract-ocr \
   tesseract-ocr-all \
   wget \
@@ -68,6 +82,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && apt-get purge -y wget gcc python3-dev libc6-dev \
   && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/*
+
+# VobSub OCR binary (links against the tesseract/leptonica installed above).
+COPY --from=vobsub-ocr-build /opt/subtile-ocr/bin/subtile-ocr /usr/local/bin/subtile-ocr
 
 WORKDIR /app
 
