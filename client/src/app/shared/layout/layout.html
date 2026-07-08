@@ -250,6 +250,12 @@
                 </a>
               </li>
               <li>
+                <a routerLink="/playlists" routerLinkActive="active" (click)="resetNavHistory()">
+                  <svg lucideListVideo class="h-5 w-5"></svg>
+                  {{ 'nav.playlists' | translate }}
+                </a>
+              </li>
+              <li>
                 <a routerLink="/activity" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
                   <span class="flex items-center gap-2">
                     <svg lucideDownload class="h-5 w-5"></svg>
@@ -365,6 +371,12 @@
           <a routerLink="/history" routerLinkActive="active">
             <svg lucideHistory class="h-5 w-5"></svg>
             {{ 'nav.history' | translate }}
+          </a>
+        </li>
+        <li>
+          <a routerLink="/playlists" routerLinkActive="active">
+            <svg lucideListVideo class="h-5 w-5"></svg>
+            {{ 'nav.playlists' | translate }}
           </a>
         </li>
 

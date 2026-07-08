@@ -25,6 +25,7 @@ import {
   LucideFilm,
   LucideFolder,
   LucideListChecks,
+  LucideListPlus,
   LucidePlay,
   LucideRotateCcw,
   LucideScanLine,
@@ -101,7 +102,7 @@ interface AudioTrack {
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
     LucideCaptions, LucideCheck, LucideClipboardList, LucideDownload,
     LucideEllipsisVertical, LucideEye, LucideEyeOff,
-    LucideFilm, LucideFolder, LucideListChecks, LucidePlay, LucideRotateCcw, LucideScanLine,
+    LucideFilm, LucideFolder, LucideListChecks, LucideListPlus, LucidePlay, LucideRotateCcw, LucideScanLine,
     LucideSearch, LucideSettings, LucideTrash2,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -209,6 +210,8 @@ export class MediaInfoHeaderComponent {
   readonly openDownloadDetail = output<void>();
   /** Viewer (regular requester) asks to (re-)request the current title. */
   readonly requestMedia = output<void>();
+  /** Viewer wants to add the current title to one of their playlists. */
+  readonly addToPlaylist = output<void>();
   /** Emitted after a series-level bulk watched toggle. Parent should refresh its episode watched list. */
   readonly seriesWatchedToggled = output<{ watched: boolean }>();
   /** Emitted after a single-episode watched toggle so the parent can refresh

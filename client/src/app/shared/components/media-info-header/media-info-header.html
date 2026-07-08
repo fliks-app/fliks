@@ -454,6 +454,10 @@
       </button>
     }
   }
+  <button type="button" class="dropdown-item text-white" (click)="addToPlaylist.emit()">
+    <svg lucideListPlus class="h-5 w-5 shrink-0 opacity-80"></svg>
+    <span class="flex-1">{{ 'playlists.add_to_playlist' | translate }}</span>
+  </button>
   @if (canGrab() && mediaType() !== 'series' && qualityProfileName()) {
     <button type="button" [disabled]="grabBusy() !== null" class="dropdown-item text-white" (click)="grabBest.emit()">
       @if (grabBusy() === 'best') { <span class="loading loading-spinner loading-sm"></span> }

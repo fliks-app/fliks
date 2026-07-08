@@ -51,6 +51,7 @@ import {
 import { MediaDetailProfilesModalComponent } from './components/media-detail-profiles-modal/media-detail-profiles-modal.component';
 import { MediaDetailLibraryModalComponent } from './components/media-detail-library-modal/media-detail-library-modal.component';
 import { RequestModalComponent } from '../tmdb-preview/components/request-modal/request-modal.component';
+import { AddToPlaylistModalComponent } from './components/add-to-playlist-modal/add-to-playlist-modal.component';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
@@ -100,6 +101,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     MediaDetailProfilesModalComponent,
     MediaDetailLibraryModalComponent,
     RequestModalComponent,
+    AddToPlaylistModalComponent,
     HorizontalScrollerComponent,
     MediaCardComponent,
     DownloadQualityModalComponent,
@@ -1678,6 +1680,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   // ---------------------------------------------------------------------------
 
   private readonly requestModal = viewChild<RequestModalComponent>('requestModal');
+  private readonly addToPlaylistModal = viewChild(AddToPlaylistModalComponent);
+
+  /** Open the "add to playlist" dialog for the current title. */
+  protected openAddToPlaylist() {
+    const m = this.media();
+    if (m) this.addToPlaylistModal()?.open(m.id);
+  }
 
   /** Fetch the global active-request state for this title. Run after the
    *  media loads, and again after a successful submit so the gates and the

@@ -90,6 +90,21 @@ export const routes: Routes = [
         data: { titleKey: 'persons.title', reuse: true },
       },
       {
+        path: 'playlists',
+        loadComponent: () =>
+          import('./features/playlists/playlists').then(
+            (m) => m.PlaylistsComponent,
+          ),
+        data: { titleKey: 'playlists.title', reuse: true },
+      },
+      {
+        path: 'playlists/:id',
+        loadComponent: () =>
+          import('./features/playlists/playlist-detail/playlist-detail').then(
+            (m) => m.PlaylistDetailComponent,
+          ),
+      },
+      {
         path: 'persons/:id',
         loadComponent: () =>
           import('./features/person-detail/person-detail').then(

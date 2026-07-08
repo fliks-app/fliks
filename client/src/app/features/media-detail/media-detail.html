@@ -73,6 +73,7 @@
           (editSubtitles)="openSubtitles()"
           (episodeWatchedToggled)="onEpisodeWatchedToggledFromHeader($event)"
           (requestMedia)="openRequestForMedia()"
+          (addToPlaylist)="openAddToPlaylist()"
           (openTracking)="openTracking({ kind: 'episode', episodeId: ep.id })"
         />
 
@@ -184,6 +185,7 @@
           (seriesWatchedToggled)="onSeriesWatchedToggled($event)"
           (editSubtitles)="openSubtitles()"
           (requestMedia)="openRequestForMedia()"
+          (addToPlaylist)="openAddToPlaylist()"
           (openTracking)="openTracking(m.type === 'movie' ? { kind: 'movie' } : { kind: 'series' })"
           [badge]="headerBadge()"
           (openDownloadDetail)="openDownloadDetailModal()"
@@ -461,3 +463,5 @@
     (requested)="onRequestSubmitted()"
   />
 }
+
+<app-add-to-playlist-modal #addToPlaylistModal />

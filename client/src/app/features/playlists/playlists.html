@@ -1,0 +1,73 @@
+<div class="flex flex-col gap-4 h-full">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold">{{ 'playlists.title' | translate }}</h1>
+    <button type="button" class="btn btn-primary btn-sm gap-2" (click)="openCreate()">
+      <svg lucidePlus class="w-4 h-4" [strokeWidth]="2"></svg>
+      {{ 'playlists.create' | translate }}
+    </button>
+  </div>
+
+  @if (loading() && !playlists().length) {
+    <div class="flex justify-center py-12">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (!playlists().length) {
+    <div class="text-center py-24 text-base-content/50">
+      <p class="text-lg">{{ 'playlists.empty' | translate }}</p>
+    </div>
+  } @else {
+    <div
+      class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 tv:grid-cols-6 gap-3 sm:gap-4"
+    >
+      @for (p of playlists(); track p.id) {
+        <app-mosaic-card
+          [posters]="p.posters"
+          [label]="p.name"
+          [count]="p.itemCount"
+          (clicked)="openPlaylist(p.id)"
+        />
+      }
+    </div>
+  }
+</div>
+
+<dialog #createDialog class="modal">
+  <div class="modal-box max-w-md">
+    <form method="dialog">
+      <button
+        class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+        [attr.aria-label]="'common.close' | translate"
+      >
+        ✕
+      </button>
+    </form>
+    <h3 class="text-lg font-bold mb-4">{{ 'playlists.create' | translate }}</h3>
+    <form class="flex flex-col gap-4" (ngSubmit)="create()">
+      <input
+        type="text"
+        class="input input-bordered w-full"
+        name="newPlaylistName"
+        [placeholder]="'playlists.new_placeholder' | translate"
+        [ngModel]="newName()"
+        (ngModelChange)="newName.set($event)"
+        autofocus
+      />
+      <div class="modal-action mt-0">
+        <button type="button" class="btn btn-sm" (click)="closeCreate()">
+          {{ 'common.cancel' | translate }}
+        </button>
+        <button
+          type="submit"
+          class="btn btn-primary btn-sm"
+          [disabled]="creating() || !newName().trim()"
+        >
+          @if (creating()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'playlists.create' | translate }}
+        </button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
