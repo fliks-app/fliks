@@ -371,22 +371,23 @@ export class MediaCardComponent {
         run: () => this.openDetail(),
       });
     }
-    if (this.interactiveWatched()) {
-      const watched = this.status() === 'watched';
-      actions.push({
-        labelKey: watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched',
-        icon: watched ? 'eye-off' : 'eye',
-        run: () => this.watchedToggled.emit(!watched),
-      });
-    }
-    // Library media can be added to a playlist from any card. Gated on a real
-    // media id so TMDB/discover previews (no library id) don't offer it.
+    // Library media can be added to a playlist from any card, listed above
+    // "mark watched". Gated on a real media id so TMDB/discover previews (no
+    // library id) don't offer it.
     const mediaId = this.media()?.id ?? this.playlistMediaId();
     if (mediaId != null) {
       actions.push({
         labelKey: 'playlists.add_to_playlist',
         icon: 'list-plus',
         run: () => this.addToPlaylist.open(mediaId),
+      });
+    }
+    if (this.interactiveWatched()) {
+      const watched = this.status() === 'watched';
+      actions.push({
+        labelKey: watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched',
+        icon: watched ? 'eye-off' : 'eye',
+        run: () => this.watchedToggled.emit(!watched),
       });
     }
     actions.push(...this.extraActions());
