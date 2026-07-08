@@ -34,16 +34,17 @@ export class CreatePlaylists1781200000000 implements MigrationInterface {
         "updatedAt" timestamptz NOT NULL DEFAULT now(),
         "playlistId" int NOT NULL,
         "mediaId" int NOT NULL,
+        "episodeId" int,
         "position" int NOT NULL,
         "addedById" int,
         CONSTRAINT "FK_playlist_items_playlist"
           FOREIGN KEY ("playlistId") REFERENCES "playlists"("id") ON DELETE CASCADE,
         CONSTRAINT "FK_playlist_items_media"
           FOREIGN KEY ("mediaId") REFERENCES "media"("id") ON DELETE CASCADE,
+        CONSTRAINT "FK_playlist_items_episode"
+          FOREIGN KEY ("episodeId") REFERENCES "episodes"("id") ON DELETE CASCADE,
         CONSTRAINT "FK_playlist_items_addedBy"
-          FOREIGN KEY ("addedById") REFERENCES "users"("id") ON DELETE SET NULL,
-        CONSTRAINT "UQ_playlist_items_playlist_media"
-          UNIQUE ("playlistId", "mediaId")
+          FOREIGN KEY ("addedById") REFERENCES "users"("id") ON DELETE SET NULL
       )
     `);
     await queryRunner.query(`
@@ -55,8 +56,26 @@ export class CreatePlaylists1781200000000 implements MigrationInterface {
         ON "playlist_items" ("mediaId")
     `);
     await queryRunner.query(`
+      CREATE INDEX "IDX_playlist_items_episodeId"
+        ON "playlist_items" ("episodeId")
+    `);
+    await queryRunner.query(`
       CREATE INDEX "IDX_playlist_items_addedById"
         ON "playlist_items" ("addedById")
+    `);
+    // A movie appears at most once per playlist; an episode at most once per
+    // playlist. Two partial indexes because a plain UNIQUE(playlistId, mediaId,
+    // episodeId) would let duplicate movies through (Postgres treats NULLs as
+    // distinct by default).
+    await queryRunner.query(`
+      CREATE UNIQUE INDEX "UQ_playlist_items_movie"
+        ON "playlist_items" ("playlistId", "mediaId")
+        WHERE "episodeId" IS NULL
+    `);
+    await queryRunner.query(`
+      CREATE UNIQUE INDEX "UQ_playlist_items_episode"
+        ON "playlist_items" ("playlistId", "episodeId")
+        WHERE "episodeId" IS NOT NULL
     `);
 
     await queryRunner.query(`
