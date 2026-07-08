@@ -14,5 +14,8 @@
     @if (!tv.isTv()) {
       <li><a routerLink="/app-settings/storage" routerLinkActive="active"><svg lucideHardDrive class="h-4 w-4"></svg>{{ 'app_settings.nav.storage' | translate }}</a></li>
     }
+    @if (device.isDesktopNative()) {
+      <li><a routerLink="/app-settings/update" routerLinkActive="active"><svg lucideDownload class="h-4 w-4"></svg>{{ 'app_settings.nav.update' | translate }}</a></li>
+    }
   </ng-container>
 </app-settings-drawer>

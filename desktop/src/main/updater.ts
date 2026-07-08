@@ -1,4 +1,6 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import electronUpdater from 'electron-updater';
 import {
   UPDATE_IPC,
@@ -23,6 +25,36 @@ const PERIODIC_CHECK_MS = 6 * 60 * 60 * 1000;
 function updateCheckDisabled(): boolean {
   const v = (process.env.FLIKS_DISABLE_UPDATE_CHECK ?? '').trim().toLowerCase();
   return v === '1' || v === 'true' || v === 'yes';
+}
+
+/** File logger for electron-updater. A packaged GUI app has no console, so the
+ *  updater's own diagnostics (feed URL, resolved version, failure cause) would
+ *  otherwise vanish — and a failed check is silent in the UI. Writes to the
+ *  app's logs dir (e.g. %APPDATA%/Fliks/logs/updater.log on Windows). */
+function fileUpdaterLogger(): {
+  info: (m?: unknown) => void;
+  warn: (m?: unknown) => void;
+  error: (m?: unknown) => void;
+  debug: (m?: unknown) => void;
+} {
+  const write = (level: string, m?: unknown): void => {
+    try {
+      const dir = app.getPath('logs');
+      mkdirSync(dir, { recursive: true });
+      appendFileSync(
+        join(dir, 'updater.log'),
+        `${new Date().toISOString()} [${level}] ${typeof m === 'string' ? m : JSON.stringify(m)}\n`,
+      );
+    } catch {
+      // Logging must never break the updater.
+    }
+  };
+  return {
+    info: (m) => write('info', m),
+    warn: (m) => write('warn', m),
+    error: (m) => write('error', m),
+    debug: (m) => write('debug', m),
+  };
 }
 
 function canSelfInstall(): boolean {
@@ -76,6 +108,7 @@ export function setupUpdater(): void {
   }
 
   if (installable) {
+    autoUpdater.logger = fileUpdaterLogger();
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
     // Avoid lzma-native (not bundled); full-file downloads are fine here.

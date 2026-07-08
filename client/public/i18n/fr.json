@@ -165,8 +165,18 @@
       "cast": "Chromecast",
       "display": "Affichage",
       "storage": "Stockage",
-      "home": "Accueil"
+      "home": "Accueil",
+      "update": "Mise à jour"
     }
+  },
+  "update_settings": {
+    "title": "Mise à jour",
+    "current_version": "Version actuelle",
+    "unknown_version": "Inconnue",
+    "check": "Vérifier les mises à jour",
+    "up_to_date": "Votre application est à jour.",
+    "check_failed": "Échec de la vérification des mises à jour.",
+    "store_managed": "Les mises à jour de cette application sont gérées par votre store."
   },
   "display_settings": {
     "title": "Affichage",

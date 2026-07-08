@@ -4,6 +4,7 @@ import { adminGuard } from './core/guards/admin.guard';
 import { serverConfigGuard } from './core/guards/server-config.guard';
 import { passwordChangeGuard } from './core/guards/password-change.guard';
 import { noTvGuard } from './core/guards/no-tv.guard';
+import { desktopGuard } from './core/guards/desktop.guard';
 
 export const routes: Routes = [
   {
@@ -286,6 +287,14 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/app-settings/display-settings/display-settings').then(
             (m) => m.DisplaySettingsPageComponent,
+          ),
+      },
+      {
+        path: 'update',
+        canActivate: [desktopGuard],
+        loadComponent: () =>
+          import('./features/app-settings/update-settings/update-settings').then(
+            (m) => m.UpdateSettingsPageComponent,
           ),
       },
     ],
