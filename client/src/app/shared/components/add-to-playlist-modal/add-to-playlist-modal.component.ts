@@ -13,14 +13,14 @@ import { LucideListPlus, LucidePlus } from '@lucide/angular';
 import {
   Playlist,
   PlaylistsApiService,
-} from '../../../../core/services/api/playlists-api.service';
-import { ToastService } from '../../../../core/services/toast.service';
+} from '../../../core/services/api/playlists-api.service';
+import { ToastService } from '../../../core/services/toast.service';
 
 /**
  * Small dialog to add a media to an existing playlist or create a new one on
- * the fly. Opened from the media-detail header. Only writable playlists are
- * relevant, but the list mirrors what the user can see; the backend rejects an
- * add to a playlist where the caller lacks editor rights.
+ * the fly. Mounted once at the layout level and opened from anywhere (media
+ * cards, the media-detail header) through {@link AddToPlaylistService}. Only
+ * playlists the user can add to are listed (viewers are filtered out).
  */
 @Component({
   selector: 'app-add-to-playlist-modal',

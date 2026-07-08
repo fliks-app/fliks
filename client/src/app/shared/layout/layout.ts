@@ -32,9 +32,11 @@ import { DownloadManagerService } from '../../core/services/download-manager.ser
 import { NetworkService } from '../../core/services/network.service';
 import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
+import { AddToPlaylistModalComponent } from '../components/add-to-playlist-modal/add-to-playlist-modal.component';
 import { UserMenuComponent } from '../components/user-menu';
 import { AppUpdateModalComponent } from '../components/app-update-modal/app-update-modal';
 import { AppUpdateService } from '../../core/services/app-update.service';
+import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
 import { LucideIconComponent } from '../components/lucide-icon';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { BackgroundComponent } from '../components/background/background';
@@ -68,6 +70,7 @@ import {
     LucideHistory, LucideEllipsisVertical, LucideUsers, LucidePin, LucideRocket, LucideListVideo,
     CastOverlayComponent,
     CardActionsPanelComponent,
+    AddToPlaylistModalComponent,
     UserMenuComponent,
     AppUpdateModalComponent,
     LucideIconComponent,
@@ -88,6 +91,14 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly serverCache = inject(ServerCacheService);
   private readonly sse = inject(SseService);
   private readonly downloadManager = inject(DownloadManagerService);
+  private readonly addToPlaylistSvc = inject(AddToPlaylistService);
+  private readonly addToPlaylistModal = viewChild(AddToPlaylistModalComponent);
+  // Bridge the global "add to playlist" requests (from cards / the media-detail
+  // header) to the single modal instance mounted in the layout.
+  private readonly addToPlaylistBridge = effect(() => {
+    const req = this.addToPlaylistSvc.request();
+    if (req) this.addToPlaylistModal()?.open(req.mediaId);
+  });
   readonly networkService = inject(NetworkService);
   readonly castService = inject(CastService);
   readonly navbar = inject(NavbarService);

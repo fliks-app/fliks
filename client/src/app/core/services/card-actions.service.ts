@@ -14,7 +14,7 @@ export interface CardAction {
    * Lucide icon name for the leading glyph. Resolved by the panel component
    * against a curated whitelist. Unknown names render no icon.
    */
-  icon?: 'play' | 'external-link' | 'eye' | 'eye-off' | 'trash-2';
+  icon?: 'play' | 'external-link' | 'eye' | 'eye-off' | 'trash-2' | 'list-plus';
   /** Optional tone applied to label + icon. */
   tone?: 'default' | 'danger';
   /** Action invoked when the user activates this row. */

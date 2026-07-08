@@ -293,6 +293,9 @@
   <!-- Card actions panel (TV menu button / mobile long-press) — single instance -->
   <app-card-actions-panel />
 
+  <!-- Add-to-playlist dialog — single instance, opened via AddToPlaylistService -->
+  <app-add-to-playlist-modal />
+
   <div class="drawer-side z-40" [class.hidden]="isNative && device.isPhone()">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
     <aside class="w-64 min-h-full flex flex-col"
