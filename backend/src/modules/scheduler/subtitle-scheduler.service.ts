@@ -13,7 +13,7 @@ import { SettingsService } from '../settings/settings.service';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import {
   hasServableTextSub,
-  isImageBasedSubtitleCodec,
+  isOcrSupportedSubtitleCodec,
 } from '../../common/constants/subtitle-codecs';
 import {
   SubtitleLanguageItem,
@@ -248,7 +248,7 @@ export class SubtitleSchedulerService {
     const imageSub = existingSubs.find(
       (s) =>
         s.language === isoCode &&
-        isImageBasedSubtitleCodec(s.codec) &&
+        isOcrSupportedSubtitleCodec(s.codec) &&
         s.streamIndex != null &&
         s.status !== SubtitleStatus.FAILED,
     );

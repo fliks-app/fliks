@@ -14,3 +14,14 @@ const IMAGE_BASED_SUBTITLE_CODECS = new Set([
 export function isImageBasedSubtitleCodec(codec: string | null | undefined): boolean {
   return IMAGE_BASED_SUBTITLE_CODECS.has(codec ?? '');
 }
+
+/**
+ * Image codecs the backend OCR pipeline can turn into text (PGS, VOBSUB).
+ * Mirrors the backend set so the UI only offers extraction where it can run.
+ */
+const OCR_SUPPORTED_SUBTITLE_CODECS = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle']);
+
+/** True for image subtitles the OCR pipeline can extract to text. */
+export function isOcrSupportedSubtitleCodec(codec: string | null | undefined): boolean {
+  return OCR_SUPPORTED_SUBTITLE_CODECS.has(codec ?? '');
+}

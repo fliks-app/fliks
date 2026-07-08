@@ -148,6 +148,9 @@ export class MediaInfoHeaderComponent {
 
   // ── Inputs: subtitles (built by parent from SubtitleFileRow[]) ──
   readonly subtitles = input<MediaInfoHeaderSubtitle[]>([]);
+  /** Localized languages of OCR extractions running in the background, shown
+   *  as an "extraction en cours" indicator until each result is ready. */
+  readonly ocrLanguages = input<string[]>([]);
 
   // ── Inputs: files ──
   readonly files = input<MediaInfoHeaderFile[]>([]);

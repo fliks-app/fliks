@@ -18,6 +18,21 @@ export function isImageBasedSubtitleCodec(codec: string | null | undefined): boo
   return IMAGE_BASED_SUBTITLE_CODECS.has(codec ?? '');
 }
 
+/**
+ * Image codecs the OCR pipeline can actually turn into text: PGS via pgsrip,
+ * VOBSUB (dvd_subtitle) via mkvextract + subtile-ocr. DVB and XSUB are bitmap
+ * but have no OCR path, so extraction must not be offered for them.
+ */
+export const OCR_SUPPORTED_SUBTITLE_CODECS = new Set([
+  'hdmv_pgs_subtitle',
+  'dvd_subtitle',
+]);
+
+/** True for image subtitles the OCR pipeline can extract to text. */
+export function isOcrSupportedSubtitleCodec(codec: string | null | undefined): boolean {
+  return OCR_SUPPORTED_SUBTITLE_CODECS.has(codec ?? '');
+}
+
 /** Minimal subtitle shape needed to decide whether a language is covered. */
 export interface ServableSubProbe {
   language: string;
