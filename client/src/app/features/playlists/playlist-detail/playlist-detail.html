@@ -157,9 +157,9 @@
             (click)="toggleSeries(group.seriesId)"
           >
             <img
-              [src]="group.media.posterUrl | resolveUrl: 'thumb'"
+              [src]="(group.media.fanartUrl ?? group.media.posterUrl) | resolveUrl: 'thumb'"
               alt=""
-              class="w-10 h-14 object-cover rounded bg-base-300 shrink-0"
+              class="w-24 aspect-video object-cover rounded bg-base-300 shrink-0"
             />
             <span class="font-semibold flex-1 truncate">{{ group.media.title }}</span>
             <span class="text-sm text-base-content/50 shrink-0">
@@ -196,10 +196,10 @@
       <img
         [src]="thumb | resolveUrl: 'thumb'"
         alt=""
-        class="h-12 w-auto max-w-24 object-cover rounded bg-base-300 shrink-0"
+        class="w-36 sm:w-44 aspect-video object-cover rounded bg-base-300 shrink-0"
       />
     } @else {
-      <div class="h-12 w-20 rounded bg-base-300 shrink-0"></div>
+      <div class="w-36 sm:w-44 aspect-video rounded bg-base-300 shrink-0"></div>
     }
     <div class="min-w-0">
       @if (item.episode; as ep) {

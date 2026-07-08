@@ -191,7 +191,11 @@ export class PlaylistDetailComponent {
   }
 
   itemThumb(it: PlaylistItem): string | null {
-    return it.episode?.stillUrl ?? it.media.posterUrl ?? null;
+    // Prefer a landscape image (episode still, else the movie/series fanart),
+    // like the history list; fall back to the poster.
+    return (
+      it.episode?.stillUrl ?? it.media.fanartUrl ?? it.media.posterUrl ?? null
+    );
   }
 
   constructor() {
