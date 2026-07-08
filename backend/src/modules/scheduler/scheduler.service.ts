@@ -413,20 +413,38 @@ export class SchedulerService implements OnModuleInit {
     );
   }
 
+  /**
+   * Drop indexers in failure / Retry-After cooldown before an auto-grab
+   * fan-out, mirroring the interactive search paths. A cooled-down indexer
+   * left in the list makes the throttle sleep its queued call out for the
+   * full backoff (up to 6h); since the fan-out awaits every indexer, one
+   * broken host stalls the whole `Promise.allSettled` and the grab step
+   * never runs. Returns [] when every indexer is cooling.
+   */
+  private readyIndexersOrNone(indexers: Indexer[], context: string): Indexer[] {
+    const ready = this.torznab.filterReadyIndexers(indexers);
+    if (!ready.length) {
+      this.log.warn(
+        `${context}: every indexer is in cooldown — skipping this run`,
+      );
+    }
+    return ready;
+  }
+
   private async doSearchMissing(mediaIds?: number[]): Promise<void> {
     if (mediaIds?.length) {
       this.log.log(
         `SearchMissing: targeted restart for media IDs [${mediaIds.join(', ')}]`,
       );
     }
-    const indexers = await this.indexerRepo.find({
+    const enabledIndexers = await this.indexerRepo.find({
       where: { enabled: true },
       order: { priority: 'ASC' },
     });
     const clients = await this.clientRepo.find({ where: { enabled: true } });
     const qbitClient = clients.find((c) => this.qbittorrent.supports(c));
 
-    if (!indexers.length) {
+    if (!enabledIndexers.length) {
       throw new Error('No enabled indexers configured');
     }
     if (!qbitClient) {
@@ -439,6 +457,9 @@ export class SchedulerService implements OnModuleInit {
     if (!connCheck.ok) {
       throw new Error(`Download client unreachable — ${connCheck.message}`);
     }
+
+    const indexers = this.readyIndexersOrNone(enabledIndexers, 'SearchMissing');
+    if (!indexers.length) return;
 
     await this.searchMissingMovies(indexers, qbitClient, mediaIds);
     await this.searchMissingEpisodes(indexers, qbitClient, mediaIds);
@@ -977,11 +998,14 @@ export class SchedulerService implements OnModuleInit {
   }
 
   private async doRssSync(): Promise<void> {
-    const indexers = await this.indexerRepo.find({
+    const enabledIndexers = await this.indexerRepo.find({
       where: { enabled: true, enableRss: true },
       order: { priority: 'ASC' },
     });
 
+    if (!enabledIndexers.length) return;
+
+    const indexers = this.readyIndexersOrNone(enabledIndexers, 'RssSync');
     if (!indexers.length) return;
 
     // Full candidates (with profiles + files) so RSS reuses the exact same
