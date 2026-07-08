@@ -25,6 +25,8 @@ import {
   LucideArrowUp,
   LucideChevronDown,
   LucideEllipsisVertical,
+  LucideEye,
+  LucideEyeOff,
   LucideGripVertical,
   LucidePencil,
   LucideSettings,
@@ -33,6 +35,7 @@ import {
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
+import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import {
   Playlist,
   PlaylistItem,
@@ -41,6 +44,17 @@ import {
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { TvService } from '../../../core/services/tv.service';
+
+interface PlaylistSeriesGroup {
+  seriesId: number;
+  media: PlaylistItem['media'];
+  episodes: PlaylistItem[];
+}
+
+/** A grouped-view root entry: a movie item, or a series block. */
+type PlaylistGroupedEntry =
+  | { kind: 'movie'; item: PlaylistItem }
+  | { kind: 'series'; group: PlaylistSeriesGroup };
 
 @Component({
   selector: 'app-playlist-detail',
@@ -56,6 +70,8 @@ import { TvService } from '../../../core/services/tv.service';
     LucideArrowUp,
     LucideChevronDown,
     LucideEllipsisVertical,
+    LucideEye,
+    LucideEyeOff,
     LucideGripVertical,
     LucidePencil,
     LucideSettings,
@@ -75,6 +91,7 @@ export class PlaylistDetailComponent {
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
   readonly tv = inject(TvService);
+  private readonly streamingApi = inject(StreamingApiService);
 
   private readonly routeParams = toSignal(this.route.paramMap);
   readonly playlistId = computed(() => Number(this.routeParams()?.get('id')));
@@ -139,20 +156,10 @@ export class PlaylistDetailComponent {
     });
   }
 
-  /** Movie items, in playlist order (grouped view). */
-  readonly movieItems = computed(() => this.items().filter((i) => !i.episode));
-
-  /** Episode items grouped by their series (grouped view). Groups ordered by
-   *  first appearance; episodes within a group keep playlist order. */
-  readonly seriesGroups = computed(() => {
-    const groups = new Map<
-      number,
-      {
-        seriesId: number;
-        media: PlaylistItem['media'];
-        episodes: PlaylistItem[];
-      }
-    >();
+  /** Episode items grouped by their series. Episodes are always kept in
+   *  SERIES order (season, then episode), independent of playlist position. */
+  readonly seriesGroups = computed<PlaylistSeriesGroup[]>(() => {
+    const groups = new Map<number, PlaylistSeriesGroup>();
     for (const it of this.items()) {
       if (!it.episode) continue;
       let g = groups.get(it.media.id);
@@ -162,7 +169,35 @@ export class PlaylistDetailComponent {
       }
       g.episodes.push(it);
     }
+    for (const g of groups.values()) {
+      g.episodes.sort(
+        (a, b) =>
+          (a.episode?.season?.seasonNumber ?? 0) -
+            (b.episode?.season?.seasonNumber ?? 0) ||
+          (a.episode?.episodeNumber ?? 0) - (b.episode?.episodeNumber ?? 0),
+      );
+    }
     return [...groups.values()];
+  });
+
+  /** Grouped-view root entries (movies + one block per series), ordered by
+   *  first appearance in the current playlist order. This root order is what
+   *  the user reorders in grouped view. */
+  readonly groupedEntries = computed<PlaylistGroupedEntry[]>(() => {
+    const seriesById = new Map<number, PlaylistSeriesGroup>();
+    for (const g of this.seriesGroups()) seriesById.set(g.seriesId, g);
+    const entries: PlaylistGroupedEntry[] = [];
+    const seenSeries = new Set<number>();
+    for (const it of this.items()) {
+      if (!it.episode) {
+        entries.push({ kind: 'movie', item: it });
+      } else if (!seenSeries.has(it.media.id)) {
+        seenSeries.add(it.media.id);
+        const group = seriesById.get(it.media.id);
+        if (group) entries.push({ kind: 'series', group });
+      }
+    }
+    return entries;
   });
 
   episodeLabel(ep: NonNullable<PlaylistItem['episode']>): string {
@@ -196,6 +231,38 @@ export class PlaylistDetailComponent {
     return (
       it.episode?.stillUrl ?? it.media.fanartUrl ?? it.media.posterUrl ?? null
     );
+  }
+
+  private patchItem(itemId: number, patch: Partial<PlaylistItem>): void {
+    this.items.update((list) =>
+      list.map((i) => (i.itemId === itemId ? { ...i, ...patch } : i)),
+    );
+  }
+
+  /** Toggle the viewer's watched state for a movie or episode item. */
+  async toggleItemWatched(item: PlaylistItem): Promise<void> {
+    const nextWatched = !item.watched;
+    this.patchItem(item.itemId, {
+      watched: nextWatched,
+      progressPercent: nextWatched ? 100 : 0,
+    });
+    try {
+      const state = await this.streamingApi.toggleWatched(
+        item.media.id,
+        undefined,
+        item.episode?.id ?? undefined,
+      );
+      this.patchItem(item.itemId, {
+        watched: state.completed,
+        progressPercent: state.completed ? 100 : 0,
+      });
+    } catch {
+      // Revert on failure (global interceptor surfaces the error).
+      this.patchItem(item.itemId, {
+        watched: item.watched,
+        progressPercent: item.progressPercent,
+      });
+    }
   }
 
   constructor() {
@@ -335,6 +402,35 @@ export class PlaylistDetailComponent {
     [next[index], next[target]] = [next[target], next[index]];
     this.items.set(next);
     this.persistOrder();
+  }
+
+  // ── Grouped reorder: reorders the root media (movies + series blocks);
+  //    episodes stay in series order inside their block. ──
+  private applyGroupedOrder(entries: PlaylistGroupedEntry[]): void {
+    const ids: number[] = [];
+    for (const e of entries) {
+      if (e.kind === 'movie') ids.push(e.item.itemId);
+      else for (const ep of e.group.episodes) ids.push(ep.itemId);
+    }
+    const byId = new Map(this.items().map((i) => [i.itemId, i]));
+    this.items.set(
+      ids.map((id) => byId.get(id)).filter((x): x is PlaylistItem => !!x),
+    );
+    this.persistOrder();
+  }
+
+  dropGroup(event: CdkDragDrop<PlaylistGroupedEntry[]>): void {
+    const entries = [...this.groupedEntries()];
+    moveItemInArray(entries, event.previousIndex, event.currentIndex);
+    this.applyGroupedOrder(entries);
+  }
+
+  moveGroup(index: number, delta: number): void {
+    const entries = [...this.groupedEntries()];
+    const target = index + delta;
+    if (target < 0 || target >= entries.length) return;
+    [entries[index], entries[target]] = [entries[target], entries[index]];
+    this.applyGroupedOrder(entries);
   }
 
   // ── Remove item ──

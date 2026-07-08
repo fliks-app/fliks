@@ -728,11 +728,27 @@ export class PlaybackService implements OnModuleInit {
   async toggleWatched(
     userId: number,
     mediaId: number,
-    mediaFileId: number,
+    mediaFileId?: number,
     episodeId?: number,
   ): Promise<PlaybackState> {
     const existing = await this.findState(userId, mediaId, episodeId);
     const willBeCompleted = existing ? !existing.completed : true;
+
+    // A brand-new state needs a file (mediaFile is NOT NULL). Resolve one from
+    // the episode / movie when the caller didn't pass it — e.g. a playlist row,
+    // which has no file id to hand.
+    let fileId = mediaFileId;
+    if (!fileId && !existing) {
+      const file =
+        episodeId != null
+          ? await this.mediaFileRepo.findOne({
+              where: { episode: { id: episodeId } },
+            })
+          : await this.mediaFileRepo.findOne({
+              where: { media: { id: mediaId }, episode: IsNull() },
+            });
+      fileId = file?.id;
+    }
 
     // Always build from relation properties — RelationId virtuals
     // (userId/mediaId/mediaFileId) are read-only and don't persist, so inserts
@@ -747,15 +763,15 @@ export class PlaybackService implements OnModuleInit {
 
     state.completed = willBeCompleted;
     state.lastPlayedAt = new Date();
-    if (mediaFileId) state.mediaFile = { id: mediaFileId } as MediaFile;
+    if (fileId) state.mediaFile = { id: fileId } as MediaFile;
 
     if (willBeCompleted) {
       state.positionSeconds = 0;
       if (!state.durationSeconds) {
-        const fileId = mediaFileId || state.mediaFileId;
-        if (fileId) {
+        const durId = fileId || state.mediaFileId;
+        if (durId) {
           const file = await this.mediaFileRepo.findOne({
-            where: { id: fileId },
+            where: { id: durId },
           });
           state.durationSeconds = file?.streamInfo?.durationSeconds ?? 0;
         }
