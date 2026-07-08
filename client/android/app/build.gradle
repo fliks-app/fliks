@@ -14,7 +14,7 @@ android {
         // accept. The committed default of 1 keeps local debug builds
         // working without any env setup.
         versionCode = ((project.findProperty('FLIKS_VERSION_CODE') ?: 1) as int)
-        versionName "1.15.0" // x-release-please-version
+        versionName "1.15.1" // x-release-please-version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
