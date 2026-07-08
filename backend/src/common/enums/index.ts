@@ -6,3 +6,4 @@ export * from './media-server-type.enum';
 export * from './minimum-availability.enum';
 export * from './subtitle-provider-type.enum';
 export * from './subtitle-status.enum';
+export * from './playlist-share-role.enum';

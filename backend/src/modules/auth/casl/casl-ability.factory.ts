@@ -15,6 +15,7 @@ import { LanguageProfile } from '../../profiles/entities/language-profile.entity
 import { SubtitleProvider } from '../../subtitles/entities/subtitle-provider.entity';
 import { SubtitleFile } from '../../subtitles/entities/subtitle-file.entity';
 import { Library } from '../../libraries/entities/library.entity';
+import { Playlist } from '../../playlists/entities/playlist.entity';
 import { Action } from './actions.enum';
 
 type Subjects =
@@ -29,6 +30,7 @@ type Subjects =
       | typeof SubtitleProvider
       | typeof SubtitleFile
       | typeof Library
+      | typeof Playlist
     >
   | 'Settings'
   | 'all';
@@ -51,6 +53,14 @@ export class CaslAbilityFactory {
     // Every authenticated user can read/update themselves
     can(Action.Read, User, { id: user.id } as any);
     can(Action.Update, User, { id: user.id } as any);
+
+    // Every authenticated user may use playlists. This only opens the feature;
+    // the per-playlist owner/administrator/editor/viewer rules are enforced in
+    // PlaylistsService (CASL sees the class, never the instance).
+    can(Action.Read, Playlist);
+    can(Action.Create, Playlist);
+    can(Action.Update, Playlist);
+    can(Action.Delete, Playlist);
 
     // --- media ---
     if (perms.has('media.read')) {
