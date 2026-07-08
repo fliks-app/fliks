@@ -1,0 +1,98 @@
+<h1 class="text-2xl font-bold mb-4">{{ 'update_settings.title' | translate }}</h1>
+<div class="card bg-base-100 border border-base-200">
+  <div class="card-body gap-5">
+    <div class="flex items-center justify-between gap-4 flex-wrap">
+      <div>
+        <p class="text-sm opacity-70">{{ 'update_settings.current_version' | translate }}</p>
+        <p class="text-lg font-semibold">
+          {{ update.currentVersion() || ('update_settings.unknown_version' | translate) }}
+        </p>
+      </div>
+
+      @if (canCheck()) {
+        <button class="btn btn-sm" [disabled]="checking() || downloading()" (click)="check()">
+          @if (checking()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'update_settings.check' | translate }}
+        </button>
+      }
+    </div>
+
+    @if (!canCheck()) {
+      <div class="alert bg-base-200">
+        <span class="text-sm">{{ 'update_settings.store_managed' | translate }}</span>
+      </div>
+    } @else if (upToDate()) {
+      <div class="flex items-center gap-2 text-success">
+        <svg lucideCircleCheck class="h-5 w-5"></svg>
+        <span>{{ 'update_settings.up_to_date' | translate }}</span>
+      </div>
+    } @else if (hasError()) {
+      <div class="flex items-start gap-2 text-error">
+        <svg lucideCircleAlert class="h-5 w-5 shrink-0"></svg>
+        <div>
+          <p>{{ 'update_settings.check_failed' | translate }}</p>
+          @if (update.errorMessage(); as err) {
+            <p class="text-xs opacity-70 mt-0.5 break-words">{{ err }}</p>
+          }
+        </div>
+      </div>
+    }
+
+    @if (update.info(); as info) {
+      @if (!upToDate()) {
+        <div class="rounded-box bg-base-200 p-4">
+          <div class="flex items-center gap-2 mb-1">
+            <svg lucideRocket class="h-5 w-5 text-primary"></svg>
+            <h2 class="font-bold">{{ 'update.title' | translate }}</h2>
+          </div>
+          <p class="text-sm opacity-70 mb-3">
+            @if (update.currentVersion(); as current) {
+              {{ 'update.version_transition' | translate: { current: current, next: info.version } }}
+            } @else {
+              {{ 'update.version_available' | translate: { version: info.version } }}
+            }
+            @if (info.releaseDate) {
+              · {{ info.releaseDate | date: 'mediumDate' }}
+            }
+          </p>
+
+          <div class="rounded-box bg-base-100 p-3 max-h-72 overflow-y-auto mb-4">
+            @if (info.releaseNotes) {
+              <div class="changelog-md text-sm break-words" [innerHTML]="info.releaseNotes | markdown"></div>
+            } @else {
+              <p class="text-sm opacity-60">{{ 'update.no_notes' | translate }}</p>
+            }
+          </div>
+
+          @if (downloading()) {
+            <progress class="progress progress-primary w-full" [value]="update.progress()" max="100"></progress>
+            <p class="text-xs opacity-70 mt-1 text-center">
+              {{ 'update.downloading' | translate: { percent: update.progress() } }}
+            </p>
+          } @else {
+            <div class="flex justify-end">
+              @if (installing()) {
+                <button class="btn btn-primary" disabled>
+                  <span class="loading loading-spinner loading-sm"></span>
+                  {{ 'update.installing' | translate }}
+                </button>
+              } @else if (canInstallInApp()) {
+                <button class="btn btn-primary" (click)="action()">
+                  <svg lucideDownload class="h-4 w-4"></svg>
+                  {{ 'update.install' | translate }}
+                </button>
+              } @else {
+                <button class="btn btn-primary" (click)="action()">
+                  <svg lucideExternalLink class="h-4 w-4"></svg>
+                  {{ 'update.open_release' | translate }}
+                </button>
+              }
+            </div>
+          }
+        </div>
+      }
+    }
+  </div>
+</div>
