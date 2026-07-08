@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.15.1](https://github.com/fliks-app/fliks/compare/v1.15.0...v1.15.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* **scheduler:** skip cooldown indexers in auto-grab search fan-outs ([#609](https://github.com/fliks-app/fliks/issues/609)) ([48f988f](https://github.com/fliks-app/fliks/commit/48f988f07cd24a18ddf720eaab31a102ec06509d))
+* **update:** add desktop-only update settings page and updater file log ([#611](https://github.com/fliks-app/fliks/issues/611)) ([434d709](https://github.com/fliks-app/fliks/commit/434d709480d967399423b86fc2349d53161e4c2b))
+
 ## [1.15.0](https://github.com/fliks-app/fliks/compare/v1.14.1...v1.15.0) (2026-07-07)
 
 
