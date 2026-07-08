@@ -113,11 +113,11 @@ export class PlaylistDetailComponent {
 
   private readViewPref(): 'grouped' | 'flat' {
     try {
-      return localStorage.getItem(PlaylistDetailComponent.VIEW_KEY) === 'flat'
-        ? 'flat'
-        : 'grouped';
+      return localStorage.getItem(PlaylistDetailComponent.VIEW_KEY) === 'grouped'
+        ? 'grouped'
+        : 'flat';
     } catch {
-      return 'grouped';
+      return 'flat';
     }
   }
 

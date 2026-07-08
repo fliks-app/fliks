@@ -36,6 +36,10 @@ export interface PlaylistItem {
   media: Media;
   /** Set when the item is a single episode; null for a movie item. */
   episode: PlaylistEpisode | null;
+  /** The viewer's watch progress on this item (0–100). */
+  progressPercent: number;
+  /** Whether the viewer finished this item. */
+  watched: boolean;
 }
 
 export interface CreatePlaylistBody {

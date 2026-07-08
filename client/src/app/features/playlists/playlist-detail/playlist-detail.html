@@ -192,15 +192,28 @@
 <!-- One playlist row (movie or episode), shared by both views. -->
 <ng-template #itemRow let-item>
   <a [routerLink]="itemLink(item)" class="flex items-center gap-3 flex-1 min-w-0">
-    @if (itemThumb(item); as thumb) {
-      <img
-        [src]="thumb | resolveUrl: 'thumb'"
-        alt=""
-        class="w-36 sm:w-44 aspect-video object-cover rounded bg-base-300 shrink-0"
-      />
-    } @else {
-      <div class="w-36 sm:w-44 aspect-video rounded bg-base-300 shrink-0"></div>
-    }
+    <div
+      class="relative w-36 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300"
+    >
+      @if (itemThumb(item); as thumb) {
+        <img
+          [src]="thumb | resolveUrl: 'thumb'"
+          alt=""
+          class="h-full w-full object-cover"
+          loading="lazy"
+        />
+      }
+      @if (item.watched || item.progressPercent > 0) {
+        <div class="absolute bottom-0 left-0 right-0 h-1 bg-black/40">
+          <div
+            class="h-full"
+            [class.bg-success]="item.watched"
+            [class.bg-primary]="!item.watched"
+            [style.width.%]="item.watched ? 100 : item.progressPercent"
+          ></div>
+        </div>
+      }
+    </div>
     <div class="min-w-0">
       @if (item.episode; as ep) {
         <p class="font-medium truncate">{{ episodeLabel(ep) }}</p>
