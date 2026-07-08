@@ -3,9 +3,25 @@
     <span class="loading loading-spinner loading-lg"></span>
   </div>
 } @else if (playlist(); as pl) {
-  <div class="flex flex-col gap-4 mb-6">
-    <div class="flex items-start justify-between gap-3">
-      <div class="min-w-0">
+  <div class="flex items-start gap-4 mb-6">
+      <!-- Playlist icon: the auto cover mosaic (2×2 / single / fallback). -->
+      <div class="w-16 h-16 sm:w-20 sm:h-20 shrink-0 overflow-hidden rounded-lg bg-base-300">
+        @if (pl.posters.length >= 4) {
+          <div class="grid grid-cols-2 grid-rows-2 h-full w-full">
+            @for (p of pl.posters.slice(0, 4); track p) {
+              <img [src]="p | resolveUrl: 'thumb'" alt="" class="h-full w-full object-cover" />
+            }
+          </div>
+        } @else if (pl.posters.length > 0) {
+          <img [src]="pl.posters[0] | resolveUrl: 'thumb'" alt="" class="h-full w-full object-cover" />
+        } @else {
+          <div class="flex h-full w-full items-center justify-center text-base-content/40">
+            <svg lucideListVideo class="h-8 w-8" [strokeWidth]="1.5"></svg>
+          </div>
+        }
+      </div>
+
+      <div class="min-w-0 flex-1">
         <h1 class="text-2xl font-bold truncate">{{ pl.name }}</h1>
         <p class="text-sm text-base-content/60 mt-1">
           {{ 'playlists.item_count' | translate: { count: items().length } }}
@@ -57,8 +73,6 @@
           </app-dropdown-menu>
         }
       </div>
-    </div>
-
   </div>
 
   @if (!items().length) {

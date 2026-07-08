@@ -1,6 +1,7 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  DestroyRef,
   ElementRef,
   computed,
   effect,
@@ -27,6 +28,7 @@ import {
   LucideChevronDown,
   LucideEllipsisVertical,
   LucideGripVertical,
+  LucideListVideo,
   LucidePencil,
   LucideSettings,
   LucideTrash2,
@@ -35,6 +37,7 @@ import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-fi
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
+import { BackgroundService } from '../../../core/services/background.service';
 import {
   Playlist,
   PlaylistItem,
@@ -71,6 +74,7 @@ type PlaylistGroupedEntry =
     LucideChevronDown,
     LucideEllipsisVertical,
     LucideGripVertical,
+    LucideListVideo,
     LucidePencil,
     LucideSettings,
     LucideTrash2,
@@ -90,6 +94,8 @@ export class PlaylistDetailComponent {
   private readonly translate = inject(TranslateService);
   readonly tv = inject(TvService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly background = inject(BackgroundService);
+  private readonly destroyRef = inject(DestroyRef);
 
   private readonly routeParams = toSignal(this.route.paramMap);
   readonly playlistId = computed(() => Number(this.routeParams()?.get('id')));
@@ -269,6 +275,20 @@ export class PlaylistDetailComponent {
       const id = this.playlistId();
       if (Number.isFinite(id) && id > 0) void this.load(id);
     });
+    // Drive the global page background from the playlist's media, like the
+    // media-detail pages.
+    effect(() => {
+      const pool = [
+        ...new Set(
+          this.items()
+            .map((i) => i.media.fanartUrl)
+            .filter((u): u is string => !!u),
+        ),
+      ];
+      if (pool.length) this.background.setBackgrounds(pool);
+      else this.background.clear();
+    });
+    this.destroyRef.onDestroy(() => this.background.clear());
   }
 
   private async load(id: number): Promise<void> {
