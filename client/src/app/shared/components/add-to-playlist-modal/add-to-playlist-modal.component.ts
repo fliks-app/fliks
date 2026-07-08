@@ -11,6 +11,7 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucideListPlus, LucidePlus } from '@lucide/angular';
 import {
+  AddToPlaylistBody,
   Playlist,
   PlaylistsApiService,
 } from '../../../core/services/api/playlists-api.service';
@@ -38,15 +39,15 @@ export class AddToPlaylistModalComponent {
 
   readonly added = output<void>();
 
-  readonly mediaId = signal<number | null>(null);
+  readonly target = signal<AddToPlaylistBody | null>(null);
   readonly playlists = signal<Playlist[]>([]);
   readonly loading = signal(false);
   readonly busyId = signal<number | null>(null);
   readonly creating = signal(false);
   readonly newName = signal('');
 
-  async open(mediaId: number): Promise<void> {
-    this.mediaId.set(mediaId);
+  async open(target: AddToPlaylistBody): Promise<void> {
+    this.target.set(target);
     this.newName.set('');
     this.playlists.set([]);
     this.dialogEl()?.nativeElement.showModal();
@@ -67,11 +68,11 @@ export class AddToPlaylistModalComponent {
   }
 
   async addTo(playlist: Playlist): Promise<void> {
-    const mediaId = this.mediaId();
-    if (mediaId == null || this.busyId() !== null) return;
+    const target = this.target();
+    if (!target || this.busyId() !== null) return;
     this.busyId.set(playlist.id);
     try {
-      await this.api.addItem(playlist.id, mediaId);
+      await this.api.addItem(playlist.id, target);
       this.toast.success(this.translate.instant('playlists.added_toast'));
       this.added.emit();
       this.close();
@@ -83,13 +84,13 @@ export class AddToPlaylistModalComponent {
   }
 
   async createAndAdd(): Promise<void> {
-    const mediaId = this.mediaId();
+    const target = this.target();
     const name = this.newName().trim();
-    if (mediaId == null || !name || this.creating()) return;
+    if (!target || !name || this.creating()) return;
     this.creating.set(true);
     try {
       const created = await this.api.create({ name });
-      await this.api.addItem(created.id, mediaId);
+      await this.api.addItem(created.id, target);
       this.toast.success(
         this.translate.instant('playlists.created_and_added_toast'),
       );

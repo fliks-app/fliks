@@ -1681,10 +1681,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly requestModal = viewChild<RequestModalComponent>('requestModal');
   private readonly addToPlaylist = inject(AddToPlaylistService);
 
-  /** Open the "add to playlist" dialog for the current title. */
+  /** Open the "add to playlist" dialog: the focused episode when browsing an
+   *  episode, otherwise the movie or the whole series (`mediaId`). */
   protected openAddToPlaylist() {
     const m = this.media();
-    if (m) this.addToPlaylist.open(m.id);
+    if (!m) return;
+    const ep = this.episodeMode() ? this.focusedEpisode() : null;
+    this.addToPlaylist.open(ep ? { episodeId: ep.id } : { mediaId: m.id });
   }
 
   /** Fetch the global active-request state for this title. Run after the

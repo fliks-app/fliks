@@ -1137,6 +1137,10 @@
     "move_up": "Monter",
     "move_down": "Descendre",
     "add_to_playlist": "Ajouter à une liste",
+    "add_season": "Ajouter la saison à une liste",
+    "view_grouped": "Groupé",
+    "view_flat": "Liste",
+    "episodes_count": "{{count}} épisodes",
     "added_toast": "Ajouté à la liste",
     "created_and_added_toast": "Liste créée et titre ajouté"
   },

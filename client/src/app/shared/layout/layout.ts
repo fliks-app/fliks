@@ -97,7 +97,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   // header) to the single modal instance mounted in the layout.
   private readonly addToPlaylistBridge = effect(() => {
     const req = this.addToPlaylistSvc.request();
-    if (req) this.addToPlaylistModal()?.open(req.mediaId);
+    if (req) this.addToPlaylistModal()?.open(req.target);
   });
   readonly networkService = inject(NetworkService);
   readonly castService = inject(CastService);

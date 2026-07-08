@@ -66,57 +66,164 @@
       <p class="text-lg">{{ 'playlists.no_items' | translate }}</p>
     </div>
   } @else {
-    <div
-      cdkDropList
-      (cdkDropListDropped)="drop($event)"
-      class="grid content-start grid-cols-3 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 gap-1.5 sm:gap-4"
-    >
-      @for (item of items(); track item.itemId; let i = $index) {
-        <div cdkDrag [cdkDragDisabled]="!canEditItems() || tv.isTv()" class="relative">
-          @if (canEditItems()) {
-            @if (!tv.isTv()) {
-              <button
-                type="button"
-                cdkDragHandle
-                class="absolute top-2 left-2 z-20 btn btn-circle btn-xs bg-black/50 border-0 text-white cursor-grab"
-                [attr.aria-label]="'playlists.drag' | translate"
-              >
-                <svg lucideGripVertical class="h-4 w-4"></svg>
-              </button>
-            } @else {
-              <div class="absolute top-2 left-2 z-20 flex flex-col gap-1">
-                <button
-                  type="button"
-                  class="btn btn-circle btn-xs"
-                  [disabled]="i === 0"
-                  (click)="move(i, -1)"
-                  [attr.aria-label]="'playlists.move_up' | translate"
-                >
-                  <svg lucideArrowUp class="h-4 w-4"></svg>
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-circle btn-xs"
-                  [disabled]="i === items().length - 1"
-                  (click)="move(i, 1)"
-                  [attr.aria-label]="'playlists.move_down' | translate"
-                >
-                  <svg lucideArrowDown class="h-4 w-4"></svg>
-                </button>
-              </div>
-            }
-          }
+    <!-- View toggle: grouped (series collapse to one entry) vs flat -->
+    <div class="flex justify-end mb-3">
+      <div class="join">
+        <button
+          type="button"
+          class="btn btn-sm join-item"
+          [class.btn-active]="viewMode() === 'grouped'"
+          (click)="setView('grouped')"
+        >
+          {{ 'playlists.view_grouped' | translate }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm join-item"
+          [class.btn-active]="viewMode() === 'flat'"
+          (click)="setView('flat')"
+        >
+          {{ 'playlists.view_flat' | translate }}
+        </button>
+      </div>
+    </div>
 
-          <app-media-card
-            [media]="item.media"
-            [dismissable]="canEditItems()"
-            (dismissed)="removeItem(item)"
-          />
+    @if (viewMode() === 'flat') {
+      <div cdkDropList (cdkDropListDropped)="drop($event)" class="flex flex-col gap-1">
+        @for (item of items(); track item.itemId; let i = $index) {
+          <div
+            cdkDrag
+            [cdkDragDisabled]="!canEditItems() || tv.isTv()"
+            class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200"
+          >
+            @if (canEditItems()) {
+              @if (!tv.isTv()) {
+                <button
+                  type="button"
+                  cdkDragHandle
+                  class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0"
+                  [attr.aria-label]="'playlists.drag' | translate"
+                >
+                  <svg lucideGripVertical class="h-4 w-4"></svg>
+                </button>
+              } @else {
+                <div class="flex flex-col shrink-0">
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs btn-square"
+                    [disabled]="i === 0"
+                    (click)="move(i, -1)"
+                    [attr.aria-label]="'playlists.move_up' | translate"
+                  >
+                    <svg lucideArrowUp class="h-4 w-4"></svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs btn-square"
+                    [disabled]="i === items().length - 1"
+                    (click)="move(i, 1)"
+                    [attr.aria-label]="'playlists.move_down' | translate"
+                  >
+                    <svg lucideArrowDown class="h-4 w-4"></svg>
+                  </button>
+                </div>
+              }
+            }
+            <ng-container
+              [ngTemplateOutlet]="itemRow"
+              [ngTemplateOutletContext]="{ $implicit: item }"
+            ></ng-container>
+          </div>
+        }
+      </div>
+    } @else {
+      @if (movieItems().length) {
+        <div class="flex flex-col gap-1 mb-4">
+          @for (item of movieItems(); track item.itemId) {
+            <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
+              <ng-container
+                [ngTemplateOutlet]="itemRow"
+                [ngTemplateOutletContext]="{ $implicit: item }"
+              ></ng-container>
+            </div>
+          }
         </div>
       }
-    </div>
+      @for (group of seriesGroups(); track group.seriesId) {
+        <section class="mb-3">
+          <button
+            type="button"
+            class="flex items-center gap-3 w-full text-left mb-1 p-1.5 rounded-lg hover:bg-base-200"
+            (click)="toggleSeries(group.seriesId)"
+          >
+            <img
+              [src]="group.media.posterUrl | resolveUrl: 'thumb'"
+              alt=""
+              class="w-10 h-14 object-cover rounded bg-base-300 shrink-0"
+            />
+            <span class="font-semibold flex-1 truncate">{{ group.media.title }}</span>
+            <span class="text-sm text-base-content/50 shrink-0">
+              {{ 'playlists.episodes_count' | translate: { count: group.episodes.length } }}
+            </span>
+            <svg
+              lucideChevronDown
+              class="h-5 w-5 shrink-0 transition-transform"
+              [class.-rotate-90]="!expandedSeries().has(group.seriesId)"
+            ></svg>
+          </button>
+          @if (expandedSeries().has(group.seriesId)) {
+            <div class="flex flex-col gap-1 pl-6">
+              @for (item of group.episodes; track item.itemId) {
+                <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
+                  <ng-container
+                    [ngTemplateOutlet]="itemRow"
+                    [ngTemplateOutletContext]="{ $implicit: item }"
+                  ></ng-container>
+                </div>
+              }
+            </div>
+          }
+        </section>
+      }
+    }
   }
 }
+
+<!-- One playlist row (movie or episode), shared by both views. -->
+<ng-template #itemRow let-item>
+  <a [routerLink]="itemLink(item)" class="flex items-center gap-3 flex-1 min-w-0">
+    @if (itemThumb(item); as thumb) {
+      <img
+        [src]="thumb | resolveUrl: 'thumb'"
+        alt=""
+        class="h-12 w-auto max-w-24 object-cover rounded bg-base-300 shrink-0"
+      />
+    } @else {
+      <div class="h-12 w-20 rounded bg-base-300 shrink-0"></div>
+    }
+    <div class="min-w-0">
+      @if (item.episode; as ep) {
+        <p class="font-medium truncate">{{ episodeLabel(ep) }}</p>
+        <p class="text-sm text-base-content/60 truncate">{{ item.media.title }}</p>
+      } @else {
+        <p class="font-medium truncate">{{ item.media.title }}</p>
+        @if (item.media.year) {
+          <p class="text-sm text-base-content/60 truncate">{{ item.media.year }}</p>
+        }
+      }
+    </div>
+  </a>
+  @if (canEditItems()) {
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm btn-square text-error shrink-0"
+      (click)="removeItem(item)"
+      [attr.aria-label]="'common.delete' | translate"
+    >
+      <svg lucideTrash2 class="h-4 w-4"></svg>
+    </button>
+  }
+</ng-template>
 
 <dialog #renameDialog class="modal">
   <div class="modal-box max-w-md">

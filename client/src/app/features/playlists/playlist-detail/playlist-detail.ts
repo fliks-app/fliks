@@ -9,7 +9,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router } from '@angular/router';
+import { NgTemplateOutlet } from '@angular/common';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
@@ -22,15 +23,16 @@ import {
 import {
   LucideArrowDown,
   LucideArrowUp,
+  LucideChevronDown,
   LucideEllipsisVertical,
   LucideGripVertical,
   LucidePencil,
   LucideSettings,
   LucideTrash2,
 } from '@lucide/angular';
-import { MediaCardComponent } from '../../../shared/components/media-card/media-card';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
+import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import {
   Playlist,
   PlaylistItem,
@@ -45,19 +47,22 @@ import { TvService } from '../../../core/services/tv.service';
   imports: [
     TranslateModule,
     FormsModule,
+    NgTemplateOutlet,
+    RouterLink,
     CdkDropList,
     CdkDrag,
     CdkDragHandle,
     LucideArrowDown,
     LucideArrowUp,
+    LucideChevronDown,
     LucideEllipsisVertical,
     LucideGripVertical,
     LucidePencil,
     LucideSettings,
     LucideTrash2,
-    MediaCardComponent,
     ToggleFieldComponent,
     DropdownMenuComponent,
+    ResolveUrlPipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './playlist-detail.html',
@@ -100,6 +105,94 @@ export class PlaylistDetailComponent {
     return r === 'owner' || r === 'administrator';
   });
   readonly isOwner = computed(() => this.playlist()?.role === 'owner');
+
+  // ── View mode (per-user local preference) ──
+  private static readonly VIEW_KEY = 'playlists.detail.view';
+  readonly viewMode = signal<'grouped' | 'flat'>(this.readViewPref());
+  readonly expandedSeries = signal<Set<number>>(new Set());
+
+  private readViewPref(): 'grouped' | 'flat' {
+    try {
+      return localStorage.getItem(PlaylistDetailComponent.VIEW_KEY) === 'flat'
+        ? 'flat'
+        : 'grouped';
+    } catch {
+      return 'grouped';
+    }
+  }
+
+  setView(mode: 'grouped' | 'flat') {
+    this.viewMode.set(mode);
+    try {
+      localStorage.setItem(PlaylistDetailComponent.VIEW_KEY, mode);
+    } catch {
+      /* localStorage may be unavailable */
+    }
+  }
+
+  toggleSeries(seriesId: number) {
+    this.expandedSeries.update((s) => {
+      const next = new Set(s);
+      if (next.has(seriesId)) next.delete(seriesId);
+      else next.add(seriesId);
+      return next;
+    });
+  }
+
+  /** Movie items, in playlist order (grouped view). */
+  readonly movieItems = computed(() => this.items().filter((i) => !i.episode));
+
+  /** Episode items grouped by their series (grouped view). Groups ordered by
+   *  first appearance; episodes within a group keep playlist order. */
+  readonly seriesGroups = computed(() => {
+    const groups = new Map<
+      number,
+      {
+        seriesId: number;
+        media: PlaylistItem['media'];
+        episodes: PlaylistItem[];
+      }
+    >();
+    for (const it of this.items()) {
+      if (!it.episode) continue;
+      let g = groups.get(it.media.id);
+      if (!g) {
+        g = { seriesId: it.media.id, media: it.media, episodes: [] };
+        groups.set(it.media.id, g);
+      }
+      g.episodes.push(it);
+    }
+    return [...groups.values()];
+  });
+
+  episodeLabel(ep: NonNullable<PlaylistItem['episode']>): string {
+    const s = ep.season?.seasonNumber;
+    const end =
+      ep.endEpisodeNumber && ep.endEpisodeNumber !== ep.episodeNumber
+        ? `-${ep.endEpisodeNumber}`
+        : '';
+    const code =
+      s != null
+        ? `S${s}E${ep.episodeNumber}${end}`
+        : `E${ep.episodeNumber}${end}`;
+    return ep.title ? `${code} · ${ep.title}` : code;
+  }
+
+  episodeLink(it: PlaylistItem): string[] {
+    return ['/series', String(it.media.id), 'episode', String(it.episode!.id)];
+  }
+
+  /** Route for a row: the episode page for an episode item, else the movie or
+   *  series detail. */
+  itemLink(it: PlaylistItem): string[] {
+    if (it.episode) return this.episodeLink(it);
+    const kind = it.media.type === 'series' ? 'series' : 'movies';
+    return ['/' + kind, String(it.media.id)];
+  }
+
+  itemThumb(it: PlaylistItem): string | null {
+    return it.episode?.stillUrl ?? it.media.posterUrl ?? null;
+  }
 
   constructor() {
     // The router reuses this component across playlists; reload on id change.

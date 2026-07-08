@@ -122,6 +122,9 @@ export class MediaCardComponent {
    *  fed by individual inputs rather than `[media]` (continue-watching,
    *  recommendations, coming-soon). Falls back to `media().id`. */
   readonly playlistMediaId = input<number | null>(null);
+  /** Episode id for the "add to playlist" action on episode-backed cards
+   *  (e.g. continue-watching an episode). Takes precedence over the media id. */
+  readonly playlistEpisodeId = input<number | null>(null);
 
   // Events
   readonly clicked = output<void>();
@@ -375,11 +378,15 @@ export class MediaCardComponent {
     // "mark watched". Gated on a real media id so TMDB/discover previews (no
     // library id) don't offer it.
     const mediaId = this.media()?.id ?? this.playlistMediaId();
-    if (mediaId != null) {
+    const episodeId = this.playlistEpisodeId();
+    if (episodeId != null || mediaId != null) {
       actions.push({
         labelKey: 'playlists.add_to_playlist',
         icon: 'list-plus',
-        run: () => this.addToPlaylist.open(mediaId),
+        run: () =>
+          this.addToPlaylist.open(
+            episodeId != null ? { episodeId } : { mediaId: mediaId! },
+          ),
       });
     }
     if (this.interactiveWatched()) {
