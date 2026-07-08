@@ -116,6 +116,10 @@
           </button>
         }
       }
+      <button type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer" (click)="addToPlaylist.emit()">
+        <svg lucideListPlus class="h-5 w-5"></svg>
+        {{ 'playlists.add_to_playlist' | translate }}
+      </button>
       <app-dropdown-menu placement="bottom-end">
         <button trigger type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer">
           <svg lucideEllipsisVertical class="h-5 w-5"></svg>
@@ -285,6 +289,9 @@
           }
         }
         <ng-container *ngTemplateOutlet="downloadBadge"></ng-container>
+        <button type="button" class="btn btn-ghost btn btn-circle" [attr.aria-label]="'playlists.add_to_playlist' | translate" (click)="addToPlaylist.emit()">
+          <svg lucideListPlus class="h-4 w-4"></svg>
+        </button>
         <app-dropdown-menu placement="bottom-end">
           <button trigger type="button" class="btn btn-ghost btn btn-circle">
             <svg lucideEllipsisVertical class="h-5 w-5"></svg>
@@ -454,10 +461,6 @@
       </button>
     }
   }
-  <button type="button" class="dropdown-item text-white" (click)="addToPlaylist.emit()">
-    <svg lucideListPlus class="h-5 w-5 shrink-0 opacity-80"></svg>
-    <span class="flex-1">{{ 'playlists.add_to_playlist' | translate }}</span>
-  </button>
   @if (canGrab() && mediaType() !== 'series' && qualityProfileName()) {
     <button type="button" [disabled]="grabBusy() !== null" class="dropdown-item text-white" (click)="grabBest.emit()">
       @if (grabBusy() === 'best') { <span class="loading loading-spinner loading-sm"></span> }
