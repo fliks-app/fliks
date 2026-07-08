@@ -4,6 +4,7 @@ import { Playlist } from './entities/playlist.entity';
 import { PlaylistItem } from './entities/playlist-item.entity';
 import { PlaylistShare } from './entities/playlist-share.entity';
 import { Media } from '../media/entities/media.entity';
+import { Episode } from '../media/entities/episode.entity';
 import { PlaylistsService } from './playlists.service';
 import { PlaylistsController } from './playlists.controller';
 import { AuthModule } from '../auth/auth.module';
@@ -11,7 +12,7 @@ import { LibrariesModule } from '../libraries/libraries.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Playlist, PlaylistItem, PlaylistShare, Media]),
+    TypeOrmModule.forFeature([Playlist, PlaylistItem, PlaylistShare, Media, Episode]),
     forwardRef(() => AuthModule),
     LibrariesModule,
   ],

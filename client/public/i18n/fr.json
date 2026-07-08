@@ -1966,6 +1966,7 @@
     "404": "Ressource introuvable",
     "409": "Conflit — la ressource existe déjà",
     "media_already_in_playlist": "Ce média est déjà dans la liste",
+    "playlist_add_target_required": "Aucun média, épisode ou saison indiqué",
     "422": "Données invalides",
     "429": "Trop de requêtes — réessayez plus tard",
     "500": "Erreur interne du serveur",

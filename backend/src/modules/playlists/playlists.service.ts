@@ -10,9 +10,10 @@ import { Playlist } from './entities/playlist.entity';
 import { PlaylistItem } from './entities/playlist-item.entity';
 import { PlaylistShare } from './entities/playlist-share.entity';
 import { Media } from '../media/entities/media.entity';
+import { Episode } from '../media/entities/episode.entity';
 import { User } from '../users/entities/user.entity';
 import { LibrariesService } from '../libraries/libraries.service';
-import { PlaylistShareRole } from '../../common/enums';
+import { MediaType, PlaylistShareRole } from '../../common/enums';
 import { CreatePlaylistDto } from './dto/create-playlist.dto';
 import { UpdatePlaylistDto } from './dto/update-playlist.dto';
 import { AddPlaylistItemDto } from './dto/add-playlist-item.dto';
@@ -45,7 +46,10 @@ export interface PlaylistItemView {
   itemId: number;
   position: number;
   addedById: number | null;
+  /** The movie, or the parent series when this item is an episode. */
   media: Media;
+  /** Set when the item is a single episode; null for a movie item. */
+  episode: Episode | null;
 }
 
 @Injectable()
@@ -59,6 +63,8 @@ export class PlaylistsService {
     private readonly shareRepo: Repository<PlaylistShare>,
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
+    @InjectRepository(Episode)
+    private readonly episodeRepo: Repository<Episode>,
     private readonly libraries: LibrariesService,
     private readonly dataSource: DataSource,
   ) {}
@@ -161,6 +167,20 @@ export class PlaylistsService {
       relations: ['library'],
     });
     const byId = new Map(media.map((m) => [m.id, m]));
+
+    // The client has no standalone episode fetch, so inline the episode fields
+    // (season/episode numbers, title, still) needed to render episode items.
+    const epIds = items
+      .map((i) => i.episodeId)
+      .filter((id): id is number => id != null);
+    const episodes = epIds.length
+      ? await this.episodeRepo.find({
+          where: { id: In(epIds) },
+          relations: ['season'],
+        })
+      : [];
+    const epById = new Map(episodes.map((e) => [e.id, e]));
+
     return items
       .filter((i) => byId.has(i.mediaId))
       .map((i) => ({
@@ -168,6 +188,7 @@ export class PlaylistsService {
         position: i.position,
         addedById: i.addedById,
         media: byId.get(i.mediaId) as Media,
+        episode: i.episodeId != null ? (epById.get(i.episodeId) ?? null) : null,
       }));
   }
 
@@ -219,52 +240,174 @@ export class PlaylistsService {
   // Write — items
   // ---------------------------------------------------------------------------
 
+  /**
+   * Add to a playlist. The body picks the scope: a movie (`mediaId` → a movie),
+   * a single episode (`episodeId`), a whole season (`seasonId`) or a whole
+   * series (`mediaId` → a series). Season/series expand server-side to one row
+   * per episode in a single transaction, skipping items already present, and
+   * only touching media the caller can access. Returns how many rows were added.
+   */
   async addItem(
     user: User,
     playlistId: number,
     dto: AddPlaylistItemDto,
-  ): Promise<PlaylistItem> {
+  ): Promise<{ added: number }> {
     await this.assertRole(user, playlistId, PlaylistShareRole.EDITOR);
-
-    // Only media the caller can see may be added.
     const accessible = await this.libraries.getAccessibleLibraryIds(user);
-    const media = await this.mediaRepo.findOne({
-      where: {
-        id: dto.mediaId,
-        library: { id: In(accessible.length ? accessible : [-1]) },
-      },
-    });
-    if (!media) throw new NotFoundException(`Media #${dto.mediaId} not found`);
+    const accessibleIds = accessible.length ? accessible : [-1];
 
-    const existing = await this.itemRepo.findOne({
-      where: { playlist: { id: playlistId }, media: { id: dto.mediaId } },
-    });
-    if (existing) throw new BadRequestException('errors.media_already_in_playlist');
+    const { targets, bulk } = await this.resolveAddTargets(dto, accessibleIds);
+    if (!targets.length) return { added: 0 };
 
-    const max = await this.itemRepo
-      .createQueryBuilder('i')
-      .select('MAX(i.position)', 'max')
-      .where('i."playlistId" = :pid', { pid: playlistId })
-      .getRawOne<{ max: number | null }>();
-    const position = max?.max != null ? Number(max.max) + 1 : 0;
+    const runInsert = (): Promise<{ added: number }> =>
+      this.dataSource.transaction(async (m) => {
+        const itemRepo = m.getRepository(PlaylistItem);
+        const existing = await itemRepo.find({
+          where: { playlist: { id: playlistId } },
+        });
+        const movieIds = new Set(
+          existing.filter((e) => e.episodeId == null).map((e) => e.mediaId),
+        );
+        const epIds = new Set(
+          existing.filter((e) => e.episodeId != null).map((e) => e.episodeId),
+        );
+        const fresh = targets.filter((t) =>
+          t.episodeId != null ? !epIds.has(t.episodeId) : !movieIds.has(t.mediaId),
+        );
+        if (!fresh.length) {
+          // A single explicit add of an item already present is the "duplicate"
+          // case the UI surfaces; a bulk add just reports nothing new.
+          if (!bulk) {
+            throw new BadRequestException('errors.media_already_in_playlist');
+          }
+          return { added: 0 };
+        }
+
+        const maxRow = await itemRepo
+          .createQueryBuilder('i')
+          .select('MAX(i.position)', 'max')
+          .where('i."playlistId" = :pid', { pid: playlistId })
+          .getRawOne<{ max: number | null }>();
+        let position = maxRow?.max != null ? Number(maxRow.max) + 1 : 0;
+
+        const rows = fresh.map((t) =>
+          itemRepo.create({
+            playlist: { id: playlistId } as Playlist,
+            media: { id: t.mediaId } as Media,
+            episode: t.episodeId != null ? ({ id: t.episodeId } as Episode) : null,
+            addedBy: { id: user.id } as User,
+            position: position++,
+          }),
+        );
+        await itemRepo.save(rows);
+        return { added: rows.length };
+      });
 
     try {
-      return await this.itemRepo.save(
-        this.itemRepo.create({
-          playlist: { id: playlistId } as Playlist,
-          media: { id: dto.mediaId } as Media,
-          addedBy: { id: user.id } as User,
-          position,
-        }),
-      );
+      return await runInsert();
     } catch (err) {
-      // Unique(playlist, media): a concurrent add raced past the pre-check —
-      // surface the same clean 400 rather than a raw DB error.
-      if ((err as { code?: string }).code === '23505') {
+      if (err instanceof BadRequestException) throw err;
+      if ((err as { code?: string }).code !== '23505') throw err;
+      // Partial unique index violation — a concurrent add raced past the
+      // skip-existing check. A single add is the "duplicate" case the UI
+      // surfaces; a bulk add retries once so skip-existing now sees the
+      // concurrently-inserted rows (and no-ops cleanly if it races again).
+      if (!bulk) {
         throw new BadRequestException('errors.media_already_in_playlist');
       }
-      throw err;
+      try {
+        return await runInsert();
+      } catch (retry) {
+        if (retry instanceof BadRequestException) throw retry;
+        if ((retry as { code?: string }).code === '23505') return { added: 0 };
+        throw retry;
+      }
     }
+  }
+
+  /**
+   * Turn an add request into the concrete rows to insert, validating the
+   * caller's library access. `bulk` = a season/series expansion (skip
+   * already-present episodes) vs a single movie/episode add.
+   */
+  private async resolveAddTargets(
+    dto: AddPlaylistItemDto,
+    accessibleIds: number[],
+  ): Promise<{
+    targets: { mediaId: number; episodeId: number | null }[];
+    bulk: boolean;
+  }> {
+    // Single episode
+    if (dto.episodeId != null) {
+      const ep = await this.episodeRepo.findOne({
+        where: { id: dto.episodeId },
+        relations: ['season'],
+      });
+      if (!ep?.season) {
+        throw new NotFoundException(`Episode #${dto.episodeId} not found`);
+      }
+      await this.assertAccessibleSeries(ep.season.mediaId, accessibleIds);
+      return {
+        targets: [{ mediaId: ep.season.mediaId, episodeId: dto.episodeId }],
+        bulk: false,
+      };
+    }
+
+    // Whole season
+    if (dto.seasonId != null) {
+      const eps = await this.episodeRepo.find({
+        where: { season: { id: dto.seasonId } },
+        relations: ['season'],
+        order: { episodeNumber: 'ASC' },
+      });
+      if (!eps.length) return { targets: [], bulk: true };
+      const seriesId = eps[0].season.mediaId;
+      await this.assertAccessibleSeries(seriesId, accessibleIds);
+      return {
+        targets: eps.map((e) => ({ mediaId: seriesId, episodeId: e.id })),
+        bulk: true,
+      };
+    }
+
+    // Movie or whole series (by media id)
+    if (dto.mediaId != null) {
+      const media = await this.mediaRepo.findOne({
+        where: { id: dto.mediaId, library: { id: In(accessibleIds) } },
+      });
+      if (!media) throw new NotFoundException(`Media #${dto.mediaId} not found`);
+      if (media.type === MediaType.SERIES) {
+        const eps = await this.episodeRepo.find({
+          where: { season: { media: { id: dto.mediaId } } },
+          relations: ['season'],
+        });
+        eps.sort(
+          (a, b) =>
+            a.season.seasonNumber - b.season.seasonNumber ||
+            a.episodeNumber - b.episodeNumber,
+        );
+        return {
+          targets: eps.map((e) => ({ mediaId: media.id, episodeId: e.id })),
+          bulk: true,
+        };
+      }
+      return { targets: [{ mediaId: dto.mediaId, episodeId: null }], bulk: false };
+    }
+
+    throw new BadRequestException('errors.playlist_add_target_required');
+  }
+
+  private async assertAccessibleSeries(
+    seriesId: number,
+    accessibleIds: number[],
+  ): Promise<void> {
+    const series = await this.mediaRepo.findOne({
+      where: {
+        id: seriesId,
+        type: MediaType.SERIES,
+        library: { id: In(accessibleIds) },
+      },
+    });
+    if (!series) throw new NotFoundException(`Series #${seriesId} not found`);
   }
 
   async removeItem(
