@@ -477,6 +477,21 @@ export class PlaylistsService {
     }
   }
 
+  /** Remove every item of one media from the playlist — for a series this is
+   *  all its episode rows (they all carry the series' mediaId). */
+  async removeItemsByMedia(
+    user: User,
+    playlistId: number,
+    mediaId: number,
+  ): Promise<{ removed: number }> {
+    await this.assertRole(user, playlistId, PlaylistShareRole.EDITOR);
+    const res = await this.itemRepo.delete({
+      playlist: { id: playlistId },
+      media: { id: mediaId },
+    });
+    return { removed: res.affected ?? 0 };
+  }
+
   async reorder(
     user: User,
     playlistId: number,

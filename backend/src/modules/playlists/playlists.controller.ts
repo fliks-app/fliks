@@ -94,6 +94,16 @@ export class PlaylistsController {
     return this.service.reorder(req.user as User, id, dto);
   }
 
+  @Delete(':id/items/by-media/:mediaId')
+  @CheckPolicies((ability) => ability.can(Action.Update, Playlist))
+  removeItemsByMedia(
+    @Req() req: Request,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('mediaId', ParseIntPipe) mediaId: number,
+  ) {
+    return this.service.removeItemsByMedia(req.user as User, id, mediaId);
+  }
+
   @Delete(':id/items/:itemId')
   @CheckPolicies((ability) => ability.can(Action.Update, Playlist))
   removeItem(

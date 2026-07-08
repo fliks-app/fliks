@@ -115,4 +115,13 @@ export class PlaylistsApiService {
       this.http.delete<void>(`/api/playlists/${id}/items/${itemId}`),
     );
   }
+
+  /** Remove every item of one media (a series → all its episodes). */
+  removeItemsByMedia(id: number, mediaId: number) {
+    return firstValueFrom(
+      this.http.delete<{ removed: number }>(
+        `/api/playlists/${id}/items/by-media/${mediaId}`,
+      ),
+    );
+  }
 }

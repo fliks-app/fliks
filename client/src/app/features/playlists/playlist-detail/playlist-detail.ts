@@ -454,4 +454,27 @@ export class PlaylistDetailComponent {
       void this.load(id);
     }
   }
+
+  /** Remove every episode of a series from the playlist (grouped view). */
+  async removeSeries(group: PlaylistSeriesGroup): Promise<void> {
+    const id = this.playlist()?.id;
+    if (id == null) return;
+    const confirmed = await this.confirmation.confirm({
+      title: this.translate.instant('playlists.remove_series_title'),
+      message: this.translate.instant('playlists.remove_series_confirm', {
+        title: group.media.title,
+        count: group.episodes.length,
+      }),
+      confirmLabel: this.translate.instant('playlists.remove_item_action'),
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    const ids = new Set(group.episodes.map((e) => e.itemId));
+    this.items.update((list) => list.filter((i) => !ids.has(i.itemId)));
+    try {
+      await this.api.removeItemsByMedia(id, group.seriesId);
+    } catch {
+      void this.load(id);
+    }
+  }
 }

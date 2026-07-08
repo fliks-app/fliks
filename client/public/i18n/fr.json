@@ -1141,6 +1141,8 @@
     "remove_item_title": "Retirer de la liste",
     "remove_item_confirm": "Retirer « {{title}} » de la liste ?",
     "remove_item_action": "Retirer",
+    "remove_series_title": "Retirer la série",
+    "remove_series_confirm": "Retirer les {{count}} épisodes de « {{title}} » de la liste ?",
     "view_grouped": "Groupé",
     "view_flat": "Liste",
     "episodes_count": "{{count}} épisodes",
