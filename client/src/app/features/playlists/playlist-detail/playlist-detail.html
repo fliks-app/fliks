@@ -280,11 +280,7 @@
     (click)="toggleItemWatched(item)"
     [attr.aria-label]="(item.watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched') | translate"
   >
-    @if (item.watched) {
-      <svg lucideEyeOff class="h-4 w-4"></svg>
-    } @else {
-      <svg lucideEye class="h-4 w-4"></svg>
-    }
+    <svg lucideCheck class="h-4 w-4"></svg>
   </button>
   @if (canEditItems()) {
     <button
