@@ -9,6 +9,7 @@ import { Capacitor } from '@capacitor/core';
 import { computeMediaBarStatus, computeMediaBarPercent } from '../../utils/media-status.util';
 import { CardActionsDirective } from '../../directives/card-actions.directive';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
+import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
@@ -40,6 +41,7 @@ export class MediaCardComponent {
   private readonly router = inject(Router);
   private readonly tv = inject(TvService);
   private readonly cardActionsService = inject(CardActionsService);
+  private readonly addToPlaylist = inject(AddToPlaylistService);
   private readonly playableMedia = inject(PlayableMediaService);
   private readonly navbar = inject(NavbarService);
   protected readonly device = inject(DeviceService);
@@ -116,6 +118,10 @@ export class MediaCardComponent {
    *  on recommendation cards). Appended after the built-in actions, before the
    *  danger "remove" entry. Pure menu actions — no inline indicator. */
   readonly extraActions = input<CardAction[]>([]);
+  /** Library media id used for the "add to playlist" action when the card is
+   *  fed by individual inputs rather than `[media]` (continue-watching,
+   *  recommendations, coming-soon). Falls back to `media().id`. */
+  readonly playlistMediaId = input<number | null>(null);
 
   // Events
   readonly clicked = output<void>();
@@ -363,6 +369,17 @@ export class MediaCardComponent {
         labelKey: 'media_card.action_open',
         icon: 'external-link',
         run: () => this.openDetail(),
+      });
+    }
+    // Library media can be added to a playlist from any card, listed above
+    // "mark watched". Gated on a real media id so TMDB/discover previews (no
+    // library id) don't offer it.
+    const mediaId = this.media()?.id ?? this.playlistMediaId();
+    if (mediaId != null) {
+      actions.push({
+        labelKey: 'playlists.add_to_playlist',
+        icon: 'list-plus',
+        run: () => this.addToPlaylist.open(mediaId),
       });
     }
     if (this.interactiveWatched()) {

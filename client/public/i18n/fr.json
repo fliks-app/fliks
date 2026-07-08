@@ -225,6 +225,7 @@
     "more": "Plus",
     "change_server": "Changer de serveur",
     "persons": "Personnes",
+    "playlists": "Playlists",
     "account": "Mon compte"
   },
   "history": {
@@ -1114,6 +1115,31 @@
     "previous": "Page précédente",
     "next": "Page suivante"
   },
+  "playlists": {
+    "title": "Listes de lecture",
+    "create": "Créer une liste",
+    "empty": "Aucune liste de lecture",
+    "no_items": "Cette liste est vide",
+    "new_placeholder": "Nom de la liste",
+    "item_count": "{{count}} élément(s)",
+    "rename": "Renommer",
+    "settings": "Paramètres",
+    "saved": "Modifications enregistrées",
+    "created_toast": "Liste créée",
+    "delete_title": "Supprimer la liste",
+    "delete_confirm": "Supprimer « {{name}} » ? Cette action est irréversible.",
+    "deleted_toast": "Liste supprimée",
+    "auto_remove_watched": "Retirer les éléments vus",
+    "auto_remove_watched_hint": "Un élément est retiré de la liste une fois que tu l'as terminé.",
+    "auto_download": "Téléchargement automatique",
+    "auto_download_hint": "Sur iOS et Android, les éléments de la liste sont téléchargés pour la lecture hors-ligne.",
+    "drag": "Réordonner",
+    "move_up": "Monter",
+    "move_down": "Descendre",
+    "add_to_playlist": "Ajouter à une liste",
+    "added_toast": "Ajouté à la liste",
+    "created_and_added_toast": "Liste créée et titre ajouté"
+  },
   "downloads": {
     "title": "Téléchargements",
     "download": "Télécharger",
@@ -1939,6 +1965,7 @@
     "403": "Accès interdit",
     "404": "Ressource introuvable",
     "409": "Conflit — la ressource existe déjà",
+    "media_already_in_playlist": "Ce média est déjà dans la liste",
     "422": "Données invalides",
     "429": "Trop de requêtes — réessayez plus tard",
     "500": "Erreur interne du serveur",

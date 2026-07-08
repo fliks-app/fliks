@@ -40,7 +40,13 @@ function extractMessage(
   }
 
   if (body?.message) {
-    return Array.isArray(body.message) ? body.message.join(', ') : body.message;
+    if (Array.isArray(body.message)) return body.message.join(', ');
+    // Backends may return an i18n key for user-facing validation errors
+    // (English-only rule keeps the copy out of the API); translate it when
+    // known, otherwise show the message as-is.
+    const msg = body.message as string;
+    const translated = translate.instant(msg);
+    return translated !== msg ? translated : msg;
   }
 
   const key = `errors.${err.status}`;

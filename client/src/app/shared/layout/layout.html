@@ -250,6 +250,12 @@
                 </a>
               </li>
               <li>
+                <a routerLink="/playlists" routerLinkActive="active" (click)="resetNavHistory()">
+                  <svg lucideListVideo class="h-5 w-5"></svg>
+                  {{ 'nav.playlists' | translate }}
+                </a>
+              </li>
+              <li>
                 <a routerLink="/activity" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
                   <span class="flex items-center gap-2">
                     <svg lucideDownload class="h-5 w-5"></svg>
@@ -286,6 +292,9 @@
 
   <!-- Card actions panel (TV menu button / mobile long-press) — single instance -->
   <app-card-actions-panel />
+
+  <!-- Add-to-playlist dialog — single instance, opened via AddToPlaylistService -->
+  <app-add-to-playlist-modal />
 
   <div class="drawer-side z-40" [class.hidden]="isNative && device.isPhone()">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
@@ -365,6 +374,12 @@
           <a routerLink="/history" routerLinkActive="active">
             <svg lucideHistory class="h-5 w-5"></svg>
             {{ 'nav.history' | translate }}
+          </a>
+        </li>
+        <li>
+          <a routerLink="/playlists" routerLinkActive="active">
+            <svg lucideListVideo class="h-5 w-5"></svg>
+            {{ 'nav.playlists' | translate }}
           </a>
         </li>
 
