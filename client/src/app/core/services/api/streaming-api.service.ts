@@ -603,7 +603,7 @@ export class StreamingApiService {
     );
   }
 
-  toggleWatched(mediaId: number, mediaFileId: number, episodeId?: number) {
+  toggleWatched(mediaId: number, mediaFileId?: number, episodeId?: number) {
     return firstValueFrom(
       this.http.post<PlaybackState>(`/api/playback/media/${mediaId}/toggle-watched`, { mediaFileId, episodeId }),
     );

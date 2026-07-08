@@ -3,9 +3,25 @@
     <span class="loading loading-spinner loading-lg"></span>
   </div>
 } @else if (playlist(); as pl) {
-  <div class="flex flex-col gap-4 mb-6">
-    <div class="flex items-start justify-between gap-3">
-      <div class="min-w-0">
+  <div class="flex items-start gap-4 mb-6">
+      <!-- Playlist icon: the auto cover mosaic (2×2 / single / fallback). -->
+      <div class="w-16 h-16 sm:w-20 sm:h-20 shrink-0 overflow-hidden rounded-lg bg-base-300">
+        @if (pl.posters.length >= 4) {
+          <div class="grid grid-cols-2 grid-rows-2 h-full w-full">
+            @for (p of pl.posters.slice(0, 4); track p) {
+              <img [src]="p | resolveUrl: 'thumb'" alt="" class="h-full w-full object-cover" />
+            }
+          </div>
+        } @else if (pl.posters.length > 0) {
+          <img [src]="pl.posters[0] | resolveUrl: 'thumb'" alt="" class="h-full w-full object-cover" />
+        } @else {
+          <div class="flex h-full w-full items-center justify-center text-base-content/40">
+            <svg lucideListVideo class="h-8 w-8" [strokeWidth]="1.5"></svg>
+          </div>
+        }
+      </div>
+
+      <div class="min-w-0 flex-1">
         <h1 class="text-2xl font-bold truncate">{{ pl.name }}</h1>
         <p class="text-sm text-base-content/60 mt-1">
           {{ 'playlists.item_count' | translate: { count: items().length } }}
@@ -57,8 +73,6 @@
           </app-dropdown-menu>
         }
       </div>
-    </div>
-
   </div>
 
   @if (!items().length) {
@@ -66,57 +80,243 @@
       <p class="text-lg">{{ 'playlists.no_items' | translate }}</p>
     </div>
   } @else {
-    <div
-      cdkDropList
-      (cdkDropListDropped)="drop($event)"
-      class="grid content-start grid-cols-3 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 gap-1.5 sm:gap-4"
-    >
-      @for (item of items(); track item.itemId; let i = $index) {
-        <div cdkDrag [cdkDragDisabled]="!canEditItems() || tv.isTv()" class="relative">
-          @if (canEditItems()) {
-            @if (!tv.isTv()) {
-              <button
-                type="button"
-                cdkDragHandle
-                class="absolute top-2 left-2 z-20 btn btn-circle btn-xs bg-black/50 border-0 text-white cursor-grab"
-                [attr.aria-label]="'playlists.drag' | translate"
-              >
-                <svg lucideGripVertical class="h-4 w-4"></svg>
-              </button>
-            } @else {
-              <div class="absolute top-2 left-2 z-20 flex flex-col gap-1">
+    <!-- View toggle: grouped (series collapse to one entry) vs flat -->
+    <div class="flex justify-end mb-3">
+      <div class="join">
+        <button
+          type="button"
+          class="btn btn-sm join-item"
+          [class.btn-active]="viewMode() === 'grouped'"
+          (click)="setView('grouped')"
+        >
+          {{ 'playlists.view_grouped' | translate }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm join-item"
+          [class.btn-active]="viewMode() === 'flat'"
+          (click)="setView('flat')"
+        >
+          {{ 'playlists.view_flat' | translate }}
+        </button>
+      </div>
+    </div>
+
+    @if (viewMode() === 'flat') {
+      <div cdkDropList (cdkDropListDropped)="drop($event)" class="flex flex-col gap-1">
+        @for (item of items(); track item.itemId; let i = $index) {
+          <div
+            cdkDrag
+            [cdkDragDisabled]="!canEditItems() || tv.isTv()"
+            class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200"
+          >
+            @if (canEditItems()) {
+              @if (!tv.isTv()) {
                 <button
                   type="button"
-                  class="btn btn-circle btn-xs"
-                  [disabled]="i === 0"
-                  (click)="move(i, -1)"
-                  [attr.aria-label]="'playlists.move_up' | translate"
+                  cdkDragHandle
+                  class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0"
+                  [attr.aria-label]="'playlists.drag' | translate"
                 >
-                  <svg lucideArrowUp class="h-4 w-4"></svg>
+                  <svg lucideGripVertical class="h-4 w-4"></svg>
                 </button>
+              } @else {
+                <div class="flex flex-col shrink-0">
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs btn-square"
+                    [disabled]="i === 0"
+                    (click)="move(i, -1)"
+                    [attr.aria-label]="'playlists.move_up' | translate"
+                  >
+                    <svg lucideArrowUp class="h-4 w-4"></svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs btn-square"
+                    [disabled]="i === items().length - 1"
+                    (click)="move(i, 1)"
+                    [attr.aria-label]="'playlists.move_down' | translate"
+                  >
+                    <svg lucideArrowDown class="h-4 w-4"></svg>
+                  </button>
+                </div>
+              }
+            }
+            <ng-container
+              [ngTemplateOutlet]="itemRow"
+              [ngTemplateOutletContext]="{ $implicit: item }"
+            ></ng-container>
+          </div>
+        }
+      </div>
+    } @else {
+      <div cdkDropList (cdkDropListDropped)="dropGroup($event)" class="flex flex-col gap-1">
+        @for (
+          entry of groupedEntries();
+          track entry.kind === 'movie' ? 'm' + entry.item.itemId : 's' + entry.group.seriesId;
+          let i = $index
+        ) {
+          <div cdkDrag [cdkDragDisabled]="!canEditItems() || tv.isTv()">
+            <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
+              @if (canEditItems()) {
+                @if (!tv.isTv()) {
+                  <button
+                    type="button"
+                    cdkDragHandle
+                    class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0"
+                    [attr.aria-label]="'playlists.drag' | translate"
+                  >
+                    <svg lucideGripVertical class="h-4 w-4"></svg>
+                  </button>
+                } @else {
+                  <div class="flex flex-col shrink-0">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs btn-square"
+                      [disabled]="i === 0"
+                      (click)="moveGroup(i, -1)"
+                      [attr.aria-label]="'playlists.move_up' | translate"
+                    >
+                      <svg lucideArrowUp class="h-4 w-4"></svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs btn-square"
+                      [disabled]="i === groupedEntries().length - 1"
+                      (click)="moveGroup(i, 1)"
+                      [attr.aria-label]="'playlists.move_down' | translate"
+                    >
+                      <svg lucideArrowDown class="h-4 w-4"></svg>
+                    </button>
+                  </div>
+                }
+              }
+
+              @if (entry.kind === 'movie') {
+                <ng-container
+                  [ngTemplateOutlet]="itemRow"
+                  [ngTemplateOutletContext]="{ $implicit: entry.item }"
+                ></ng-container>
+              } @else {
                 <button
                   type="button"
-                  class="btn btn-circle btn-xs"
-                  [disabled]="i === items().length - 1"
-                  (click)="move(i, 1)"
-                  [attr.aria-label]="'playlists.move_down' | translate"
+                  class="flex items-center gap-3 flex-1 min-w-0 text-left"
+                  (click)="toggleSeries(entry.group.seriesId)"
                 >
-                  <svg lucideArrowDown class="h-4 w-4"></svg>
+                  <div
+                    class="relative w-36 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300"
+                  >
+                    <img
+                      [src]="(entry.group.media.fanartUrl ?? entry.group.media.posterUrl) | resolveUrl: 'thumb'"
+                      alt=""
+                      class="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="font-medium truncate">{{ entry.group.media.title }}</p>
+                    <p class="text-sm text-base-content/60">
+                      {{ 'playlists.episodes_count' | translate: { count: entry.group.episodes.length } }}
+                    </p>
+                  </div>
+                  <svg
+                    lucideChevronDown
+                    class="h-5 w-5 shrink-0 transition-transform"
+                    [class.-rotate-90]="!expandedSeries().has(entry.group.seriesId)"
+                  ></svg>
                 </button>
+                @if (canEditItems()) {
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm btn-square text-error shrink-0"
+                    (click)="removeSeries(entry.group)"
+                    [attr.aria-label]="'playlists.remove_series_title' | translate"
+                  >
+                    <svg lucideTrash2 class="h-4 w-4"></svg>
+                  </button>
+                }
+              }
+            </div>
+
+            @if (entry.kind === 'series' && expandedSeries().has(entry.group.seriesId)) {
+              <!-- Left margin = row padding (p-1.5) + drag handle (btn-xs 1.5rem)
+                   + gap-2, so the guide line sits under the series thumbnail. -->
+              <div class="flex flex-col gap-1 mt-1 ml-[2.375rem] border-l-2 border-base-300 pl-4">
+                @for (item of entry.group.episodes; track item.itemId) {
+                  <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
+                    <ng-container
+                      [ngTemplateOutlet]="itemRow"
+                      [ngTemplateOutletContext]="{ $implicit: item }"
+                    ></ng-container>
+                  </div>
+                }
               </div>
             }
-          }
+          </div>
+        }
+      </div>
+    }
+  }
+}
 
-          <app-media-card
-            [media]="item.media"
-            [dismissable]="canEditItems()"
-            (dismissed)="removeItem(item)"
-          />
+<!-- One playlist row (movie or episode), shared by both views. -->
+<ng-template #itemRow let-item>
+  <a [routerLink]="itemLink(item)" class="flex items-center gap-3 flex-1 min-w-0">
+    <div
+      class="relative w-36 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300"
+    >
+      @if (itemThumb(item); as thumb) {
+        <img
+          [src]="thumb | resolveUrl: 'thumb'"
+          alt=""
+          class="h-full w-full object-cover"
+          loading="lazy"
+        />
+      }
+      @if (item.watched || item.progressPercent > 0) {
+        <div class="absolute bottom-0 left-0 right-0 h-1 bg-black/40">
+          <div
+            class="h-full"
+            [class.bg-success]="item.watched"
+            [class.bg-primary]="!item.watched"
+            [style.width.%]="item.watched ? 100 : item.progressPercent"
+          ></div>
         </div>
       }
     </div>
+    <div class="min-w-0">
+      @if (item.episode; as ep) {
+        <p class="font-medium truncate">{{ episodeLabel(ep) }}</p>
+        <p class="text-sm text-base-content/60 truncate">{{ item.media.title }}</p>
+      } @else {
+        <p class="font-medium truncate">{{ item.media.title }}</p>
+        @if (item.media.year) {
+          <p class="text-sm text-base-content/60 truncate">{{ item.media.year }}</p>
+        }
+      }
+    </div>
+  </a>
+  <button
+    type="button"
+    class="btn btn-ghost btn-sm btn-square shrink-0"
+    [class.text-success]="item.watched"
+    (click)="toggleItemWatched(item)"
+    [attr.aria-label]="(item.watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched') | translate"
+  >
+    <svg lucideCheck class="h-4 w-4"></svg>
+  </button>
+  @if (canEditItems()) {
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm btn-square text-error shrink-0"
+      (click)="removeItem(item)"
+      [attr.aria-label]="'common.delete' | translate"
+    >
+      <svg lucideTrash2 class="h-4 w-4"></svg>
+    </button>
   }
-}
+</ng-template>
 
 <dialog #renameDialog class="modal">
   <div class="modal-box max-w-md">

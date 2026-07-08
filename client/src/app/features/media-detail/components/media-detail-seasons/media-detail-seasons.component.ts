@@ -17,6 +17,7 @@ import {
   LucideEye,
   LucideEyeOff,
   LucideListChecks,
+  LucideListPlus,
   LucidePackage,
   LucideX,
 } from '@lucide/angular';
@@ -39,16 +40,18 @@ import {
   seasonsVisibleWithDiskFilter,
 } from '../../media-detail.utils';
 import { PlayableMediaService } from '../../../../core/services/playable-media.service';
+import { AddToPlaylistService } from '../../../../core/services/add-to-playlist.service';
 
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, FormsModule, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideListChecks, LucidePackage, LucideX],
+  imports: [TranslateModule, FormsModule, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideListChecks, LucideListPlus, LucidePackage, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
 export class MediaDetailSeasonsComponent {
   private readonly playableMedia = inject(PlayableMediaService);
+  private readonly addToPlaylist = inject(AddToPlaylistService);
   readonly media = input.required<Media>();
   readonly selectedSeason = input<Season | null>(null);
   readonly activeSeasonId = input.required<number | null>();
@@ -146,6 +149,10 @@ export class MediaDetailSeasonsComponent {
 
   episodeRoute(ep: Episode): string[] {
     return ['/series', String(this.media().id), 'episode', String(ep.id)];
+  }
+
+  addSeasonToPlaylist(season: Season) {
+    this.addToPlaylist.open({ seasonId: season.id });
   }
 
   playEpisode(ep: Episode) {

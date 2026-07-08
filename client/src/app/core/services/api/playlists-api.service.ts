@@ -19,11 +19,27 @@ export interface Playlist {
   posters: string[];
 }
 
+export interface PlaylistEpisode {
+  id: number;
+  episodeNumber: number;
+  endEpisodeNumber?: number | null;
+  title?: string | null;
+  stillUrl?: string | null;
+  season?: { seasonNumber: number } | null;
+}
+
 export interface PlaylistItem {
   itemId: number;
   position: number;
   addedById: number | null;
+  /** The movie, or the parent series when the item is an episode. */
   media: Media;
+  /** Set when the item is a single episode; null for a movie item. */
+  episode: PlaylistEpisode | null;
+  /** The viewer's watch progress on this item (0–100). */
+  progressPercent: number;
+  /** Whether the viewer finished this item. */
+  watched: boolean;
 }
 
 export interface CreatePlaylistBody {
@@ -33,6 +49,14 @@ export interface CreatePlaylistBody {
 }
 
 export type UpdatePlaylistBody = Partial<CreatePlaylistBody>;
+
+/** Scope of an add: a movie/series (`mediaId`), a single `episodeId`, or a
+ *  whole `seasonId`. Season/series expand to episodes server-side. */
+export interface AddToPlaylistBody {
+  mediaId?: number;
+  episodeId?: number;
+  seasonId?: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class PlaylistsApiService {
@@ -74,9 +98,9 @@ export class PlaylistsApiService {
     );
   }
 
-  addItem(id: number, mediaId: number) {
+  addItem(id: number, body: AddToPlaylistBody) {
     return firstValueFrom(
-      this.http.post<PlaylistItem>(`/api/playlists/${id}/items`, { mediaId }),
+      this.http.post<{ added: number }>(`/api/playlists/${id}/items`, body),
     );
   }
 
@@ -89,6 +113,15 @@ export class PlaylistsApiService {
   removeItem(id: number, itemId: number) {
     return firstValueFrom(
       this.http.delete<void>(`/api/playlists/${id}/items/${itemId}`),
+    );
+  }
+
+  /** Remove every item of one media (a series → all its episodes). */
+  removeItemsByMedia(id: number, mediaId: number) {
+    return firstValueFrom(
+      this.http.delete<{ removed: number }>(
+        `/api/playlists/${id}/items/by-media/${mediaId}`,
+      ),
     );
   }
 }

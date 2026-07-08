@@ -5,12 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, IsNull, Repository } from 'typeorm';
 import { Playlist } from './entities/playlist.entity';
 import { PlaylistItem } from './entities/playlist-item.entity';
 import { PlaylistShare } from './entities/playlist-share.entity';
 import { Media } from '../media/entities/media.entity';
 import { Episode } from '../media/entities/episode.entity';
+import { PlaybackState } from '../streaming/entities/playback-state.entity';
 import { User } from '../users/entities/user.entity';
 import { LibrariesService } from '../libraries/libraries.service';
 import { MediaType, PlaylistShareRole } from '../../common/enums';
@@ -50,6 +51,10 @@ export interface PlaylistItemView {
   media: Media;
   /** Set when the item is a single episode; null for a movie item. */
   episode: Episode | null;
+  /** The requesting user's watch progress on this item (0–100). */
+  progressPercent: number;
+  /** Whether the requesting user finished this item. */
+  watched: boolean;
 }
 
 @Injectable()
@@ -65,6 +70,8 @@ export class PlaylistsService {
     private readonly mediaRepo: Repository<Media>,
     @InjectRepository(Episode)
     private readonly episodeRepo: Repository<Episode>,
+    @InjectRepository(PlaybackState)
+    private readonly playbackRepo: Repository<PlaybackState>,
     private readonly libraries: LibrariesService,
     private readonly dataSource: DataSource,
   ) {}
@@ -181,15 +188,60 @@ export class PlaylistsService {
       : [];
     const epById = new Map(episodes.map((e) => [e.id, e]));
 
+    // Per-item watch progress for this user (movie: media playback with no
+    // episode; episode: the episode's playback), for the progress bar.
+    const movieMediaIds = items
+      .filter((i) => i.episodeId == null)
+      .map((i) => i.mediaId);
+    const where: Record<string, unknown>[] = [];
+    if (movieMediaIds.length) {
+      where.push({
+        user: { id: user.id },
+        media: { id: In(movieMediaIds) },
+        episode: IsNull(),
+      });
+    }
+    if (epIds.length) {
+      where.push({ user: { id: user.id }, episode: { id: In(epIds) } });
+    }
+    const states = where.length
+      ? await this.playbackRepo.find({ where })
+      : [];
+    const psByMovie = new Map<number, PlaybackState>();
+    const psByEpisode = new Map<number, PlaybackState>();
+    for (const s of states) {
+      if (s.episodeId == null) psByMovie.set(s.mediaId, s);
+      else psByEpisode.set(s.episodeId, s);
+    }
+    const progressOf = (
+      s: PlaybackState | undefined,
+    ): { progressPercent: number; watched: boolean } => {
+      if (!s) return { progressPercent: 0, watched: false };
+      if (s.completed) return { progressPercent: 100, watched: true };
+      const pct =
+        s.durationSeconds > 0
+          ? Math.min(100, Math.round((s.positionSeconds / s.durationSeconds) * 100))
+          : 0;
+      return { progressPercent: pct, watched: false };
+    };
+
     return items
       .filter((i) => byId.has(i.mediaId))
-      .map((i) => ({
-        itemId: i.id,
-        position: i.position,
-        addedById: i.addedById,
-        media: byId.get(i.mediaId) as Media,
-        episode: i.episodeId != null ? (epById.get(i.episodeId) ?? null) : null,
-      }));
+      .map((i) => {
+        const ps =
+          i.episodeId != null
+            ? psByEpisode.get(i.episodeId)
+            : psByMovie.get(i.mediaId);
+        return {
+          itemId: i.id,
+          position: i.position,
+          addedById: i.addedById,
+          media: byId.get(i.mediaId) as Media,
+          episode:
+            i.episodeId != null ? (epById.get(i.episodeId) ?? null) : null,
+          ...progressOf(ps),
+        };
+      });
   }
 
   // ---------------------------------------------------------------------------
@@ -425,6 +477,21 @@ export class PlaylistsService {
     }
   }
 
+  /** Remove every item of one media from the playlist — for a series this is
+   *  all its episode rows (they all carry the series' mediaId). */
+  async removeItemsByMedia(
+    user: User,
+    playlistId: number,
+    mediaId: number,
+  ): Promise<{ removed: number }> {
+    await this.assertRole(user, playlistId, PlaylistShareRole.EDITOR);
+    const res = await this.itemRepo.delete({
+      playlist: { id: playlistId },
+      media: { id: mediaId },
+    });
+    return { removed: res.affected ?? 0 };
+  }
+
   async reorder(
     user: User,
     playlistId: number,
@@ -490,18 +557,34 @@ export class PlaylistsService {
     const rows: { playlistId: number; count: number; posters: string[] }[] =
       await this.dataSource.query(
         `
-        SELECT pi."playlistId" AS "playlistId",
-               COUNT(*)::int    AS count,
-               COALESCE(
-                 (ARRAY_AGG(m."posterUrl" ORDER BY pi."position")
-                  FILTER (WHERE m."posterUrl" IS NOT NULL))[1:4],
-                 ARRAY[]::text[]
-               ) AS posters
-        FROM playlist_items pi
-        JOIN media m ON m.id = pi."mediaId"
-        WHERE pi."playlistId" = ANY($1)
-          AND m."libraryId" = ANY($2)
-        GROUP BY pi."playlistId"
+        SELECT c."playlistId" AS "playlistId",
+               c.count         AS count,
+               COALESCE(p.posters, ARRAY[]::text[]) AS posters
+        FROM (
+          SELECT pi."playlistId" AS "playlistId", COUNT(*)::int AS count
+          FROM playlist_items pi
+          JOIN media m ON m.id = pi."mediaId"
+          WHERE pi."playlistId" = ANY($1)
+            AND m."libraryId" = ANY($2)
+          GROUP BY pi."playlistId"
+        ) c
+        LEFT JOIN (
+          -- One poster per distinct media (a series counts once, not once per
+          -- episode), ordered by its first position, capped at 4 for the mosaic.
+          SELECT "playlistId", (ARRAY_AGG(poster ORDER BY minpos))[1:4] AS posters
+          FROM (
+            SELECT pi."playlistId" AS "playlistId",
+                   m."posterUrl"   AS poster,
+                   MIN(pi."position") AS minpos
+            FROM playlist_items pi
+            JOIN media m ON m.id = pi."mediaId"
+            WHERE pi."playlistId" = ANY($1)
+              AND m."libraryId" = ANY($2)
+              AND m."posterUrl" IS NOT NULL
+            GROUP BY pi."playlistId", m."posterUrl"
+          ) d
+          GROUP BY "playlistId"
+        ) p ON p."playlistId" = c."playlistId"
         `,
         [playlistIds, accessibleLibraryIds],
       );

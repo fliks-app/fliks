@@ -265,7 +265,7 @@ export class PlaybackController {
   toggleWatched(
     @Req() req: Request,
     @Param('mediaId', ParseIntPipe) mediaId: number,
-    @Body() body: { mediaFileId: number; episodeId?: number },
+    @Body() body: { mediaFileId?: number; episodeId?: number },
   ) {
     const user = req.user as User;
     return this.playbackService.toggleWatched(
