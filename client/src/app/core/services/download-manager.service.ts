@@ -49,16 +49,18 @@ export class DownloadManagerService {
   private eventSeq = 0;
   private nextLocalId = Date.now();
 
-  // Web downloads each spin up a hidden <video> + Shaka Storage; a mass
-  // (auto-download) fan-out would otherwise exhaust memory/connections, so
-  // cap how many run at once and queue the rest. Native downloads are queued
-  // by the ExoPlayer/AVAsset daemon itself, so they don't go through here.
+  // Cap concurrent web downloads (each spins up a hidden player + Shaka store);
+  // native downloads are queued by the OS daemon and don't come through here.
   private static readonly MAX_WEB_CONCURRENT = 2;
   private webActive = 0;
   private readonly webQueue: Array<() => void> = [];
 
   /** Unified download event — fed by native bridge (Android/iOS) or Shaka (web). */
   readonly lastDownloadEvent = signal<DownloadEvent | null>(null);
+
+  /** Bumped when {@link recover} finishes, so the auto-download reconciler runs
+   *  after interrupted tasks are cleaned up instead of racing that pass. */
+  readonly recoveredAt = signal(0);
 
   private emitEvent(type: DownloadEvent['type'], taskId: number, progress: number, status?: string) {
     this.lastDownloadEvent.set({ type, taskId, progress, status, seq: ++this.eventSeq });
@@ -184,15 +186,10 @@ export class DownloadManagerService {
 
   async deleteDownload(task: DownloadTask) {
     if (this.isNative) {
-      // Native offline content is keyed by task id, so this removes only this
-      // task's download — a sibling task for the same file is untouched.
       await this.notif.removeDownload(String(task.id));
     }
-    // The offline media, the Shaka URI and the subtitle VTTs are keyed by
-    // mediaFileId and shared by any other task for the same file. Only tear
-    // them down when no other (non-failed) task still references the file, so
-    // deleting one download — e.g. an auto-download being cleared after it was
-    // watched — never strips a manual download of the same title.
+    // Media, Shaka URI and VTTs are keyed by mediaFileId and shared with any
+    // sibling task for the same file — only remove them when none remains.
     const sharedElsewhere = this.cache
       .load()
       .some(
@@ -203,7 +200,6 @@ export class DownloadManagerService {
       );
     if (!sharedElsewhere) {
       await this.storage.delete(`download-${task.mediaFileId}`);
-      // Remove the pre-downloaded subtitle VTTs so they don't outlive the media.
       for (const sub of task.offlineSubtitles ?? []) {
         await this.storage.deleteSmallFile(sub.key);
       }
@@ -361,7 +357,13 @@ export class DownloadManagerService {
       }
     }
 
-    // Prune tasks whose local content is gone
+    const nativeById = new Map<string, { id: string; progress: number; state: string }>();
+    if (this.isNative) {
+      for (const d of await this.notif.getDownloads().catch(() => [])) {
+        nativeById.set(String(d.id), d);
+      }
+    }
+
     for (const t of tasks) {
       if (t.status === 'ready') {
         // Native: trust localStorage — ExoPlayer's SimpleCache persists across
@@ -377,7 +379,17 @@ export class DownloadManagerService {
       } else if (t.status === 'failed') {
         // Remove stale failed tasks
         this.cache.remove(t.id);
+      } else if (t.status === 'transcoding') {
+        // In-flight at last shutdown. The web Shaka store dies with the JS
+        // context and a redeploy can drop a native download — fail the ones no
+        // longer tracked so they stop sitting at 0% (auto-download re-fetches
+        // them). A surviving native download stays tracked and resumes itself.
+        if (!this.isNative || !nativeById.has(String(t.id))) {
+          this.updateTaskStatus(t.id, 'failed', 0);
+        }
       }
     }
+
+    this.recoveredAt.update((n) => n + 1);
   }
 }

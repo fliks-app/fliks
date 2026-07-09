@@ -246,9 +246,7 @@ export class OfflineStorageService {
     }
   }
 
-  /** Remove a stored small file (VTT subtitle) — the counterpart to
-   *  {@link downloadSmallFile}. Called when deleting a download so its
-   *  pre-downloaded subtitle files don't outlive the media. */
+  /** Remove a stored VTT subtitle (counterpart to {@link downloadSmallFile}). */
   async deleteSmallFile(key: string): Promise<void> {
     try {
       if (this.isNative) {

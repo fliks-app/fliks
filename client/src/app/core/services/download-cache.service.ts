@@ -54,9 +54,7 @@ export class DownloadCacheService {
   readonly localTaskIds = signal<Set<number>>(new Set());
 
   constructor() {
-    // Re-hydrate the persisted on-device id set whenever the (server, user)
-    // scope changes — login, logout or a server switch swaps which downloads
-    // this device should surface.
+    // Re-hydrate on scope change (login / logout / server switch).
     effect(() => {
       this.auth.user();
       this.serverConfig.serverUrl();

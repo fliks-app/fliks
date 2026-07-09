@@ -24,18 +24,10 @@ interface AutoTarget {
 }
 
 /**
- * Keeps offline downloads in sync with the user's autoDownload playlists.
- *
- * Native mobile only (iOS/Android): TVs and the web app never auto-download —
- * TV offline storage is unavailable and the web path would spin up a hidden
- * player per item. Guarded by the same `native && !TV` gate the /downloads
- * flow uses.
- *
- * Reconciles on auth-ready, on reconnect, on app resume, and whenever a
- * playlist's autoDownload setting is saved. Each pass downloads any
- * not-yet-watched item of an autoDownload playlist that isn't already
- * on-device, and (auto-delete-after-watched) removes any auto-managed download
- * the user has since finished. Manual downloads are never touched.
+ * Syncs offline downloads with the user's autoDownload playlists (native mobile
+ * only — never on TV or web). Downloads not-yet-watched items that aren't on
+ * device and removes auto-managed downloads once watched; manual downloads are
+ * never touched.
  */
 @Injectable({ providedIn: 'root' })
 export class AutoDownloadService {
@@ -53,12 +45,11 @@ export class AutoDownloadService {
 
   constructor() {
     if (!this.enabled) return;
-    // Reconcile once auth is ready and again on every event that could have
-    // changed the desired set while we weren't looking.
+    // Runs after the download manager recovers (auth-ready + reconnect); resume
+    // and explicit changes (settings save / add) call reconcile() directly.
     effect(() => {
-      if (this.auth.isAuthenticated()) void this.reconcile('auth');
+      if (this.downloads.recoveredAt() > 0) void this.reconcile('recovered');
     });
-    window.addEventListener('online', () => void this.reconcile('online'));
     this.appResume.resume$.subscribe(() => void this.reconcile('resume'));
   }
 
@@ -66,11 +57,8 @@ export class AutoDownloadService {
     console.info(`[auto-dl] ${msg}`);
   }
 
-  /**
-   * Delete the matching auto-managed download the moment an item is reported
-   * completed (from the player's heartbeat), rather than waiting for the next
-   * reconcile. Manual downloads (auto !== true) are left in place.
-   */
+  /** Delete the matching auto-managed download as soon as an item is reported
+   *  completed (player heartbeat), ahead of the next reconcile. */
   async onItemCompleted(mediaFileId: number): Promise<void> {
     if (!this.enabled || !mediaFileId) return;
     const task = this.cache
@@ -94,10 +82,8 @@ export class AutoDownloadService {
     this.log(`reconcile start (${trigger})`);
     try {
       const all = await this.playlistsApi.list({ force: true });
-      const playlists = all.filter(
-        // A viewer can't act on the list, so never auto-download on their behalf.
-        (p) => p.autoDownload && p.role !== 'viewer',
-      );
+      // viewers can't act on the list, so skip those
+      const playlists = all.filter((p) => p.autoDownload && p.role !== 'viewer');
       this.log(
         `${all.length} playlist(s), ${playlists.length} with autoDownload`,
       );
@@ -152,10 +138,9 @@ export class AutoDownloadService {
 
   /** Download every not-yet-watched target that isn't already on-device. */
   private async downloadMissing(targets: AutoTarget[]): Promise<void> {
-    // One media fetch per series/movie, reused across its episodes this pass.
+    // one media fetch per series/movie, reused across its episodes
     const mediaCache = new Map<number, Media | null>();
-    // Sequential on purpose: paces session creation and lets the native
-    // download daemon manage its own transfer concurrency.
+    // sequential: paces session creation; the native daemon manages transfers
     for (const t of targets) {
       const label = t.episodeLabel ? `${t.title} ${t.episodeLabel}` : t.title;
       if (t.watched) continue;
@@ -233,8 +218,7 @@ export class AutoDownloadService {
     }
   }
 
-  /** Resolve the media file to download for a target (movie file or the
-   *  episode's file), or null when the media has no file to offer. */
+  /** The movie file or the episode's file, or null when there's none. */
   private async resolveFileId(
     t: AutoTarget,
     mediaCache: Map<number, Media | null>,
