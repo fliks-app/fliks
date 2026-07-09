@@ -256,10 +256,19 @@ export class PlaylistDetailComponent {
         undefined,
         item.episode?.id ?? undefined,
       );
-      this.patchItem(item.itemId, {
-        watched: state.completed,
-        progressPercent: state.completed ? 100 : 0,
-      });
+      // On an auto-remove playlist the server drops the row once it is watched
+      // (owner-scoped), so mirror that by removing it from the list instead of
+      // just flagging it.
+      if (state.completed && this.playlist()?.autoRemoveWatched && this.isOwner()) {
+        this.items.update((list) =>
+          list.filter((i) => i.itemId !== item.itemId),
+        );
+      } else {
+        this.patchItem(item.itemId, {
+          watched: state.completed,
+          progressPercent: state.completed ? 100 : 0,
+        });
+      }
     } catch {
       // Revert on failure (global interceptor surfaces the error).
       this.patchItem(item.itemId, {

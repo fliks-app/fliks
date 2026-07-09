@@ -29,6 +29,7 @@ import { AuthModule } from '../auth/auth.module';
 import { SettingsModule } from '../settings/settings.module';
 import { LibrariesModule } from '../libraries/libraries.module';
 import { MarkersModule } from '../markers/markers.module';
+import { PlaylistsModule } from '../playlists/playlists.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { MarkersModule } from '../markers/markers.module';
     SettingsModule,
     LibrariesModule,
     MarkersModule,
+    PlaylistsModule,
   ],
   controllers: [StreamingController, PlaybackController],
   providers: [
