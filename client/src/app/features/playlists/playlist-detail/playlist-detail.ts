@@ -38,6 +38,7 @@ import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu'
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { BackgroundService } from '../../../core/services/background.service';
+import { AutoDownloadService } from '../../../core/services/auto-download.service';
 import {
   Playlist,
   PlaylistItem,
@@ -95,6 +96,7 @@ export class PlaylistDetailComponent {
   readonly tv = inject(TvService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly background = inject(BackgroundService);
+  private readonly autoDownload = inject(AutoDownloadService);
   private readonly destroyRef = inject(DestroyRef);
 
   private readonly routeParams = toSignal(this.route.paramMap);
@@ -341,6 +343,9 @@ export class PlaylistDetailComponent {
       this.playlist.set(updated);
       this.toast.success(this.translate.instant('playlists.saved'));
       this.closeSettings();
+      // Kick the reconciler now so enabling autoDownload starts fetching
+      // immediately instead of waiting for the next app launch/resume.
+      if (updated.autoDownload) void this.autoDownload.reconcile('settings');
     } catch {
       // Errors are surfaced by the global HTTP interceptor.
     } finally {
