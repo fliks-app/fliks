@@ -95,7 +95,7 @@ export class DownloadManagerService {
   private readonly authEffect = effect(() => {
     if (this.auth.isAuthenticated() && !this.recovered) {
       this.recovered = true;
-      void this.recover();
+      void this.recover(true);
     }
   });
 
@@ -347,8 +347,12 @@ export class DownloadManagerService {
   /**
    * Recover download state from localStorage cache.
    * Re-populates the titles map for UI display.
+   *
+   * `onStartup` = the app just (re)launched, so every in-flight task is a
+   * leftover from before and its session is dead; on a mere reconnect,
+   * in-flight downloads may still be live, so only the untracked ones are failed.
    */
-  private async recover() {
+  private async recover(onStartup = false) {
     const tasks = this.cache.load();
 
     for (const t of tasks) {
@@ -380,11 +384,13 @@ export class DownloadManagerService {
         // Remove stale failed tasks
         this.cache.remove(t.id);
       } else if (t.status === 'transcoding') {
-        // In-flight at last shutdown. The web Shaka store dies with the JS
-        // context and a redeploy can drop a native download — fail the ones no
-        // longer tracked so they stop sitting at 0% (auto-download re-fetches
-        // them). A surviving native download stays tracked and resumes itself.
-        if (!this.isNative || !nativeById.has(String(t.id))) {
+        // In-flight when the app last stopped: the web Shaka store dies with the
+        // JS context, and a redeploy leaves a native download with a dead
+        // session (stuck at 0%). On startup fail every such task so it stops
+        // freezing and auto-download re-fetches it with a fresh session; on a
+        // reconnect only fail the ones the daemon no longer tracks so a live
+        // download isn't disturbed.
+        if (onStartup || !this.isNative || !nativeById.has(String(t.id))) {
           this.updateTaskStatus(t.id, 'failed', 0);
         }
       }
