@@ -1130,7 +1130,7 @@
     "delete_confirm": "Supprimer « {{name}} » ? Cette action est irréversible.",
     "deleted_toast": "Liste supprimée",
     "auto_remove_watched": "Retirer les éléments vus",
-    "auto_remove_watched_hint": "Un élément est retiré de la liste une fois que tu l'as terminé.",
+    "auto_remove_watched_hint": "Les éléments sont automatiquement retirés de la liste une fois visionnés.",
     "auto_download": "Téléchargement automatique",
     "auto_download_hint": "Sur iOS et Android, les éléments de la liste sont téléchargés pour la lecture hors-ligne.",
     "drag": "Réordonner",
