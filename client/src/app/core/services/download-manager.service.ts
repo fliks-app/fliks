@@ -184,12 +184,29 @@ export class DownloadManagerService {
 
   async deleteDownload(task: DownloadTask) {
     if (this.isNative) {
+      // Native offline content is keyed by task id, so this removes only this
+      // task's download — a sibling task for the same file is untouched.
       await this.notif.removeDownload(String(task.id));
     }
-    await this.storage.delete(`download-${task.mediaFileId}`);
-    // Remove the pre-downloaded subtitle VTTs so they don't outlive the media.
-    for (const sub of task.offlineSubtitles ?? []) {
-      await this.storage.deleteSmallFile(sub.key);
+    // The offline media, the Shaka URI and the subtitle VTTs are keyed by
+    // mediaFileId and shared by any other task for the same file. Only tear
+    // them down when no other (non-failed) task still references the file, so
+    // deleting one download — e.g. an auto-download being cleared after it was
+    // watched — never strips a manual download of the same title.
+    const sharedElsewhere = this.cache
+      .load()
+      .some(
+        (t) =>
+          t.id !== task.id &&
+          t.mediaFileId === task.mediaFileId &&
+          t.status !== 'failed',
+      );
+    if (!sharedElsewhere) {
+      await this.storage.delete(`download-${task.mediaFileId}`);
+      // Remove the pre-downloaded subtitle VTTs so they don't outlive the media.
+      for (const sub of task.offlineSubtitles ?? []) {
+        await this.storage.deleteSmallFile(sub.key);
+      }
     }
     this.cache.remove(task.id);
     this.cache.removeLocal(task.id);
