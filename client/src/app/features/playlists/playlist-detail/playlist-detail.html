@@ -80,78 +80,7 @@
       <p class="text-lg">{{ 'playlists.no_items' | translate }}</p>
     </div>
   } @else {
-    <!-- View toggle: grouped (series collapse to one entry) vs flat -->
-    <div class="flex justify-end mb-3">
-      <div class="join">
-        <button
-          type="button"
-          class="btn btn-sm join-item"
-          [class.btn-active]="viewMode() === 'grouped'"
-          (click)="setView('grouped')"
-        >
-          {{ 'playlists.view_grouped' | translate }}
-        </button>
-        <button
-          type="button"
-          class="btn btn-sm join-item"
-          [class.btn-active]="viewMode() === 'flat'"
-          (click)="setView('flat')"
-        >
-          {{ 'playlists.view_flat' | translate }}
-        </button>
-      </div>
-    </div>
-
-    @if (viewMode() === 'flat') {
-      <div cdkDropList (cdkDropListDropped)="drop($event)" class="flex flex-col gap-1">
-        @for (item of items(); track item.itemId; let i = $index) {
-          <div
-            cdkDrag
-            [cdkDragDisabled]="!canEditItems() || tv.isTv()"
-            class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200"
-          >
-            @if (canEditItems()) {
-              @if (!tv.isTv()) {
-                <button
-                  type="button"
-                  cdkDragHandle
-                  class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0"
-                  [attr.aria-label]="'playlists.drag' | translate"
-                >
-                  <svg lucideGripVertical class="h-4 w-4"></svg>
-                </button>
-              } @else {
-                <div class="flex flex-col shrink-0">
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs btn-square"
-                    [disabled]="i === 0"
-                    (click)="move(i, -1)"
-                    [attr.aria-label]="'playlists.move_up' | translate"
-                  >
-                    <svg lucideArrowUp class="h-4 w-4"></svg>
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs btn-square"
-                    [disabled]="i === items().length - 1"
-                    (click)="move(i, 1)"
-                    [attr.aria-label]="'playlists.move_down' | translate"
-                  >
-                    <svg lucideArrowDown class="h-4 w-4"></svg>
-                  </button>
-                </div>
-              }
-            }
-            <ng-container
-              [ngTemplateOutlet]="itemRow"
-              [ngTemplateOutletContext]="{ $implicit: item }"
-            ></ng-container>
-          </div>
-        }
-      </div>
-    } @else {
-      <div cdkDropList (cdkDropListDropped)="dropGroup($event)" class="flex flex-col gap-1">
+    <div cdkDropList (cdkDropListDropped)="dropGroup($event)" class="flex flex-col gap-1">
         @for (
           entry of groupedEntries();
           track entry.kind === 'movie' ? 'm' + entry.item.itemId : 's' + entry.group.seriesId;
@@ -237,7 +166,7 @@
                     }
                   </div>
                   <div class="collapse-content !px-0 !pb-0">
-                    <div class="flex flex-col gap-1 mt-1 ml-2 pl-3 border-l-2 border-base-300 sm:ml-4 sm:pl-4">
+                    <div class="flex flex-col gap-1 mt-1 sm:ml-4 sm:pl-4 sm:border-l-2 sm:border-base-300">
                       @for (item of entry.group.episodes; track item.itemId) {
                         <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
                           <ng-container
@@ -254,11 +183,10 @@
           </div>
         }
       </div>
-    }
   }
 }
 
-<!-- One playlist row (movie or episode), shared by both views. -->
+<!-- One playlist row (movie or episode). -->
 <ng-template #itemRow let-item>
   <a [routerLink]="itemLink(item)" class="flex items-center gap-3 flex-1 min-w-0">
     <div

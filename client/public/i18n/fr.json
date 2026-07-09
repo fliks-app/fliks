@@ -1143,8 +1143,6 @@
     "remove_item_action": "Retirer",
     "remove_series_title": "Retirer la série",
     "remove_series_confirm": "Retirer les {{count}} épisodes de « {{title}} » de la liste ?",
-    "view_grouped": "Groupé",
-    "view_flat": "Liste",
     "episodes_count": "{{count}} épisodes",
     "added_toast": "Ajouté à la liste",
     "created_and_added_toast": "Liste créée et titre ajouté"

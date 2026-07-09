@@ -127,29 +127,7 @@ export class PlaylistDetailComponent {
   });
   readonly isOwner = computed(() => this.playlist()?.role === 'owner');
 
-  // ── View mode (per-user local preference) ──
-  private static readonly VIEW_KEY = 'playlists.detail.view';
-  readonly viewMode = signal<'grouped' | 'flat'>(this.readViewPref());
   readonly expandedSeries = signal<Set<number>>(new Set());
-
-  private readViewPref(): 'grouped' | 'flat' {
-    try {
-      return localStorage.getItem(PlaylistDetailComponent.VIEW_KEY) === 'grouped'
-        ? 'grouped'
-        : 'flat';
-    } catch {
-      return 'flat';
-    }
-  }
-
-  setView(mode: 'grouped' | 'flat') {
-    this.viewMode.set(mode);
-    try {
-      localStorage.setItem(PlaylistDetailComponent.VIEW_KEY, mode);
-    } catch {
-      /* localStorage may be unavailable */
-    }
-  }
 
   toggleSeries(seriesId: number) {
     this.expandedSeries.update((s) => {
@@ -416,22 +394,6 @@ export class PlaylistDetailComponent {
         // shared editor who only sees a library-filtered subset).
         void this.load(id);
       });
-  }
-
-  drop(event: CdkDragDrop<PlaylistItem[]>): void {
-    const next = [...this.items()];
-    moveItemInArray(next, event.previousIndex, event.currentIndex);
-    this.items.set(next);
-    this.persistOrder();
-  }
-
-  move(index: number, delta: number): void {
-    const next = [...this.items()];
-    const target = index + delta;
-    if (target < 0 || target >= next.length) return;
-    [next[index], next[target]] = [next[target], next[index]];
-    this.items.set(next);
-    this.persistOrder();
   }
 
   // ── Grouped reorder: reorders the root media (movies + series blocks);
