@@ -244,12 +244,6 @@
                 </li>
               }
               <li>
-                <a routerLink="/persons" routerLinkActive="active" (click)="resetNavHistory()">
-                  <svg lucideUsers class="h-5 w-5"></svg>
-                  {{ 'nav.persons' | translate }}
-                </a>
-              </li>
-              <li>
                 <a routerLink="/playlists" routerLinkActive="active" (click)="resetNavHistory()">
                   <svg lucideListVideo class="h-5 w-5"></svg>
                   {{ 'nav.playlists' | translate }}
@@ -357,9 +351,9 @@
           </li>
         }
         <li>
-          <a routerLink="/persons" routerLinkActive="active">
-            <svg lucideUsers class="h-5 w-5"></svg>
-            {{ 'nav.persons' | translate }}
+          <a routerLink="/playlists" routerLinkActive="active">
+            <svg lucideListVideo class="h-5 w-5"></svg>
+            {{ 'nav.playlists' | translate }}
           </a>
         </li>
         @if (!tv.isTv()) {
@@ -376,13 +370,6 @@
             {{ 'nav.history' | translate }}
           </a>
         </li>
-        <li>
-          <a routerLink="/playlists" routerLinkActive="active">
-            <svg lucideListVideo class="h-5 w-5"></svg>
-            {{ 'nav.playlists' | translate }}
-          </a>
-        </li>
-
         <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_downloads' | translate }}</li>
         <li>
           <a routerLink="/requests" routerLinkActive="active" class="justify-between">
