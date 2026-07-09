@@ -46,9 +46,16 @@ export class DownloadManagerService {
   private readonly translate = inject(TranslateService);
 
   private readonly titles = new Map<number, { title: string; episode?: string }>();
-  private activeCount = 0;
   private eventSeq = 0;
   private nextLocalId = Date.now();
+
+  // Web downloads each spin up a hidden <video> + Shaka Storage; a mass
+  // (auto-download) fan-out would otherwise exhaust memory/connections, so
+  // cap how many run at once and queue the rest. Native downloads are queued
+  // by the ExoPlayer/AVAsset daemon itself, so they don't go through here.
+  private static readonly MAX_WEB_CONCURRENT = 2;
+  private webActive = 0;
+  private readonly webQueue: Array<() => void> = [];
 
   /** Unified download event — fed by native bridge (Android/iOS) or Shaka (web). */
   readonly lastDownloadEvent = signal<DownloadEvent | null>(null);
@@ -73,10 +80,8 @@ export class DownloadManagerService {
 
     if (event.type === 'failed') {
       this.updateTaskStatus(taskId, 'failed', 0);
-      this.decActive();
     } else if (event.type === 'complete') {
       this.updateTaskStatus(taskId, 'ready', 100);
-      this.decActive();
       // Pre-download subtitles for offline playback (fire-and-forget)
       void this.preDownloadSubtitles(taskId);
     }
@@ -105,17 +110,26 @@ export class DownloadManagerService {
     quality: string,
     title: string,
     episode?: string,
-    meta?: { mediaId?: number; posterUrl?: string | null; type?: string },
+    meta?: {
+      mediaId?: number;
+      posterUrl?: string | null;
+      type?: string;
+      episodeId?: number;
+      /** Set by the auto-download reconciler; enables auto-delete-after-watched. */
+      auto?: boolean;
+    },
   ): Promise<DownloadTask> {
     const taskId = this.nextLocalId++;
     const task: DownloadTask = {
       id: taskId,
       mediaId: meta?.mediaId ?? 0,
+      episodeId: meta?.episodeId,
       mediaFileId,
       quality,
       status: 'transcoding',
       progress: 0,
       episodeLabel: episode,
+      auto: meta?.auto,
       createdAt: new Date().toISOString(),
       media: { id: meta?.mediaId ?? 0, title, posterUrl: meta?.posterUrl ?? null, type: meta?.type ?? '' },
     };
@@ -148,7 +162,6 @@ export class DownloadManagerService {
 
     this.titles.set(taskId, { title, episode });
     this.persistTask(task);
-    this.incActive();
 
     if (this.isNative) {
       const token =
@@ -163,7 +176,7 @@ export class DownloadManagerService {
         notifFailed: this.translate.instant('downloads.notif_failed'),
       });
     } else {
-      void this.handleWebDownload(task, hlsUrl);
+      this.enqueueWeb(task, hlsUrl);
     }
 
     return task;
@@ -174,15 +187,34 @@ export class DownloadManagerService {
       await this.notif.removeDownload(String(task.id));
     }
     await this.storage.delete(`download-${task.mediaFileId}`);
+    // Remove the pre-downloaded subtitle VTTs so they don't outlive the media.
+    for (const sub of task.offlineSubtitles ?? []) {
+      await this.storage.deleteSmallFile(sub.key);
+    }
     this.cache.remove(task.id);
     this.cache.removeLocal(task.id);
     this.titles.delete(task.id);
-    if (['transcoding', 'pending', 'ready'].includes(task.status)) {
-      this.decActive();
-    }
   }
 
   // ===== WEB PATH =====
+
+  /** Run a web download now if under the concurrency cap, else queue it. */
+  private enqueueWeb(task: DownloadTask, hlsUrl: string) {
+    const run = async () => {
+      this.webActive++;
+      try {
+        await this.handleWebDownload(task, hlsUrl);
+      } finally {
+        this.webActive--;
+        this.webQueue.shift()?.();
+      }
+    };
+    if (this.webActive < DownloadManagerService.MAX_WEB_CONCURRENT) {
+      void run();
+    } else {
+      this.webQueue.push(() => void run());
+    }
+  }
 
   /**
    * Web offline download using Shaka's built-in offline storage API.
@@ -193,7 +225,6 @@ export class DownloadManagerService {
 
     const offlineUri = this.storage.getShakaOfflineUri(task.mediaFileId);
     if (offlineUri) {
-      this.decActive();
       return;
     }
 
@@ -227,7 +258,6 @@ export class DownloadManagerService {
       this.emitEvent('failed', downloadId, 0);
     } finally {
       this.cache.markDone(downloadId);
-      this.decActive();
     }
   }
 
@@ -299,14 +329,6 @@ export class DownloadManagerService {
     );
     this.cache.save(updated);
     if (status === 'ready') this.cache.markLocal(taskId);
-  }
-
-  private incActive() {
-    this.activeCount++;
-  }
-
-  private decActive() {
-    this.activeCount = Math.max(0, this.activeCount - 1);
   }
 
   /**

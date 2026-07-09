@@ -24,6 +24,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
 import { OfflineStorageService } from '../../core/services/offline-storage.service';
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
+import { AutoDownloadService } from '../../core/services/auto-download.service';
 import { NetworkService } from '../../core/services/network.service';
 import { DownloadCacheService } from '../../core/services/download-cache.service';
 import {
@@ -202,6 +203,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly streamingApi = inject(StreamingApiService);
   private readonly offlineStorage = inject(OfflineStorageService);
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
+  private readonly autoDownload = inject(AutoDownloadService);
   private readonly network = inject(NetworkService);
   private readonly dlCache = inject(DownloadCacheService);
   private readonly mediaService = inject(MediaService);
@@ -3403,6 +3405,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // player's buffer drains.
         if (response?.sessionLost) {
           void this.recoverFromLostSession();
+        }
+        // Auto-delete-after-watched: the moment the server marks this item
+        // completed, drop its auto-managed download (no-op otherwise).
+        if (response?.state?.completed) {
+          void this.autoDownload.onItemCompleted(this.mediaFileId);
         }
       } catch {
         this.offlineSync.queue(offlinePayload);

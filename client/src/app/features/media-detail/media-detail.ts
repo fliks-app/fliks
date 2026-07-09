@@ -1141,7 +1141,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         if (ep.title) episode += ` ${ep.title}`;
       }
       await this.downloadManager.createDownload(ev.mediaFileId, ev.quality, title, episode, {
-        mediaId: m?.id, posterUrl: m?.posterUrl, type: m?.type,
+        mediaId: m?.id, posterUrl: m?.posterUrl, type: m?.type, episodeId: ep?.id,
       });
       this.toast.success(this.translate.instant('downloads.started'));
     } catch {
