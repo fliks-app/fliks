@@ -87,99 +87,130 @@
           let i = $index
         ) {
           <div cdkDrag [cdkDragDisabled]="!canEditItems() || tv.isTv()">
-            <div class="flex items-start gap-2">
-              @if (canEditItems()) {
-                @if (!tv.isTv()) {
-                  <button
-                    type="button"
-                    cdkDragHandle
-                    class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0 mt-1.5"
-                    [attr.aria-label]="'playlists.drag' | translate"
-                  >
-                    <svg lucideGripVertical class="h-4 w-4"></svg>
-                  </button>
-                } @else {
-                  <div class="flex flex-col shrink-0 mt-1">
+            @if (entry.kind === 'movie') {
+              <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
+                @if (canEditItems()) {
+                  @if (!tv.isTv()) {
                     <button
                       type="button"
-                      class="btn btn-ghost btn-xs btn-square"
-                      [disabled]="i === 0"
-                      (click)="moveGroup(i, -1)"
-                      [attr.aria-label]="'playlists.move_up' | translate"
+                      cdkDragHandle
+                      class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0"
+                      [attr.aria-label]="'playlists.drag' | translate"
                     >
-                      <svg lucideArrowUp class="h-4 w-4"></svg>
+                      <svg lucideGripVertical class="h-4 w-4"></svg>
                     </button>
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs btn-square"
-                      [disabled]="i === groupedEntries().length - 1"
-                      (click)="moveGroup(i, 1)"
-                      [attr.aria-label]="'playlists.move_down' | translate"
-                    >
-                      <svg lucideArrowDown class="h-4 w-4"></svg>
-                    </button>
-                  </div>
-                }
-              }
-
-              @if (entry.kind === 'movie') {
-                <div class="flex items-center gap-2 flex-1 min-w-0 rounded-lg p-1.5 hover:bg-base-200">
-                  <ng-container
-                    [ngTemplateOutlet]="itemRow"
-                    [ngTemplateOutletContext]="{ $implicit: entry.item }"
-                  ></ng-container>
-                </div>
-              } @else {
-                <div
-                  class="collapse collapse-arrow flex-1 min-w-0 rounded-lg hover:bg-base-200"
-                  [class.collapse-open]="expandedSeries().has(entry.group.seriesId)"
-                >
-                  <div
-                    class="collapse-title flex items-center gap-3 min-h-0 p-1.5 pr-10 cursor-pointer"
-                    (click)="toggleSeries(entry.group.seriesId)"
-                  >
-                    <div
-                      class="relative w-24 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300"
-                    >
-                      <img
-                        [src]="(entry.group.media.fanartUrl ?? entry.group.media.posterUrl) | resolveUrl: 'thumb'"
-                        alt=""
-                        class="h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    </div>
-                    <div class="min-w-0 flex-1">
-                      <p class="font-medium line-clamp-2">{{ entry.group.media.title }}</p>
-                      <p class="text-sm text-base-content/60">
-                        {{ 'playlists.episodes_count' | translate: { count: entry.group.episodes.length } }}
-                      </p>
-                    </div>
-                    @if (canEditItems()) {
+                  } @else {
+                    <div class="flex flex-col shrink-0">
                       <button
                         type="button"
-                        class="btn btn-ghost btn-sm btn-square text-error shrink-0"
-                        (click)="$event.stopPropagation(); removeSeries(entry.group)"
-                        [attr.aria-label]="'playlists.remove_series_title' | translate"
+                        class="btn btn-ghost btn-xs btn-square"
+                        [disabled]="i === 0"
+                        (click)="moveGroup(i, -1)"
+                        [attr.aria-label]="'playlists.move_up' | translate"
                       >
-                        <svg lucideTrash2 class="h-4 w-4"></svg>
+                        <svg lucideArrowUp class="h-4 w-4"></svg>
                       </button>
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs btn-square"
+                        [disabled]="i === groupedEntries().length - 1"
+                        (click)="moveGroup(i, 1)"
+                        [attr.aria-label]="'playlists.move_down' | translate"
+                      >
+                        <svg lucideArrowDown class="h-4 w-4"></svg>
+                      </button>
+                    </div>
+                  }
+                }
+                <ng-container
+                  [ngTemplateOutlet]="itemRow"
+                  [ngTemplateOutletContext]="{ $implicit: entry.item }"
+                ></ng-container>
+              </div>
+            } @else {
+              <div
+                class="collapse collapse-arrow rounded-lg hover:bg-base-200"
+                [class.collapse-open]="expandedSeries().has(entry.group.seriesId)"
+              >
+                <div
+                  class="collapse-title flex items-center gap-2 min-h-0 p-1.5 pr-10 cursor-pointer"
+                  (click)="toggleSeries(entry.group.seriesId)"
+                >
+                  @if (canEditItems()) {
+                    @if (!tv.isTv()) {
+                      <button
+                        type="button"
+                        cdkDragHandle
+                        class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0"
+                        (click)="$event.stopPropagation()"
+                        [attr.aria-label]="'playlists.drag' | translate"
+                      >
+                        <svg lucideGripVertical class="h-4 w-4"></svg>
+                      </button>
+                    } @else {
+                      <div class="flex flex-col shrink-0">
+                        <button
+                          type="button"
+                          class="btn btn-ghost btn-xs btn-square"
+                          [disabled]="i === 0"
+                          (click)="$event.stopPropagation(); moveGroup(i, -1)"
+                          [attr.aria-label]="'playlists.move_up' | translate"
+                        >
+                          <svg lucideArrowUp class="h-4 w-4"></svg>
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-ghost btn-xs btn-square"
+                          [disabled]="i === groupedEntries().length - 1"
+                          (click)="$event.stopPropagation(); moveGroup(i, 1)"
+                          [attr.aria-label]="'playlists.move_down' | translate"
+                        >
+                          <svg lucideArrowDown class="h-4 w-4"></svg>
+                        </button>
+                      </div>
+                    }
+                  }
+                  <div
+                    class="relative w-24 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300"
+                  >
+                    <img
+                      [src]="(entry.group.media.fanartUrl ?? entry.group.media.posterUrl) | resolveUrl: 'thumb'"
+                      alt=""
+                      class="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="font-medium line-clamp-2">{{ entry.group.media.title }}</p>
+                    <p class="text-sm text-base-content/60">
+                      {{ 'playlists.episodes_count' | translate: { count: entry.group.episodes.length } }}
+                    </p>
+                  </div>
+                  @if (canEditItems()) {
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-sm btn-square text-error shrink-0"
+                      (click)="$event.stopPropagation(); removeSeries(entry.group)"
+                      [attr.aria-label]="'playlists.remove_series_title' | translate"
+                    >
+                      <svg lucideTrash2 class="h-4 w-4"></svg>
+                    </button>
+                  }
+                </div>
+                <div class="collapse-content !px-0 !pb-0">
+                  <div class="flex flex-col gap-1 mt-1">
+                    @for (item of entry.group.episodes; track item.itemId) {
+                      <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
+                        <ng-container
+                          [ngTemplateOutlet]="itemRow"
+                          [ngTemplateOutletContext]="{ $implicit: item }"
+                        ></ng-container>
+                      </div>
                     }
                   </div>
-                  <div class="collapse-content !px-0 !pb-0">
-                    <div class="flex flex-col gap-1 mt-1 sm:ml-4 sm:pl-4 sm:border-l-2 sm:border-base-300">
-                      @for (item of entry.group.episodes; track item.itemId) {
-                        <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
-                          <ng-container
-                            [ngTemplateOutlet]="itemRow"
-                            [ngTemplateOutletContext]="{ $implicit: item }"
-                          ></ng-container>
-                        </div>
-                      }
-                    </div>
-                  </div>
                 </div>
-              }
-            </div>
+              </div>
+            }
           </div>
         }
       </div>
