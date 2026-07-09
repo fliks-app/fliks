@@ -279,15 +279,12 @@ export class PlaylistDetailComponent {
       if (pool.length) this.background.setBackgrounds(pool);
       else this.background.clear();
     });
-    // Register as a hero page so the shared layout shows its back button (and
-    // the media-driven background reads as a hero), like the media-detail pages.
-    effect(() => {
-      const p = this.playlist();
-      if (p) this.navbar.enterHeroPage(p.name);
-    });
+    // Reuse the layout's desktop back button (no hero styling, so mobile keeps
+    // its normal top padding).
+    this.navbar.showBackButton.set(true);
     this.destroyRef.onDestroy(() => {
       this.background.clear();
-      this.navbar.leaveHeroPage();
+      this.navbar.showBackButton.set(false);
     });
   }
 

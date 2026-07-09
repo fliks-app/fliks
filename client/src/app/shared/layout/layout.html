@@ -114,7 +114,7 @@
          [class.md:flex]="device.isTablet() && navbar.effectiveSidebarPinned()">
       <!-- Hero back + clearlogo (left) -->
       <div class="flex items-center gap-3 min-w-0">
-        @if (navbar.isHeroPage() && canGoBack()) {
+        @if ((navbar.isHeroPage() || navbar.showBackButton()) && canGoBack()) {
           <button type="button" (click)="goBack()"
                   [attr.aria-label]="'media_detail.back' | translate"
                   class="btn btn-ghost btn-circle">
