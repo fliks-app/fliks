@@ -79,7 +79,9 @@ export class AddToPlaylistModalComponent {
       this.added.emit();
       this.close();
       // Fetch the new item straight away when the target playlist auto-downloads.
-      if (playlist.autoDownload) void this.autoDownload.reconcile('add');
+      if (this.autoDownload.isAutoDownload(playlist.id)) {
+        void this.autoDownload.reconcile('add');
+      }
     } catch {
       // Errors are surfaced by the global HTTP interceptor.
     } finally {

@@ -356,12 +356,14 @@
         [label]="'playlists.auto_remove_watched' | translate"
         [hint]="'playlists.auto_remove_watched_hint' | translate"
       />
-      <app-toggle-field
-        [value]="draftAutoDownload()"
-        (valueChange)="draftAutoDownload.set($event)"
-        [label]="'playlists.auto_download' | translate"
-        [hint]="'playlists.auto_download_hint' | translate"
-      />
+      @if (showAutoDownload) {
+        <app-toggle-field
+          [value]="draftAutoDownload()"
+          (valueChange)="draftAutoDownload.set($event)"
+          [label]="'playlists.auto_download' | translate"
+          [hint]="'playlists.auto_download_hint' | translate"
+        />
+      }
     </div>
     <div class="modal-action">
       <button type="button" class="btn btn-sm" (click)="closeSettings()">

@@ -12,7 +12,6 @@ export interface Playlist {
   ownerId: number;
   role: PlaylistRole;
   autoRemoveWatched: boolean;
-  autoDownload: boolean;
   coverImageUrl: string | null;
   itemCount: number;
   /** First up-to-4 poster URLs for the card mosaic (per-viewer). */
@@ -46,7 +45,6 @@ export interface PlaylistItem {
 export interface CreatePlaylistBody {
   name: string;
   autoRemoveWatched?: boolean;
-  autoDownload?: boolean;
 }
 
 export type UpdatePlaylistBody = Partial<CreatePlaylistBody>;

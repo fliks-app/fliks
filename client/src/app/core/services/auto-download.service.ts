@@ -31,7 +31,8 @@ interface AutoTarget {
  */
 @Injectable({ providedIn: 'root' })
 export class AutoDownloadService {
-  private readonly enabled =
+  /** True only on native mobile (iOS/Android). Also gates the settings toggle. */
+  readonly enabled =
     Capacitor.isNativePlatform() && !inject(TvService).isTv();
   private readonly auth = inject(AuthService);
   private readonly appResume = inject(AppResumeService);
@@ -55,6 +56,33 @@ export class AutoDownloadService {
 
   private log(msg: string): void {
     console.info(`[auto-dl] ${msg}`);
+  }
+
+  // Auto-download is a per-device choice, so the flag lives in the app
+  // (localStorage), keyed by playlist id — never on the server.
+  private static readonly PREF_KEY = 'fliks.playlists.autoDownload';
+
+  private prefs(): Record<string, boolean> {
+    try {
+      return JSON.parse(localStorage.getItem(AutoDownloadService.PREF_KEY) ?? '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  isAutoDownload(playlistId: number): boolean {
+    return this.prefs()[playlistId] === true;
+  }
+
+  setAutoDownload(playlistId: number, enabled: boolean): void {
+    const prefs = this.prefs();
+    if (enabled) prefs[playlistId] = true;
+    else delete prefs[playlistId];
+    try {
+      localStorage.setItem(AutoDownloadService.PREF_KEY, JSON.stringify(prefs));
+    } catch {
+      /* localStorage may be unavailable */
+    }
   }
 
   /** Delete the matching auto-managed download as soon as an item is reported
@@ -83,7 +111,9 @@ export class AutoDownloadService {
     try {
       const all = await this.playlistsApi.list({ force: true });
       // viewers can't act on the list, so skip those
-      const playlists = all.filter((p) => p.autoDownload && p.role !== 'viewer');
+      const playlists = all.filter(
+        (p) => p.role !== 'viewer' && this.isAutoDownload(p.id),
+      );
       this.log(
         `${all.length} playlist(s), ${playlists.length} with autoDownload`,
       );

@@ -114,6 +114,8 @@ export class PlaylistDetailComponent {
   readonly savingSettings = signal(false);
   readonly draftAutoRemoveWatched = signal(false);
   readonly draftAutoDownload = signal(false);
+  /** Auto-download is native-mobile only, so its toggle is hidden elsewhere. */
+  readonly showAutoDownload = this.autoDownload.enabled;
 
   /** Add / remove / reorder items — editor and above. */
   readonly canEditItems = computed(() => {
@@ -299,7 +301,7 @@ export class PlaylistDetailComponent {
     const p = this.playlist();
     if (!p) return;
     this.draftAutoRemoveWatched.set(p.autoRemoveWatched);
-    this.draftAutoDownload.set(p.autoDownload);
+    this.draftAutoDownload.set(this.autoDownload.isAutoDownload(p.id));
     this.settingsDialog()?.nativeElement.showModal();
   }
 
@@ -314,14 +316,14 @@ export class PlaylistDetailComponent {
     try {
       const updated = await this.api.update(p.id, {
         autoRemoveWatched: this.draftAutoRemoveWatched(),
-        autoDownload: this.draftAutoDownload(),
       });
       this.playlist.set(updated);
+      // Auto-download is stored on-device only, not on the server.
+      this.autoDownload.setAutoDownload(p.id, this.draftAutoDownload());
       this.toast.success(this.translate.instant('playlists.saved'));
       this.closeSettings();
-      // Kick the reconciler now so enabling autoDownload starts fetching
-      // immediately instead of waiting for the next app launch/resume.
-      if (updated.autoDownload) void this.autoDownload.reconcile('settings');
+      // Kick the reconciler now so enabling it starts fetching immediately.
+      if (this.draftAutoDownload()) void this.autoDownload.reconcile('settings');
     } catch {
       // Errors are surfaced by the global HTTP interceptor.
     } finally {
