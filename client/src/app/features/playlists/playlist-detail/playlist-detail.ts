@@ -38,6 +38,7 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { BackgroundService } from '../../../core/services/background.service';
 import { AutoDownloadService } from '../../../core/services/auto-download.service';
+import { NavbarService } from '../../../core/services/navbar.service';
 import {
   Playlist,
   PlaylistItem,
@@ -92,6 +93,7 @@ export class PlaylistDetailComponent {
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
   readonly tv = inject(TvService);
+  readonly navbar = inject(NavbarService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly background = inject(BackgroundService);
   private readonly autoDownload = inject(AutoDownloadService);
@@ -277,7 +279,16 @@ export class PlaylistDetailComponent {
       if (pool.length) this.background.setBackgrounds(pool);
       else this.background.clear();
     });
-    this.destroyRef.onDestroy(() => this.background.clear());
+    // Register as a hero page so the shared layout shows its back button (and
+    // the media-driven background reads as a hero), like the media-detail pages.
+    effect(() => {
+      const p = this.playlist();
+      if (p) this.navbar.enterHeroPage(p.name);
+    });
+    this.destroyRef.onDestroy(() => {
+      this.background.clear();
+      this.navbar.leaveHeroPage();
+    });
   }
 
   private async load(id: number): Promise<void> {
