@@ -25,6 +25,7 @@ export interface PlaylistEpisode {
   endEpisodeNumber?: number | null;
   title?: string | null;
   stillUrl?: string | null;
+  runtime?: number | null;
   season?: { seasonNumber: number } | null;
 }
 

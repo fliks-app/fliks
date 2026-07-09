@@ -286,11 +286,13 @@
     <div class="min-w-0">
       @if (item.episode; as ep) {
         <p class="font-medium line-clamp-2">{{ episodeLabel(ep) }}</p>
-        <p class="text-sm text-base-content/60 truncate">{{ item.media.title }}</p>
+        @if (ep.runtime) {
+          <p class="text-sm text-base-content/60 truncate">{{ ep.runtime }} {{ 'common.min' | translate }}</p>
+        }
       } @else {
         <p class="font-medium line-clamp-2">{{ item.media.title }}</p>
-        @if (item.media.year) {
-          <p class="text-sm text-base-content/60 truncate">{{ item.media.year }}</p>
+        @if (item.media.runtime) {
+          <p class="text-sm text-base-content/60 truncate">{{ item.media.runtime }} {{ 'common.min' | translate }}</p>
         }
       }
     </div>
