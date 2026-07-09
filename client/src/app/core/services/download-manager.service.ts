@@ -384,13 +384,21 @@ export class DownloadManagerService {
         // Remove stale failed tasks
         this.cache.remove(t.id);
       } else if (t.status === 'transcoding') {
-        // In-flight when the app last stopped: the web Shaka store dies with the
-        // JS context, and a redeploy leaves a native download with a dead
-        // session (stuck at 0%). On startup fail every such task so it stops
-        // freezing and auto-download re-fetches it with a fresh session; on a
-        // reconnect only fail the ones the daemon no longer tracks so a live
-        // download isn't disturbed.
-        if (onStartup || !this.isNative || !nativeById.has(String(t.id))) {
+        // In-flight when the app last stopped and stuck at 0% (web Shaka store
+        // died with the JS context; a redeploy left the native download with a
+        // dead session).
+        if (onStartup) {
+          // Cancel the dead native download so it can't keep retrying and race
+          // the fresh one. Auto items are dropped and re-fetched by the
+          // reconciler (one clean download); manual ones are flagged failed so
+          // they don't silently vanish.
+          if (t.auto) {
+            await this.deleteDownload(t);
+          } else {
+            if (this.isNative) await this.notif.removeDownload(String(t.id));
+            this.updateTaskStatus(t.id, 'failed', 0);
+          }
+        } else if (!this.isNative || !nativeById.has(String(t.id))) {
           this.updateTaskStatus(t.id, 'failed', 0);
         }
       }
