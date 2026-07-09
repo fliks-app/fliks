@@ -25,7 +25,6 @@ import {
   LucideArrowDown,
   LucideArrowUp,
   LucideCheck,
-  LucideChevronDown,
   LucideEllipsisVertical,
   LucideGripVertical,
   LucideListVideo,
@@ -38,6 +37,8 @@ import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu'
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { BackgroundService } from '../../../core/services/background.service';
+import { AutoDownloadService } from '../../../core/services/auto-download.service';
+import { NavbarService } from '../../../core/services/navbar.service';
 import {
   Playlist,
   PlaylistItem,
@@ -71,7 +72,6 @@ type PlaylistGroupedEntry =
     LucideArrowDown,
     LucideArrowUp,
     LucideCheck,
-    LucideChevronDown,
     LucideEllipsisVertical,
     LucideGripVertical,
     LucideListVideo,
@@ -93,8 +93,10 @@ export class PlaylistDetailComponent {
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
   readonly tv = inject(TvService);
+  readonly navbar = inject(NavbarService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly background = inject(BackgroundService);
+  private readonly autoDownload = inject(AutoDownloadService);
   private readonly destroyRef = inject(DestroyRef);
 
   private readonly routeParams = toSignal(this.route.paramMap);
@@ -114,6 +116,8 @@ export class PlaylistDetailComponent {
   readonly savingSettings = signal(false);
   readonly draftAutoRemoveWatched = signal(false);
   readonly draftAutoDownload = signal(false);
+  /** Auto-download is native-mobile only, so its toggle is hidden elsewhere. */
+  readonly showAutoDownload = this.autoDownload.enabled;
 
   /** Add / remove / reorder items — editor and above. */
   readonly canEditItems = computed(() => {
@@ -127,29 +131,7 @@ export class PlaylistDetailComponent {
   });
   readonly isOwner = computed(() => this.playlist()?.role === 'owner');
 
-  // ── View mode (per-user local preference) ──
-  private static readonly VIEW_KEY = 'playlists.detail.view';
-  readonly viewMode = signal<'grouped' | 'flat'>(this.readViewPref());
   readonly expandedSeries = signal<Set<number>>(new Set());
-
-  private readViewPref(): 'grouped' | 'flat' {
-    try {
-      return localStorage.getItem(PlaylistDetailComponent.VIEW_KEY) === 'grouped'
-        ? 'grouped'
-        : 'flat';
-    } catch {
-      return 'flat';
-    }
-  }
-
-  setView(mode: 'grouped' | 'flat') {
-    this.viewMode.set(mode);
-    try {
-      localStorage.setItem(PlaylistDetailComponent.VIEW_KEY, mode);
-    } catch {
-      /* localStorage may be unavailable */
-    }
-  }
 
   toggleSeries(seriesId: number) {
     this.expandedSeries.update((s) => {
@@ -297,7 +279,13 @@ export class PlaylistDetailComponent {
       if (pool.length) this.background.setBackgrounds(pool);
       else this.background.clear();
     });
-    this.destroyRef.onDestroy(() => this.background.clear());
+    // Reuse the layout's desktop back button (no hero styling, so mobile keeps
+    // its normal top padding).
+    this.navbar.showBackButton.set(true);
+    this.destroyRef.onDestroy(() => {
+      this.background.clear();
+      this.navbar.showBackButton.set(false);
+    });
   }
 
   private async load(id: number): Promise<void> {
@@ -321,7 +309,7 @@ export class PlaylistDetailComponent {
     const p = this.playlist();
     if (!p) return;
     this.draftAutoRemoveWatched.set(p.autoRemoveWatched);
-    this.draftAutoDownload.set(p.autoDownload);
+    this.draftAutoDownload.set(this.autoDownload.isAutoDownload(p.id));
     this.settingsDialog()?.nativeElement.showModal();
   }
 
@@ -336,11 +324,14 @@ export class PlaylistDetailComponent {
     try {
       const updated = await this.api.update(p.id, {
         autoRemoveWatched: this.draftAutoRemoveWatched(),
-        autoDownload: this.draftAutoDownload(),
       });
       this.playlist.set(updated);
+      // Auto-download is stored on-device only, not on the server.
+      this.autoDownload.setAutoDownload(p.id, this.draftAutoDownload());
       this.toast.success(this.translate.instant('playlists.saved'));
       this.closeSettings();
+      // Kick the reconciler now so enabling it starts fetching immediately.
+      if (this.draftAutoDownload()) void this.autoDownload.reconcile('settings');
     } catch {
       // Errors are surfaced by the global HTTP interceptor.
     } finally {
@@ -413,22 +404,6 @@ export class PlaylistDetailComponent {
         // shared editor who only sees a library-filtered subset).
         void this.load(id);
       });
-  }
-
-  drop(event: CdkDragDrop<PlaylistItem[]>): void {
-    const next = [...this.items()];
-    moveItemInArray(next, event.previousIndex, event.currentIndex);
-    this.items.set(next);
-    this.persistOrder();
-  }
-
-  move(index: number, delta: number): void {
-    const next = [...this.items()];
-    const target = index + delta;
-    if (target < 0 || target >= next.length) return;
-    [next[index], next[target]] = [next[target], next[index]];
-    this.items.set(next);
-    this.persistOrder();
   }
 
   // ── Grouped reorder: reorders the root media (movies + series blocks);

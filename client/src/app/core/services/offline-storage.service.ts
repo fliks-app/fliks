@@ -2,10 +2,12 @@ import { Injectable, inject } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { AuthService } from './auth.service';
 import { DownloadNotificationService } from './download-notification.service';
+import { DownloadCacheService } from './download-cache.service';
 
 const CACHE_NAME = 'offline-media';
 
-/** Map mediaFileId → Shaka offline:xxx URI. Persisted in localStorage. */
+/** Map mediaFileId → Shaka offline:xxx URI. Persisted in localStorage, keyed
+ *  per (server, user) like the rest of the download state. */
 const SHAKA_OFFLINE_KEY = 'fliks.shakaOfflineUris';
 
 /** Lazy-loaded Filesystem reference — avoids crash on web where the plugin isn't available. */
@@ -32,6 +34,12 @@ export class OfflineStorageService {
   private readonly platform = Capacitor.getPlatform();
   private readonly auth = inject(AuthService);
   private readonly notif = inject(DownloadNotificationService);
+  private readonly cache = inject(DownloadCacheService);
+
+  /** Per (server, user) key for the Shaka offline URI map. */
+  private shakaKey(): string {
+    return `${SHAKA_OFFLINE_KEY}.${this.cache.scopeSuffix()}`;
+  }
 
   async getLocalUrl(key: string): Promise<string | null> {
     if (this.isNative) {
@@ -57,9 +65,9 @@ export class OfflineStorageService {
   private async getNativeOfflineUrl(key: string): Promise<string | null> {
     try {
       const mfid = Number(key.replace('download-', ''));
-      const raw = localStorage.getItem('fliks.downloads.cache');
-      const tasks: any[] = raw ? JSON.parse(raw) : [];
-      const task = tasks.find((t: any) => t.mediaFileId === mfid && t.status === 'ready');
+      const task = this.cache
+        .load()
+        .find((t) => t.mediaFileId === mfid && t.status === 'ready');
       if (!task) return null;
       if (this.platform === 'ios') {
         return await this.notif.getOfflineUrl(String(task.id));
@@ -75,7 +83,7 @@ export class OfflineStorageService {
   /** Get stored Shaka offline URI for a media file, or null. */
   getShakaOfflineUri(mediaFileId: number): string | null {
     try {
-      const map = JSON.parse(localStorage.getItem(SHAKA_OFFLINE_KEY) ?? '{}');
+      const map = JSON.parse(localStorage.getItem(this.shakaKey()) ?? '{}');
       return map[String(mediaFileId)] ?? null;
     } catch {
       return null;
@@ -84,17 +92,17 @@ export class OfflineStorageService {
 
   private setShakaOfflineUri(mediaFileId: number, uri: string): void {
     try {
-      const map = JSON.parse(localStorage.getItem(SHAKA_OFFLINE_KEY) ?? '{}');
+      const map = JSON.parse(localStorage.getItem(this.shakaKey()) ?? '{}');
       map[String(mediaFileId)] = uri;
-      localStorage.setItem(SHAKA_OFFLINE_KEY, JSON.stringify(map));
+      localStorage.setItem(this.shakaKey(), JSON.stringify(map));
     } catch { /* ignore */ }
   }
 
   private removeShakaOfflineUri(mediaFileId: number): void {
     try {
-      const map = JSON.parse(localStorage.getItem(SHAKA_OFFLINE_KEY) ?? '{}');
+      const map = JSON.parse(localStorage.getItem(this.shakaKey()) ?? '{}');
       delete map[String(mediaFileId)];
-      localStorage.setItem(SHAKA_OFFLINE_KEY, JSON.stringify(map));
+      localStorage.setItem(this.shakaKey(), JSON.stringify(map));
     } catch { /* ignore */ }
   }
 
@@ -236,6 +244,22 @@ export class OfflineStorageService {
     } catch {
       return false;
     }
+  }
+
+  /** Remove a stored VTT subtitle (counterpart to {@link downloadSmallFile}). */
+  async deleteSmallFile(key: string): Promise<void> {
+    try {
+      if (this.isNative) {
+        const { Filesystem, Directory } = await getFs();
+        await Filesystem.deleteFile({
+          path: `fliks-downloads/${key}`,
+          directory: Directory.Data,
+        });
+      } else {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.delete(key);
+      }
+    } catch { /* already gone — fine */ }
   }
 
   /** Get small file content as text (for VTT). */

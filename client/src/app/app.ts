@@ -8,6 +8,7 @@ import { AuthService } from './core/services/auth.service';
 import { CastPlayerService } from './core/services/cast-player.service';
 import { SseService } from './core/services/sse.service';
 import { DownloadManagerService } from './core/services/download-manager.service';
+import { AutoDownloadService } from './core/services/auto-download.service';
 import { BrowserDeviceProfileService } from './core/services/browser-device-profile.service';
 import { TvService } from './core/services/tv.service';
 import { TvSpatialNavService } from './core/services/tv-spatial-nav.service';
@@ -31,6 +32,8 @@ export class App implements OnInit, OnDestroy {
   private readonly sse = inject(SseService);
   /** Injected to ensure DownloadManagerService singleton is created (authEffect, nativeEffect). */
   private readonly dlManager = inject(DownloadManagerService);
+  /** Injected so the auto-download reconciler runs on auth-ready (native, non-TV). */
+  private readonly autoDownload = inject(AutoDownloadService);
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
   /** Eagerly instantiate TvService so it can detect Android TV and set the body `tv` class. */
   private readonly tv = inject(TvService);

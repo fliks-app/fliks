@@ -16,6 +16,7 @@ import {
   PlaylistsApiService,
 } from '../../../core/services/api/playlists-api.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { AutoDownloadService } from '../../../core/services/auto-download.service';
 
 /**
  * Small dialog to add a media to an existing playlist or create a new one on
@@ -33,6 +34,7 @@ export class AddToPlaylistModalComponent {
   private readonly api = inject(PlaylistsApiService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
+  private readonly autoDownload = inject(AutoDownloadService);
 
   private readonly dialogEl =
     viewChild<ElementRef<HTMLDialogElement>>('dialog');
@@ -76,6 +78,10 @@ export class AddToPlaylistModalComponent {
       this.toast.success(this.translate.instant('playlists.added_toast'));
       this.added.emit();
       this.close();
+      // Fetch the new item straight away when the target playlist auto-downloads.
+      if (this.autoDownload.isAutoDownload(playlist.id)) {
+        void this.autoDownload.reconcile('add');
+      }
     } catch {
       // Errors are surfaced by the global HTTP interceptor.
     } finally {

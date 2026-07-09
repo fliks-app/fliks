@@ -80,132 +80,98 @@
       <p class="text-lg">{{ 'playlists.no_items' | translate }}</p>
     </div>
   } @else {
-    <!-- View toggle: grouped (series collapse to one entry) vs flat -->
-    <div class="flex justify-end mb-3">
-      <div class="join">
-        <button
-          type="button"
-          class="btn btn-sm join-item"
-          [class.btn-active]="viewMode() === 'grouped'"
-          (click)="setView('grouped')"
-        >
-          {{ 'playlists.view_grouped' | translate }}
-        </button>
-        <button
-          type="button"
-          class="btn btn-sm join-item"
-          [class.btn-active]="viewMode() === 'flat'"
-          (click)="setView('flat')"
-        >
-          {{ 'playlists.view_flat' | translate }}
-        </button>
-      </div>
-    </div>
-
-    @if (viewMode() === 'flat') {
-      <div cdkDropList (cdkDropListDropped)="drop($event)" class="flex flex-col gap-1">
-        @for (item of items(); track item.itemId; let i = $index) {
-          <div
-            cdkDrag
-            [cdkDragDisabled]="!canEditItems() || tv.isTv()"
-            class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200"
-          >
-            @if (canEditItems()) {
-              @if (!tv.isTv()) {
-                <button
-                  type="button"
-                  cdkDragHandle
-                  class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0"
-                  [attr.aria-label]="'playlists.drag' | translate"
-                >
-                  <svg lucideGripVertical class="h-4 w-4"></svg>
-                </button>
-              } @else {
-                <div class="flex flex-col shrink-0">
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs btn-square"
-                    [disabled]="i === 0"
-                    (click)="move(i, -1)"
-                    [attr.aria-label]="'playlists.move_up' | translate"
-                  >
-                    <svg lucideArrowUp class="h-4 w-4"></svg>
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs btn-square"
-                    [disabled]="i === items().length - 1"
-                    (click)="move(i, 1)"
-                    [attr.aria-label]="'playlists.move_down' | translate"
-                  >
-                    <svg lucideArrowDown class="h-4 w-4"></svg>
-                  </button>
-                </div>
-              }
-            }
-            <ng-container
-              [ngTemplateOutlet]="itemRow"
-              [ngTemplateOutletContext]="{ $implicit: item }"
-            ></ng-container>
-          </div>
-        }
-      </div>
-    } @else {
-      <div cdkDropList (cdkDropListDropped)="dropGroup($event)" class="flex flex-col gap-1">
+    <div cdkDropList (cdkDropListDropped)="dropGroup($event)" class="flex flex-col gap-1">
         @for (
           entry of groupedEntries();
           track entry.kind === 'movie' ? 'm' + entry.item.itemId : 's' + entry.group.seriesId;
           let i = $index
         ) {
           <div cdkDrag [cdkDragDisabled]="!canEditItems() || tv.isTv()">
-            <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
-              @if (canEditItems()) {
-                @if (!tv.isTv()) {
-                  <button
-                    type="button"
-                    cdkDragHandle
-                    class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0"
-                    [attr.aria-label]="'playlists.drag' | translate"
-                  >
-                    <svg lucideGripVertical class="h-4 w-4"></svg>
-                  </button>
-                } @else {
-                  <div class="flex flex-col shrink-0">
+            @if (entry.kind === 'movie') {
+              <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
+                @if (canEditItems()) {
+                  @if (!tv.isTv()) {
                     <button
                       type="button"
-                      class="btn btn-ghost btn-xs btn-square"
-                      [disabled]="i === 0"
-                      (click)="moveGroup(i, -1)"
-                      [attr.aria-label]="'playlists.move_up' | translate"
+                      cdkDragHandle
+                      class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0"
+                      [attr.aria-label]="'playlists.drag' | translate"
                     >
-                      <svg lucideArrowUp class="h-4 w-4"></svg>
+                      <svg lucideGripVertical class="h-4 w-4"></svg>
                     </button>
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs btn-square"
-                      [disabled]="i === groupedEntries().length - 1"
-                      (click)="moveGroup(i, 1)"
-                      [attr.aria-label]="'playlists.move_down' | translate"
-                    >
-                      <svg lucideArrowDown class="h-4 w-4"></svg>
-                    </button>
-                  </div>
+                  } @else {
+                    <div class="flex flex-col shrink-0">
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs btn-square"
+                        [disabled]="i === 0"
+                        (click)="moveGroup(i, -1)"
+                        [attr.aria-label]="'playlists.move_up' | translate"
+                      >
+                        <svg lucideArrowUp class="h-4 w-4"></svg>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs btn-square"
+                        [disabled]="i === groupedEntries().length - 1"
+                        (click)="moveGroup(i, 1)"
+                        [attr.aria-label]="'playlists.move_down' | translate"
+                      >
+                        <svg lucideArrowDown class="h-4 w-4"></svg>
+                      </button>
+                    </div>
+                  }
                 }
-              }
-
-              @if (entry.kind === 'movie') {
                 <ng-container
                   [ngTemplateOutlet]="itemRow"
                   [ngTemplateOutletContext]="{ $implicit: entry.item }"
                 ></ng-container>
-              } @else {
-                <button
-                  type="button"
-                  class="flex items-center gap-3 flex-1 min-w-0 text-left"
+              </div>
+            } @else {
+              <div
+                class="collapse collapse-arrow rounded-lg"
+                [class.collapse-open]="expandedSeries().has(entry.group.seriesId)"
+              >
+                <div
+                  class="collapse-title flex items-center gap-2 min-h-0 p-1.5 pr-10 cursor-pointer hover:bg-base-200"
                   (click)="toggleSeries(entry.group.seriesId)"
                 >
+                  @if (canEditItems()) {
+                    @if (!tv.isTv()) {
+                      <button
+                        type="button"
+                        cdkDragHandle
+                        class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0"
+                        (click)="$event.stopPropagation()"
+                        [attr.aria-label]="'playlists.drag' | translate"
+                      >
+                        <svg lucideGripVertical class="h-4 w-4"></svg>
+                      </button>
+                    } @else {
+                      <div class="flex flex-col shrink-0">
+                        <button
+                          type="button"
+                          class="btn btn-ghost btn-xs btn-square"
+                          [disabled]="i === 0"
+                          (click)="$event.stopPropagation(); moveGroup(i, -1)"
+                          [attr.aria-label]="'playlists.move_up' | translate"
+                        >
+                          <svg lucideArrowUp class="h-4 w-4"></svg>
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-ghost btn-xs btn-square"
+                          [disabled]="i === groupedEntries().length - 1"
+                          (click)="$event.stopPropagation(); moveGroup(i, 1)"
+                          [attr.aria-label]="'playlists.move_down' | translate"
+                        >
+                          <svg lucideArrowDown class="h-4 w-4"></svg>
+                        </button>
+                      </div>
+                    }
+                  }
                   <div
-                    class="relative w-36 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300"
+                    class="relative w-24 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300"
                   >
                     <img
                       [src]="(entry.group.media.fanartUrl ?? entry.group.media.posterUrl) | resolveUrl: 'thumb'"
@@ -215,56 +181,47 @@
                     />
                   </div>
                   <div class="min-w-0 flex-1">
-                    <p class="font-medium truncate">{{ entry.group.media.title }}</p>
+                    <p class="font-medium line-clamp-2">{{ entry.group.media.title }}</p>
                     <p class="text-sm text-base-content/60">
                       {{ 'playlists.episodes_count' | translate: { count: entry.group.episodes.length } }}
                     </p>
                   </div>
-                  <svg
-                    lucideChevronDown
-                    class="h-5 w-5 shrink-0 transition-transform"
-                    [class.-rotate-90]="!expandedSeries().has(entry.group.seriesId)"
-                  ></svg>
-                </button>
-                @if (canEditItems()) {
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-sm btn-square text-error shrink-0"
-                    (click)="removeSeries(entry.group)"
-                    [attr.aria-label]="'playlists.remove_series_title' | translate"
-                  >
-                    <svg lucideTrash2 class="h-4 w-4"></svg>
-                  </button>
-                }
-              }
-            </div>
-
-            @if (entry.kind === 'series' && expandedSeries().has(entry.group.seriesId)) {
-              <!-- Left margin = row padding (p-1.5) + drag handle (btn-xs 1.5rem)
-                   + gap-2, so the guide line sits under the series thumbnail. -->
-              <div class="flex flex-col gap-1 mt-1 ml-[2.375rem] border-l-2 border-base-300 pl-4">
-                @for (item of entry.group.episodes; track item.itemId) {
-                  <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
-                    <ng-container
-                      [ngTemplateOutlet]="itemRow"
-                      [ngTemplateOutletContext]="{ $implicit: item }"
-                    ></ng-container>
+                  @if (canEditItems()) {
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-sm btn-square text-error shrink-0"
+                      (click)="$event.stopPropagation(); removeSeries(entry.group)"
+                      [attr.aria-label]="'playlists.remove_series_title' | translate"
+                    >
+                      <svg lucideTrash2 class="h-4 w-4"></svg>
+                    </button>
+                  }
+                </div>
+                <div class="collapse-content !px-0 !pb-0">
+                  <div class="flex flex-col gap-1 mt-1">
+                    @for (item of entry.group.episodes; track item.itemId) {
+                      <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
+                        <ng-container
+                          [ngTemplateOutlet]="itemRow"
+                          [ngTemplateOutletContext]="{ $implicit: item }"
+                        ></ng-container>
+                      </div>
+                    }
                   </div>
-                }
+                </div>
               </div>
             }
           </div>
         }
       </div>
-    }
   }
 }
 
-<!-- One playlist row (movie or episode), shared by both views. -->
+<!-- One playlist row (movie or episode). -->
 <ng-template #itemRow let-item>
   <a [routerLink]="itemLink(item)" class="flex items-center gap-3 flex-1 min-w-0">
     <div
-      class="relative w-36 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300"
+      class="relative w-24 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300"
     >
       @if (itemThumb(item); as thumb) {
         <img
@@ -287,35 +244,58 @@
     </div>
     <div class="min-w-0">
       @if (item.episode; as ep) {
-        <p class="font-medium truncate">{{ episodeLabel(ep) }}</p>
-        <p class="text-sm text-base-content/60 truncate">{{ item.media.title }}</p>
+        <p class="font-medium line-clamp-2">{{ episodeLabel(ep) }}</p>
+        @if (ep.runtime) {
+          <p class="text-sm text-base-content/60 truncate">{{ ep.runtime }} {{ 'common.min' | translate }}</p>
+        }
       } @else {
-        <p class="font-medium truncate">{{ item.media.title }}</p>
-        @if (item.media.year) {
-          <p class="text-sm text-base-content/60 truncate">{{ item.media.year }}</p>
+        <p class="font-medium line-clamp-2">{{ item.media.title }}</p>
+        @if (item.media.runtime) {
+          <p class="text-sm text-base-content/60 truncate">{{ item.media.runtime }} {{ 'common.min' | translate }}</p>
         }
       }
     </div>
   </a>
-  <button
-    type="button"
-    class="btn btn-ghost btn-sm btn-square shrink-0"
-    [class.text-success]="item.watched"
-    (click)="toggleItemWatched(item)"
-    [attr.aria-label]="(item.watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched') | translate"
-  >
-    <svg lucideCheck class="h-4 w-4"></svg>
-  </button>
-  @if (canEditItems()) {
+  <!-- sm+: inline actions -->
+  <div class="hidden sm:flex items-center gap-1 shrink-0">
     <button
       type="button"
-      class="btn btn-ghost btn-sm btn-square text-error shrink-0"
-      (click)="removeItem(item)"
-      [attr.aria-label]="'common.delete' | translate"
+      class="btn btn-ghost btn-sm btn-square"
+      [class.text-success]="item.watched"
+      (click)="toggleItemWatched(item)"
+      [attr.aria-label]="(item.watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched') | translate"
     >
-      <svg lucideTrash2 class="h-4 w-4"></svg>
+      <svg lucideCheck class="h-4 w-4"></svg>
     </button>
-  }
+    @if (canEditItems()) {
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm btn-square text-error"
+        (click)="removeItem(item)"
+        [attr.aria-label]="'common.delete' | translate"
+      >
+        <svg lucideTrash2 class="h-4 w-4"></svg>
+      </button>
+    }
+  </div>
+  <!-- mobile: collapse into a dropdown to keep width for the title -->
+  <div class="sm:hidden shrink-0 self-center">
+    <app-dropdown-menu placement="bottom-end">
+      <div trigger tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.more' | translate">
+        <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+      </div>
+      <button type="button" class="dropdown-item text-white" (click)="toggleItemWatched(item)">
+        <svg lucideCheck class="h-4 w-4"></svg>
+        {{ (item.watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched') | translate }}
+      </button>
+      @if (canEditItems()) {
+        <button type="button" class="dropdown-item text-error" (click)="removeItem(item)">
+          <svg lucideTrash2 class="h-4 w-4"></svg>
+          {{ 'common.delete' | translate }}
+        </button>
+      }
+    </app-dropdown-menu>
+  </div>
 </ng-template>
 
 <dialog #renameDialog class="modal">
@@ -376,12 +356,14 @@
         [label]="'playlists.auto_remove_watched' | translate"
         [hint]="'playlists.auto_remove_watched_hint' | translate"
       />
-      <app-toggle-field
-        [value]="draftAutoDownload()"
-        (valueChange)="draftAutoDownload.set($event)"
-        [label]="'playlists.auto_download' | translate"
-        [hint]="'playlists.auto_download_hint' | translate"
-      />
+      @if (showAutoDownload) {
+        <app-toggle-field
+          [value]="draftAutoDownload()"
+          (valueChange)="draftAutoDownload.set($event)"
+          [label]="'playlists.auto_download' | translate"
+          [hint]="'playlists.auto_download_hint' | translate"
+        />
+      }
     </div>
     <div class="modal-action">
       <button type="button" class="btn btn-sm" (click)="closeSettings()">

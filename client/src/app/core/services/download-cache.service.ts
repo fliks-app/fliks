@@ -1,4 +1,6 @@
-import { Injectable, signal, untracked } from '@angular/core';
+import { Injectable, signal, untracked, inject, effect } from '@angular/core';
+import { AuthService } from './auth.service';
+import { ServerConfigService } from './server-config.service';
 
 /** Client-side download task tracked in localStorage. */
 export interface DownloadTask {
@@ -11,6 +13,9 @@ export interface DownloadTask {
   progress: number;
   episodeLabel?: string;
   error?: string;
+  /** Created by the auto-download reconciler from an autoDownload playlist.
+   *  Only these are removed once watched — manual downloads are never touched. */
+  auto?: boolean;
   createdAt: string;
   /** HLS URL used for the download — needed for native offline playback via CacheDataSource. */
   hlsUrl?: string;
@@ -32,18 +37,53 @@ const LOCAL_IDS_KEY = 'fliks.downloads.localIds';
 /**
  * Tracks device download progress (in-memory signals) and
  * persists task list for offline access (localStorage).
+ *
+ * Persistence is isolated per (server, user): a shared device never leaks one
+ * account's downloads into another's list, and colliding mediaFileIds across
+ * servers can't cross-surface.
  */
 @Injectable({ providedIn: 'root' })
 export class DownloadCacheService {
+  private readonly auth = inject(AuthService);
+  private readonly serverConfig = inject(ServerConfigService);
+
   /** Active device downloads with progress % */
   readonly activeDownloads = signal<Map<number, number>>(new Map());
 
   /** Task IDs whose file is on device — persisted in localStorage */
-  readonly localTaskIds = signal<Set<number>>(this.loadLocalIds());
+  readonly localTaskIds = signal<Set<number>>(new Set());
+
+  constructor() {
+    // Re-hydrate on scope change (login / logout / server switch).
+    effect(() => {
+      this.auth.user();
+      this.serverConfig.serverUrl();
+      this.localTaskIds.set(this.loadLocalIds());
+    });
+  }
+
+  /** localStorage-key suffix isolating downloads to the current (server, user).
+   *  Read untracked so it is safe to call from anywhere (including effects that
+   *  also write localTaskIds) without creating a mutual-invalidation loop. */
+  scopeSuffix(): string {
+    return untracked(() => {
+      const server = this.serverConfig.serverUrl();
+      const userId = this.auth.user()?.id ?? 0;
+      return `${server}::${userId}`;
+    });
+  }
+
+  private storageKey(): string {
+    return `${STORAGE_KEY}.${this.scopeSuffix()}`;
+  }
+
+  private localIdsKey(): string {
+    return `${LOCAL_IDS_KEY}.${this.scopeSuffix()}`;
+  }
 
   private loadLocalIds(): Set<number> {
     try {
-      const raw = localStorage.getItem(LOCAL_IDS_KEY);
+      const raw = localStorage.getItem(this.localIdsKey());
       return raw ? new Set(JSON.parse(raw)) : new Set();
     } catch { return new Set(); }
   }
@@ -51,7 +91,7 @@ export class DownloadCacheService {
   private persistLocalIds() {
     // untracked: markLocal/removeLocal run inside effects that also write
     // localTaskIds — a tracked read here would create a mutual-invalidation loop.
-    localStorage.setItem(LOCAL_IDS_KEY, JSON.stringify([...untracked(() => this.localTaskIds())]));
+    localStorage.setItem(this.localIdsKey(), JSON.stringify([...untracked(() => this.localTaskIds())]));
   }
 
   markLocal(taskId: number) {
@@ -95,7 +135,7 @@ export class DownloadCacheService {
   /** Persist task list for offline recovery */
   save(tasks: DownloadTask[]) {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+      localStorage.setItem(this.storageKey(), JSON.stringify(tasks));
     } catch {
       // quota exceeded
     }
@@ -104,7 +144,7 @@ export class DownloadCacheService {
   /** Load cached task list (for offline) */
   load(): DownloadTask[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(this.storageKey());
       return raw ? JSON.parse(raw) : [];
     } catch {
       return [];

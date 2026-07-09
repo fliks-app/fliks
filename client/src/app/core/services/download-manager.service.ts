@@ -46,12 +46,21 @@ export class DownloadManagerService {
   private readonly translate = inject(TranslateService);
 
   private readonly titles = new Map<number, { title: string; episode?: string }>();
-  private activeCount = 0;
   private eventSeq = 0;
   private nextLocalId = Date.now();
 
+  // Cap concurrent web downloads (each spins up a hidden player + Shaka store);
+  // native downloads are queued by the OS daemon and don't come through here.
+  private static readonly MAX_WEB_CONCURRENT = 2;
+  private webActive = 0;
+  private readonly webQueue: Array<() => void> = [];
+
   /** Unified download event — fed by native bridge (Android/iOS) or Shaka (web). */
   readonly lastDownloadEvent = signal<DownloadEvent | null>(null);
+
+  /** Bumped when {@link recover} finishes, so the auto-download reconciler runs
+   *  after interrupted tasks are cleaned up instead of racing that pass. */
+  readonly recoveredAt = signal(0);
 
   private emitEvent(type: DownloadEvent['type'], taskId: number, progress: number, status?: string) {
     this.lastDownloadEvent.set({ type, taskId, progress, status, seq: ++this.eventSeq });
@@ -73,10 +82,8 @@ export class DownloadManagerService {
 
     if (event.type === 'failed') {
       this.updateTaskStatus(taskId, 'failed', 0);
-      this.decActive();
     } else if (event.type === 'complete') {
       this.updateTaskStatus(taskId, 'ready', 100);
-      this.decActive();
       // Pre-download subtitles for offline playback (fire-and-forget)
       void this.preDownloadSubtitles(taskId);
     }
@@ -88,7 +95,7 @@ export class DownloadManagerService {
   private readonly authEffect = effect(() => {
     if (this.auth.isAuthenticated() && !this.recovered) {
       this.recovered = true;
-      void this.recover();
+      void this.recover(true);
     }
   });
 
@@ -105,17 +112,26 @@ export class DownloadManagerService {
     quality: string,
     title: string,
     episode?: string,
-    meta?: { mediaId?: number; posterUrl?: string | null; type?: string },
+    meta?: {
+      mediaId?: number;
+      posterUrl?: string | null;
+      type?: string;
+      episodeId?: number;
+      /** Set by the auto-download reconciler; enables auto-delete-after-watched. */
+      auto?: boolean;
+    },
   ): Promise<DownloadTask> {
     const taskId = this.nextLocalId++;
     const task: DownloadTask = {
       id: taskId,
       mediaId: meta?.mediaId ?? 0,
+      episodeId: meta?.episodeId,
       mediaFileId,
       quality,
       status: 'transcoding',
       progress: 0,
       episodeLabel: episode,
+      auto: meta?.auto,
       createdAt: new Date().toISOString(),
       media: { id: meta?.mediaId ?? 0, title, posterUrl: meta?.posterUrl ?? null, type: meta?.type ?? '' },
     };
@@ -148,7 +164,6 @@ export class DownloadManagerService {
 
     this.titles.set(taskId, { title, episode });
     this.persistTask(task);
-    this.incActive();
 
     if (this.isNative) {
       const token =
@@ -163,7 +178,7 @@ export class DownloadManagerService {
         notifFailed: this.translate.instant('downloads.notif_failed'),
       });
     } else {
-      void this.handleWebDownload(task, hlsUrl);
+      this.enqueueWeb(task, hlsUrl);
     }
 
     return task;
@@ -173,16 +188,46 @@ export class DownloadManagerService {
     if (this.isNative) {
       await this.notif.removeDownload(String(task.id));
     }
-    await this.storage.delete(`download-${task.mediaFileId}`);
+    // Media, Shaka URI and VTTs are keyed by mediaFileId and shared with any
+    // sibling task for the same file — only remove them when none remains.
+    const sharedElsewhere = this.cache
+      .load()
+      .some(
+        (t) =>
+          t.id !== task.id &&
+          t.mediaFileId === task.mediaFileId &&
+          t.status !== 'failed',
+      );
+    if (!sharedElsewhere) {
+      await this.storage.delete(`download-${task.mediaFileId}`);
+      for (const sub of task.offlineSubtitles ?? []) {
+        await this.storage.deleteSmallFile(sub.key);
+      }
+    }
     this.cache.remove(task.id);
     this.cache.removeLocal(task.id);
     this.titles.delete(task.id);
-    if (['transcoding', 'pending', 'ready'].includes(task.status)) {
-      this.decActive();
-    }
   }
 
   // ===== WEB PATH =====
+
+  /** Run a web download now if under the concurrency cap, else queue it. */
+  private enqueueWeb(task: DownloadTask, hlsUrl: string) {
+    const run = async () => {
+      this.webActive++;
+      try {
+        await this.handleWebDownload(task, hlsUrl);
+      } finally {
+        this.webActive--;
+        this.webQueue.shift()?.();
+      }
+    };
+    if (this.webActive < DownloadManagerService.MAX_WEB_CONCURRENT) {
+      void run();
+    } else {
+      this.webQueue.push(() => void run());
+    }
+  }
 
   /**
    * Web offline download using Shaka's built-in offline storage API.
@@ -193,7 +238,6 @@ export class DownloadManagerService {
 
     const offlineUri = this.storage.getShakaOfflineUri(task.mediaFileId);
     if (offlineUri) {
-      this.decActive();
       return;
     }
 
@@ -227,7 +271,6 @@ export class DownloadManagerService {
       this.emitEvent('failed', downloadId, 0);
     } finally {
       this.cache.markDone(downloadId);
-      this.decActive();
     }
   }
 
@@ -301,19 +344,15 @@ export class DownloadManagerService {
     if (status === 'ready') this.cache.markLocal(taskId);
   }
 
-  private incActive() {
-    this.activeCount++;
-  }
-
-  private decActive() {
-    this.activeCount = Math.max(0, this.activeCount - 1);
-  }
-
   /**
    * Recover download state from localStorage cache.
    * Re-populates the titles map for UI display.
+   *
+   * `onStartup` = the app just (re)launched, so every in-flight task is a
+   * leftover from before and its session is dead; on a mere reconnect,
+   * in-flight downloads may still be live, so only the untracked ones are failed.
    */
-  private async recover() {
+  private async recover(onStartup = false) {
     const tasks = this.cache.load();
 
     for (const t of tasks) {
@@ -322,7 +361,13 @@ export class DownloadManagerService {
       }
     }
 
-    // Prune tasks whose local content is gone
+    const nativeById = new Map<string, { id: string; progress: number; state: string }>();
+    if (this.isNative) {
+      for (const d of await this.notif.getDownloads().catch(() => [])) {
+        nativeById.set(String(d.id), d);
+      }
+    }
+
     for (const t of tasks) {
       if (t.status === 'ready') {
         // Native: trust localStorage — ExoPlayer's SimpleCache persists across
@@ -338,7 +383,27 @@ export class DownloadManagerService {
       } else if (t.status === 'failed') {
         // Remove stale failed tasks
         this.cache.remove(t.id);
+      } else if (t.status === 'transcoding') {
+        // In-flight when the app last stopped and stuck at 0% (web Shaka store
+        // died with the JS context; a redeploy left the native download with a
+        // dead session).
+        if (onStartup) {
+          // Cancel the dead native download so it can't keep retrying and race
+          // the fresh one. Auto items are dropped and re-fetched by the
+          // reconciler (one clean download); manual ones are flagged failed so
+          // they don't silently vanish.
+          if (t.auto) {
+            await this.deleteDownload(t);
+          } else {
+            if (this.isNative) await this.notif.removeDownload(String(t.id));
+            this.updateTaskStatus(t.id, 'failed', 0);
+          }
+        } else if (!this.isNative || !nativeById.has(String(t.id))) {
+          this.updateTaskStatus(t.id, 'failed', 0);
+        }
       }
     }
+
+    this.recoveredAt.update((n) => n + 1);
   }
 }

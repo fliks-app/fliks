@@ -15,6 +15,9 @@ export class NavbarService {
   readonly heroLogoUrl = signal<string | null>(null);
   /** Whether the current page has a hero fanart. */
   readonly isHeroPage = signal(false);
+  /** Non-hero pages can opt into the layout's desktop back button by setting
+   *  this, without taking on the hero styling. */
+  readonly showBackButton = signal(false);
   /** Resolved title for non-hero routes (set from route data or by components). */
   readonly pageTitle = signal('');
   /** Whether the window is scrolled near the top (updated by LayoutComponent). */
