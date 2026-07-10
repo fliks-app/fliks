@@ -2359,6 +2359,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       prewarmQuality,
       pos > 0 ? Math.floor(pos) : undefined,
     );
+    // Refresh the near-expiry stream token before rebuilding the play URL:
+    // it's baked into every segment URL and can't be swapped once the engine
+    // loads, so a token that lapsed mid-film would 401 every segment.
+    await this.authService.ensureStreamToken();
     const { url, mimeType } = this.buildPlayUrl({
       sid: this.playbackInfo.sessionId,
     });
@@ -3295,6 +3299,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.qualityManager.buildQualityOptions(pi);
 
     const mode = this.playbackMode();
+    // Refresh the near-expiry stream token before rebuilding the play URL:
+    // it's baked into every segment URL and can't be swapped once the engine
+    // loads, so a token that lapsed mid-film would 401 every segment.
+    await this.authService.ensureStreamToken();
     const { url, mimeType } = this.buildPlayUrl({ startTime: currentPos });
     await this.engine.load(url, currentPos, mimeType);
 
