@@ -69,6 +69,9 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
         bufferingGoal: 30,
         rebufferingGoal: 1,
         bufferBehind: 60,
+        // A selected subtitle track whose segments 404 or fail to parse is
+        // dropped instead of aborting video and audio playback.
+        ignoreTextStreamFailures: true,
       },
     } as any);
 
