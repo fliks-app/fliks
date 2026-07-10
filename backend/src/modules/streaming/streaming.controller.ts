@@ -2061,7 +2061,19 @@ export class StreamingController {
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Length', fileSize);
       res.setHeader('Accept-Ranges', 'bytes');
-      fs.createReadStream(absolutePath).pipe(res);
+      // pipe() does not forward source errors, so a read failure (EIO/ESTALE
+      // on a network mount, a file swapped mid-stream) would emit an
+      // unhandled 'error' and crash the process, killing every active
+      // playback. Close this one response instead.
+      const fullStream = fs.createReadStream(absolutePath);
+      fullStream.on('error', (err) => {
+        this.log.error(
+          `direct-play read error (mediaFileId=${mediaFileId}): ${err}`,
+        );
+        if (!res.headersSent) res.status(500).end();
+        else res.destroy();
+      });
+      fullStream.pipe(res);
       return;
     }
 
@@ -2082,6 +2094,14 @@ export class StreamingController {
     res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Content-Length', chunkSize);
 
-    fs.createReadStream(absolutePath, { start, end }).pipe(res);
+    const rangeStream = fs.createReadStream(absolutePath, { start, end });
+    rangeStream.on('error', (err) => {
+      this.log.error(
+        `direct-play read error (mediaFileId=${mediaFileId}): ${err}`,
+      );
+      if (!res.headersSent) res.status(500).end();
+      else res.destroy();
+    });
+    rangeStream.pipe(res);
   }
 }
