@@ -706,8 +706,13 @@ export function buildFfmpegArgs(
       ...(useTs ? [] : ['-movflags', '+cmaf']),
       '-f',
       'hls',
+      // Cut on the fps-aware grid (== the forced-IDR cadence and the playlist
+      // EXTINF), not the integer setting. On fractional-fps sources the audio
+      // renditions would otherwise be cut on the 3.0s grid while video IDRs land
+      // on 3.003s; the per-segment drift accumulates until the tfdt anchor snaps
+      // audio a whole segment late mid-film (sudden A/V desync).
       '-hls_time',
-      String(SEGMENT_DURATION),
+      String(realSeg),
       '-hls_list_size',
       '0',
       '-start_number',
@@ -808,7 +813,10 @@ export function buildAudioOnlyFfmpegArgs(
   } = opts;
   const segType = useTs ? 'mpegts' : 'fmp4';
   const segExt = useTs ? 'ts' : 'm4s';
-  const SEGMENT_DURATION = getSegmentDuration();
+  // fps-aware segment length so audio renditions cut on the same grid as the
+  // video IDRs / playlist EXTINF (see buildFfmpegArgs). Equals the integer
+  // setting for integer / unknown fps.
+  const realSeg = realSegmentSeconds(sourceFps);
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
   if (trustedStreamInfo) {
@@ -846,7 +854,7 @@ export function buildAudioOnlyFfmpegArgs(
     '-f',
     'hls',
     '-hls_time',
-    String(SEGMENT_DURATION),
+    String(realSeg),
     '-hls_list_size',
     '0',
     '-start_number',

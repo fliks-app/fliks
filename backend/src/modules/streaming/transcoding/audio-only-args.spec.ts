@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { buildAudioOnlyFfmpegArgs } from './ffmpeg-args';
-import { segmentIndexToSeconds } from './constants';
+import { realSegmentSeconds, segmentIndexToSeconds } from './constants';
 
 describe('buildAudioOnlyFfmpegArgs', () => {
   const log = new Logger('test');
@@ -40,6 +40,33 @@ describe('buildAudioOnlyFfmpegArgs', () => {
     // Must match the video path's fps-aware seek, not the integer-grid value.
     expect(seek).toBe(String(segmentIndexToSeconds(5, fps)));
     expect(seek).not.toBe(String(segmentIndexToSeconds(5)));
+  });
+
+  it('cuts on the fps-aware grid so audio renditions stay aligned with the video IDRs', () => {
+    const fps = 24000 / 1001; // 23.976
+    const args = buildAudioOnlyFfmpegArgs(
+      {
+        inputPath: '/in.mkv',
+        outputDir: '/out',
+        audioStreamIndex: 0,
+        trustedStreamInfo: true,
+        sourceFps: fps,
+      },
+      log,
+    );
+    const hlsTime = args[args.indexOf('-hls_time') + 1];
+    // Must match the video IDR / EXTINF grid (3.003s), not the integer 3.0s
+    // setting — otherwise the audio tfdt drifts a whole segment mid-film.
+    expect(hlsTime).toBe(String(realSegmentSeconds(fps)));
+    expect(hlsTime).not.toBe('3');
+  });
+
+  it('cuts on the integer grid when fps is unknown (no regression)', () => {
+    const args = buildAudioOnlyFfmpegArgs(
+      { inputPath: '/in.mkv', outputDir: '/out', audioStreamIndex: 0 },
+      log,
+    );
+    expect(args[args.indexOf('-hls_time') + 1]).toBe('3');
   });
 
   it('emits no -ss for a fresh start', () => {
