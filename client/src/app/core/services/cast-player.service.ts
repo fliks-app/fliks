@@ -430,7 +430,7 @@ export class CastPlayerService {
    * audio/burn-in context wouldn't be picked up by an existing session
    * (transcoding.service only auto-replaces on quality change).
    */
-  async reloadCastStream(positionOverride?: number) {
+  async reloadCastStream(positionOverride?: number, autoplay = true) {
     const mfId = this.mediaFileId();
     if (!mfId) return;
 
@@ -455,7 +455,7 @@ export class CastPlayerService {
       this.authService.getCastInfo(),
     ]);
 
-    await this.dispatchLoad(mfId, pi, currentPos, transcodeQuality, castInfo);
+    await this.dispatchLoad(mfId, pi, currentPos, transcodeQuality, castInfo, autoplay);
   }
 
   /**
@@ -468,6 +468,7 @@ export class CastPlayerService {
     currentPos: number,
     transcodeQuality: string | undefined,
     castInfo: { token: string; streamBaseUrl: string },
+    autoplay: boolean,
   ) {
     const castMode: 'direct' | 'remux' | 'transcode' =
       pi.playMethod === 'DirectPlay' ? 'direct' :
@@ -549,6 +550,7 @@ export class CastPlayerService {
       activeSubtitleTrackId,
       mediaId: this.mediaId(),
       episodeId: this.episodeId(),
+      autoplay,
     });
   }
 
@@ -622,7 +624,11 @@ export class CastPlayerService {
       // Backend lost the session (its keep-alive lapsed, a restart, …).
       // The receiver can't self-heal a session_expired, so re-issue
       // playback-info and reload the stream with a fresh sid.
-      if (response?.sessionLost) await this.reloadCastStream(pos);
+      // Preserve the receiver's pause state across an auto-recovery reload — a
+      // paused cast whose session was reaped (missed heartbeats) must not be
+      // force-resumed by the reload's default autoplay.
+      if (response?.sessionLost)
+        await this.reloadCastStream(pos, !this.cast.isPaused());
     } catch { /* ignore */ }
   }
 
@@ -776,6 +782,6 @@ export class CastPlayerService {
       activeAudioStreamIndex: audioIndex,
     });
 
-    await this.dispatchLoad(opts.mediaFileId, pi, startTime, activeQualityId, castInfo);
+    await this.dispatchLoad(opts.mediaFileId, pi, startTime, activeQualityId, castInfo, true);
   }
 }

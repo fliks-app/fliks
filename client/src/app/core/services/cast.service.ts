@@ -43,6 +43,10 @@ export interface CastMediaInfo {
   subtitle?: string;
   posterUrl?: string;
   currentTime?: number;
+  /** When false, the receiver loads the media paused; defaults to autoplay.
+   *  Recovery reloads pass the receiver's current pause state so a paused cast
+   *  isn't force-resumed. */
+  autoplay?: boolean;
   subtitles?: { url: string; language: string; label: string }[];
   activeSubtitleTrackId?: number;
   /**
@@ -406,7 +410,7 @@ export class CastService implements OnDestroy {
 
     const request = new chrome.cast.media.LoadRequest(mediaInfo);
     request.currentTime = info.currentTime ?? 0;
-    request.autoplay = true;
+    request.autoplay = info.autoplay ?? true;
     if (info.activeSubtitleTrackId) {
       request.activeTrackIds = [info.activeSubtitleTrackId];
     }
@@ -414,7 +418,7 @@ export class CastService implements OnDestroy {
     try {
       await this.session.loadMedia(request);
       this.mediaTitle.set(info.title);
-      this.isPaused.set(false);
+      this.isPaused.set(info.autoplay === false);
       if (info.activeSubtitleTrackId) {
         setTimeout(() => this.setActiveSubtitle(info.activeSubtitleTrackId!), 1500);
       }
