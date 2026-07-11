@@ -203,6 +203,9 @@ export class QualityManagerService {
             switchInterval: 5,              // Re-evaluate every 5s (default: 8)
             bandwidthUpgradeTarget: 0.7,    // Upgrade at 70% headroom (default: 0.85 = more conservative)
             bandwidthDowngradeTarget: 0.95, // Downgrade only when nearly saturated
+            // Don't fetch a rung larger than the player element (DPR-aware):
+            // a 4K rung on a 1080p view only wastes bandwidth and stalls slow links.
+            restrictToElementSize: true,
             advanced: {
               // Require 5 MB of observed data before ABR makes decisions.
               // FFmpeg transcode startup makes the first segment arrive 10-30s
