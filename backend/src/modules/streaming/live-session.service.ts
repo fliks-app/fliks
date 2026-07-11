@@ -43,7 +43,12 @@ export interface LiveSession {
   mediaTitle: string | null;
   mediaType: string | null;
   posterUrl: string | null;
+  /** Routing hash for this playback's transcode job (base hash + instanceId). */
   profileHash: string | null;
+  /** Un-suffixed byte-layout hash; used to detect a concurrent sibling (#638). */
+  profileBase: string | null;
+  /** Instance suffix when split off a concurrent sibling, else null (#638). */
+  instanceId: string | null;
   quality: string | null;
   kind: SessionKind;
   deviceLabel: string | null;
@@ -223,6 +228,8 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       mediaType: input.mediaType ?? null,
       posterUrl: input.posterUrl ?? null,
       profileHash: input.profileHash ?? null,
+      profileBase: input.profileHash ?? null,
+      instanceId: null,
       quality: input.quality ?? null,
       kind: input.kind,
       deviceLabel: input.deviceLabel ?? null,
@@ -257,6 +264,29 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       canCopyAudio: input.canCopyAudio ?? false,
       pinned: input.pinned ?? false,
     };
+    // #638: split a concurrent playback of the same content onto its own job so
+    // two live viewers never share (and mutually kill) one ffmpeg. Race-free:
+    // no await between this scan and sessions.set. A same-tab reload shares the
+    // SSE connection, so it isn't counted as a sibling.
+    if (input.profileHash != null) {
+      const sibling = [...this.sessions.values()].some(
+        (s) =>
+          s.userId === input.userId &&
+          s.mediaFileId === input.mediaFileId &&
+          s.profileBase === input.profileHash &&
+          now - s.lastBeat < (s.pinned ? this.pinnedTtlMs : this.ttlMs) &&
+          !(
+            s.sseConnectionId != null &&
+            s.sseConnectionId === session.sseConnectionId
+          ),
+      );
+      if (sibling) {
+        session.instanceId =
+          '~i' + session.sessionId.replace(/[^a-z0-9]/gi, '').slice(0, 8);
+        session.profileHash = input.profileHash + session.instanceId;
+      }
+    }
+
     // Per-user concurrent-session cap. Legit multi-device viewing must never
     // be blocked, so we evict the user's oldest-beaten session rather than
     // reject the new one — this only bounds runaway session leaks from a

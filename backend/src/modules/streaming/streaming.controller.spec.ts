@@ -120,6 +120,8 @@ describe('StreamingController.stopLiveSession', () => {
       mediaType: null,
       posterUrl: null,
       profileHash: null,
+      profileBase: null,
+      instanceId: null,
       quality: null,
       kind: 'directplay',
       deviceLabel: null,

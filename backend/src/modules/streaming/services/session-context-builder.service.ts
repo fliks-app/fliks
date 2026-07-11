@@ -40,6 +40,7 @@ export class SessionContextBuilder {
     return {
       userId: user?.id,
       username: user?.username,
+      instanceSuffix: live?.instanceId ?? undefined,
       mediaTitle: resolved.media?.title,
       mediaType: resolved.media?.type,
       posterUrl: resolved.media?.posterUrl ?? null,

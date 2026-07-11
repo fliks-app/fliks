@@ -398,6 +398,7 @@ export class StreamingController {
     startQuality: string | undefined,
     startAt: number | undefined,
     deviceType: 'mobile' | 'desktop',
+    instanceIdOverride?: string | null,
   ): Promise<void> {
     if (!startQuality || startQuality === 'auto') return;
     try {
@@ -409,6 +410,12 @@ export class StreamingController {
       );
       const ctx = this.sessionContextBuilder.build(req, resolved, mediaFileId);
       ctx.spawnReason = 'prewarm';
+      // playback-info carries no ?sid=, so the builder resolves the requester
+      // via findCurrent — which in a concurrent burst can be the other viewer.
+      // Pin the instance to the session we just created instead (#638).
+      if (instanceIdOverride !== undefined) {
+        ctx.instanceSuffix = instanceIdOverride ?? undefined;
+      }
       const profileHash = this.transcodingService.computeProfileHashForCtx(ctx);
       const existing = this.transcodingService.getExistingSession(
         mediaFileId,
@@ -842,6 +849,7 @@ export class StreamingController {
         startQuality,
         startAt,
         deviceType,
+        liveSession.instanceId,
       );
     }
 

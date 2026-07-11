@@ -2333,13 +2333,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     opts: { preservePause: boolean; unmute: boolean },
   ): Promise<void> {
     if (!this.engine || !this.mediaFileId) return;
-    // Drop the prior sid before minting a new one. A recovery loop that
-    // re-mints without this leaks one LiveSession per iteration, each
-    // surfacing as its own row on the admin activity dashboard. Fire-and-
-    // forget — a stale/expired sid 204s. (reloadStream already does this.)
+    // Drop the prior sid before minting a new one, and await it: a stall
+    // recovery still has a live prior session, and the backend would otherwise
+    // treat the re-mint as a concurrent sibling and split it onto a cold job.
     const prevSid = this.playbackInfo?.sessionId;
     if (prevSid) {
-      this.streamingApi
+      await this.streamingApi
         .stopSessions(this.mediaFileId, prevSid)
         .catch(() => {});
     }
