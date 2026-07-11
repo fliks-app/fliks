@@ -3233,6 +3233,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  a second quick switch) must not run two getPlaybackInfo + load cycles at
    *  once — that races the engine and leaks a session. */
   private reloadingStream = false;
+  /** Set once doReloadStream reaches a successful engine.load(). Lets the
+   *  reloadStream catch tell a dead surface (failure before load) from a live
+   *  one (a later throw over already-playing video). */
+  private reloadReachedPlayback = false;
 
   /** Reload the stream (e.g. when toggling burn-in subtitles or switching
    *  audio). User-initiated, so re-arm the native recovery guard and serialise
@@ -3240,9 +3244,33 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async reloadStream() {
     if (!this.engine || this.reloadingStream) return;
     this.reloadingStream = true;
+    this.reloadReachedPlayback = false;
     this.engine.resetRecoveryGuard();
     try {
       await this.doReloadStream();
+    } catch (e) {
+      // Only the mobile ExoPlayer/AVPlayer engine is torn down before
+      // re-negotiating (NativePlayer.stop()), so a transient failure there
+      // (playback-info / engine.load) leaves a dead surface with the stall
+      // watchdog quiesced — surface a terminal card so the user has a way out.
+      // Every other engine keeps its previous source playing from buffer and
+      // self-heals via the 410 -> sessionExpired recovery (Shaka/webOS, and the
+      // desktop-mpv / Tizen surfaces, whose Capacitor stop is a no-op), and a
+      // throw after load() means video is already playing — none should card.
+      console.error('[Player] reloadStream failed:', e);
+      if (
+        this.isNativeEngine() &&
+        !this.isDesktopNative &&
+        !this.isTizenEngine() &&
+        !this.reloadReachedPlayback &&
+        !this.destroyed &&
+        !this.state.error()
+      ) {
+        this.state.setError(this.translate.instant('player.playback_error'), {
+          source: 'session',
+        });
+      }
+      throw e;
     } finally {
       this.reloadingStream = false;
     }
@@ -3305,6 +3333,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     await this.authService.ensureStreamToken();
     const { url, mimeType } = this.buildPlayUrl({ startTime: currentPos });
     await this.engine.load(url, currentPos, mimeType);
+    this.reloadReachedPlayback = true;
 
     this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
     this.restorePlayState(wasPaused);
