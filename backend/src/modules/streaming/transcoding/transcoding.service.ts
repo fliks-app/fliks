@@ -454,7 +454,29 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         ctx,
       ),
     );
-    if (skipVerify) return session;
+    if (skipVerify) {
+      // Return without blocking the caller on seg-0, but still run the
+      // HW-crash → CPU fallback in the BACKGROUND. A HW encoder that crashes on
+      // the first frame otherwise leaves a 0-byte init.mp4 + a dead session in
+      // the map, and no other path re-spawns it on CPU — every later init/seg
+      // request then serves the 0-byte stub as a retryable 503 forever, so the
+      // title never plays. The fallback swaps a healthy CPU session into the map
+      // under the same key; subsequent requests pick it up.
+      void this.verifyHwAccelOrFallback(
+        session,
+        key,
+        mediaFileId,
+        quality,
+        absolutePath,
+        session.cachePath,
+        requestedSegment,
+        ctx,
+      ).catch(() => {
+        /* background safety net — a failure here just leaves the existing
+           transient-503 behaviour, never worse */
+      });
+      return session;
+    }
     return this.verifyHwAccelOrFallback(
       session,
       key,
@@ -657,6 +679,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         ctx,
       );
       this.applyContext(cpuSession, ctx);
+      // Carry the crashed session's identity forward so live-session cleanup
+      // can reap this fallback on the normal grace window; without it an
+      // abandoned fallback (viewer left before any segment request) would run
+      // to EOF unattended before fallbackIdleCleanup reaps it.
+      cpuSession.baseProfileHash = session.baseProfileHash;
+      cpuSession.variant = session.variant;
       this.sessions.set(key, cpuSession);
       return cpuSession;
     });
