@@ -537,8 +537,15 @@ export class StreamBuilderService {
     const srcChannels = source.audioChannels ?? 2;
     const srcCodec = (source.audioCodec ?? '').toLowerCase();
     const srcCap = audioChannelCap(profile, srcCodec);
+    // Copy the source audio only when it can live in an fMP4 segment. Without
+    // this gate a profile that claims mp3/alac would copy an MP3/ALAC track
+    // into muxed fMP4 whose CODECS string can't be declared, so MSE rejects the
+    // init segment (Shaka 3014/3015) — a black player instead of playback.
+    // Mirrors the DirectStream path's guard.
     const srcCompatible =
-      directPlayResult.audioSupported && srcChannels <= srcCap;
+      directPlayResult.audioSupported &&
+      srcChannels <= srcCap &&
+      FMP4_COMPATIBLE_AUDIO.has(srcCodec);
     const surroundCodec = profileAudioCodecs.includes('eac3')
       ? 'eac3'
       : profileAudioCodecs.includes('ac3')
