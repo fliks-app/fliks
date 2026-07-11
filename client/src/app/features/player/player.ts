@@ -293,6 +293,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private lastProgressPos = 0;
   private lastProgressAt = 0;
   private readonly stallTimeoutMs = 15_000;
+  // A backward seek can trigger a 10-30s backend respawn (awaitSeekUnlock's
+  // ceiling) with a frozen-but-healthy playhead; widen the window right after.
+  private lastSeekAt = 0;
+  private readonly seekStallGraceMs = 32_000;
 
   // ── Template-facing signal aliases (delegate to services) ──
   readonly loading = this.state.loading;
@@ -1701,6 +1705,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // until `awaitSeekUnlock` lets the engine resume driving it.
       this.state.seekLocked.set(true);
       this.state.currentTime.set(t);
+      this.lastSeekAt = Date.now();
       void this.awaitSeekUnlock(t);
     }
     // Suppress auto-skip for 2s after a manual seek so the user can step back
@@ -2532,7 +2537,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
       return;
     }
-    if (Date.now() - this.lastProgressAt >= this.stallTimeoutMs) {
+    const timeout =
+      Date.now() - this.lastSeekAt < this.seekStallGraceMs
+        ? this.seekStallGraceMs
+        : this.stallTimeoutMs;
+    if (Date.now() - this.lastProgressAt >= timeout) {
       this.resetStallWatchdog();
       void this.recoverFromLostSession();
     }
