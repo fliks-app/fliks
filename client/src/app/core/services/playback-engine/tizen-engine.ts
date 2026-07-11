@@ -143,6 +143,16 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.clearHandlers();
   }
 
+  /** Stop the shared AVPlay surface and drop the transparent-page class,
+   *  but only while this engine still owns the singleton. A stale load()
+   *  settling after a newer engine took over must not stop the newer
+   *  engine's playback. Mirrors the ownership guard in destroy(). */
+  private stopIfOwner(): void {
+    if (TizenEngine.activeEngine !== this) return;
+    try { webapis.avplay.stop(); } catch { /* ok */ }
+    document.documentElement.classList.remove('native-player-active');
+  }
+
   private applyDisplayRect() {
     if (!this.avObject) return;
     try {
@@ -199,8 +209,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       const timer = setTimeout(() => {
         if (settled) return;
         settled = true;
-        try { webapis.avplay.stop(); } catch { /* ok */ }
-        document.documentElement.classList.remove('native-player-active');
+        this.stopIfOwner();
         const msg = 'AVPlay prepareAsync timeout (30s)';
         this.emit('error', { code: -1, message: msg, errorKey: 'player.playback_error' });
         reject(new Error(msg));
@@ -232,16 +241,14 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
             resolve();
           }),
           (err) => done(() => {
-            try { webapis.avplay.stop(); } catch { /* ok */ }
-            document.documentElement.classList.remove('native-player-active');
+            this.stopIfOwner();
             this.emit('error', { code: -1, message: 'AVPlay prepare failed: ' + String(err), errorKey: 'player.playback_error' });
             reject(new Error('AVPlay prepare failed: ' + String(err)));
           }),
         );
       } catch (e) {
         done(() => {
-          try { webapis.avplay.stop(); } catch { /* ok */ }
-          document.documentElement.classList.remove('native-player-active');
+          this.stopIfOwner();
           const msg = 'AVPlay prepareAsync threw: ' + (e instanceof Error ? e.message : String(e));
           this.emit('error', { code: -1, message: msg, errorKey: 'player.playback_error' });
           reject(new Error(msg));
