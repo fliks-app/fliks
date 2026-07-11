@@ -351,9 +351,17 @@ export function buildFfmpegArgs(
   // playlist already advertises for this rung — display aspect stays stable
   // across the session even if the player re-parses the manifest. Resolved here
   // (ahead of the bitrate) so the HEVC Main-tier clamp below can use it.
+  // When an auto-crop trims the source frame the encoder scales the CROPPED
+  // picture, so the output size must follow the crop dimensions — otherwise a
+  // horizontal (pillarbox) crop scales back up to the uncropped width and the
+  // bitstream's RESOLUTION and codec level overshoot what the master playlist
+  // declares for this rung (the master already sizes from the crop). A
+  // letterbox crop keeps the source width, so its output width is unchanged.
+  const framedWidth = crop ? crop.width : sourceWidth;
+  const framedHeight = crop ? crop.height : sourceHeight;
   const outDims =
-    sourceWidth > 0 && sourceHeight > 0
-      ? profileResolution(profile, sourceWidth, sourceHeight)
+    framedWidth > 0 && framedHeight > 0
+      ? profileResolution(profile, framedWidth, framedHeight)
       : { width: profile.maxWidth, height: profile.maxHeight };
   const w = outDims.width;
   const h = outDims.height;

@@ -1476,3 +1476,27 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
     `);
   });
 });
+
+describe('buildFfmpegArgs — pillarbox crop output sizing', () => {
+  it('scales a pillarbox crop at the cropped width, not the uncropped source width', () => {
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'qsv',
+        videoVariant: HEVC_SDR,
+        profile: profile(PROFILE_4K),
+        // 4:3 content pillarboxed inside a 3840x2160 container.
+        crop: { width: 2880, height: 2160, x: 480, y: 0 },
+        sourceWidth: 3840,
+        sourceHeight: 2160,
+      }),
+      silentLog,
+    );
+    const vf = args[args.indexOf('-vf') + 1];
+    // The encoder must scale the crop at its own 2880 width so the bitstream
+    // RESOLUTION and codec level match what the master playlist declares for
+    // this rung — not scale back up to the uncropped 3840 width (which
+    // over-declares the level and trips strict MSE decoders).
+    expect(vf).toContain('crop=2880:2160:480:0');
+    expect(vf).not.toContain('3840');
+  });
+});
