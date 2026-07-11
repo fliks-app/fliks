@@ -357,7 +357,14 @@ export class CastPlayerService {
    *  and kills the backend transcode session so its ffmpeg stops; without
    *  this the session lingers until SESSION_TIMEOUT_MS, holding HW
    *  encoder slots and disk cache. */
+  private disconnectGrace: ReturnType<typeof setTimeout> | null = null;
+  private static readonly DISCONNECT_GRACE_MS = 45_000;
+
   clear() {
+    if (this.disconnectGrace) {
+      clearTimeout(this.disconnectGrace);
+      this.disconnectGrace = null;
+    }
     const mfId = this.mediaFileId();
     const castSid = this.liveSessionId();
     this.saveCastPosition(); // Save final position before clearing
@@ -376,12 +383,25 @@ export class CastPlayerService {
   }
 
   constructor() {
-    // Auto-clear when the cast session drops (TV remote stop, network drop,
-    // sender app closed) — without this hook the backend ffmpeg keeps
-    // running until the next stale-session sweep.
+    // Tear down when the cast session drops, but debounce it: a sender blip
+    // (Wi-Fi roam, sleep) drops the connection while the TV keeps playing, and
+    // clearing here would 410 it. CAF auto-rejoins (ORIGIN_SCOPED), so cancel
+    // the teardown on reconnect; a real stop just clears a bit later.
     effect(() => {
       const connected = this.cast.isConnected();
-      if (!connected && this.hasMedia()) this.clear();
+      if (connected) {
+        if (this.disconnectGrace) {
+          clearTimeout(this.disconnectGrace);
+          this.disconnectGrace = null;
+        }
+        return;
+      }
+      if (this.hasMedia() && !this.disconnectGrace) {
+        this.disconnectGrace = setTimeout(() => {
+          this.disconnectGrace = null;
+          if (!this.cast.isConnected() && this.hasMedia()) this.clear();
+        }, CastPlayerService.DISCONNECT_GRACE_MS);
+      }
     });
     // On every session connect, ask the receiver which audio/video codecs
     // its MediaSource accepts and cache the answer by device name. The
