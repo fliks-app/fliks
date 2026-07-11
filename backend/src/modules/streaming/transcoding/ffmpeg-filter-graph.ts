@@ -11,6 +11,9 @@ export interface VideoFilterContext {
   /** Source bit depth — picks the crop round-trip pixel format (10-bit → p010le
    *  so the HDR colour space survives the hwdownload → crop → hwupload trip). */
   sourceBitDepth: number;
+  /** Dolby Vision P5: tonemap via the RPU-aware libplacebo (Vulkan) chain
+   *  instead of the standard tonemap that misreads IPT-C2 (#636). */
+  dovi?: boolean;
 }
 
 /**
@@ -30,7 +33,7 @@ export interface VideoFilterContext {
 export function buildVideoFilters(
   ctx: VideoFilterContext,
 ): EncoderInput['filters'] {
-  const { crop, burnIn, tonemap, useVaapiTonemap, sourceBitDepth } = ctx;
+  const { crop, burnIn, tonemap, useVaapiTonemap, sourceBitDepth, dovi } = ctx;
   const cropStr = crop
     ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`
     : '';
@@ -48,7 +51,9 @@ export function buildVideoFilters(
   // yuv420p; the `tonemap` filter handles PQ/HLG linearisation internally (no
   // zscale/libzimg dependency).
   const tonemapCpu = tonemap
-    ? `format=gbrpf32le,tonemap=mobius:desat=0,format=yuv420p,`
+    ? dovi
+      ? `hwupload,libplacebo=apply_dolbyvision=1:tonemapping=bt.2390:colorspace=bt709:color_primaries=bt709:color_trc=bt709:format=nv12,hwdownload,format=nv12,`
+      : `format=gbrpf32le,tonemap=mobius:desat=0,format=yuv420p,`
     : '';
   // HW-crop round-trip: hwdownload → crop → hwupload. The explicit `format=`
   // matches the source bit depth (p010le for 10-bit) so crop runs in the

@@ -43,6 +43,7 @@ import {
   isTonemapOpenclEnabled,
   runTonemapOpenclProbe,
 } from './codec/tonemap-opencl-probe';
+import { runLibplaceboDvProbe } from './codec/libplacebo-dv-probe';
 import {
   generateMasterPlaylist,
   getAvailableProfiles,
@@ -138,6 +139,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.detectedHwAccel === 'vaapi'
     ) {
       void runTonemapOpenclProbe(this.log);
+    }
+    // Vulkan/libplacebo Dolby Vision P5 tonemap. Vendor-agnostic, so probe on
+    // any non-macOS host; a GPU-less server fails device init fast (fail-closed).
+    if (this.detectedHwAccel !== 'videotoolbox') {
+      void runLibplaceboDvProbe(this.log);
     }
 
     // Tight cleanup cadence — paired with the live-session 30 s TTL +
@@ -1589,10 +1595,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       videoVariant: ctx?.videoVariant,
       sourceVideoCodec: ctx?.sourceVideoCodec,
       sourceVideoBitrateBps: ctx?.sourceVideoBitrateBps,
-      sourceBitDepth: ctx?.isSourceHdr ? 10 : 8,
+      sourceBitDepth: ctx?.isSourceHdr || ctx?.sourceDvProfile === 5 ? 10 : 8,
       sourceWidth: ctx?.sourceWidth,
       sourceHeight: ctx?.sourceHeight,
       sourceHdrMetadata: ctx?.hdrMetadata,
+      sourceDvProfile: ctx?.sourceDvProfile,
+      sourceDvBlSignalCompatId: ctx?.sourceDvBlSignalCompatId,
     };
   }
 
