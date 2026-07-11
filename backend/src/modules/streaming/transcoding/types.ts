@@ -81,6 +81,9 @@ export type TonemapAlgo = 'auto' | 'opencl' | 'vaapi' | 'qsv';
 export interface SessionContext {
   userId?: number;
   username?: string;
+  /** Per-playback suffix appended to the profile hash so a concurrent second
+   *  viewer gets its own transcode job (#638). Undefined for the sole playback. */
+  instanceSuffix?: string;
   mediaTitle?: string;
   mediaType?: string;
   posterUrl?: string | null;

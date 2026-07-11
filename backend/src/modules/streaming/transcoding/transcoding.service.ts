@@ -265,9 +265,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    *  the session and reused as the session-map key segment so multiple
    *  profile variants of the same `(file, user)` coexist as siblings. */
   computeProfileHashForCtx(ctx: SessionContext | undefined): string {
-    return computeProfileHash(
+    const base = computeProfileHash(
       buildPlaybackProfileFromContext(ctx, getSegmentDuration() * 1000),
     );
+    // Instance suffix forks a concurrent playback onto its own job (#638);
+    // absent for the sole playback, so the hash is unchanged there.
+    return ctx?.instanceSuffix ? base + ctx.instanceSuffix : base;
   }
 
   /**

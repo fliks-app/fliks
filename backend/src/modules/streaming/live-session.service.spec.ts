@@ -72,15 +72,25 @@ describe('LiveSessionRegistry', () => {
     expect(svc.size()).toBe(0);
   });
 
-  it('listForJob filters by (user, file, profile)', () => {
+  it('listForJob filters by (user, file, profile); a concurrent dup is split off', () => {
     svc.create({ ...BASE, profileHash: 'aaa' });
-    svc.create({ ...BASE, profileHash: 'aaa' });
+    const dup = svc.create({ ...BASE, profileHash: 'aaa' });
     svc.create({ ...BASE, profileHash: 'bbb' });
     svc.create({ ...BASE, mediaFileId: 99, profileHash: 'aaa' });
-    expect(svc.listForJob(1, 42, 'aaa')).toHaveLength(2);
+    expect(dup.instanceId).not.toBeNull();
+    expect(dup.profileHash).toBe('aaa' + dup.instanceId);
+    expect(svc.listForJob(1, 42, 'aaa')).toHaveLength(1);
+    expect(svc.listForJob(1, 42, dup.profileHash!)).toHaveLength(1);
     expect(svc.listForJob(1, 42, 'bbb')).toHaveLength(1);
     expect(svc.listForJob(1, 99, 'aaa')).toHaveLength(1);
     expect(svc.listForJob(1, 99, 'bbb')).toHaveLength(0);
+  });
+
+  it('does not split a same-connection reload (shared sseConnectionId)', () => {
+    svc.create({ ...BASE, profileHash: 'aaa', sseConnectionId: 'c1' });
+    const reload = svc.create({ ...BASE, profileHash: 'aaa', sseConnectionId: 'c1' });
+    expect(reload.instanceId).toBeNull();
+    expect(reload.profileHash).toBe('aaa');
   });
 
   it('list returns Date-typed snapshots', () => {
@@ -309,7 +319,7 @@ describe('LiveSessionRegistry per-user cap', () => {
     svc.create({ ...BASE, userId: 99, username: 'bob' });
 
     expect(svc.size()).toBe(3);
-    expect(svc.listForJob(1, 42, 'aaaaaaaaaa')).toHaveLength(2);
+    expect(svc.list().filter((s) => s.userId === 1)).toHaveLength(2);
   });
 
   it('does not cap anonymous (null userId) sessions', () => {
