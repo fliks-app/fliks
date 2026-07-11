@@ -2551,6 +2551,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async recoverFromLostSession(): Promise<void> {
     if (this.destroyed) return;
     if (this.recoveringFromLostSession) return;
+    // A user reload (quality / audio switch, episode swap) re-mints the session
+    // and reloads the engine itself; a 410 or a heartbeat sessionLost inside
+    // that window is expected, and recovering here would race a second
+    // getPlaybackInfo + engine.load onto the same engine. Clear any recovery
+    // veil we were holding across a backoff — the in-flight reload now owns the
+    // session — so it isn't leaked true after the reload settles.
+    if (this.reloadingStream) {
+      this.state.setRecovering(false);
+      return;
+    }
     if (this.recoverRetryTimer) return; // a backoff retry is already queued
     if (this.recoverAttempts >= this.maxRecoverAttempts) {
       // Exhausted recovery — surface a terminal error card instead of
