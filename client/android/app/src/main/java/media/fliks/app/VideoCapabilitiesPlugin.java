@@ -10,7 +10,9 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -29,6 +31,10 @@ public class VideoCapabilitiesPlugin extends Plugin {
     @PluginMethod()
     public void getSupported(PluginCall call) {
         Set<String> codecs = new HashSet<>();
+        // codec key -> the most capable decoder's [maxWidth, maxHeight]. Gates
+        // Direct Play so a device whose HEVC/AV1 decoder tops out at 1080p
+        // doesn't advertise unbounded support and black-screen on a 4K source.
+        Map<String, int[]> maxRes = new HashMap<>();
         boolean hevcMain10 = false;
         boolean av1Main10 = false;
         try {
@@ -43,6 +49,17 @@ public class VideoCapabilitiesPlugin extends Plugin {
                         MediaCodecInfo.CodecCapabilities caps = info.getCapabilitiesForType(type);
                         if ("hevc".equals(key) && supportsMain10(caps, true)) hevcMain10 = true;
                         if ("av1".equals(key) && supportsMain10(caps, false)) av1Main10 = true;
+                        MediaCodecInfo.VideoCapabilities vc = caps.getVideoCapabilities();
+                        if (vc != null) {
+                            int w = vc.getSupportedWidths().getUpper();
+                            int h = vc.getSupportedHeights().getUpper();
+                            int[] cur = maxRes.get(key);
+                            // Keep the single most capable decoder (by area) so we
+                            // never report a width/height pair no one decoder does.
+                            if (cur == null || (long) w * h > (long) cur[0] * cur[1]) {
+                                maxRes.put(key, new int[] { w, h });
+                            }
+                        }
                     } catch (Throwable ignored) { /* per-codec best-effort */ }
                 }
             }
@@ -60,11 +77,22 @@ public class VideoCapabilitiesPlugin extends Plugin {
         containers.put("webm");
         containers.put("mkv");
 
+        // Per-codec max decodable resolution, so the backend refuses Direct
+        // Play of a source above the device's real decode ceiling.
+        JSObject resolutions = new JSObject();
+        for (Map.Entry<String, int[]> e : maxRes.entrySet()) {
+            JSObject wh = new JSObject();
+            wh.put("width", e.getValue()[0]);
+            wh.put("height", e.getValue()[1]);
+            resolutions.put(e.getKey(), wh);
+        }
+
         JSObject result = new JSObject();
         result.put("videoCodecs", arr);
         result.put("hevcMain10", hevcMain10);
         result.put("av1Main10", av1Main10);
         result.put("containers", containers);
+        result.put("resolutions", resolutions);
         call.resolve(result);
     }
 

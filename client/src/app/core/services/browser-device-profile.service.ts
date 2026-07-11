@@ -29,6 +29,10 @@ interface NativeVideoCaps {
   hevcMain10: boolean;
   av1Main10: boolean;
   containers: string[];
+  /** Per-codec max decodable resolution (codec key → {width, height}) from the
+   *  device's MediaCodec VideoCapabilities. Absent on platforms whose plugin
+   *  doesn't report it, leaving the codec unconstrained as before. */
+  resolutions?: Record<string, { width: number; height: number }>;
 }
 interface VideoCapabilitiesPlugin {
   getSupported(): Promise<NativeVideoCaps>;
@@ -324,6 +328,7 @@ export class BrowserDeviceProfileService {
             codec: 'h264',
             profiles: ['baseline', 'constrained baseline', 'main', 'high'],
             maxBitDepth: 8,
+            ...this.nativeResCondition(nv, 'h264'),
           });
         } else if (c === 'hevc') {
           videoCodecs.push('hevc', 'h265', 'hvc1', 'hev1');
@@ -331,6 +336,7 @@ export class BrowserDeviceProfileService {
             codec: 'hevc',
             profiles: nv.hevcMain10 ? ['main', 'main 10'] : ['main'],
             maxBitDepth: nv.hevcMain10 ? 10 : 8,
+            ...this.nativeResCondition(nv, 'hevc'),
           });
         } else if (c === 'av1') {
           videoCodecs.push('av1');
@@ -338,6 +344,7 @@ export class BrowserDeviceProfileService {
             codec: 'av1',
             profiles: nv.av1Main10 ? ['main', 'high'] : ['main'],
             maxBitDepth: nv.av1Main10 ? 10 : 8,
+            ...this.nativeResCondition(nv, 'av1'),
           });
         } else {
           videoCodecs.push(c); // vp9 / vp8 — no fine-grained conditions
@@ -525,6 +532,19 @@ export class BrowserDeviceProfileService {
     const full = codec ? `${mime}; codecs="${codec}"` : mime;
     if (hasMSE) return MediaSource.isTypeSupported(full);
     return !!video.canPlayType(full);
+  }
+
+  /** Turn the native plugin's per-codec decode ceiling into a codec-condition
+   *  fragment. Empty when the plugin didn't report a resolution for this codec,
+   *  leaving it unconstrained (the backend then Direct Plays any resolution). */
+  private nativeResCondition(
+    nv: NativeVideoCaps,
+    key: string,
+  ): { maxWidth?: number; maxHeight?: number } {
+    const r = nv.resolutions?.[key];
+    return r && r.width > 0 && r.height > 0
+      ? { maxWidth: r.width, maxHeight: r.height }
+      : {};
   }
 
   /** Probe max H.264 level by testing progressively higher levels */
