@@ -226,6 +226,10 @@ export interface SessionContext {
    *  encoder signals the source's real mastering display / content light
    *  instead of a generic 1000-nit reference. */
   hdrMetadata?: import('./codec/types').HdrStaticMetadata;
+  /** Dolby Vision profile + base-layer compat id, threaded from streamInfo so
+   *  ffmpeg-args can gate the P5 libplacebo tonemap (#636). */
+  sourceDvProfile?: number;
+  sourceDvBlSignalCompatId?: number;
 }
 
 export interface TranscodeSession {

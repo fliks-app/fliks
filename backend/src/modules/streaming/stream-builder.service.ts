@@ -160,6 +160,12 @@ export class StreamBuilderService {
 
     // HDR detection
     const isSourceHdr = !!source.hdrFormat;
+    // Dolby Vision Profile 5 (single-layer IPT-PQ-C2, no HDR10 base): decodes
+    // green/purple wherever copied, and its metadata often lives only in the RPU
+    // (no HDR VUI), so it drives transcode+tonemap independently of isSourceHdr.
+    const dvP5 =
+      v?.dvProfile === 5 &&
+      (v?.dvBlSignalCompatId === 0 || v?.dvBlSignalCompatId == null);
     const clientSupportsHdr = profile.supportsHdr === true;
     // Codec selector: picks the variant the encoder pipeline will produce
     // when the playback path lands on transcode. The result is threaded by
@@ -178,7 +184,7 @@ export class StreamBuilderService {
       {
         width: source.width ?? 0,
         height: source.height ?? 0,
-        hdr: (source.hdrFormat as CodecVariant['hdr']) ?? null,
+        hdr: dvP5 ? null : ((source.hdrFormat as CodecVariant['hdr']) ?? null),
         codec: normaliseSourceCodec(source.videoCodec) ?? undefined,
       },
       profile,
@@ -199,7 +205,7 @@ export class StreamBuilderService {
     // re-encode then runs the tonemap filter; copy paths (DirectPlay / remux)
     // never tone-map. AVPlayer rejects with -12927 if an H.264 re-encode
     // keeps the HDR VUI, hence the filter.
-    const transcodeTonemaps = isSourceHdr && !useHdrLadder;
+    const transcodeTonemaps = (isSourceHdr || dvP5) && !useHdrLadder;
     // useHdrLadder and selectedVariant are returned to the controller
     // via EvaluateResult; the controller threads them onto the live
     // session rather than the service writing side-effects.
@@ -237,6 +243,7 @@ export class StreamBuilderService {
     // the source codec on purpose: AV1, VP9 and HEVC 10-bit HDR all qualify.
     const clientCanPresentHdr =
       isSourceHdr &&
+      !dvP5 &&
       clientSupportsHdr &&
       directPlayResult.videoSupported &&
       directPlayResult.videoConditionsMet;
@@ -245,13 +252,13 @@ export class StreamBuilderService {
     // tone-map only when the re-encode is actually SDR — when the HDR ladder
     // preserves it the real blocker is whatever tryDirectPlay already
     // recorded (resolution, level, …).
-    if (isSourceHdr && !clientCanPresentHdr) {
+    if ((isSourceHdr || dvP5) && !clientCanPresentHdr) {
       if (directPlayResult.canDirectPlay)
         directPlayResult.canDirectPlay = false;
       if (transcodeTonemaps) {
         reasons.push({
           flag: 'VideoHdrNotSupported',
-          message: `HDR → SDR (tone mapping ${source.hdrFormat})`,
+          message: `HDR → SDR (tone mapping ${dvP5 ? 'Dolby Vision P5' : source.hdrFormat})`,
         });
       }
     }
@@ -326,6 +333,7 @@ export class StreamBuilderService {
       directPlayResult.videoSupported &&
       directPlayResult.videoConditionsMet &&
       (!isSourceHdr || clientCanPresentHdr) &&
+      !dvP5 &&
       !needsBurnIn &&
       !needsCrop;
 

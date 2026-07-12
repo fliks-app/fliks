@@ -91,6 +91,8 @@ export class SessionContextBuilder {
       ),
       isSourceHdr: !!si?.video?.[0]?.hdrFormat,
       hdrMetadata: si?.video?.[0]?.hdrMetadata,
+      sourceDvProfile: si?.video?.[0]?.dvProfile,
+      sourceDvBlSignalCompatId: si?.video?.[0]?.dvBlSignalCompatId,
       // Variant chosen by stream-builder's codec selector at playback-info time,
       // threaded through every session spawn so ffmpeg-args resolves the
       // matching encoder descriptor. Undefined only for legacy callers that

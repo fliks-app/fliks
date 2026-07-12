@@ -32,6 +32,7 @@ import { hevcMainTierCapBps } from './codec/codec-strings';
 import { varStreamMapLayout } from './audio-layout';
 import { resolveEncodePipeline } from './encode-pipeline';
 import { buildVideoFilters } from './ffmpeg-filter-graph';
+import { isLibplaceboDvEnabled } from './codec/libplacebo-dv-probe';
 import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
 
 /**
@@ -94,6 +95,10 @@ export interface BuildFfmpegArgsOptions {
    *  display tonemaps to the real peak luminance; the encoders fall back to a
    *  generic 1000-nit reference when absent. */
   sourceHdrMetadata?: HdrStaticMetadata;
+  /** Dolby Vision profile + base-layer compat id — gate the P5 libplacebo
+   *  tonemap (#636). */
+  sourceDvProfile?: number;
+  sourceDvBlSignalCompatId?: number;
   /** Audio output decision — see {@link SessionContext.audioPlan}. When
    *  omitted, ffmpeg-args falls back to AAC stereo at the profile bitrate
    *  (safe default that plays everywhere). */
@@ -239,6 +244,8 @@ export function buildFfmpegArgs(
     sourceWidth = 0,
     sourceHeight = 0,
     sourceHdrMetadata,
+    sourceDvProfile,
+    sourceDvBlSignalCompatId,
     tonemapAlgo = 'auto',
   } = opts;
 
@@ -409,6 +416,13 @@ export function buildFfmpegArgs(
   }
   const variant: CodecVariant = videoVariant;
   const isHdrOutput = variant.hdr !== null;
+  // Dolby Vision P5 tonemaps through the RPU-aware libplacebo (Vulkan) chain,
+  // on CPU decode/encode, only when the boot probe confirmed it works (#636).
+  const useDoviTonemap =
+    !!tonemap &&
+    sourceDvProfile === 5 &&
+    (sourceDvBlSignalCompatId === 0 || sourceDvBlSignalCompatId == null) &&
+    isLibplaceboDvEnabled();
 
   // Image-based subtitle burn-in (PGS/VOBSUB) is composited via -filter_complex
   // below, reusing the encoder's video chain so the accelerated scale/tonemap
@@ -427,7 +441,7 @@ export function buildFfmpegArgs(
     qsvNativeAvailable,
     useVaapiTonemap,
   } = resolveEncodePipeline(variant, {
-    hwAccel,
+    hwAccel: useDoviTonemap ? 'none' : hwAccel,
     crop: !!crop,
     burnIn: !!burnIn?.filter,
     tonemap: !!tonemap,
@@ -540,6 +554,9 @@ export function buildFfmpegArgs(
   if (tonemap && !useVaapiTonemap && decoder.outputSurface === 'vaapi') {
     args.push('-init_hw_device', 'opencl=ocl:0.0');
   }
+  if (useDoviTonemap) {
+    args.push('-init_hw_device', 'vulkan=vk:0', '-filter_hw_device', 'vk');
+  }
 
   args.push('-i', inputPath);
 
@@ -590,6 +607,7 @@ export function buildFfmpegArgs(
       tonemap,
       useVaapiTonemap,
       sourceBitDepth,
+      dovi: useDoviTonemap,
     }),
     tonemap,
     tonemapPath,
