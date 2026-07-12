@@ -14,6 +14,7 @@ import {
   pickExtractor,
   type CropArea,
 } from './thumbnail-extractors';
+import { TranscodingService } from './transcoding';
 
 const execFileAsync = promisify(execFile);
 
@@ -95,9 +96,21 @@ export class ThumbnailService {
     private readonly eventsService: EventsService,
     @InjectRepository(Command)
     private readonly commandRepo: Repository<Command>,
+    private readonly transcoding: TranscodingService,
   ) {
     this.log.log(
       `Thumbnail extraction backends: ${describeBackends()} (SEEK_CONCURRENCY=${SEEK_CONCURRENCY}, SPRITE_CONCURRENCY=${SPRITE_CONCURRENCY})`,
+    );
+  }
+
+  /** Pick the frame extractor, forcing the CPU path while a live transcode is
+   *  using the GPU. HW sprite decodes share the same render node as the
+   *  transcode's decode/VPP pipeline with no GPU budget between them, so an
+   *  unguarded sprite burst starves (or, on QSV, kills) the live session. */
+  private chooseExtractor(crop?: CropArea) {
+    return pickExtractor(
+      crop,
+      HWACCEL_AVAILABLE && this.transcoding.hasActiveTranscode(),
     );
   }
 
@@ -266,7 +279,7 @@ export class ThumbnailService {
 
     // Ask the factory which backend will run, so the log line matches
     // exactly what ffmpeg sees per frame.
-    const decode = pickExtractor(crop).describe();
+    const decode = this.chooseExtractor(crop).describe();
     this.log.log(
       `Sprite START for "${label}" (file #${mediaFileId}): ${count} thumbs @ ${interval}s interval, workers=${SEEK_CONCURRENCY}, decode=${decode}, otherSprites=${otherRunning}, queued=${this.queue.length}, srcSize=${srcSizeMb ?? '?'}MB, crop=${
         crop ? `${crop.width}x${crop.height}+${crop.x},${crop.y}` : 'none'
@@ -597,7 +610,7 @@ export class ThumbnailService {
     crop?: CropArea,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const args = pickExtractor(crop).buildArgs({
+      const args = this.chooseExtractor(crop).buildArgs({
         inputPath,
         seekSeconds,
         outputPath,

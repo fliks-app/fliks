@@ -231,6 +231,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return this.detectedHwAccel;
   }
 
+  /** True while any transcode ffmpeg is still running. ThumbnailService reads it
+   *  to keep HW sprite extraction off the GPU while a live transcode needs the
+   *  decode/VPP pipeline (ionice/nice only de-prioritise CPU, not the GPU). */
+  hasActiveTranscode(): boolean {
+    for (const session of this.sessions.values()) {
+      if (session.process.exitCode === null) return true;
+    }
+    return false;
+  }
+
   /** List of tone-mapping algorithms the current host can run.
    *  `'auto'` is always available — it maps to the platform's native
    *  HW path (`scale_vt` on macOS / VideoToolbox, tonemap_opencl or
