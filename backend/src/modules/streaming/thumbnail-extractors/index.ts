@@ -51,9 +51,15 @@ const BACKENDS: ExtractorBackend[] = (() => {
   return [new SwExtractor()];
 })();
 
-/** Pick the highest-priority backend that can handle the given crop. */
-export function pickExtractor(crop?: CropArea): ExtractorBackend {
+/** Pick the highest-priority backend that can handle the given crop.
+ *  `forceSoftware` skips every HW backend and returns the CPU extractor —
+ *  used to keep sprite decodes off the GPU while a live transcode owns it. */
+export function pickExtractor(
+  crop?: CropArea,
+  forceSoftware = false,
+): ExtractorBackend {
   for (const b of BACKENDS) {
+    if (forceSoftware && b.name !== 'sw') continue;
     if (b.supports(crop)) return b;
   }
   // Unreachable — SwExtractor.supports() always returns true.
