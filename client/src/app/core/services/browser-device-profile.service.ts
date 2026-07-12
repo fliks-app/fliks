@@ -481,21 +481,18 @@ export class BrowserDeviceProfileService {
       supportsHdr = hdrDisplay && has10bitCodec;
     }
 
-    // Dolby Vision passthrough capability. iOS/Android report it from the native
-    // probe (DV HW decoder / DV panel type). webOS OLEDs are assumed DV-capable
-    // when the panel is HDR (no per-model probe; optimistic). Web/Shaka has no DV
-    // (browser MSE never decodes dvh1), and Tizen is HLS-only with DV signaling
-    // not yet wired, so both stay false.
-    // DV is a superset of HDR, so it never outlives supportsHdr (keeps the
-    // forceDisableHdr override consistent, and a non-HDR panel can't present DV).
-    let supportsDolbyVision: boolean;
-    if (Capacitor.isNativePlatform()) {
-      supportsDolbyVision = supportsHdr && (this.nativeDolbyVision ?? false);
-    } else if (tvPlatform === 'webos') {
-      supportsDolbyVision = supportsHdr;
-    } else {
-      supportsDolbyVision = false;
-    }
+    // Dolby Vision passthrough capability, gated under supportsHdr (DV ⊆ HDR, so
+    // it never outlives HDR and the forceDisableHdr override stays consistent).
+    // iOS/Android report it from the native probe (DV HW decoder / DV panel
+    // type). Non-native targets (webOS `<video>`, desktop/web browsers) probe the
+    // DV codec strings directly: LG webOS pipelines answer canPlayType for
+    // dvh1/dvhe on DV panels, while browsers and HDR10-only TVs return empty and
+    // correctly stay false (no green/purple from a copied P5).
+    const supportsDolbyVision =
+      supportsHdr &&
+      (Capacitor.isNativePlatform()
+        ? this.nativeDolbyVision ?? false
+        : this.probeDolbyVision(video, hasMSE));
 
     const useTs = readUseTsOverride();
     if (useTs) console.warn('[DeviceProfile] useTs override active');
@@ -564,6 +561,18 @@ export class BrowserDeviceProfileService {
     const full = codec ? `${mime}; codecs="${codec}"` : mime;
     if (hasMSE) return MediaSource.isTypeSupported(full);
     return !!video.canPlayType(full);
+  }
+
+  /** Probe single-layer Dolby Vision decode (profiles 5 and 8, dvh1/dvhe tags).
+   *  Returns true only if the pipeline actually claims a DV codec — so DV panels
+   *  report true and HDR10-only displays / browsers report false. */
+  private probeDolbyVision(video: HTMLVideoElement, hasMSE: boolean): boolean {
+    return (
+      this.testCodec(video, hasMSE, 'video/mp4', 'dvh1.05.06') ||
+      this.testCodec(video, hasMSE, 'video/mp4', 'dvh1.08.06') ||
+      this.testCodec(video, hasMSE, 'video/mp4', 'dvhe.05.06') ||
+      this.testCodec(video, hasMSE, 'video/mp4', 'dvhe.08.06')
+    );
   }
 
   /** Turn the native plugin's per-codec decode ceiling into a codec-condition
