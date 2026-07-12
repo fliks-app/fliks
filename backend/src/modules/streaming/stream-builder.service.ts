@@ -29,6 +29,7 @@ import { resolveEncodePipeline } from './transcoding/encode-pipeline';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { bucketResolutionHeight } from '../../common/utils/resolution.util';
 import { normaliseSourceCodec } from './transcoding/codec/normalise';
+import { deriveDvInfo, isDvProfile5 } from './transcoding/codec/dolby-vision';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
 import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
 
@@ -158,14 +159,14 @@ export class StreamBuilderService {
       crop: autoCropEnabled ? v?.crop : undefined,
     };
 
-    // HDR detection
+    // HDR / Dolby Vision detection
     const isSourceHdr = !!source.hdrFormat;
-    // Dolby Vision Profile 5 (single-layer IPT-PQ-C2, no HDR10 base): decodes
-    // green/purple wherever copied, and its metadata often lives only in the RPU
-    // (no HDR VUI), so it drives transcode+tonemap independently of isSourceHdr.
-    const dvP5 =
-      v?.dvProfile === 5 &&
-      (v?.dvBlSignalCompatId === 0 || v?.dvBlSignalCompatId == null);
+    const dv = deriveDvInfo(v);
+    // Profile 5 (single-layer IPT-PQ-C2, no HDR10 base) decodes green/purple
+    // wherever a non-DV client copies it, and its metadata often lives only in
+    // the RPU (no HDR VUI), so it drives transcode+tonemap independently of
+    // isSourceHdr — unless the client can present DV (see clientCanPresentDv).
+    const dvP5 = isDvProfile5(dv);
     const clientSupportsHdr = profile.supportsHdr === true;
     // Codec selector: picks the variant the encoder pipeline will produce
     // when the playback path lands on transcode. The result is threaded by
@@ -248,11 +249,22 @@ export class StreamBuilderService {
       directPlayResult.videoSupported &&
       directPlayResult.videoConditionsMet;
 
-    // HDR the client can't present as-is forces a transcode. Flag the
+    // Single-layer DV (P5, P8.x) carries its RPU inside the HEVC NALs, so a raw
+    // copy preserves DV for a client that declares it can present it. Dual-layer
+    // P7's enhancement layer can't ride HLS, so dv.singleLayer excludes it.
+    const clientCanPresentDv =
+      profile.supportsDolbyVision === true &&
+      dv.singleLayer &&
+      directPlayResult.videoSupported &&
+      directPlayResult.videoConditionsMet;
+    const clientCanPresentDynamicRange =
+      clientCanPresentHdr || clientCanPresentDv;
+
+    // HDR/DV the client can't present as-is forces a transcode. Flag the
     // tone-map only when the re-encode is actually SDR — when the HDR ladder
     // preserves it the real blocker is whatever tryDirectPlay already
     // recorded (resolution, level, …).
-    if ((isSourceHdr || dvP5) && !clientCanPresentHdr) {
+    if ((isSourceHdr || dvP5) && !clientCanPresentDynamicRange) {
       if (directPlayResult.canDirectPlay)
         directPlayResult.canDirectPlay = false;
       if (transcodeTonemaps) {
@@ -332,8 +344,7 @@ export class StreamBuilderService {
     const sourceCopyable =
       directPlayResult.videoSupported &&
       directPlayResult.videoConditionsMet &&
-      (!isSourceHdr || clientCanPresentHdr) &&
-      !dvP5 &&
+      ((!isSourceHdr && !dvP5) || clientCanPresentDynamicRange) &&
       !needsBurnIn &&
       !needsCrop;
 

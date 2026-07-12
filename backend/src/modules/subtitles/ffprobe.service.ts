@@ -55,9 +55,15 @@ export interface VideoStreamInfo {
   colorPrimaries?: string;
   hdrFormat?: HdrFormat;
   /** Dolby Vision profile from the stream's DOVI configuration record (e.g. 5,
-   *  8), with its base-layer signal compatibility id (e.g. 8.1, 8.4). */
+   *  8), with its base-layer signal compatibility id (e.g. 8.1, 8.4), level, and
+   *  which layers the record declares. `dvElPresent` tells single-layer (P5/P8)
+   *  from dual-layer P7, whose enhancement layer is unreachable over HLS. */
   dvProfile?: number;
   dvBlSignalCompatId?: number;
+  dvLevel?: number;
+  dvRpuPresent?: boolean;
+  dvBlPresent?: boolean;
+  dvElPresent?: boolean;
   /** Source HDR10 static metadata (SMPTE ST 2086 mastering display + CTA-861.3
    *  content light), probed via frame side-data for HDR10 sources. Drives the
    *  encoder's master-display / max-cll so the display tonemaps to the source's
@@ -127,7 +133,11 @@ interface FfprobeStream {
   side_data_list?: {
     side_data_type?: string;
     dv_profile?: number;
+    dv_level?: number;
     dv_bl_signal_compatibility_id?: number;
+    rpu_present_flag?: number;
+    bl_present_flag?: number;
+    el_present_flag?: number;
   }[];
   channels?: number;
   channel_layout?: string;
@@ -379,6 +389,10 @@ export class FfprobeService {
             hdrFormat: this.deriveHdrFormat(s.color_transfer, s.color_primaries),
             dvProfile: dovi?.dv_profile,
             dvBlSignalCompatId: dovi?.dv_bl_signal_compatibility_id,
+            dvLevel: dovi?.dv_level,
+            dvRpuPresent: dovi?.rpu_present_flag === 1,
+            dvBlPresent: dovi?.bl_present_flag === 1,
+            dvElPresent: dovi?.el_present_flag === 1,
           };
         });
 
