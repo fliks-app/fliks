@@ -32,6 +32,22 @@ const dvHevcClient: DeviceProfileDto = {
   supportsDolbyVision: true,
 } as never;
 
+// DV-capable client that can NOT raw-play MKV (iOS AVPlayer: mp4/mov only), so a
+// DV-in-MKV source can't DirectPlay and would otherwise fall to a remux copy.
+const dvMp4OnlyClient: DeviceProfileDto = {
+  containers: ['mp4'],
+  directPlayProfiles: [
+    { containers: ['mp4'], videoCodecs: ['hevc'], audioCodecs: ['aac'] },
+  ],
+  codecConditions: [
+    { codec: 'hevc', profiles: ['main', 'main 10'], maxBitDepth: 10, maxWidth: 3840, maxHeight: 2160, maxLevel: 180 },
+  ],
+  supportsHdr: true,
+  supportsDirectPlay: true,
+  supportsDolbyVision: true,
+  maxAudioChannels: 6,
+} as never;
+
 const resolved = (
   dvProfile?: number,
   dvBlSignalCompatId?: number,
@@ -121,5 +137,14 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     const out = svc().evaluate(r, dvHevcClient, 'tok');
     expect(out.response.playMethod).toBe('DirectPlay');
     expect(out.response.videoCopyStream).toBe(true);
+  });
+
+  it('transcodes (not remuxes) P5 for a DV client that cannot raw-play the container', () => {
+    // iOS-style: MKV source can't DirectPlay, and the fMP4 remux would drop the
+    // DV config box → green/purple. P5 must tonemap instead of copy.
+    const r = svc().evaluate(resolved(5, 0), dvMp4OnlyClient, 'tok');
+    expect(r.response.playMethod).toBe('Transcode');
+    expect(r.response.videoCopyStream).toBeFalsy();
+    expect(r.response.tonemapping).toBe(true);
   });
 });

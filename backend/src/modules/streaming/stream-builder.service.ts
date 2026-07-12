@@ -426,7 +426,11 @@ export class StreamBuilderService {
     // Cannot remux if tone mapping or burn-in is needed (video must be re-encoded).
     // A lower explicit rung / ABR-on-auto wants a re-encoded ladder, not a
     // source-resolution remux copy, so `forceLadder` skips this path too.
-    const canCopyVideo = sourceCopyable && !forceLadder;
+    // Dolby Vision Profile 5 is never remuxed: the fMP4 muxer drops the DV
+    // configuration box on `-c:v copy`, so a copied P5 (whose base layer isn't
+    // valid HDR10) would render green/purple. P5 rides raw DirectPlay (whole
+    // original file, DV intact) or a tonemap transcode instead — never remux.
+    const canCopyVideo = sourceCopyable && !forceLadder && !dvP5;
     if (canCopyVideo) {
       // Some audio codecs the device profile claims to support are
       // only playable in their NATIVE container (e.g. MP3 via
