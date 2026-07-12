@@ -2,6 +2,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import type { PlaybackEngine } from './playback-engine/playback-engine';
 import {
+  isNetworkOrAbort,
   isUndecodableError,
   userMessageKeyFor,
   type PlaybackError,
@@ -59,9 +60,19 @@ export class PlayerStateService {
    *  "Playback error" overlay. Owned by PlayerComponent's recovery flow. */
   private recovering = false;
 
+  /** Live check for whether the current media is Dolby Vision served untouched
+   *  (DirectPlay/DirectStream). Read at error time — not cached — so a mid-session
+   *  play-method change (e.g. a quality switch to a tonemapped transcode) is
+   *  always reflected. Registered once by PlayerComponent. */
+  private dolbyVisionProbe: (() => boolean) | null = null;
+
   setRecovering(value: boolean): void {
     this.recovering = value;
     if (value) this.error.set(null);
+  }
+
+  setDolbyVisionProbe(probe: (() => boolean) | null): void {
+    this.dolbyVisionProbe = probe;
   }
 
   /** Set the error card from a translated one-liner plus optional
@@ -128,14 +139,21 @@ export class PlayerStateService {
         return;
       }
       const source = e.source ?? 'engine';
-      // Prefer the engine's explicit i18n key (Tizen/webOS surface platform
-      // strings); otherwise map the source/code/category to a category
-      // message. The raw fields are kept for the diagnostics block.
-      const userMessage = e.errorKey
-        ? this.translate.instant(e.errorKey)
-        : this.translate.instant(
-            userMessageKeyFor({ source, code: e.code, category: e.category }),
-          );
+      // A DV passthrough that fails to decode wins over everything else (even a
+      // platform errorKey): tell the user Dolby Vision failed on this device.
+      // Otherwise prefer the engine's explicit i18n key (Tizen/webOS surface
+      // platform strings), else map source/code/category to a category message.
+      // The raw fields are kept for the diagnostics block regardless.
+      const dvFailure =
+        (this.dolbyVisionProbe?.() ?? false) &&
+        !isNetworkOrAbort({ source, code: e.code, category: e.category });
+      const userMessage = dvFailure
+        ? this.translate.instant('player.dolby_vision_decode_failed')
+        : e.errorKey
+          ? this.translate.instant(e.errorKey)
+          : this.translate.instant(
+              userMessageKeyFor({ source, code: e.code, category: e.category }),
+            );
       this.setError(userMessage, {
         source,
         code: e.code,
