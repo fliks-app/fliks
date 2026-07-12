@@ -7,8 +7,8 @@
 FROM ubuntu:24.04 AS libplacebo-dovi-build
 ARG LIBPLACEBO_TAG=v6.338.2
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl git build-essential pkg-config \
-    meson ninja-build glslang-dev libvulkan-dev liblcms2-dev python3-mako \
+    ca-certificates curl git build-essential pkg-config libssl-dev \
+    meson ninja-build libshaderc-dev libvulkan-dev liblcms2-dev python3-mako python3-jinja2 \
   && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
   && . "$HOME/.cargo/env" \
   && cargo install cargo-c \
@@ -19,7 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
        https://code.videolan.org/videolan/libplacebo.git /tmp/libplacebo \
   && cd /tmp/libplacebo \
   && PKG_CONFIG_PATH=/opt/dvlibs/lib/pkgconfig meson setup build \
-       -Dlibdovi=enabled -Dvulkan=enabled -Dglslang=enabled \
+       -Dlibdovi=enabled -Dvulkan=enabled -Dshaderc=enabled -Dglslang=disabled \
+       -Dopengl=disabled -Dd3d11=disabled \
        -Ddemos=false -Dtests=false --buildtype=release --prefix=/opt/plbo --libdir=lib \
   && ninja -C build && ninja -C build install \
   && rm -rf /var/lib/apt/lists/* "$HOME/.cargo/registry" "$HOME/.rustup" \
