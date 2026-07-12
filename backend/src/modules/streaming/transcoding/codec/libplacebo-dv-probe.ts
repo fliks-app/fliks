@@ -22,6 +22,23 @@ export function isLibplaceboDvEnabled(): boolean {
   return probedOnce && enabled;
 }
 
+/** True when the libplacebo ffmpeg loads is actually linked against libdovi.
+ *  The stock Ubuntu apt libplacebo is NOT, and there `apply_dolbyvision` is a
+ *  silent no-op — so without this check the probe would falsely enable and ship
+ *  an uncorrected P5. `ldd` prints the full transitive closure, so libdovi
+ *  appears iff libplacebo pulled it in. */
+async function libdoviLinked(): Promise<boolean> {
+  try {
+    await execFileAsync('sh', [
+      '-c',
+      'ldd "$(command -v ffmpeg)" 2>/dev/null | grep -qi libdovi',
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function runLibplaceboDvProbe(log: Logger): Promise<void> {
   const t0 = Date.now();
   const sample = path.join(
@@ -29,6 +46,9 @@ export async function runLibplaceboDvProbe(log: Logger): Promise<void> {
     `fliks-libplacebo-dv-probe-${process.pid}.hevc`,
   );
   try {
+    if (!(await libdoviLinked())) {
+      throw new Error('libplacebo is not linked against libdovi');
+    }
     await execFileAsync(
       'ffmpeg',
       [
