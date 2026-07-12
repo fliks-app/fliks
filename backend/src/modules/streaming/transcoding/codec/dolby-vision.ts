@@ -6,9 +6,6 @@ export interface DvInfo {
   profile?: number;
   compatId?: number;
   singleLayer: boolean;
-  /** EXT-X-SUPPLEMENTAL-CODECS brand for the base-layer compatibility:
-   *  db1p = 8.1 (HDR10 base), db4h = 8.4 (HLG base). */
-  supplementalTag: 'db1p' | 'db4h' | null;
 }
 
 export interface DvStream {
@@ -22,9 +19,7 @@ export function deriveDvInfo(v?: DvStream): DvInfo {
   const compatId = v?.dvBlSignalCompatId;
   const singleLayer =
     (profile === 5 || profile === 8) && v?.dvElPresent !== true;
-  const supplementalTag =
-    compatId === 1 ? 'db1p' : compatId === 4 ? 'db4h' : null;
-  return { profile, compatId, singleLayer, supplementalTag };
+  return { profile, compatId, singleLayer };
 }
 
 /** Profile 5: single-layer IPT-PQ-C2 with no HDR10 base. A non-DV client that
