@@ -3242,6 +3242,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   async onSelectQualityById(id: string) {
     const option = this.availableQualities().find(q => q.id === id);
     if (!option) return;
+    // Re-selecting the active rung is a no-op: selectQuality() short-circuits
+    // internally, but reloadStream() would still kill + re-mint the session
+    // (ffmpeg stop, playback-info, full engine.load) for zero change.
+    if (id === this.activeQualityId()) {
+      this.resetHideTimer();
+      return;
+    }
     const mode = this.playbackMode();
     // Picking a rung below source — or any rung while already on the HLS
     // ladder — re-negotiates playback: reloadStream() re-requests playback-info
