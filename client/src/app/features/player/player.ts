@@ -728,7 +728,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       videoPlaybackMode = this.translate.instant('player.stats_direct_playback');
     } else {
       const hwLabel: Record<string, string> = { qsv: 'QSV', vaapi: 'VAAPI', nvenc: 'NVENC', videotoolbox: 'Apple VT', none: 'CPU' };
-      videoPlaybackMode = this.translate.instant('player.stats_transcoding', { hw: hwLabel[hw] ?? hw.toUpperCase() });
+      const parts = [hwLabel[hw] ?? hw.toUpperCase()];
+      if (pi?.outputVideoCodec) parts.push(pi.outputVideoCodec.toUpperCase());
+      // HDR survives the transcode only when the source is HDR and we're not
+      // tonemapping to SDR — surface the format (HDR10 / HLG) that's emitted.
+      if (src?.hdrFormat && !pi?.tonemapping) parts.push(src.hdrFormat);
+      videoPlaybackMode = this.translate.instant('player.stats_transcoding', { hw: parts.join(' ') });
     }
     if (playingHeight && src?.height && playingHeight < src.height) {
       videoPlaybackMode += ` \u2192 ${playingWidth}x${playingHeight}`;
