@@ -27,7 +27,16 @@ const hdrHevcClient: DeviceProfileDto = {
   maxAudioChannels: 6,
 } as never;
 
-const resolved = (dvProfile?: number, dvBlSignalCompatId?: number) =>
+const dvHevcClient: DeviceProfileDto = {
+  ...hdrHevcClient,
+  supportsDolbyVision: true,
+} as never;
+
+const resolved = (
+  dvProfile?: number,
+  dvBlSignalCompatId?: number,
+  dvElPresent?: boolean,
+) =>
   ({
     ext: '.mkv',
     contentType: 'video/x-matroska',
@@ -53,6 +62,7 @@ const resolved = (dvProfile?: number, dvBlSignalCompatId?: number) =>
             colorPrimaries: 'bt2020',
             dvProfile,
             dvBlSignalCompatId,
+            dvElPresent,
           },
         ],
         audio: [{ codec: 'aac', channels: 2, bitRate: 128_000 }],
@@ -91,5 +101,25 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
       r.response.transcodeReasons.some((x) => /Dolby Vision/.test(x.message)),
     ).toBe(false);
     expect(r.response.tonemapping).toBe(false);
+  });
+
+  it('DirectPlays P5 untouched for a client that can present DV', () => {
+    const r = svc().evaluate(resolved(5, 0), dvHevcClient, 'tok');
+    expect(r.response.playMethod).toBe('DirectPlay');
+    expect(r.response.videoCopyStream).toBe(true);
+    expect(r.response.tonemapping).toBe(false);
+    expect(
+      r.response.transcodeReasons.some((x) => /Dolby Vision/.test(x.message)),
+    ).toBe(false);
+  });
+
+  it('DirectPlays P5 with RPU-only metadata (no HDR VUI) for a DV client', () => {
+    const r: any = resolved(5, 0);
+    r.mediaFile.streamInfo.video[0].hdrFormat = undefined;
+    r.mediaFile.streamInfo.video[0].colorTransfer = undefined;
+    r.mediaFile.streamInfo.video[0].colorPrimaries = undefined;
+    const out = svc().evaluate(r, dvHevcClient, 'tok');
+    expect(out.response.playMethod).toBe('DirectPlay');
+    expect(out.response.videoCopyStream).toBe(true);
   });
 });

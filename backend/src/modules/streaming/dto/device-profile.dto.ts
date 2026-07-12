@@ -88,6 +88,18 @@ export class DeviceProfileDto {
   supportsHdr?: boolean;
 
   /**
+   * Client can present single-layer Dolby Vision (Profile 5 / 8.x) directly:
+   * both a DV decoder and a DV panel confirmed on the device. The backend then
+   * DirectPlays the original container untouched so the RPU rides through.
+   * ABSENT means false — the opposite of {@link supportsDirectPlay} — so a
+   * client that hasn't proven DV never gets a P5 copied (it would render
+   * green/purple on non-DV hardware); such clients keep the tonemap transcode.
+   */
+  @IsBoolean()
+  @IsOptional()
+  supportsDolbyVision?: boolean;
+
+  /**
    * Client engine can play a raw progressive file served as-is (Direct Play).
    * Shaka (web), ExoPlayer/AVPlayer (native mobile) and webOS `<video>` all
    * can. Samsung Tizen AVPlay is HLS-only and cannot open a raw file, so it
