@@ -41,6 +41,7 @@ async function libdoviLinked(): Promise<boolean> {
 
 export async function runLibplaceboDvProbe(log: Logger): Promise<void> {
   const t0 = Date.now();
+  let reason = '';
   const sample = path.join(
     os.tmpdir(),
     `fliks-libplacebo-dv-probe-${process.pid}.hevc`,
@@ -82,13 +83,14 @@ export async function runLibplaceboDvProbe(log: Logger): Promise<void> {
       { timeout: 20_000 },
     );
     enabled = true;
-  } catch {
+  } catch (e) {
     enabled = false;
+    reason = e instanceof Error ? e.message : String(e);
   } finally {
     await unlink(sample).catch(() => {});
     probedOnce = true;
     log.log(
-      `[libplacebo-dv-probe] ${enabled ? 'enabled' : 'disabled'} (${Date.now() - t0}ms)`,
+      `[libplacebo-dv-probe] ${enabled ? 'enabled' : `disabled (${reason})`} (${Date.now() - t0}ms)`,
     );
   }
 }
