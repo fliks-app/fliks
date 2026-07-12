@@ -49,14 +49,6 @@ const CCWGTV_HD_NO_4K_HEVC_HDR: ClientQuirk = {
     'Chromecast with Google TV (HD) silently fails HEVC Main10 above 1080p',
 };
 
-const CCWGTV_HD_NO_4K: ClientQuirk = {
-  id: 'ccwgtv-hd-no-4k-rungs',
-  matches: (ctx) =>
-    /chromecast.+google.+tv/i.test(ctx.userAgent) && !/4k/i.test(ctx.userAgent),
-  filter: (variants) => variants,
-  reason: 'Chromecast with Google TV (HD) caps decode at 1080p',
-};
-
 const OLDER_CHROMECAST_NO_AV1: ClientQuirk = {
   id: 'older-chromecast-no-av1',
   matches: (ctx) => {
@@ -84,7 +76,6 @@ const APPLE_TV_PRE_A17_NO_AV1: ClientQuirk = {
 
 const REGISTRY: readonly ClientQuirk[] = [
   CCWGTV_HD_NO_4K_HEVC_HDR,
-  CCWGTV_HD_NO_4K,
   OLDER_CHROMECAST_NO_AV1,
   APPLE_TV_PRE_A17_NO_AV1,
 ];
