@@ -52,6 +52,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libmfx-gen1.2 \
   libvpl2 \
   libvulkan1 \
+  libshaderc1 \
   mesa-vulkan-drivers \
   vainfo \
   wget \
