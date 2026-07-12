@@ -8,7 +8,7 @@ import { SystemInfoService } from './system-info.service';
 import { getDeviceName } from '../utils/device-info';
 
 interface HdrPlugin {
-  isSupported(): Promise<{ supported: boolean }>;
+  isSupported(): Promise<{ supported: boolean; dolbyVision?: boolean }>;
 }
 const Hdr = registerPlugin<HdrPlugin>('Hdr');
 
@@ -86,6 +86,12 @@ export interface DeviceProfile {
    *  Falls back to maxAudioChannels per codec on the backend. */
   audioChannelsByCodec?: Record<string, number>;
   supportsHdr: boolean;
+  /** Client can present single-layer Dolby Vision (P5 / 8.x) directly, so the
+   *  backend DirectPlays the original container untouched instead of tonemapping
+   *  P5 to SDR. iOS/Android report it from the native probe (DV HW decoder / DV
+   *  panel type); webOS OLEDs assume it when the panel is HDR. Web/Shaka and
+   *  Tizen stay false. Absent = false on the backend. */
+  supportsDolbyVision?: boolean;
   /** Client device category — selects the backend bitrate ladder.
    *  Capacitor native (iOS/Android app) → 'mobile'; web (incl. Cast sender) → 'desktop'. */
   deviceType: 'mobile' | 'desktop';
@@ -155,6 +161,7 @@ export class BrowserDeviceProfileService {
   private readonly systemInfo = inject(SystemInfoService);
   private cachedProfile: DeviceProfile | null = null;
   private nativeHdr: boolean | null = null;
+  private nativeDolbyVision: boolean | null = null;
   private nativeAudio: {
     codecs: string[];
     maxChannels: number;
@@ -167,8 +174,12 @@ export class BrowserDeviceProfileService {
     // later sync use)
     if (Capacitor.isNativePlatform()) {
       Hdr.isSupported()
-        .then((r) => { this.nativeHdr = r.supported; })
-        .catch(() => { this.nativeHdr = false; });
+        .then((r) => {
+          this.nativeHdr = r.supported;
+          this.nativeDolbyVision = r.dolbyVision ?? false;
+          this.cachedProfile = null;
+        })
+        .catch(() => { this.nativeHdr = false; this.nativeDolbyVision = false; });
       AudioCaps.getSupported()
         .then((r) => { this.nativeAudio = r; this.cachedProfile = null; })
         .catch(() => { this.nativeAudio = null; });
@@ -209,6 +220,10 @@ export class BrowserDeviceProfileService {
       ...this.cachedProfile,
       systemName,
       supportsHdr: forceDisableHdr ? false : this.cachedProfile.supportsHdr,
+      // Forcing HDR off (user wants SDR) also drops DV passthrough — DV is HDR.
+      supportsDolbyVision: forceDisableHdr
+        ? false
+        : this.cachedProfile.supportsDolbyVision,
       useTs: useTsOverride,
     };
   }
@@ -466,6 +481,22 @@ export class BrowserDeviceProfileService {
       supportsHdr = hdrDisplay && has10bitCodec;
     }
 
+    // Dolby Vision passthrough capability. iOS/Android report it from the native
+    // probe (DV HW decoder / DV panel type). webOS OLEDs are assumed DV-capable
+    // when the panel is HDR (no per-model probe; optimistic). Web/Shaka has no DV
+    // (browser MSE never decodes dvh1), and Tizen is HLS-only with DV signaling
+    // not yet wired, so both stay false.
+    // DV is a superset of HDR, so it never outlives supportsHdr (keeps the
+    // forceDisableHdr override consistent, and a non-HDR panel can't present DV).
+    let supportsDolbyVision: boolean;
+    if (Capacitor.isNativePlatform()) {
+      supportsDolbyVision = supportsHdr && (this.nativeDolbyVision ?? false);
+    } else if (tvPlatform === 'webos') {
+      supportsDolbyVision = supportsHdr;
+    } else {
+      supportsDolbyVision = false;
+    }
+
     const useTs = readUseTsOverride();
     if (useTs) console.warn('[DeviceProfile] useTs override active');
 
@@ -480,6 +511,7 @@ export class BrowserDeviceProfileService {
       maxAudioChannels,
       audioChannelsByCodec: this.nativeAudio?.channelsByCodec,
       supportsHdr,
+      supportsDolbyVision,
       deviceType: Capacitor.isNativePlatform() ? 'mobile' : 'desktop',
       deviceName: getDeviceName(),
       useTs,

@@ -67,6 +67,7 @@
     "error_network": "Erreur réseau pendant la lecture.",
     "error_decode": "Erreur de décodage de la vidéo.",
     "error_unsupported": "Format vidéo non pris en charge.",
+    "dolby_vision_decode_failed": "La lecture Dolby Vision a échoué sur cet appareil. Choisissez une autre qualité pour la convertir.",
     "error_details": "Détails techniques",
     "copy_diagnostics": "Copier les infos",
     "copied": "Copié",

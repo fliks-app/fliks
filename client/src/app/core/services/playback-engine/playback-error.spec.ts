@@ -25,6 +25,18 @@ describe('playback-error', () => {
       expect(userMessageKeyFor({ source: 'shaka', category: 3, code: 3017 })).toBe('player.playback_error');
       expect(userMessageKeyFor({ source: 'session' })).toBe('player.playback_error');
     });
+
+    it('surfaces an explicit Dolby Vision message on a DV decode failure', () => {
+      expect(userMessageKeyFor({ source: 'media', code: 3, dolbyVision: true })).toBe('player.dolby_vision_decode_failed');
+      expect(userMessageKeyFor({ source: 'shaka', category: 3, code: 3016, dolbyVision: true })).toBe('player.dolby_vision_decode_failed');
+      expect(userMessageKeyFor({ source: 'engine', dolbyVision: true })).toBe('player.dolby_vision_decode_failed');
+    });
+
+    it('does not blame Dolby Vision for a network/abort blip', () => {
+      expect(userMessageKeyFor({ source: 'media', code: 2, dolbyVision: true })).toBe('player.error_network');
+      expect(userMessageKeyFor({ source: 'media', code: 1, dolbyVision: true })).toBe('player.error_aborted');
+      expect(userMessageKeyFor({ source: 'shaka', category: 1, code: 1002, dolbyVision: true })).toBe('player.error_network');
+    });
   });
 
   describe('isUndecodableError', () => {

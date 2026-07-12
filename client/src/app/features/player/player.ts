@@ -248,6 +248,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  `ngAfterViewInit` but that happens after the first effect pass. */
   private readonly _stateReset = (this.state.reset(), null);
 
+  /** Register the live DV-passthrough probe once. Read at error time, so it
+   *  reflects the current play method even after a mid-session quality switch.
+   *  `reset()` (called again on episode reload) must not clear it, hence a
+   *  one-shot registration here rather than a per-load sync. */
+  private readonly _dvProbe = (
+    this.state.setDolbyVisionProbe(() => this.isDolbyVisionPassthrough()),
+    null
+  );
+
   private readonly videoEl = viewChild<ElementRef<HTMLVideoElement>>('videoElement');
   private readonly containerEl = viewChild<ElementRef<HTMLDivElement>>('playerContainer');
   private readonly controls = viewChild(PlayerControlsComponent);
@@ -1280,11 +1289,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // message and keep the raw fields for the diagnostics block.
       const isShaka = e?.category != null;
       this.state.setError(
-        isShaka
-          ? this.translate.instant(
-              userMessageKeyFor({ source: 'shaka', code: e?.code, category: e?.category }),
-            )
-          : this.translate.instant('player.playback_error'),
+        this.translate.instant(
+          userMessageKeyFor({
+            source: isShaka ? 'shaka' : 'engine',
+            code: e?.code,
+            category: e?.category,
+            dolbyVision: this.isDolbyVisionPassthrough(),
+          }),
+        ),
         {
           source: isShaka ? 'shaka' : 'engine',
           code: e?.code,
@@ -2057,11 +2069,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // `message` field only — the card body never shows an untranslated string.
       const isShaka = e?.category != null;
       this.state.setError(
-        isShaka
-          ? this.translate.instant(
-              userMessageKeyFor({ source: 'shaka', code: e?.code, category: e?.category }),
-            )
-          : this.translate.instant('player.playback_error'),
+        this.translate.instant(
+          userMessageKeyFor({
+            source: isShaka ? 'shaka' : 'engine',
+            code: e?.code,
+            category: e?.category,
+            dolbyVision: this.isDolbyVisionPassthrough(),
+          }),
+        ),
         {
           source: isShaka ? 'shaka' : 'engine',
           code: e?.code,
@@ -2490,6 +2505,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } catch {
       // Clipboard blocked (insecure context / denied permission) — no-op.
     }
+  }
+
+  /** True when the current media is Dolby Vision AND we're serving it untouched
+   *  (DirectPlay / DirectStream): a decode failure is then a DV-capability
+   *  failure, surfaced with an explicit message. A tonemapped transcode is not
+   *  DV, so it stays on the generic error path. Read live at error time (via the
+   *  probe registered on PlayerStateService) so it tracks quality switches. */
+  private isDolbyVisionPassthrough(): boolean {
+    const method = this.playbackInfo?.playMethod;
+    if (method !== 'DirectPlay' && method !== 'DirectStream') return false;
+    const v = this.media?.files?.find((f) => f.id === this.mediaFileId)
+      ?.streamInfo?.video?.[0];
+    return (v?.dvProfile ?? 0) > 0;
   }
 
   /** Ticked once a second from the stats interval. Detects a frozen playhead

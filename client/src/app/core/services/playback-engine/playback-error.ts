@@ -76,7 +76,14 @@ export function userMessageKeyFor(err: {
   source: PlaybackError['source'];
   code?: number;
   category?: number;
+  dolbyVision?: boolean;
 }): string {
+  // A fatal failure while presenting Dolby Vision untouched is almost always the
+  // DV bitstream the device couldn't decode — show an explicit, actionable line.
+  // Network / abort blips keep their own message.
+  if (err.dolbyVision && !isNetworkOrAbort(err)) {
+    return 'player.dolby_vision_decode_failed';
+  }
   if (err.source === 'media') {
     switch (err.code) {
       case 1:
@@ -95,6 +102,19 @@ export function userMessageKeyFor(err: {
     if (err.code === 4032) return 'player.error_unsupported';
   }
   return 'player.playback_error';
+}
+
+/** Transient transport failures (network / user abort) — distinct from a
+ *  decode/format failure, so a Dolby Vision title doesn't blame DV for a
+ *  dropped connection. */
+export function isNetworkOrAbort(err: {
+  source: PlaybackError['source'];
+  code?: number;
+  category?: number;
+}): boolean {
+  if (err.source === 'media') return err.code === 1 || err.code === 2;
+  if (err.source === 'shaka') return err.category === 1;
+  return false;
 }
 
 /** A stream-level decode/format failure that a fresh session cannot fix —

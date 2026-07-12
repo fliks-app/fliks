@@ -12,6 +12,9 @@ public class HdrPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func isSupported(_ call: CAPPluginCall) {
         let supported = AVPlayer.eligibleForHDRPlayback
-        call.resolve(["supported": supported])
+        // iOS has no public per-codec Dolby Vision probe; DV playback tracks HDR
+        // eligibility on AVPlayer (HDR-eligible iPhone/iPad/Apple TV models decode
+        // DV P5/P8.1), so the HDR signal doubles as the DV one.
+        call.resolve(["supported": supported, "dolbyVision": supported])
     }
 }
