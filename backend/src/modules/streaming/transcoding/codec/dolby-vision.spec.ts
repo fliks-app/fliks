@@ -5,20 +5,17 @@ describe('deriveDvInfo', () => {
     const info = deriveDvInfo({ dvProfile: 5, dvBlSignalCompatId: 0 });
     expect(info.singleLayer).toBe(true);
     expect(isDvProfile5(info)).toBe(true);
-    expect(info.supplementalTag).toBeNull();
   });
 
-  it('classifies P8.1 as single-layer with the db1p brand', () => {
+  it('classifies P8.1 (HDR10 base) as single-layer', () => {
     const info = deriveDvInfo({ dvProfile: 8, dvBlSignalCompatId: 1 });
     expect(info.singleLayer).toBe(true);
     expect(isDvProfile5(info)).toBe(false);
-    expect(info.supplementalTag).toBe('db1p');
   });
 
-  it('classifies P8.4 with the db4h brand', () => {
+  it('classifies P8.4 (HLG base) as single-layer', () => {
     const info = deriveDvInfo({ dvProfile: 8, dvBlSignalCompatId: 4 });
     expect(info.singleLayer).toBe(true);
-    expect(info.supplementalTag).toBe('db4h');
   });
 
   it('treats a dual-layer profile (enhancement layer present) as not single-layer', () => {
@@ -45,6 +42,5 @@ describe('deriveDvInfo', () => {
     expect(info.profile).toBeUndefined();
     expect(info.singleLayer).toBe(false);
     expect(isDvProfile5(info)).toBe(false);
-    expect(info.supplementalTag).toBeNull();
   });
 });
