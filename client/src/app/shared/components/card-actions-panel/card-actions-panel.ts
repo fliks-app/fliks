@@ -16,6 +16,7 @@ import {
   LucideEyeOff,
   LucideTrash2,
   LucideListPlus,
+  LucideUserPlus,
 } from '@lucide/angular';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
 import { TvService } from '../../../core/services/tv.service';
@@ -48,6 +49,7 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
     LucideEyeOff,
     LucideTrash2,
     LucideListPlus,
+    LucideUserPlus,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './card-actions-panel.html',
