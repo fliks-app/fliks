@@ -29,14 +29,14 @@ import { RequestsService, TitleRequestState } from '../../core/services/api/requ
 import { RequestModalComponent } from './components/request-modal/request-modal.component';
 import { ImportModalComponent } from './components/import-modal/import-modal.component';
 import { MediaType } from '../../core/enums/media-type.enum';
-import { LucideFilm, LucideUser, LucidePlay } from '@lucide/angular';
+import { LucideFilm, LucideUser, LucidePlay, LucidePlus } from '@lucide/angular';
 import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, ResolveUrlPipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, LucideFilm, LucideUser, LucidePlay],
+  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, ResolveUrlPipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })

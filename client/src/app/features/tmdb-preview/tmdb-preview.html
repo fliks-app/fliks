@@ -43,8 +43,8 @@
       <!-- Action buttons -->
       <div class="flex flex-wrap items-center gap-3 mt-4">
         @if (canImport()) {
-          <button type="button" class="btn btn-primary flex-1" (click)="openImportModal()">
-            {{ 'discover.add_to_library' | translate }}
+          <button type="button" class="btn btn-primary flex-1 gap-2" (click)="openImportModal()">
+            <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
           </button>
         }
         @if (canRequest()) {
@@ -164,8 +164,8 @@
         <!-- Action buttons — order + sizing matching media-detail's row. -->
         <div class="flex flex-wrap items-center gap-2 mt-6">
           @if (canImport()) {
-            <button type="button" class="btn btn-primary" (click)="openImportModal()">
-              {{ 'discover.add_to_library' | translate }}
+            <button type="button" class="btn btn-primary gap-2" (click)="openImportModal()">
+              <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
             </button>
           }
           @if (canRequest()) {
