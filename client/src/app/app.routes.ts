@@ -105,6 +105,12 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'profile/:userId',
+        canActivate: [noTvGuard],
+        loadComponent: () =>
+          import('./features/profile/profile').then((m) => m.ProfileComponent),
+      },
+      {
         path: 'persons/:id',
         loadComponent: () =>
           import('./features/person-detail/person-detail').then(
@@ -249,6 +255,13 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/account/recommendations').then(
             (m) => m.AccountRecommendationsComponent,
+          ),
+      },
+      {
+        path: 'privacy',
+        loadComponent: () =>
+          import('./features/account/privacy').then(
+            (m) => m.AccountPrivacyComponent,
           ),
       },
     ],

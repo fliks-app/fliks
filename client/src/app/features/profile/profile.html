@@ -1,0 +1,133 @@
+@if (loading() && !profile()) {
+  <div class="flex justify-center py-12">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else if (profile(); as p) {
+  <!-- Header -->
+  <div class="flex items-center gap-4 mb-8">
+    <div class="avatar avatar-placeholder shrink-0">
+      <div
+        class="w-20 h-20 rounded-full text-3xl font-semibold text-white"
+        [style.background-color]="'hsl(' + avatar().hue + ' 55% 45%)'"
+      >
+        @if (p.avatar) {
+          <img [src]="p.avatar" [alt]="p.username" />
+        } @else {
+          <span>{{ avatar().initials }}</span>
+        }
+      </div>
+    </div>
+    <div class="min-w-0 flex-1">
+      <h1 class="text-2xl font-bold truncate">{{ p.username }}</h1>
+      <div class="flex gap-4 text-sm text-base-content/60 mt-1">
+        <span>{{ 'social.followers_count' | translate: { n: p.followerCount } }}</span>
+        <span>{{ 'social.following_count' | translate: { n: p.followingCount } }}</span>
+      </div>
+      @if (p.followsYou && !p.isSelf) {
+        <span class="badge badge-sm badge-ghost mt-2">{{ 'social.follows_you' | translate }}</span>
+      }
+    </div>
+    <div class="shrink-0">
+      @if (p.isSelf) {
+        <button type="button" class="btn btn-outline btn-sm gap-2" (click)="editPrivacy()">
+          <svg lucideSettings class="h-4 w-4"></svg>
+          {{ 'social.edit_privacy' | translate }}
+        </button>
+      } @else if (p.isFollowing) {
+        <button type="button" class="btn btn-outline btn-sm gap-2" [disabled]="busy()" (click)="unfollow()">
+          <svg lucideUserCheck class="h-4 w-4"></svg>
+          {{ 'social.unfollow' | translate }}
+        </button>
+      } @else if (p.requested) {
+        <button type="button" class="btn btn-ghost btn-sm gap-2" [disabled]="busy()" (click)="unfollow()">
+          <svg lucideClock class="h-4 w-4"></svg>
+          {{ 'social.requested' | translate }}
+        </button>
+      } @else {
+        <button type="button" class="btn btn-primary btn-sm gap-2" [disabled]="busy()" (click)="follow()">
+          <svg lucideUserPlus class="h-4 w-4"></svg>
+          {{ (p.visibility === 'public' ? 'social.follow' : 'social.request_follow') | translate }}
+        </button>
+      }
+    </div>
+  </div>
+
+  <!-- Private profile, not yet a follower -->
+  @if (!p.isSelf && p.visibility === 'private' && !p.isFollowing) {
+    <div class="text-center py-12 text-base-content/50">
+      <p class="text-lg">{{ 'social.profile_private' | translate }}</p>
+    </div>
+  } @else {
+    <!-- Nothing shared -->
+    @if (!p.isSelf && !hasContent(p)) {
+      <div class="text-center py-12 text-base-content/50">
+        <p class="text-lg">{{ 'social.profile_empty' | translate }}</p>
+      </div>
+    }
+    <!-- Tastes -->
+    @if (p.shown.tastes && p.topGenres.length) {
+      <section class="mb-8">
+        <h2 class="text-lg font-semibold mb-3">{{ 'social.section_tastes' | translate: { username: p.username } }}</h2>
+        <div class="flex flex-wrap gap-2">
+          @for (g of p.topGenres; track g.genre) {
+            @if (firstLibraryName()) {
+              <a
+                class="badge badge-lg badge-outline hover:badge-primary cursor-pointer"
+                [routerLink]="['/libraries', firstLibraryName()]"
+                [queryParams]="{ view: 'all', genre: g.genre }"
+              >{{ g.genre }}</a>
+            } @else {
+              <span class="badge badge-lg">{{ g.genre }}</span>
+            }
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Public playlists -->
+    @if (p.playlists.length) {
+      <app-horizontal-scroller [title]="'social.section_playlists' | translate" class="mb-6 block">
+        @for (pl of p.playlists; track pl.id) {
+          <div class="shrink-0 w-28 sm:w-32 lg:w-40">
+            <app-mosaic-card
+              [posters]="pl.posters"
+              [label]="pl.name"
+              [subtitle]="(pl.itemCount <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate: { count: pl.itemCount }"
+              (clicked)="openPlaylist(pl.id)"
+            />
+          </div>
+        }
+      </app-horizontal-scroller>
+    }
+
+    <!-- Recommendations -->
+    @if (p.shown.recommendations && p.recommendations.length) {
+      <app-horizontal-scroller [title]="'social.section_recommendations' | translate" class="mb-6 block">
+        @for (rec of p.recommendations; track rec.media.id) {
+          <app-media-card
+            class="shrink-0 w-28 sm:w-32 lg:w-40"
+            [imageUrl]="rec.media.posterUrl"
+            [title]="rec.media.title"
+            [subtitle]="'' + rec.media.year"
+            [link]="mediaLink(rec.media.type, rec.media.id)"
+          />
+        }
+      </app-horizontal-scroller>
+    }
+
+    <!-- Recently watched -->
+    @if (p.shown.recentlyWatched && p.recentlyWatched.length) {
+      <app-horizontal-scroller [title]="'social.section_recently_watched' | translate" class="mb-6 block">
+        @for (item of p.recentlyWatched; track item.id) {
+          <app-media-card
+            [aspect]="'landscape'"
+            [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
+            [title]="item.mediaTitle"
+            [subtitle]="item.episodeLabel ?? undefined"
+            [link]="mediaLink(item.mediaType, item.mediaId)"
+          />
+        }
+      </app-horizontal-scroller>
+    }
+  }
+}

@@ -1,6 +1,7 @@
 @if (auth.canAccessSettings()) {
   <app-setup-checklist [padding]="true" />
 }
+<app-follow-requests-card [padding]="true" />
 
 
 <div appTvSection appDefaultFocus="a[data-home-focus^='library:']" focusKey="home" focusIdAttr="data-home-focus" class="flex flex-col gap-8">

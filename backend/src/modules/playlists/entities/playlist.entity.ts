@@ -7,6 +7,7 @@ import {
   RelationId,
 } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
+import { PlaylistVisibility } from '../../../common/enums';
 import { User } from '../../users/entities/user.entity';
 import { PlaylistItem } from './playlist-item.entity';
 
@@ -35,6 +36,15 @@ export class Playlist extends BaseEntity {
    *  advances to the next item automatically. */
   @Column({ default: false })
   autoPlay: boolean;
+
+  /** Who can read the playlist: owner-only (private), the owner's accepted
+   *  followers, or any authenticated member (public). */
+  @Column({
+    type: 'enum',
+    enum: PlaylistVisibility,
+    default: PlaylistVisibility.PRIVATE,
+  })
+  visibility: PlaylistVisibility;
 
   /** Keep the playlist's media downloaded on native iOS/Android clients. */
   @Column({ default: false })

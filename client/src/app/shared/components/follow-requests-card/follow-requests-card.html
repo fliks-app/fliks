@@ -1,0 +1,54 @@
+@if (!tv.isTv() && requests().length > 0) {
+  <div [class.pb-4]="padding()">
+    <section class="card bg-base-200/60 backdrop-blur-sm shadow-sm">
+      <div class="card-body p-4 sm:p-5 gap-3">
+        <header class="flex items-center gap-3">
+          <h2 class="card-title text-base">
+            {{ 'social.requests_title' | translate }}
+            <span class="badge badge-primary badge-sm">{{ requests().length }}</span>
+          </h2>
+        </header>
+
+        <ul class="flex flex-col divide-y divide-base-300/50">
+          @for (u of requests(); track u.id) {
+            <li class="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+              <a [routerLink]="['/profile', u.id]" class="flex items-center gap-3 flex-1 min-w-0">
+                <div class="avatar avatar-placeholder shrink-0">
+                  <div
+                    class="w-9 h-9 rounded-full text-white text-sm font-semibold"
+                    [style.background-color]="'hsl(' + avatar(u.username).hue + ' 55% 45%)'"
+                  >
+                    @if (u.avatar) {
+                      <img [src]="u.avatar" [alt]="u.username" />
+                    } @else {
+                      <span>{{ avatar(u.username).initials }}</span>
+                    }
+                  </div>
+                </div>
+                <span class="flex-1 min-w-0 truncate text-sm font-medium">{{ u.username }}</span>
+              </a>
+              <button
+                type="button"
+                class="btn btn-primary btn-sm btn-square"
+                [disabled]="busyId() === u.id"
+                (click)="accept(u)"
+                [attr.aria-label]="'social.accept' | translate"
+              >
+                <svg lucideCheck class="h-4 w-4"></svg>
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm btn-square"
+                [disabled]="busyId() === u.id"
+                (click)="reject(u)"
+                [attr.aria-label]="'social.reject' | translate"
+              >
+                <svg lucideX class="h-4 w-4"></svg>
+              </button>
+            </li>
+          }
+        </ul>
+      </div>
+    </section>
+  </div>
+}

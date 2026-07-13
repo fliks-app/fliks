@@ -47,6 +47,7 @@ import {
   Playlist,
   PlaylistItem,
   PlaylistsApiService,
+  PlaylistVisibility,
 } from '../../../core/services/api/playlists-api.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
@@ -124,6 +125,7 @@ export class PlaylistDetailComponent {
   readonly draftAutoRemoveWatched = signal(false);
   readonly draftAutoDownload = signal(false);
   readonly draftAutoPlay = signal(false);
+  readonly draftVisibility = signal<PlaylistVisibility>('private');
   /** Auto-download is native-mobile only, so its toggle is hidden elsewhere. */
   readonly showAutoDownload = this.autoDownload.enabled;
 
@@ -376,6 +378,7 @@ export class PlaylistDetailComponent {
     this.draftAutoRemoveWatched.set(p.autoRemoveWatched);
     this.draftAutoDownload.set(this.autoDownload.isAutoDownload(p.id));
     this.draftAutoPlay.set(p.autoPlay);
+    this.draftVisibility.set(p.visibility);
     this.settingsDialog()?.nativeElement.showModal();
   }
 
@@ -391,6 +394,7 @@ export class PlaylistDetailComponent {
       const updated = await this.api.update(p.id, {
         autoRemoveWatched: this.draftAutoRemoveWatched(),
         autoPlay: this.draftAutoPlay(),
+        visibility: this.draftVisibility(),
       });
       this.playlist.set(updated);
       // Auto-download is stored on-device only, not on the server.

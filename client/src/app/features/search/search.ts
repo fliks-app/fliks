@@ -24,6 +24,9 @@ import {
 import { AuthService } from '../../core/services/auth.service';
 import { RequestsService, FliksRequestStatus } from '../../core/services/api/requests.service';
 import { SearchStateService } from '../../core/services/search-state.service';
+import { SocialApiService } from '../../core/services/api/social-api.service';
+import { TvService } from '../../core/services/tv.service';
+import { initialsAvatar } from '../../core/utils/initials-avatar';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { MediaType } from '../../core/enums/media-type.enum';
@@ -50,6 +53,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly reuseStrategy = inject(CachingReuseStrategy);
   private readonly injector = inject(Injector);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly social = inject(SocialApiService);
+  readonly tv = inject(TvService);
   readonly state = inject(SearchStateService);
 
   readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
@@ -176,7 +181,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  setFilter(f: 'all' | 'movie' | 'series') {
+  setFilter(f: 'all' | 'movie' | 'series' | 'people') {
     this.state.filter.set(f);
     if (this.state.query().trim()) {
       if (this.searchTimer) clearTimeout(this.searchTimer);
@@ -201,6 +206,14 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   clearQuery() {
     this.state.clear();
     this.searchInput()?.nativeElement.focus();
+  }
+
+  avatar(name: string) {
+    return initialsAvatar(name);
+  }
+
+  openProfile(userId: number) {
+    void this.router.navigate(['/profile', userId]);
   }
 
   /** Series toggle via the bulk endpoint; movies need a local file. */
@@ -234,6 +247,25 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!q) return;
 
     const filter = this.state.filter();
+
+    // People search is a distinct surface — no local/external media lookups.
+    if (filter === 'people') {
+      this.state.peopleLoading.set(true);
+      try {
+        const results = await this.social.searchUsers(q);
+        // Ignore a stale response if the query/filter moved on meanwhile.
+        if (this.state.query().trim() !== q || this.state.filter() !== 'people') return;
+        this.state.peopleResults.set(results);
+      } catch {
+        if (this.state.query().trim() === q && this.state.filter() === 'people') {
+          this.state.peopleResults.set([]);
+        }
+      } finally {
+        this.state.peopleLoading.set(false);
+      }
+      return;
+    }
+
     const type: MediaType | undefined = filter === 'all' ? undefined : filter;
 
     // Search local library first

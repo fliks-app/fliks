@@ -233,6 +233,15 @@ export class UsersService implements OnModuleInit {
     if (dto.hiddenLibraryIds !== undefined)
       target.hiddenLibraryIds = dto.hiddenLibraryIds;
 
+    // Self-editable social privacy — opt-in, no ACL impact.
+    if (dto.profileVisibility !== undefined)
+      target.profileVisibility = dto.profileVisibility;
+    if (dto.shareTastes !== undefined) target.shareTastes = dto.shareTastes;
+    if (dto.shareRecommendations !== undefined)
+      target.shareRecommendations = dto.shareRecommendations;
+    if (dto.shareWatchHistory !== undefined)
+      target.shareWatchHistory = dto.shareWatchHistory;
+
     await this.userRepo.save(target);
 
     // Library access replace (manager-only). Done after the user row save so

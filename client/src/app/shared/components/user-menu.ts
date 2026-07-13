@@ -4,6 +4,7 @@ import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { ServerCacheService } from '../../core/services/server-cache.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
+import { TvService } from '../../core/services/tv.service';
 import { DropdownMenuComponent } from './dropdown-menu';
 import { Capacitor } from '@capacitor/core';
 import {
@@ -15,6 +16,7 @@ import {
   LucideServer,
   LucideMonitorSmartphone,
 } from '@lucide/angular';
+import { initialsAvatar } from '../../core/utils/initials-avatar';
 
 @Component({
   selector: 'app-user-menu',
@@ -38,11 +40,20 @@ import {
       @if (auth.user(); as user) {
         <div class="border-b border-white/10 pb-1 mb-1">
           <a
-            routerLink="/account"
+            [routerLink]="tv.isTv() ? ['/account'] : ['/profile', user.id]"
             class="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-white/5"
           >
-            <div class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-              <svg lucideUser class="h-5 w-5 text-white/60"></svg>
+            <div class="avatar avatar-placeholder shrink-0">
+              <div
+                class="w-10 h-10 rounded-full text-white text-sm font-semibold"
+                [style.background-color]="'hsl(' + avatar(user.username).hue + ' 55% 45%)'"
+              >
+                @if (user.avatar) {
+                  <img [src]="user.avatar" [alt]="user.username" />
+                } @else {
+                  <span>{{ avatar(user.username).initials }}</span>
+                }
+              </div>
             </div>
             <div class="min-w-0 flex-1">
               <p class="font-semibold truncate text-white">{{ user.username }}</p>
@@ -88,6 +99,7 @@ import {
 })
 export class UserMenuComponent {
   readonly auth = inject(AuthService);
+  readonly tv = inject(TvService);
   private readonly router = inject(Router);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly serverCache = inject(ServerCacheService);
@@ -97,6 +109,10 @@ export class UserMenuComponent {
    *  Web is served by the backend so the origin is fixed; the entry
    *  would be a dead-end there. */
   protected readonly canChangeServer = this.isNative;
+
+  protected avatar(name: string) {
+    return initialsAvatar(name);
+  }
 
   protected async switchUser() {
     await this.serverCache.clearAll();

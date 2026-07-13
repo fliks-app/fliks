@@ -21,7 +21,18 @@ export interface User {
   libraryOrder: number[];
   /** Per-user libraries hidden from the home page and sidebar. */
   hiddenLibraryIds: number[];
+  /** Social profile discoverability. */
+  profileVisibility: ProfileVisibility;
+  /** Expose derived top-genres on the public profile. */
+  shareTastes: boolean;
+  /** Expose personal recommendations on the public profile. */
+  shareRecommendations: boolean;
+  /** Expose recently-watched on the public profile. */
+  shareWatchHistory: boolean;
 }
+
+/** Public = instant follow + shared content; private = follow on approval. */
+export type ProfileVisibility = 'public' | 'private';
 
 interface LoginResponse {
   user: User;

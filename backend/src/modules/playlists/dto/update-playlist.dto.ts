@@ -1,4 +1,11 @@
-import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
+import { PlaylistVisibility } from '../../../common/enums';
 
 export class UpdatePlaylistDto {
   @IsOptional()
@@ -17,4 +24,8 @@ export class UpdatePlaylistDto {
   @IsOptional()
   @IsBoolean()
   autoPlay?: boolean;
+
+  @IsOptional()
+  @IsEnum(PlaylistVisibility)
+  visibility?: PlaylistVisibility;
 }

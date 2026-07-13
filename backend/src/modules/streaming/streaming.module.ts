@@ -76,6 +76,7 @@ import { PlaylistsModule } from '../playlists/playlists.module';
     LiveSessionRegistry,
     ThumbnailService,
     SubtitleStreamService,
+    RecommendationService,
   ],
 })
 export class StreamingModule {}
