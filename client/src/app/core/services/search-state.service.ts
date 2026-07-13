@@ -9,7 +9,11 @@ const EXTERNAL_KEY = 'fliks-search-external';
 @Injectable({ providedIn: 'root' })
 export class SearchStateService {
   readonly query = signal('');
-  readonly filter = signal<'all' | 'movie' | 'series' | 'people'>('all');
+  /** Top-level surface: media (videos) vs members (people). */
+  readonly tab = signal<'videos' | 'people'>('videos');
+  /** Media type filter within the videos tab — drives search + discover
+   *  (genre list, trending/popular). */
+  readonly contentType = signal<'all' | 'movie' | 'series'>('all');
   readonly externalEnabled = signal(localStorage.getItem(EXTERNAL_KEY) !== 'false');
 
   private readonly persistExternal = effect(() => {

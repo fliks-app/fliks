@@ -34,26 +34,29 @@
     </app-dropdown-menu>
   </div>
 
-  <!-- Filter tabs -->
+  <!-- Top tabs: videos vs members -->
   <div role="tablist" class="tabs tabs-boxed w-fit">
-    <button type="button" role="tab" class="tab" [class.tab-active]="state.filter() === 'all'" (click)="setFilter('all')">
-      {{ 'search.filter_all' | translate }}
-    </button>
-    <button type="button" role="tab" class="tab" [class.tab-active]="state.filter() === 'movie'" (click)="setFilter('movie')">
-      {{ 'search.filter_movies' | translate }}
-    </button>
-    <button type="button" role="tab" class="tab" [class.tab-active]="state.filter() === 'series'" (click)="setFilter('series')">
-      {{ 'search.filter_series' | translate }}
+    <button type="button" role="tab" class="tab" [class.tab-active]="state.tab() === 'videos'" (click)="setTab('videos')">
+      {{ 'search.tab_videos' | translate }}
     </button>
     @if (!tv.isTv()) {
-      <button type="button" role="tab" class="tab" [class.tab-active]="state.filter() === 'people'" (click)="setFilter('people')">
+      <button type="button" role="tab" class="tab" [class.tab-active]="state.tab() === 'people'" (click)="setTab('people')">
         {{ 'social.search_tab_people' | translate }}
       </button>
     }
   </div>
 
+  <!-- Media type: drives search + discover (reloads the discover genre list). -->
+  @if (state.tab() === 'videos') {
+    <div class="join">
+      <button type="button" class="btn btn-sm join-item" [class.btn-primary]="state.contentType() === 'all'" (click)="setContentType('all')">{{ 'search.filter_all' | translate }}</button>
+      <button type="button" class="btn btn-sm join-item" [class.btn-primary]="state.contentType() === 'movie'" (click)="setContentType('movie')">{{ 'search.filter_movies' | translate }}</button>
+      <button type="button" class="btn btn-sm join-item" [class.btn-primary]="state.contentType() === 'series'" (click)="setContentType('series')">{{ 'search.filter_series' | translate }}</button>
+    </div>
+  }
+
   @if (!state.hasQuery()) {
-    @if (state.filter() === 'people') {
+    @if (state.tab() === 'people') {
       <p class="text-base-content/50 text-center py-12">{{ 'search.discover_people_hint' | translate }}</p>
     } @else if (state.externalEnabled()) {
       <!-- Discover: filter sidebar (desktop) + rows / results grid -->
@@ -137,7 +140,7 @@
         <p class="text-base-content/50 text-center py-12">{{ 'search.hint_local' | translate }}</p>
       }
     }
-  } @else if (state.filter() === 'people') {
+  } @else if (state.tab() === 'people') {
     <!-- People results -->
     @if (state.peopleLoading()) {
       <div class="flex justify-center py-8">

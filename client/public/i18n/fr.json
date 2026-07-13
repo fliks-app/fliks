@@ -563,6 +563,7 @@
     "placeholder": "Rechercher un film ou une série...",
     "hint": "Tapez pour rechercher dans votre bibliothèque et les fournisseurs externes.",
     "hint_local": "Tapez pour rechercher dans votre bibliothèque.",
+    "tab_videos": "Vidéos",
     "filter_all": "Tout",
     "filter_movies": "Films",
     "filter_series": "Séries",

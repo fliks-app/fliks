@@ -71,13 +71,14 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Load discovery rows whenever the empty state is showing, keyed on the
    *  active tab + external-search toggle so a tab/toggle change refreshes them. */
   private readonly discoveryEffect = effect(() => {
-    const filter = this.state.filter();
+    const tab = this.state.tab();
+    const ct = this.state.contentType();
     const external = this.state.externalEnabled();
-    if (this.state.hasQuery() || filter === 'people') return;
-    const key = `${filter}:${external}`;
+    if (this.state.hasQuery() || tab !== 'videos') return;
+    const key = `${ct}:${external}`;
     if (key === this.lastDiscoveryKey) return;
     this.lastDiscoveryKey = key;
-    void this.loadDiscovery(filter, external);
+    void this.loadDiscovery(ct, external);
   });
 
   readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
@@ -204,10 +205,20 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  setFilter(f: 'all' | 'movie' | 'series' | 'people') {
-    // Discover genres/results are type-specific — drop them when the tab changes.
-    if (f !== this.state.filter()) this.state.resetDiscover();
-    this.state.filter.set(f);
+  setTab(t: 'videos' | 'people') {
+    if (t === this.state.tab()) return;
+    this.state.tab.set(t);
+    if (this.state.query().trim()) {
+      if (this.searchTimer) clearTimeout(this.searchTimer);
+      this.runSearch();
+    }
+  }
+
+  setContentType(ct: 'all' | 'movie' | 'series') {
+    if (ct === this.state.contentType()) return;
+    // Discover genres/results are type-specific — drop them when the type changes.
+    this.state.resetDiscover();
+    this.state.contentType.set(ct);
     if (this.state.query().trim()) {
       if (this.searchTimer) clearTimeout(this.searchTimer);
       this.runSearch();
@@ -249,18 +260,18 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
    * section. Rows follow the active `movie`/`series`/`all` tab.
    */
   private async loadDiscovery(
-    filter: 'all' | 'movie' | 'series' | 'people',
+    ct: 'all' | 'movie' | 'series',
     external: boolean,
   ): Promise<void> {
     this.state.discoveryLoading.set(true);
     try {
-      const isSeries = filter === 'series';
-      const isMovie = filter === 'movie';
+      const isSeries = ct === 'series';
+      const isMovie = ct === 'movie';
 
       const recs = await this.streamingApi
         .getRecommendations({ limit: 30 })
         .catch(() => []);
-      if (this.staleDiscovery(filter, external)) return;
+      if (this.staleDiscovery(ct, external)) return;
       this.state.discoveryRecommendations.set(
         isMovie || isSeries
           ? recs.filter((r) => r.media.type === (isMovie ? 'movie' : 'series'))
@@ -275,13 +286,13 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
       const [trending, popular, genres] = await Promise.all([
-        this.fetchTrending(filter, this.state.trendingWindow()),
-        this.fetchPopular(filter),
+        this.fetchTrending(ct, this.state.trendingWindow()),
+        this.fetchPopular(ct),
         (isSeries ? this.metadata.getTvGenres() : this.metadata.getMovieGenres()).catch(
           () => [],
         ),
       ]);
-      if (this.staleDiscovery(filter, external)) return;
+      if (this.staleDiscovery(ct, external)) return;
       this.state.discoveryTrending.set(trending);
       this.state.discoveryPopular.set(popular);
       this.state.discoverGenres.set(genres);
@@ -291,8 +302,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       // taste — NOT limited to the library. Derive their top genres from the
       // library recommendations, then discover those genres on TMDB.
       const topGenreIds = this.deriveTasteGenreIds(this.state.discoveryRecommendations(), genres);
-      const suggestions = await this.fetchSuggestions(filter, topGenreIds);
-      if (this.staleDiscovery(filter, external)) return;
+      const suggestions = await this.fetchSuggestions(ct, topGenreIds);
+      if (this.staleDiscovery(ct, external)) return;
       this.state.discoverySuggestions.set(suggestions);
     } finally {
       this.state.discoveryLoading.set(false);
@@ -322,11 +333,11 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   /** TMDB discover across the taste genres (one call per genre, merged
    *  round-robin + deduped — an OR the AND-only /discover can't express). */
   private async fetchSuggestions(
-    filter: 'all' | 'movie' | 'series' | 'people',
+    ct: 'all' | 'movie' | 'series',
     genreIds: number[],
   ): Promise<MetadataSearchResult[]> {
     if (!genreIds.length) return [];
-    const isSeries = filter === 'series';
+    const isSeries = ct === 'series';
     const perGenre = await Promise.all(
       genreIds.map((id) =>
         (isSeries
@@ -351,11 +362,11 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private async fetchTrending(
-    filter: 'all' | 'movie' | 'series' | 'people',
+    ct: 'all' | 'movie' | 'series',
     window: 'day' | 'week',
   ): Promise<MetadataSearchResult[]> {
-    if (filter === 'series') return this.metadata.getTrendingTv(window).catch(() => []);
-    if (filter === 'movie') return this.metadata.getTrendingMovies(window).catch(() => []);
+    if (ct === 'series') return this.metadata.getTrendingTv(window).catch(() => []);
+    if (ct === 'movie') return this.metadata.getTrendingMovies(window).catch(() => []);
     const [m, t] = await Promise.all([
       this.metadata.getTrendingMovies(window).catch(() => []),
       this.metadata.getTrendingTv(window).catch(() => []),
@@ -364,10 +375,10 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private async fetchPopular(
-    filter: 'all' | 'movie' | 'series' | 'people',
+    ct: 'all' | 'movie' | 'series',
   ): Promise<MetadataSearchResult[]> {
-    if (filter === 'series') return this.metadata.getPopularTv().catch(() => []);
-    if (filter === 'movie') return this.metadata.getPopularMovies().catch(() => []);
+    if (ct === 'series') return this.metadata.getPopularTv().catch(() => []);
+    if (ct === 'movie') return this.metadata.getPopularMovies().catch(() => []);
     const [m, t] = await Promise.all([
       this.metadata.getPopularMovies().catch(() => []),
       this.metadata.getPopularTv().catch(() => []),
@@ -375,12 +386,16 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     return this.interleave(m, t);
   }
 
-  /** True if the tab/toggle moved on while a discovery fetch was in flight. */
+  /** True if the type/toggle moved on while a discovery fetch was in flight. */
   private staleDiscovery(
-    filter: 'all' | 'movie' | 'series' | 'people',
+    ct: 'all' | 'movie' | 'series',
     external: boolean,
   ): boolean {
-    return this.state.filter() !== filter || this.state.externalEnabled() !== external;
+    return (
+      this.state.tab() !== 'videos' ||
+      this.state.contentType() !== ct ||
+      this.state.externalEnabled() !== external
+    );
   }
 
   /** Alternate two lists so a mixed row isn't all movies then all series. */
@@ -405,7 +420,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   setTrendingWindow(w: 'day' | 'week') {
     if (this.state.trendingWindow() === w) return;
     this.state.trendingWindow.set(w);
-    void this.fetchTrending(this.state.filter(), w).then((rows) => {
+    void this.fetchTrending(this.state.contentType(), w).then((rows) => {
       if (this.state.trendingWindow() === w) this.state.discoveryTrending.set(rows);
     });
   }
@@ -422,7 +437,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Run the TMDB /discover query from the current panel filters and switch
    *  the content area to the results grid. */
   async applyDiscover() {
-    const filter = this.state.filter();
+    const ct = this.state.contentType();
     const opts: DiscoverFilters = {
       genreIds: [...this.state.discoverSelectedGenres()],
       sort: this.state.discoverSort(),
@@ -435,7 +450,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.closeFilterSheet();
     try {
       const rows =
-        filter === 'series'
+        ct === 'series'
           ? await this.metadata.discoverTv(opts)
           : await this.metadata.discoverMovies(opts);
       this.state.discoverResults.set(rows);
@@ -489,18 +504,16 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     const q = this.state.query().trim();
     if (!q) return;
 
-    const filter = this.state.filter();
-
     // People search is a distinct surface — no local/external media lookups.
-    if (filter === 'people') {
+    if (this.state.tab() === 'people') {
       this.state.peopleLoading.set(true);
       try {
         const results = await this.social.searchUsers(q);
-        // Ignore a stale response if the query/filter moved on meanwhile.
-        if (this.state.query().trim() !== q || this.state.filter() !== 'people') return;
+        // Ignore a stale response if the query/tab moved on meanwhile.
+        if (this.state.query().trim() !== q || this.state.tab() !== 'people') return;
         this.state.peopleResults.set(results);
       } catch {
-        if (this.state.query().trim() === q && this.state.filter() === 'people') {
+        if (this.state.query().trim() === q && this.state.tab() === 'people') {
           this.state.peopleResults.set([]);
         }
       } finally {
@@ -509,7 +522,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    const type: MediaType | undefined = filter === 'all' ? undefined : filter;
+    const ct = this.state.contentType();
+    const type: MediaType | undefined = ct === 'all' ? undefined : ct;
 
     // Search local library first
     this.state.localLoading.set(true);
@@ -525,11 +539,11 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     queueMicrotask(() => {
       // Revalidate: cached result paints instantly, then catch up to fresh
       // matches (a media imported since the last identical query lands here).
-      if (this.state.query().trim() !== q || this.state.filter() !== filter) return;
+      if (this.state.query().trim() !== q || this.state.contentType() !== ct) return;
       void this.mediaService
         .getAll(localParams, { force: true })
         .then((fresh) => {
-          if (this.state.query().trim() === q && this.state.filter() === filter) {
+          if (this.state.query().trim() === q && this.state.contentType() === ct) {
             this.state.localResults.set(fresh.data);
           }
         })
@@ -541,9 +555,9 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.state.externalLoading.set(true);
     try {
       let rows: MetadataSearchResult[];
-      if (filter === 'movie') {
+      if (ct === 'movie') {
         rows = await this.metadata.searchMovie(q);
-      } else if (filter === 'series') {
+      } else if (ct === 'series') {
         rows = await this.metadata.searchTv(q);
       } else {
         const [movies, tv] = await Promise.all([
