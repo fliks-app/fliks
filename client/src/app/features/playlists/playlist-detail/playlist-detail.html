@@ -37,6 +37,10 @@
         <!-- md+ : inline buttons -->
         <div class="hidden md:flex items-center gap-2">
           @if (canManage()) {
+            <button type="button" class="btn btn-ghost btn-sm gap-2" (click)="openMembers()">
+              <svg lucideUsers class="h-4 w-4"></svg>
+              {{ 'playlists.members' | translate }}
+            </button>
             <button type="button" class="btn btn-ghost btn-sm gap-2" (click)="openSettings()">
               <svg lucideSettings class="h-4 w-4"></svg>
               {{ 'playlists.settings' | translate }}
@@ -61,6 +65,10 @@
               <svg lucideEllipsisVertical class="h-5 w-5"></svg>
             </div>
             @if (canManage()) {
+              <button type="button" class="dropdown-item text-white" (click)="openMembers()">
+                <svg lucideUsers class="h-4 w-4"></svg>
+                {{ 'playlists.members' | translate }}
+              </button>
               <button type="button" class="dropdown-item text-white" (click)="openSettings()">
                 <svg lucideSettings class="h-4 w-4"></svg>
                 {{ 'playlists.settings' | translate }}
@@ -394,6 +402,67 @@
         {{ 'common.save' | translate }}
       </button>
     </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<dialog #membersDialog class="modal">
+  <div class="modal-box max-w-md">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" [attr.aria-label]="'common.close' | translate">✕</button>
+    </form>
+    <h3 class="text-lg font-bold mb-1">{{ 'playlists.members' | translate }}</h3>
+    <p class="text-sm text-base-content/60 mb-4">{{ 'playlists.members_hint' | translate }}</p>
+
+    <!-- Current members -->
+    <ul class="flex flex-col gap-1 mb-4">
+      @for (m of members(); track m.userId) {
+        <li class="flex items-center gap-3 p-1.5 rounded-lg">
+          <span class="flex-1 min-w-0 truncate font-medium">{{ m.username }}</span>
+          @if (m.role === 'owner' || m.userId === myUserId()) {
+            <span class="badge badge-sm badge-ghost">{{ ('playlists.role_' + m.role) | translate }}</span>
+          } @else {
+            <select
+              class="select select-bordered select-xs w-36 shrink-0"
+              [ngModel]="m.role"
+              (ngModelChange)="changeMemberRole(m.userId, $event)"
+              [disabled]="memberBusy()"
+            >
+              <option value="viewer">{{ 'playlists.role_viewer' | translate }}</option>
+              <option value="editor">{{ 'playlists.role_editor' | translate }}</option>
+              <option value="administrator">{{ 'playlists.role_administrator' | translate }}</option>
+            </select>
+            <button type="button" class="btn btn-ghost btn-xs btn-square text-error" [disabled]="memberBusy()" (click)="removeMember(m.userId)" [attr.aria-label]="'playlists.remove_item_action' | translate">
+              <svg lucideTrash2 class="h-4 w-4"></svg>
+            </button>
+          }
+        </li>
+      }
+    </ul>
+
+    <div class="divider my-2"></div>
+
+    <!-- Add a member -->
+    <p class="text-sm font-semibold mb-1">{{ 'playlists.members_add_title' | translate }}</p>
+    <input
+      type="text"
+      class="input input-bordered input-sm w-full"
+      [placeholder]="'playlists.members_search_placeholder' | translate"
+      [ngModel]="memberQuery()"
+      (ngModelChange)="onMemberQuery($event)"
+    />
+    @if (memberResults().length) {
+      <ul class="flex flex-col gap-1 mt-2 max-h-52 overflow-y-auto">
+        @for (u of memberResults(); track u.id) {
+          <li>
+            <button type="button" class="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left" [disabled]="memberBusy()" (click)="addMember(u)">
+              <span class="flex-1 min-w-0 truncate">{{ u.username }}</span>
+              <svg lucideUserPlus class="h-4 w-4 text-base-content/60"></svg>
+            </button>
+          </li>
+        }
+      </ul>
+    }
   </div>
   <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>

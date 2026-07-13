@@ -202,6 +202,29 @@ export class SocialService {
     return this.decorate(me, users);
   }
 
+  /** Members the caller may add as playlist collaborators: public profiles, or
+   *  members the caller already follows (accepted). An empty query returns the
+   *  default suggestions (so the picker can propose on focus). */
+  async searchConnectable(me: User, query: string): Promise<SocialUser[]> {
+    const q = query?.trim();
+    const followingIds = (
+      await this.followRepo.find({
+        where: { follower: { id: me.id }, status: FollowStatus.ACCEPTED },
+      })
+    ).map((f) => f.followingId);
+    const qb = this.userRepo
+      .createQueryBuilder('u')
+      .where('u.enabled = true')
+      .andWhere('u.id != :meId', { meId: me.id })
+      .andWhere('(u.profileVisibility = :pub OR u.id IN (:...ids))', {
+        pub: ProfileVisibility.PUBLIC,
+        ids: followingIds.length ? followingIds : [-1],
+      });
+    if (q) qb.andWhere('u.username ILIKE :q', { q: `%${q}%` });
+    const users = await qb.orderBy('u.username', 'ASC').take(30).getMany();
+    return this.decorate(me, users);
+  }
+
   private async connectionsVisible(me: User, target: User): Promise<boolean> {
     return (
       me.id === target.id ||

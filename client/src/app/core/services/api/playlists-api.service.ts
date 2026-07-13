@@ -5,6 +5,15 @@ import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
 import { Media } from './media.service';
 
 export type PlaylistRole = 'owner' | 'administrator' | 'editor' | 'viewer';
+/** Roles that can be granted to a member (owner is not grantable). */
+export type PlaylistShareRole = 'administrator' | 'editor' | 'viewer';
+
+export interface PlaylistMember {
+  userId: number;
+  username: string;
+  avatar: string | null;
+  role: PlaylistRole;
+}
 
 /** Who can read the playlist. */
 export type PlaylistVisibility = 'private' | 'followers' | 'public';
@@ -132,6 +141,26 @@ export class PlaylistsApiService {
       this.http.delete<{ removed: number }>(
         `/api/playlists/${id}/items/by-media/${mediaId}`,
       ),
+    );
+  }
+
+  // ── Members (collaboration) ──
+
+  members(id: number) {
+    return firstValueFrom(
+      this.http.get<PlaylistMember[]>(`/api/playlists/${id}/members`),
+    );
+  }
+
+  addMember(id: number, userId: number, role: PlaylistShareRole) {
+    return firstValueFrom(
+      this.http.post<PlaylistMember[]>(`/api/playlists/${id}/members`, { userId, role }),
+    );
+  }
+
+  removeMember(id: number, userId: number) {
+    return firstValueFrom(
+      this.http.delete<PlaylistMember[]>(`/api/playlists/${id}/members/${userId}`),
     );
   }
 }

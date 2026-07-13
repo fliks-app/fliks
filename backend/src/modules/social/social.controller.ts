@@ -28,6 +28,11 @@ export class SocialController {
     return this.service.search(me, q ?? '');
   }
 
+  @Get('connectable')
+  connectable(@CurrentUser() me: User, @Query('q') q: string) {
+    return this.service.searchConnectable(me, q ?? '');
+  }
+
   @Get('requests')
   requests(@CurrentUser() me: User) {
     return this.service.listRequests(me);
