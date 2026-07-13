@@ -91,6 +91,7 @@ export class HomeSettingsPageComponent implements OnInit {
     'continue-watching': 'home_settings.section.continue_watching',
     recommendations: 'home_settings.section.recommendations',
     'recently-added': 'home_settings.section.recently_added',
+    playlists: 'home_settings.section.playlists',
     'coming-soon': 'home_settings.section.coming_soon',
     'requests-recent': 'home_settings.section.requests_recent',
   };

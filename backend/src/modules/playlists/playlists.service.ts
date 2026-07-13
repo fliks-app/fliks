@@ -352,6 +352,8 @@ export class PlaylistsService {
           }),
         );
         await itemRepo.save(rows);
+        // Reflect item changes in updatedAt (it otherwise only moves on rename).
+        await m.update(Playlist, playlistId, { updatedAt: () => 'now()' });
         return { added: rows.length };
       });
 
@@ -475,6 +477,8 @@ export class PlaylistsService {
     if (!res.affected) {
       throw new NotFoundException(`Playlist item #${itemId} not found`);
     }
+    // Reflect item changes in updatedAt (it otherwise only moves on rename).
+    await this.repo.update(playlistId, { updatedAt: () => 'now()' });
   }
 
   /** Remove every item of one media from the playlist — for a series this is
@@ -489,6 +493,10 @@ export class PlaylistsService {
       playlist: { id: playlistId },
       media: { id: mediaId },
     });
+    if (res.affected) {
+      // Reflect item changes in updatedAt (it otherwise only moves on rename).
+      await this.repo.update(playlistId, { updatedAt: () => 'now()' });
+    }
     return { removed: res.affected ?? 0 };
   }
 
@@ -552,6 +560,8 @@ export class PlaylistsService {
       for (let idx = 0; idx < dto.itemIds.length; idx++) {
         await m.update(PlaylistItem, { id: dto.itemIds[idx] }, { position: idx });
       }
+      // Reflect item changes in updatedAt (it otherwise only moves on rename).
+      await m.update(Playlist, playlistId, { updatedAt: () => 'now()' });
     });
   }
 

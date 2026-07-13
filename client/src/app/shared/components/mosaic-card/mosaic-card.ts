@@ -16,10 +16,10 @@ import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
     <button
       type="button"
       data-no-focus-ring
-      class="group flex flex-col items-stretch gap-2 text-left focus:outline-none min-w-0 w-full"
+      class="group flex flex-col items-stretch gap-2 text-left focus:outline-none min-w-0 w-full cursor-pointer"
       (click)="clicked.emit()"
     >
-      <div class="mosaic-art aspect-square rounded-xl overflow-hidden bg-base-300 ring-1 ring-base-300 transition-shadow group-hover:ring-primary">
+      <div class="mosaic-art relative aspect-square rounded-xl overflow-hidden bg-base-300 shadow-md group-hover:shadow-xl transition-shadow">
         @if (posters().length >= 4) {
           <div class="grid grid-cols-2 grid-rows-2 w-full h-full">
             @for (p of posters().slice(0, 4); track p) {
@@ -33,10 +33,11 @@ import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
             <svg lucideFolder class="w-12 h-12" [strokeWidth]="1.5"></svg>
           </div>
         }
+        <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
       </div>
       <div class="text-sm min-w-0 w-full">
-        <div class="font-medium truncate group-hover:text-primary transition-colors">{{ label() }}</div>
-        <div class="text-xs text-base-content/50">{{ count() }}</div>
+        <div class="font-medium truncate hover:underline">{{ label() }}</div>
+        <div class="text-xs text-base-content/50">{{ subtitle() }}</div>
       </div>
     </button>
   `,
@@ -44,6 +45,7 @@ import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
 export class MosaicCardComponent {
   readonly posters = input.required<string[]>();
   readonly label = input.required<string>();
-  readonly count = input.required<number>();
+  /** Pre-formatted subtitle line under the label (e.g. "5 éléments"). */
+  readonly subtitle = input.required<string>();
   readonly clicked = output<void>();
 }

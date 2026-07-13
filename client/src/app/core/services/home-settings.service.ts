@@ -7,6 +7,7 @@ export type HomeSectionKey =
   | 'continue-watching'
   | 'recommendations'
   | 'recently-added'
+  | 'playlists'
   | 'coming-soon'
   | 'requests-recent'
   | `library-recent:${number}`;
@@ -16,6 +17,7 @@ export type HomeSectionType =
   | 'continue-watching'
   | 'recommendations'
   | 'recently-added'
+  | 'playlists'
   | 'coming-soon'
   | 'requests-recent'
   | 'library-recent';
@@ -50,6 +52,7 @@ const BUILTIN_ORDER: HomeSectionKey[] = [
   'continue-watching',
   'recommendations',
   'recently-added',
+  'playlists',
   'coming-soon',
 ];
 

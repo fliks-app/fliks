@@ -67,7 +67,7 @@
       [class.pr-4]="sortBy() === 'title' && sortOrder() === 'ASC'"
     >
       <span class="text-sm text-base-content/70 mr-1">
-        {{ 'library.element_count' | translate:{ count: list.total() } }}
+        {{ (list.total() <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate:{ count: list.total() } }}
       </span>
 
       @if (selectedGenre()) {
@@ -467,7 +467,7 @@
   } @else if (viewMode() === 'genres') {
     <div class="flex items-center gap-3">
       <span class="text-sm text-base-content/70">
-        {{ 'library.element_count' | translate:{ count: genresList().length } }}
+        {{ (genresList().length <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate:{ count: genresList().length } }}
       </span>
     </div>
     @if (genresLoading() && !genresList().length) {
@@ -488,7 +488,7 @@
           <app-mosaic-card
             [posters]="g.posters"
             [label]="g.genre"
-            [count]="g.count"
+            [subtitle]="(g.count <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate: { count: g.count }"
             (clicked)="pickGenre(g.genre)"
           />
         }
@@ -511,7 +511,7 @@
           <app-mosaic-card
             [posters]="c.posters"
             [label]="c.name"
-            [count]="c.count"
+            [subtitle]="(c.count <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate: { count: c.count }"
             (clicked)="pickCollection(c.id)"
           />
         }
