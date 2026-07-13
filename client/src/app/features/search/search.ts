@@ -271,6 +271,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
         this.state.discoveryTrending.set([]);
         this.state.discoveryPopular.set([]);
         this.state.discoverGenres.set([]);
+        this.state.discoverySuggestions.set([]);
         return;
       }
       const [trending, popular, genres] = await Promise.all([
@@ -285,9 +286,68 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       this.state.discoveryPopular.set(popular);
       this.state.discoverGenres.set(genres);
       this.loadRequestedIds();
+
+      // "Suggestions pour vous" (external): TMDB catalog matching the viewer's
+      // taste — NOT limited to the library. Derive their top genres from the
+      // library recommendations, then discover those genres on TMDB.
+      const topGenreIds = this.deriveTasteGenreIds(this.state.discoveryRecommendations(), genres);
+      const suggestions = await this.fetchSuggestions(filter, topGenreIds);
+      if (this.staleDiscovery(filter, external)) return;
+      this.state.discoverySuggestions.set(suggestions);
     } finally {
       this.state.discoveryLoading.set(false);
     }
+  }
+
+  /** Map the viewer's most-recurring recommendation genres to TMDB genre ids. */
+  private deriveTasteGenreIds(
+    recs: RecommendationItem[],
+    genres: { id: number; name: string }[],
+  ): number[] {
+    const freq = new Map<string, number>();
+    for (const r of recs) {
+      for (const g of r.media.genres ?? []) {
+        const k = g.toLowerCase();
+        freq.set(k, (freq.get(k) ?? 0) + 1);
+      }
+    }
+    const nameToId = new Map(genres.map((g) => [g.name.toLowerCase(), g.id]));
+    return [...freq.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => nameToId.get(name))
+      .filter((id): id is number => id != null)
+      .slice(0, 3);
+  }
+
+  /** TMDB discover across the taste genres (one call per genre, merged
+   *  round-robin + deduped — an OR the AND-only /discover can't express). */
+  private async fetchSuggestions(
+    filter: 'all' | 'movie' | 'series' | 'people',
+    genreIds: number[],
+  ): Promise<MetadataSearchResult[]> {
+    if (!genreIds.length) return [];
+    const isSeries = filter === 'series';
+    const perGenre = await Promise.all(
+      genreIds.map((id) =>
+        (isSeries
+          ? this.metadata.discoverTv({ genreIds: [id], sort: 'popularity.desc' })
+          : this.metadata.discoverMovies({ genreIds: [id], sort: 'popularity.desc' })
+        ).catch(() => [] as MetadataSearchResult[]),
+      ),
+    );
+    const out: MetadataSearchResult[] = [];
+    const seen = new Set<number>();
+    const maxLen = Math.max(0, ...perGenre.map((a) => a.length));
+    for (let i = 0; i < maxLen; i++) {
+      for (const arr of perGenre) {
+        const r = arr[i];
+        if (r && !seen.has(r.tmdbId)) {
+          seen.add(r.tmdbId);
+          out.push(r);
+        }
+      }
+    }
+    return out.slice(0, 24);
   }
 
   private async fetchTrending(

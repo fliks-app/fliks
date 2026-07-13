@@ -83,7 +83,7 @@
               <p class="text-base-content/50 text-center py-12">{{ 'search.no_results' | translate }}</p>
             }
           } @else {
-            @if (state.discoveryLoading() && !state.discoveryTrending().length && !state.discoveryPopular().length && !state.discoveryRecommendations().length) {
+            @if (state.discoveryLoading() && !state.discoveryTrending().length && !state.discoveryPopular().length && !state.discoverySuggestions().length) {
               <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
             }
             <div class="flex flex-col gap-6">
@@ -105,10 +105,10 @@
                   }
                 </app-horizontal-scroller>
               }
-              @if (state.discoveryRecommendations().length) {
+              @if (state.discoverySuggestions().length) {
                 <app-horizontal-scroller [title]="'search.discover_suggestions' | translate" class="block">
-                  @for (rec of state.discoveryRecommendations(); track rec.media.id) {
-                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="rec.media.posterUrl" [title]="rec.media.title" [subtitle]="'' + (rec.media.year ?? '')" [link]="recLink(rec)" [status]="rec.media.available ? null : 'missing'" [playable]="rec.media.available" />
+                  @for (row of state.discoverySuggestions(); track row.mediaType + ':' + row.tmdbId) {
+                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" (clicked)="onExternalCardClick(row)" />
                   }
                 </app-horizontal-scroller>
               }

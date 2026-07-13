@@ -28,8 +28,12 @@ export class SearchStateService {
   readonly trendingWindow = signal<'day' | 'week'>('week');
   readonly discoveryTrending = signal<MetadataSearchResult[]>([]);
   readonly discoveryPopular = signal<MetadataSearchResult[]>([]);
-  /** Personalized recommendations from the viewer's library (local, always). */
+  /** Personalized recommendations from the viewer's library (local; used for the
+   *  external-OFF row and to derive the taste genres below). */
   readonly discoveryRecommendations = signal<RecommendationItem[]>([]);
+  /** TMDB catalog picks matching the viewer's taste — the external-ON
+   *  "Suggestions pour vous" row, deliberately NOT limited to the library. */
+  readonly discoverySuggestions = signal<MetadataSearchResult[]>([]);
   readonly discoveryLoading = signal(false);
 
   // ── Discover filter panel (TMDB /discover) ──
