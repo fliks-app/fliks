@@ -13,4 +13,8 @@ export class UpdatePlaylistDto {
   @IsOptional()
   @IsBoolean()
   autoDownload?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  autoPlay?: boolean;
 }

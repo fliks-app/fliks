@@ -154,7 +154,7 @@ export class PlayerControlsComponent {
     // A cue removed while focused can swallow its blur, leaving the flag stuck;
     // clear it whenever no cue is shown so the next one isn't born frozen.
     effect(() => {
-      if (!this.showSkipIntro() && !this.showNextEpisode()) {
+      if (!this.showSkipIntro() && !this.showNextCue()) {
         this.cueFocused.set(false);
       }
     });
@@ -211,8 +211,9 @@ export class PlayerControlsComponent {
     this.failedLogoUrl.set(this.logoUrl());
   }
   readonly episodeTitle = input('');
-  readonly hasNextEpisode = input(false);
-  readonly hasPrevEpisode = input(false);
+  readonly hasNext = input(false);
+  /** i18n key for the next-item control label — episode vs generic item. */
+  readonly nextLabelKey = input('player.next_episode');
   readonly activeQualityLabel = input('Auto');
   readonly isNative = input(false);
   /** Desktop (Electron) — native engine but mouse-driven; keeps the fullscreen
@@ -236,7 +237,7 @@ export class PlayerControlsComponent {
   readonly fillScreen = input(false);
   readonly statsVisible = input(false);
   readonly showSkipIntro = input(false);
-  readonly showNextEpisode = input(false);
+  readonly showNextCue = input(false);
   /** How long a floating cue stays up, in ms — drives the in-button progress
    *  sweep so it finishes exactly as the parent retracts the cue. */
   readonly cueDurationMs = input(6000);
@@ -249,7 +250,6 @@ export class PlayerControlsComponent {
   readonly cueFocused = signal(false);
   readonly togglePlay = output<void>();
   readonly skipIntro = output<void>();
-  readonly skipToNextEpisode = output<void>();
   readonly tapOverlay = output<void>();
   readonly seek = output<number>();
   readonly volumeChange = output<number>();
@@ -262,8 +262,8 @@ export class PlayerControlsComponent {
   readonly selectSubtitle = output<string | null>();
   readonly selectQuality = output<string>();
   readonly speedChange = output<number>();
-  readonly nextEpisode = output<void>();
-  readonly prevEpisode = output<void>();
+  /** Advance to the next item — emitted by the toolbar button and the outro cue. */
+  readonly next = output<void>();
   readonly back = output<void>();
   readonly selectAudioTrack = output<string>();
   readonly toggleCast = output<void>();

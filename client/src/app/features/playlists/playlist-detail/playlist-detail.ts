@@ -27,8 +27,10 @@ import {
   LucideCheck,
   LucideEllipsisVertical,
   LucideGripVertical,
+  LucideInfo,
   LucideListVideo,
   LucidePencil,
+  LucidePlay,
   LucideSettings,
   LucideTrash2,
 } from '@lucide/angular';
@@ -39,6 +41,8 @@ import { StreamingApiService } from '../../../core/services/api/streaming-api.se
 import { BackgroundService } from '../../../core/services/background.service';
 import { AutoDownloadService } from '../../../core/services/auto-download.service';
 import { NavbarService } from '../../../core/services/navbar.service';
+import { PlayableMediaService } from '../../../core/services/playable-media.service';
+import { QueueItem } from '../../../core/services/playback-queue.service';
 import {
   Playlist,
   PlaylistItem,
@@ -74,8 +78,10 @@ type PlaylistGroupedEntry =
     LucideCheck,
     LucideEllipsisVertical,
     LucideGripVertical,
+    LucideInfo,
     LucideListVideo,
     LucidePencil,
+    LucidePlay,
     LucideSettings,
     LucideTrash2,
     ToggleFieldComponent,
@@ -97,6 +103,7 @@ export class PlaylistDetailComponent {
   private readonly streamingApi = inject(StreamingApiService);
   private readonly background = inject(BackgroundService);
   private readonly autoDownload = inject(AutoDownloadService);
+  private readonly playable = inject(PlayableMediaService);
   private readonly destroyRef = inject(DestroyRef);
 
   private readonly routeParams = toSignal(this.route.paramMap);
@@ -116,6 +123,7 @@ export class PlaylistDetailComponent {
   readonly savingSettings = signal(false);
   readonly draftAutoRemoveWatched = signal(false);
   readonly draftAutoDownload = signal(false);
+  readonly draftAutoPlay = signal(false);
   /** Auto-download is native-mobile only, so its toggle is hidden elsewhere. */
   readonly showAutoDownload = this.autoDownload.enabled;
 
@@ -219,6 +227,63 @@ export class PlaylistDetailComponent {
     );
   }
 
+  // ── Playback ──
+
+  /** Items in the exact order the grouped view shows them (movies + series
+   *  blocks, episodes in series order) — this is the order playback follows, so
+   *  the queue never diverges from what the user sees. */
+  readonly orderedItems = computed<PlaylistItem[]>(() => {
+    const out: PlaylistItem[] = [];
+    for (const e of this.groupedEntries()) {
+      if (e.kind === 'movie') out.push(e.item);
+      else out.push(...e.group.episodes);
+    }
+    return out;
+  });
+
+  /** Map a playlist row to a queue item. The file id is resolved later (on
+   *  launch / advance) since the playlist payload doesn't carry it. */
+  private toQueueItem(it: PlaylistItem): QueueItem {
+    return {
+      mediaId: it.media.id,
+      episodeId: it.episode?.id ?? undefined,
+      title: it.media.title,
+      episodeTitle: it.episode ? this.episodeLabel(it.episode) : undefined,
+      fanartUrl: it.media.fanartUrl ?? null,
+      stillUrl: it.episode?.stillUrl ?? null,
+    };
+  }
+
+  /** Play the whole playlist, starting at the first unwatched item (or the
+   *  first item when everything is watched). */
+  playAll(): void {
+    const list = this.orderedItems();
+    if (!list.length) return;
+    const firstUnwatched = list.findIndex((i) => !i.watched);
+    void this.launchQueue(firstUnwatched >= 0 ? firstUnwatched : 0);
+  }
+
+  /** Play from a specific row, queueing the rest of the playlist after it. */
+  playFrom(item: PlaylistItem): void {
+    const index = this.orderedItems().findIndex((i) => i.itemId === item.itemId);
+    if (index >= 0) void this.launchQueue(index);
+  }
+
+  private async launchQueue(startIndex: number): Promise<void> {
+    const p = this.playlist();
+    if (!p) return;
+    const queue = this.orderedItems().map((i) => this.toQueueItem(i));
+    const launched = await this.playable.playFromPlaylist(
+      p.id,
+      queue,
+      startIndex,
+      p.autoPlay,
+    );
+    if (!launched) {
+      this.toast.error(this.translate.instant('playlists.item_unavailable'));
+    }
+  }
+
   private patchItem(itemId: number, patch: Partial<PlaylistItem>): void {
     this.items.update((list) =>
       list.map((i) => (i.itemId === itemId ? { ...i, ...patch } : i)),
@@ -310,6 +375,7 @@ export class PlaylistDetailComponent {
     if (!p) return;
     this.draftAutoRemoveWatched.set(p.autoRemoveWatched);
     this.draftAutoDownload.set(this.autoDownload.isAutoDownload(p.id));
+    this.draftAutoPlay.set(p.autoPlay);
     this.settingsDialog()?.nativeElement.showModal();
   }
 
@@ -324,6 +390,7 @@ export class PlaylistDetailComponent {
     try {
       const updated = await this.api.update(p.id, {
         autoRemoveWatched: this.draftAutoRemoveWatched(),
+        autoPlay: this.draftAutoPlay(),
       });
       this.playlist.set(updated);
       // Auto-download is stored on-device only, not on the server.

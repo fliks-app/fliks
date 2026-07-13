@@ -31,6 +31,10 @@ export class PlayerStateService {
   readonly playbackRate = signal(1);
   readonly buffering = signal(false);
   readonly bufferedEnd = signal(0);
+  /** Latched when the engine reaches the natural end of the stream; cleared by
+   *  {@link reset} on the next load. The player watches it to auto-advance the
+   *  queue. */
+  readonly ended = signal(false);
   readonly playbackMode = signal<'direct' | 'remux' | 'transcode'>('direct');
   readonly hwAccel = signal('none');
 
@@ -114,6 +118,10 @@ export class PlayerStateService {
       // for native.
     });
 
+    engine.on('ended', () => {
+      this.ended.set(true);
+    });
+
     engine.on('timeUpdate', (e) => {
       if (!this.seekLocked()) this.currentTime.set(e.position);
       if (e.duration > 0) this.duration.set(e.duration);
@@ -177,6 +185,7 @@ export class PlayerStateService {
     this.duration.set(0);
     this.buffering.set(false);
     this.bufferedEnd.set(0);
+    this.ended.set(false);
     this.seekLocked.set(false);
     this.lastBufferingPos = -1;
   }

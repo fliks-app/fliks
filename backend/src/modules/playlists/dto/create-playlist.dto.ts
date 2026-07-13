@@ -12,4 +12,8 @@ export class CreatePlaylistDto {
   @IsOptional()
   @IsBoolean()
   autoDownload?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  autoPlay?: boolean;
 }

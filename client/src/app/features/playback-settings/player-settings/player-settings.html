@@ -61,6 +61,12 @@
       [hint]="'playback_settings.player_auto_skip_intro_hint' | translate"
     />
 
+    <app-toggle-field
+      [(value)]="autoPlayNext"
+      [label]="'playback_settings.player_auto_play_next' | translate"
+      [hint]="'playback_settings.player_auto_play_next_hint' | translate"
+    />
+
     <button class="btn btn-ghost btn-sm text-error gap-2 self-start" (click)="clearAudioSelections()">
       <svg lucideTrash2 class="h-4 w-4"></svg>
       {{ 'playback_settings.player_clear_saved' | translate }}

@@ -31,6 +31,11 @@ export class Playlist extends BaseEntity {
   @Column({ default: false })
   autoRemoveWatched: boolean;
 
+  /** Play the playlist's items back to back: when one finishes, the player
+   *  advances to the next item automatically. */
+  @Column({ default: false })
+  autoPlay: boolean;
+
   /** Keep the playlist's media downloaded on native iOS/Android clients. */
   @Column({ default: false })
   autoDownload: boolean;

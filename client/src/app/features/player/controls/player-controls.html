@@ -144,8 +144,8 @@
     <!-- Mobile: action buttons aligned right -->
     @if (isMobileTouch()) {
       <div class="flex items-center lg:gap-1 shrink-0" (click)="$event.stopPropagation()">
-        @if (hasNextEpisode()) {
-          <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.next_episode' | translate" (click)="nextEpisode.emit()">
+        @if (hasNext()) {
+          <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="nextLabelKey() | translate" (click)="next.emit()">
             <svg lucideSkipForward class="h-5 w-5"></svg>
           </button>
         }
@@ -213,9 +213,9 @@
 
       <!-- Right: action buttons -->
       <div class="flex items-center gap-1.5">
-        <!-- Next episode -->
-        @if (hasNextEpisode()) {
-          <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.next_episode' | translate" (click)="nextEpisode.emit()">
+        <!-- Next item -->
+        @if (hasNext()) {
+          <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="nextLabelKey() | translate" (click)="next.emit()">
             <svg lucideSkipForward class="h-6 w-6"></svg>
           </button>
         }
@@ -286,14 +286,14 @@
   </button>
 }
 
-<!-- ===== Next episode floating button (during outro) ===== -->
-@if (showNextEpisode()) {
+<!-- ===== Next item floating button (during outro) ===== -->
+@if (showNextCue()) {
   <button
     #nextEpisodeBtn
     type="button"
     class="btn btn-primary absolute right-6 z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
     style="right: max(1.5rem, env(safe-area-inset-right)); bottom: max(var(--cue-bottom, 8rem), calc(var(--cue-bottom, 8rem) + env(safe-area-inset-bottom)));"
-    (click)="skipToNextEpisode.emit()"
+    (click)="next.emit()"
     (focus)="cueFocused.set(true)"
     (blur)="cueFocused.set(false)"
   >
@@ -304,7 +304,7 @@
     ></span>
     <span class="relative flex items-center gap-2">
       <svg lucideSkipForward class="h-4 w-4"></svg>
-      {{ 'player.next_episode' | translate }}
+      {{ nextLabelKey() | translate }}
     </span>
   </button>
 }
