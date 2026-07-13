@@ -216,7 +216,7 @@
     "profile_private": "Ce profil est privé. Suivez cet utilisateur pour voir son contenu.",
     "profile_empty": "L'utilisateur a choisi de ne pas afficher de données sur son profil.",
     "section_playlists": "Playlists publiques",
-    "section_tastes": "Genres préférés de {{username}}",
+    "section_tastes": "Genres préférés",
     "section_recommendations": "Recommandations",
     "section_recently_watched": "Vu récemment",
     "section_likes": "Coups de cœur",
