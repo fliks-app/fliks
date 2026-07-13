@@ -46,12 +46,13 @@
     }
   </div>
 
-  <!-- Media type: drives search + discover (reloads the discover genre list). -->
+  <!-- Media type: drives search + discover (reloads the discover genre list).
+       Spans the filter-column width, the three tabs sharing it equally. -->
   @if (state.tab() === 'videos') {
-    <div class="join">
-      <button type="button" class="btn btn-sm join-item" [class.btn-primary]="state.contentType() === 'all'" (click)="setContentType('all')">{{ 'search.filter_all' | translate }}</button>
-      <button type="button" class="btn btn-sm join-item" [class.btn-primary]="state.contentType() === 'movie'" (click)="setContentType('movie')">{{ 'search.filter_movies' | translate }}</button>
-      <button type="button" class="btn btn-sm join-item" [class.btn-primary]="state.contentType() === 'series'" (click)="setContentType('series')">{{ 'search.filter_series' | translate }}</button>
+    <div class="join w-full lg:w-60">
+      <button type="button" class="btn btn-sm join-item flex-1" [class.btn-primary]="state.contentType() === 'all'" (click)="setContentType('all')">{{ 'search.filter_all' | translate }}</button>
+      <button type="button" class="btn btn-sm join-item flex-1" [class.btn-primary]="state.contentType() === 'movie'" (click)="setContentType('movie')">{{ 'search.filter_movies' | translate }}</button>
+      <button type="button" class="btn btn-sm join-item flex-1" [class.btn-primary]="state.contentType() === 'series'" (click)="setContentType('series')">{{ 'search.filter_series' | translate }}</button>
     </div>
   }
 
