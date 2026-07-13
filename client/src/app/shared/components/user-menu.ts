@@ -59,7 +59,6 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
             </div>
             <div class="min-w-0 flex-1">
               <p class="font-semibold truncate text-white">{{ user.username }}</p>
-              <p class="text-xs text-white/50">{{ user.role }}</p>
             </div>
           </a>
         </div>
