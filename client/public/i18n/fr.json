@@ -258,7 +258,9 @@
     "recent_media_in": "Récemment ajouté – {{library}}",
     "requests_recent": "Demandes récentes",
     "cw_remove_title": "Retirer",
-    "cw_remove_message": "Retirer « {{title}} » de la liste ?"
+    "cw_remove_message": "Retirer « {{title}} » de la liste ?",
+    "customize": "Personnaliser l'accueil",
+    "customize_hint": "Ajoutez, retirez et réorganisez les zones de l'accueil"
   },
   "playback_settings": {
     "title": "Paramètres de lecture",
