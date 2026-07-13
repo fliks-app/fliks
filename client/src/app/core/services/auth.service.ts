@@ -31,6 +31,8 @@ export interface User {
   shareWatchHistory: boolean;
   /** Expose liked content on the public profile. */
   shareLikes: boolean;
+  /** Opt out of the whole social layer (undiscoverable + can't use sharing). */
+  shareDisabled: boolean;
 }
 
 /** Public = instant follow + shared content; private = follow on approval. */
@@ -131,6 +133,10 @@ export class AuthService {
 
   readonly user = this._user.asReadonly();
   readonly isAuthenticated = computed(() => !!this._user());
+  /** True when the user opted out of the social/sharing layer — social UI
+   *  surfaces (follow, recommend, playlist collaborators/save, people search)
+   *  are hidden and the backend rejects the actions. */
+  readonly sharingDisabled = computed(() => !!this._user()?.shareDisabled);
 
   /** Check if the current user has a specific permission. */
   hasPermission(perm: string): boolean {

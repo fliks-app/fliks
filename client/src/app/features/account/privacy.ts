@@ -21,6 +21,7 @@ interface SocialPrefs {
   shareRecommendations?: boolean;
   shareWatchHistory?: boolean;
   shareLikes?: boolean;
+  shareDisabled?: boolean;
 }
 
 @Component({
@@ -41,6 +42,7 @@ export class AccountPrivacyComponent implements OnInit {
   readonly shareRecommendations = signal(false);
   readonly shareWatchHistory = signal(false);
   readonly shareLikes = signal(false);
+  readonly shareDisabled = signal(false);
 
   readonly requests = signal<SocialUser[]>([]);
 
@@ -59,6 +61,7 @@ export class AccountPrivacyComponent implements OnInit {
     this.shareRecommendations.set(u.shareRecommendations);
     this.shareWatchHistory.set(u.shareWatchHistory);
     this.shareLikes.set(u.shareLikes);
+    this.shareDisabled.set(u.shareDisabled);
   }
 
   private async loadRequests(): Promise<void> {
@@ -92,6 +95,14 @@ export class AccountPrivacyComponent implements OnInit {
   async onShareLikesChange(value: boolean): Promise<void> {
     this.shareLikes.set(value);
     await this.persist({ shareLikes: value });
+  }
+
+  async onShareDisabledChange(value: boolean): Promise<void> {
+    this.shareDisabled.set(value);
+    await this.persist({ shareDisabled: value });
+    // Enabling tears down the user's social ties server-side (follows, saved
+    // playlists, collaborations…); drop the now-empty follow-requests list.
+    if (value) this.requests.set([]);
   }
 
   private async persist(patch: SocialPrefs): Promise<void> {

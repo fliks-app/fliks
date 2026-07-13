@@ -243,7 +243,16 @@ export class UsersService implements OnModuleInit {
       target.shareWatchHistory = dto.shareWatchHistory;
     if (dto.shareLikes !== undefined) target.shareLikes = dto.shareLikes;
 
+    // Opting out of the social layer: run the teardown once, on the
+    // false → true transition (after the row is saved so the flag is set).
+    const leavingSocial =
+      dto.shareDisabled === true && target.shareDisabled !== true;
+    if (dto.shareDisabled !== undefined)
+      target.shareDisabled = dto.shareDisabled;
+
     await this.userRepo.save(target);
+
+    if (leavingSocial) await this.leaveSocial(targetId);
 
     // Library access replace (manager-only). Done after the user row save so
     // FK is valid even for newly-promoted users.
@@ -267,6 +276,40 @@ export class UsersService implements OnModuleInit {
     }
 
     return this.findOne(targetId);
+  }
+
+  /**
+   * Tear down a user's social ties when they opt out of the sharing layer.
+   * Raw SQL keyed on the (stable) table/column names so UsersService stays
+   * decoupled from the social/playlist modules. Every table FK-cascades on
+   * user delete, so these are the same rows that would vanish if the account
+   * were removed — here we drop them while keeping the account.
+   */
+  private async leaveSocial(userId: number): Promise<void> {
+    const m = this.userRepo.manager;
+    // Leave the follow graph in both directions.
+    await m.query(
+      'DELETE FROM user_follows WHERE "followerId" = $1 OR "followingId" = $1',
+      [userId],
+    );
+    // Drop playlists they saved from other members.
+    await m.query('DELETE FROM playlist_saves WHERE "userId" = $1', [userId]);
+    // Remove them as a collaborator elsewhere, and unshare their own playlists.
+    await m.query('DELETE FROM playlist_shares WHERE "userId" = $1', [userId]);
+    await m.query(
+      'DELETE FROM playlist_shares WHERE "playlistId" IN (SELECT id FROM playlists WHERE "ownerId" = $1)',
+      [userId],
+    );
+    // Make their own playlists private again.
+    await m.query(
+      `UPDATE playlists SET visibility = 'private' WHERE "ownerId" = $1 AND visibility <> 'private'`,
+      [userId],
+    );
+    // Drop content recommendations they sent or received.
+    await m.query(
+      'DELETE FROM content_recommendations WHERE "senderId" = $1 OR "recipientId" = $1',
+      [userId],
+    );
   }
 
   async remove(id: number): Promise<void> {

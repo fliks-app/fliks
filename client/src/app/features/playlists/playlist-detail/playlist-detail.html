@@ -34,7 +34,7 @@
             {{ 'player.play' | translate }}
           </button>
         }
-        @if (!isOwner()) {
+        @if (!isOwner() && !sharingDisabled()) {
           <button type="button" class="btn btn-sm gap-2" [class.btn-ghost]="!pl.saved" [class.btn-outline]="pl.saved" [disabled]="savingBookmark()" (click)="toggleSave()">
             @if (pl.saved) {
               <svg lucideBookmarkCheck class="h-4 w-4"></svg>
@@ -48,10 +48,12 @@
         <!-- md+ : inline buttons -->
         <div class="hidden md:flex items-center gap-2">
           @if (canManage()) {
-            <button type="button" class="btn btn-ghost btn-sm gap-2" (click)="openMembers()">
-              <svg lucideUsers class="h-4 w-4"></svg>
-              {{ 'playlists.members' | translate }}
-            </button>
+            @if (!sharingDisabled()) {
+              <button type="button" class="btn btn-ghost btn-sm gap-2" (click)="openMembers()">
+                <svg lucideUsers class="h-4 w-4"></svg>
+                {{ 'playlists.members' | translate }}
+              </button>
+            }
             <button type="button" class="btn btn-ghost btn-sm gap-2" (click)="openSettings()">
               <svg lucideSettings class="h-4 w-4"></svg>
               {{ 'playlists.settings' | translate }}
@@ -76,10 +78,12 @@
               <svg lucideEllipsisVertical class="h-5 w-5"></svg>
             </div>
             @if (canManage()) {
-              <button type="button" class="dropdown-item text-white" (click)="openMembers()">
-                <svg lucideUsers class="h-4 w-4"></svg>
-                {{ 'playlists.members' | translate }}
-              </button>
+              @if (!sharingDisabled()) {
+                <button type="button" class="dropdown-item text-white" (click)="openMembers()">
+                  <svg lucideUsers class="h-4 w-4"></svg>
+                  {{ 'playlists.members' | translate }}
+                </button>
+              }
               <button type="button" class="dropdown-item text-white" (click)="openSettings()">
                 <svg lucideSettings class="h-4 w-4"></svg>
                 {{ 'playlists.settings' | translate }}

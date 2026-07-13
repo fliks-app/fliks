@@ -426,7 +426,7 @@
 
 <!-- Items projected into both mobile + desktop dropdown-menus. -->
 <ng-template #moreMenuItems>
-  @if (!tv.isTv()) {
+  @if (!tv.isTv() && !auth.sharingDisabled()) {
     <button type="button" class="dropdown-item text-white" (click)="recommend.emit()">
       <svg lucideUserPlus class="h-5 w-5 shrink-0 opacity-80"></svg>
       <span class="flex-1">{{ 'recommend.menu_item' | translate }}</span>

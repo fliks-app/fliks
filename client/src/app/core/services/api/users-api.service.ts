@@ -47,6 +47,8 @@ export interface UpdateUserBody {
   shareWatchHistory?: boolean;
   /** Self-editable: expose liked content on the public profile. */
   shareLikes?: boolean;
+  /** Self-editable: opt out of the whole social/sharing layer. */
+  shareDisabled?: boolean;
 }
 
 /** Aggregated stats payload for the admin user-detail Statistics tab. */

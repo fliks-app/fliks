@@ -113,6 +113,13 @@ export class User extends BaseEntity {
   @Column({ default: false })
   shareLikes: boolean;
 
+  /** Opt out of the whole social layer: the user becomes undiscoverable (search,
+   *  connectable, profile) and can't use any sharing feature. Enabling it drops
+   *  their social ties (follows, saved playlists, collaborations, recommendations)
+   *  — see UsersService. */
+  @Column({ default: false })
+  shareDisabled: boolean;
+
   /** Computed permissions from the linked role (isAdmin overrides with all). */
   get permissions(): string[] {
     if (this.isAdmin) {

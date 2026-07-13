@@ -12,6 +12,7 @@ import { CardAction, CardActionsService } from '../../../core/services/card-acti
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../../core/services/recommend.service';
 import { TvService } from '../../../core/services/tv.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
 import { NavbarService } from '../../../core/services/navbar.service';
@@ -44,6 +45,7 @@ export class MediaCardComponent {
   private readonly cardActionsService = inject(CardActionsService);
   private readonly addToPlaylist = inject(AddToPlaylistService);
   private readonly recommend = inject(RecommendService);
+  private readonly auth = inject(AuthService);
   private readonly playableMedia = inject(PlayableMediaService);
   private readonly navbar = inject(NavbarService);
   protected readonly device = inject(DeviceService);
@@ -393,7 +395,7 @@ export class MediaCardComponent {
       // Recommend to a member sits next to "add to playlist". Needs the parent
       // mediaId (the API keys recommendations to the title), and is hidden on TV
       // like the rest of the social surface.
-      if (mediaId != null && !this.tv.isTv()) {
+      if (mediaId != null && !this.tv.isTv() && !this.auth.sharingDisabled()) {
         actions.push({
           labelKey: 'recommend.menu_item',
           icon: 'user-plus',
