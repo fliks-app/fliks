@@ -29,6 +29,7 @@ import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
+import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { NetworkService } from '../../core/services/network.service';
 import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
@@ -93,6 +94,13 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly serverCache = inject(ServerCacheService);
   private readonly sse = inject(SseService);
   private readonly downloadManager = inject(DownloadManagerService);
+  // Instantiate eagerly from the shell so it records the page the user was on
+  // BEFORE the first player open. It is `providedIn: 'root'` but otherwise only
+  // injected by the player, which is created too late (during the → /watch nav)
+  // to observe the launching page — leaving the player's onBack without a
+  // previousUrl on the first play and forcing a replaceUrl that strands a
+  // history entry (back button then needs two presses to leave the detail page).
+  private readonly navHistory = inject(NavigationHistoryService);
   private readonly addToPlaylistSvc = inject(AddToPlaylistService);
   private readonly addToPlaylistModal = viewChild(AddToPlaylistModalComponent);
   // Bridge the global "add to playlist" requests (from cards / the media-detail
