@@ -100,6 +100,9 @@ export class AccountPrivacyComponent implements OnInit {
   }
 
   async onShareDisabledChange(value: boolean): Promise<void> {
+    // Reflect the toggle immediately so the bound value tracks the switch —
+    // this is what lets the false reset below register as a real change.
+    this.shareDisabled.set(value);
     // Enabling tears down the user's social ties server-side (follows, saved
     // playlists, collaborations, recommendations) — confirm before applying.
     if (value) {
@@ -110,14 +113,12 @@ export class AccountPrivacyComponent implements OnInit {
         variant: 'danger',
       });
       if (!confirmed) {
-        // Snap the toggle back to its bound state — nothing was persisted.
         this.shareDisabled.set(false);
         return;
       }
+      this.requests.set([]);
     }
-    this.shareDisabled.set(value);
     await this.persist({ shareDisabled: value });
-    if (value) this.requests.set([]);
   }
 
   private async persist(patch: SocialPrefs): Promise<void> {
