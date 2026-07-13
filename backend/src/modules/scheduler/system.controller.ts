@@ -81,6 +81,9 @@ export interface ActiveStreamDto {
   /** Real host OS name+version ("macOS 26") from the client; overrides the
    *  frozen-UA OS in the device label. */
   systemName: string | null;
+  /** Fliks client build version ("1.15.2"); only non-web clients (native app /
+   *  TV / desktop) report it, so it's null for browser sessions. */
+  appVersion: string | null;
   startedAt: string;
   lastActivity: string;
   // Progress
@@ -406,6 +409,7 @@ export class SystemController {
       lastActivity: string;
       deviceLabel: string | null;
       systemName: string | null;
+      appVersion: string | null;
       transcodeSession: TranscodeSession | undefined;
       audioPlan: LiveSessionSnapshot['audioPlan'];
       position: number;
@@ -456,6 +460,7 @@ export class SystemController {
               )
             : null),
         systemName: session.systemName,
+        appVersion: session.appVersion,
         transcodeSession: ts,
         audioPlan: session.audioPlan,
         // The LiveSession keeps the playhead fresh on every heartbeat — read
@@ -525,6 +530,7 @@ export class SystemController {
         hwAccel: s.hwAccelVal,
         device: s.deviceLabel,
         systemName: s.systemName,
+        appVersion: s.appVersion,
         startedAt: s.startedAt,
         lastActivity: s.lastActivity,
         positionSeconds,

@@ -126,6 +126,7 @@ describe('StreamingController.stopLiveSession', () => {
       kind: 'directplay',
       deviceLabel: null,
       systemName: null,
+      appVersion: null,
       sseConnectionId: null,
       startedAt: Date.now(),
       lastBeat: Date.now(),

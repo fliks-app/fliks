@@ -162,6 +162,15 @@ export class DeviceProfileDto {
   @MaxLength(60)
   systemName?: string;
 
+  /** Fliks client build version ("1.15.2"), sent only by non-web clients
+   *  (native app / TV / desktop). Web omits it — its bundle is always the
+   *  server's current build, so a version there is redundant. Shown next to
+   *  the device label on the admin streams dashboard. Cosmetic only. */
+  @IsString()
+  @IsOptional()
+  @MaxLength(40)
+  appVersion?: string;
+
   /**
    * Force MPEG-TS segments for every transcode session of this device.
    * Hard override, used as an emergency switch (admin / debug). The

@@ -21,6 +21,10 @@ export interface ActiveStream {
   /** Real host OS name+version ("macOS 26") sent by the client; overrides the
    *  UA-derived OS (which the browser freezes) in the device label. */
   systemName: string | null;
+  /** Fliks client build version ("1.15.2"); only non-web clients (native app /
+   *  TV / desktop) report it, so it's null for browser sessions. Shown next to
+   *  the device label. */
+  appVersion: string | null;
   startedAt: string;
   lastActivity: string;
   positionSeconds: number;

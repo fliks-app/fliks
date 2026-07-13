@@ -55,6 +55,10 @@ export interface LiveSession {
   /** Real host OS name+version ("macOS 26") from the client DeviceProfile;
    *  preferred over the UA-derived label in the admin streams dashboard. */
   systemName: string | null;
+  /** Fliks client build version ("1.15.2") from the DeviceProfile; only
+   *  non-web clients (native app / TV / desktop) send it. Shown next to the
+   *  device label on the admin streams dashboard. */
+  appVersion: string | null;
   /** SSE connection that owns this playback — admin remote-control is routed
    *  here so a second device on the same (user, file) is left untouched. */
   sseConnectionId: string | null;
@@ -126,6 +130,7 @@ export interface CreateLiveSessionInput {
   kind: SessionKind;
   deviceLabel?: string | null;
   systemName?: string | null;
+  appVersion?: string | null;
   sseConnectionId?: string | null;
   position?: number;
   useTs?: boolean;
@@ -234,6 +239,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       kind: input.kind,
       deviceLabel: input.deviceLabel ?? null,
       systemName: input.systemName ?? null,
+      appVersion: input.appVersion ?? null,
       sseConnectionId: input.sseConnectionId ?? null,
       startedAt: now,
       lastBeat: now,

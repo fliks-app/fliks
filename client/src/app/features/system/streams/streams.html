@@ -125,7 +125,9 @@
         <div class="text-center text-xs text-base-content/60 py-1.5">
           {{ s.username ?? '—' }}
           @if (formatDevice(s.device, s.systemName); as deviceLabel) {
-            <div class="text-base-content/40">{{ deviceLabel }}</div>
+            <div class="text-base-content/40">
+              {{ deviceLabel }}@if (s.appVersion) {<span class="opacity-70"> · {{ 'system.device_client_version' | translate:{ version: s.appVersion } }}</span>}
+            </div>
           }
         </div>
 
