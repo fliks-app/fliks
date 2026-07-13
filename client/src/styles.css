@@ -573,7 +573,33 @@ body.tv .to-base-100\/50 {
 /* Dropdowns are click-driven (`.dropdown-open` toggled by
    `appDropdownToggle`). Neutralise DaisyUI's `:focus-within` fallback so
    tabbing onto a trigger never auto-opens the menu — Tab/D-pad focus alone
-   should be a focus move, not an open. */
+   should be a focus move, not an open. `display` is part of the transition
+   (`allow-discrete`) so the panel animates on close before it's hidden;
+   `@starting-style` gives the matching open animation. Unsupported engines
+   (old TV Chromium) ignore both and just toggle instantly. */
+.dropdown > .dropdown-content {
+  opacity: 0;
+  transform: scale(0.96);
+  transform-origin: top;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease,
+    display 0.15s allow-discrete;
+}
+.dropdown.dropdown-end > .dropdown-content {
+  transform-origin: top right;
+}
+.dropdown.dropdown-top > .dropdown-content {
+  transform-origin: bottom;
+}
+.dropdown.dropdown-open > .dropdown-content {
+  opacity: 1;
+  transform: scale(1);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
 .dropdown:not(.dropdown-open) > .dropdown-content {
   display: none !important;
 }
