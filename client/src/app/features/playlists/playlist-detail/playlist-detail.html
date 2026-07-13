@@ -440,14 +440,16 @@
       }
     </ul>
 
+    <div class="divider my-2"></div>
+
     <!-- Add a member -->
+    <p class="text-sm font-semibold mb-1">{{ 'playlists.members_add_title' | translate }}</p>
     <input
       type="text"
       class="input input-bordered input-sm w-full"
       [placeholder]="'playlists.members_search_placeholder' | translate"
       [ngModel]="memberQuery()"
       (ngModelChange)="onMemberQuery($event)"
-      (focus)="onMemberQuery(memberQuery())"
     />
     @if (memberResults().length) {
       <ul class="flex flex-col gap-1 mt-2 max-h-52 overflow-y-auto">

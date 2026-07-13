@@ -1181,6 +1181,7 @@
     "view_details": "Voir les détails",
     "members": "Membres",
     "members_hint": "Invitez d'autres membres à collaborer sur cette liste.",
+    "members_add_title": "Ajouter des collaborateurs",
     "members_search_placeholder": "Rechercher un membre à ajouter…",
     "role_owner": "Propriétaire",
     "role_viewer": "Lecture",
