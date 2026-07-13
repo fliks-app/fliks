@@ -38,6 +38,8 @@ import { ServerConfigService } from '../../core/services/server-config.service';
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
+import { PlaybackQueueService, QueueItem } from '../../core/services/playback-queue.service';
+import { resolvePlayableFile } from '../../shared/utils/media-play.util';
 import { audioChannelsLabel, formatAudioLabel, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
 import { formatErrorDiagnostics, userMessageKeyFor } from '../../core/services/playback-engine/playback-error';
 import {
@@ -218,6 +220,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly navHistory = inject(NavigationHistoryService);
   private readonly toast = inject(ToastService);
   private readonly navbar = inject(NavbarService);
+  private readonly queue = inject(PlaybackQueueService);
   private readonly translate = inject(TranslateService);
   private readonly title = inject(Title);
 
@@ -504,9 +507,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  user-interaction reveal. */
   private readonly autoHideOnPlayEffect = effect(() => {
     if (this.videoStarted() && untracked(() => this.controlsVisible())) {
+      // After an in-place item switch we deliberately kept the controls up to
+      // show the new title; when its first frame plays, don't snap them away —
+      // start the normal auto-hide countdown instead so they linger briefly.
+      if (untracked(() => this.revealAcrossSwitch)) {
+        this.revealAcrossSwitch = false;
+        this.resetHideTimer();
+        return;
+      }
       this.controlsVisible.set(false);
     }
   });
+  /** One-shot: keep the controls visible across the next play-start (set on an
+   *  item switch), letting the auto-hide timer retract them rather than the
+   *  first-frame effect snapping them off. */
+  private revealAcrossSwitch = false;
 
   /** Re-apply native subtitle style on controls show/hide so the bottom-margin
       bump kicks in. Browser playback uses CSS instead — see styles below. */
@@ -891,6 +906,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.episodeId = qp['episodeId'] ? +qp['episodeId'] : undefined;
     const resumeTime = 't' in qp ? +qp['t'] : undefined;
 
+    // A playlist launch registers the queue before navigating and passes its id.
+    // Consume it only when it matches; any other entry point drops the queue
+    // (a series queue is rebuilt from the media once it loads — see
+    // syncSeriesQueue — so we never inherit a stale "up next" here).
+    const playlistId = qp['playlistId'] ? +qp['playlistId'] : undefined;
+    if (
+      playlistId &&
+      this.queue.source() === 'playlist' &&
+      this.queue.sourceId() === playlistId
+    ) {
+      this.queue.syncTo(this.mediaId, this.episodeId);
+    } else {
+      this.queue.clear();
+    }
+
     // Subtitle loading promise — started early for Shaka path, resolved later
     let subsPromise: Promise<any[]> | null = null;
 
@@ -958,6 +988,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
         const file = media.files?.find((f: any) => f.id === this.mediaFileId);
         this.applyEpisodeMetadata();
+        this.syncSeriesQueue();
 
         // Use duration from streamInfo (reliable, from ffprobe)
         const si = file?.streamInfo as any;
@@ -1912,6 +1943,33 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return { episodeId: next.id, mediaFileId: file.id };
   });
 
+  /** The item that plays next: the queue's next entry (a playlist item, or the
+   *  next episode of the series queue). Null when nothing follows or there's no
+   *  queue (a standalone film). Drives the skip control and auto-advance alike. */
+  readonly upNext = computed<QueueItem | null>(() =>
+    this.queue.active() ? this.queue.peekNext() : null,
+  );
+
+  /** Whether the current context advances automatically when a stream ends: the
+   *  per-playlist flag for a playlist queue, else the global player setting
+   *  (series episodes). */
+  readonly autoplayEnabled = computed<boolean>(() =>
+    this.queue.source() === 'playlist'
+      ? this.queue.autoplay()
+      : this.playerSettings.settings().autoPlayNext,
+  );
+
+  /** i18n key for the next-item affordance — an episode reads "next episode",
+   *  a queue that moves to a movie reads the generic "play next". */
+  readonly nextLabelKey = computed(() =>
+    this.upNext()?.episodeId != null ? 'player.next_episode' : 'player.play_next',
+  );
+
+  /** The active queue's items + cursor for the in-player queue list (empty when
+   *  no queue is driving playback, e.g. a standalone film or a lone series). */
+  readonly queueItems = computed(() => this.queue.items());
+  readonly queueIndex = computed(() => this.queue.index());
+
   /** True when the cursor is inside the detected outro window. */
   readonly inOutroRange = computed(() => {
     const m = this.outroMarker();
@@ -1919,10 +1977,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.currentTime() >= m.startSeconds;
   });
 
-  /** True when the playhead is in the outro and a next episode exists —
-   *  gates the timed reveal of the floating "Épisode suivant" cue. */
+  /** True when the playhead is in the outro and something follows — gates the
+   *  timed reveal of the floating skip cue. */
   readonly showNextEpisodeButton = computed(
-    () => this.inOutroRange() && this.nextEpisodeContext() !== null,
+    () => this.inOutroRange() && this.upNext() !== null,
   );
 
   /** Reveal the next-episode cue once each time the playhead enters the outro. */
@@ -1937,12 +1995,83 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   });
 
+  /** Auto-advance when a stream reaches its natural end and the context allows
+   *  it. {@link PlayerStateService.ended} latches on the engine 'ended' event
+   *  and is cleared by the reload's state reset, so this fires once per item. */
+  private readonly autoAdvanceEffect = effect(() => {
+    if (!this.state.ended()) return;
+    if (!this.autoplayEnabled()) return;
+    if (!this.upNext()) return;
+    void this.advance();
+  });
+
   /** Set the episode label + still backdrop from {@link media} and the current
    *  {@link episodeId} (no-op for movies). Shared by the initial load and the
    *  in-place episode switch so the loading backdrop matches what's about to
    *  play — the episode still (stored locally) is preferred over series fanart. */
+  /** Populate the queue with the current series' episodes (S/E order, only ones
+   *  with a file) so the queue list + auto-advance work for a series played
+   *  outside a playlist — wherever an episode is opened (Continue Watching,
+   *  detail page, …). No-op while a playlist owns the queue; clears the queue
+   *  for movies or when the current episode has no queue-able siblings. */
+  private syncSeriesQueue(): void {
+    if (this.queue.source() === 'playlist') return; // the playlist owns the queue
+    const m = this.media;
+    if (!m || m.type !== 'series' || !this.episodeId || !m.seasons?.length) {
+      this.queue.clear();
+      return;
+    }
+    const flat: {
+      seasonNumber: number;
+      episodeNumber: number;
+      id: number;
+      title?: string | null;
+      stillUrl?: string | null;
+    }[] = [];
+    for (const s of m.seasons) {
+      if ((s.seasonNumber ?? 0) <= 0) continue; // skip specials
+      for (const ep of s.episodes ?? []) {
+        flat.push({
+          seasonNumber: s.seasonNumber,
+          episodeNumber: ep.episodeNumber ?? 0,
+          id: ep.id,
+          title: ep.title,
+          stillUrl: ep.stillUrl,
+        });
+      }
+    }
+    flat.sort(
+      (a, b) => a.seasonNumber - b.seasonNumber || a.episodeNumber - b.episodeNumber,
+    );
+    const items: QueueItem[] = [];
+    for (const e of flat) {
+      const file = (m.files ?? []).find((f) => f.episodeId === e.id);
+      if (!file) continue; // an episode with no available file isn't queue-able
+      items.push({
+        mediaId: m.id,
+        episodeId: e.id,
+        mediaFileId: file.id,
+        title: m.title,
+        episodeTitle: `S${e.seasonNumber}:E${e.episodeNumber}${e.title ? ` - ${e.title}` : ''}`,
+        fanartUrl: m.fanartUrl,
+        stillUrl: e.stillUrl ?? null,
+      });
+    }
+    const idx = items.findIndex((it) => it.episodeId === this.episodeId);
+    if (idx < 0 || items.length <= 1) {
+      this.queue.clear();
+      return;
+    }
+    this.queue.start(items, idx, { source: 'series', sourceId: m.id, autoplay: false });
+  }
+
   private applyEpisodeMetadata(): void {
-    if (!this.episodeId || !this.media?.seasons) return;
+    // A movie (or an item with no episode) carries no episode label — clear any
+    // that lingered from a previous episode when a queue crosses into a movie.
+    if (!this.episodeId || !this.media?.seasons) {
+      this.episodeTitle.set('');
+      return;
+    }
     for (const season of this.media.seasons) {
       const ep = season.episodes?.find((e) => e.id === this.episodeId);
       if (!ep) continue;
@@ -1987,14 +2116,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.mediaFileId = mediaFileId;
       this.episodeId = episodeId;
       this.activeBurnInId = null;
-      // Same series → media is unchanged; reload it only if the id differs.
+      // Same series → media is unchanged; reload it only if the id differs
+      // (a queue can cross media). Refresh the title/logo when it does.
       if (mediaId && mediaId !== this.mediaId) {
         this.mediaId = mediaId;
         this.media = await this.mediaService.getOne(mediaId);
+        this.mediaTitle.set(this.media.title);
+        this.mediaLogoUrl.set(this.media.logoUrl ?? null);
       }
-      // Recompute next-episode context + refresh the episode label / backdrop.
+      // Recompute next-item context + refresh the episode label / backdrop.
       this.mediaLoadedTick.update((v) => v + 1);
       this.applyEpisodeMetadata();
+      this.syncSeriesQueue();
 
       const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
       const knownDuration = (file?.streamInfo as any)?.durationSeconds;
@@ -2067,7 +2200,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       void this.loadSpriteMetadata();
 
       if (!this.isNativeEngine()) this.engine.play().catch(() => {});
-      this.resetHideTimer();
+      // Reveal the controls across the switch so the new title/episode shows;
+      // the flag lets them stay through the first frame and then auto-hide on
+      // the usual timer (see autoHideOnPlayEffect).
+      this.revealAcrossSwitch = true;
+      this.controlsVisible.set(true);
     } catch (e: any) {
       // Map to a translated line (Shaka-shaped errors keep their category
       // message) and keep the raw engine/exception text in the diagnostics
@@ -2096,60 +2233,159 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  /** Advance to the next episode ({@link nextEpisodeContext}), marking the
-   *  current one watched first. Reloads in place — reusing the mounted player
-   *  so there's no close/reopen flash — and updates the URL to the new episode
-   *  (the /watch route is reused, so this triggers no remount). Offline and
-   *  Cast keep the full remount: their source isn't a re-negotiable local
-   *  stream. */
-  async goToNextEpisode(): Promise<void> {
-    const next = this.nextEpisodeContext();
-    if (!next || !this.mediaId) return;
-    const mediaId = this.mediaId;
-
-    // Force the current episode to be marked as completed server-side.
-    // Backend threshold: position >= duration - 30s OR position >= duration * 0.9.
+  /** Mark the item currently playing as completed server-side, so advancing
+   *  past it (auto or manual) counts as watched.
+   *  Backend threshold: position >= duration - 30s OR position >= duration * 0.9. */
+  private async markCurrentComplete(): Promise<void> {
+    if (!this.mediaId) return;
     const dur =
       (this.castService.isConnected()
         ? this.castService.duration()
         : this.engine?.duration) ||
       this.duration() ||
       0;
-    if (dur > 0) {
-      try {
-        await this.streamingApi.updatePlaybackState(this.mediaId, {
-          positionSeconds: dur,
-          durationSeconds: dur,
-          mediaFileId: this.mediaFileId,
-          episodeId: this.episodeId,
-        });
-      } catch {
-        /* non-blocking — switch even if the update fails */
+    if (dur <= 0) return;
+    try {
+      await this.streamingApi.updatePlaybackState(this.mediaId, {
+        positionSeconds: dur,
+        durationSeconds: dur,
+        mediaFileId: this.mediaFileId,
+        episodeId: this.episodeId,
+      });
+    } catch {
+      /* non-blocking — advance even if the update fails */
+    }
+  }
+
+  /** Guards {@link advance} against re-entry while a switch is resolving (a
+   *  manual click racing the end-of-stream auto-advance, or the effect
+   *  re-firing before the reload's state reset clears `ended`). */
+  private advancing = false;
+
+  /** Resolve a queue item's playable file id — carried on series-next items,
+   *  looked up lazily (media fetch) for playlist items. Null when the item's
+   *  media has no available file. */
+  private async resolveItemFileId(item: QueueItem): Promise<number | null> {
+    if (item.mediaFileId != null) return item.mediaFileId;
+    const media = await this.mediaService.getOne(item.mediaId).catch(() => null);
+    return media ? (resolvePlayableFile(media, item.episodeId)?.id ?? null) : null;
+  }
+
+  /** Advance to {@link upNext}: mark the current item watched, resolve the next
+   *  playable file (series-next carries it; playlist items resolve lazily) and
+   *  load it in place — reusing the mounted player so there's no close/reopen
+   *  flash, updating the URL (the /watch route is reused, so no remount).
+   *  Offline and Cast keep the full remount: their source isn't a re-negotiable
+   *  local stream. Drives both the manual skip control and auto-advance.
+   *
+   *  Playlist items whose file is unavailable (e.g. not downloaded yet) are
+   *  skipped so a gap in the middle doesn't dead-end the rest of the queue. */
+  async advance(): Promise<void> {
+    // Don't stack on an in-flight quality/audio reload: it would move the queue
+    // cursor while the current item is still (re)loading. The manual control
+    // stays usable once the reload settles.
+    if (this.advancing || this.reloadingStream) return;
+    if (!this.upNext()) return;
+    this.advancing = true;
+    try {
+      await this.markCurrentComplete();
+
+      // Pick the next playable item. For a queue, walk the cursor forward over
+      // any unavailable items; series-next always resolves to a stored file.
+      let item: QueueItem | null;
+      let mediaFileId: number | null;
+      let skipped = 0;
+      if (this.queue.active()) {
+        item = this.queue.advance();
+        mediaFileId = item ? await this.resolveItemFileId(item) : null;
+        while (item && mediaFileId == null) {
+          skipped++;
+          item = this.queue.advance();
+          mediaFileId = item ? await this.resolveItemFileId(item) : null;
+        }
+      } else {
+        item = this.upNext();
+        mediaFileId = item?.mediaFileId ?? null;
       }
+
+      if (!item || mediaFileId == null) {
+        if (skipped > 0) {
+          this.toast.error(this.translate.instant('player.next_unavailable'));
+        }
+        return;
+      }
+
+      await this.loadItem(item, mediaFileId);
+    } finally {
+      this.advancing = false;
+    }
+  }
+
+  /** Jump to an explicit queue item (the user picked it in the queue list).
+   *  Unlike {@link advance} it does NOT mark the current item watched — a jump
+   *  isn't finishing — and it does not skip: the user chose this item. */
+  async playQueueItem(index: number): Promise<void> {
+    if (this.advancing || this.reloadingStream) return;
+    if (index === this.queue.index()) return; // already playing it
+    const item = this.queue.items()[index];
+    if (!item) return;
+    this.advancing = true;
+    try {
+      const mediaFileId = await this.resolveItemFileId(item);
+      if (mediaFileId == null) {
+        this.toast.error(this.translate.instant('player.next_unavailable'));
+        return;
+      }
+      this.queue.setIndex(index);
+      await this.loadItem(item, mediaFileId);
+    } finally {
+      this.advancing = false;
+    }
+  }
+
+  /** Load a resolved queue item into the mounted player (in place, no remount)
+   *  or via a full remount for offline / Cast. Shared by {@link advance} and
+   *  {@link playQueueItem}; the cursor is expected to already point at `item`. */
+  private async loadItem(item: QueueItem, mediaFileId: number): Promise<void> {
+    // Committing to the item — clear the end-of-stream latch so a reload that
+    // no-ops can't leave it set and re-trigger the auto-advance effect.
+    this.state.ended.set(false);
+
+    const qp: Record<string, number> = { mediaId: item.mediaId };
+    if (item.episodeId) qp['episodeId'] = item.episodeId;
+    const sourceId = this.queue.sourceId();
+    // Only a playlist queue is re-established from the URL; a series queue is
+    // rebuilt from the loaded media, so it needs no param.
+    if (this.queue.source() === 'playlist' && sourceId != null) {
+      qp['playlistId'] = sourceId;
     }
 
     const canReloadInPlace =
       !!this.engine && !this.isOfflinePlayback && !this.castService.isConnected();
     if (canReloadInPlace) {
+      // Match the incoming item's backdrop during the brief reload (the episode
+      // still, else the media fanart) so it's not the outgoing frame.
+      const backdrop = item.stillUrl ?? item.fanartUrl;
+      if (backdrop) this.fanartUrl.set(this.serverConfig.resolveUrl(backdrop));
       // replaceUrl + markAsBackNavigation keep both histories clear of the old
-      // episode so Back never reopens the player. Route reuse → no remount.
+      // item so Back never reopens the player. Route reuse → no remount.
       this.navbar.markAsBackNavigation();
-      void this.router.navigate(['/watch', next.mediaFileId], {
-        queryParams: { mediaId, episodeId: next.episodeId },
+      void this.router.navigate(['/watch', mediaFileId], {
+        queryParams: qp,
         replaceUrl: true,
       });
-      await this.reloadForEpisode(next.mediaFileId, mediaId, next.episodeId);
+      await this.reloadForEpisode(mediaFileId, item.mediaId, item.episodeId);
       return;
     }
 
-    // Offline / Cast fallback: detour through `/` to force a fresh remount
-    // (the default router would otherwise reuse the component and never re-read
-    // the snapshot params).
+    // Offline / Cast fallback: detour through `/` to force a fresh remount (the
+    // default router would otherwise reuse the component and never re-read the
+    // snapshot params).
     void this.router
       .navigateByUrl('/', { skipLocationChange: true })
       .then(() =>
-        this.router.navigate(['/watch', next.mediaFileId], {
-          queryParams: { mediaId, episodeId: next.episodeId },
+        this.router.navigate(['/watch', mediaFileId], {
+          queryParams: qp,
           replaceUrl: true,
         }),
       );
@@ -2705,8 +2941,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   onBack() {
     this.savePosition();
     // Desktop compositor: leaving the player drops the native (SDL) window out
-    // of fullscreen so the rest of the app isn't stuck fullscreen. Episode
-    // switches route through goToNextEpisode(), not onBack(), so they keep it.
+    // of fullscreen so the rest of the app isn't stuck fullscreen. Item
+    // switches route through advance(), not onBack(), so they keep it.
     if (this.isDesktopNative && this.engine instanceof DesktopEngine && this.engine.fullscreen) {
       this.engine.setFullscreen(false);
     }
@@ -2716,9 +2952,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // the URL without exiting the player.
     // replaceUrl drops /watch from history so hardware/browser back does not
     // reopen the player on the way back.
+    const queueSourceId = this.queue.sourceId();
     let target: string;
     if (!this.mediaId) {
       target = '/';
+    } else if (this.queue.source() === 'playlist' && queueSourceId != null) {
+      // Playing from a playlist returns to that playlist, not the item's page.
+      target = `/playlists/${queueSourceId}`;
     } else {
       // Offline playback never loads `this.media`; fall back to the type stored
       // on the download task so a downloaded series routes to /series, not

@@ -4,6 +4,8 @@ import { CastService } from './cast.service';
 import { CastPlayerService } from './cast-player.service';
 import { MediaService } from './api/media.service';
 import { StreamingApiService } from './api/streaming-api.service';
+import { PlaybackQueueService, QueueItem } from './playback-queue.service';
+import { resolvePlayableFile } from '../../shared/utils/media-play.util';
 
 export interface PlayContext {
   fileId: number;
@@ -29,9 +31,13 @@ export class PlayableMediaService {
   private readonly castPlayer = inject(CastPlayerService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly mediaService = inject(MediaService);
+  private readonly queue = inject(PlaybackQueueService);
 
   /** Play a media file — Cast if connected, otherwise navigate to player. */
   async play(ctx: PlayContext, fromStart: boolean) {
+    // A standalone play is never part of a queue — drop any playlist queue so
+    // the player doesn't inherit stale "up next" context from a prior session.
+    this.queue.clear();
     if (this.castService.isConnected()) {
       await this.castPlayer.quickStart({
         mediaFileId: ctx.fileId,
@@ -71,6 +77,70 @@ export class PlayableMediaService {
       void this.mediaService.getCast(ctx.mediaId).catch(() => {});
       void this.mediaService.getCrew(ctx.mediaId).catch(() => {});
     }
+  }
+
+  /**
+   * Start playback of a playlist: registers the ordered queue, resolves the
+   * launched item's file and opens the player (or Cast) on it. Subsequent items
+   * are advanced by the player as each one finishes (when `autoplay`). Returns
+   * false when the launched item has no playable file (caller surfaces the UX).
+   */
+  async playFromPlaylist(
+    playlistId: number,
+    items: QueueItem[],
+    startIndex: number,
+    autoplay: boolean,
+  ): Promise<boolean> {
+    // Scan forward from the requested start for the first item with an available
+    // file, skipping any that aren't playable (e.g. not downloaded yet).
+    let index = Math.max(0, startIndex);
+    let file: ReturnType<typeof resolvePlayableFile> = null;
+    for (; index < items.length; index++) {
+      const media = await this.mediaService.getOne(items[index].mediaId).catch(() => null);
+      file = media ? resolvePlayableFile(media, items[index].episodeId) : null;
+      if (file) break;
+    }
+    if (!file || index >= items.length) return false;
+    const start = items[index];
+
+    // Cache the resolved file on the launched item so the player doesn't
+    // re-resolve it; later items stay lazy (resolved on advance).
+    const resolved = items.map((it, i) =>
+      i === index ? { ...it, mediaFileId: file!.id } : it,
+    );
+
+    if (this.castService.isConnected()) {
+      // Cast plays the single launched item; the queue drives only the local
+      // player, so don't leave a queue the Cast session won't consume.
+      this.queue.clear();
+      await this.castPlayer.quickStart({
+        mediaFileId: file.id,
+        mediaId: start.mediaId,
+        episodeId: start.episodeId,
+        title: start.title,
+        episodeTitle: start.episodeTitle,
+        fanartUrl: start.fanartUrl ?? null,
+        streamInfo: file.streamInfo,
+      });
+      this.castPlayer.expanded.set(true);
+      return true;
+    }
+
+    this.queue.start(resolved, index, {
+      source: 'playlist',
+      sourceId: playlistId,
+      autoplay,
+    });
+    const qp: Record<string, number> = { mediaId: start.mediaId, playlistId };
+    if (start.episodeId) qp['episodeId'] = start.episodeId;
+    this.router.navigate(['/watch', file.id], {
+      queryParams: qp,
+      state: {
+        fanartUrl: start.fanartUrl ?? null,
+        stillUrl: start.stillUrl ?? null,
+      },
+    });
+    return true;
   }
 
   /** Toggle watched status for a media/episode. Returns the new completed state. */

@@ -36,6 +36,7 @@ export interface PlaylistView {
   role: PlaylistRole;
   autoRemoveWatched: boolean;
   autoDownload: boolean;
+  autoPlay: boolean;
   coverImageUrl: string | null;
   itemCount: number;
   posters: string[];
@@ -255,6 +256,7 @@ export class PlaylistsService {
         owner: { id: user.id } as User,
         autoRemoveWatched: dto.autoRemoveWatched ?? false,
         autoDownload: dto.autoDownload ?? false,
+        autoPlay: dto.autoPlay ?? false,
       }),
     );
     return this.findOneForUser(user, playlist.id);
@@ -272,6 +274,7 @@ export class PlaylistsService {
       patch.autoRemoveWatched = dto.autoRemoveWatched;
     }
     if (dto.autoDownload !== undefined) patch.autoDownload = dto.autoDownload;
+    if (dto.autoPlay !== undefined) patch.autoPlay = dto.autoPlay;
     if (Object.keys(patch).length) await this.repo.update(playlistId, patch);
     return this.findOneForUser(user, playlistId);
   }
@@ -581,6 +584,7 @@ export class PlaylistsService {
       role,
       autoRemoveWatched: playlist.autoRemoveWatched,
       autoDownload: playlist.autoDownload,
+      autoPlay: playlist.autoPlay,
       coverImageUrl: playlist.coverImageUrl,
       itemCount: stats?.count ?? 0,
       posters: stats?.posters ?? [],

@@ -36,6 +36,7 @@ export class PlayerSettingsPageComponent implements OnInit {
   readonly showEcoQualities = signal(true);
   readonly ecoByDefault = signal(false);
   readonly autoSkipIntro = signal(false);
+  readonly autoPlayNext = signal(true);
 
   ngOnInit() {
     const p = this.ps.get();
@@ -47,6 +48,7 @@ export class PlayerSettingsPageComponent implements OnInit {
     this.showEcoQualities.set(p.showEcoQualities);
     this.ecoByDefault.set(p.ecoByDefault);
     this.autoSkipIntro.set(p.autoSkipIntro);
+    this.autoPlayNext.set(p.autoPlayNext);
   }
 
   clearAudioSelections() {
@@ -65,6 +67,7 @@ export class PlayerSettingsPageComponent implements OnInit {
       showEcoQualities: this.showEcoQualities(),
       ecoByDefault: this.ecoByDefault(),
       autoSkipIntro: this.autoSkipIntro(),
+      autoPlayNext: this.autoPlayNext(),
     });
     this.toast.success(this.translate.instant('common.settings_saved'));
   }

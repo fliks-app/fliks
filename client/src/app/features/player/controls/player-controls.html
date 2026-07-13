@@ -144,8 +144,8 @@
     <!-- Mobile: action buttons aligned right -->
     @if (isMobileTouch()) {
       <div class="flex items-center lg:gap-1 shrink-0" (click)="$event.stopPropagation()">
-        @if (hasNextEpisode()) {
-          <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.next_episode' | translate" (click)="nextEpisode.emit()">
+        @if (hasNext()) {
+          <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="nextLabelKey() | translate" (click)="next.emit()">
             <svg lucideSkipForward class="h-5 w-5"></svg>
           </button>
         }
@@ -213,9 +213,9 @@
 
       <!-- Right: action buttons -->
       <div class="flex items-center gap-1.5">
-        <!-- Next episode -->
-        @if (hasNextEpisode()) {
-          <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.next_episode' | translate" (click)="nextEpisode.emit()">
+        <!-- Next item -->
+        @if (hasNext()) {
+          <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="nextLabelKey() | translate" (click)="next.emit()">
             <svg lucideSkipForward class="h-6 w-6"></svg>
           </button>
         }
@@ -286,14 +286,14 @@
   </button>
 }
 
-<!-- ===== Next episode floating button (during outro) ===== -->
-@if (showNextEpisode()) {
+<!-- ===== Next item floating button (during outro) ===== -->
+@if (showNextCue()) {
   <button
     #nextEpisodeBtn
     type="button"
     class="btn btn-primary absolute right-6 z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
     style="right: max(1.5rem, env(safe-area-inset-right)); bottom: max(var(--cue-bottom, 8rem), calc(var(--cue-bottom, 8rem) + env(safe-area-inset-bottom)));"
-    (click)="skipToNextEpisode.emit()"
+    (click)="next.emit()"
     (focus)="cueFocused.set(true)"
     (blur)="cueFocused.set(false)"
   >
@@ -304,7 +304,7 @@
     ></span>
     <span class="relative flex items-center gap-2">
       <svg lucideSkipForward class="h-4 w-4"></svg>
-      {{ 'player.next_episode' | translate }}
+      {{ nextLabelKey() | translate }}
     </span>
   </button>
 }
@@ -343,6 +343,13 @@
           <svg lucideChevronRight class="h-4 w-4 text-white/30 shrink-0"></svg>
         </button>
       }
+      @if (queueItems().length > 1) {
+        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="settingsPanel.set('queue')">
+          <span class="flex-1 text-left">{{ 'player.queue' | translate }}</span>
+          <span class="text-white/40 text-xs">{{ queueIndex() + 1 }} / {{ queueItems().length }}</span>
+          <svg lucideChevronRight class="h-4 w-4 text-white/30 shrink-0"></svg>
+        </button>
+      }
       <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="toggleFillScreen.emit()">
         <span class="flex-1 text-left">{{ 'player.fill_screen' | translate }}</span>
         @if (fillScreen()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
@@ -373,6 +380,25 @@
           @if (activeQualityId() === q.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
         </button>
       }
+    } @else if (settingsPanel() === 'queue') {
+      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10 mb-1" (click)="settingsPanel.set('main')">
+        <svg lucideArrowLeft class="h-4 w-4 text-white/50 shrink-0"></svg>
+        <span class="font-medium">{{ 'player.queue' | translate }}</span>
+      </button>
+      <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
+      <!-- No inner scroll container: the sheet itself scrolls, so its
+           drag-to-dismiss (keyed off the sheet's own scrollTop) doesn't fight a
+           nested scroller. -->
+      @for (q of queueItems(); track $index; let i = $index) {
+        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" [attr.data-queue-active]="queueIndex() === i ? 'true' : null" (click)="selectQueueItem.emit(i); closeSheet()">
+          <span class="w-5 shrink-0 text-white/40 text-xs">{{ i + 1 }}</span>
+          <span class="flex-1 text-left min-w-0">
+            <span class="block truncate">{{ q.episodeTitle || q.title }}</span>
+            @if (q.episodeTitle) { <span class="block truncate text-white/50 text-xs">{{ q.title }}</span> }
+          </span>
+          @if (queueIndex() === i) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+        </button>
+      }
     }
   </div>
 </app-bottom-sheet>
@@ -391,6 +417,14 @@
               {{ activeQualityLabel() }}
               @if (showEcoLeaf()) { <svg lucideLeaf class="h-3.5 w-3.5 shrink-0"></svg> }
             </span>
+            <svg lucideChevronRight class="h-4 w-4 text-white/40 shrink-0"></svg>
+          </button>
+        }
+        <!-- Queue row → opens sub-panel -->
+        @if (queueItems().length > 1) {
+          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="settingsPanel.set('queue')">
+            <span class="flex-1 text-left">{{ 'player.queue' | translate }}</span>
+            <span class="text-white/50 text-xs">{{ queueIndex() + 1 }} / {{ queueItems().length }}</span>
             <svg lucideChevronRight class="h-4 w-4 text-white/40 shrink-0"></svg>
           </button>
         }
@@ -434,6 +468,32 @@
             @if (activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
           </button>
         }
+      </div>
+    } @else if (settingsPanel() === 'queue') {
+      <div class="py-2 px-1">
+        <!-- Back header -->
+        <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 mb-1" (click)="settingsPanel.set('main')">
+          <svg lucideArrowLeft class="h-4 w-4 text-white/60 shrink-0"></svg>
+          <span class="font-medium">{{ 'player.queue' | translate }}</span>
+        </button>
+        <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
+        <div class="max-h-[60vh] overflow-y-auto">
+          @for (q of queueItems(); track $index; let i = $index) {
+            <button
+              class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
+              [disabled]="queueIndex() === i"
+              [attr.data-queue-active]="queueIndex() === i ? 'true' : null"
+              (click)="selectQueueItem.emit(i); closeDropdown($event)"
+            >
+              <span class="w-5 shrink-0 text-white/40 text-xs">{{ i + 1 }}</span>
+              <span class="flex-1 text-left min-w-0">
+                <span class="block truncate">{{ q.episodeTitle || q.title }}</span>
+                @if (q.episodeTitle) { <span class="block truncate text-white/50 text-xs">{{ q.title }}</span> }
+              </span>
+              @if (queueIndex() === i) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+            </button>
+          }
+        </div>
       </div>
     }
   </div>

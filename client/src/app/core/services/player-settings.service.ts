@@ -32,6 +32,8 @@ export interface PlayerSettings {
   subtitleTopMargin: number;
   // Skip intro
   autoSkipIntro: boolean;
+  // Play the next episode automatically when one finishes (series).
+  autoPlayNext: boolean;
 }
 
 const SETTINGS_KEY = 'player.settings';
@@ -56,6 +58,7 @@ const DEFAULTS: PlayerSettings = {
   subtitleBottomMargin: 5,
   subtitleTopMargin: 5,
   autoSkipIntro: false,
+  autoPlayNext: true,
 };
 
 /** Map ISO 639-1 (2-letter) to ISO 639-2/B (3-letter) for language matching. */

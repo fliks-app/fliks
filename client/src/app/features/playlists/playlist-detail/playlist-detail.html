@@ -28,6 +28,12 @@
         </p>
       </div>
       <div class="flex items-center gap-2 shrink-0">
+        @if (items().length) {
+          <button type="button" class="btn btn-primary btn-sm gap-2" (click)="playAll()">
+            <svg lucidePlay class="h-4 w-4"></svg>
+            {{ 'player.play' | translate }}
+          </button>
+        }
         <!-- md+ : inline buttons -->
         <div class="hidden md:flex items-center gap-2">
           @if (canManage()) {
@@ -217,9 +223,14 @@
   }
 }
 
-<!-- One playlist row (movie or episode). -->
+<!-- One playlist row (movie or episode): the body plays the item (queueing the
+     rest of the playlist); secondary actions live in the kebab dropdown. -->
 <ng-template #itemRow let-item>
-  <a [routerLink]="itemLink(item)" class="flex items-center gap-3 flex-1 min-w-0">
+  <button
+    type="button"
+    (click)="playFrom(item)"
+    class="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
+  >
     <div
       class="relative w-24 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300"
     >
@@ -255,35 +266,17 @@
         }
       }
     </div>
-  </a>
-  <!-- sm+: inline actions -->
-  <div class="hidden sm:flex items-center gap-1 shrink-0">
-    <button
-      type="button"
-      class="btn btn-ghost btn-sm btn-square"
-      [class.text-success]="item.watched"
-      (click)="toggleItemWatched(item)"
-      [attr.aria-label]="(item.watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched') | translate"
-    >
-      <svg lucideCheck class="h-4 w-4"></svg>
-    </button>
-    @if (canEditItems()) {
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm btn-square text-error"
-        (click)="removeItem(item)"
-        [attr.aria-label]="'common.delete' | translate"
-      >
-        <svg lucideTrash2 class="h-4 w-4"></svg>
-      </button>
-    }
-  </div>
-  <!-- mobile: collapse into a dropdown to keep width for the title -->
-  <div class="sm:hidden shrink-0 self-center">
+  </button>
+  <!-- Secondary actions: view details + watched + remove, in one dropdown. -->
+  <div class="shrink-0 self-center">
     <app-dropdown-menu placement="bottom-end">
       <div trigger tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.more' | translate">
         <svg lucideEllipsisVertical class="h-5 w-5"></svg>
       </div>
+      <a class="dropdown-item text-white" [routerLink]="itemLink(item)">
+        <svg lucideInfo class="h-4 w-4"></svg>
+        {{ 'playlists.view_details' | translate }}
+      </a>
       <button type="button" class="dropdown-item text-white" (click)="toggleItemWatched(item)">
         <svg lucideCheck class="h-4 w-4"></svg>
         {{ (item.watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched') | translate }}
@@ -350,6 +343,12 @@
     </form>
     <h3 class="text-lg font-bold mb-4">{{ 'playlists.settings' | translate }}</h3>
     <div class="flex flex-col gap-4">
+      <app-toggle-field
+        [value]="draftAutoPlay()"
+        (valueChange)="draftAutoPlay.set($event)"
+        [label]="'playlists.auto_play' | translate"
+        [hint]="'playlists.auto_play_hint' | translate"
+      />
       <app-toggle-field
         [value]="draftAutoRemoveWatched()"
         (valueChange)="draftAutoRemoveWatched.set($event)"

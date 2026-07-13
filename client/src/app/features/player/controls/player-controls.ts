@@ -16,6 +16,7 @@ import {
 import { DeviceService } from '../../../core/services/device.service';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
 import { PlayerSettingsService } from '../../../core/services/player-settings.service';
+import { QueueItem } from '../../../core/services/playback-queue.service';
 import { NgTemplateOutlet } from '@angular/common';
 import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
 import { TranslateModule } from '@ngx-translate/core';
@@ -154,7 +155,7 @@ export class PlayerControlsComponent {
     // A cue removed while focused can swallow its blur, leaving the flag stuck;
     // clear it whenever no cue is shown so the next one isn't born frozen.
     effect(() => {
-      if (!this.showSkipIntro() && !this.showNextEpisode()) {
+      if (!this.showSkipIntro() && !this.showNextCue()) {
         this.cueFocused.set(false);
       }
     });
@@ -164,6 +165,19 @@ export class PlayerControlsComponent {
     // cue's @if is live and is undefined otherwise.
     effect(() => this.autoFocusCue(this.skipIntroBtn()));
     effect(() => this.autoFocusCue(this.nextEpisodeBtn()));
+    // Center the currently-playing item when the queue panel opens (in either
+    // the dropdown or the bottom sheet), so a long queue doesn't open scrolled
+    // to the top. Re-runs if the cursor moves while the panel is up.
+    effect(() => {
+      if (this.settingsPanel() !== 'queue') return;
+      this.queueIndex(); // re-center when the playing item changes
+      requestAnimationFrame(() => {
+        if (this.settingsPanel() !== 'queue') return;
+        this.hostEl.nativeElement
+          .querySelector('[data-queue-active="true"]')
+          ?.scrollIntoView({ block: 'center' });
+      });
+    });
   }
   private lastPanelOpen = false;
   private lastVisible = true;
@@ -211,8 +225,13 @@ export class PlayerControlsComponent {
     this.failedLogoUrl.set(this.logoUrl());
   }
   readonly episodeTitle = input('');
-  readonly hasNextEpisode = input(false);
-  readonly hasPrevEpisode = input(false);
+  readonly hasNext = input(false);
+  /** i18n key for the next-item control label — episode vs generic item. */
+  readonly nextLabelKey = input('player.next_episode');
+  /** The active playback queue (playlist) and the index currently playing —
+   *  drives the "File d'attente" menu (empty for standalone / series playback). */
+  readonly queueItems = input<QueueItem[]>([]);
+  readonly queueIndex = input(0);
   readonly activeQualityLabel = input('Auto');
   readonly isNative = input(false);
   /** Desktop (Electron) — native engine but mouse-driven; keeps the fullscreen
@@ -236,7 +255,7 @@ export class PlayerControlsComponent {
   readonly fillScreen = input(false);
   readonly statsVisible = input(false);
   readonly showSkipIntro = input(false);
-  readonly showNextEpisode = input(false);
+  readonly showNextCue = input(false);
   /** How long a floating cue stays up, in ms — drives the in-button progress
    *  sweep so it finishes exactly as the parent retracts the cue. */
   readonly cueDurationMs = input(6000);
@@ -249,7 +268,6 @@ export class PlayerControlsComponent {
   readonly cueFocused = signal(false);
   readonly togglePlay = output<void>();
   readonly skipIntro = output<void>();
-  readonly skipToNextEpisode = output<void>();
   readonly tapOverlay = output<void>();
   readonly seek = output<number>();
   readonly volumeChange = output<number>();
@@ -261,9 +279,11 @@ export class PlayerControlsComponent {
   readonly toggleQualityPicker = output<void>();
   readonly selectSubtitle = output<string | null>();
   readonly selectQuality = output<string>();
+  /** Play the queue item at this index (picked from the queue list). */
+  readonly selectQueueItem = output<number>();
   readonly speedChange = output<number>();
-  readonly nextEpisode = output<void>();
-  readonly prevEpisode = output<void>();
+  /** Advance to the next item — emitted by the toolbar button and the outro cue. */
+  readonly next = output<void>();
   readonly back = output<void>();
   readonly selectAudioTrack = output<string>();
   readonly toggleCast = output<void>();
@@ -286,7 +306,7 @@ export class PlayerControlsComponent {
   readonly speedOptions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
   /** Settings dropdown panel navigation */
-  readonly settingsPanel = signal<'main' | 'quality'>('main');
+  readonly settingsPanel = signal<'main' | 'quality' | 'queue'>('main');
 
   /**
    * Which click-driven dropdown is open, or null. Replaces DaisyUI's
