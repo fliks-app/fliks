@@ -94,6 +94,8 @@
                 [title]="item.title"
                 [subtitle]="item.label ?? undefined"
                 [link]="likeLink(item)"
+                [playlistMediaId]="item.mediaId"
+                [playlistEpisodeId]="item.episodeId"
               />
             }
           </app-horizontal-scroller>
