@@ -176,7 +176,7 @@
       <div class="flex justify-center py-8">
         <span class="loading loading-spinner loading-lg"></span>
       </div>
-    } @else if (state.localResults().length > 0) {
+    } @else if (state.localResults().length > 0 || state.ownedExternalResults().length > 0) {
       <div>
         <h2 class="text-lg font-semibold mb-3">{{ 'search.section_library' | translate }}</h2>
         <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
@@ -187,6 +187,17 @@
               [progressPercent]="media.watched ? 0 : (media.progressPercent ?? 0)"
               [interactiveWatched]="canMarkMediaWatched(media)"
               (watchedToggled)="toggleMediaWatched(media, $event)"
+            />
+          }
+          <!-- Owned titles the local title search missed but the provider
+               matched via other metadata (franchise, keywords…). -->
+          @for (row of state.ownedExternalResults(); track row.mediaType + ':' + row.tmdbId) {
+            <app-media-card
+              [imageUrl]="row.posterUrl"
+              [title]="row.title"
+              [subtitle]="'' + (row.year ?? '')"
+              [rating]="row.rating"
+              (clicked)="onExternalCardClick(row)"
             />
           }
         </div>
@@ -217,7 +228,7 @@
     }
 
     <!-- No results at all -->
-    @if (!state.localLoading() && !state.externalLoading() && state.localResults().length === 0 && state.filteredExternalResults().length === 0) {
+    @if (!state.localLoading() && !state.externalLoading() && state.localResults().length === 0 && state.filteredExternalResults().length === 0 && state.ownedExternalResults().length === 0) {
       <div class="text-center py-8">
         <p class="text-base-content/50">{{ 'search.no_results' | translate }}</p>
         @if (!state.externalEnabled()) {
