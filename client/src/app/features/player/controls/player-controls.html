@@ -481,7 +481,7 @@
             <button
               class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
               [disabled]="queueIndex() === i"
-              (click)="selectQueueItem.emit(i)"
+              (click)="selectQueueItem.emit(i); closeDropdown($event)"
             >
               <span class="w-5 shrink-0 text-white/40 text-xs">{{ i + 1 }}</span>
               <span class="flex-1 text-left min-w-0">
