@@ -103,18 +103,32 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly navHistory = inject(NavigationHistoryService);
   private readonly addToPlaylistSvc = inject(AddToPlaylistService);
   private readonly addToPlaylistModal = viewChild(AddToPlaylistModalComponent);
+  /** Counter of the last request already handed to the modal. The bridge effect
+   *  also depends on the modal viewChild, so it re-runs whenever that re-resolves
+   *  (e.g. on navigation); without this guard it would reopen the modal from the
+   *  never-cleared `request` signal — the "modal opens by itself on back" bug. */
+  private lastAddToPlaylistN = 0;
   // Bridge the global "add to playlist" requests (from cards / the media-detail
   // header) to the single modal instance mounted in the layout.
   private readonly addToPlaylistBridge = effect(() => {
     const req = this.addToPlaylistSvc.request();
-    if (req) this.addToPlaylistModal()?.open(req.target);
+    const modal = this.addToPlaylistModal();
+    if (req && modal && req.n !== this.lastAddToPlaylistN) {
+      this.lastAddToPlaylistN = req.n;
+      modal.open(req.target);
+    }
   });
   private readonly recommendSvc = inject(RecommendService);
   private readonly recommendModal = viewChild(RecommendModalComponent);
+  private lastRecommendN = 0;
   // Bridge the global "recommend to a member" requests to the layout modal.
   private readonly recommendBridge = effect(() => {
     const req = this.recommendSvc.request();
-    if (req) void this.recommendModal()?.open(req.target);
+    const modal = this.recommendModal();
+    if (req && modal && req.n !== this.lastRecommendN) {
+      this.lastRecommendN = req.n;
+      void modal.open(req.target);
+    }
   });
   readonly networkService = inject(NetworkService);
   readonly castService = inject(CastService);
