@@ -69,8 +69,15 @@ export class NavbarService {
       // from — e.g. media-detail → player → browser-back → "Retour" would
       // otherwise reopen the player).
       if (e instanceof NavigationStart && e.navigationTrigger === 'popstate') {
-        this.isPoppingBack = true;
+        // Only treat a popstate as a back-pop when it lands on the URL at the
+        // top of our own stack. A stray popstate that doesn't (e.g. Android
+        // dismissing the soft keyboard pops an IME history entry) must NOT set
+        // isPoppingBack — otherwise it swallows the push for the *next* real
+        // navigation, leaving that page with no back arrow and a dead back
+        // gesture (reproduced by tapping a card from search with the keyboard
+        // still open).
         if (this.history[this.history.length - 1] === e.url) {
+          this.isPoppingBack = true;
           this.history.pop();
         }
       }
