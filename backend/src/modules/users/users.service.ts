@@ -278,6 +278,7 @@ export class UsersService implements OnModuleInit {
     if (dto.shareWatchHistory !== undefined)
       target.shareWatchHistory = dto.shareWatchHistory;
     if (dto.shareLikes !== undefined) target.shareLikes = dto.shareLikes;
+    if (dto.shareStats !== undefined) target.shareStats = dto.shareStats;
 
     // Opting out of the social layer: run the teardown once, on the
     // false → true transition (after the row is saved so the flag is set).

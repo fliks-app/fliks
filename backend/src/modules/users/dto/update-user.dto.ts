@@ -103,6 +103,11 @@ export class UpdateUserDto {
   @IsOptional()
   shareLikes?: boolean;
 
+  /** Self-editable: expose activity statistics on the public profile. */
+  @IsBoolean()
+  @IsOptional()
+  shareStats?: boolean;
+
   /** Self-editable: opt out of the whole social layer (undiscoverable + can't
    *  use sharing features). Enabling it drops the user's social ties. */
   @IsBoolean()

@@ -136,6 +136,13 @@ export const routes: Routes = [
               ),
           },
           {
+            path: 'statistics',
+            loadComponent: () =>
+              import('./features/profile/profile-statistics').then(
+                (m) => m.ProfileStatisticsComponent,
+              ),
+          },
+          {
             path: 'recommendations',
             loadComponent: () =>
               import('./features/profile/profile-recommendations').then(

@@ -25,6 +25,8 @@ import {
 } from '../streaming/playback.service';
 import { LibrariesService } from '../libraries/libraries.service';
 import { EventsService } from '../scheduler/events.service';
+import { UsersStatsService } from '../users/users-stats.service';
+import { UserStatsDto } from '../users/dto/user-stats.dto';
 import { FollowStatus, ProfileVisibility } from '../../common/enums';
 
 /** A member as seen by another member, with the caller-relative follow state. */
@@ -52,6 +54,7 @@ export interface PublicProfile extends SocialUser {
     recommendations: boolean;
     recentlyWatched: boolean;
     likes: boolean;
+    stats: boolean;
   };
   playlists: PlaylistView[];
   topGenres: { genre: string; weight: number }[];
@@ -105,6 +108,7 @@ export class SocialService {
     private readonly libraries: LibrariesService,
     private readonly events: EventsService,
     private readonly likes: LikesService,
+    private readonly usersStats: UsersStatsService,
   ) {}
 
   // ── helpers ──
@@ -365,6 +369,7 @@ export class SocialService {
       recommendations: false,
       recentlyWatched: false,
       likes: false,
+      stats: false,
     };
     if (!canSeeContent) {
       // A non-follower of a private profile sees only name + avatar + follow
@@ -390,6 +395,7 @@ export class SocialService {
       recommendations: isSelf || target.shareRecommendations,
       recentlyWatched: isSelf || target.shareWatchHistory,
       likes: isSelf || target.shareLikes,
+      stats: isSelf || target.shareStats,
     };
     const [playlists, topGenres, recommendations, history, likes] =
       await Promise.all([
@@ -417,6 +423,33 @@ export class SocialService {
       recentlyWatched: history.data,
       likes,
     };
+  }
+
+  /** Activity statistics for a profile's Statistics tab. Visible to the owner
+   *  always, and to others only when the user shares stats AND the caller may
+   *  see the profile (public, or an accepted follower). 404 otherwise (no
+   *  probe). Delegates the aggregation to the shared users-stats service. */
+  async getUserStats(me: User, targetId: number): Promise<UserStatsDto> {
+    const target = await this.requireUser(targetId);
+    const isSelf = me.id === targetId;
+    if (!isSelf && (target.shareDisabled || me.shareDisabled)) {
+      throw new NotFoundException(`User #${targetId} not found`);
+    }
+    if (!isSelf) {
+      const iFollow = await this.followRepo.findOne({
+        where: {
+          follower: { id: me.id },
+          following: { id: targetId },
+          status: FollowStatus.ACCEPTED,
+        },
+      });
+      const canSee =
+        target.profileVisibility === ProfileVisibility.PUBLIC || !!iFollow;
+      if (!target.shareStats || !canSee) {
+        throw new NotFoundException(`User #${targetId} not found`);
+      }
+    }
+    return this.usersStats.getUserStats(targetId);
   }
 
   /** Media popular among the members the caller follows (accepted), scoped to

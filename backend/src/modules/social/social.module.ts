@@ -17,6 +17,7 @@ import { StreamingModule } from '../streaming/streaming.module';
 import { LibrariesModule } from '../libraries/libraries.module';
 import { EventsModule } from '../scheduler/events.module';
 import { AuthModule } from '../auth/auth.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { AuthModule } from '../auth/auth.module';
     LibrariesModule,
     EventsModule,
     AuthModule,
+    UsersModule,
   ],
   controllers: [SocialController, LikesController],
   providers: [SocialService, LikesService],

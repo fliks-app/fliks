@@ -46,6 +46,12 @@
       [label]="'social.privacy_share_likes' | translate"
       [hint]="'social.privacy_share_likes_hint' | translate"
     />
+    <app-toggle-field
+      [value]="shareStats()"
+      (valueChange)="onShareStatsChange($event)"
+      [label]="'social.privacy_share_stats' | translate"
+      [hint]="'social.privacy_share_stats_hint' | translate"
+    />
     }
   </div>
 

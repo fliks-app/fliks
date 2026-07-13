@@ -31,6 +31,8 @@ export interface User {
   shareWatchHistory: boolean;
   /** Expose liked content on the public profile. */
   shareLikes: boolean;
+  /** Expose activity statistics on the public profile. */
+  shareStats: boolean;
   /** Opt out of the whole social layer (undiscoverable + can't use sharing). */
   shareDisabled: boolean;
 }
