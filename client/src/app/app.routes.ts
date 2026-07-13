@@ -111,6 +111,24 @@ export const routes: Routes = [
           import('./features/profile/profile').then((m) => m.ProfileComponent),
       },
       {
+        path: 'profile/:userId/followers',
+        canActivate: [noTvGuard],
+        data: { mode: 'followers' },
+        loadComponent: () =>
+          import('./features/profile/profile-connections').then(
+            (m) => m.ProfileConnectionsComponent,
+          ),
+      },
+      {
+        path: 'profile/:userId/following',
+        canActivate: [noTvGuard],
+        data: { mode: 'following' },
+        loadComponent: () =>
+          import('./features/profile/profile-connections').then(
+            (m) => m.ProfileConnectionsComponent,
+          ),
+      },
+      {
         path: 'persons/:id',
         loadComponent: () =>
           import('./features/person-detail/person-detail').then(
