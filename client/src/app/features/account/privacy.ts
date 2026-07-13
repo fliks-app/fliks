@@ -11,6 +11,7 @@ import { ToggleFieldComponent } from '../../shared/components/forms/toggle-field
 import { UsersApiService } from '../../core/services/api/users-api.service';
 import { AuthService, ProfileVisibility } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ConfirmationService } from '../../core/services/confirmation.service';
 import { SocialApiService, SocialUser } from '../../core/services/api/social-api.service';
 
 /** The self-editable social privacy fields — shape shared by the API body and
@@ -36,6 +37,7 @@ export class AccountPrivacyComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly publicProfile = signal(false);
   readonly shareTastes = signal(false);
@@ -98,10 +100,23 @@ export class AccountPrivacyComponent implements OnInit {
   }
 
   async onShareDisabledChange(value: boolean): Promise<void> {
+    // Enabling tears down the user's social ties server-side (follows, saved
+    // playlists, collaborations, recommendations) — confirm before applying.
+    if (value) {
+      const confirmed = await this.confirmation.confirm({
+        title: this.translate.instant('social.privacy_share_disabled'),
+        message: this.translate.instant('social.privacy_share_disabled_confirm'),
+        confirmLabel: this.translate.instant('social.privacy_share_disabled_confirm_action'),
+        variant: 'danger',
+      });
+      if (!confirmed) {
+        // Snap the toggle back to its bound state — nothing was persisted.
+        this.shareDisabled.set(false);
+        return;
+      }
+    }
     this.shareDisabled.set(value);
     await this.persist({ shareDisabled: value });
-    // Enabling tears down the user's social ties server-side (follows, saved
-    // playlists, collaborations…); drop the now-empty follow-requests list.
     if (value) this.requests.set([]);
   }
 
