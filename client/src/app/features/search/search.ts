@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   signal,
   effect,
+  untracked,
   inject,
   Injector,
   OnDestroy,
@@ -111,7 +112,11 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly genreFilterEffect = effect(() => {
     const req = this.state.genreFilterRequest();
     if (!req) return;
-    void this.applyGenreFilter(req.genreId);
+    // One-shot: untracked so the applied filter reads don't become deps.
+    untracked(() => {
+      void this.applyGenreFilter(req.genreId);
+      this.state.genreFilterRequest.set(null);
+    });
   });
 
   readonly requestedTmdbIds = signal<Map<number, FliksRequestStatus>>(new Map());
