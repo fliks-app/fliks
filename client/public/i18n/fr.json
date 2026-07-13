@@ -293,6 +293,7 @@
   },
   "nav": {
     "home": "Accueil",
+    "my_profile": "Mon profil",
     "statistics": "Statistiques",
     "dashboard": "Tableau de bord",
     "import_disk": "Import disque",

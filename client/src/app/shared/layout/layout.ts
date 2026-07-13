@@ -60,6 +60,7 @@ import {
   LucidePin,
   LucideRocket,
   LucideListVideo,
+  LucideUserRound,
 } from '@lucide/angular';
 
 
@@ -69,7 +70,7 @@ import {
     RouterOutlet, RouterLink, RouterLinkActive, TranslateModule,
     LucideMenu, LucideChevronLeft, LucideHome, LucideSearch,
     LucideClipboardList, LucideDownload, LucideCalendar, LucideCast,
-    LucideHistory, LucideEllipsisVertical, LucidePin, LucideRocket, LucideListVideo,
+    LucideHistory, LucideEllipsisVertical, LucidePin, LucideRocket, LucideListVideo, LucideUserRound,
     CastOverlayComponent,
     CardActionsPanelComponent,
     AddToPlaylistModalComponent,

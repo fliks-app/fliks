@@ -338,6 +338,14 @@
             {{ 'search.title' | translate }}
           </a>
         </li>
+        @if (!tv.isTv() && auth.user()?.id) {
+          <li>
+            <a [routerLink]="['/profile', auth.user()!.id]" routerLinkActive="active">
+              <svg lucideUserRound class="h-5 w-5"></svg>
+              {{ 'nav.my_profile' | translate }}
+            </a>
+          </li>
+        }
 
         <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_library' | translate }}</li>
         @for (lib of displayLibraries(); track lib.id) {
