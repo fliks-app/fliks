@@ -13,9 +13,9 @@ export interface QueueItem {
   stillUrl?: string | null;
 }
 
-/** Where the active queue came from. Only playlists drive an explicit queue
- *  today; series "next episode" stays derived from the loaded media. */
-export type QueueSource = 'playlist';
+/** Where the active queue came from: an explicit playlist, or the episodes of
+ *  the series currently playing (built from its loaded media). */
+export type QueueSource = 'playlist' | 'series';
 
 /**
  * Holds the active explicit playback queue that spans media boundaries (a

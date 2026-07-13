@@ -895,10 +895,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const resumeTime = 't' in qp ? +qp['t'] : undefined;
 
     // A playlist launch registers the queue before navigating and passes its id.
-    // Consume it only when it matches; any other entry point is a standalone
-    // play, so drop a stale queue rather than inherit its "up next".
+    // Consume it only when it matches; any other entry point drops the queue
+    // (a series queue is rebuilt from the media once it loads — see
+    // syncSeriesQueue — so we never inherit a stale "up next" here).
     const playlistId = qp['playlistId'] ? +qp['playlistId'] : undefined;
-    if (playlistId && this.queue.active() && this.queue.sourceId() === playlistId) {
+    if (
+      playlistId &&
+      this.queue.source() === 'playlist' &&
+      this.queue.sourceId() === playlistId
+    ) {
       this.queue.syncTo(this.mediaId, this.episodeId);
     } else {
       this.queue.clear();
@@ -971,6 +976,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
         const file = media.files?.find((f: any) => f.id === this.mediaFileId);
         this.applyEpisodeMetadata();
+        this.syncSeriesQueue();
 
         // Use duration from streamInfo (reliable, from ffprobe)
         const si = file?.streamInfo as any;
@@ -1925,25 +1931,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return { episodeId: next.id, mediaFileId: file.id };
   });
 
-  /** The single "what plays next" source: the active queue's next item when a
-   *  playlist is driving playback, otherwise the current series' next episode.
-   *  Null when nothing follows. Drives the skip control and auto-advance alike. */
-  readonly upNext = computed<QueueItem | null>(() => {
-    if (this.queue.active()) return this.queue.peekNext();
-    const next = this.nextEpisodeContext();
-    if (!next) return null;
-    return {
-      mediaId: this.mediaId,
-      episodeId: next.episodeId,
-      mediaFileId: next.mediaFileId,
-      title: this.mediaTitle(),
-    };
-  });
+  /** The item that plays next: the queue's next entry (a playlist item, or the
+   *  next episode of the series queue). Null when nothing follows or there's no
+   *  queue (a standalone film). Drives the skip control and auto-advance alike. */
+  readonly upNext = computed<QueueItem | null>(() =>
+    this.queue.active() ? this.queue.peekNext() : null,
+  );
 
   /** Whether the current context advances automatically when a stream ends: the
-   *  per-playlist flag while a queue is active, else the global player setting. */
+   *  per-playlist flag for a playlist queue, else the global player setting
+   *  (series episodes). */
   readonly autoplayEnabled = computed<boolean>(() =>
-    this.queue.active()
+    this.queue.source() === 'playlist'
       ? this.queue.autoplay()
       : this.playerSettings.settings().autoPlayNext,
   );
@@ -1998,6 +1997,62 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  {@link episodeId} (no-op for movies). Shared by the initial load and the
    *  in-place episode switch so the loading backdrop matches what's about to
    *  play — the episode still (stored locally) is preferred over series fanart. */
+  /** Populate the queue with the current series' episodes (S/E order, only ones
+   *  with a file) so the queue list + auto-advance work for a series played
+   *  outside a playlist — wherever an episode is opened (Continue Watching,
+   *  detail page, …). No-op while a playlist owns the queue; clears the queue
+   *  for movies or when the current episode has no queue-able siblings. */
+  private syncSeriesQueue(): void {
+    if (this.queue.source() === 'playlist') return; // the playlist owns the queue
+    const m = this.media;
+    if (!m || m.type !== 'series' || !this.episodeId || !m.seasons?.length) {
+      this.queue.clear();
+      return;
+    }
+    const flat: {
+      seasonNumber: number;
+      episodeNumber: number;
+      id: number;
+      title?: string | null;
+      stillUrl?: string | null;
+    }[] = [];
+    for (const s of m.seasons) {
+      if ((s.seasonNumber ?? 0) <= 0) continue; // skip specials
+      for (const ep of s.episodes ?? []) {
+        flat.push({
+          seasonNumber: s.seasonNumber,
+          episodeNumber: ep.episodeNumber ?? 0,
+          id: ep.id,
+          title: ep.title,
+          stillUrl: ep.stillUrl,
+        });
+      }
+    }
+    flat.sort(
+      (a, b) => a.seasonNumber - b.seasonNumber || a.episodeNumber - b.episodeNumber,
+    );
+    const items: QueueItem[] = [];
+    for (const e of flat) {
+      const file = (m.files ?? []).find((f) => f.episodeId === e.id);
+      if (!file) continue; // an episode with no available file isn't queue-able
+      items.push({
+        mediaId: m.id,
+        episodeId: e.id,
+        mediaFileId: file.id,
+        title: m.title,
+        episodeTitle: `S${e.seasonNumber}:E${e.episodeNumber}${e.title ? ` - ${e.title}` : ''}`,
+        fanartUrl: m.fanartUrl,
+        stillUrl: e.stillUrl ?? null,
+      });
+    }
+    const idx = items.findIndex((it) => it.episodeId === this.episodeId);
+    if (idx < 0 || items.length <= 1) {
+      this.queue.clear();
+      return;
+    }
+    this.queue.start(items, idx, { source: 'series', sourceId: m.id, autoplay: false });
+  }
+
   private applyEpisodeMetadata(): void {
     // A movie (or an item with no episode) carries no episode label — clear any
     // that lingered from a previous episode when a queue crosses into a movie.
@@ -2060,6 +2115,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Recompute next-item context + refresh the episode label / backdrop.
       this.mediaLoadedTick.update((v) => v + 1);
       this.applyEpisodeMetadata();
+      this.syncSeriesQueue();
 
       const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
       const knownDuration = (file?.streamInfo as any)?.durationSeconds;
@@ -2282,7 +2338,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const qp: Record<string, number> = { mediaId: item.mediaId };
     if (item.episodeId) qp['episodeId'] = item.episodeId;
     const sourceId = this.queue.sourceId();
-    if (this.queue.active() && sourceId != null) qp['playlistId'] = sourceId;
+    // Only a playlist queue is re-established from the URL; a series queue is
+    // rebuilt from the loaded media, so it needs no param.
+    if (this.queue.source() === 'playlist' && sourceId != null) {
+      qp['playlistId'] = sourceId;
+    }
 
     const canReloadInPlace =
       !!this.engine && !this.isOfflinePlayback && !this.castService.isConnected();
@@ -2880,7 +2940,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     let target: string;
     if (!this.mediaId) {
       target = '/';
-    } else if (this.queue.active() && queueSourceId != null) {
+    } else if (this.queue.source() === 'playlist' && queueSourceId != null) {
       // Playing from a playlist returns to that playlist, not the item's page.
       target = `/playlists/${queueSourceId}`;
     } else {
