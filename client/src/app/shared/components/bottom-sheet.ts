@@ -81,6 +81,11 @@ export class BottomSheetComponent {
    *  would chain straight into the close. Reaching the top mid-scroll stops;
    *  a fresh swipe (new touchstart at the top) is needed to dismiss. */
   private startedAtTop = false;
+  /** Y of the previous touchmove, and whether the last meaningful move went
+   *  downward — the release only dismisses when the finger was still heading
+   *  down, so easing back up after over-pulling keeps the sheet open. */
+  private prevY = 0;
+  private movingDown = true;
   private prevBodyOverflow: string | null = null;
   private prevHtmlOverflow: string | null = null;
   private registered = false;
@@ -202,13 +207,16 @@ export class BottomSheetComponent {
     const el = this.sheet()?.nativeElement;
     if (!el) return;
     this.startY = e.touches[0].clientY;
+    this.prevY = this.startY;
+    this.movingDown = true;
     this.startedAtTop = el.scrollTop <= 0;
   }
 
   onTouchMove(e: TouchEvent) {
     const el = this.sheet()?.nativeElement;
     if (!el) return;
-    const deltaY = e.touches[0].clientY - this.startY;
+    const y = e.touches[0].clientY;
+    const deltaY = y - this.startY;
 
     // Only turn a downward pull into a dismiss-drag when the gesture began at
     // the top. Scrolling a long list up to the top does NOT chain into the
@@ -217,19 +225,25 @@ export class BottomSheetComponent {
       e.preventDefault();
       this.dragging.set(true);
       this.dragOffset.set(deltaY);
+      // Remember the last meaningful direction (2px deadzone ignores jitter),
+      // so the release can tell an eased-back pull from a committed swipe.
+      const dy = y - this.prevY;
+      if (Math.abs(dy) >= 2) this.movingDown = dy > 0;
     } else if (this.dragging() && deltaY <= 0) {
-      // User reversed direction — cancel drag
+      // User reversed all the way past the start — cancel drag
       this.dragging.set(false);
       this.dragOffset.set(0);
     }
+    this.prevY = y;
   }
 
   onTouchEnd() {
     if (!this.dragging()) return;
     this.dragging.set(false);
 
-    // If dragged more than 80px, dismiss; otherwise snap back
-    if (this.dragOffset() > 80) {
+    // Dismiss only when pulled past the threshold AND still heading down at
+    // release — easing back up after over-pulling snaps the sheet open again.
+    if (this.dragOffset() > 80 && this.movingDown) {
       this.dismiss();
     } else {
       this.dragOffset.set(0);
