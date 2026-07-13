@@ -1,0 +1,51 @@
+<h1 class="text-xl font-bold mb-4">{{ titleKey() | translate }}</h1>
+
+@if (loading() && !users().length) {
+  <div class="flex justify-center py-12">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else if (users().length) {
+  <ul class="flex flex-col gap-1 max-w-xl">
+    @for (u of users(); track u.id) {
+      <li class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200">
+        <a [routerLink]="['/profile', u.id]" class="flex items-center gap-3 flex-1 min-w-0">
+          <div class="avatar avatar-placeholder shrink-0">
+            <div
+              class="w-10 h-10 rounded-full text-white text-sm font-semibold"
+              [style.background-color]="'hsl(' + avatar(u.username).hue + ' 55% 45%)'"
+            >
+              @if (u.avatar) {
+                <img [src]="u.avatar" [alt]="u.username" />
+              } @else {
+                <span>{{ avatar(u.username).initials }}</span>
+              }
+            </div>
+          </div>
+          <span class="flex-1 min-w-0 truncate font-medium">{{ u.username }}</span>
+          @if (u.followsYou) {
+            <span class="badge badge-sm badge-ghost">{{ 'social.follows_you' | translate }}</span>
+          }
+        </a>
+        @if (u.isFollowing) {
+          <button type="button" class="btn btn-outline btn-sm gap-2" [disabled]="busyId() === u.id" (click)="unfollow(u)">
+            <svg lucideUserCheck class="h-4 w-4"></svg>
+            {{ 'social.unfollow' | translate }}
+          </button>
+        } @else if (u.requested) {
+          <button type="button" class="btn btn-ghost btn-sm gap-2" [disabled]="busyId() === u.id" (click)="unfollow(u)">
+            <svg lucideClock class="h-4 w-4"></svg>
+            {{ 'social.requested' | translate }}
+          </button>
+        } @else {
+          <button type="button" class="btn btn-primary btn-sm btn-square" [disabled]="busyId() === u.id" (click)="follow(u)" [attr.aria-label]="'social.follow' | translate">
+            <svg lucideUserPlus class="h-4 w-4"></svg>
+          </button>
+        }
+      </li>
+    }
+  </ul>
+} @else {
+  <div class="text-center py-12 text-base-content/50">
+    <p class="text-lg">{{ (mode() === 'followers' ? 'social.no_followers' : 'social.no_following') | translate }}</p>
+  </div>
+}
