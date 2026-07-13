@@ -423,7 +423,7 @@
             <span class="badge badge-sm badge-ghost">{{ 'playlists.role_owner' | translate }}</span>
           } @else {
             <select
-              class="select select-bordered select-xs"
+              class="select select-bordered select-xs w-36 shrink-0"
               [ngModel]="m.role"
               (ngModelChange)="changeMemberRole(m.userId, $event)"
               [disabled]="memberBusy()"
