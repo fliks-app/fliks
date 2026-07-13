@@ -104,17 +104,28 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly addToPlaylistSvc = inject(AddToPlaylistService);
   private readonly addToPlaylistModal = viewChild(AddToPlaylistModalComponent);
   // Bridge the global "add to playlist" requests (from cards / the media-detail
-  // header) to the single modal instance mounted in the layout.
+  // header) to the single modal instance mounted in the layout. The request is
+  // consumed (cleared) once handed over, so it can't reopen the modal when this
+  // layout is re-created — e.g. after exiting the player, which lives on a route
+  // OUTSIDE this shell, so the shell is destroyed on play and rebuilt on exit.
   private readonly addToPlaylistBridge = effect(() => {
     const req = this.addToPlaylistSvc.request();
-    if (req) this.addToPlaylistModal()?.open(req.target);
+    const modal = this.addToPlaylistModal();
+    if (req && modal) {
+      this.addToPlaylistSvc.clear();
+      modal.open(req.target);
+    }
   });
   private readonly recommendSvc = inject(RecommendService);
   private readonly recommendModal = viewChild(RecommendModalComponent);
   // Bridge the global "recommend to a member" requests to the layout modal.
   private readonly recommendBridge = effect(() => {
     const req = this.recommendSvc.request();
-    if (req) void this.recommendModal()?.open(req.target);
+    const modal = this.recommendModal();
+    if (req && modal) {
+      this.recommendSvc.clear();
+      void modal.open(req.target);
+    }
   });
   readonly networkService = inject(NetworkService);
   readonly castService = inject(CastService);
