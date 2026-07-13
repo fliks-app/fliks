@@ -2,6 +2,7 @@
   <app-setup-checklist [padding]="true" />
 }
 <app-follow-requests-card [padding]="true" />
+<app-received-recommendations-card [padding]="true" />
 
 
 <div appTvSection appDefaultFocus="a[data-home-focus^='library:']" focusKey="home" focusIdAttr="data-home-focus" class="flex flex-col gap-8">
@@ -75,6 +76,24 @@
                 [extraActions]="recommendationActions(rec)"
                 (played)="playRecommendation(rec)"
                 (dismissed)="dismissRecommendation(rec)"
+              />
+            }
+          </app-horizontal-scroller>
+        }
+      }
+
+      <!-- Likes -->
+      @case ('likes') {
+        @if (likes().length) {
+          <app-horizontal-scroller [title]="'likes.home_row' | translate">
+            @for (item of likes(); track item.mediaId + '-' + (item.seasonId ?? '') + '-' + (item.episodeId ?? '')) {
+              <app-media-card
+                [aspect]="'landscape'"
+                [attr.data-home-focus]="'like:' + item.mediaId + '-' + (item.seasonId ?? '') + '-' + (item.episodeId ?? '')"
+                [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
+                [title]="item.title"
+                [subtitle]="item.label ?? undefined"
+                [link]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId]"
               />
             }
           </app-horizontal-scroller>

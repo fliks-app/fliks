@@ -1,0 +1,49 @@
+@if (!tv.isTv() && items().length > 0) {
+  <div [class.pb-4]="padding()">
+    <section class="card bg-base-200/60 backdrop-blur-sm shadow-sm">
+      <div class="card-body p-4 sm:p-5 gap-3">
+        <header class="flex items-center gap-3">
+          <h2 class="card-title text-base">
+            {{ 'recommend.received_title' | translate }}
+            <span class="badge badge-primary badge-sm">{{ items().length }}</span>
+          </h2>
+        </header>
+
+        <ul class="flex flex-col divide-y divide-base-300/50">
+          @for (item of items(); track item.id) {
+            <li class="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+              <a [routerLink]="mediaLink(item)" class="flex items-center gap-3 flex-1 min-w-0">
+                <div class="w-20 aspect-video rounded-md bg-base-300 overflow-hidden shrink-0">
+                  @if (item.stillUrl ?? item.fanartUrl ?? item.posterUrl; as img) {
+                    <img [src]="img" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
+                  }
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm truncate">
+                    {{ 'recommend.received_by' | translate: { username: item.sender.username } }}
+                  </p>
+                  <p class="text-sm font-semibold truncate">{{ item.title }}</p>
+                  @if (item.label) {
+                    <p class="text-xs text-base-content/60 truncate">{{ item.label }}</p>
+                  }
+                  @if (item.message) {
+                    <p class="text-xs text-base-content/70 italic truncate">« {{ item.message }} »</p>
+                  }
+                </div>
+              </a>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm btn-square"
+                [disabled]="busyId() === item.id"
+                (click)="dismiss(item)"
+                [attr.aria-label]="'recommend.dismiss' | translate"
+              >
+                <svg lucideX class="h-4 w-4"></svg>
+              </button>
+            </li>
+          }
+        </ul>
+      </div>
+    </section>
+  </div>
+}

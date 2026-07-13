@@ -7,6 +7,7 @@ import { MediaService, Media, CalendarEntry } from '../../core/services/api/medi
 import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '../../core/services/api/streaming-api.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { PlaylistsApiService, Playlist } from '../../core/services/api/playlists-api.service';
+import { LikesApiService, LikedItem } from '../../core/services/api/likes-api.service';
 import { RequestsService, FliksRequestRow } from '../../core/services/api/requests.service';
 import { SseService } from '../../core/services/sse.service';
 import {
@@ -33,6 +34,7 @@ import { HorizontalScrollerComponent } from '../../shared/components/horizontal-
 import { LucideIconComponent } from '../../shared/components/lucide-icon';
 import { SetupChecklistComponent } from '../../shared/components/setup-checklist/setup-checklist';
 import { FollowRequestsCardComponent } from '../../shared/components/follow-requests-card/follow-requests-card';
+import { ReceivedRecommendationsCardComponent } from '../../shared/components/received-recommendations-card/received-recommendations-card';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { AuthService } from '../../core/services/auth.service';
 import { RequestCardComponent } from '../requests/request-card/request-card';
@@ -81,6 +83,7 @@ import { RequestDeclineModalComponent } from '../requests/request-decline-modal/
     LucideIconComponent,
     SetupChecklistComponent,
     FollowRequestsCardComponent,
+    ReceivedRecommendationsCardComponent,
     TvSectionDirective,
     RequestCardComponent,
     RequestDeclineModalComponent,
@@ -97,6 +100,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly playableMedia = inject(PlayableMediaService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly playlistsApi = inject(PlaylistsApiService);
+  private readonly likesApi = inject(LikesApiService);
   private readonly requestsService = inject(RequestsService);
   private readonly sse = inject(SseService);
   private readonly downloadProgress = inject(DownloadProgressService);
@@ -139,6 +143,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly recommendations = signal<RecommendationItem[]>([]);
   /** Accessible playlists ordered by last modification, for the "playlists" zone. */
   readonly playlists = signal<Playlist[]>([]);
+  /** The viewer's liked content, for the "likes" zone. */
+  readonly likes = signal<LikedItem[]>([]);
   /** Recently-added items per library, keyed by library id (opt-in zones). */
   readonly libraryRecent = signal<Map<number, Media[]>>(new Map());
   /** Latest requests (scoped to rights by the backend) for the optional
@@ -348,11 +354,12 @@ export class HomeComponent implements OnInit, OnDestroy {
   private async loadAllSections(opts: { force?: boolean } = {}): Promise<void> {
     const force = !!opts.force;
     try {
-      const [libs, cw, recs, pls] = await Promise.all([
+      const [libs, cw, recs, pls, likes] = await Promise.all([
         this.librariesApi.listMine({ force }).catch(() => null),
         this.streamingApi.getContinueWatching(undefined, { force }).catch(() => null),
         this.streamingApi.getRecommendations({ force }).catch(() => null),
         this.playlistsApi.list({ force }).catch(() => null),
+        this.likesApi.mine(undefined, { force }).catch(() => null),
       ]);
       if (libs) this.libraries.set(libs);
       if (cw) this.continueWatching.set(cw);
@@ -363,6 +370,7 @@ export class HomeComponent implements OnInit, OnDestroy {
             .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
             .slice(0, 20),
         );
+      if (likes) this.likes.set(likes);
     } catch { /* ignore */ }
     await this.loadFilteredSections({ force });
   }

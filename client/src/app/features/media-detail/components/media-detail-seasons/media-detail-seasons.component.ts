@@ -16,9 +16,11 @@ import {
   LucideEllipsisVertical,
   LucideEye,
   LucideEyeOff,
+  LucideHeart,
   LucideListChecks,
   LucideListPlus,
   LucidePackage,
+  LucideSend,
   LucideX,
 } from '@lucide/angular';
 import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
@@ -41,17 +43,19 @@ import {
 } from '../../media-detail.utils';
 import { PlayableMediaService } from '../../../../core/services/playable-media.service';
 import { AddToPlaylistService } from '../../../../core/services/add-to-playlist.service';
+import { TvService } from '../../../../core/services/tv.service';
 
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, FormsModule, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideListChecks, LucideListPlus, LucidePackage, LucideX],
+  imports: [TranslateModule, FormsModule, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideListChecks, LucideListPlus, LucidePackage, LucideSend, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
 export class MediaDetailSeasonsComponent {
   private readonly playableMedia = inject(PlayableMediaService);
   private readonly addToPlaylist = inject(AddToPlaylistService);
+  readonly tv = inject(TvService);
   readonly media = input.required<Media>();
   readonly selectedSeason = input<Season | null>(null);
   readonly activeSeasonId = input.required<number | null>();
@@ -82,6 +86,8 @@ export class MediaDetailSeasonsComponent {
   /** Optional override for the horizontal-scroller title. Defaults to
    *  the generic "Episodes" string when null. */
   readonly sectionTitle = input<string | null>(null);
+  /** Season ids the viewer has liked — drives the season heart entry. */
+  readonly likedSeasonIds = input<number[]>([]);
 
   readonly selectSeason = output<number>();
   readonly episodesHasFileOnlyChange = output<boolean>();
@@ -94,6 +100,10 @@ export class MediaDetailSeasonsComponent {
   readonly requestSeason = output<Season>();
   /** Open the tracking-status modal for this season (emits the season number). */
   readonly viewSeasonTracking = output<number>();
+  /** Toggle the viewer's like on this season (emits the season id). */
+  readonly toggleSeasonLike = output<number>();
+  /** Recommend this season to another member (emits the season id). */
+  readonly recommendSeason = output<number>();
   readonly seasonWatchedBusyId = input<number | null>(null);
 
   /** Every episode with a file in the season is in the watched set. */
@@ -153,6 +163,10 @@ export class MediaDetailSeasonsComponent {
 
   addSeasonToPlaylist(season: Season) {
     this.addToPlaylist.open({ seasonId: season.id });
+  }
+
+  isSeasonLiked(seasonId: number): boolean {
+    return this.likedSeasonIds().includes(seasonId);
   }
 
   playEpisode(ep: Episode) {

@@ -134,5 +134,20 @@
         }
       </app-horizontal-scroller>
     }
+
+    <!-- Likes -->
+    @if (p.shown.likes && p.likes.length) {
+      <app-horizontal-scroller [title]="'social.section_likes' | translate" class="mb-6 block">
+        @for (item of p.likes; track item.mediaId + '-' + (item.seasonId ?? '') + '-' + (item.episodeId ?? '')) {
+          <app-media-card
+            [aspect]="'landscape'"
+            [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
+            [title]="item.title"
+            [subtitle]="item.label ?? undefined"
+            [link]="mediaLink(item.mediaType, item.mediaId)"
+          />
+        }
+      </app-horizontal-scroller>
+    }
   }
 }

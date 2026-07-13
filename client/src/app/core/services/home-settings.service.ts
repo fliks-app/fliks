@@ -6,6 +6,7 @@ export type HomeSectionKey =
   | 'libraries'
   | 'continue-watching'
   | 'recommendations'
+  | 'likes'
   | 'recently-added'
   | 'playlists'
   | 'coming-soon'
@@ -16,6 +17,7 @@ export type HomeSectionType =
   | 'libraries'
   | 'continue-watching'
   | 'recommendations'
+  | 'likes'
   | 'recently-added'
   | 'playlists'
   | 'coming-soon'
@@ -51,6 +53,7 @@ const BUILTIN_ORDER: HomeSectionKey[] = [
   'libraries',
   'continue-watching',
   'recommendations',
+  'likes',
   'recently-added',
   'playlists',
   'coming-soon',

@@ -38,6 +38,31 @@
         </button>
         <button
           type="button"
+          class="dropdown-item text-white"
+          (click)="toggleSeasonLike.emit(selSeason.id)"
+        >
+          <svg
+            lucideHeart
+            class="h-5 w-5 shrink-0 opacity-80"
+            [class.text-error]="isSeasonLiked(selSeason.id)"
+            [attr.fill]="isSeasonLiked(selSeason.id) ? 'currentColor' : 'none'"
+          ></svg>
+          <span class="flex-1">{{
+            (isSeasonLiked(selSeason.id) ? 'likes.unlike_season' : 'likes.like_season') | translate
+          }}</span>
+        </button>
+        @if (!tv.isTv()) {
+          <button
+            type="button"
+            class="dropdown-item text-white"
+            (click)="recommendSeason.emit(selSeason.id)"
+          >
+            <svg lucideSend class="h-5 w-5 shrink-0 opacity-80"></svg>
+            <span class="flex-1">{{ 'recommend.menu_item_season' | translate }}</span>
+          </button>
+        }
+        <button
+          type="button"
           [disabled]="seasonWatchedBusyId() === selSeason.id"
           class="dropdown-item text-white"
           (click)="toggleSeasonWatched.emit({ season: selSeason, watched: !seasonFullyWatched(selSeason) })"

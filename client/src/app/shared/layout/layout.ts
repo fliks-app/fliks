@@ -33,10 +33,12 @@ import { NetworkService } from '../../core/services/network.service';
 import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
 import { AddToPlaylistModalComponent } from '../components/add-to-playlist-modal/add-to-playlist-modal.component';
+import { RecommendModalComponent } from '../components/recommend-modal/recommend-modal.component';
 import { UserMenuComponent } from '../components/user-menu';
 import { AppUpdateModalComponent } from '../components/app-update-modal/app-update-modal';
 import { AppUpdateService } from '../../core/services/app-update.service';
 import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
+import { RecommendService } from '../../core/services/recommend.service';
 import { LucideIconComponent } from '../components/lucide-icon';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { BackgroundComponent } from '../components/background/background';
@@ -70,6 +72,7 @@ import {
     CastOverlayComponent,
     CardActionsPanelComponent,
     AddToPlaylistModalComponent,
+    RecommendModalComponent,
     UserMenuComponent,
     AppUpdateModalComponent,
     LucideIconComponent,
@@ -97,6 +100,13 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly addToPlaylistBridge = effect(() => {
     const req = this.addToPlaylistSvc.request();
     if (req) this.addToPlaylistModal()?.open(req.target);
+  });
+  private readonly recommendSvc = inject(RecommendService);
+  private readonly recommendModal = viewChild(RecommendModalComponent);
+  // Bridge the global "recommend to a member" requests to the layout modal.
+  private readonly recommendBridge = effect(() => {
+    const req = this.recommendSvc.request();
+    if (req) void this.recommendModal()?.open(req.target);
   });
   readonly networkService = inject(NetworkService);
   readonly castService = inject(CastService);

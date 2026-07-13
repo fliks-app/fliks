@@ -109,6 +109,10 @@ export class User extends BaseEntity {
   @Column({ default: false })
   shareWatchHistory: boolean;
 
+  /** Expose liked content on the public profile. */
+  @Column({ default: false })
+  shareLikes: boolean;
+
   /** Computed permissions from the linked role (isAdmin overrides with all). */
   get permissions(): string[] {
     if (this.isAdmin) {

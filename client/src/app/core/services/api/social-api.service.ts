@@ -5,6 +5,7 @@ import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
 import { ProfileVisibility } from '../auth.service';
 import { Playlist } from './playlists-api.service';
 import { RecommendationItem, WatchHistoryItem } from './streaming-api.service';
+import { LikedItem } from './likes-api.service';
 
 /** A member as seen by another, with caller-relative follow state. */
 export interface SocialUser {
@@ -26,14 +27,42 @@ export interface PublicProfile extends SocialUser {
     tastes: boolean;
     recommendations: boolean;
     recentlyWatched: boolean;
+    likes: boolean;
   };
   playlists: Playlist[];
   topGenres: { genre: string; weight: number }[];
   recommendations: RecommendationItem[];
   recentlyWatched: WatchHistoryItem[];
+  likes: LikedItem[];
 }
 
 type FollowResult = { status: 'pending' | 'accepted' };
+
+/** Identifies the content being recommended to another member. */
+export interface RecommendContentBody {
+  recipientId: number;
+  mediaId: number;
+  seasonId?: number;
+  episodeId?: number;
+  message?: string;
+}
+
+/** A content recommendation received from another member. */
+export interface ReceivedRecommendation {
+  id: number;
+  sender: { id: number; username: string; avatar: string | null };
+  message: string | null;
+  createdAt: string;
+  mediaId: number;
+  mediaType: string;
+  title: string;
+  posterUrl: string | null;
+  fanartUrl: string | null;
+  seasonId: number | null;
+  episodeId: number | null;
+  label: string | null;
+  stillUrl: string | null;
+}
 
 @Injectable({ providedIn: 'root' })
 export class SocialApiService {
@@ -127,6 +156,28 @@ export class SocialApiService {
   rejectRequest(userId: number) {
     return firstValueFrom(
       this.http.post<void>(`/api/social/requests/${userId}/reject`, {}),
+    );
+  }
+
+  // ── content recommendations (member → member) ──
+
+  recommend(body: RecommendContentBody) {
+    return firstValueFrom(this.http.post<void>('/api/social/recommend', body));
+  }
+
+  /** Content other members have recommended to me (not yet dismissed). */
+  receivedRecommendations(opts: { force?: boolean } = {}) {
+    return firstValueFrom(
+      this.http.get<ReceivedRecommendation[]>(
+        '/api/social/recommendations/received',
+        this.headers(opts.force),
+      ),
+    );
+  }
+
+  dismissRecommendation(id: number) {
+    return firstValueFrom(
+      this.http.post<void>(`/api/social/recommendations/${id}/dismiss`, {}),
     );
   }
 }

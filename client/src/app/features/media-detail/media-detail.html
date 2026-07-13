@@ -74,6 +74,9 @@
           (episodeWatchedToggled)="onEpisodeWatchedToggledFromHeader($event)"
           (requestMedia)="openRequestForMedia()"
           (addToPlaylist)="openAddToPlaylist()"
+          (recommend)="openRecommend()"
+          [liked]="focusedLiked()"
+          (likeToggled)="toggleLike()"
           (openTracking)="openTracking({ kind: 'episode', episodeId: ep.id })"
         />
 
@@ -186,6 +189,9 @@
           (editSubtitles)="openSubtitles()"
           (requestMedia)="openRequestForMedia()"
           (addToPlaylist)="openAddToPlaylist()"
+          (recommend)="openRecommend()"
+          [liked]="focusedLiked()"
+          (likeToggled)="toggleLike()"
           (openTracking)="openTracking(m.type === 'movie' ? { kind: 'movie' } : { kind: 'series' })"
           [badge]="headerBadge()"
           (openDownloadDetail)="openDownloadDetailModal()"
@@ -233,6 +239,7 @@
             [isAdmin]="isAdmin()"
             [canRequest]="canRequest()"
             [userRequestedSeasonNumbers]="requestedSeasons()"
+            [likedSeasonIds]="likeState().seasonIds"
             (selectSeason)="selectSeason($event)"
             (episodesHasFileOnlyChange)="setEpisodesHasFileOnly($event)"
             (loadSeasonReleases)="loadSeasonReleases(m.id, $event)"
@@ -242,6 +249,8 @@
             (toggleEpisodeWatched)="onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
             (requestSeason)="openRequestForSeason($event)"
             (viewSeasonTracking)="openTracking({ kind: 'season', seasonNumber: $event })"
+            (toggleSeasonLike)="toggleSeasonLike($event)"
+            (recommendSeason)="recommendSeason($event)"
           />
         }
 

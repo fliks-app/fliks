@@ -52,6 +52,8 @@ import { MediaDetailProfilesModalComponent } from './components/media-detail-pro
 import { MediaDetailLibraryModalComponent } from './components/media-detail-library-modal/media-detail-library-modal.component';
 import { RequestModalComponent } from '../tmdb-preview/components/request-modal/request-modal.component';
 import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
+import { RecommendService } from '../../core/services/recommend.service';
+import { LikesApiService, LikeState } from '../../core/services/api/likes-api.service';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
@@ -1688,6 +1690,100 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!m) return;
     const ep = this.episodeMode() ? this.focusedEpisode() : null;
     this.addToPlaylist.open(ep ? { episodeId: ep.id } : { mediaId: m.id });
+  }
+
+  private readonly recommend = inject(RecommendService);
+
+  /** Recommend the current title to another member: the focused episode when
+   *  browsing an episode, otherwise the movie or the whole series. */
+  protected openRecommend() {
+    const m = this.media();
+    if (!m) return;
+    const ep = this.episodeMode() ? this.focusedEpisode() : null;
+    this.recommend.open(ep ? { mediaId: m.id, episodeId: ep.id } : { mediaId: m.id });
+  }
+
+  // ── Likes ──
+  private readonly likesApi = inject(LikesApiService);
+  readonly likeState = signal<LikeState>({ media: false, seasonIds: [], episodeIds: [] });
+  private lastLikeStateId = 0;
+  private readonly likeStateEffect = effect(() => {
+    const id = this.media()?.id ?? 0;
+    if (id && id !== this.lastLikeStateId) {
+      this.lastLikeStateId = id;
+      void this.loadLikeState(id);
+    }
+  });
+
+  private async loadLikeState(id: number): Promise<void> {
+    try {
+      this.likeState.set(await this.likesApi.state(id, { force: true }));
+    } catch {
+      /* interceptor surfaces errors */
+    }
+  }
+
+  /** Like state of the header's current target (movie, or the focused episode). */
+  readonly focusedLiked = computed(() => {
+    const st = this.likeState();
+    if (this.episodeMode()) {
+      const ep = this.focusedEpisode();
+      return ep ? st.episodeIds.includes(ep.id) : false;
+    }
+    return st.media;
+  });
+
+  seasonLiked(seasonId: number): boolean {
+    return this.likeState().seasonIds.includes(seasonId);
+  }
+
+  /** Toggle the like on the header target (movie / focused episode). */
+  protected async toggleLike(): Promise<void> {
+    const m = this.media();
+    if (!m) return;
+    const ep = this.episodeMode() ? this.focusedEpisode() : null;
+    const target = ep ? { mediaId: m.id, episodeId: ep.id } : { mediaId: m.id };
+    const wasLiked = this.focusedLiked();
+    this.likeState.update((st) =>
+      ep
+        ? {
+            ...st,
+            episodeIds: wasLiked
+              ? st.episodeIds.filter((i) => i !== ep.id)
+              : [...st.episodeIds, ep.id],
+          }
+        : { ...st, media: !wasLiked },
+    );
+    try {
+      if (wasLiked) await this.likesApi.unlike(target);
+      else await this.likesApi.like(target);
+    } catch {
+      void this.loadLikeState(m.id);
+    }
+  }
+
+  recommendSeason(seasonId: number): void {
+    const m = this.media();
+    if (!m) return;
+    this.recommend.open({ mediaId: m.id, seasonId });
+  }
+
+  async toggleSeasonLike(seasonId: number): Promise<void> {
+    const m = this.media();
+    if (!m) return;
+    const wasLiked = this.seasonLiked(seasonId);
+    this.likeState.update((st) => ({
+      ...st,
+      seasonIds: wasLiked
+        ? st.seasonIds.filter((i) => i !== seasonId)
+        : [...st.seasonIds, seasonId],
+    }));
+    try {
+      if (wasLiked) await this.likesApi.unlike({ mediaId: m.id, seasonId });
+      else await this.likesApi.like({ mediaId: m.id, seasonId });
+    } catch {
+      void this.loadLikeState(m.id);
+    }
   }
 
   /** Fetch the global active-request state for this title. Run after the

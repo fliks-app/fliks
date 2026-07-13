@@ -54,6 +54,16 @@
     >
       {{ 'library.view_collections' | translate }}
     </button>
+    <button
+      type="button"
+      class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
+      [class.bg-base-300]="viewMode() === 'likes'"
+      [class.text-base-content/70]="viewMode() !== 'likes'"
+      [class.hover:bg-base-200]="viewMode() !== 'likes'"
+      (click)="setViewMode('likes')"
+    >
+      {{ 'library.view_likes' | translate }}
+    </button>
   </nav>
 
   @if (viewMode() === 'all') {
@@ -424,6 +434,21 @@
         <span class="loading loading-spinner loading-lg"></span>
       </div>
     } @else {
+      <!-- Recommended by other members (personal inbox, not library-scoped). -->
+      @if (recommendedForYou().length) {
+        <app-horizontal-scroller [title]="'recommend.for_you' | translate">
+          @for (item of recommendedForYou(); track item.id) {
+            <app-media-card
+              [aspect]="'landscape'"
+              [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
+              [title]="item.title"
+              [subtitle]="item.label ?? ('recommend.received_by' | translate: { username: item.sender.username })"
+              [link]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId]"
+            />
+          }
+        </app-horizontal-scroller>
+      }
+
       <!-- Continue watching (horizontal scroller). Hidden when nothing
            in-progress in this library so we don't render an empty row. -->
       @if (suggestionsContinue().length) {
@@ -472,7 +497,7 @@
             />
           }
         </div>
-      } @else if (!suggestionsContinue().length && !suggestionsFromFollowing().length) {
+      } @else if (!suggestionsContinue().length && !suggestionsFromFollowing().length && !recommendedForYou().length) {
         <div class="text-center py-24 text-base-content/50">
           <p class="text-lg">{{ 'library.suggestions_empty' | translate }}</p>
           <p class="text-sm mt-2">{{ 'library.suggestions_empty_hint' | translate }}</p>
@@ -528,6 +553,28 @@
             [label]="c.name"
             [subtitle]="(c.count <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate: { count: c.count }"
             (clicked)="pickCollection(c.id)"
+          />
+        }
+      </div>
+    }
+  } @else if (viewMode() === 'likes') {
+    @if (likesLoading() && !likesList().length) {
+      <div class="flex justify-center py-12">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else if (!likesList().length) {
+      <div class="text-center py-24 text-base-content/50">
+        <p class="text-lg">{{ 'likes.empty' | translate }}</p>
+      </div>
+    } @else {
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 tv:grid-cols-5 gap-3 sm:gap-4">
+        @for (item of likesList(); track item.mediaId + '-' + (item.seasonId ?? '') + '-' + (item.episodeId ?? '')) {
+          <app-media-card
+            [aspect]="'landscape'"
+            [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
+            [title]="item.title"
+            [subtitle]="item.label ?? undefined"
+            [link]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId]"
           />
         }
       </div>
