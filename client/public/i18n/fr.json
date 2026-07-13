@@ -1020,6 +1020,7 @@
     "device_google_tv": "Google TV",
     "device_samsung_tv": "TV Samsung",
     "device_lg_tv": "TV LG",
+    "device_client_version": "v{{version}}",
     "commands_title": "Déclencher une tâche",
     "cmd_rss_sync": "Synchronisation RSS",
     "cmd_search_missing": "Rechercher les manquants",

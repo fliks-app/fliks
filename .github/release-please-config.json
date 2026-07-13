@@ -37,6 +37,7 @@
           "path": "macos/Fliks/Info.plist"
         },
         "client/android/app/build.gradle",
+        "client/src/environments/environment.ts",
         "cast-receiver/index.html",
         "client/ios/App/App.xcodeproj/project.pbxproj"
       ]

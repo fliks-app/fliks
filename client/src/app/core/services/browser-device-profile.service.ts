@@ -6,6 +6,7 @@ import { ServerConfigService } from './server-config.service';
 import { ENGINE_TRAITS, engineKindFor } from './engine-traits';
 import { SystemInfoService } from './system-info.service';
 import { getDeviceName } from '../utils/device-info';
+import { environment } from '../../../environments/environment';
 
 interface HdrPlugin {
   isSupported(): Promise<{ supported: boolean; dolbyVision?: boolean }>;
@@ -101,6 +102,10 @@ export interface DeviceProfile {
   /** Real host OS name+version ("macOS 26", "iOS 18.5") resolved natively; the
    *  admin label prefers this over the UA-derived OS (which the UA freezes). */
   systemName?: string;
+  /** Fliks client build version ("1.15.2"). Sent only by non-web clients
+   *  (native app / TV / desktop): a browser always runs the server's current
+   *  build, so a version there is redundant. Shown on the admin dashboard. */
+  appVersion?: string;
   /** Hard force MPEG-TS HLS for every transcode session of this client.
    *  Defaults to `false`; the only switch in shipping configs is the
    *  narrower `useTsOnSingleAudio` below. Opt-in via
@@ -497,6 +502,12 @@ export class BrowserDeviceProfileService {
     const useTs = readUseTsOverride();
     if (useTs) console.warn('[DeviceProfile] useTs override active');
 
+    // A plain browser always runs the server's current build, so its version is
+    // redundant on the admin dashboard — only the installed clients (native app,
+    // Smart TV, desktop shell) report a build version worth surfacing.
+    const isWeb =
+      !Capacitor.isNativePlatform() && !isTv && !this.device.isDesktopNative();
+
     return {
       directPlayProfiles: [{
         containers,
@@ -511,6 +522,7 @@ export class BrowserDeviceProfileService {
       supportsDolbyVision,
       deviceType: Capacitor.isNativePlatform() ? 'mobile' : 'desktop',
       deviceName: getDeviceName(),
+      appVersion: isWeb ? undefined : environment.version,
       useTs,
       // Tizen opts into MPEG-TS on single-audio sources (AVPlay's HLS-fMP4
       // rendition-probe stall, issue #148). Multi-audio sources stay on

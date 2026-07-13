@@ -805,6 +805,7 @@ export class StreamingController {
       kind,
       deviceLabel,
       systemName: deviceProfile.systemName ?? null,
+      appVersion: deviceProfile.appVersion ?? null,
       sseConnectionId,
       position: resumePosition,
       useTs: effectiveUseTs,

@@ -1,5 +1,9 @@
 export const environment = {
   production: false,
+  /** Fliks client build version, kept in sync with client/package.json by
+   *  release-please. Reported to the backend (non-web clients only) so the
+   *  admin streams dashboard can show which app build a viewer is running. */
+  version: '1.15.2', // x-release-please-version
   /** Base URL pour ApiHandlerService (chemins versionnés sous /api). */
   apiUrl: '/api',
   /**
