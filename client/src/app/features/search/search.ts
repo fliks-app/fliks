@@ -27,6 +27,7 @@ import { RequestsService, FliksRequestStatus } from '../../core/services/api/req
 import { SearchStateService } from '../../core/services/search-state.service';
 import { SocialApiService } from '../../core/services/api/social-api.service';
 import { TvService } from '../../core/services/tv.service';
+import { DeviceService } from '../../core/services/device.service';
 import { initialsAvatar } from '../../core/utils/initials-avatar';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
@@ -58,6 +59,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly streamingApi = inject(StreamingApiService);
   private readonly social = inject(SocialApiService);
   readonly tv = inject(TvService);
+  private readonly device = inject(DeviceService);
   readonly state = inject(SearchStateService);
 
   /** TMDB /discover sort options (label keys resolved in the template). */
@@ -126,8 +128,10 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
-    // Focus only if no existing query (first visit)
-    if (!this.state.hasQuery()) {
+    // Auto-focus on first visit only on non-touch devices (desktop). On touch
+    // surfaces this would pop the soft keyboard on arrival; there the keyboard
+    // opens only on an explicit re-tap of the search dock (requestFocus).
+    if (!this.state.hasQuery() && !this.device.isTouch()) {
       setTimeout(() => this.searchInput()?.nativeElement.focus(), 100);
     }
   }

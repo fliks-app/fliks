@@ -31,11 +31,12 @@ import { ImportModalComponent } from './components/import-modal/import-modal.com
 import { MediaType } from '../../core/enums/media-type.enum';
 import { LucideFilm, LucideUser, LucidePlay } from '@lucide/angular';
 import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
+import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, ResolveUrlPipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, LucideFilm, LucideUser, LucidePlay],
+  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, ResolveUrlPipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, LucideFilm, LucideUser, LucidePlay],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })

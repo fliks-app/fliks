@@ -275,8 +275,7 @@
   <!-- Cast (shared mobile + desktop) -->
   @if (topCast().length) {
     <section class="px-1 md:px-0 mt-8">
-      <h2 class="text-lg font-semibold mb-3">{{ 'discover.preview_cast' | translate }}</h2>
-      <div class="flex gap-4 overflow-x-auto pb-2 scrollbar-none">
+      <app-horizontal-scroller [title]="'discover.preview_cast' | translate" class="block">
         @for (c of topCast(); track c.externalId) {
           <div class="shrink-0 w-24 text-center">
             <div class="avatar avatar-placeholder mx-auto">
@@ -294,7 +293,7 @@
             }
           </div>
         }
-      </div>
+      </app-horizontal-scroller>
     </section>
   }
 }
