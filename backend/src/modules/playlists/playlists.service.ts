@@ -12,9 +12,15 @@ import { PlaylistShare } from './entities/playlist-share.entity';
 import { Media } from '../media/entities/media.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { PlaybackState } from '../streaming/entities/playback-state.entity';
+import { UserFollow } from '../social/entities/user-follow.entity';
 import { User } from '../users/entities/user.entity';
 import { LibrariesService } from '../libraries/libraries.service';
-import { MediaType, PlaylistShareRole } from '../../common/enums';
+import {
+  FollowStatus,
+  MediaType,
+  PlaylistShareRole,
+  PlaylistVisibility,
+} from '../../common/enums';
 import { CreatePlaylistDto } from './dto/create-playlist.dto';
 import { UpdatePlaylistDto } from './dto/update-playlist.dto';
 import { AddPlaylistItemDto } from './dto/add-playlist-item.dto';
@@ -37,6 +43,7 @@ export interface PlaylistView {
   autoRemoveWatched: boolean;
   autoDownload: boolean;
   autoPlay: boolean;
+  visibility: PlaylistVisibility;
   coverImageUrl: string | null;
   itemCount: number;
   posters: string[];
@@ -73,6 +80,8 @@ export class PlaylistsService {
     private readonly episodeRepo: Repository<Episode>,
     @InjectRepository(PlaybackState)
     private readonly playbackRepo: Repository<PlaybackState>,
+    @InjectRepository(UserFollow)
+    private readonly followRepo: Repository<UserFollow>,
     private readonly libraries: LibrariesService,
     private readonly dataSource: DataSource,
   ) {}
@@ -96,6 +105,24 @@ export class PlaylistsService {
       throw new NotFoundException(`Playlist #${playlistId} not found`);
     }
     if (playlist.ownerId === user.id) return { playlist, role: 'owner' };
+
+    // Public / followers visibility grants read-only access without a share.
+    // (Write paths pass EDITOR/ADMINISTRATOR, so they never take this branch.)
+    if (min === PlaylistShareRole.VIEWER) {
+      if (playlist.visibility === PlaylistVisibility.PUBLIC) {
+        return { playlist, role: PlaylistShareRole.VIEWER };
+      }
+      if (playlist.visibility === PlaylistVisibility.FOLLOWERS) {
+        const followsOwner = await this.followRepo.exist({
+          where: {
+            follower: { id: user.id },
+            following: { id: playlist.ownerId },
+            status: FollowStatus.ACCEPTED,
+          },
+        });
+        if (followsOwner) return { playlist, role: PlaylistShareRole.VIEWER };
+      }
+    }
 
     const share = await this.shareRepo.findOne({
       where: { playlist: { id: playlistId }, user: { id: user.id } },
@@ -137,6 +164,33 @@ export class PlaylistsService {
     );
     return entries
       .map((e) => this.toView(e.playlist, e.role, stats.get(e.playlist.id)))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * A target user's playlists visible on their public profile: always the
+   * PUBLIC ones, plus FOLLOWERS ones when `includeFollowers` (the viewer is an
+   * accepted follower). Posters/counts scoped to the VIEWER's library access.
+   */
+  async listVisibleForOwner(
+    ownerId: number,
+    viewer: User,
+    includeFollowers: boolean,
+  ): Promise<PlaylistView[]> {
+    const visibilities = includeFollowers
+      ? [PlaylistVisibility.PUBLIC, PlaylistVisibility.FOLLOWERS]
+      : [PlaylistVisibility.PUBLIC];
+    const playlists = await this.repo.find({
+      where: { owner: { id: ownerId }, visibility: In(visibilities) },
+    });
+    if (!playlists.length) return [];
+    const accessible = await this.libraries.getAccessibleLibraryIds(viewer);
+    const stats = await this.postersAndCounts(
+      playlists.map((p) => p.id),
+      accessible,
+    );
+    return playlists
+      .map((p) => this.toView(p, PlaylistShareRole.VIEWER, stats.get(p.id)))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -275,6 +329,7 @@ export class PlaylistsService {
     }
     if (dto.autoDownload !== undefined) patch.autoDownload = dto.autoDownload;
     if (dto.autoPlay !== undefined) patch.autoPlay = dto.autoPlay;
+    if (dto.visibility !== undefined) patch.visibility = dto.visibility;
     if (Object.keys(patch).length) await this.repo.update(playlistId, patch);
     return this.findOneForUser(user, playlistId);
   }
@@ -585,6 +640,7 @@ export class PlaylistsService {
       autoRemoveWatched: playlist.autoRemoveWatched,
       autoDownload: playlist.autoDownload,
       autoPlay: playlist.autoPlay,
+      visibility: playlist.visibility,
       coverImageUrl: playlist.coverImageUrl,
       itemCount: stats?.count ?? 0,
       posters: stats?.posters ?? [],

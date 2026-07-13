@@ -32,6 +32,7 @@ import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { LucideIconComponent } from '../../shared/components/lucide-icon';
 import { SetupChecklistComponent } from '../../shared/components/setup-checklist/setup-checklist';
+import { FollowRequestsCardComponent } from '../../shared/components/follow-requests-card/follow-requests-card';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { AuthService } from '../../core/services/auth.service';
 import { RequestCardComponent } from '../requests/request-card/request-card';
@@ -79,6 +80,7 @@ import { RequestDeclineModalComponent } from '../requests/request-decline-modal/
     HorizontalScrollerComponent,
     LucideIconComponent,
     SetupChecklistComponent,
+    FollowRequestsCardComponent,
     TvSectionDirective,
     RequestCardComponent,
     RequestDeclineModalComponent,

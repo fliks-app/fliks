@@ -149,6 +149,13 @@ export type SseEvent =
       pairingId: string;
       deviceName: string;
       deviceId: string;
+    }
+  // Social — delivered to the target user (see SocialService).
+  | {
+      type: 'social.followed' | 'social.follow_request' | 'social.follow_accepted';
+      userId: number;
+      username: string;
+      avatar: string | null;
     };
 
 /**

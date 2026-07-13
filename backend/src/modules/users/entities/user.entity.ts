@@ -1,7 +1,7 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { Exclude } from 'class-transformer';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { MediaServerType } from '../../../common/enums';
+import { MediaServerType, ProfileVisibility } from '../../../common/enums';
 import { Role } from '../../roles/entities/role.entity';
 
 @Entity('users')
@@ -84,6 +84,30 @@ export class User extends BaseEntity {
    */
   @Column({ type: 'jsonb', default: [] })
   hiddenLibraryIds: number[];
+
+  /**
+   * Social discoverability. `PRIVATE` (default): findable in member search, but
+   * following needs approval and a non-follower sees only name + avatar.
+   * `PUBLIC`: instant follow and shared content visible to any member.
+   */
+  @Column({
+    type: 'enum',
+    enum: ProfileVisibility,
+    default: ProfileVisibility.PRIVATE,
+  })
+  profileVisibility: ProfileVisibility;
+
+  /** Expose the derived "top genres" taste summary on the public profile. */
+  @Column({ default: false })
+  shareTastes: boolean;
+
+  /** Expose personal recommendations on the public profile. */
+  @Column({ default: false })
+  shareRecommendations: boolean;
+
+  /** Expose the recently-watched list on the public profile. */
+  @Column({ default: false })
+  shareWatchHistory: boolean;
 
   /** Computed permissions from the linked role (isAdmin overrides with all). */
   get permissions(): string[] {

@@ -6,6 +6,9 @@ import { Media } from './media.service';
 
 export type PlaylistRole = 'owner' | 'administrator' | 'editor' | 'viewer';
 
+/** Who can read the playlist. */
+export type PlaylistVisibility = 'private' | 'followers' | 'public';
+
 export interface Playlist {
   id: number;
   name: string;
@@ -14,6 +17,8 @@ export interface Playlist {
   autoRemoveWatched: boolean;
   /** Play the playlist's items back to back (server-side, per playlist). */
   autoPlay: boolean;
+  /** Read scope: owner-only, the owner's accepted followers, or any member. */
+  visibility: PlaylistVisibility;
   coverImageUrl: string | null;
   itemCount: number;
   /** First up-to-4 poster URLs for the card mosaic (per-viewer). */
@@ -50,6 +55,7 @@ export interface CreatePlaylistBody {
   name: string;
   autoRemoveWatched?: boolean;
   autoPlay?: boolean;
+  visibility?: PlaylistVisibility;
 }
 
 export type UpdatePlaylistBody = Partial<CreatePlaylistBody>;

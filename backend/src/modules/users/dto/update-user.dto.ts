@@ -3,6 +3,7 @@ import {
   IsArray,
   IsBoolean,
   IsEmail,
+  IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
@@ -10,6 +11,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { ProfileVisibility } from '../../../common/enums';
 
 export class UpdateUserDto {
   @IsString()
@@ -75,4 +77,24 @@ export class UpdateUserDto {
   @IsInt({ each: true })
   @IsOptional()
   hiddenLibraryIds?: number[];
+
+  /** Self-editable: social profile discoverability (public / private). */
+  @IsEnum(ProfileVisibility)
+  @IsOptional()
+  profileVisibility?: ProfileVisibility;
+
+  /** Self-editable: expose derived top-genres on the public profile. */
+  @IsBoolean()
+  @IsOptional()
+  shareTastes?: boolean;
+
+  /** Self-editable: expose personal recommendations on the public profile. */
+  @IsBoolean()
+  @IsOptional()
+  shareRecommendations?: boolean;
+
+  /** Self-editable: expose recently-watched on the public profile. */
+  @IsBoolean()
+  @IsOptional()
+  shareWatchHistory?: boolean;
 }

@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { ProfileVisibility } from '../auth.service';
 
 export interface UserRow {
   id: number;
@@ -36,6 +37,14 @@ export interface UpdateUserBody {
   libraryOrder?: number[];
   /** Self-editable: library ids hidden from the home page and sidebar. */
   hiddenLibraryIds?: number[];
+  /** Self-editable: social profile discoverability. */
+  profileVisibility?: ProfileVisibility;
+  /** Self-editable: expose derived top-genres on the public profile. */
+  shareTastes?: boolean;
+  /** Self-editable: expose personal recommendations on the public profile. */
+  shareRecommendations?: boolean;
+  /** Self-editable: expose recently-watched on the public profile. */
+  shareWatchHistory?: boolean;
 }
 
 /** Aggregated stats payload for the admin user-detail Statistics tab. */

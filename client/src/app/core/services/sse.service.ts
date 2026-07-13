@@ -149,6 +149,27 @@ export class SseService implements OnDestroy {
           this.translate.instant('sse.stalled_removed', { title: event['title'] ?? '' }),
         );
         break;
+      case 'social.followed':
+        this.toast.info(
+          this.translate.instant('social.toast_new_follower', {
+            username: event['username'] ?? '',
+          }),
+        );
+        break;
+      case 'social.follow_request':
+        this.toast.info(
+          this.translate.instant('social.toast_follow_request', {
+            username: event['username'] ?? '',
+          }),
+        );
+        break;
+      case 'social.follow_accepted':
+        this.toast.info(
+          this.translate.instant('social.toast_follow_accepted', {
+            username: event['username'] ?? '',
+          }),
+        );
+        break;
       case 'rescan.started':
         // Toast shown from media-detail / episode-detail when POST /rescan returns
         break;

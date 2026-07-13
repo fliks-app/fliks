@@ -121,6 +121,39 @@ export class RecommendationService {
     return this.dismissalRepo.count({ where: { userId } });
   }
 
+  /**
+   * A user's "taste": their most-weighted genres derived from recently
+   * completed media (most recent weighs highest), for the public profile.
+   * Genre names only — never titles — so it leaks no library-scoped content.
+   */
+  async getTopGenres(
+    userId: number,
+    limit = 8,
+  ): Promise<{ genre: string; weight: number }[]> {
+    const recentStates = await this.playbackRepo.find({
+      where: { user: { id: userId }, completed: true },
+      order: { lastPlayedAt: 'DESC' },
+      take: 15,
+      relations: ['media'],
+    });
+    const seen = new Set<number>();
+    const weights = new Map<string, number>();
+    let rank = 0;
+    for (const ps of recentStates) {
+      if (!ps.media?.genres?.length || seen.has(ps.media.id)) continue;
+      seen.add(ps.media.id);
+      const w = 1 / (rank + 1);
+      for (const g of ps.media.genres) {
+        weights.set(g, (weights.get(g) ?? 0) + w);
+      }
+      if (++rank >= 10) break;
+    }
+    return [...weights.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([genre, weight]) => ({ genre, weight }));
+  }
+
   async getRecommendations(
     userId: number,
     accessibleLibraryIds: number[],

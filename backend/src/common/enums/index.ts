@@ -7,3 +7,6 @@ export * from './minimum-availability.enum';
 export * from './subtitle-provider-type.enum';
 export * from './subtitle-status.enum';
 export * from './playlist-share-role.enum';
+export * from './playlist-visibility.enum';
+export * from './profile-visibility.enum';
+export * from './follow-status.enum';

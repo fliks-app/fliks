@@ -1,13 +1,14 @@
 import { Injectable, signal, computed, effect } from '@angular/core';
 import { Media } from './api/media.service';
 import { MetadataSearchResult } from './api/metadata.service';
+import { SocialUser } from './api/social-api.service';
 
 const EXTERNAL_KEY = 'fliks-search-external';
 
 @Injectable({ providedIn: 'root' })
 export class SearchStateService {
   readonly query = signal('');
-  readonly filter = signal<'all' | 'movie' | 'series'>('all');
+  readonly filter = signal<'all' | 'movie' | 'series' | 'people'>('all');
   readonly externalEnabled = signal(localStorage.getItem(EXTERNAL_KEY) !== 'false');
 
   private readonly persistExternal = effect(() => {
@@ -17,6 +18,8 @@ export class SearchStateService {
   readonly localLoading = signal(false);
   readonly externalResults = signal<MetadataSearchResult[]>([]);
   readonly externalLoading = signal(false);
+  readonly peopleResults = signal<SocialUser[]>([]);
+  readonly peopleLoading = signal(false);
   readonly hasQuery = computed(() => this.query().trim().length > 0);
   /** Counter incremented whenever a caller (e.g. the bottom-dock
    *  search button) asks the search page to refocus its input.
@@ -38,7 +41,9 @@ export class SearchStateService {
     this.query.set('');
     this.localResults.set([]);
     this.externalResults.set([]);
+    this.peopleResults.set([]);
     this.localLoading.set(false);
     this.externalLoading.set(false);
+    this.peopleLoading.set(false);
   }
 }

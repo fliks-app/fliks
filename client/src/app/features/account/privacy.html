@@ -1,0 +1,54 @@
+<div class="max-w-2xl">
+  <h1 class="text-xl font-bold mb-1">{{ 'social.privacy_title' | translate }}</h1>
+  <p class="text-sm text-base-content/60 mb-6">{{ 'social.privacy_intro' | translate }}</p>
+
+  <div class="flex flex-col gap-4">
+    <app-toggle-field
+      [value]="publicProfile()"
+      (valueChange)="onPublicProfileChange($event)"
+      [label]="'social.privacy_public_profile' | translate"
+      [hint]="'social.privacy_public_profile_hint' | translate"
+    />
+
+    <div class="divider my-0"></div>
+
+    <app-toggle-field
+      [value]="shareTastes()"
+      (valueChange)="onShareTastesChange($event)"
+      [label]="'social.privacy_share_tastes' | translate"
+      [hint]="'social.privacy_share_tastes_hint' | translate"
+    />
+    <app-toggle-field
+      [value]="shareRecommendations()"
+      (valueChange)="onShareRecommendationsChange($event)"
+      [label]="'social.privacy_share_recommendations' | translate"
+      [hint]="'social.privacy_share_recommendations_hint' | translate"
+    />
+    <app-toggle-field
+      [value]="shareWatchHistory()"
+      (valueChange)="onShareWatchHistoryChange($event)"
+      [label]="'social.privacy_share_watch_history' | translate"
+      [hint]="'social.privacy_share_watch_history_hint' | translate"
+    />
+  </div>
+
+  <!-- Follow requests -->
+  @if (requests().length) {
+    <div class="mt-8">
+      <h2 class="text-lg font-semibold mb-3">{{ 'social.requests_title' | translate }}</h2>
+      <ul class="flex flex-col gap-2">
+        @for (r of requests(); track r.id) {
+          <li class="flex items-center gap-3 p-2 rounded-lg bg-base-200">
+            <span class="flex-1 min-w-0 truncate font-medium">{{ r.username }}</span>
+            <button type="button" class="btn btn-primary btn-sm btn-square" (click)="accept(r)" [attr.aria-label]="'social.accept' | translate">
+              <svg lucideCheck class="h-4 w-4"></svg>
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm btn-square" (click)="reject(r)" [attr.aria-label]="'social.reject' | translate">
+              <svg lucideX class="h-4 w-4"></svg>
+            </button>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+</div>
