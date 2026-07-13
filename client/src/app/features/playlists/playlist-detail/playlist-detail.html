@@ -447,6 +447,7 @@
       [placeholder]="'playlists.members_search_placeholder' | translate"
       [ngModel]="memberQuery()"
       (ngModelChange)="onMemberQuery($event)"
+      (focus)="onMemberQuery(memberQuery())"
     />
     @if (memberResults().length) {
       <ul class="flex flex-col gap-1 mt-2 max-h-52 overflow-y-auto">

@@ -445,19 +445,19 @@ export class PlaylistDetailComponent {
     } catch {
       // Errors surfaced by the global interceptor.
     }
+    // Propose connectable members right away, before the user types.
+    void this.onMemberQuery('');
   }
 
   closeMembers() {
     this.membersDialog()?.nativeElement.close();
   }
 
+  /** Search connectable members; an empty query returns default suggestions,
+   *  so results appear as soon as the field is focused. */
   async onMemberQuery(q: string): Promise<void> {
     this.memberQuery.set(q);
     const query = q.trim();
-    if (!query) {
-      this.memberResults.set([]);
-      return;
-    }
     try {
       const found = await this.social.searchConnectable(query);
       if (this.memberQuery().trim() !== query) return; // stale response
