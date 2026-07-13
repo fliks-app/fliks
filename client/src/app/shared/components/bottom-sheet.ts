@@ -75,7 +75,12 @@ export class BottomSheetComponent {
   private readonly tv = inject(TvService);
   private readonly dismissCallback = () => this.dismiss();
   private startY = 0;
-  private startScroll = 0;
+  /** True when the touch gesture began with the sheet already scrolled to the
+   *  top. Only then can a downward drag turn into a dismiss — otherwise
+   *  scrolling a long list up to the top and continuing in the same gesture
+   *  would chain straight into the close. Reaching the top mid-scroll stops;
+   *  a fresh swipe (new touchstart at the top) is needed to dismiss. */
+  private startedAtTop = false;
   private prevBodyOverflow: string | null = null;
   private prevHtmlOverflow: string | null = null;
   private registered = false;
@@ -197,7 +202,7 @@ export class BottomSheetComponent {
     const el = this.sheet()?.nativeElement;
     if (!el) return;
     this.startY = e.touches[0].clientY;
-    this.startScroll = el.scrollTop;
+    this.startedAtTop = el.scrollTop <= 0;
   }
 
   onTouchMove(e: TouchEvent) {
@@ -205,11 +210,13 @@ export class BottomSheetComponent {
     if (!el) return;
     const deltaY = e.touches[0].clientY - this.startY;
 
-    // Only start dragging down when scrolled to top
-    if (el.scrollTop <= 0 && deltaY > 0) {
+    // Only turn a downward pull into a dismiss-drag when the gesture began at
+    // the top. Scrolling a long list up to the top does NOT chain into the
+    // close in the same gesture — the user lifts and swipes again.
+    if (this.startedAtTop && el.scrollTop <= 0 && deltaY > 0) {
       e.preventDefault();
       this.dragging.set(true);
-      this.dragOffset.set(Math.max(0, deltaY - this.startScroll));
+      this.dragOffset.set(deltaY);
     } else if (this.dragging() && deltaY <= 0) {
       // User reversed direction — cancel drag
       this.dragging.set(false);
