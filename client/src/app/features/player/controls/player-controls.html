@@ -386,18 +386,19 @@
         <span class="font-medium">{{ 'player.queue' | translate }}</span>
       </button>
       <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
-      <div class="max-h-[50vh] overflow-y-auto">
-        @for (q of queueItems(); track $index; let i = $index) {
-          <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="selectQueueItem.emit(i); closeSheet()">
-            <span class="w-5 shrink-0 text-white/40 text-xs">{{ i + 1 }}</span>
-            <span class="flex-1 text-left min-w-0">
-              <span class="block truncate">{{ q.episodeTitle || q.title }}</span>
-              @if (q.episodeTitle) { <span class="block truncate text-white/50 text-xs">{{ q.title }}</span> }
-            </span>
-            @if (queueIndex() === i) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
-          </button>
-        }
-      </div>
+      <!-- No inner scroll container: the sheet itself scrolls, so its
+           drag-to-dismiss (keyed off the sheet's own scrollTop) doesn't fight a
+           nested scroller. -->
+      @for (q of queueItems(); track $index; let i = $index) {
+        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" [attr.data-queue-active]="queueIndex() === i ? 'true' : null" (click)="selectQueueItem.emit(i); closeSheet()">
+          <span class="w-5 shrink-0 text-white/40 text-xs">{{ i + 1 }}</span>
+          <span class="flex-1 text-left min-w-0">
+            <span class="block truncate">{{ q.episodeTitle || q.title }}</span>
+            @if (q.episodeTitle) { <span class="block truncate text-white/50 text-xs">{{ q.title }}</span> }
+          </span>
+          @if (queueIndex() === i) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+        </button>
+      }
     }
   </div>
 </app-bottom-sheet>
@@ -481,6 +482,7 @@
             <button
               class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
               [disabled]="queueIndex() === i"
+              [attr.data-queue-active]="queueIndex() === i ? 'true' : null"
               (click)="selectQueueItem.emit(i); closeDropdown($event)"
             >
               <span class="w-5 shrink-0 text-white/40 text-xs">{{ i + 1 }}</span>

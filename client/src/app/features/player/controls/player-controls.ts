@@ -165,6 +165,19 @@ export class PlayerControlsComponent {
     // cue's @if is live and is undefined otherwise.
     effect(() => this.autoFocusCue(this.skipIntroBtn()));
     effect(() => this.autoFocusCue(this.nextEpisodeBtn()));
+    // Center the currently-playing item when the queue panel opens (in either
+    // the dropdown or the bottom sheet), so a long queue doesn't open scrolled
+    // to the top. Re-runs if the cursor moves while the panel is up.
+    effect(() => {
+      if (this.settingsPanel() !== 'queue') return;
+      this.queueIndex(); // re-center when the playing item changes
+      requestAnimationFrame(() => {
+        if (this.settingsPanel() !== 'queue') return;
+        this.hostEl.nativeElement
+          .querySelector('[data-queue-active="true"]')
+          ?.scrollIntoView({ block: 'center' });
+      });
+    });
   }
   private lastPanelOpen = false;
   private lastVisible = true;
