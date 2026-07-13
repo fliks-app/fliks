@@ -6,6 +6,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media, CalendarEntry } from '../../core/services/api/media.service';
 import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '../../core/services/api/streaming-api.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
+import { PlaylistsApiService, Playlist } from '../../core/services/api/playlists-api.service';
 import { RequestsService, FliksRequestRow } from '../../core/services/api/requests.service';
 import { SseService } from '../../core/services/sse.service';
 import {
@@ -27,6 +28,7 @@ import { LibraryPrefsService } from '../../core/services/library-prefs.service';
 import { TvService } from '../../core/services/tv.service';
 import { CardAction } from '../../core/services/card-actions.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
+import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { LucideIconComponent } from '../../shared/components/lucide-icon';
 import { SetupChecklistComponent } from '../../shared/components/setup-checklist/setup-checklist';
@@ -73,6 +75,7 @@ import { RequestDeclineModalComponent } from '../requests/request-decline-modal/
   imports: [
     RouterLink, TranslateModule, DefaultFocusDirective,
     MediaCardComponent,
+    MosaicCardComponent,
     HorizontalScrollerComponent,
     LucideIconComponent,
     SetupChecklistComponent,
@@ -91,6 +94,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly playableMedia = inject(PlayableMediaService);
   private readonly librariesApi = inject(LibrariesApiService);
+  private readonly playlistsApi = inject(PlaylistsApiService);
   private readonly requestsService = inject(RequestsService);
   private readonly sse = inject(SseService);
   private readonly downloadProgress = inject(DownloadProgressService);
@@ -131,6 +135,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly recentMedia = signal<Media[]>([]);
   readonly comingSoon = signal<CalendarEntry[]>([]);
   readonly recommendations = signal<RecommendationItem[]>([]);
+  /** Accessible playlists ordered by last modification, for the "playlists" zone. */
+  readonly playlists = signal<Playlist[]>([]);
   /** Recently-added items per library, keyed by library id (opt-in zones). */
   readonly libraryRecent = signal<Map<number, Media[]>>(new Map());
   /** Latest requests (scoped to rights by the backend) for the optional
@@ -253,6 +259,10 @@ export class HomeComponent implements OnInit, OnDestroy {
     return c;
   }
 
+  openPlaylist(id: number): void {
+    void this.router.navigate(['/playlists', id]);
+  }
+
   async ngOnInit() {
     this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
     // Profile names for the request cards are resolved client-side (same as
@@ -336,14 +346,21 @@ export class HomeComponent implements OnInit, OnDestroy {
   private async loadAllSections(opts: { force?: boolean } = {}): Promise<void> {
     const force = !!opts.force;
     try {
-      const [libs, cw, recs] = await Promise.all([
+      const [libs, cw, recs, pls] = await Promise.all([
         this.librariesApi.listMine({ force }).catch(() => null),
         this.streamingApi.getContinueWatching(undefined, { force }).catch(() => null),
         this.streamingApi.getRecommendations({ force }).catch(() => null),
+        this.playlistsApi.list({ force }).catch(() => null),
       ]);
       if (libs) this.libraries.set(libs);
       if (cw) this.continueWatching.set(cw);
       if (recs) this.recommendations.set(recs);
+      if (pls)
+        this.playlists.set(
+          [...pls]
+            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+            .slice(0, 20),
+        );
     } catch { /* ignore */ }
     await this.loadFilteredSections({ force });
   }

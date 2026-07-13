@@ -255,6 +255,7 @@
     "coming_soon": "Bientôt disponible",
     "recent_media": "Récemment ajoutés",
     "recommendations": "Recommandations",
+    "playlists": "Playlists récentes",
     "recent_media_in": "Récemment ajouté – {{library}}",
     "requests_recent": "Demandes récentes",
     "cw_remove_title": "Retirer",
@@ -567,7 +568,6 @@
     "bulk_monitored": "Surveillance",
     "view_suggestions": "Suggestions",
     "view_genres": "Genres",
-    "element_count": "{{count}} éléments",
     "order_asc": "Tri croissant",
     "order_desc": "Tri décroissant",
     "filter_button": "Filtres",
@@ -1086,6 +1086,8 @@
     "recap": "Résumé"
   },
   "common": {
+    "item_count_one": "{{count}} élément",
+    "item_count_other": "{{count}} éléments",
     "search": "Rechercher…",
     "confirm": "Confirmer",
     "cancel": "Annuler",
@@ -1125,7 +1127,6 @@
     "empty": "Aucune liste de lecture",
     "no_items": "Cette liste est vide",
     "new_placeholder": "Nom de la liste",
-    "item_count": "{{count}} élément(s)",
     "rename": "Renommer",
     "settings": "Paramètres",
     "saved": "Modifications enregistrées",
@@ -2072,6 +2073,7 @@
       "continue_watching": "Reprendre la lecture",
       "recommendations": "Recommandations",
       "recently_added": "Récemment ajouté",
+      "playlists": "Playlists récentes",
       "coming_soon": "Bientôt disponible",
       "requests_recent": "Demandes récentes"
     },
