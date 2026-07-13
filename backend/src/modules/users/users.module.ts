@@ -8,6 +8,7 @@ import { UsersService } from './users.service';
 import { UsersStatsService } from './users-stats.service';
 import { UsersController } from './users.controller';
 import { AuthModule } from '../auth/auth.module';
+import { ImageModule } from '../images/image.module';
 import { PlaybackState } from '../streaming/entities/playback-state.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
 
@@ -24,6 +25,7 @@ import { FliksRequest } from '../requests/entities/request.entity';
       FliksRequest,
     ]),
     AuthModule,
+    ImageModule,
   ],
   controllers: [UsersController],
   providers: [UsersService, UsersStatsService],

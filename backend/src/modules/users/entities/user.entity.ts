@@ -39,8 +39,8 @@ export class User extends BaseEntity {
   @Column({ nullable: true })
   mediaServerId: string;
 
-  @Column({ nullable: true })
-  avatar: string;
+  @Column({ type: 'varchar', nullable: true })
+  avatar: string | null;
 
   @Column({ type: 'timestamptz', nullable: true })
   lastLogin: Date;

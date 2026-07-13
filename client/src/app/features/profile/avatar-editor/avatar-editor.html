@@ -1,0 +1,49 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-sm">
+    <h3 class="text-lg font-bold mb-4">{{ 'social.avatar_edit_title' | translate }}</h3>
+    <div class="flex flex-col items-center gap-4">
+      <div
+        class="relative overflow-hidden rounded-full bg-base-300 touch-none select-none cursor-move"
+        [style.width.px]="vp"
+        [style.height.px]="vp"
+        (pointerdown)="onPointerDown($event)"
+        (pointermove)="onPointerMove($event)"
+        (pointerup)="onPointerUp($event)"
+        (pointercancel)="onPointerUp($event)"
+      >
+        @if (imgSrc(); as src) {
+          <img
+            [src]="src"
+            class="absolute top-0 left-0 max-w-none pointer-events-none"
+            [style.width.px]="dispW()"
+            [style.height.px]="dispH()"
+            [style.transform]="'translate(' + offX() + 'px, ' + offY() + 'px)'"
+            alt=""
+          />
+        }
+        <div class="absolute inset-0 rounded-full ring-2 ring-white/50 pointer-events-none"></div>
+      </div>
+      <input
+        type="range"
+        min="1"
+        max="3"
+        step="0.01"
+        class="range range-primary range-sm w-full"
+        [value]="zoom()"
+        (input)="onZoomChange(+$any($event.target).value)"
+        [attr.aria-label]="'social.avatar_zoom' | translate"
+      />
+    </div>
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="close()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="confirm()">
+        {{ 'common.save' | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button (click)="close()">{{ 'common.close' | translate }}</button>
+  </form>
+</dialog>
