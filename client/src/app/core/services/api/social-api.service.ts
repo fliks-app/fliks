@@ -6,6 +6,7 @@ import { ProfileVisibility } from '../auth.service';
 import { Playlist } from './playlists-api.service';
 import { RecommendationItem, WatchHistoryItem } from './streaming-api.service';
 import { LikedItem } from './likes-api.service';
+import { UserStats } from './users-api.service';
 
 /** A member as seen by another, with caller-relative follow state. */
 export interface SocialUser {
@@ -28,6 +29,7 @@ export interface PublicProfile extends SocialUser {
     recommendations: boolean;
     recentlyWatched: boolean;
     likes: boolean;
+    stats: boolean;
   };
   playlists: Playlist[];
   topGenres: { genre: string; weight: number }[];
@@ -115,6 +117,17 @@ export class SocialApiService {
     return firstValueFrom(
       this.http.get<PublicProfile>(
         `/api/social/users/${userId}/profile`,
+        this.headers(opts.force),
+      ),
+    );
+  }
+
+  /** Activity statistics for a profile's Statistics tab (owner, or a member who
+   *  shares stats and whose profile the caller may see). */
+  getUserStats(userId: number, opts: { force?: boolean } = {}) {
+    return firstValueFrom(
+      this.http.get<UserStats>(
+        `/api/social/users/${userId}/stats`,
         this.headers(opts.force),
       ),
     );

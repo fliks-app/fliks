@@ -113,6 +113,11 @@ export class User extends BaseEntity {
   @Column({ default: false })
   shareLikes: boolean;
 
+  /** Expose activity statistics (watch stats + request counts) on the public
+   *  profile. */
+  @Column({ default: false })
+  shareStats: boolean;
+
   /** Opt out of the whole social layer: the user becomes undiscoverable (search,
    *  connectable, profile) and can't use any sharing feature. Enabling it drops
    *  their social ties (follows, saved playlists, collaborations, recommendations)

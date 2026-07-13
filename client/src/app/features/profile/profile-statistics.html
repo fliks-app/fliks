@@ -1,0 +1,62 @@
+@if (loading() && !stats()) {
+  <div class="flex justify-center py-12">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else if (stats(); as s) {
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <!-- Watch stats -->
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-3">
+        <h3 class="card-title text-base">{{ 'social.stats_playback_title' | translate }}</h3>
+        <ul class="flex flex-col gap-2">
+          <li class="flex items-center gap-3">
+            <svg lucideClock class="h-5 w-5 text-base-content/60 shrink-0"></svg>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm text-base-content/60">{{ 'social.stats_total_time' | translate }}</div>
+              <div class="text-xl font-semibold">{{ totalHours() }} h</div>
+            </div>
+          </li>
+          <li class="flex items-center gap-3">
+            <svg lucideFilm class="h-5 w-5 text-base-content/60 shrink-0"></svg>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm text-base-content/60">{{ 'social.stats_movies' | translate }}</div>
+              <div class="text-xl font-semibold">{{ s.playback.moviesWatched }}</div>
+            </div>
+          </li>
+          <li class="flex items-center gap-3">
+            <svg lucideTv class="h-5 w-5 text-base-content/60 shrink-0"></svg>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm text-base-content/60">{{ 'social.stats_series' | translate }}</div>
+              <div class="text-xl font-semibold">{{ s.playback.seriesStarted }}</div>
+            </div>
+          </li>
+          <li class="flex items-center gap-3">
+            <svg lucideListVideo class="h-5 w-5 text-base-content/60 shrink-0"></svg>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm text-base-content/60">{{ 'social.stats_episodes' | translate }}</div>
+              <div class="text-xl font-semibold">{{ s.playback.episodesWatched }}</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Requests -->
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-3">
+        <h3 class="card-title text-base">{{ 'social.stats_requests_title' | translate }}</h3>
+        <div class="flex items-center gap-3">
+          <svg lucideClipboardList class="h-6 w-6 text-base-content/60 shrink-0"></svg>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm text-base-content/60">{{ 'social.stats_requests_made' | translate }}</div>
+            <div class="text-3xl font-bold">{{ totalRequests() }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+} @else {
+  <div class="text-center py-12 text-base-content/50">
+    <p class="text-lg">{{ 'social.stats_empty' | translate }}</p>
+  </div>
+}

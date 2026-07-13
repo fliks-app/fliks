@@ -29,6 +29,6 @@ import { FliksRequest } from '../requests/entities/request.entity';
   ],
   controllers: [UsersController],
   providers: [UsersService, UsersStatsService],
-  exports: [TypeOrmModule, UsersService],
+  exports: [TypeOrmModule, UsersService, UsersStatsService],
 })
 export class UsersModule {}

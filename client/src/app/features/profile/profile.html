@@ -104,6 +104,18 @@
     >
       {{ 'social.tab_overview' | translate }}
     </a>
+    @if (p.shown.stats) {
+      <a
+        class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
+        [routerLink]="['/profile', p.id, 'statistics']"
+        [routerLinkActive]="'bg-base-300'"
+        #st="routerLinkActive"
+        [class.text-base-content/70]="!st.isActive"
+        [class.hover:bg-base-200]="!st.isActive"
+      >
+        {{ 'social.tab_stats' | translate }}
+      </a>
+    }
     @if (p.isSelf) {
       <a
         class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"

@@ -22,6 +22,7 @@ interface SocialPrefs {
   shareRecommendations?: boolean;
   shareWatchHistory?: boolean;
   shareLikes?: boolean;
+  shareStats?: boolean;
   shareDisabled?: boolean;
 }
 
@@ -44,6 +45,7 @@ export class AccountPrivacyComponent implements OnInit {
   readonly shareRecommendations = signal(false);
   readonly shareWatchHistory = signal(false);
   readonly shareLikes = signal(false);
+  readonly shareStats = signal(false);
   readonly shareDisabled = signal(false);
 
   readonly requests = signal<SocialUser[]>([]);
@@ -63,6 +65,7 @@ export class AccountPrivacyComponent implements OnInit {
     this.shareRecommendations.set(u.shareRecommendations);
     this.shareWatchHistory.set(u.shareWatchHistory);
     this.shareLikes.set(u.shareLikes);
+    this.shareStats.set(u.shareStats);
     this.shareDisabled.set(u.shareDisabled);
   }
 
@@ -97,6 +100,11 @@ export class AccountPrivacyComponent implements OnInit {
   async onShareLikesChange(value: boolean): Promise<void> {
     this.shareLikes.set(value);
     await this.persist({ shareLikes: value });
+  }
+
+  async onShareStatsChange(value: boolean): Promise<void> {
+    this.shareStats.set(value);
+    await this.persist({ shareStats: value });
   }
 
   async onShareDisabledChange(value: boolean): Promise<void> {

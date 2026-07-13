@@ -117,4 +117,9 @@ export class SocialController {
   profile(@CurrentUser() me: User, @Param('userId', ParseIntPipe) userId: number) {
     return this.service.getProfile(me, userId);
   }
+
+  @Get('users/:userId/stats')
+  stats(@CurrentUser() me: User, @Param('userId', ParseIntPipe) userId: number) {
+    return this.service.getUserStats(me, userId);
+  }
 }
