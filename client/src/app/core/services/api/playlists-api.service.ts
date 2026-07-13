@@ -28,6 +28,8 @@ export interface Playlist {
   autoPlay: boolean;
   /** Read scope: owner-only, the owner's accepted followers, or any member. */
   visibility: PlaylistVisibility;
+  /** True when this playlist is in the caller's list because they saved it. */
+  saved: boolean;
   coverImageUrl: string | null;
   itemCount: number;
   /** First up-to-4 poster URLs for the card mosaic (per-viewer). */
@@ -162,5 +164,15 @@ export class PlaylistsApiService {
     return firstValueFrom(
       this.http.delete<PlaylistMember[]>(`/api/playlists/${id}/members/${userId}`),
     );
+  }
+
+  // ── Save (bookmark another member's playlist) ──
+
+  save(id: number) {
+    return firstValueFrom(this.http.post<void>(`/api/playlists/${id}/save`, {}));
+  }
+
+  unsave(id: number) {
+    return firstValueFrom(this.http.delete<void>(`/api/playlists/${id}/save`));
   }
 }

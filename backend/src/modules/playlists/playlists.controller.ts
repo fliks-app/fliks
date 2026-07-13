@@ -115,6 +115,18 @@ export class PlaylistsController {
     return this.service.removeItem(req.user as User, id, itemId);
   }
 
+  @Post(':id/save')
+  @CheckPolicies((ability) => ability.can(Action.Read, Playlist))
+  save(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
+    return this.service.savePlaylist(req.user as User, id);
+  }
+
+  @Delete(':id/save')
+  @CheckPolicies((ability) => ability.can(Action.Read, Playlist))
+  unsave(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
+    return this.service.unsavePlaylist(req.user as User, id);
+  }
+
   @Get(':id/members')
   @CheckPolicies((ability) => ability.can(Action.Read, Playlist))
   getMembers(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {

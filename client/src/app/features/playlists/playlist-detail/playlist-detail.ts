@@ -35,6 +35,8 @@ import {
   LucideTrash2,
   LucideUsers,
   LucideUserPlus,
+  LucideBookmark,
+  LucideBookmarkCheck,
 } from '@lucide/angular';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
@@ -96,6 +98,8 @@ type PlaylistGroupedEntry =
     LucideTrash2,
     LucideUsers,
     LucideUserPlus,
+    LucideBookmark,
+    LucideBookmarkCheck,
     ToggleFieldComponent,
     DropdownMenuComponent,
     ResolveUrlPipe,
@@ -149,6 +153,7 @@ export class PlaylistDetailComponent {
   readonly memberQuery = signal('');
   readonly memberResults = signal<SocialUser[]>([]);
   readonly memberBusy = signal(false);
+  readonly savingBookmark = signal(false);
   /** Auto-download is native-mobile only, so its toggle is hidden elsewhere. */
   readonly showAutoDownload = this.autoDownload.enabled;
 
@@ -499,6 +504,27 @@ export class PlaylistDetailComponent {
       this.members.set(await this.api.removeMember(p.id, userId));
     } finally {
       this.memberBusy.set(false);
+    }
+  }
+
+  // ── Save (bookmark someone else's playlist) ──
+  async toggleSave(): Promise<void> {
+    const p = this.playlist();
+    if (!p || this.savingBookmark()) return;
+    const next = !p.saved;
+    this.savingBookmark.set(true);
+    // Optimistic flip.
+    this.playlist.set({ ...p, saved: next });
+    try {
+      if (next) await this.api.save(p.id);
+      else await this.api.unsave(p.id);
+      this.toast.success(
+        this.translate.instant(next ? 'playlists.saved_added' : 'playlists.saved_removed'),
+      );
+    } catch {
+      this.playlist.set({ ...p, saved: p.saved }); // revert
+    } finally {
+      this.savingBookmark.set(false);
     }
   }
 

@@ -9,6 +9,7 @@ import { DataSource, In, IsNull, Repository } from 'typeorm';
 import { Playlist } from './entities/playlist.entity';
 import { PlaylistItem } from './entities/playlist-item.entity';
 import { PlaylistShare } from './entities/playlist-share.entity';
+import { PlaylistSave } from './entities/playlist-save.entity';
 import { Media } from '../media/entities/media.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { PlaybackState } from '../streaming/entities/playback-state.entity';
@@ -46,6 +47,8 @@ export interface PlaylistView {
   autoDownload: boolean;
   autoPlay: boolean;
   visibility: PlaylistVisibility;
+  /** True when this entry is in the caller's list because they saved it. */
+  saved: boolean;
   coverImageUrl: string | null;
   itemCount: number;
   posters: string[];
@@ -83,6 +86,8 @@ export class PlaylistsService {
     private readonly itemRepo: Repository<PlaylistItem>,
     @InjectRepository(PlaylistShare)
     private readonly shareRepo: Repository<PlaylistShare>,
+    @InjectRepository(PlaylistSave)
+    private readonly saveRepo: Repository<PlaylistSave>,
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
     @InjectRepository(Episode)
@@ -149,19 +154,36 @@ export class PlaylistsService {
   // Read
   // ---------------------------------------------------------------------------
 
-  /** Playlists the caller owns or has been shared, with per-viewer cover/count. */
+  /** Playlists the caller owns, has been shared, or saved — with per-viewer
+   *  cover/count. */
   async findAccessibleForUser(user: User): Promise<PlaylistView[]> {
     const owned = await this.repo.find({ where: { owner: { id: user.id } } });
     const shares = await this.shareRepo.find({
       where: { user: { id: user.id } },
       relations: ['playlist'],
     });
+    const saves = await this.saveRepo.find({
+      where: { user: { id: user.id } },
+      relations: ['playlist'],
+    });
 
-    const byId = new Map<number, { playlist: Playlist; role: PlaylistRole }>();
-    for (const p of owned) byId.set(p.id, { playlist: p, role: 'owner' });
+    const byId = new Map<
+      number,
+      { playlist: Playlist; role: PlaylistRole; saved: boolean }
+    >();
+    for (const p of owned) byId.set(p.id, { playlist: p, role: 'owner', saved: false });
     for (const s of shares) {
       if (s.playlist && !byId.has(s.playlist.id)) {
-        byId.set(s.playlist.id, { playlist: s.playlist, role: s.role });
+        byId.set(s.playlist.id, { playlist: s.playlist, role: s.role, saved: false });
+      }
+    }
+    for (const sv of saves) {
+      if (sv.playlist && !byId.has(sv.playlist.id)) {
+        byId.set(sv.playlist.id, {
+          playlist: sv.playlist,
+          role: PlaylistShareRole.VIEWER,
+          saved: true,
+        });
       }
     }
 
@@ -174,7 +196,9 @@ export class PlaylistsService {
       accessible,
     );
     return entries
-      .map((e) => this.toView(e.playlist, e.role, stats.get(e.playlist.id)))
+      .map((e) =>
+        this.toView(e.playlist, e.role, stats.get(e.playlist.id), e.saved),
+      )
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -215,7 +239,41 @@ export class PlaylistsService {
     const stats = (await this.postersAndCounts([playlistId], accessible)).get(
       playlistId,
     );
-    return this.toView(playlist, role, stats);
+    const saved =
+      role !== 'owner' &&
+      (await this.saveRepo.exist({
+        where: { user: { id: user.id }, playlist: { id: playlistId } },
+      }));
+    return this.toView(playlist, role, stats, saved);
+  }
+
+  /** Bookmark another member's readable playlist into the caller's list. */
+  async savePlaylist(user: User, playlistId: number): Promise<void> {
+    const { playlist } = await this.assertRole(
+      user,
+      playlistId,
+      PlaylistShareRole.VIEWER,
+    );
+    if (playlist.ownerId === user.id) {
+      throw new BadRequestException('You already own this playlist');
+    }
+    const existing = await this.saveRepo.findOne({
+      where: { user: { id: user.id }, playlist: { id: playlistId } },
+    });
+    if (existing) return;
+    await this.saveRepo.save(
+      this.saveRepo.create({
+        user: { id: user.id } as User,
+        playlist: { id: playlistId } as Playlist,
+      }),
+    );
+  }
+
+  async unsavePlaylist(user: User, playlistId: number): Promise<void> {
+    await this.saveRepo.delete({
+      user: { id: user.id },
+      playlist: { id: playlistId },
+    });
   }
 
   /**
@@ -763,6 +821,7 @@ export class PlaylistsService {
     playlist: Playlist,
     role: PlaylistRole,
     stats: { count: number; posters: string[] } | undefined,
+    saved = false,
   ): PlaylistView {
     return {
       id: playlist.id,
@@ -773,6 +832,7 @@ export class PlaylistsService {
       autoDownload: playlist.autoDownload,
       autoPlay: playlist.autoPlay,
       visibility: playlist.visibility,
+      saved,
       coverImageUrl: playlist.coverImageUrl,
       itemCount: stats?.count ?? 0,
       posters: stats?.posters ?? [],

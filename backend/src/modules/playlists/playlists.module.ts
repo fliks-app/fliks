@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Playlist } from './entities/playlist.entity';
 import { PlaylistItem } from './entities/playlist-item.entity';
 import { PlaylistShare } from './entities/playlist-share.entity';
+import { PlaylistSave } from './entities/playlist-save.entity';
 import { Media } from '../media/entities/media.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { PlaybackState } from '../streaming/entities/playback-state.entity';
@@ -19,6 +20,7 @@ import { LibrariesModule } from '../libraries/libraries.module';
       Playlist,
       PlaylistItem,
       PlaylistShare,
+      PlaylistSave,
       Media,
       Episode,
       PlaybackState,
