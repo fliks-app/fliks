@@ -6,7 +6,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslateModule } from '@ngx-translate/core';
 import {
   LucideClock,
   LucideFilm,
@@ -16,7 +16,6 @@ import {
 } from '@lucide/angular';
 import { SocialApiService } from '../../core/services/api/social-api.service';
 import { UserStats } from '../../core/services/api/users-api.service';
-import { formatRelativeTime } from '../../core/utils/relative-time';
 import { ProfileContextService } from './profile-context.service';
 
 /** The profile "statistics" tab: watch stats + total requests made. Visible for
@@ -37,7 +36,6 @@ import { ProfileContextService } from './profile-context.service';
 })
 export class ProfileStatisticsComponent {
   private readonly api = inject(SocialApiService);
-  private readonly translate = inject(TranslateService);
   private readonly ctx = inject(ProfileContextService);
 
   readonly stats = signal<UserStats | null>(null);
@@ -80,10 +78,5 @@ export class ProfileStatisticsComponent {
     } finally {
       this.loading.set(false);
     }
-  }
-
-  formatRelative(iso: string | null): string {
-    if (!iso) return '—';
-    return formatRelativeTime(iso, this.translate.currentLang ?? 'fr');
   }
 }
