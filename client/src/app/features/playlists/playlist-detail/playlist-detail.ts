@@ -33,6 +33,8 @@ import {
   LucidePlay,
   LucideSettings,
   LucideTrash2,
+  LucideUsers,
+  LucideUserPlus,
 } from '@lucide/angular';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
@@ -46,9 +48,15 @@ import { QueueItem } from '../../../core/services/playback-queue.service';
 import {
   Playlist,
   PlaylistItem,
+  PlaylistMember,
   PlaylistsApiService,
+  PlaylistShareRole,
   PlaylistVisibility,
 } from '../../../core/services/api/playlists-api.service';
+import {
+  SocialApiService,
+  SocialUser,
+} from '../../../core/services/api/social-api.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { TvService } from '../../../core/services/tv.service';
@@ -85,6 +93,8 @@ type PlaylistGroupedEntry =
     LucidePlay,
     LucideSettings,
     LucideTrash2,
+    LucideUsers,
+    LucideUserPlus,
     ToggleFieldComponent,
     DropdownMenuComponent,
     ResolveUrlPipe,
@@ -105,6 +115,7 @@ export class PlaylistDetailComponent {
   private readonly background = inject(BackgroundService);
   private readonly autoDownload = inject(AutoDownloadService);
   private readonly playable = inject(PlayableMediaService);
+  private readonly social = inject(SocialApiService);
   private readonly destroyRef = inject(DestroyRef);
 
   private readonly routeParams = toSignal(this.route.paramMap);
@@ -114,6 +125,8 @@ export class PlaylistDetailComponent {
     viewChild<ElementRef<HTMLDialogElement>>('renameDialog');
   private readonly settingsDialog =
     viewChild<ElementRef<HTMLDialogElement>>('settingsDialog');
+  private readonly membersDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('membersDialog');
 
   readonly loading = signal(true);
   readonly playlist = signal<Playlist | null>(null);
@@ -126,6 +139,11 @@ export class PlaylistDetailComponent {
   readonly draftAutoDownload = signal(false);
   readonly draftAutoPlay = signal(false);
   readonly draftVisibility = signal<PlaylistVisibility>('private');
+  // Members / collaboration
+  readonly members = signal<PlaylistMember[]>([]);
+  readonly memberQuery = signal('');
+  readonly memberResults = signal<SocialUser[]>([]);
+  readonly memberBusy = signal(false);
   /** Auto-download is native-mobile only, so its toggle is hidden elsewhere. */
   readonly showAutoDownload = this.autoDownload.enabled;
 
@@ -407,6 +425,75 @@ export class PlaylistDetailComponent {
       // Errors are surfaced by the global HTTP interceptor.
     } finally {
       this.savingSettings.set(false);
+    }
+  }
+
+  // ── Members (collaboration) ──
+  async openMembers(): Promise<void> {
+    const p = this.playlist();
+    if (!p) return;
+    this.memberQuery.set('');
+    this.memberResults.set([]);
+    this.membersDialog()?.nativeElement.showModal();
+    try {
+      this.members.set(await this.api.members(p.id));
+    } catch {
+      // Errors surfaced by the global interceptor.
+    }
+  }
+
+  closeMembers() {
+    this.membersDialog()?.nativeElement.close();
+  }
+
+  async onMemberQuery(q: string): Promise<void> {
+    this.memberQuery.set(q);
+    const query = q.trim();
+    if (!query) {
+      this.memberResults.set([]);
+      return;
+    }
+    try {
+      const found = await this.social.searchUsers(query);
+      if (this.memberQuery().trim() !== query) return; // stale response
+      const memberIds = new Set(this.members().map((m) => m.userId));
+      this.memberResults.set(found.filter((u) => !memberIds.has(u.id)));
+    } catch {
+      this.memberResults.set([]);
+    }
+  }
+
+  async addMember(user: SocialUser, role: PlaylistShareRole = 'editor'): Promise<void> {
+    const p = this.playlist();
+    if (!p || this.memberBusy()) return;
+    this.memberBusy.set(true);
+    try {
+      this.members.set(await this.api.addMember(p.id, user.id, role));
+      this.memberResults.update((r) => r.filter((u) => u.id !== user.id));
+    } finally {
+      this.memberBusy.set(false);
+    }
+  }
+
+  async changeMemberRole(userId: number, role: PlaylistShareRole): Promise<void> {
+    const p = this.playlist();
+    if (!p || this.memberBusy()) return;
+    this.memberBusy.set(true);
+    try {
+      this.members.set(await this.api.addMember(p.id, userId, role));
+    } finally {
+      this.memberBusy.set(false);
+    }
+  }
+
+  async removeMember(userId: number): Promise<void> {
+    const p = this.playlist();
+    if (!p || this.memberBusy()) return;
+    this.memberBusy.set(true);
+    try {
+      this.members.set(await this.api.removeMember(p.id, userId));
+    } finally {
+      this.memberBusy.set(false);
     }
   }
 

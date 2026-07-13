@@ -16,6 +16,7 @@ import { PlaylistsService } from './playlists.service';
 import { CreatePlaylistDto } from './dto/create-playlist.dto';
 import { UpdatePlaylistDto } from './dto/update-playlist.dto';
 import { AddPlaylistItemDto } from './dto/add-playlist-item.dto';
+import { AddPlaylistMemberDto } from './dto/add-playlist-member.dto';
 import { ReorderPlaylistItemsDto } from './dto/reorder-playlist-items.dto';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
@@ -112,5 +113,31 @@ export class PlaylistsController {
     @Param('itemId', ParseIntPipe) itemId: number,
   ) {
     return this.service.removeItem(req.user as User, id, itemId);
+  }
+
+  @Get(':id/members')
+  @CheckPolicies((ability) => ability.can(Action.Read, Playlist))
+  getMembers(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
+    return this.service.listMembers(req.user as User, id);
+  }
+
+  @Post(':id/members')
+  @CheckPolicies((ability) => ability.can(Action.Update, Playlist))
+  addMember(
+    @Req() req: Request,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AddPlaylistMemberDto,
+  ) {
+    return this.service.addMember(req.user as User, id, dto);
+  }
+
+  @Delete(':id/members/:userId')
+  @CheckPolicies((ability) => ability.can(Action.Update, Playlist))
+  removeMember(
+    @Req() req: Request,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+  ) {
+    return this.service.removeMember(req.user as User, id, userId);
   }
 }

@@ -24,6 +24,7 @@ import {
 import { CreatePlaylistDto } from './dto/create-playlist.dto';
 import { UpdatePlaylistDto } from './dto/update-playlist.dto';
 import { AddPlaylistItemDto } from './dto/add-playlist-item.dto';
+import { AddPlaylistMemberDto } from './dto/add-playlist-member.dto';
 import { ReorderPlaylistItemsDto } from './dto/reorder-playlist-items.dto';
 
 /** Owner has every capability; the enum ranks the three shared roles. */
@@ -65,6 +66,13 @@ export interface PlaylistItemView {
   watched: boolean;
 }
 
+export interface PlaylistMemberView {
+  userId: number;
+  username: string;
+  avatar: string | null;
+  role: PlaylistRole;
+}
+
 @Injectable()
 export class PlaylistsService {
   constructor(
@@ -82,6 +90,8 @@ export class PlaylistsService {
     private readonly playbackRepo: Repository<PlaybackState>,
     @InjectRepository(UserFollow)
     private readonly followRepo: Repository<UserFollow>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly libraries: LibrariesService,
     private readonly dataSource: DataSource,
   ) {}
@@ -344,6 +354,106 @@ export class PlaylistsService {
       throw new ForbiddenException('Only the owner can delete a playlist');
     }
     await this.repo.remove(playlist);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Members (collaboration)
+  // ---------------------------------------------------------------------------
+
+  /** Owner + shared members with their roles. Any member (viewer+) may see the
+   *  roster. */
+  async listMembers(
+    user: User,
+    playlistId: number,
+  ): Promise<PlaylistMemberView[]> {
+    const { playlist } = await this.assertRole(
+      user,
+      playlistId,
+      PlaylistShareRole.VIEWER,
+    );
+    const owner = await this.userRepo.findOne({
+      where: { id: playlist.ownerId },
+    });
+    const shares = await this.shareRepo.find({
+      where: { playlist: { id: playlistId } },
+      relations: ['user'],
+    });
+    const members: PlaylistMemberView[] = [];
+    if (owner) {
+      members.push({
+        userId: owner.id,
+        username: owner.username,
+        avatar: owner.avatar ?? null,
+        role: 'owner',
+      });
+    }
+    for (const s of shares) {
+      if (!s.user) continue;
+      members.push({
+        userId: s.user.id,
+        username: s.user.username,
+        avatar: s.user.avatar ?? null,
+        role: s.role,
+      });
+    }
+    return members;
+  }
+
+  /** Grant or update a member's role. Administrator (or owner) only. */
+  async addMember(
+    user: User,
+    playlistId: number,
+    dto: AddPlaylistMemberDto,
+  ): Promise<PlaylistMemberView[]> {
+    const { playlist } = await this.assertRole(
+      user,
+      playlistId,
+      PlaylistShareRole.ADMINISTRATOR,
+    );
+    if (dto.userId === playlist.ownerId) {
+      throw new BadRequestException('The owner is already a member');
+    }
+    const target = await this.userRepo.findOne({
+      where: { id: dto.userId, enabled: true },
+    });
+    if (!target) throw new NotFoundException(`User #${dto.userId} not found`);
+    const existing = await this.shareRepo.findOne({
+      where: { playlist: { id: playlistId }, user: { id: dto.userId } },
+    });
+    if (existing) {
+      existing.role = dto.role;
+      await this.shareRepo.save(existing);
+    } else {
+      await this.shareRepo.save(
+        this.shareRepo.create({
+          playlist: { id: playlistId } as Playlist,
+          user: { id: dto.userId } as User,
+          role: dto.role,
+        }),
+      );
+    }
+    return this.listMembers(user, playlistId);
+  }
+
+  /** Revoke a member's access. Administrator (or owner) only. */
+  async removeMember(
+    user: User,
+    playlistId: number,
+    targetUserId: number,
+  ): Promise<PlaylistMemberView[]> {
+    const { playlist } = await this.assertRole(
+      user,
+      playlistId,
+      PlaylistShareRole.ADMINISTRATOR,
+    );
+    if (targetUserId === playlist.ownerId) {
+      throw new BadRequestException('Cannot remove the owner');
+    }
+    await this.shareRepo.delete({
+      playlist: { id: playlistId },
+      user: { id: targetUserId },
+    });
+    return this.listMembers(user, playlistId);
   }
 
   // ---------------------------------------------------------------------------
