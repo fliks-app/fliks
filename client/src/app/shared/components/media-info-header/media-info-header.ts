@@ -31,9 +31,9 @@ import {
   LucideRotateCcw,
   LucideScanLine,
   LucideSearch,
-  LucideSend,
   LucideSettings,
   LucideTrash2,
+  LucideUserPlus,
 } from '@lucide/angular';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
@@ -105,7 +105,7 @@ interface AudioTrack {
     LucideCaptions, LucideCheck, LucideClipboardList, LucideDownload,
     LucideEllipsisVertical, LucideEye, LucideEyeOff,
     LucideFilm, LucideFolder, LucideHeart, LucideListChecks, LucideListPlus, LucidePlay, LucideRotateCcw, LucideScanLine,
-    LucideSearch, LucideSend, LucideSettings, LucideTrash2,
+    LucideSearch, LucideSettings, LucideTrash2, LucideUserPlus,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-info-header.html',

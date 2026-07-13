@@ -60,10 +60,9 @@ export interface PublicProfile extends SocialUser {
   likes: LikedItem[];
 }
 
-/** A content recommendation received from another member, rendered as a card. */
-export interface ReceivedRecommendation {
+/** The content half of a recommendation card (movie / season / episode). */
+export interface RecommendationCard {
   id: number;
-  sender: { id: number; username: string; avatar: string | null };
   message: string | null;
   createdAt: Date;
   mediaId: number;
@@ -75,6 +74,16 @@ export interface ReceivedRecommendation {
   episodeId: number | null;
   label: string | null;
   stillUrl: string | null;
+}
+
+/** A content recommendation received from another member. */
+export interface ReceivedRecommendation extends RecommendationCard {
+  sender: { id: number; username: string; avatar: string | null };
+}
+
+/** A content recommendation the caller sent to another member. */
+export interface SentRecommendation extends RecommendationCard {
+  recipient: { id: number; username: string; avatar: string | null };
 }
 
 @Injectable()
@@ -515,46 +524,93 @@ export class SocialService {
     });
   }
 
-  /** Active (not dismissed) recommendations addressed to me, newest first,
-   *  scoped to my library ACL. */
-  async receivedRecommendations(me: User): Promise<ReceivedRecommendation[]> {
+  /** Shape a recommendation's content half (media card + label), or null when
+   *  the media is missing / outside the viewer's library access. */
+  private contentCard(
+    r: ContentRecommendation,
+    accessible: number[],
+  ): RecommendationCard | null {
+    const m = r.media;
+    if (!m || !accessible.includes(m.libraryId as number)) return null;
+    const season = r.season ?? r.episode?.season ?? null;
+    const label = r.episode
+      ? `S${season?.seasonNumber ?? '?'}E${r.episode.episodeNumber}` +
+        (r.episode.title ? ` · ${r.episode.title}` : '')
+      : r.season
+        ? `${m.title} · S${r.season.seasonNumber}`
+        : null;
+    return {
+      id: r.id,
+      message: r.message,
+      createdAt: r.createdAt,
+      mediaId: m.id,
+      mediaType: m.type,
+      title: m.title,
+      posterUrl: m.posterUrl,
+      fanartUrl: m.fanartUrl,
+      seasonId: r.seasonId,
+      episodeId: r.episodeId,
+      label,
+      stillUrl: r.episode?.stillUrl ?? null,
+    };
+  }
+
+  /** Recommendations addressed to me, newest first, scoped to my library ACL.
+   *  Dismissing one (from the home card) only hides it from the active feed —
+   *  `includeDismissed` brings the full history back for the profile page. */
+  async receivedRecommendations(
+    me: User,
+    includeDismissed = false,
+  ): Promise<ReceivedRecommendation[]> {
     const accessible = await this.libraries.getAccessibleLibraryIds(me);
     if (!accessible.length) return [];
     const rows = await this.recRepo.find({
-      where: { recipient: { id: me.id }, dismissedAt: IsNull() },
+      where: {
+        recipient: { id: me.id },
+        ...(includeDismissed ? {} : { dismissedAt: IsNull() }),
+      },
       relations: ['sender', 'media', 'season', 'episode', 'episode.season'],
       order: { createdAt: 'DESC' },
       take: 60,
     });
     const items: ReceivedRecommendation[] = [];
     for (const r of rows) {
-      const m = r.media;
-      if (!m || !accessible.includes(m.libraryId as number)) continue;
-      const season = r.season ?? r.episode?.season ?? null;
-      const label = r.episode
-        ? `S${season?.seasonNumber ?? '?'}E${r.episode.episodeNumber}` +
-          (r.episode.title ? ` · ${r.episode.title}` : '')
-        : r.season
-          ? `${m.title} · S${r.season.seasonNumber}`
-          : null;
+      const card = this.contentCard(r, accessible);
+      if (!card) continue;
       items.push({
-        id: r.id,
+        ...card,
         sender: {
           id: r.sender.id,
           username: r.sender.username,
           avatar: r.sender.avatar ?? null,
         },
-        message: r.message,
-        createdAt: r.createdAt,
-        mediaId: m.id,
-        mediaType: m.type,
-        title: m.title,
-        posterUrl: m.posterUrl,
-        fanartUrl: m.fanartUrl,
-        seasonId: r.seasonId,
-        episodeId: r.episodeId,
-        label,
-        stillUrl: r.episode?.stillUrl ?? null,
+      });
+    }
+    return items;
+  }
+
+  /** Recommendations the caller has sent to other members, newest first,
+   *  scoped to the caller's library ACL. */
+  async sentRecommendations(me: User): Promise<SentRecommendation[]> {
+    const accessible = await this.libraries.getAccessibleLibraryIds(me);
+    if (!accessible.length) return [];
+    const rows = await this.recRepo.find({
+      where: { sender: { id: me.id } },
+      relations: ['recipient', 'media', 'season', 'episode', 'episode.season'],
+      order: { createdAt: 'DESC' },
+      take: 60,
+    });
+    const items: SentRecommendation[] = [];
+    for (const r of rows) {
+      const card = this.contentCard(r, accessible);
+      if (!card) continue;
+      items.push({
+        ...card,
+        recipient: {
+          id: r.recipient.id,
+          username: r.recipient.username,
+          avatar: r.recipient.avatar ?? null,
+        },
       });
     }
     return items;

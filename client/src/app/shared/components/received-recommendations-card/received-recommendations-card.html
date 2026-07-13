@@ -12,25 +12,28 @@
         <ul class="flex flex-col divide-y divide-base-300/50">
           @for (item of items(); track item.id) {
             <li class="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-              <a [routerLink]="mediaLink(item)" class="flex items-center gap-3 flex-1 min-w-0">
-                <div class="w-20 aspect-video rounded-md bg-base-300 overflow-hidden shrink-0">
+              <a [routerLink]="mediaLink(item)" class="shrink-0">
+                <div class="w-20 aspect-video rounded-md bg-base-300 overflow-hidden">
                   @if (item.stillUrl ?? item.fanartUrl ?? item.posterUrl; as img) {
                     <img [src]="img" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
                   }
                 </div>
-                <div class="flex-1 min-w-0">
-                  <p class="text-sm truncate">
-                    {{ 'recommend.received_by' | translate: { username: item.sender.username } }}
-                  </p>
-                  <p class="text-sm font-semibold truncate">{{ item.title }}</p>
+              </a>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm truncate">
+                  <a [routerLink]="['/profile', item.sender.id]" class="font-medium hover:underline">{{ item.sender.username }}</a>
+                  <span class="text-base-content/70"> {{ 'recommend.received_by_suffix' | translate }}</span>
+                </p>
+                <a [routerLink]="mediaLink(item)" class="block">
+                  <p class="text-sm font-semibold truncate hover:underline">{{ item.title }}</p>
                   @if (item.label) {
                     <p class="text-xs text-base-content/60 truncate">{{ item.label }}</p>
                   }
-                  @if (item.message) {
-                    <p class="text-xs text-base-content/70 italic truncate">« {{ item.message }} »</p>
-                  }
-                </div>
-              </a>
+                </a>
+                @if (item.message) {
+                  <p class="text-xs text-base-content/70 italic truncate">« {{ item.message }} »</p>
+                }
+              </div>
               <button
                 type="button"
                 class="btn btn-ghost btn-sm btn-square"

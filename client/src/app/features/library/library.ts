@@ -478,6 +478,19 @@ export class LibraryComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Route to a liked / recommended item: the episode page when it targets an
+   *  episode, otherwise the movie or series detail page. */
+  contentLink(
+    mediaType: string,
+    mediaId: number,
+    episodeId: number | null,
+  ): string[] {
+    if (episodeId) {
+      return ['/series', String(mediaId), 'episode', String(episodeId)];
+    }
+    return [mediaType === 'series' ? '/series' : '/movies', String(mediaId)];
+  }
+
   /** Fetches the viewer's liked content scoped to the active library. */
   private async loadLikes(): Promise<void> {
     const lib = this.library();

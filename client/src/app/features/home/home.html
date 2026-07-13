@@ -93,7 +93,7 @@
                 [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
                 [title]="item.title"
                 [subtitle]="item.label ?? undefined"
-                [link]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId]"
+                [link]="likeLink(item)"
               />
             }
           </app-horizontal-scroller>
