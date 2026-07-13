@@ -7,6 +7,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { UserFollow } from './entities/user-follow.entity';
 import { User } from '../users/entities/user.entity';
+import { PlaybackState } from '../streaming/entities/playback-state.entity';
+import { Media } from '../media/entities/media.entity';
 import { PlaylistsService, PlaylistView } from '../playlists/playlists.service';
 import {
   RecommendationItem,
@@ -53,6 +55,10 @@ export class SocialService {
     private readonly followRepo: Repository<UserFollow>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(PlaybackState)
+    private readonly playbackRepo: Repository<PlaybackState>,
+    @InjectRepository(Media)
+    private readonly mediaRepo: Repository<Media>,
     private readonly playlists: PlaylistsService,
     private readonly recommendations: RecommendationService,
     private readonly playback: PlaybackService,
@@ -343,5 +349,68 @@ export class SocialService {
       recommendations: recommendations.map((r) => ({ ...r, becauseTitle: '' })),
       recentlyWatched: history.data,
     };
+  }
+
+  /** Media popular among the members the caller follows (accepted), scoped to
+   *  the caller's library ACL (and the active library when given), excluding
+   *  what the caller has already played. Shaped as RecommendationItem[] so the
+   *  library Suggestions row can render it like the other recommendation rows. */
+  async followingRecommendations(
+    me: User,
+    libraryId?: number,
+    limit = 20,
+  ): Promise<RecommendationItem[]> {
+    const followingIds = (
+      await this.followRepo.find({
+        where: { follower: { id: me.id }, status: FollowStatus.ACCEPTED },
+      })
+    ).map((f) => f.followingId);
+    if (!followingIds.length) return [];
+    const accessible = await this.libraries.getAccessibleLibraryIds(me);
+    if (!accessible.length) return [];
+    const libs =
+      libraryId && accessible.includes(libraryId) ? [libraryId] : accessible;
+
+    const rows: { mediaId: number }[] = await this.playbackRepo.query(
+      `
+      SELECT ps."mediaId" AS "mediaId", COUNT(DISTINCT ps."userId")::int AS cnt
+      FROM playback_states ps
+      JOIN media m ON m.id = ps."mediaId"
+      WHERE ps."userId" = ANY($1)
+        AND ps.completed = true
+        AND m."libraryId" = ANY($2)
+        AND NOT EXISTS (
+          SELECT 1 FROM playback_states mine
+          WHERE mine."userId" = $3 AND mine."mediaId" = ps."mediaId"
+        )
+      GROUP BY ps."mediaId"
+      ORDER BY cnt DESC, ps."mediaId" DESC
+      LIMIT $4
+      `,
+      [followingIds, libs, me.id, limit],
+    );
+    if (!rows.length) return [];
+    const media = await this.mediaRepo.find({
+      where: { id: In(rows.map((r) => r.mediaId)) },
+    });
+    const byId = new Map(media.map((m) => [m.id, m]));
+    return rows
+      .map((r) => byId.get(r.mediaId))
+      .filter((m): m is Media => !!m)
+      .map((m) => ({
+        media: {
+          id: m.id,
+          title: m.title,
+          type: m.type,
+          year: m.year,
+          posterUrl: m.posterUrl,
+          fanartUrl: m.fanartUrl,
+          additionalFanartUrls: m.additionalFanartUrls ?? [],
+          genres: m.genres ?? [],
+          available: true,
+        },
+        becauseTitle: '',
+        score: 0,
+      }));
   }
 }

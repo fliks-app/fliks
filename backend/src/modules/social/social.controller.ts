@@ -33,6 +33,19 @@ export class SocialController {
     return this.service.searchConnectable(me, q ?? '');
   }
 
+  @Get('recommendations')
+  followingRecommendations(
+    @CurrentUser() me: User,
+    @Query('libraryId') libraryId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.service.followingRecommendations(
+      me,
+      libraryId ? +libraryId : undefined,
+      limit ? Math.min(+limit, 50) : 20,
+    );
+  }
+
   @Get('requests')
   requests(@CurrentUser() me: User) {
     return this.service.listRequests(me);

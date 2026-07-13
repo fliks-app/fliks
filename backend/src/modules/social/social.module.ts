@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserFollow } from './entities/user-follow.entity';
 import { User } from '../users/entities/user.entity';
+import { PlaybackState } from '../streaming/entities/playback-state.entity';
+import { Media } from '../media/entities/media.entity';
 import { SocialService } from './social.service';
 import { SocialController } from './social.controller';
 import { PlaylistsModule } from '../playlists/playlists.module';
@@ -12,7 +14,7 @@ import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserFollow, User]),
+    TypeOrmModule.forFeature([UserFollow, User, PlaybackState, Media]),
     PlaylistsModule,
     StreamingModule,
     LibrariesModule,

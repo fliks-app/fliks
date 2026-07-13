@@ -442,6 +442,21 @@
         </app-horizontal-scroller>
       }
 
+      <!-- Popular among the members the user follows. -->
+      @if (suggestionsFromFollowing().length) {
+        <app-horizontal-scroller [title]="'library.suggestions_following' | translate">
+          @for (rec of suggestionsFromFollowing(); track rec.media.id) {
+            <app-media-card
+              class="shrink-0 w-28 sm:w-32 lg:w-40"
+              [imageUrl]="rec.media.posterUrl"
+              [title]="rec.media.title"
+              [subtitle]="rec.media.year ? '' + rec.media.year : undefined"
+              [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
+            />
+          }
+        </app-horizontal-scroller>
+      }
+
       <!-- Recommendations grid — same column rhythm as the main `all`
            grid so the suggestions feel like a continuation of the same
            page rather than a separate component. -->
@@ -457,7 +472,7 @@
             />
           }
         </div>
-      } @else if (!suggestionsContinue().length) {
+      } @else if (!suggestionsContinue().length && !suggestionsFromFollowing().length) {
         <div class="text-center py-24 text-base-content/50">
           <p class="text-lg">{{ 'library.suggestions_empty' | translate }}</p>
           <p class="text-sm mt-2">{{ 'library.suggestions_empty_hint' | translate }}</p>
