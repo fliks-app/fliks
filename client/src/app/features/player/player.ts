@@ -507,9 +507,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  user-interaction reveal. */
   private readonly autoHideOnPlayEffect = effect(() => {
     if (this.videoStarted() && untracked(() => this.controlsVisible())) {
+      // After an in-place item switch we deliberately kept the controls up to
+      // show the new title; when its first frame plays, don't snap them away —
+      // start the normal auto-hide countdown instead so they linger briefly.
+      if (untracked(() => this.revealAcrossSwitch)) {
+        this.revealAcrossSwitch = false;
+        this.resetHideTimer();
+        return;
+      }
       this.controlsVisible.set(false);
     }
   });
+  /** One-shot: keep the controls visible across the next play-start (set on an
+   *  item switch), letting the auto-hide timer retract them rather than the
+   *  first-frame effect snapping them off. */
+  private revealAcrossSwitch = false;
 
   /** Re-apply native subtitle style on controls show/hide so the bottom-margin
       bump kicks in. Browser playback uses CSS instead — see styles below. */
@@ -2188,7 +2200,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       void this.loadSpriteMetadata();
 
       if (!this.isNativeEngine()) this.engine.play().catch(() => {});
-      this.resetHideTimer();
+      // Reveal the controls across the switch so the new title/episode shows;
+      // the flag lets them stay through the first frame and then auto-hide on
+      // the usual timer (see autoHideOnPlayEffect).
+      this.revealAcrossSwitch = true;
+      this.controlsVisible.set(true);
     } catch (e: any) {
       // Map to a translated line (Shaka-shaped errors keep their category
       // message) and keep the raw engine/exception text in the diagnostics
