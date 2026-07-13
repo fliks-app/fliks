@@ -652,7 +652,16 @@
     "preview_votes": "votes",
     "preview_director": "Réalisation",
     "preview_cast": "Distribution",
-    "watch_trailer": "Bande-annonce"
+    "watch_trailer": "Bande-annonce",
+    "status_released": "Sorti",
+    "status_rumored": "Rumeur",
+    "status_planned": "Prévu",
+    "status_in_production": "En production",
+    "status_post_production": "Post-production",
+    "status_canceled": "Annulé",
+    "status_returning_series": "En cours",
+    "status_ended": "Terminé",
+    "status_pilot": "Pilote"
   },
   "library": {
     "empty": "Aucun média dans cette bibliothèque",

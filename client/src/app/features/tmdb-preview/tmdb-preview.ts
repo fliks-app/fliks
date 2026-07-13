@@ -131,6 +131,12 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     this.directors().map((d) => d.name).join(', '),
   );
 
+  /** i18n key for the provider status (lowercased, spaces → underscores). */
+  readonly statusKey = computed(() => {
+    const s = this.media()?.status;
+    return s ? 'discover.status_' + s.replace(/[\s-]+/g, '_') : '';
+  });
+
   /** Best trailer key: a YouTube Trailer, else Teaser, else any YouTube video. */
   readonly trailerKey = computed<string | null>(() => {
     const vids = (this.media()?.videos ?? []).filter((v) => v.site === 'YouTube');

@@ -29,7 +29,7 @@
         }
         @if (m.year) { <span>{{ m.year }}</span> }
         @if (m.runtime) { <span>{{ m.runtime }}min</span> }
-        @if (m.status) { <span>{{ m.status }}</span> }
+        @if (m.status && m.status !== 'unknown') { <span>{{ statusKey() | translate }}</span> }
       </div>
 
       @if (m.genres.length) {
@@ -152,7 +152,7 @@
           }
           @if (m.year) { <span>{{ m.year }}</span> }
           @if (m.runtime) { <span>{{ m.runtime }}min</span> }
-          @if (m.status) { <span>{{ m.status }}</span> }
+          @if (m.status && m.status !== 'unknown') { <span>{{ statusKey() | translate }}</span> }
         </div>
 
         @if (m.genres.length) {
