@@ -249,6 +249,9 @@ export class PlaylistsService {
 
   /** Bookmark another member's readable playlist into the caller's list. */
   async savePlaylist(user: User, playlistId: number): Promise<void> {
+    if (user.shareDisabled) {
+      throw new BadRequestException('Sharing features are disabled');
+    }
     const { playlist } = await this.assertRole(
       user,
       playlistId,
@@ -398,7 +401,13 @@ export class PlaylistsService {
     }
     if (dto.autoDownload !== undefined) patch.autoDownload = dto.autoDownload;
     if (dto.autoPlay !== undefined) patch.autoPlay = dto.autoPlay;
-    if (dto.visibility !== undefined) patch.visibility = dto.visibility;
+    if (dto.visibility !== undefined) {
+      // A member who opted out of sharing can't expose a playlist publicly.
+      if (user.shareDisabled && dto.visibility !== PlaylistVisibility.PRIVATE) {
+        throw new BadRequestException('Sharing features are disabled');
+      }
+      patch.visibility = dto.visibility;
+    }
     if (Object.keys(patch).length) await this.repo.update(playlistId, patch);
     return this.findOneForUser(user, playlistId);
   }
@@ -469,6 +478,9 @@ export class PlaylistsService {
       playlistId,
       PlaylistShareRole.ADMINISTRATOR,
     );
+    if (user.shareDisabled) {
+      throw new BadRequestException('Sharing features are disabled');
+    }
     if (dto.userId === user.id) {
       throw new BadRequestException('Cannot change your own role');
     }
@@ -479,16 +491,18 @@ export class PlaylistsService {
       where: { id: dto.userId, enabled: true },
     });
     if (!target) throw new NotFoundException(`User #${dto.userId} not found`);
-    // Only public members, or members the caller follows, may be added.
+    // Only public members, or members the caller follows, may be added — and
+    // never a member who opted out of sharing.
     const connectable =
-      target.profileVisibility === ProfileVisibility.PUBLIC ||
-      (await this.followRepo.exist({
+      !target.shareDisabled &&
+      (target.profileVisibility === ProfileVisibility.PUBLIC ||
+        (await this.followRepo.exist({
         where: {
           follower: { id: user.id },
           following: { id: dto.userId },
           status: FollowStatus.ACCEPTED,
         },
-      }));
+      })));
     if (!connectable) {
       throw new ForbiddenException(
         'You can only add public members or members you follow',

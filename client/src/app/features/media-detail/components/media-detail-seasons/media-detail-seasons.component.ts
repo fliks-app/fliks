@@ -44,6 +44,7 @@ import {
 import { PlayableMediaService } from '../../../../core/services/playable-media.service';
 import { AddToPlaylistService } from '../../../../core/services/add-to-playlist.service';
 import { TvService } from '../../../../core/services/tv.service';
+import { AuthService } from '../../../../core/services/auth.service';
 
 
 @Component({
@@ -56,6 +57,7 @@ export class MediaDetailSeasonsComponent {
   private readonly playableMedia = inject(PlayableMediaService);
   private readonly addToPlaylist = inject(AddToPlaylistService);
   readonly tv = inject(TvService);
+  readonly auth = inject(AuthService);
   readonly media = input.required<Media>();
   readonly selectedSeason = input<Season | null>(null);
   readonly activeSeasonId = input.required<number | null>();

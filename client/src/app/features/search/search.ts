@@ -52,6 +52,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly auth = inject(AuthService);
+  /** Opted out of the social layer → the people tab is hidden. */
+  protected readonly sharingDisabled = this.auth.sharingDisabled;
   private readonly requestsApi = inject(RequestsService);
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly reuseStrategy = inject(CachingReuseStrategy);
@@ -199,7 +201,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   onQueryInput(value: string) {
     this.state.query.set(value);
     if (this.searchTimer) clearTimeout(this.searchTimer);
-    if (value.trim()) {
+    // People keeps searching on an empty query (→ default roster); videos clear.
+    if (value.trim() || this.state.tab() === 'people') {
       this.searchTimer = setTimeout(() => this.runSearch(), 350);
     } else {
       this.state.localResults.set([]);
@@ -212,7 +215,9 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   setTab(t: 'videos' | 'people') {
     if (t === this.state.tab()) return;
     this.state.tab.set(t);
-    if (this.state.query().trim()) {
+    // Load the default member roster when switching to people (even with no
+    // query); videos only searches when a query is present.
+    if (t === 'people' || this.state.query().trim()) {
       if (this.searchTimer) clearTimeout(this.searchTimer);
       this.runSearch();
     }
@@ -506,9 +511,9 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private async runSearch() {
     const q = this.state.query().trim();
-    if (!q) return;
 
-    // People search is a distinct surface — no local/external media lookups.
+    // People is a distinct surface — no local/external media lookups. Runs even
+    // with an empty query: the backend then returns the default member roster.
     if (this.state.tab() === 'people') {
       this.state.peopleLoading.set(true);
       try {
@@ -525,6 +530,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       }
       return;
     }
+
+    if (!q) return;
 
     const ct = this.state.contentType();
     const type: MediaType | undefined = ct === 'all' ? undefined : ct;

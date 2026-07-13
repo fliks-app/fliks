@@ -3,6 +3,16 @@
   <p class="text-sm text-base-content/60 mb-6">{{ 'social.privacy_intro' | translate }}</p>
 
   <div class="flex flex-col gap-4">
+    <!-- Master opt-out: hides the rest of the sharing options when on. -->
+    <app-toggle-field
+      [value]="shareDisabled()"
+      (valueChange)="onShareDisabledChange($event)"
+      [label]="'social.privacy_share_disabled' | translate"
+      [hint]="'social.privacy_share_disabled_hint' | translate"
+    />
+
+    @if (!shareDisabled()) {
+    <div class="divider my-0"></div>
     <app-toggle-field
       [value]="publicProfile()"
       (valueChange)="onPublicProfileChange($event)"
@@ -36,10 +46,11 @@
       [label]="'social.privacy_share_likes' | translate"
       [hint]="'social.privacy_share_likes_hint' | translate"
     />
+    }
   </div>
 
   <!-- Follow requests -->
-  @if (requests().length) {
+  @if (!shareDisabled() && requests().length) {
     <div class="mt-8">
       <h2 class="text-lg font-semibold mb-3">{{ 'social.requests_title' | translate }}</h2>
       <ul class="flex flex-col gap-2">

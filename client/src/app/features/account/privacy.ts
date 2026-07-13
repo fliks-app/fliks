@@ -11,6 +11,7 @@ import { ToggleFieldComponent } from '../../shared/components/forms/toggle-field
 import { UsersApiService } from '../../core/services/api/users-api.service';
 import { AuthService, ProfileVisibility } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ConfirmationService } from '../../core/services/confirmation.service';
 import { SocialApiService, SocialUser } from '../../core/services/api/social-api.service';
 
 /** The self-editable social privacy fields — shape shared by the API body and
@@ -21,6 +22,7 @@ interface SocialPrefs {
   shareRecommendations?: boolean;
   shareWatchHistory?: boolean;
   shareLikes?: boolean;
+  shareDisabled?: boolean;
 }
 
 @Component({
@@ -35,12 +37,14 @@ export class AccountPrivacyComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly publicProfile = signal(false);
   readonly shareTastes = signal(false);
   readonly shareRecommendations = signal(false);
   readonly shareWatchHistory = signal(false);
   readonly shareLikes = signal(false);
+  readonly shareDisabled = signal(false);
 
   readonly requests = signal<SocialUser[]>([]);
 
@@ -59,6 +63,7 @@ export class AccountPrivacyComponent implements OnInit {
     this.shareRecommendations.set(u.shareRecommendations);
     this.shareWatchHistory.set(u.shareWatchHistory);
     this.shareLikes.set(u.shareLikes);
+    this.shareDisabled.set(u.shareDisabled);
   }
 
   private async loadRequests(): Promise<void> {
@@ -92,6 +97,28 @@ export class AccountPrivacyComponent implements OnInit {
   async onShareLikesChange(value: boolean): Promise<void> {
     this.shareLikes.set(value);
     await this.persist({ shareLikes: value });
+  }
+
+  async onShareDisabledChange(value: boolean): Promise<void> {
+    // Reflect the toggle immediately so the bound value tracks the switch —
+    // this is what lets the false reset below register as a real change.
+    this.shareDisabled.set(value);
+    // Enabling tears down the user's social ties server-side (follows, saved
+    // playlists, collaborations, recommendations) — confirm before applying.
+    if (value) {
+      const confirmed = await this.confirmation.confirm({
+        title: this.translate.instant('social.privacy_share_disabled'),
+        message: this.translate.instant('social.privacy_share_disabled_confirm'),
+        confirmLabel: this.translate.instant('social.privacy_share_disabled_confirm_action'),
+        variant: 'danger',
+      });
+      if (!confirmed) {
+        this.shareDisabled.set(false);
+        return;
+      }
+      this.requests.set([]);
+    }
+    await this.persist({ shareDisabled: value });
   }
 
   private async persist(patch: SocialPrefs): Promise<void> {

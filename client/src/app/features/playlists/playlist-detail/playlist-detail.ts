@@ -126,6 +126,8 @@ export class PlaylistDetailComponent {
 
   /** The signed-in user's id — a member can't edit their own role. */
   readonly myUserId = computed(() => this.auth.user()?.id ?? 0);
+  /** Opted out of sharing → hide save + collaborator controls. */
+  readonly sharingDisabled = this.auth.sharingDisabled;
 
   private readonly routeParams = toSignal(this.route.paramMap);
   readonly playlistId = computed(() => Number(this.routeParams()?.get('id')));

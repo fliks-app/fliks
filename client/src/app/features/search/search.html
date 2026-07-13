@@ -39,7 +39,7 @@
     <button type="button" role="tab" class="tab" [class.tab-active]="state.tab() === 'videos'" (click)="setTab('videos')">
       {{ 'search.tab_videos' | translate }}
     </button>
-    @if (!tv.isTv()) {
+    @if (!tv.isTv() && !sharingDisabled()) {
       <button type="button" role="tab" class="tab" [class.tab-active]="state.tab() === 'people'" (click)="setTab('people')">
         {{ 'social.search_tab_people' | translate }}
       </button>
@@ -56,10 +56,33 @@
     </div>
   }
 
-  @if (!state.hasQuery()) {
-    @if (state.tab() === 'people') {
-      <p class="text-base-content/50 text-center py-12">{{ 'search.discover_people_hint' | translate }}</p>
-    } @else if (state.externalEnabled()) {
+  @if (state.tab() === 'people') {
+    <!-- People: default roster (no query) or filtered results -->
+    @if (state.peopleLoading() && !state.peopleResults().length) {
+      <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+    } @else if (state.peopleResults().length > 0) {
+      <div class="flex flex-col gap-1 max-w-xl">
+        @for (u of state.peopleResults(); track u.id) {
+          <button type="button" class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left cursor-pointer" (click)="openProfile(u.id)">
+            <div class="avatar avatar-placeholder shrink-0">
+              <div class="w-10 h-10 rounded-full text-white text-sm font-semibold" [style.background-color]="'hsl(' + avatar(u.username).hue + ' 55% 45%)'">
+                @if (u.avatar) { <img [src]="u.avatar" [alt]="u.username" /> } @else { <span>{{ avatar(u.username).initials }}</span> }
+              </div>
+            </div>
+            <span class="flex-1 min-w-0 truncate font-medium">{{ u.username }}</span>
+            @if (u.isFollowing) {
+              <span class="badge badge-sm badge-ghost">{{ 'social.following' | translate }}</span>
+            } @else if (u.followsYou) {
+              <span class="badge badge-sm badge-ghost">{{ 'social.follows_you' | translate }}</span>
+            }
+          </button>
+        }
+      </div>
+    } @else {
+      <p class="text-base-content/50 text-center py-12">{{ (state.hasQuery() ? 'social.no_people_results' : 'search.discover_people_hint') | translate }}</p>
+    }
+  } @else if (!state.hasQuery()) {
+    @if (state.externalEnabled()) {
       <!-- Discover: filter sidebar (desktop) + rows / results grid -->
       <div class="flex gap-6">
         <aside class="hidden lg:block w-60 shrink-0">
@@ -140,39 +163,6 @@
       } @else {
         <p class="text-base-content/50 text-center py-12">{{ 'search.hint_local' | translate }}</p>
       }
-    }
-  } @else if (state.tab() === 'people') {
-    <!-- People results -->
-    @if (state.peopleLoading()) {
-      <div class="flex justify-center py-8">
-        <span class="loading loading-spinner loading-lg"></span>
-      </div>
-    } @else if (state.peopleResults().length > 0) {
-      <div class="flex flex-col gap-1 max-w-xl">
-        @for (u of state.peopleResults(); track u.id) {
-          <button type="button" class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left cursor-pointer" (click)="openProfile(u.id)">
-            <div class="avatar avatar-placeholder shrink-0">
-              <div class="w-10 h-10 rounded-full text-white text-sm font-semibold" [style.background-color]="'hsl(' + avatar(u.username).hue + ' 55% 45%)'">
-                @if (u.avatar) {
-                  <img [src]="u.avatar" [alt]="u.username" />
-                } @else {
-                  <span>{{ avatar(u.username).initials }}</span>
-                }
-              </div>
-            </div>
-            <span class="flex-1 min-w-0 truncate font-medium">{{ u.username }}</span>
-            @if (u.isFollowing) {
-              <span class="badge badge-sm badge-ghost">{{ 'social.following' | translate }}</span>
-            } @else if (u.followsYou) {
-              <span class="badge badge-sm badge-ghost">{{ 'social.follows_you' | translate }}</span>
-            }
-          </button>
-        }
-      </div>
-    } @else {
-      <div class="text-center py-8">
-        <p class="text-base-content/50">{{ 'social.no_people_results' | translate }}</p>
-      </div>
     }
   } @else {
     <!-- Local library results -->

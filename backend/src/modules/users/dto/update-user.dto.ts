@@ -102,4 +102,10 @@ export class UpdateUserDto {
   @IsBoolean()
   @IsOptional()
   shareLikes?: boolean;
+
+  /** Self-editable: opt out of the whole social layer (undiscoverable + can't
+   *  use sharing features). Enabling it drops the user's social ties. */
+  @IsBoolean()
+  @IsOptional()
+  shareDisabled?: boolean;
 }

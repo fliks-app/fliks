@@ -160,7 +160,13 @@ export class SocialService {
     if (me.id === targetId) {
       throw new BadRequestException('Cannot follow yourself');
     }
+    if (me.shareDisabled) {
+      throw new BadRequestException('Sharing features are disabled');
+    }
     const target = await this.requireUser(targetId);
+    // A member who opted out of sharing is undiscoverable — 404, not 403, so
+    // their existence can't be probed.
+    if (target.shareDisabled) throw new NotFoundException(`User #${targetId} not found`);
     const existing = await this.followRepo.findOne({
       where: { follower: { id: me.id }, following: { id: targetId } },
     });
@@ -236,16 +242,17 @@ export class SocialService {
   // ── discovery ──
 
   async search(me: User, query: string): Promise<SocialUser[]> {
+    // Opted-out members don't use discovery at all.
+    if (me.shareDisabled) return [];
     const q = query?.trim();
-    if (!q) return [];
-    const users = await this.userRepo
+    // No query → a default roster of discoverable members (not just matches).
+    const qb = this.userRepo
       .createQueryBuilder('u')
       .where('u.enabled = true')
-      .andWhere('u.id != :meId', { meId: me.id })
-      .andWhere('u.username ILIKE :q', { q: `%${q}%` })
-      .orderBy('u.username', 'ASC')
-      .take(30)
-      .getMany();
+      .andWhere('u.shareDisabled = false')
+      .andWhere('u.id != :meId', { meId: me.id });
+    if (q) qb.andWhere('u.username ILIKE :q', { q: `%${q}%` });
+    const users = await qb.orderBy('u.username', 'ASC').take(30).getMany();
     return this.decorate(me, users);
   }
 
@@ -253,6 +260,7 @@ export class SocialService {
    *  members the caller already follows (accepted). An empty query returns the
    *  default suggestions (so the picker can propose on focus). */
   async searchConnectable(me: User, query: string): Promise<SocialUser[]> {
+    if (me.shareDisabled) return [];
     const q = query?.trim();
     const followingIds = (
       await this.followRepo.find({
@@ -262,6 +270,7 @@ export class SocialService {
     const qb = this.userRepo
       .createQueryBuilder('u')
       .where('u.enabled = true')
+      .andWhere('u.shareDisabled = false')
       .andWhere('u.id != :meId', { meId: me.id })
       .andWhere('(u.profileVisibility = :pub OR u.id IN (:...ids))', {
         pub: ProfileVisibility.PUBLIC,
@@ -305,6 +314,11 @@ export class SocialService {
   async getProfile(me: User, targetId: number): Promise<PublicProfile> {
     const target = await this.requireUser(targetId);
     const isSelf = me.id === targetId;
+    // An opted-out member is invisible to everyone but themselves, and an
+    // opted-out viewer can't browse others' profiles. 404 either way (no probe).
+    if (!isSelf && (target.shareDisabled || me.shareDisabled)) {
+      throw new NotFoundException(`User #${targetId} not found`);
+    }
     const [followerCount, followingCount, outgoing] = await Promise.all([
       this.followRepo.count({
         where: { following: { id: targetId }, status: FollowStatus.ACCEPTED },
@@ -474,8 +488,9 @@ export class SocialService {
    *  (accepted) — the same reach as the playlist-collaborator picker. */
   private async assertConnectable(me: User, target: User): Promise<void> {
     const ok =
-      target.profileVisibility === ProfileVisibility.PUBLIC ||
-      (await this.isAcceptedFollower(me.id, target.id));
+      !target.shareDisabled &&
+      (target.profileVisibility === ProfileVisibility.PUBLIC ||
+        (await this.isAcceptedFollower(me.id, target.id)));
     // 404 (not 403) so a hidden recipient can't be probed for existence.
     if (!ok) throw new NotFoundException(`User #${target.id} not found`);
   }
@@ -483,6 +498,9 @@ export class SocialService {
   async recommend(me: User, dto: RecommendContentDto): Promise<void> {
     if (me.id === dto.recipientId) {
       throw new BadRequestException('Cannot recommend to yourself');
+    }
+    if (me.shareDisabled) {
+      throw new BadRequestException('Sharing features are disabled');
     }
     const recipient = await this.requireUser(dto.recipientId);
     await this.assertConnectable(me, recipient);

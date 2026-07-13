@@ -51,7 +51,7 @@
             (isSeasonLiked(selSeason.id) ? 'likes.unlike_season' : 'likes.like_season') | translate
           }}</span>
         </button>
-        @if (!tv.isTv()) {
+        @if (!tv.isTv() && !auth.sharingDisabled()) {
           <button
             type="button"
             class="dropdown-item text-white"
