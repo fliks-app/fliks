@@ -58,6 +58,12 @@
       <p class="text-lg">{{ 'social.profile_private' | translate }}</p>
     </div>
   } @else {
+    <!-- Nothing shared -->
+    @if (!p.isSelf && !hasContent(p)) {
+      <div class="text-center py-12 text-base-content/50">
+        <p class="text-lg">{{ 'social.profile_empty' | translate }}</p>
+      </div>
+    }
     <!-- Tastes -->
     @if (p.shown.tastes && p.topGenres.length) {
       <section class="mb-8">

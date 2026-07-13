@@ -209,6 +209,7 @@
     "followers_count": "{{n}} abonné(s)",
     "following_count": "{{n}} abonnement(s)",
     "profile_private": "Ce profil est privé. Suivez ce membre pour voir son contenu.",
+    "profile_empty": "L'utilisateur a choisi de ne pas afficher de données sur son profil.",
     "section_playlists": "Playlists publiques",
     "section_tastes": "Genres préférés de {{username}}",
     "section_recommendations": "Recommandations",

@@ -96,6 +96,16 @@ export class ProfileComponent {
     return [mediaType === 'series' ? '/series' : '/movies', String(mediaId)];
   }
 
+  /** True when at least one visible section has something to show. */
+  hasContent(p: PublicProfile): boolean {
+    return (
+      p.playlists.length > 0 ||
+      (p.shown.tastes && p.topGenres.length > 0) ||
+      (p.shown.recommendations && p.recommendations.length > 0) ||
+      (p.shown.recentlyWatched && p.recentlyWatched.length > 0)
+    );
+  }
+
   openPlaylist(id: number): void {
     void this.router.navigate(['/playlists', id]);
   }
