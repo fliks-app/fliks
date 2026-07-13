@@ -115,6 +115,15 @@ function extractAlternativeTitles(
   return out;
 }
 
+/** TMDB /discover filters (V1 subset). */
+export interface DiscoverOptions {
+  genreIds?: number[];
+  sortBy?: string;
+  voteAverageGte?: number;
+  yearGte?: number;
+  yearLte?: number;
+}
+
 @Injectable()
 export class TmdbProvider implements IMetadataProvider {
   readonly name = 'tmdb';
@@ -428,9 +437,11 @@ export class TmdbProvider implements IMetadataProvider {
     return seasons;
   }
 
-  async getTrendingMovies(): Promise<MetadataSearchResult[]> {
+  async getTrendingMovies(
+    window: 'day' | 'week' = 'week',
+  ): Promise<MetadataSearchResult[]> {
     const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
-      '/trending/movie/week',
+      `/trending/movie/${window}`,
       { params: { language: 'fr-FR' } },
     );
     return data.results.map((r) => this.mapMovieResult(r));
@@ -452,9 +463,11 @@ export class TmdbProvider implements IMetadataProvider {
     return data.results.map((r) => this.mapMovieResult(r));
   }
 
-  async getTrendingTvShows(): Promise<MetadataSearchResult[]> {
+  async getTrendingTvShows(
+    window: 'day' | 'week' = 'week',
+  ): Promise<MetadataSearchResult[]> {
     const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
-      '/trending/tv/week',
+      `/trending/tv/${window}`,
       { params: { language: 'fr-FR' } },
     );
     return data.results.map((r) => this.mapTvResult(r));
@@ -472,6 +485,61 @@ export class TmdbProvider implements IMetadataProvider {
     const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
       '/tv/on_the_air',
       { params: { language: 'fr-FR' } },
+    );
+    return data.results.map((r) => this.mapTvResult(r));
+  }
+
+  async getMovieGenres(): Promise<{ id: number; name: string }[]> {
+    const { data } = await this.client.get<{
+      genres: { id: number; name: string }[];
+    }>('/genre/movie/list', { params: { language: 'fr-FR' } });
+    return data.genres;
+  }
+
+  async getTvGenres(): Promise<{ id: number; name: string }[]> {
+    const { data } = await this.client.get<{
+      genres: { id: number; name: string }[];
+    }>('/genre/tv/list', { params: { language: 'fr-FR' } });
+    return data.genres;
+  }
+
+  async discoverMovies(opts: DiscoverOptions): Promise<MetadataSearchResult[]> {
+    const params: Record<string, string | number> = {
+      language: 'fr-FR',
+      include_adult: 'false',
+      sort_by: opts.sortBy || 'popularity.desc',
+      // Keep obscure entries out of popularity/date sorts.
+      'vote_count.gte': 50,
+    };
+    if (opts.genreIds?.length) params['with_genres'] = opts.genreIds.join(',');
+    if (opts.voteAverageGte) params['vote_average.gte'] = opts.voteAverageGte;
+    if (opts.yearGte) params['primary_release_date.gte'] = `${opts.yearGte}-01-01`;
+    if (opts.yearLte) params['primary_release_date.lte'] = `${opts.yearLte}-12-31`;
+    const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
+      '/discover/movie',
+      { params },
+    );
+    return data.results.map((r) => this.mapMovieResult(r));
+  }
+
+  async discoverTvShows(opts: DiscoverOptions): Promise<MetadataSearchResult[]> {
+    // TMDB /discover/tv dates its sort on first_air_date, not release date.
+    const sortBy = (opts.sortBy || 'popularity.desc').replace(
+      'primary_release_date',
+      'first_air_date',
+    );
+    const params: Record<string, string | number> = {
+      language: 'fr-FR',
+      sort_by: sortBy,
+      'vote_count.gte': 50,
+    };
+    if (opts.genreIds?.length) params['with_genres'] = opts.genreIds.join(',');
+    if (opts.voteAverageGte) params['vote_average.gte'] = opts.voteAverageGte;
+    if (opts.yearGte) params['first_air_date.gte'] = `${opts.yearGte}-01-01`;
+    if (opts.yearLte) params['first_air_date.lte'] = `${opts.yearLte}-12-31`;
+    const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
+      '/discover/tv',
+      { params },
     );
     return data.results.map((r) => this.mapTvResult(r));
   }

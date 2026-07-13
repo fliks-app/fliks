@@ -34,27 +34,114 @@
     </app-dropdown-menu>
   </div>
 
-  <!-- Filter tabs -->
+  <!-- Top tabs: videos vs members -->
   <div role="tablist" class="tabs tabs-boxed w-fit">
-    <button type="button" role="tab" class="tab" [class.tab-active]="state.filter() === 'all'" (click)="setFilter('all')">
-      {{ 'search.filter_all' | translate }}
-    </button>
-    <button type="button" role="tab" class="tab" [class.tab-active]="state.filter() === 'movie'" (click)="setFilter('movie')">
-      {{ 'search.filter_movies' | translate }}
-    </button>
-    <button type="button" role="tab" class="tab" [class.tab-active]="state.filter() === 'series'" (click)="setFilter('series')">
-      {{ 'search.filter_series' | translate }}
+    <button type="button" role="tab" class="tab" [class.tab-active]="state.tab() === 'videos'" (click)="setTab('videos')">
+      {{ 'search.tab_videos' | translate }}
     </button>
     @if (!tv.isTv()) {
-      <button type="button" role="tab" class="tab" [class.tab-active]="state.filter() === 'people'" (click)="setFilter('people')">
+      <button type="button" role="tab" class="tab" [class.tab-active]="state.tab() === 'people'" (click)="setTab('people')">
         {{ 'social.search_tab_people' | translate }}
       </button>
     }
   </div>
 
+  <!-- Media type: drives search + discover (reloads the discover genre list).
+       Spans the filter-column width, the three tabs sharing it equally. -->
+  @if (state.tab() === 'videos') {
+    <div class="join w-full lg:w-60">
+      <button type="button" class="btn btn-sm join-item flex-1" [class.btn-primary]="state.contentType() === 'all'" (click)="setContentType('all')">{{ 'search.filter_all' | translate }}</button>
+      <button type="button" class="btn btn-sm join-item flex-1" [class.btn-primary]="state.contentType() === 'movie'" (click)="setContentType('movie')">{{ 'search.filter_movies' | translate }}</button>
+      <button type="button" class="btn btn-sm join-item flex-1" [class.btn-primary]="state.contentType() === 'series'" (click)="setContentType('series')">{{ 'search.filter_series' | translate }}</button>
+    </div>
+  }
+
   @if (!state.hasQuery()) {
-    <p class="text-base-content/50 text-center py-12">{{ (state.externalEnabled() ? 'search.hint' : 'search.hint_local') | translate }}</p>
-  } @else if (state.filter() === 'people') {
+    @if (state.tab() === 'people') {
+      <p class="text-base-content/50 text-center py-12">{{ 'search.discover_people_hint' | translate }}</p>
+    } @else if (state.externalEnabled()) {
+      <!-- Discover: filter sidebar (desktop) + rows / results grid -->
+      <div class="flex gap-6">
+        <aside class="hidden lg:block w-60 shrink-0">
+          <ng-container *ngTemplateOutlet="filterPanel" />
+        </aside>
+        <div class="flex-1 min-w-0">
+          <button type="button" class="lg:hidden btn btn-sm btn-outline gap-2 mb-4" (click)="openFilterSheet()">
+            <svg lucideSettings class="h-4 w-4"></svg>{{ 'search.filters' | translate }}
+          </button>
+
+          @if (state.discoverActive()) {
+            <div class="flex items-center gap-3 mb-3">
+              <h2 class="text-lg font-bold">{{ 'search.discover_results' | translate }}</h2>
+              <button type="button" class="btn btn-ghost btn-xs" (click)="clearDiscover()">{{ 'search.clear' | translate }}</button>
+            </div>
+            @if (state.discoverLoading()) {
+              <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+            } @else if (state.discoverResults().length) {
+              <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 gap-3 sm:gap-4">
+                @for (row of state.discoverResults(); track row.mediaType + ':' + row.tmdbId) {
+                  <app-media-card [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" (clicked)="onExternalCardClick(row)" />
+                }
+              </div>
+            } @else {
+              <p class="text-base-content/50 text-center py-12">{{ 'search.no_results' | translate }}</p>
+            }
+          } @else {
+            @if (state.discoveryLoading() && !state.discoveryTrending().length && !state.discoveryPopular().length && !state.discoverySuggestions().length) {
+              <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+            }
+            <div class="flex flex-col gap-6">
+              @if (state.discoveryTrending().length) {
+                <app-horizontal-scroller [title]="'search.discover_trending' | translate" class="block">
+                  <div scrollerActions class="join">
+                    <button type="button" class="btn btn-xs join-item" [class.btn-primary]="state.trendingWindow() === 'day'" (click)="setTrendingWindow('day')">{{ 'search.trending_day' | translate }}</button>
+                    <button type="button" class="btn btn-xs join-item" [class.btn-primary]="state.trendingWindow() === 'week'" (click)="setTrendingWindow('week')">{{ 'search.trending_week' | translate }}</button>
+                  </div>
+                  @for (row of state.discoveryTrending(); track row.mediaType + ':' + row.tmdbId) {
+                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" (clicked)="onExternalCardClick(row)" />
+                  }
+                </app-horizontal-scroller>
+              }
+              @if (state.discoveryPopular().length) {
+                <app-horizontal-scroller [title]="'search.discover_popular' | translate" class="block">
+                  @for (row of state.discoveryPopular(); track row.mediaType + ':' + row.tmdbId) {
+                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" (clicked)="onExternalCardClick(row)" />
+                  }
+                </app-horizontal-scroller>
+              }
+              @if (state.discoverySuggestions().length) {
+                <app-horizontal-scroller [title]="'search.discover_suggestions' | translate" class="block">
+                  @for (row of state.discoverySuggestions(); track row.mediaType + ':' + row.tmdbId) {
+                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" (clicked)="onExternalCardClick(row)" />
+                  }
+                </app-horizontal-scroller>
+              }
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Mobile filter sheet -->
+      <dialog #filterSheet class="modal">
+        <div class="modal-box">
+          <form method="dialog"><button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" [attr.aria-label]="'common.close' | translate">✕</button></form>
+          <ng-container *ngTemplateOutlet="filterPanel" />
+        </div>
+        <form method="dialog" class="modal-backdrop"><button>close</button></form>
+      </dialog>
+    } @else {
+      <!-- External search off: local suggestions only -->
+      @if (state.discoveryRecommendations().length) {
+        <app-horizontal-scroller [title]="'search.discover_suggestions' | translate" class="block">
+          @for (rec of state.discoveryRecommendations(); track rec.media.id) {
+            <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="rec.media.posterUrl" [title]="rec.media.title" [subtitle]="'' + (rec.media.year ?? '')" [link]="recLink(rec)" [status]="rec.media.available ? null : 'missing'" [playable]="rec.media.available" />
+          }
+        </app-horizontal-scroller>
+      } @else {
+        <p class="text-base-content/50 text-center py-12">{{ 'search.hint_local' | translate }}</p>
+      }
+    }
+  } @else if (state.tab() === 'people') {
     <!-- People results -->
     @if (state.peopleLoading()) {
       <div class="flex justify-center py-8">
@@ -93,7 +180,7 @@
       <div class="flex justify-center py-8">
         <span class="loading loading-spinner loading-lg"></span>
       </div>
-    } @else if (state.localResults().length > 0) {
+    } @else if (state.localResults().length > 0 || state.ownedExternalResults().length > 0) {
       <div>
         <h2 class="text-lg font-semibold mb-3">{{ 'search.section_library' | translate }}</h2>
         <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
@@ -104,6 +191,17 @@
               [progressPercent]="media.watched ? 0 : (media.progressPercent ?? 0)"
               [interactiveWatched]="canMarkMediaWatched(media)"
               (watchedToggled)="toggleMediaWatched(media, $event)"
+            />
+          }
+          <!-- Owned titles the local title search missed but the provider
+               matched via other metadata (franchise, keywords…). -->
+          @for (row of state.ownedExternalResults(); track row.mediaType + ':' + row.tmdbId) {
+            <app-media-card
+              [imageUrl]="row.posterUrl"
+              [title]="row.title"
+              [subtitle]="'' + (row.year ?? '')"
+              [rating]="row.rating"
+              (clicked)="onExternalCardClick(row)"
             />
           }
         </div>
@@ -134,7 +232,7 @@
     }
 
     <!-- No results at all -->
-    @if (!state.localLoading() && !state.externalLoading() && state.localResults().length === 0 && state.filteredExternalResults().length === 0) {
+    @if (!state.localLoading() && !state.externalLoading() && state.localResults().length === 0 && state.filteredExternalResults().length === 0 && state.ownedExternalResults().length === 0) {
       <div class="text-center py-8">
         <p class="text-base-content/50">{{ 'search.no_results' | translate }}</p>
         @if (!state.externalEnabled()) {
@@ -146,3 +244,81 @@
     }
   }
 </div>
+
+<!-- Discover filter panel — projected into the desktop sidebar and the mobile sheet -->
+<ng-template #filterPanel>
+  <div class="flex flex-col gap-4">
+    <h3 class="font-semibold">{{ 'search.filters' | translate }}</h3>
+
+    <div class="flex flex-col gap-1">
+      <span class="text-sm text-base-content/60">{{ 'search.sort_label' | translate }}</span>
+      <select
+        class="select select-bordered select-sm w-full"
+        [ngModel]="state.discoverSort()"
+        (ngModelChange)="state.discoverSort.set($event)"
+      >
+        @for (o of sortOptions; track o.value) {
+          <option [value]="o.value">{{ o.labelKey | translate }}</option>
+        }
+      </select>
+    </div>
+
+    @if (state.discoverGenres().length) {
+      <div class="flex flex-col gap-1">
+        <span class="text-sm text-base-content/60">{{ 'search.genres_label' | translate }}</span>
+        <div class="flex flex-wrap gap-2 mt-1">
+          @for (g of state.discoverGenres(); track g.id) {
+            <button
+              type="button"
+              class="badge badge-lg cursor-pointer"
+              [class.badge-primary]="state.discoverSelectedGenres().has(g.id)"
+              [class.badge-outline]="!state.discoverSelectedGenres().has(g.id)"
+              (click)="toggleGenre(g.id)"
+            >{{ g.name }}</button>
+          }
+        </div>
+      </div>
+    }
+
+    <div class="flex flex-col gap-1">
+      <span class="text-sm text-base-content/60 flex justify-between">
+        <span>{{ 'search.rating_label' | translate }}</span>
+        <span class="tabular-nums">{{ state.discoverVoteMin() }}+</span>
+      </span>
+      <input
+        type="range" min="0" max="9" step="1"
+        class="range range-primary range-sm w-full"
+        [ngModel]="state.discoverVoteMin()"
+        (ngModelChange)="state.discoverVoteMin.set(+$event)"
+      />
+    </div>
+
+    <div class="flex flex-col gap-1">
+      <span class="text-sm text-base-content/60">{{ 'search.year_label' | translate }}</span>
+      <div class="flex items-center gap-2">
+        <input
+          type="number" inputmode="numeric" min="1900" max="2100"
+          class="input input-bordered input-sm w-full"
+          [placeholder]="'search.year_from' | translate"
+          [ngModel]="state.discoverYearMin()"
+          (ngModelChange)="state.discoverYearMin.set($event ? +$event : null)"
+        />
+        <span class="text-base-content/40">–</span>
+        <input
+          type="number" inputmode="numeric" min="1900" max="2100"
+          class="input input-bordered input-sm w-full"
+          [placeholder]="'search.year_to' | translate"
+          [ngModel]="state.discoverYearMax()"
+          (ngModelChange)="state.discoverYearMax.set($event ? +$event : null)"
+        />
+      </div>
+    </div>
+
+    <div class="flex gap-2 pt-1">
+      <button type="button" class="btn btn-primary btn-sm flex-1" (click)="applyDiscover()">{{ 'search.apply' | translate }}</button>
+      @if (state.discoverActive() || state.discoverSelectedGenres().size) {
+        <button type="button" class="btn btn-ghost btn-sm" (click)="clearDiscover()">{{ 'search.clear' | translate }}</button>
+      }
+    </div>
+  </div>
+</ng-template>

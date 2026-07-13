@@ -12,33 +12,37 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
 import { MediaService, Media } from '../../core/services/api/media.service';
-import { StreamingApiService } from '../../core/services/api/streaming-api.service';
+import { StreamingApiService, RecommendationItem } from '../../core/services/api/streaming-api.service';
 import {
   MetadataService,
   MetadataSearchResult,
+  DiscoverFilters,
 } from '../../core/services/api/metadata.service';
 import { AuthService } from '../../core/services/auth.service';
 import { RequestsService, FliksRequestStatus } from '../../core/services/api/requests.service';
 import { SearchStateService } from '../../core/services/search-state.service';
 import { SocialApiService } from '../../core/services/api/social-api.service';
 import { TvService } from '../../core/services/tv.service';
+import { DeviceService } from '../../core/services/device.service';
 import { initialsAvatar } from '../../core/utils/initials-avatar';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { MediaType } from '../../core/enums/media-type.enum';
 import { MediaCardComponent, CardBadge } from '../../shared/components/media-card/media-card';
+import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
+import { NgTemplateOutlet } from '@angular/common';
 import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 
 @Component({
   selector: 'app-search',
-  imports: [FormsModule, TranslateModule, MediaCardComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings],
+  imports: [FormsModule, TranslateModule, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './search.html',
 })
@@ -55,7 +59,29 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly streamingApi = inject(StreamingApiService);
   private readonly social = inject(SocialApiService);
   readonly tv = inject(TvService);
+  private readonly device = inject(DeviceService);
   readonly state = inject(SearchStateService);
+
+  /** TMDB /discover sort options (label keys resolved in the template). */
+  readonly sortOptions = [
+    { value: 'popularity.desc', labelKey: 'search.sort_popularity' },
+    { value: 'vote_average.desc', labelKey: 'search.sort_rating' },
+    { value: 'primary_release_date.desc', labelKey: 'search.sort_recent' },
+  ];
+  readonly filterSheet = viewChild<ElementRef<HTMLDialogElement>>('filterSheet');
+  private lastDiscoveryKey = '';
+  /** Load discovery rows whenever the empty state is showing, keyed on the
+   *  active tab + external-search toggle so a tab/toggle change refreshes them. */
+  private readonly discoveryEffect = effect(() => {
+    const tab = this.state.tab();
+    const ct = this.state.contentType();
+    const external = this.state.externalEnabled();
+    if (this.state.hasQuery() || tab !== 'videos') return;
+    const key = `${ct}:${external}`;
+    if (key === this.lastDiscoveryKey) return;
+    this.lastDiscoveryKey = key;
+    void this.loadDiscovery(ct, external);
+  });
 
   readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
 
@@ -102,8 +128,10 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
-    // Focus only if no existing query (first visit)
-    if (!this.state.hasQuery()) {
+    // Auto-focus on first visit only on non-touch devices (desktop). On touch
+    // surfaces this would pop the soft keyboard on arrival; there the keyboard
+    // opens only on an explicit re-tap of the search dock (requestFocus).
+    if (!this.state.hasQuery() && !this.device.isTouch()) {
       setTimeout(() => this.searchInput()?.nativeElement.focus(), 100);
     }
   }
@@ -181,8 +209,20 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  setFilter(f: 'all' | 'movie' | 'series' | 'people') {
-    this.state.filter.set(f);
+  setTab(t: 'videos' | 'people') {
+    if (t === this.state.tab()) return;
+    this.state.tab.set(t);
+    if (this.state.query().trim()) {
+      if (this.searchTimer) clearTimeout(this.searchTimer);
+      this.runSearch();
+    }
+  }
+
+  setContentType(ct: 'all' | 'movie' | 'series') {
+    if (ct === this.state.contentType()) return;
+    // Discover genres/results are type-specific — drop them when the type changes.
+    this.state.resetDiscover();
+    this.state.contentType.set(ct);
     if (this.state.query().trim()) {
       if (this.searchTimer) clearTimeout(this.searchTimer);
       this.runSearch();
@@ -216,6 +256,228 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     void this.router.navigate(['/profile', userId]);
   }
 
+  /**
+   * Populate the empty-state discovery rows. Trending/popular + the discover
+   * genre list are TMDB and only fetched when external search is enabled;
+   * suggestions always come from the viewer's own library. Each fetch fails
+   * soft (empty row) so a missing provider / cold-start user just drops that
+   * section. Rows follow the active `movie`/`series`/`all` tab.
+   */
+  private async loadDiscovery(
+    ct: 'all' | 'movie' | 'series',
+    external: boolean,
+  ): Promise<void> {
+    this.state.discoveryLoading.set(true);
+    try {
+      const isSeries = ct === 'series';
+      const isMovie = ct === 'movie';
+
+      const recs = await this.streamingApi
+        .getRecommendations({ limit: 30 })
+        .catch(() => []);
+      if (this.staleDiscovery(ct, external)) return;
+      this.state.discoveryRecommendations.set(
+        isMovie || isSeries
+          ? recs.filter((r) => r.media.type === (isMovie ? 'movie' : 'series'))
+          : recs,
+      );
+
+      if (!external) {
+        this.state.discoveryTrending.set([]);
+        this.state.discoveryPopular.set([]);
+        this.state.discoverGenres.set([]);
+        this.state.discoverySuggestions.set([]);
+        return;
+      }
+      const [trending, popular, genres] = await Promise.all([
+        this.fetchTrending(ct, this.state.trendingWindow()),
+        this.fetchPopular(ct),
+        (isSeries ? this.metadata.getTvGenres() : this.metadata.getMovieGenres()).catch(
+          () => [],
+        ),
+      ]);
+      if (this.staleDiscovery(ct, external)) return;
+      this.state.discoveryTrending.set(trending);
+      this.state.discoveryPopular.set(popular);
+      this.state.discoverGenres.set(genres);
+      this.loadRequestedIds();
+
+      // "Suggestions pour vous" (external): TMDB catalog matching the viewer's
+      // taste — NOT limited to the library. Derive their top genres from the
+      // library recommendations, then discover those genres on TMDB.
+      const topGenreIds = this.deriveTasteGenreIds(this.state.discoveryRecommendations(), genres);
+      const suggestions = await this.fetchSuggestions(ct, topGenreIds);
+      if (this.staleDiscovery(ct, external)) return;
+      this.state.discoverySuggestions.set(suggestions);
+    } finally {
+      this.state.discoveryLoading.set(false);
+    }
+  }
+
+  /** Map the viewer's most-recurring recommendation genres to TMDB genre ids. */
+  private deriveTasteGenreIds(
+    recs: RecommendationItem[],
+    genres: { id: number; name: string }[],
+  ): number[] {
+    const freq = new Map<string, number>();
+    for (const r of recs) {
+      for (const g of r.media.genres ?? []) {
+        const k = g.toLowerCase();
+        freq.set(k, (freq.get(k) ?? 0) + 1);
+      }
+    }
+    const nameToId = new Map(genres.map((g) => [g.name.toLowerCase(), g.id]));
+    return [...freq.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => nameToId.get(name))
+      .filter((id): id is number => id != null)
+      .slice(0, 3);
+  }
+
+  /** TMDB discover across the taste genres (one call per genre, merged
+   *  round-robin + deduped — an OR the AND-only /discover can't express). */
+  private async fetchSuggestions(
+    ct: 'all' | 'movie' | 'series',
+    genreIds: number[],
+  ): Promise<MetadataSearchResult[]> {
+    if (!genreIds.length) return [];
+    const isSeries = ct === 'series';
+    const perGenre = await Promise.all(
+      genreIds.map((id) =>
+        (isSeries
+          ? this.metadata.discoverTv({ genreIds: [id], sort: 'popularity.desc' })
+          : this.metadata.discoverMovies({ genreIds: [id], sort: 'popularity.desc' })
+        ).catch(() => [] as MetadataSearchResult[]),
+      ),
+    );
+    const out: MetadataSearchResult[] = [];
+    const seen = new Set<number>();
+    const maxLen = Math.max(0, ...perGenre.map((a) => a.length));
+    for (let i = 0; i < maxLen; i++) {
+      for (const arr of perGenre) {
+        const r = arr[i];
+        if (r && !seen.has(r.tmdbId)) {
+          seen.add(r.tmdbId);
+          out.push(r);
+        }
+      }
+    }
+    return out.slice(0, 24);
+  }
+
+  private async fetchTrending(
+    ct: 'all' | 'movie' | 'series',
+    window: 'day' | 'week',
+  ): Promise<MetadataSearchResult[]> {
+    if (ct === 'series') return this.metadata.getTrendingTv(window).catch(() => []);
+    if (ct === 'movie') return this.metadata.getTrendingMovies(window).catch(() => []);
+    const [m, t] = await Promise.all([
+      this.metadata.getTrendingMovies(window).catch(() => []),
+      this.metadata.getTrendingTv(window).catch(() => []),
+    ]);
+    return this.interleave(m, t);
+  }
+
+  private async fetchPopular(
+    ct: 'all' | 'movie' | 'series',
+  ): Promise<MetadataSearchResult[]> {
+    if (ct === 'series') return this.metadata.getPopularTv().catch(() => []);
+    if (ct === 'movie') return this.metadata.getPopularMovies().catch(() => []);
+    const [m, t] = await Promise.all([
+      this.metadata.getPopularMovies().catch(() => []),
+      this.metadata.getPopularTv().catch(() => []),
+    ]);
+    return this.interleave(m, t);
+  }
+
+  /** True if the type/toggle moved on while a discovery fetch was in flight. */
+  private staleDiscovery(
+    ct: 'all' | 'movie' | 'series',
+    external: boolean,
+  ): boolean {
+    return (
+      this.state.tab() !== 'videos' ||
+      this.state.contentType() !== ct ||
+      this.state.externalEnabled() !== external
+    );
+  }
+
+  /** Alternate two lists so a mixed row isn't all movies then all series. */
+  private interleave(
+    a: MetadataSearchResult[],
+    b: MetadataSearchResult[],
+  ): MetadataSearchResult[] {
+    const out: MetadataSearchResult[] = [];
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      if (a[i]) out.push(a[i]);
+      if (b[i]) out.push(b[i]);
+    }
+    return out;
+  }
+
+  recLink(rec: RecommendationItem): string[] {
+    return ['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id];
+  }
+
+  // ── Discover panel ──
+
+  setTrendingWindow(w: 'day' | 'week') {
+    if (this.state.trendingWindow() === w) return;
+    this.state.trendingWindow.set(w);
+    void this.fetchTrending(this.state.contentType(), w).then((rows) => {
+      if (this.state.trendingWindow() === w) this.state.discoveryTrending.set(rows);
+    });
+  }
+
+  toggleGenre(id: number) {
+    this.state.discoverSelectedGenres.update((set) => {
+      const next = new Set(set);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  /** Run the TMDB /discover query from the current panel filters and switch
+   *  the content area to the results grid. */
+  async applyDiscover() {
+    const ct = this.state.contentType();
+    const opts: DiscoverFilters = {
+      genreIds: [...this.state.discoverSelectedGenres()],
+      sort: this.state.discoverSort(),
+      voteMin: this.state.discoverVoteMin() || undefined,
+      yearMin: this.state.discoverYearMin(),
+      yearMax: this.state.discoverYearMax(),
+    };
+    this.state.discoverActive.set(true);
+    this.state.discoverLoading.set(true);
+    this.closeFilterSheet();
+    try {
+      const rows =
+        ct === 'series'
+          ? await this.metadata.discoverTv(opts)
+          : await this.metadata.discoverMovies(opts);
+      this.state.discoverResults.set(rows);
+      this.loadRequestedIds();
+    } catch {
+      this.state.discoverResults.set([]);
+    } finally {
+      this.state.discoverLoading.set(false);
+    }
+  }
+
+  clearDiscover() {
+    this.state.resetDiscover();
+  }
+
+  openFilterSheet() {
+    this.filterSheet()?.nativeElement.showModal();
+  }
+
+  closeFilterSheet() {
+    this.filterSheet()?.nativeElement.close();
+  }
+
   /** Series toggle via the bulk endpoint; movies need a local file. */
   canMarkMediaWatched(m: Media): boolean {
     return m.type === 'series' || !!m.files?.length;
@@ -246,18 +508,16 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     const q = this.state.query().trim();
     if (!q) return;
 
-    const filter = this.state.filter();
-
     // People search is a distinct surface — no local/external media lookups.
-    if (filter === 'people') {
+    if (this.state.tab() === 'people') {
       this.state.peopleLoading.set(true);
       try {
         const results = await this.social.searchUsers(q);
-        // Ignore a stale response if the query/filter moved on meanwhile.
-        if (this.state.query().trim() !== q || this.state.filter() !== 'people') return;
+        // Ignore a stale response if the query/tab moved on meanwhile.
+        if (this.state.query().trim() !== q || this.state.tab() !== 'people') return;
         this.state.peopleResults.set(results);
       } catch {
-        if (this.state.query().trim() === q && this.state.filter() === 'people') {
+        if (this.state.query().trim() === q && this.state.tab() === 'people') {
           this.state.peopleResults.set([]);
         }
       } finally {
@@ -266,7 +526,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    const type: MediaType | undefined = filter === 'all' ? undefined : filter;
+    const ct = this.state.contentType();
+    const type: MediaType | undefined = ct === 'all' ? undefined : ct;
 
     // Search local library first
     this.state.localLoading.set(true);
@@ -282,11 +543,11 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     queueMicrotask(() => {
       // Revalidate: cached result paints instantly, then catch up to fresh
       // matches (a media imported since the last identical query lands here).
-      if (this.state.query().trim() !== q || this.state.filter() !== filter) return;
+      if (this.state.query().trim() !== q || this.state.contentType() !== ct) return;
       void this.mediaService
         .getAll(localParams, { force: true })
         .then((fresh) => {
-          if (this.state.query().trim() === q && this.state.filter() === filter) {
+          if (this.state.query().trim() === q && this.state.contentType() === ct) {
             this.state.localResults.set(fresh.data);
           }
         })
@@ -298,9 +559,9 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.state.externalLoading.set(true);
     try {
       let rows: MetadataSearchResult[];
-      if (filter === 'movie') {
+      if (ct === 'movie') {
         rows = await this.metadata.searchMovie(q);
-      } else if (filter === 'series') {
+      } else if (ct === 'series') {
         rows = await this.metadata.searchTv(q);
       } else {
         const [movies, tv] = await Promise.all([

@@ -157,6 +157,7 @@ export interface MediaMetadataBrief {
   originalLanguage: string | null;
   productionCountries: string[] | null;
   productionCompanies: string[] | null;
+  videos?: { key: string; site: string; type: string; name: string }[] | null;
 }
 
 export interface MediaCastEntry {

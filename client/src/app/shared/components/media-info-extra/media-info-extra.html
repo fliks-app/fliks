@@ -72,5 +72,32 @@
         </div>
       }
     </dl>
+
+    @if (trailerKey()) {
+      <button type="button" class="btn btn-outline gap-2 mt-2" (click)="openTrailer()">
+        <svg lucidePlay class="h-4 w-4"></svg>{{ 'discover.watch_trailer' | translate }}
+      </button>
+    }
   </section>
 }
+
+<!-- Trailer player -->
+<dialog #trailerDialog class="modal" (close)="trailerEmbedUrl.set(null)">
+  <div class="modal-box max-w-3xl p-0 overflow-hidden bg-black relative">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 z-10 text-white" [attr.aria-label]="'common.close' | translate">✕</button>
+    </form>
+    <div class="aspect-video">
+      @if (trailerEmbedUrl(); as url) {
+        <iframe
+          [src]="url"
+          class="w-full h-full"
+          allow="autoplay; encrypted-media; fullscreen"
+          referrerpolicy="strict-origin-when-cross-origin"
+          allowfullscreen
+        ></iframe>
+      }
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
