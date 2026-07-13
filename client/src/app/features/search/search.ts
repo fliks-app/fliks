@@ -29,6 +29,7 @@ import { SocialApiService } from '../../core/services/api/social-api.service';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
 import { initialsAvatar } from '../../core/utils/initials-avatar';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { MediaType } from '../../core/enums/media-type.enum';
@@ -42,7 +43,7 @@ import { Keyboard } from '@capacitor/keyboard';
 
 @Component({
   selector: 'app-search',
-  imports: [FormsModule, TranslateModule, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings],
+  imports: [FormsModule, TranslateModule, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ResolveUrlPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './search.html',
 })

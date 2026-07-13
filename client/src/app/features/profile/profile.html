@@ -16,7 +16,7 @@
             [attr.aria-label]="'social.avatar_change' | translate"
           >
             @if (p.avatar) {
-              <img [src]="p.avatar" [alt]="p.username" />
+              <img [src]="p.avatar | resolveUrl" [alt]="p.username" />
             } @else {
               <span>{{ avatar().initials }}</span>
             }
@@ -39,7 +39,7 @@
             [style.background-color]="'hsl(' + avatar().hue + ' 55% 45%)'"
           >
             @if (p.avatar) {
-              <img [src]="p.avatar" [alt]="p.username" />
+              <img [src]="p.avatar | resolveUrl" [alt]="p.username" />
             } @else {
               <span>{{ avatar().initials }}</span>
             }

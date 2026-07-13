@@ -13,6 +13,7 @@ import { LucideUserPlus, LucideUserCheck, LucideClock } from '@lucide/angular';
 import { SocialApiService, SocialUser } from '../../core/services/api/social-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { initialsAvatar } from '../../core/utils/initials-avatar';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ProfileContextService } from './profile-context.service';
 
 type ConnectionsMode = 'followers' | 'following';
@@ -21,7 +22,7 @@ type ConnectionsMode = 'followers' | 'following';
  *  its own follow/unfollow control. */
 @Component({
   selector: 'app-profile-connections',
-  imports: [RouterLink, TranslateModule, LucideUserPlus, LucideUserCheck, LucideClock],
+  imports: [RouterLink, TranslateModule, LucideUserPlus, LucideUserCheck, LucideClock, ResolveUrlPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile-connections.html',
 })

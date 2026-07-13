@@ -13,7 +13,7 @@
               [style.background-color]="'hsl(' + avatar(u.username).hue + ' 55% 45%)'"
             >
               @if (u.avatar) {
-                <img [src]="u.avatar" [alt]="u.username" />
+                <img [src]="u.avatar | resolveUrl" [alt]="u.username" />
               } @else {
                 <span>{{ avatar(u.username).initials }}</span>
               }

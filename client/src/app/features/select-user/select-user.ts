@@ -16,6 +16,7 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
 import { ServerCacheService } from '../../core/services/server-cache.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { initialsAvatar } from '../../core/utils/initials-avatar';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { LucideMonitorSmartphone, LucideKeyRound, LucideUserRoundPen } from '@lucide/angular';
 
 @Component({
@@ -25,6 +26,7 @@ import { LucideMonitorSmartphone, LucideKeyRound, LucideUserRoundPen } from '@lu
     LucideMonitorSmartphone,
     LucideKeyRound,
     LucideUserRoundPen,
+    ResolveUrlPipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './select-user.html',

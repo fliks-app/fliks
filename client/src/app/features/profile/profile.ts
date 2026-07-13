@@ -30,6 +30,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { initialsAvatar } from '../../core/utils/initials-avatar';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ProfileContextService } from './profile-context.service';
 import { AvatarEditorComponent } from './avatar-editor/avatar-editor';
 
@@ -53,6 +54,7 @@ import { AvatarEditorComponent } from './avatar-editor/avatar-editor';
     LucideSettings,
     LucideCamera,
     AvatarEditorComponent,
+    ResolveUrlPipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile.html',
