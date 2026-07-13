@@ -15,6 +15,7 @@ import { Subscription, filter } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media, GenreSummary, CollectionSummary } from '../../core/services/api/media.service';
+import { SocialApiService } from '../../core/services/api/social-api.service';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
@@ -82,6 +83,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
 export class LibraryComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly socialApi = inject(SocialApiService);
   private readonly profilesService = inject(ProfilesService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly route = inject(ActivatedRoute);
@@ -126,6 +128,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
   readonly suggestionsContinue = signal<ContinueWatchingItem[]>([]);
   /** History-based recommendations, scoped to the active library. */
   readonly suggestionsRecommendations = signal<RecommendationItem[]>([]);
+  /** Popular among the members the user follows. */
+  readonly suggestionsFromFollowing = signal<RecommendationItem[]>([]);
   readonly suggestionsLoading = signal(false);
 
   // ── Genres view ─────────────────────────────────────────────────────
@@ -480,14 +484,16 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (!lib) return;
     this.suggestionsLoading.set(true);
     try {
-      const [cw, recs] = await Promise.all([
+      const [cw, recs, following] = await Promise.all([
         this.streamingApi.getContinueWatching(lib.id).catch(() => null),
         this.streamingApi
           .getRecommendations({ libraryId: lib.id, limit: 30 })
           .catch(() => null),
+        this.socialApi.followingRecommendations(lib.id).catch(() => null),
       ]);
       if (cw) this.suggestionsContinue.set(cw);
       if (recs) this.suggestionsRecommendations.set(recs);
+      if (following) this.suggestionsFromFollowing.set(following);
     } finally {
       this.suggestionsLoading.set(false);
     }

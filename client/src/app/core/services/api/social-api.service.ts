@@ -52,6 +52,17 @@ export class SocialApiService {
     );
   }
 
+  /** Media popular among the members the caller follows, for a library's
+   *  Suggestions view. */
+  followingRecommendations(libraryId: number, opts: { force?: boolean } = {}) {
+    return firstValueFrom(
+      this.http.get<RecommendationItem[]>('/api/social/recommendations', {
+        params: { libraryId: String(libraryId) },
+        ...this.headers(opts.force),
+      }),
+    );
+  }
+
   /** Members the caller may add as playlist collaborators (public or followed). */
   searchConnectable(q: string) {
     return firstValueFrom(
