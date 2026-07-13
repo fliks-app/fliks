@@ -34,6 +34,17 @@
             {{ 'player.play' | translate }}
           </button>
         }
+        @if (!isOwner()) {
+          <button type="button" class="btn btn-sm gap-2" [class.btn-ghost]="!pl.saved" [class.btn-outline]="pl.saved" [disabled]="savingBookmark()" (click)="toggleSave()">
+            @if (pl.saved) {
+              <svg lucideBookmarkCheck class="h-4 w-4"></svg>
+              {{ 'playlists.saved_label' | translate }}
+            } @else {
+              <svg lucideBookmark class="h-4 w-4"></svg>
+              {{ 'playlists.save' | translate }}
+            }
+          </button>
+        }
         <!-- md+ : inline buttons -->
         <div class="hidden md:flex items-center gap-2">
           @if (canManage()) {
@@ -214,7 +225,11 @@
                 <div class="collapse-content !px-0 !pb-0">
                   <div class="flex flex-col gap-1 mt-1">
                     @for (item of entry.group.episodes; track item.itemId) {
-                      <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
+                      <div
+                        class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200"
+                        [class.pl-4]="!canEditItems()"
+                        [class.sm:pl-10]="!canEditItems()"
+                      >
                         <ng-container
                           [ngTemplateOutlet]="itemRow"
                           [ngTemplateOutletContext]="{ $implicit: item }"
