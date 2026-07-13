@@ -111,7 +111,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly genreFilterEffect = effect(() => {
     const req = this.state.genreFilterRequest();
     if (!req) return;
-    void this.applyGenreFilter(req.genre);
+    void this.applyGenreFilter(req.genreId);
   });
 
   readonly requestedTmdbIds = signal<Map<number, FliksRequestStatus>>(new Map());
@@ -485,26 +485,13 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.state.resetDiscover();
   }
 
-  /** Resolve a genre name to a TMDB id and run the discover grid for it. Taste
-   *  chips mix movies + series, so match against the movie genre list (the
-   *  discover grid defaults to the movie catalogue). */
-  private async applyGenreFilter(name: string): Promise<void> {
+  /** Preload the discover grid on a genre id (resolved by the caller — a
+   *  profile taste chip — so it's language-proof). */
+  private async applyGenreFilter(genreId: number): Promise<void> {
     this.state.tab.set('videos');
     this.state.query.set('');
-    try {
-      const genres = this.state.discoverGenres().length
-        ? this.state.discoverGenres()
-        : await this.metadata.getMovieGenres();
-      this.state.discoverGenres.set(genres);
-      const match = genres.find(
-        (g) => g.name.toLowerCase() === name.toLowerCase(),
-      );
-      if (!match) return;
-      this.state.discoverSelectedGenres.set(new Set([match.id]));
-      await this.applyDiscover();
-    } catch {
-      /* global error toast */
-    }
+    this.state.discoverSelectedGenres.set(new Set([genreId]));
+    await this.applyDiscover();
   }
 
   openFilterSheet() {

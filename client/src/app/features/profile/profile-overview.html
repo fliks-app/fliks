@@ -12,16 +12,16 @@
       </div>
     }
     <!-- Tastes -->
-    @if (p.shown.tastes && p.topGenres.length) {
+    @if (p.shown.tastes && displayGenres().length) {
       <section class="mb-8">
         <h2 class="text-lg font-semibold mb-3">{{ 'social.section_tastes' | translate: { username: p.username } }}</h2>
         <div class="flex flex-wrap gap-2">
-          @for (g of p.topGenres; track g.genre) {
+          @for (g of displayGenres(); track g.id) {
             <button
               type="button"
               class="badge badge-lg badge-outline cursor-pointer hover:badge-primary"
-              (click)="openGenre(g.genre)"
-            >{{ g.genre }}</button>
+              (click)="openGenre(g.id)"
+            >{{ g.name }}</button>
           }
         </div>
       </section>

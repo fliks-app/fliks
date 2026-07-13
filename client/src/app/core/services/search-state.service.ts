@@ -74,16 +74,17 @@ export class SearchStateService {
     this.focusRequestId.update((n) => n + 1);
   }
 
-  /** A genre a caller (e.g. a profile taste chip) asked to preload into the
-   *  discover panel. Carries a monotonic counter so repeat requests refire the
-   *  search page's effect even when the route is reused. */
-  readonly genreFilterRequest = signal<{ genre: string; n: number } | null>(
+  /** A TMDB genre id a caller (e.g. a profile taste chip) asked to preload into
+   *  the discover panel. An id (not a name) keeps it language-proof. Carries a
+   *  monotonic counter so repeat requests refire the search page's effect even
+   *  when the route is reused. */
+  readonly genreFilterRequest = signal<{ genreId: number; n: number } | null>(
     null,
   );
   private genreFilterCounter = 0;
 
-  requestGenreFilter(genre: string): void {
-    this.genreFilterRequest.set({ genre, n: ++this.genreFilterCounter });
+  requestGenreFilter(genreId: number): void {
+    this.genreFilterRequest.set({ genreId, n: ++this.genreFilterCounter });
   }
 
   /** External results for the "add to library" section: only titles NOT already
