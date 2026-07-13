@@ -52,6 +52,16 @@ export class SocialApiService {
     );
   }
 
+  /** Members the caller may add as playlist collaborators (public or followed). */
+  searchConnectable(q: string) {
+    return firstValueFrom(
+      this.http.get<SocialUser[]>('/api/social/connectable', {
+        params: { q },
+        ...this.headers(true),
+      }),
+    );
+  }
+
   getProfile(userId: number, opts: { force?: boolean } = {}) {
     return firstValueFrom(
       this.http.get<PublicProfile>(

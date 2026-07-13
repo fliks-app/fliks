@@ -20,6 +20,7 @@ import {
   MediaType,
   PlaylistShareRole,
   PlaylistVisibility,
+  ProfileVisibility,
 } from '../../common/enums';
 import { CreatePlaylistDto } from './dto/create-playlist.dto';
 import { UpdatePlaylistDto } from './dto/update-playlist.dto';
@@ -410,6 +411,9 @@ export class PlaylistsService {
       playlistId,
       PlaylistShareRole.ADMINISTRATOR,
     );
+    if (dto.userId === user.id) {
+      throw new BadRequestException('Cannot change your own role');
+    }
     if (dto.userId === playlist.ownerId) {
       throw new BadRequestException('The owner is already a member');
     }
@@ -417,6 +421,21 @@ export class PlaylistsService {
       where: { id: dto.userId, enabled: true },
     });
     if (!target) throw new NotFoundException(`User #${dto.userId} not found`);
+    // Only public members, or members the caller follows, may be added.
+    const connectable =
+      target.profileVisibility === ProfileVisibility.PUBLIC ||
+      (await this.followRepo.exist({
+        where: {
+          follower: { id: user.id },
+          following: { id: dto.userId },
+          status: FollowStatus.ACCEPTED,
+        },
+      }));
+    if (!connectable) {
+      throw new ForbiddenException(
+        'You can only add public members or members you follow',
+      );
+    }
     const existing = await this.shareRepo.findOne({
       where: { playlist: { id: playlistId }, user: { id: dto.userId } },
     });
@@ -446,6 +465,9 @@ export class PlaylistsService {
       playlistId,
       PlaylistShareRole.ADMINISTRATOR,
     );
+    if (targetUserId === user.id) {
+      throw new BadRequestException('Cannot change your own membership');
+    }
     if (targetUserId === playlist.ownerId) {
       throw new BadRequestException('Cannot remove the owner');
     }

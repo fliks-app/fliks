@@ -57,6 +57,7 @@ import {
   SocialApiService,
   SocialUser,
 } from '../../../core/services/api/social-api.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { TvService } from '../../../core/services/tv.service';
@@ -116,7 +117,11 @@ export class PlaylistDetailComponent {
   private readonly autoDownload = inject(AutoDownloadService);
   private readonly playable = inject(PlayableMediaService);
   private readonly social = inject(SocialApiService);
+  private readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
+
+  /** The signed-in user's id — a member can't edit their own role. */
+  readonly myUserId = computed(() => this.auth.user()?.id ?? 0);
 
   private readonly routeParams = toSignal(this.route.paramMap);
   readonly playlistId = computed(() => Number(this.routeParams()?.get('id')));
@@ -454,7 +459,7 @@ export class PlaylistDetailComponent {
       return;
     }
     try {
-      const found = await this.social.searchUsers(query);
+      const found = await this.social.searchConnectable(query);
       if (this.memberQuery().trim() !== query) return; // stale response
       const memberIds = new Set(this.members().map((m) => m.userId));
       this.memberResults.set(found.filter((u) => !memberIds.has(u.id)));

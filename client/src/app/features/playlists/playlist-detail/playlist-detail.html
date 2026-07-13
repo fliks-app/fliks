@@ -419,8 +419,8 @@
       @for (m of members(); track m.userId) {
         <li class="flex items-center gap-3 p-1.5 rounded-lg">
           <span class="flex-1 min-w-0 truncate font-medium">{{ m.username }}</span>
-          @if (m.role === 'owner') {
-            <span class="badge badge-sm badge-ghost">{{ 'playlists.role_owner' | translate }}</span>
+          @if (m.role === 'owner' || m.userId === myUserId()) {
+            <span class="badge badge-sm badge-ghost">{{ ('playlists.role_' + m.role) | translate }}</span>
           } @else {
             <select
               class="select select-bordered select-xs w-36 shrink-0"
