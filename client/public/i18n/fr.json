@@ -570,7 +570,12 @@
     "section_discover": "Ajouter à la bibliothèque",
     "no_results": "Aucun résultat trouvé.",
     "external_search": "Rechercher hors bibliothèque",
-    "enable_external": "Rechercher hors bibliothèque"
+    "enable_external": "Rechercher hors bibliothèque",
+    "discover_trending": "Tendances",
+    "discover_popular": "Populaire",
+    "discover_suggestions": "Suggestions pour vous",
+    "discover_genres": "Parcourir par genre",
+    "discover_people_hint": "Recherchez des membres par leur nom."
   },
   "discover": {
     "title": "Ajouter à la bibliothèque",

@@ -1,6 +1,7 @@
 import { Injectable, signal, computed, effect } from '@angular/core';
-import { Media } from './api/media.service';
+import { Media, GenreSummary } from './api/media.service';
 import { MetadataSearchResult } from './api/metadata.service';
+import { RecommendationItem } from './api/streaming-api.service';
 import { SocialUser } from './api/social-api.service';
 
 const EXTERNAL_KEY = 'fliks-search-external';
@@ -21,6 +22,17 @@ export class SearchStateService {
   readonly peopleResults = signal<SocialUser[]>([]);
   readonly peopleLoading = signal(false);
   readonly hasQuery = computed(() => this.query().trim().length > 0);
+
+  // ── Discovery (shown when no query is typed) ──
+  /** Trending titles from external providers (only when external search is on). */
+  readonly discoveryTrending = signal<MetadataSearchResult[]>([]);
+  /** Popular titles from external providers (only when external search is on). */
+  readonly discoveryPopular = signal<MetadataSearchResult[]>([]);
+  /** Personalized recommendations from the viewer's library. */
+  readonly discoveryRecommendations = signal<RecommendationItem[]>([]);
+  /** Genres in the accessible libraries, for browse-by-genre tiles. */
+  readonly discoveryGenres = signal<GenreSummary[]>([]);
+  readonly discoveryLoading = signal(false);
   /** Counter incremented whenever a caller (e.g. the bottom-dock
    *  search button) asks the search page to refocus its input.
    *  Search page watches this in an effect — using a counter (not a
