@@ -14,6 +14,7 @@ import { SocialApiService, SocialUser } from '../../../core/services/api/social-
 import { SseService } from '../../../core/services/sse.service';
 import { TvService } from '../../../core/services/tv.service';
 import { initialsAvatar } from '../../../core/utils/initials-avatar';
+import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 
 /**
  * Home widget listing incoming follow requests to accept/reject, styled like
@@ -22,7 +23,7 @@ import { initialsAvatar } from '../../../core/utils/initials-avatar';
  */
 @Component({
   selector: 'app-follow-requests-card',
-  imports: [RouterLink, TranslateModule, LucideCheck, LucideX],
+  imports: [RouterLink, TranslateModule, LucideCheck, LucideX, ResolveUrlPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './follow-requests-card.html',
 })

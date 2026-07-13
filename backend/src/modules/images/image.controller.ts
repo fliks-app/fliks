@@ -49,7 +49,14 @@ export class ImageController {
     sizeRaw: string | undefined,
     res: Response,
   ) {
-    const validTypes = ['media', 'person', 'episode', 'season', 'request'];
+    const validTypes = [
+      'media',
+      'person',
+      'episode',
+      'season',
+      'request',
+      'user',
+    ];
     if (!validTypes.includes(type)) throw new NotFoundException();
 
     // Request art is keyed by `{mediaType}-{tmdbId}`; everything else by a

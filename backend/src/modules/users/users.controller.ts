@@ -7,8 +7,11 @@ import {
   Body,
   Param,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   ParseIntPipe,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import { UsersStatsService } from './users-stats.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -40,6 +43,25 @@ export class UsersController {
   @CheckPolicies((ability) => ability.can(Action.Manage, User))
   create(@Body() dto: CreateUserDto) {
     return this.usersService.create(dto);
+  }
+
+  /** Self: upload a new avatar (cropped square JPEG). No policy handler → the
+   *  class JWT guard is enough; the target is always the caller. */
+  @Post('me/avatar')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
+  setAvatar(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: User,
+  ) {
+    return this.usersService.setAvatar(user.id, file);
+  }
+
+  /** Self: remove the current avatar. */
+  @Delete('me/avatar')
+  clearAvatar(@CurrentUser() user: User) {
+    return this.usersService.clearAvatar(user.id);
   }
 
   /** Admin or self */

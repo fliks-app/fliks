@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  BadRequestException,
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -17,6 +18,7 @@ import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
 import { Action } from '../auth/casl/actions.enum';
 import { LibraryUserAccess } from '../libraries/entities/library-user-access.entity';
 import { Library } from '../libraries/entities/library.entity';
+import { ImageService } from '../images/image.service';
 
 /** API shape: user without password hash, with role name instead of relation. */
 export type PublicUser = Omit<User, 'passwordHash' | 'userRole'> & {
@@ -38,6 +40,7 @@ export class UsersService implements OnModuleInit {
     @InjectRepository(LibraryUserAccess)
     private readonly libraryAccessRepo: Repository<LibraryUserAccess>,
     private readonly caslAbilityFactory: CaslAbilityFactory,
+    private readonly imageService: ImageService,
   ) {}
 
   async onModuleInit() {
@@ -87,6 +90,39 @@ export class UsersService implements OnModuleInit {
     if (!user) throw new NotFoundException(`User #${id} not found`);
     const libraryIds = await this.loadLibraryIdsForUser(id);
     return this.serialize(user, libraryIds);
+  }
+
+  /**
+   * Store a new avatar from an uploaded, already-cropped square JPEG and return
+   * the refreshed public user. The client crops and downscales before upload,
+   * so the server only persists the bytes — no image processing here.
+   */
+  async setAvatar(
+    userId: number,
+    file?: Express.Multer.File,
+  ): Promise<PublicUser> {
+    if (!file?.buffer?.length)
+      throw new BadRequestException('No image uploaded');
+    if (file.mimetype !== 'image/jpeg')
+      throw new BadRequestException('Avatar must be a JPEG image');
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException(`User #${userId} not found`);
+    const apiPath = this.imageService.storeAvatar(userId, file.buffer);
+    // The API path is stable across re-uploads, so append a version to defeat
+    // the 24h image cache and force clients to fetch the new picture.
+    user.avatar = `${apiPath}?v=${Date.now()}`;
+    await this.userRepo.save(user);
+    return this.findOne(userId);
+  }
+
+  /** Remove the user's avatar — the UI falls back to computed initials. */
+  async clearAvatar(userId: number): Promise<PublicUser> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException(`User #${userId} not found`);
+    this.imageService.deleteImages('user', userId);
+    user.avatar = null;
+    await this.userRepo.save(user);
+    return this.findOne(userId);
   }
 
   private async loadLibraryIdsForUser(userId: number): Promise<number[]> {

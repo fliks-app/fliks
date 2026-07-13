@@ -3,7 +3,13 @@ import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 
-export type ImageType = 'media' | 'person' | 'episode' | 'season' | 'request';
+export type ImageType =
+  | 'media'
+  | 'person'
+  | 'episode'
+  | 'season'
+  | 'request'
+  | 'user';
 /** Variant of a media image. `fanart-${N}` (N≥1) addresses the extra
  *  fanarts kept for randomised page backgrounds — they share `fanart`'s
  *  size pipeline (thumb / medium / full) so frontends can request any
@@ -195,7 +201,22 @@ export class ImageService {
         return path.join(this.baseDir, 'episodes', `${id}${suffix}.jpg`);
       case 'season':
         return path.join(this.baseDir, 'seasons', `${id}${suffix}.jpg`);
+      case 'user':
+        return path.join(this.baseDir, 'users', `${id}${suffix}.jpg`);
     }
+  }
+
+  /**
+   * Persist a user avatar from an in-memory buffer (already cropped and
+   * downscaled to a square client-side) and return its size-agnostic API path.
+   * Avatars are a single stored file — no size pipeline — so callers append a
+   * cache-busting version to the path when they store it on the user.
+   */
+  storeAvatar(userId: number, buffer: Buffer): string {
+    const dest = this.getDiskPath('user', userId);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, buffer);
+    return this.getApiPath('user', userId);
   }
 
   /** Whether the full-size file for (type, id, variant) is already stored. */
@@ -227,6 +248,8 @@ export class ImageService {
         return `/api/images/episode/${id}`;
       case 'season':
         return `/api/images/season/${id}`;
+      case 'user':
+        return `/api/images/user/${id}`;
     }
   }
 }

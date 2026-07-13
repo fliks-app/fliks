@@ -22,7 +22,7 @@
             <div class="avatar avatar-placeholder">
               <div class="w-24 h-24 rounded-full text-2xl font-semibold text-white" [style.background-color]="'hsl(' + init.hue + ' 55% 45%)'">
                 @if (user.avatar) {
-                  <img [src]="user.avatar" [alt]="user.username" />
+                  <img [src]="user.avatar | resolveUrl" [alt]="user.username" />
                 } @else {
                   <span>{{ init.initials }}</span>
                 }

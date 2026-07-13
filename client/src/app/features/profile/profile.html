@@ -7,16 +7,44 @@
   <div class="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
     <div class="flex items-center gap-4 min-w-0">
       <div class="avatar avatar-placeholder shrink-0">
-        <div
-          class="w-16 h-16 sm:w-20 sm:h-20 rounded-full text-2xl sm:text-3xl font-semibold text-white"
-          [style.background-color]="'hsl(' + avatar().hue + ' 55% 45%)'"
-        >
-          @if (p.avatar) {
-            <img [src]="p.avatar" [alt]="p.username" />
-          } @else {
-            <span>{{ avatar().initials }}</span>
-          }
-        </div>
+        @if (p.isSelf) {
+          <button
+            type="button"
+            class="group relative w-16 h-16 sm:w-20 sm:h-20 rounded-full text-2xl sm:text-3xl font-semibold text-white overflow-hidden"
+            [style.background-color]="'hsl(' + avatar().hue + ' 55% 45%)'"
+            (click)="avatarInput.click()"
+            [attr.aria-label]="'social.avatar_change' | translate"
+          >
+            @if (p.avatar) {
+              <img [src]="p.avatar | resolveUrl" [alt]="p.username" />
+            } @else {
+              <span>{{ avatar().initials }}</span>
+            }
+            <span
+              class="absolute inset-0 hidden group-hover:flex items-center justify-center bg-black/50"
+            >
+              <svg lucideCamera class="h-6 w-6"></svg>
+            </span>
+          </button>
+          <input
+            #avatarInput
+            type="file"
+            accept="image/*"
+            class="hidden"
+            (change)="onAvatarPicked($event)"
+          />
+        } @else {
+          <div
+            class="w-16 h-16 sm:w-20 sm:h-20 rounded-full text-2xl sm:text-3xl font-semibold text-white"
+            [style.background-color]="'hsl(' + avatar().hue + ' 55% 45%)'"
+          >
+            @if (p.avatar) {
+              <img [src]="p.avatar | resolveUrl" [alt]="p.username" />
+            } @else {
+              <span>{{ avatar().initials }}</span>
+            }
+          </div>
+        }
       </div>
       <div class="min-w-0 flex-1">
         <h1 class="text-xl sm:text-2xl font-bold truncate">{{ p.username }}</h1>
@@ -24,6 +52,15 @@
           <a [routerLink]="['/profile', p.id, 'followers']" class="hover:text-base-content">{{ 'social.followers_count' | translate: { n: p.followerCount } }}</a>
           <a [routerLink]="['/profile', p.id, 'following']" class="hover:text-base-content">{{ 'social.following_count' | translate: { n: p.followingCount } }}</a>
         </div>
+        @if (p.isSelf && p.avatar) {
+          <button
+            type="button"
+            class="text-xs text-base-content/50 hover:text-error mt-1"
+            (click)="removeAvatar()"
+          >
+            {{ 'social.avatar_remove' | translate }}
+          </button>
+        }
         @if (p.followsYou && !p.isSelf) {
           <span class="badge badge-sm badge-ghost mt-2">{{ 'social.follows_you' | translate }}</span>
         }
@@ -82,4 +119,8 @@
   </nav>
 
   <router-outlet />
+
+  @if (p.isSelf) {
+    <app-avatar-editor (cropped)="onAvatarCropped($event)" />
+  }
 }

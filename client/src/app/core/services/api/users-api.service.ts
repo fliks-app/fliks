@@ -99,4 +99,19 @@ export class UsersApiService {
     return firstValueFrom(this.http.delete<void>(`/api/users/${id}`));
   }
 
+  /** Upload a new avatar for the current user (a cropped, square JPEG blob). */
+  uploadAvatar(image: Blob) {
+    const form = new FormData();
+    form.append('file', image, 'avatar.jpg');
+    return firstValueFrom(
+      this.http.post<{ avatar: string | null }>('/api/users/me/avatar', form),
+    );
+  }
+
+  /** Remove the current user's avatar. */
+  deleteAvatar() {
+    return firstValueFrom(
+      this.http.delete<{ avatar: string | null }>('/api/users/me/avatar'),
+    );
+  }
 }

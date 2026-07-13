@@ -17,6 +17,7 @@ import {
   LucideMonitorSmartphone,
 } from '@lucide/angular';
 import { initialsAvatar } from '../../core/utils/initials-avatar';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-user-menu',
@@ -25,6 +26,7 @@ import { initialsAvatar } from '../../core/utils/initials-avatar';
     DropdownMenuComponent,
     LucideUser, LucideSettings, LucideShield, LucideRepeat, LucideLogOut,
     LucideServer, LucideMonitorSmartphone,
+    ResolveUrlPipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -49,7 +51,7 @@ import { initialsAvatar } from '../../core/utils/initials-avatar';
                 [style.background-color]="'hsl(' + avatar(user.username).hue + ' 55% 45%)'"
               >
                 @if (user.avatar) {
-                  <img [src]="user.avatar" [alt]="user.username" />
+                  <img [src]="user.avatar | resolveUrl" [alt]="user.username" />
                 } @else {
                   <span>{{ avatar(user.username).initials }}</span>
                 }
@@ -57,7 +59,6 @@ import { initialsAvatar } from '../../core/utils/initials-avatar';
             </div>
             <div class="min-w-0 flex-1">
               <p class="font-semibold truncate text-white">{{ user.username }}</p>
-              <p class="text-xs text-white/50">{{ user.role }}</p>
             </div>
           </a>
         </div>

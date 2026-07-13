@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import {
@@ -15,17 +16,23 @@ import {
   RouterLinkActive,
   RouterOutlet,
 } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   LucideUserPlus,
   LucideUserCheck,
   LucideClock,
   LucideSettings,
+  LucideCamera,
 } from '@lucide/angular';
 import { SocialApiService } from '../../core/services/api/social-api.service';
+import { UsersApiService } from '../../core/services/api/users-api.service';
+import { AuthService } from '../../core/services/auth.service';
+import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { initialsAvatar } from '../../core/utils/initials-avatar';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ProfileContextService } from './profile-context.service';
+import { AvatarEditorComponent } from './avatar-editor/avatar-editor';
 
 /**
  * Profile shell: renders the shared header (avatar, counts, follow control) and
@@ -45,6 +52,9 @@ import { ProfileContextService } from './profile-context.service';
     LucideUserCheck,
     LucideClock,
     LucideSettings,
+    LucideCamera,
+    AvatarEditorComponent,
+    ResolveUrlPipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile.html',
@@ -53,9 +63,15 @@ export class ProfileComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(SocialApiService);
+  private readonly usersApi = inject(UsersApiService);
+  private readonly auth = inject(AuthService);
+  private readonly toast = inject(ToastService);
+  private readonly translate = inject(TranslateService);
   private readonly navbar = inject(NavbarService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly ctx = inject(ProfileContextService);
+
+  private readonly editor = viewChild(AvatarEditorComponent);
 
   private readonly params = toSignal(this.route.paramMap);
   readonly userId = computed(() => Number(this.params()?.get('userId')));
@@ -119,5 +135,41 @@ export class ProfileComponent {
 
   editPrivacy(): void {
     void this.router.navigate(['/account/privacy']);
+  }
+
+  /** A file was picked from the hidden input — validate and open the cropper. */
+  onAvatarPicked(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // allow re-picking the same file
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      this.toast.error(this.translate.instant('social.avatar_invalid'));
+      return;
+    }
+    this.editor()?.open(file);
+  }
+
+  /** The cropper produced a square JPEG — upload it and reflect it live. */
+  async onAvatarCropped(blob: Blob): Promise<void> {
+    try {
+      const res = await this.usersApi.uploadAvatar(blob);
+      this.ctx.patch({ avatar: res.avatar });
+      this.auth.patchUser({ avatar: res.avatar });
+      this.toast.success(this.translate.instant('social.avatar_updated'));
+    } catch {
+      // Errors are surfaced by the global HTTP interceptor.
+    }
+  }
+
+  async removeAvatar(): Promise<void> {
+    try {
+      const res = await this.usersApi.deleteAvatar();
+      this.ctx.patch({ avatar: res.avatar });
+      this.auth.patchUser({ avatar: res.avatar });
+      this.toast.success(this.translate.instant('social.avatar_removed'));
+    } catch {
+      // Errors are surfaced by the global HTTP interceptor.
+    }
   }
 }
