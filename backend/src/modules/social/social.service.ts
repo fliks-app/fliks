@@ -4,11 +4,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { UserFollow } from './entities/user-follow.entity';
+import { ContentRecommendation } from './entities/content-recommendation.entity';
 import { User } from '../users/entities/user.entity';
 import { PlaybackState } from '../streaming/entities/playback-state.entity';
 import { Media } from '../media/entities/media.entity';
+import { Season } from '../media/entities/season.entity';
+import { Episode } from '../media/entities/episode.entity';
+import { LikesService, LikedItem } from './likes.service';
+import { RecommendContentDto } from './dto/recommend-content.dto';
 import { PlaylistsService, PlaylistView } from '../playlists/playlists.service';
 import {
   RecommendationItem,
@@ -41,11 +46,35 @@ export interface PublicProfile extends SocialUser {
   followerCount: number;
   followingCount: number;
   /** Which content sections the caller may see (drives the UI). */
-  shown: { playlists: boolean; tastes: boolean; recommendations: boolean; recentlyWatched: boolean };
+  shown: {
+    playlists: boolean;
+    tastes: boolean;
+    recommendations: boolean;
+    recentlyWatched: boolean;
+    likes: boolean;
+  };
   playlists: PlaylistView[];
   topGenres: { genre: string; weight: number }[];
   recommendations: RecommendationItem[];
   recentlyWatched: WatchHistoryItem[];
+  likes: LikedItem[];
+}
+
+/** A content recommendation received from another member, rendered as a card. */
+export interface ReceivedRecommendation {
+  id: number;
+  sender: { id: number; username: string; avatar: string | null };
+  message: string | null;
+  createdAt: Date;
+  mediaId: number;
+  mediaType: string;
+  title: string;
+  posterUrl: string | null;
+  fanartUrl: string | null;
+  seasonId: number | null;
+  episodeId: number | null;
+  label: string | null;
+  stillUrl: string | null;
 }
 
 @Injectable()
@@ -53,6 +82,8 @@ export class SocialService {
   constructor(
     @InjectRepository(UserFollow)
     private readonly followRepo: Repository<UserFollow>,
+    @InjectRepository(ContentRecommendation)
+    private readonly recRepo: Repository<ContentRecommendation>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     @InjectRepository(PlaybackState)
@@ -64,6 +95,7 @@ export class SocialService {
     private readonly playback: PlaybackService,
     private readonly libraries: LibrariesService,
     private readonly events: EventsService,
+    private readonly likes: LikesService,
   ) {}
 
   // ── helpers ──
@@ -304,7 +336,13 @@ export class SocialService {
       target.profileVisibility === ProfileVisibility.PUBLIC ||
       header.isFollowing;
 
-    const empty = { playlists: false, tastes: false, recommendations: false, recentlyWatched: false };
+    const empty = {
+      playlists: false,
+      tastes: false,
+      recommendations: false,
+      recentlyWatched: false,
+      likes: false,
+    };
     if (!canSeeContent) {
       // A non-follower of a private profile sees only name + avatar + follow
       // state — no content and no counts.
@@ -317,6 +355,7 @@ export class SocialService {
         topGenres: [],
         recommendations: [],
         recentlyWatched: [],
+        likes: [],
       };
     }
 
@@ -327,17 +366,22 @@ export class SocialService {
       tastes: isSelf || target.shareTastes,
       recommendations: isSelf || target.shareRecommendations,
       recentlyWatched: isSelf || target.shareWatchHistory,
+      likes: isSelf || target.shareLikes,
     };
-    const [playlists, topGenres, recommendations, history] = await Promise.all([
-      this.playlists.listVisibleForOwner(targetId, me, includeFollowers),
-      shown.tastes ? this.recommendations.getTopGenres(targetId) : Promise.resolve([]),
-      shown.recommendations
-        ? this.recommendations.getRecommendations(targetId, viewerAccessible, 15)
-        : Promise.resolve([]),
-      shown.recentlyWatched
-        ? this.playback.getHistory(targetId, 1, 12, viewerAccessible)
-        : Promise.resolve({ data: [], total: 0 }),
-    ]);
+    const [playlists, topGenres, recommendations, history, likes] =
+      await Promise.all([
+        this.playlists.listVisibleForOwner(targetId, me, includeFollowers),
+        shown.tastes ? this.recommendations.getTopGenres(targetId) : Promise.resolve([]),
+        shown.recommendations
+          ? this.recommendations.getRecommendations(targetId, viewerAccessible, 15)
+          : Promise.resolve([]),
+        shown.recentlyWatched
+          ? this.playback.getHistory(targetId, 1, 12, viewerAccessible)
+          : Promise.resolve({ data: [], total: 0 }),
+        shown.likes
+          ? this.likes.listLikes(targetId, viewerAccessible, { limit: 24 })
+          : Promise.resolve([]),
+      ]);
     return {
       ...header,
       shown,
@@ -348,6 +392,7 @@ export class SocialService {
       // The candidate items themselves are already viewer-ACL-scoped.
       recommendations: recommendations.map((r) => ({ ...r, becauseTitle: '' })),
       recentlyWatched: history.data,
+      likes,
     };
   }
 
@@ -412,5 +457,114 @@ export class SocialService {
         becauseTitle: '',
         score: 0,
       }));
+  }
+
+  // ── content recommendations (member → member) ──
+
+  /** A member may recommend content to public members or members they follow
+   *  (accepted) — the same reach as the playlist-collaborator picker. */
+  private async assertConnectable(me: User, target: User): Promise<void> {
+    const ok =
+      target.profileVisibility === ProfileVisibility.PUBLIC ||
+      (await this.isAcceptedFollower(me.id, target.id));
+    // 404 (not 403) so a hidden recipient can't be probed for existence.
+    if (!ok) throw new NotFoundException(`User #${target.id} not found`);
+  }
+
+  async recommend(me: User, dto: RecommendContentDto): Promise<void> {
+    if (me.id === dto.recipientId) {
+      throw new BadRequestException('Cannot recommend to yourself');
+    }
+    const recipient = await this.requireUser(dto.recipientId);
+    await this.assertConnectable(me, recipient);
+
+    const media = await this.mediaRepo.findOne({ where: { id: dto.mediaId } });
+    if (!media) throw new NotFoundException(`Media #${dto.mediaId} not found`);
+
+    // Skip a duplicate that the recipient hasn't dismissed yet, so re-sending
+    // the same title doesn't stack identical cards on their home.
+    const existing = await this.recRepo.findOne({
+      where: {
+        sender: { id: me.id },
+        recipient: { id: dto.recipientId },
+        media: { id: dto.mediaId },
+        season: dto.seasonId ? { id: dto.seasonId } : IsNull(),
+        episode: dto.episodeId ? { id: dto.episodeId } : IsNull(),
+        dismissedAt: IsNull(),
+      },
+    });
+    if (!existing) {
+      await this.recRepo.save(
+        this.recRepo.create({
+          sender: { id: me.id } as User,
+          recipient: { id: dto.recipientId } as User,
+          media: { id: dto.mediaId } as Media,
+          season: dto.seasonId ? ({ id: dto.seasonId } as Season) : null,
+          episode: dto.episodeId ? ({ id: dto.episodeId } as Episode) : null,
+          message: dto.message?.trim() || null,
+          dismissedAt: null,
+        }),
+      );
+    }
+    this.events.emitToUser(dto.recipientId, {
+      type: 'social.content_recommended',
+      userId: me.id,
+      username: me.username,
+      avatar: me.avatar ?? null,
+      mediaTitle: media.title,
+    });
+  }
+
+  /** Active (not dismissed) recommendations addressed to me, newest first,
+   *  scoped to my library ACL. */
+  async receivedRecommendations(me: User): Promise<ReceivedRecommendation[]> {
+    const accessible = await this.libraries.getAccessibleLibraryIds(me);
+    if (!accessible.length) return [];
+    const rows = await this.recRepo.find({
+      where: { recipient: { id: me.id }, dismissedAt: IsNull() },
+      relations: ['sender', 'media', 'season', 'episode', 'episode.season'],
+      order: { createdAt: 'DESC' },
+      take: 60,
+    });
+    const items: ReceivedRecommendation[] = [];
+    for (const r of rows) {
+      const m = r.media;
+      if (!m || !accessible.includes(m.libraryId as number)) continue;
+      const season = r.season ?? r.episode?.season ?? null;
+      const label = r.episode
+        ? `S${season?.seasonNumber ?? '?'}E${r.episode.episodeNumber}` +
+          (r.episode.title ? ` · ${r.episode.title}` : '')
+        : r.season
+          ? `${m.title} · S${r.season.seasonNumber}`
+          : null;
+      items.push({
+        id: r.id,
+        sender: {
+          id: r.sender.id,
+          username: r.sender.username,
+          avatar: r.sender.avatar ?? null,
+        },
+        message: r.message,
+        createdAt: r.createdAt,
+        mediaId: m.id,
+        mediaType: m.type,
+        title: m.title,
+        posterUrl: m.posterUrl,
+        fanartUrl: m.fanartUrl,
+        seasonId: r.seasonId,
+        episodeId: r.episodeId,
+        label,
+        stillUrl: r.episode?.stillUrl ?? null,
+      });
+    }
+    return items;
+  }
+
+  /** Dismiss a recommendation addressed to me (idempotent). */
+  async dismissRecommendation(me: User, id: number): Promise<void> {
+    await this.recRepo.update(
+      { id, recipient: { id: me.id }, dismissedAt: IsNull() },
+      { dismissedAt: new Date() },
+    );
   }
 }

@@ -241,6 +241,7 @@ export class UsersService implements OnModuleInit {
       target.shareRecommendations = dto.shareRecommendations;
     if (dto.shareWatchHistory !== undefined)
       target.shareWatchHistory = dto.shareWatchHistory;
+    if (dto.shareLikes !== undefined) target.shareLikes = dto.shareLikes;
 
     await this.userRepo.save(target);
 

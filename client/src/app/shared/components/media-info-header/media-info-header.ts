@@ -24,12 +24,14 @@ import {
   LucideEyeOff,
   LucideFilm,
   LucideFolder,
+  LucideHeart,
   LucideListChecks,
   LucideListPlus,
   LucidePlay,
   LucideRotateCcw,
   LucideScanLine,
   LucideSearch,
+  LucideSend,
   LucideSettings,
   LucideTrash2,
 } from '@lucide/angular';
@@ -102,8 +104,8 @@ interface AudioTrack {
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
     LucideCaptions, LucideCheck, LucideClipboardList, LucideDownload,
     LucideEllipsisVertical, LucideEye, LucideEyeOff,
-    LucideFilm, LucideFolder, LucideListChecks, LucideListPlus, LucidePlay, LucideRotateCcw, LucideScanLine,
-    LucideSearch, LucideSettings, LucideTrash2,
+    LucideFilm, LucideFolder, LucideHeart, LucideListChecks, LucideListPlus, LucidePlay, LucideRotateCcw, LucideScanLine,
+    LucideSearch, LucideSend, LucideSettings, LucideTrash2,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-info-header.html',
@@ -212,6 +214,12 @@ export class MediaInfoHeaderComponent {
   readonly requestMedia = output<void>();
   /** Viewer wants to add the current title to one of their playlists. */
   readonly addToPlaylist = output<void>();
+  /** Viewer wants to recommend the current title to another member. */
+  readonly recommend = output<void>();
+  /** Whether the viewer likes the current movie / episode. */
+  readonly liked = input(false);
+  /** Toggle the like on the current movie / episode. */
+  readonly likeToggled = output<void>();
   /** Emitted after a series-level bulk watched toggle. Parent should refresh its episode watched list. */
   readonly seriesWatchedToggled = output<{ watched: boolean }>();
   /** Emitted after a single-episode watched toggle so the parent can refresh

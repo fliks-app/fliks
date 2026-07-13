@@ -156,6 +156,14 @@ export type SseEvent =
       userId: number;
       username: string;
       avatar: string | null;
+    }
+  // A member recommended content to this user (see SocialService.recommend).
+  | {
+      type: 'social.content_recommended';
+      userId: number;
+      username: string;
+      avatar: string | null;
+      mediaTitle: string;
     };
 
 /**

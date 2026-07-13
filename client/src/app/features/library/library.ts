@@ -15,7 +15,11 @@ import { Subscription, filter } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media, GenreSummary, CollectionSummary } from '../../core/services/api/media.service';
-import { SocialApiService } from '../../core/services/api/social-api.service';
+import {
+  SocialApiService,
+  ReceivedRecommendation,
+} from '../../core/services/api/social-api.service';
+import { LikesApiService, LikedItem } from '../../core/services/api/likes-api.service';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
@@ -42,7 +46,7 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 /** Top-bar tab — `all` is the existing library grid (label = library name),
  *  `suggestions` / `genres` are placeholders for upcoming views. */
-export type LibraryViewMode = 'all' | 'suggestions' | 'genres' | 'collections';
+export type LibraryViewMode = 'all' | 'suggestions' | 'genres' | 'collections' | 'likes';
 export type SortOrder = 'ASC' | 'DESC';
 type FilterMonitored = '' | 'true' | 'false';
 type FilterWatched = '' | 'watched' | 'unwatched';
@@ -84,6 +88,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly socialApi = inject(SocialApiService);
+  private readonly likesApi = inject(LikesApiService);
   private readonly profilesService = inject(ProfilesService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly route = inject(ActivatedRoute);
@@ -130,6 +135,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
   readonly suggestionsRecommendations = signal<RecommendationItem[]>([]);
   /** Popular among the members the user follows. */
   readonly suggestionsFromFollowing = signal<RecommendationItem[]>([]);
+  /** Content other members have recommended to the viewer. */
+  readonly recommendedForYou = signal<ReceivedRecommendation[]>([]);
   readonly suggestionsLoading = signal(false);
 
   // ── Genres view ─────────────────────────────────────────────────────
@@ -144,6 +151,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
   readonly collectionsList = signal<CollectionSummary[]>([]);
   readonly collectionsLoading = signal(false);
   readonly selectedCollectionId = signal<number | null>(null);
+
+  // ── Likes view ──────────────────────────────────────────────────────
+  /** The viewer's liked content scoped to the active library. */
+  readonly likesList = signal<LikedItem[]>([]);
+  readonly likesLoading = signal(false);
 
   readonly monitoredCount = computed(() => this.list.all().filter((m) => m.monitored).length);
   readonly movieFileCount = computed(() =>
@@ -275,6 +287,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
         void this.loadGenres();
       } else if (this.viewMode() === 'collections') {
         void this.loadCollections();
+      } else if (this.viewMode() === 'likes') {
+        void this.loadLikes();
       }
       this.scrollMemory.restore(scrollKey, this.injector);
     });
@@ -298,6 +312,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
         void this.loadSuggestions();
       } else if (this.viewMode() === 'genres') {
         void this.loadGenres();
+      } else if (this.viewMode() === 'likes') {
+        void this.loadLikes();
       }
       this.scrollMemory.restoreSticky(scrollKey);
     });
@@ -340,6 +356,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
         if (this.viewMode() === 'genres') void this.loadGenres();
         else if (this.viewMode() === 'collections') void this.loadCollections();
         else if (this.viewMode() === 'suggestions') void this.loadSuggestions();
+        else if (this.viewMode() === 'likes') void this.loadLikes();
       }
     });
   }
@@ -416,6 +433,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
       void this.loadGenres();
     } else if (mode === 'collections') {
       void this.loadCollections();
+    } else if (mode === 'likes') {
+      void this.loadLikes();
     }
   }
 
@@ -459,6 +478,19 @@ export class LibraryComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Fetches the viewer's liked content scoped to the active library. */
+  private async loadLikes(): Promise<void> {
+    const lib = this.library();
+    if (!lib) return;
+    this.likesLoading.set(true);
+    try {
+      const rows = await this.likesApi.mine(lib.id, { force: true }).catch(() => null);
+      if (rows) this.likesList.set(rows);
+    } finally {
+      this.likesLoading.set(false);
+    }
+  }
+
   /** Fetches the genres aggregate (count + sample posters) for the
    *  current library. Same SWR pattern as `loadSuggestions`. */
   private async loadGenres(): Promise<void> {
@@ -484,16 +516,18 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (!lib) return;
     this.suggestionsLoading.set(true);
     try {
-      const [cw, recs, following] = await Promise.all([
+      const [cw, recs, following, forYou] = await Promise.all([
         this.streamingApi.getContinueWatching(lib.id).catch(() => null),
         this.streamingApi
           .getRecommendations({ libraryId: lib.id, limit: 30 })
           .catch(() => null),
         this.socialApi.followingRecommendations(lib.id).catch(() => null),
+        this.socialApi.receivedRecommendations().catch(() => null),
       ]);
       if (cw) this.suggestionsContinue.set(cw);
       if (recs) this.suggestionsRecommendations.set(recs);
       if (following) this.suggestionsFromFollowing.set(following);
+      if (forYou) this.recommendedForYou.set(forYou);
     } finally {
       this.suggestionsLoading.set(false);
     }

@@ -29,6 +29,8 @@ export interface User {
   shareRecommendations: boolean;
   /** Expose recently-watched on the public profile. */
   shareWatchHistory: boolean;
+  /** Expose liked content on the public profile. */
+  shareLikes: boolean;
 }
 
 /** Public = instant follow + shared content; private = follow on approval. */

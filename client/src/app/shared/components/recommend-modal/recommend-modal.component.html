@@ -1,0 +1,56 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-md">
+    <form method="dialog">
+      <button
+        class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+        [attr.aria-label]="'common.close' | translate"
+      >
+        ✕
+      </button>
+    </form>
+    <h3 class="text-lg font-bold mb-4">{{ 'recommend.title' | translate }}</h3>
+
+    <textarea
+      class="textarea textarea-bordered w-full"
+      rows="2"
+      [placeholder]="'recommend.message_placeholder' | translate"
+      [ngModel]="message()"
+      (ngModelChange)="message.set($event)"
+    ></textarea>
+
+    <div class="divider my-2"></div>
+
+    <p class="text-sm font-semibold mb-1">{{ 'recommend.recipient_title' | translate }}</p>
+    <input
+      type="text"
+      class="input input-bordered input-sm w-full"
+      [placeholder]="'recommend.search_placeholder' | translate"
+      [ngModel]="query()"
+      (ngModelChange)="onQuery($event)"
+    />
+    @if (results().length) {
+      <ul class="flex flex-col gap-1 mt-2 max-h-60 overflow-y-auto">
+        @for (u of results(); track u.id) {
+          <li>
+            <button
+              type="button"
+              class="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left"
+              [disabled]="busyId() !== null"
+              (click)="sendTo(u)"
+            >
+              <span class="flex-1 min-w-0 truncate">{{ u.username }}</span>
+              @if (busyId() === u.id) {
+                <span class="loading loading-spinner loading-sm"></span>
+              } @else {
+                <svg lucideSend class="h-4 w-4 text-base-content/60"></svg>
+              }
+            </button>
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="text-sm text-base-content/50 mt-3">{{ 'recommend.no_recipients' | translate }}</p>
+    }
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>

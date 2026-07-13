@@ -170,6 +170,14 @@ export class SseService implements OnDestroy {
           }),
         );
         break;
+      case 'social.content_recommended':
+        this.toast.info(
+          this.translate.instant('recommend.toast_received', {
+            username: event['username'] ?? '',
+            title: event['mediaTitle'] ?? '',
+          }),
+        );
+        break;
       case 'rescan.started':
         // Toast shown from media-detail / episode-detail when POST /rescan returns
         break;

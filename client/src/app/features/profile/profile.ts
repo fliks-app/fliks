@@ -102,7 +102,8 @@ export class ProfileComponent {
       p.playlists.length > 0 ||
       (p.shown.tastes && p.topGenres.length > 0) ||
       (p.shown.recommendations && p.recommendations.length > 0) ||
-      (p.shown.recentlyWatched && p.recentlyWatched.length > 0)
+      (p.shown.recentlyWatched && p.recentlyWatched.length > 0) ||
+      (p.shown.likes && p.likes.length > 0)
     );
   }
 

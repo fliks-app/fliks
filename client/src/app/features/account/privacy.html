@@ -30,6 +30,12 @@
       [label]="'social.privacy_share_watch_history' | translate"
       [hint]="'social.privacy_share_watch_history_hint' | translate"
     />
+    <app-toggle-field
+      [value]="shareLikes()"
+      (valueChange)="onShareLikesChange($event)"
+      [label]="'social.privacy_share_likes' | translate"
+      [hint]="'social.privacy_share_likes_hint' | translate"
+    />
   </div>
 
   <!-- Follow requests -->

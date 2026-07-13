@@ -97,4 +97,9 @@ export class UpdateUserDto {
   @IsBoolean()
   @IsOptional()
   shareWatchHistory?: boolean;
+
+  /** Self-editable: expose liked content on the public profile. */
+  @IsBoolean()
+  @IsOptional()
+  shareLikes?: boolean;
 }

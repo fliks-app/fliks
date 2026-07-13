@@ -45,6 +45,8 @@ export interface UpdateUserBody {
   shareRecommendations?: boolean;
   /** Self-editable: expose recently-watched on the public profile. */
   shareWatchHistory?: boolean;
+  /** Self-editable: expose liked content on the public profile. */
+  shareLikes?: boolean;
 }
 
 /** Aggregated stats payload for the admin user-detail Statistics tab. */

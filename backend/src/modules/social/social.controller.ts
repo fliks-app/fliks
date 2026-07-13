@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
@@ -12,6 +13,7 @@ import { SocialService } from './social.service';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
+import { RecommendContentDto } from './dto/recommend-content.dto';
 
 /**
  * Social graph + public profiles. Guarded by JWT only — every visibility /
@@ -44,6 +46,26 @@ export class SocialController {
       libraryId ? +libraryId : undefined,
       limit ? Math.min(+limit, 50) : 20,
     );
+  }
+
+  /** Recommend a movie / season / episode to another member. */
+  @Post('recommend')
+  recommend(@CurrentUser() me: User, @Body() dto: RecommendContentDto) {
+    return this.service.recommend(me, dto);
+  }
+
+  /** Content other members have recommended to me (not yet dismissed). */
+  @Get('recommendations/received')
+  receivedRecommendations(@CurrentUser() me: User) {
+    return this.service.receivedRecommendations(me);
+  }
+
+  @Post('recommendations/:id/dismiss')
+  dismissRecommendation(
+    @CurrentUser() me: User,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.dismissRecommendation(me, id);
   }
 
   @Get('requests')
