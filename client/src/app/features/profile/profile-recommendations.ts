@@ -12,6 +12,7 @@ import {
   SentRecommendation,
   SocialApiService,
 } from '../../core/services/api/social-api.service';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ProfileContextService } from './profile-context.service';
 
 /** The profile "recommendations" tab, own-profile only: content other members
@@ -19,7 +20,7 @@ import { ProfileContextService } from './profile-context.service';
  *  Rendered as compact tables so the recipient/sender is always visible. */
 @Component({
   selector: 'app-profile-recommendations',
-  imports: [TranslateModule, RouterLink],
+  imports: [TranslateModule, RouterLink, ResolveUrlPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile-recommendations.html',
 })

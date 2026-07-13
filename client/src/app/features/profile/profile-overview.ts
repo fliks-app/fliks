@@ -1,16 +1,19 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   inject,
   signal,
 } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { PublicProfile } from '../../core/services/api/social-api.service';
-import { LibrariesApiService } from '../../core/services/api/libraries-api.service';
+import { MetadataService, TmdbGenre } from '../../core/services/api/metadata.service';
+import { SearchStateService } from '../../core/services/search-state.service';
+import { resolveTmdbGenreId } from '../../core/utils/tmdb-genres';
 import { ProfileContextService } from './profile-context.service';
 
 /** The profile "overview" tab: tastes, playlists, recommendations, recently
@@ -19,7 +22,6 @@ import { ProfileContextService } from './profile-context.service';
 @Component({
   selector: 'app-profile-overview',
   imports: [
-    RouterLink,
     TranslateModule,
     MosaicCardComponent,
     MediaCardComponent,
@@ -30,26 +32,53 @@ import { ProfileContextService } from './profile-context.service';
 })
 export class ProfileOverviewComponent {
   private readonly router = inject(Router);
-  private readonly librariesApi = inject(LibrariesApiService);
+  private readonly metadata = inject(MetadataService);
+  private readonly searchState = inject(SearchStateService);
   protected readonly ctx = inject(ProfileContextService);
 
   readonly profile = this.ctx.profile;
 
-  /** Name of the first library the viewer can access — genre chips link here,
-   *  filtered by the genre. Empty when the viewer has no library access. */
-  readonly firstLibraryName = signal('');
+  /** TMDB genre lists in the server language (movie first so shared genres
+   *  resolve to a movie id, which the discover grid can filter on). */
+  private readonly genreList = signal<TmdbGenre[]>([]);
+
+  /** Taste chips resolved to a TMDB id + the server-language name, deduped.
+   *  Stored genre names can be a mix of languages on older items; resolving to
+   *  an id lets us relabel them consistently and filter reliably. */
+  readonly displayGenres = computed<{ id: number; name: string }[]>(() => {
+    const list = this.genreList();
+    const out: { id: number; name: string }[] = [];
+    const seen = new Set<number>();
+    for (const g of this.profile()?.topGenres ?? []) {
+      const id = resolveTmdbGenreId(g.genre, list);
+      if (id == null || seen.has(id)) continue;
+      seen.add(id);
+      out.push({ id, name: list.find((x) => x.id === id)?.name ?? g.genre });
+    }
+    return out;
+  });
 
   constructor() {
-    void this.loadLibraries();
+    void this.loadGenres();
   }
 
-  private async loadLibraries(): Promise<void> {
+  private async loadGenres(): Promise<void> {
     try {
-      const libs = await this.librariesApi.list();
-      this.firstLibraryName.set(libs[0]?.name ?? '');
+      const [movie, tv] = await Promise.all([
+        this.metadata.getMovieGenres().catch(() => [] as TmdbGenre[]),
+        this.metadata.getTvGenres().catch(() => [] as TmdbGenre[]),
+      ]);
+      this.genreList.set([...movie, ...tv]);
     } catch {
-      /* interceptor surfaces errors */
+      /* chips fall back to the static alias resolver */
     }
+  }
+
+  /** Open the general search page with the discover panel preloaded on a genre
+   *  id (language-proof), not a library-scoped view. */
+  openGenre(id: number): void {
+    this.searchState.requestGenreFilter(id);
+    void this.router.navigate(['/search']);
   }
 
   mediaLink(mediaType: string, mediaId: number): string[] {

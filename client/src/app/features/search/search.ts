@@ -105,6 +105,15 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     }, 0);
   });
 
+  /** Preload the discover panel with a genre asked for from elsewhere (e.g. a
+   *  profile taste chip). Lives on the instance so it fires across route reuse,
+   *  where ngOnInit wouldn't re-run. */
+  private readonly genreFilterEffect = effect(() => {
+    const req = this.state.genreFilterRequest();
+    if (!req) return;
+    void this.applyGenreFilter(req.genreId);
+  });
+
   readonly requestedTmdbIds = signal<Map<number, FliksRequestStatus>>(new Map());
 
   private static readonly SCROLL_KEY = 'search';
@@ -474,6 +483,15 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   clearDiscover() {
     this.state.resetDiscover();
+  }
+
+  /** Preload the discover grid on a genre id (resolved by the caller — a
+   *  profile taste chip — so it's language-proof). */
+  private async applyGenreFilter(genreId: number): Promise<void> {
+    this.state.tab.set('videos');
+    this.state.query.set('');
+    this.state.discoverSelectedGenres.set(new Set([genreId]));
+    await this.applyDiscover();
   }
 
   openFilterSheet() {
