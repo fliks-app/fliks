@@ -15,6 +15,9 @@
       @if (m.originalTitle && m.originalTitle !== m.title) {
         <p class="text-base-content/60 mt-1">{{ m.originalTitle }}</p>
       }
+      @if (m.tagline) {
+        <p class="text-sm italic text-base-content/60 mt-1">{{ m.tagline }}</p>
+      }
 
       <!-- Badges -->
       <div class="flex flex-wrap items-center gap-1.5 mt-2 text-sm text-base-content/70">
@@ -53,6 +56,11 @@
             </button>
           }
         }
+        @if (trailerKey()) {
+          <button type="button" class="btn btn-outline gap-2" (click)="openTrailer()">
+            <svg lucidePlay class="h-4 w-4"></svg>{{ 'discover.watch_trailer' | translate }}
+          </button>
+        }
       </div>
       @if (canRequest() && !hasBlockingRequest() && requestedSeasons().length) {
         <p class="text-xs text-warning mt-2">
@@ -66,6 +74,12 @@
 
       <!-- Metadata grid -->
       <div class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm mt-4">
+        @if (directors().length) {
+          <div>
+            <span class="text-base-content/50 block">{{ 'discover.preview_director' | translate }}</span>
+            <span class="font-medium">{{ directorsLabel() }}</span>
+          </div>
+        }
         @if (m.originalLanguage) {
           <div>
             <span class="text-base-content/50 block">{{ 'discover.preview_original_language' | translate }}</span>
@@ -124,6 +138,9 @@
         @if (m.originalTitle && m.originalTitle !== m.title) {
           <p class="text-base-content/70 mt-1 text-lg">{{ m.originalTitle }}</p>
         }
+        @if (m.tagline) {
+          <p class="text-base italic text-base-content/60 mt-1">{{ m.tagline }}</p>
+        }
 
         <!-- Metadata row — same plain-text style as media-detail. -->
         <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-base-content/60">
@@ -160,6 +177,11 @@
               </button>
             }
           }
+          @if (trailerKey()) {
+            <button type="button" class="btn btn-outline gap-2" (click)="openTrailer()">
+              <svg lucidePlay class="h-4 w-4"></svg>{{ 'discover.watch_trailer' | translate }}
+            </button>
+          }
         </div>
         @if (canRequest() && !hasBlockingRequest() && requestedSeasons().length) {
           <p class="text-sm text-warning mt-2">
@@ -175,6 +197,12 @@
              `MetadataDetails` doesn't fit `app-media-info-extra`'s
              `Media` input. Same visual cadence as that component. -->
         <div class="grid grid-cols-2 gap-x-8 gap-y-3 text-sm mt-6">
+          @if (directors().length) {
+            <div>
+              <span class="text-base-content/50 block">{{ 'discover.preview_director' | translate }}</span>
+              <span class="font-medium">{{ directorsLabel() }}</span>
+            </div>
+          }
           @if (m.originalLanguage) {
             <div>
               <span class="text-base-content/50 block">{{ 'discover.preview_original_language' | translate }}</span>
@@ -243,7 +271,54 @@
       </div>
     </div>
   </div>
+
+  <!-- Cast (shared mobile + desktop) -->
+  @if (topCast().length) {
+    <section class="px-1 md:px-0 mt-8">
+      <h2 class="text-lg font-semibold mb-3">{{ 'discover.preview_cast' | translate }}</h2>
+      <div class="flex gap-4 overflow-x-auto pb-2 scrollbar-none">
+        @for (c of topCast(); track c.externalId) {
+          <div class="shrink-0 w-24 text-center">
+            <div class="avatar avatar-placeholder mx-auto">
+              <div class="w-20 h-20 rounded-full bg-base-300 text-base-content/40 overflow-hidden">
+                @if (c.avatarUrl) {
+                  <img [src]="c.avatarUrl" [alt]="c.name" class="w-full h-full object-cover" loading="lazy" />
+                } @else {
+                  <svg lucideUser class="h-8 w-8"></svg>
+                }
+              </div>
+            </div>
+            <div class="text-sm font-medium truncate mt-1">{{ c.name }}</div>
+            @if (c.character) {
+              <div class="text-xs text-base-content/60 truncate">{{ c.character }}</div>
+            }
+          </div>
+        }
+      </div>
+    </section>
+  }
 }
+
+<!-- Trailer player -->
+<dialog #trailerDialog class="modal" (close)="trailerEmbedUrl.set(null)">
+  <div class="modal-box max-w-3xl p-0 overflow-hidden bg-black relative">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 z-10 text-white" [attr.aria-label]="'common.close' | translate">✕</button>
+    </form>
+    <div class="aspect-video">
+      @if (trailerEmbedUrl(); as url) {
+        <iframe
+          [src]="url"
+          class="w-full h-full"
+          allow="autoplay; encrypted-media; fullscreen"
+          referrerpolicy="strict-origin-when-cross-origin"
+          allowfullscreen
+        ></iframe>
+      }
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
 
 <app-request-modal
   [qualityProfiles]="qualityProfiles()"

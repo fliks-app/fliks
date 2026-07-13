@@ -5,6 +5,7 @@ import {
   inject,
   computed,
   effect,
+  ElementRef,
   OnInit,
   OnDestroy,
   viewChild,
@@ -12,11 +13,13 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import {
   MetadataService,
   MetadataDetails,
+  MetadataCredit,
 } from '../../core/services/api/metadata.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
@@ -26,13 +29,13 @@ import { RequestsService, TitleRequestState } from '../../core/services/api/requ
 import { RequestModalComponent } from './components/request-modal/request-modal.component';
 import { ImportModalComponent } from './components/import-modal/import-modal.component';
 import { MediaType } from '../../core/enums/media-type.enum';
-import { LucideFilm } from '@lucide/angular';
+import { LucideFilm, LucideUser, LucidePlay } from '@lucide/angular';
 import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, ResolveUrlPipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, LucideFilm],
+  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, ResolveUrlPipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, LucideFilm, LucideUser, LucidePlay],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })
@@ -108,6 +111,55 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
 
   private readonly requestModal = viewChild(RequestModalComponent);
   private readonly importModal = viewChild(ImportModalComponent);
+  private readonly trailerDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('trailerDialog');
+  private readonly sanitizer = inject(DomSanitizer);
+
+  /** Top-billed cast (capped) for the credits row. */
+  readonly topCast = computed<MetadataCredit[]>(() =>
+    (this.media()?.cast ?? []).slice(0, 15),
+  );
+
+  /** Directors (movies) or creators (series) from the crew. */
+  readonly directors = computed<MetadataCredit[]>(() => {
+    const crew = this.media()?.crew ?? [];
+    const dirs = crew.filter((c) => c.job === 'Director' || c.job === 'Creator');
+    // Dedupe by name (a person can hold several jobs).
+    return [...new Map(dirs.map((d) => [d.name, d])).values()];
+  });
+  readonly directorsLabel = computed(() =>
+    this.directors().map((d) => d.name).join(', '),
+  );
+
+  /** Best trailer key: a YouTube Trailer, else Teaser, else any YouTube video. */
+  readonly trailerKey = computed<string | null>(() => {
+    const vids = (this.media()?.videos ?? []).filter((v) => v.site === 'YouTube');
+    const pick =
+      vids.find((v) => v.type === 'Trailer') ??
+      vids.find((v) => v.type === 'Teaser') ??
+      vids[0];
+    return pick?.key ?? null;
+  });
+
+  /** Sanitized embed URL, set only while the trailer dialog is open so the
+   *  player stops (and stops fetching) when it closes. */
+  readonly trailerEmbedUrl = signal<SafeResourceUrl | null>(null);
+
+  openTrailer() {
+    const key = this.trailerKey();
+    if (!key) return;
+    this.trailerEmbedUrl.set(
+      this.sanitizer.bypassSecurityTrustResourceUrl(
+        `https://www.youtube.com/embed/${key}?autoplay=1`,
+      ),
+    );
+    this.trailerDialog()?.nativeElement.showModal();
+  }
+
+  closeTrailer() {
+    this.trailerDialog()?.nativeElement.close();
+    this.trailerEmbedUrl.set(null);
+  }
 
   ngOnDestroy() {
     this.navbar.leaveHeroPage();

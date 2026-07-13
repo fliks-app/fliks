@@ -21,10 +21,30 @@ export interface MetadataSearchResult {
   existingMediaType: MediaType | null;
 }
 
+/** A cast/crew credit from the provider. */
+export interface MetadataCredit {
+  externalId: number;
+  name: string;
+  character?: string;
+  job?: string;
+  department?: string;
+  avatarUrl: string | null;
+  order?: number;
+}
+
+/** A provider video (trailer/teaser/clip), e.g. a YouTube key. */
+export interface MetadataVideo {
+  key: string;
+  site: string;
+  type: string;
+  name: string;
+}
+
 export interface MetadataDetails extends MetadataSearchResult {
   imdbId: string | null;
   tvdbId: number | null;
   fanartUrl: string | null;
+  additionalFanartUrls: string[];
   /** Transparent PNG "clearlogo" title treatment when the provider has one. */
   logoUrl: string | null;
   runtime: number | null;
@@ -40,6 +60,13 @@ export interface MetadataDetails extends MetadataSearchResult {
   productionCompanies: string[];
   voteCount: number | null;
   popularity: number | null;
+  tagline: string | null;
+  cast: MetadataCredit[];
+  crew: MetadataCredit[];
+  videos: MetadataVideo[];
+  keywords: string[];
+  tmdbCollectionId: number | null;
+  tmdbCollectionName: string | null;
 }
 
 export interface SeasonStub {

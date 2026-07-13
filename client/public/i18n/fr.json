@@ -649,7 +649,10 @@
     "preview_revenue": "Revenu",
     "preview_countries": "Pays de production",
     "preview_studios": "Studios",
-    "preview_votes": "votes"
+    "preview_votes": "votes",
+    "preview_director": "Réalisation",
+    "preview_cast": "Distribution",
+    "watch_trailer": "Bande-annonce"
   },
   "library": {
     "empty": "Aucun média dans cette bibliothèque",
