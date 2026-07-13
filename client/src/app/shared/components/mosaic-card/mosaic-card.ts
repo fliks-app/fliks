@@ -35,9 +35,9 @@ import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
         }
         <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
       </div>
-      <div class="text-sm min-w-0 w-full">
+      <div class="text-base min-w-0 w-full">
         <div class="font-medium truncate hover:underline">{{ label() }}</div>
-        <div class="text-xs text-base-content/50">{{ subtitle() }}</div>
+        <div class="text-sm text-base-content/50">{{ subtitle() }}</div>
       </div>
     </button>
   `,

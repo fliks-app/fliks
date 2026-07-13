@@ -151,18 +151,18 @@
   <div class="pt-1.5">
     @if (_link()) {
       <a [routerLink]="_link()" [state]="_navState()" [replaceUrl]="replaceUrl()" class="hover:underline" [attr.tabindex]="innerTabindex" (pointerdown)="onAnchorPointerdown()" (keydown.enter)="onAnchorPointerdown()">
-        <h3 class="text-sm font-medium line-clamp-1 leading-snug">{{ _title() }}</h3>
+        <h3 class="text-base font-medium line-clamp-1 leading-snug">{{ _title() }}</h3>
       </a>
     } @else {
-      <h3 class="text-sm font-medium line-clamp-1 leading-snug">{{ _title() }}</h3>
+      <h3 class="text-base font-medium line-clamp-1 leading-snug">{{ _title() }}</h3>
     }
     @if (_subtitle()) {
       @if (subtitleLink()) {
         <a [routerLink]="subtitleLink()" class="hover:underline" [attr.tabindex]="innerTabindex">
-          <p class="text-xs text-base-content/50 line-clamp-1">{{ _subtitle() }}</p>
+          <p class="text-sm text-base-content/50 line-clamp-1">{{ _subtitle() }}</p>
         </a>
       } @else {
-        <p class="text-xs text-base-content/50 line-clamp-1">{{ _subtitle() }}</p>
+        <p class="text-sm text-base-content/50 line-clamp-1">{{ _subtitle() }}</p>
       }
     }
   </div>
