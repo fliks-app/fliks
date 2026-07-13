@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   signal,
   effect,
+  untracked,
   inject,
   Injector,
   OnDestroy,
@@ -111,7 +112,15 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly genreFilterEffect = effect(() => {
     const req = this.state.genreFilterRequest();
     if (!req) return;
-    void this.applyGenreFilter(req.genreId);
+    // Consume once, untracked: applying reads the discover-filter signals
+    // (selected genres, sort, rating…) synchronously, and without untracked
+    // those reads would become dependencies of this effect — so changing a
+    // genre or switching tab afterwards would re-fire it and snap the
+    // selection back. Clearing the request keeps it a one-shot hand-off.
+    untracked(() => {
+      void this.applyGenreFilter(req.genreId);
+      this.state.genreFilterRequest.set(null);
+    });
   });
 
   readonly requestedTmdbIds = signal<Map<number, FliksRequestStatus>>(new Map());
