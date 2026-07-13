@@ -103,30 +103,27 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly navHistory = inject(NavigationHistoryService);
   private readonly addToPlaylistSvc = inject(AddToPlaylistService);
   private readonly addToPlaylistModal = viewChild(AddToPlaylistModalComponent);
-  /** Counter of the last request already handed to the modal. The bridge effect
-   *  also depends on the modal viewChild, so it re-runs whenever that re-resolves
-   *  (e.g. on navigation); without this guard it would reopen the modal from the
-   *  never-cleared `request` signal — the "modal opens by itself on back" bug. */
-  private lastAddToPlaylistN = 0;
   // Bridge the global "add to playlist" requests (from cards / the media-detail
-  // header) to the single modal instance mounted in the layout.
+  // header) to the single modal instance mounted in the layout. The request is
+  // consumed (cleared) once handed over, so it can't reopen the modal when this
+  // layout is re-created — e.g. after exiting the player, which lives on a route
+  // OUTSIDE this shell, so the shell is destroyed on play and rebuilt on exit.
   private readonly addToPlaylistBridge = effect(() => {
     const req = this.addToPlaylistSvc.request();
     const modal = this.addToPlaylistModal();
-    if (req && modal && req.n !== this.lastAddToPlaylistN) {
-      this.lastAddToPlaylistN = req.n;
+    if (req && modal) {
+      this.addToPlaylistSvc.clear();
       modal.open(req.target);
     }
   });
   private readonly recommendSvc = inject(RecommendService);
   private readonly recommendModal = viewChild(RecommendModalComponent);
-  private lastRecommendN = 0;
   // Bridge the global "recommend to a member" requests to the layout modal.
   private readonly recommendBridge = effect(() => {
     const req = this.recommendSvc.request();
     const modal = this.recommendModal();
-    if (req && modal && req.n !== this.lastRecommendN) {
-      this.lastRecommendN = req.n;
+    if (req && modal) {
+      this.recommendSvc.clear();
       void modal.open(req.target);
     }
   });

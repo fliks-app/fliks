@@ -25,4 +25,12 @@ export class RecommendService {
   open(target: RecommendTarget): void {
     this.request.set({ target, n: ++this.counter });
   }
+
+  /** Consume the pending request. Called by the layout bridge once it has
+   *  handed the target to the modal, so the request doesn't linger and reopen
+   *  the modal when the layout is re-created (e.g. after exiting the player,
+   *  which lives on a route outside the layout shell). */
+  clear(): void {
+    this.request.set(null);
+  }
 }
