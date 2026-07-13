@@ -16,6 +16,7 @@ import {
 import { DeviceService } from '../../../core/services/device.service';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
 import { PlayerSettingsService } from '../../../core/services/player-settings.service';
+import { QueueItem } from '../../../core/services/playback-queue.service';
 import { NgTemplateOutlet } from '@angular/common';
 import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
 import { TranslateModule } from '@ngx-translate/core';
@@ -214,6 +215,10 @@ export class PlayerControlsComponent {
   readonly hasNext = input(false);
   /** i18n key for the next-item control label — episode vs generic item. */
   readonly nextLabelKey = input('player.next_episode');
+  /** The active playback queue (playlist) and the index currently playing —
+   *  drives the "File d'attente" menu (empty for standalone / series playback). */
+  readonly queueItems = input<QueueItem[]>([]);
+  readonly queueIndex = input(0);
   readonly activeQualityLabel = input('Auto');
   readonly isNative = input(false);
   /** Desktop (Electron) — native engine but mouse-driven; keeps the fullscreen
@@ -261,6 +266,8 @@ export class PlayerControlsComponent {
   readonly toggleQualityPicker = output<void>();
   readonly selectSubtitle = output<string | null>();
   readonly selectQuality = output<string>();
+  /** Play the queue item at this index (picked from the queue list). */
+  readonly selectQueueItem = output<number>();
   readonly speedChange = output<number>();
   /** Advance to the next item — emitted by the toolbar button and the outro cue. */
   readonly next = output<void>();
@@ -286,7 +293,7 @@ export class PlayerControlsComponent {
   readonly speedOptions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
   /** Settings dropdown panel navigation */
-  readonly settingsPanel = signal<'main' | 'quality'>('main');
+  readonly settingsPanel = signal<'main' | 'quality' | 'queue'>('main');
 
   /**
    * Which click-driven dropdown is open, or null. Replaces DaisyUI's

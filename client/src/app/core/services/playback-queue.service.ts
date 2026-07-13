@@ -34,6 +34,10 @@ export class PlaybackQueueService {
 
   /** True while a queue is driving playback. */
   readonly active = computed(() => this._items().length > 0);
+  /** The ordered queue items (read-only view for the queue UI). */
+  readonly items = computed(() => this._items());
+  /** Cursor position of the item currently playing. */
+  readonly index = computed(() => this._index());
   /** Id of the source that built the queue (e.g. the playlist id). */
   readonly sourceId = computed(() => this._sourceId());
   readonly source = computed(() => this._source());
@@ -68,6 +72,12 @@ export class PlaybackQueueService {
     if (this._index() >= this._items().length - 1) return null;
     this._index.update((i) => i + 1);
     return this.current();
+  }
+
+  /** Jump the cursor to an explicit index (used when the user picks an item in
+   *  the queue list). Out-of-range indices are ignored. */
+  setIndex(index: number): void {
+    if (index >= 0 && index < this._items().length) this._index.set(index);
   }
 
   /** Re-align the cursor to the item matching the given media/episode. Used by

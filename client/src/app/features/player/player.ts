@@ -1954,6 +1954,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.upNext()?.episodeId != null ? 'player.next_episode' : 'player.play_next',
   );
 
+  /** The active queue's items + cursor for the in-player queue list (empty when
+   *  no queue is driving playback, e.g. a standalone film or a lone series). */
+  readonly queueItems = computed(() => this.queue.items());
+  readonly queueIndex = computed(() => this.queue.index());
+
   /** True when the cursor is inside the detected outro window. */
   readonly inOutroRange = computed(() => {
     const m = this.outroMarker();
@@ -2238,47 +2243,76 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         return;
       }
 
-      // Committing to the next item — clear the end-of-stream latch so a reload
-      // that no-ops can't leave it set and re-trigger the auto-advance effect.
-      this.state.ended.set(false);
-
-      const qp: Record<string, number> = { mediaId: item.mediaId };
-      if (item.episodeId) qp['episodeId'] = item.episodeId;
-      const sourceId = this.queue.sourceId();
-      if (this.queue.active() && sourceId != null) qp['playlistId'] = sourceId;
-
-      const canReloadInPlace =
-        !!this.engine && !this.isOfflinePlayback && !this.castService.isConnected();
-      if (canReloadInPlace) {
-        // Match the incoming item's backdrop during the brief reload (the
-        // episode still, else the media fanart) so it's not the outgoing frame.
-        const backdrop = item.stillUrl ?? item.fanartUrl;
-        if (backdrop) this.fanartUrl.set(this.serverConfig.resolveUrl(backdrop));
-        // replaceUrl + markAsBackNavigation keep both histories clear of the old
-        // item so Back never reopens the player. Route reuse → no remount.
-        this.navbar.markAsBackNavigation();
-        void this.router.navigate(['/watch', mediaFileId], {
-          queryParams: qp,
-          replaceUrl: true,
-        });
-        await this.reloadForEpisode(mediaFileId, item.mediaId, item.episodeId);
-        return;
-      }
-
-      // Offline / Cast fallback: detour through `/` to force a fresh remount
-      // (the default router would otherwise reuse the component and never re-read
-      // the snapshot params).
-      void this.router
-        .navigateByUrl('/', { skipLocationChange: true })
-        .then(() =>
-          this.router.navigate(['/watch', mediaFileId], {
-            queryParams: qp,
-            replaceUrl: true,
-          }),
-        );
+      await this.loadItem(item, mediaFileId);
     } finally {
       this.advancing = false;
     }
+  }
+
+  /** Jump to an explicit queue item (the user picked it in the queue list).
+   *  Unlike {@link advance} it does NOT mark the current item watched — a jump
+   *  isn't finishing — and it does not skip: the user chose this item. */
+  async playQueueItem(index: number): Promise<void> {
+    if (this.advancing || this.reloadingStream) return;
+    if (index === this.queue.index()) return; // already playing it
+    const item = this.queue.items()[index];
+    if (!item) return;
+    this.advancing = true;
+    try {
+      const mediaFileId = await this.resolveItemFileId(item);
+      if (mediaFileId == null) {
+        this.toast.error(this.translate.instant('player.next_unavailable'));
+        return;
+      }
+      this.queue.setIndex(index);
+      await this.loadItem(item, mediaFileId);
+    } finally {
+      this.advancing = false;
+    }
+  }
+
+  /** Load a resolved queue item into the mounted player (in place, no remount)
+   *  or via a full remount for offline / Cast. Shared by {@link advance} and
+   *  {@link playQueueItem}; the cursor is expected to already point at `item`. */
+  private async loadItem(item: QueueItem, mediaFileId: number): Promise<void> {
+    // Committing to the item — clear the end-of-stream latch so a reload that
+    // no-ops can't leave it set and re-trigger the auto-advance effect.
+    this.state.ended.set(false);
+
+    const qp: Record<string, number> = { mediaId: item.mediaId };
+    if (item.episodeId) qp['episodeId'] = item.episodeId;
+    const sourceId = this.queue.sourceId();
+    if (this.queue.active() && sourceId != null) qp['playlistId'] = sourceId;
+
+    const canReloadInPlace =
+      !!this.engine && !this.isOfflinePlayback && !this.castService.isConnected();
+    if (canReloadInPlace) {
+      // Match the incoming item's backdrop during the brief reload (the episode
+      // still, else the media fanart) so it's not the outgoing frame.
+      const backdrop = item.stillUrl ?? item.fanartUrl;
+      if (backdrop) this.fanartUrl.set(this.serverConfig.resolveUrl(backdrop));
+      // replaceUrl + markAsBackNavigation keep both histories clear of the old
+      // item so Back never reopens the player. Route reuse → no remount.
+      this.navbar.markAsBackNavigation();
+      void this.router.navigate(['/watch', mediaFileId], {
+        queryParams: qp,
+        replaceUrl: true,
+      });
+      await this.reloadForEpisode(mediaFileId, item.mediaId, item.episodeId);
+      return;
+    }
+
+    // Offline / Cast fallback: detour through `/` to force a fresh remount (the
+    // default router would otherwise reuse the component and never re-read the
+    // snapshot params).
+    void this.router
+      .navigateByUrl('/', { skipLocationChange: true })
+      .then(() =>
+        this.router.navigate(['/watch', mediaFileId], {
+          queryParams: qp,
+          replaceUrl: true,
+        }),
+      );
   }
 
   onVolumeChange(vol: number) {
