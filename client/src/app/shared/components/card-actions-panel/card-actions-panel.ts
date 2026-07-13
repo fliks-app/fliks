@@ -62,6 +62,13 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
       from { opacity: 0; transform: scale(0.94) translateY(-4px); }
       to   { opacity: 1; transform: scale(1) translateY(0); }
     }
+    .card-actions-leaving {
+      animation: card-actions-pop-out 120ms ease forwards;
+    }
+    @keyframes card-actions-pop-out {
+      from { opacity: 1; transform: scale(1) translateY(0); }
+      to   { opacity: 0; transform: scale(0.94) translateY(-4px); }
+    }
   `],
 })
 export class CardActionsPanelComponent {
