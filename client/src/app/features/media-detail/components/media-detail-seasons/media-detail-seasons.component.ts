@@ -20,7 +20,7 @@ import {
   LucideListChecks,
   LucideListPlus,
   LucidePackage,
-  LucideSend,
+  LucideUserPlus,
   LucideX,
 } from '@lucide/angular';
 import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
@@ -48,7 +48,7 @@ import { TvService } from '../../../../core/services/tv.service';
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, FormsModule, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideListChecks, LucideListPlus, LucidePackage, LucideSend, LucideX],
+  imports: [TranslateModule, FormsModule, UpperCasePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })

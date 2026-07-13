@@ -271,6 +271,15 @@ export class HomeComponent implements OnInit, OnDestroy {
     void this.router.navigate(['/playlists', id]);
   }
 
+  /** Route to a liked item: the episode page when it targets an episode,
+   *  otherwise the movie or series detail page. */
+  likeLink(item: LikedItem): string[] {
+    if (item.episodeId) {
+      return ['/series', String(item.mediaId), 'episode', String(item.episodeId)];
+    }
+    return ['/' + (item.mediaType === 'series' ? 'series' : 'movies'), String(item.mediaId)];
+  }
+
   async ngOnInit() {
     this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
     // Profile names for the request cards are resolved client-side (same as

@@ -56,6 +56,9 @@ export class ReceivedRecommendationsCardComponent implements OnInit {
   }
 
   mediaLink(item: ReceivedRecommendation): string[] {
+    if (item.episodeId) {
+      return ['/series', String(item.mediaId), 'episode', String(item.episodeId)];
+    }
     return [item.mediaType === 'series' ? '/series' : '/movies', String(item.mediaId)];
   }
 

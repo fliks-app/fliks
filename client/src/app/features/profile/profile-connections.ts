@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
   computed,
   effect,
   inject,
@@ -12,8 +11,9 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { LucideUserPlus, LucideUserCheck, LucideClock } from '@lucide/angular';
 import { SocialApiService, SocialUser } from '../../core/services/api/social-api.service';
-import { NavbarService } from '../../core/services/navbar.service';
+import { AuthService } from '../../core/services/auth.service';
 import { initialsAvatar } from '../../core/utils/initials-avatar';
+import { ProfileContextService } from './profile-context.service';
 
 type ConnectionsMode = 'followers' | 'following';
 
@@ -28,21 +28,21 @@ type ConnectionsMode = 'followers' | 'following';
 export class ProfileConnectionsComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(SocialApiService);
-  private readonly navbar = inject(NavbarService);
-  private readonly destroyRef = inject(DestroyRef);
+  private readonly ctx = inject(ProfileContextService);
+  private readonly auth = inject(AuthService);
 
-  private readonly params = toSignal(this.route.paramMap);
+  /** The logged-in user — their own row shows no follow control. */
+  readonly myId = computed(() => this.auth.user()?.id ?? 0);
+
   private readonly data = toSignal(this.route.data);
-  readonly userId = computed(() => Number(this.params()?.get('userId')));
+  // `:userId` lives on the parent route; read it from the shared context
+  // rather than this child's paramMap (which wouldn't inherit it).
+  readonly userId = this.ctx.userId;
   readonly mode = computed<ConnectionsMode>(() => (this.data()?.['mode'] as ConnectionsMode) ?? 'followers');
 
   readonly loading = signal(true);
   readonly users = signal<SocialUser[]>([]);
   readonly busyId = signal<number | null>(null);
-
-  readonly titleKey = computed(() =>
-    this.mode() === 'followers' ? 'social.followers' : 'social.following_title',
-  );
 
   constructor() {
     effect(() => {
@@ -50,8 +50,6 @@ export class ProfileConnectionsComponent {
       const mode = this.mode();
       if (Number.isFinite(id) && id > 0) void this.load(id, mode);
     });
-    this.navbar.showBackButton.set(true);
-    this.destroyRef.onDestroy(() => this.navbar.showBackButton.set(false));
   }
 
   avatar(name: string) {

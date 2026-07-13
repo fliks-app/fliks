@@ -5,6 +5,7 @@ import { serverConfigGuard } from './core/guards/server-config.guard';
 import { passwordChangeGuard } from './core/guards/password-change.guard';
 import { noTvGuard } from './core/guards/no-tv.guard';
 import { desktopGuard } from './core/guards/desktop.guard';
+import { ProfileContextService } from './features/profile/profile-context.service';
 
 export const routes: Routes = [
   {
@@ -107,26 +108,41 @@ export const routes: Routes = [
       {
         path: 'profile/:userId',
         canActivate: [noTvGuard],
+        providers: [ProfileContextService],
         loadComponent: () =>
           import('./features/profile/profile').then((m) => m.ProfileComponent),
-      },
-      {
-        path: 'profile/:userId/followers',
-        canActivate: [noTvGuard],
-        data: { mode: 'followers' },
-        loadComponent: () =>
-          import('./features/profile/profile-connections').then(
-            (m) => m.ProfileConnectionsComponent,
-          ),
-      },
-      {
-        path: 'profile/:userId/following',
-        canActivate: [noTvGuard],
-        data: { mode: 'following' },
-        loadComponent: () =>
-          import('./features/profile/profile-connections').then(
-            (m) => m.ProfileConnectionsComponent,
-          ),
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./features/profile/profile-overview').then(
+                (m) => m.ProfileOverviewComponent,
+              ),
+          },
+          {
+            path: 'followers',
+            data: { mode: 'followers' },
+            loadComponent: () =>
+              import('./features/profile/profile-connections').then(
+                (m) => m.ProfileConnectionsComponent,
+              ),
+          },
+          {
+            path: 'following',
+            data: { mode: 'following' },
+            loadComponent: () =>
+              import('./features/profile/profile-connections').then(
+                (m) => m.ProfileConnectionsComponent,
+              ),
+          },
+          {
+            path: 'recommendations',
+            loadComponent: () =>
+              import('./features/profile/profile-recommendations').then(
+                (m) => m.ProfileRecommendationsComponent,
+              ),
+          },
+        ],
       },
       {
         path: 'persons/:id',

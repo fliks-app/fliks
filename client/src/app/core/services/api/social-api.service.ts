@@ -47,10 +47,9 @@ export interface RecommendContentBody {
   message?: string;
 }
 
-/** A content recommendation received from another member. */
-export interface ReceivedRecommendation {
+/** The content half of a recommendation card (movie / season / episode). */
+export interface RecommendationCard {
   id: number;
-  sender: { id: number; username: string; avatar: string | null };
   message: string | null;
   createdAt: string;
   mediaId: number;
@@ -62,6 +61,16 @@ export interface ReceivedRecommendation {
   episodeId: number | null;
   label: string | null;
   stillUrl: string | null;
+}
+
+/** A content recommendation received from another member. */
+export interface ReceivedRecommendation extends RecommendationCard {
+  sender: { id: number; username: string; avatar: string | null };
+}
+
+/** A content recommendation the caller sent to another member. */
+export interface SentRecommendation extends RecommendationCard {
+  recipient: { id: number; username: string; avatar: string | null };
 }
 
 @Injectable({ providedIn: 'root' })
@@ -165,11 +174,22 @@ export class SocialApiService {
     return firstValueFrom(this.http.post<void>('/api/social/recommend', body));
   }
 
-  /** Content other members have recommended to me (not yet dismissed). */
-  receivedRecommendations(opts: { force?: boolean } = {}) {
+  /** Content other members have recommended to me. Active feed by default;
+   *  `includeDismissed` returns the full history (for the profile page). */
+  receivedRecommendations(opts: { force?: boolean; includeDismissed?: boolean } = {}) {
     return firstValueFrom(
-      this.http.get<ReceivedRecommendation[]>(
-        '/api/social/recommendations/received',
+      this.http.get<ReceivedRecommendation[]>('/api/social/recommendations/received', {
+        ...(opts.includeDismissed ? { params: { includeDismissed: 'true' } } : {}),
+        ...this.headers(opts.force),
+      }),
+    );
+  }
+
+  /** Content I have recommended to other members. */
+  sentRecommendations(opts: { force?: boolean } = {}) {
+    return firstValueFrom(
+      this.http.get<SentRecommendation[]>(
+        '/api/social/recommendations/sent',
         this.headers(opts.force),
       ),
     );

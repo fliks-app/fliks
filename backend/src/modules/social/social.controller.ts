@@ -54,10 +54,20 @@ export class SocialController {
     return this.service.recommend(me, dto);
   }
 
-  /** Content other members have recommended to me (not yet dismissed). */
+  /** Content other members have recommended to me. Active feed by default;
+   *  `?includeDismissed=true` returns the full history (profile page). */
   @Get('recommendations/received')
-  receivedRecommendations(@CurrentUser() me: User) {
-    return this.service.receivedRecommendations(me);
+  receivedRecommendations(
+    @CurrentUser() me: User,
+    @Query('includeDismissed') includeDismissed?: string,
+  ) {
+    return this.service.receivedRecommendations(me, includeDismissed === 'true');
+  }
+
+  /** Content I have recommended to other members. */
+  @Get('recommendations/sent')
+  sentRecommendations(@CurrentUser() me: User) {
+    return this.service.sentRecommendations(me);
   }
 
   @Post('recommendations/:id/dismiss')

@@ -1,0 +1,99 @@
+@if (loading() && !received().length && !sent().length) {
+  <div class="flex justify-center py-12">
+    <span class="loading loading-spinner loading-lg"></span>
+  </div>
+} @else if (!received().length && !sent().length) {
+  <div class="text-center py-12 text-base-content/50">
+    <p class="text-lg">{{ 'recommend.profile_empty' | translate }}</p>
+  </div>
+} @else {
+  <!-- Recommended to me -->
+  @if (received().length) {
+    <section class="mb-8">
+      <h2 class="text-lg font-semibold mb-3">{{ 'recommend.profile_received' | translate }}</h2>
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>{{ 'recommend.col_content' | translate }}</th>
+              <th>{{ 'recommend.col_from' | translate }}</th>
+              <th class="hidden sm:table-cell">{{ 'recommend.col_note' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of received(); track item.id) {
+              <tr class="hover">
+                <td>
+                  <a [routerLink]="contentLink(item)" class="flex items-center gap-3 min-w-0">
+                    <div class="w-14 aspect-video rounded bg-base-300 overflow-hidden shrink-0">
+                      @if (item.stillUrl ?? item.fanartUrl ?? item.posterUrl; as img) {
+                        <img [src]="img" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
+                      }
+                    </div>
+                    <div class="min-w-0">
+                      <div class="font-medium truncate hover:underline">{{ item.title }}</div>
+                      @if (item.label) {
+                        <div class="text-xs text-base-content/60 truncate">{{ item.label }}</div>
+                      }
+                    </div>
+                  </a>
+                </td>
+                <td class="whitespace-nowrap">
+                  <a [routerLink]="['/profile', item.sender.id]" class="hover:underline">{{ item.sender.username }}</a>
+                </td>
+                <td class="hidden sm:table-cell max-w-xs text-base-content/70 italic truncate">
+                  {{ item.message || '—' }}
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+
+  <!-- Recommended by me -->
+  @if (sent().length) {
+    <section class="mb-8">
+      <h2 class="text-lg font-semibold mb-3">{{ 'recommend.profile_sent' | translate }}</h2>
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>{{ 'recommend.col_content' | translate }}</th>
+              <th>{{ 'recommend.col_to' | translate }}</th>
+              <th class="hidden sm:table-cell">{{ 'recommend.col_note' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of sent(); track item.id) {
+              <tr class="hover">
+                <td>
+                  <a [routerLink]="contentLink(item)" class="flex items-center gap-3 min-w-0">
+                    <div class="w-14 aspect-video rounded bg-base-300 overflow-hidden shrink-0">
+                      @if (item.stillUrl ?? item.fanartUrl ?? item.posterUrl; as img) {
+                        <img [src]="img" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
+                      }
+                    </div>
+                    <div class="min-w-0">
+                      <div class="font-medium truncate hover:underline">{{ item.title }}</div>
+                      @if (item.label) {
+                        <div class="text-xs text-base-content/60 truncate">{{ item.label }}</div>
+                      }
+                    </div>
+                  </a>
+                </td>
+                <td class="whitespace-nowrap">
+                  <a [routerLink]="['/profile', item.recipient.id]" class="hover:underline">{{ item.recipient.username }}</a>
+                </td>
+                <td class="hidden sm:table-cell max-w-xs text-base-content/70 italic truncate">
+                  {{ item.message || '—' }}
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+}
