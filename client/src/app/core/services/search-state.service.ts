@@ -70,10 +70,16 @@ export class SearchStateService {
     this.focusRequestId.update((n) => n + 1);
   }
 
-  /** External results filtered to exclude items already in local results */
+  /** External results for the "add to library" section: drop anything already
+   *  in the library — both titles the local search already returned AND titles
+   *  the provider flagged as imported (`existingMediaId`), which the local
+   *  title search can miss (e.g. a franchise entry whose name doesn't contain
+   *  the query). Owned titles don't belong under "Ajouter à la bibliothèque". */
   readonly filteredExternalResults = computed(() => {
     const localTmdbIds = new Set(this.localResults().map(m => m.tmdbId));
-    return this.externalResults().filter(r => !localTmdbIds.has(r.tmdbId));
+    return this.externalResults().filter(
+      (r) => r.existingMediaId == null && !localTmdbIds.has(r.tmdbId),
+    );
   });
 
   clear() {
