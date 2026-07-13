@@ -47,6 +47,21 @@ export interface SeasonStub {
   episodeCount: number;
 }
 
+/** A TMDB genre (id + localized name). */
+export interface TmdbGenre {
+  id: number;
+  name: string;
+}
+
+/** Client-side discover filter values (V1 subset). */
+export interface DiscoverFilters {
+  genreIds?: number[];
+  sort?: string;
+  voteMin?: number;
+  yearMin?: number | null;
+  yearMax?: number | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class MetadataService {
   private readonly http = inject(HttpClient);
@@ -73,12 +88,33 @@ export class MetadataService {
     );
   }
 
-  getTrendingMovies() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/trending/movie')); }
+  getTrendingMovies(window: 'day' | 'week' = 'week') { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/trending/movie', { params: { window } })); }
   getPopularMovies() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/popular/movie')); }
   getUpcomingMovies() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/upcoming/movie')); }
-  getTrendingTv() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/trending/tv')); }
+  getTrendingTv(window: 'day' | 'week' = 'week') { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/trending/tv', { params: { window } })); }
   getPopularTv() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/popular/tv')); }
   getUpcomingTv() { return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/upcoming/tv')); }
+
+  getMovieGenres() { return firstValueFrom(this.http.get<TmdbGenre[]>('/api/metadata/genres/movie')); }
+  getTvGenres() { return firstValueFrom(this.http.get<TmdbGenre[]>('/api/metadata/genres/tv')); }
+
+  private discoverParams(opts: DiscoverFilters): HttpParams {
+    let params = new HttpParams();
+    if (opts.genreIds?.length) params = params.set('genres', opts.genreIds.join(','));
+    if (opts.sort) params = params.set('sort', opts.sort);
+    if (opts.voteMin) params = params.set('voteGte', String(opts.voteMin));
+    if (opts.yearMin) params = params.set('yearGte', String(opts.yearMin));
+    if (opts.yearMax) params = params.set('yearLte', String(opts.yearMax));
+    return params;
+  }
+
+  discoverMovies(opts: DiscoverFilters) {
+    return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/discover/movie', { params: this.discoverParams(opts) }));
+  }
+
+  discoverTv(opts: DiscoverFilters) {
+    return firstValueFrom(this.http.get<MetadataSearchResult[]>('/api/metadata/discover/tv', { params: this.discoverParams(opts) }));
+  }
 
   getMovieDetails(tmdbId: number) {
     return firstValueFrom(

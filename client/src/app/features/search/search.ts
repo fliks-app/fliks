@@ -15,12 +15,12 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
-import { MediaService, Media, GenreSummary } from '../../core/services/api/media.service';
+import { MediaService, Media } from '../../core/services/api/media.service';
 import { StreamingApiService, RecommendationItem } from '../../core/services/api/streaming-api.service';
-import { LibrariesApiService } from '../../core/services/api/libraries-api.service';
 import {
   MetadataService,
   MetadataSearchResult,
+  DiscoverFilters,
 } from '../../core/services/api/metadata.service';
 import { AuthService } from '../../core/services/auth.service';
 import { RequestsService, FliksRequestStatus } from '../../core/services/api/requests.service';
@@ -32,16 +32,16 @@ import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { MediaType } from '../../core/enums/media-type.enum';
 import { MediaCardComponent, CardBadge } from '../../shared/components/media-card/media-card';
-import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
+import { NgTemplateOutlet } from '@angular/common';
 import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 
 @Component({
   selector: 'app-search',
-  imports: [FormsModule, TranslateModule, RouterLink, MediaCardComponent, MosaicCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings],
+  imports: [FormsModule, TranslateModule, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './search.html',
 })
@@ -56,13 +56,17 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly reuseStrategy = inject(CachingReuseStrategy);
   private readonly injector = inject(Injector);
   private readonly streamingApi = inject(StreamingApiService);
-  private readonly librariesApi = inject(LibrariesApiService);
   private readonly social = inject(SocialApiService);
   readonly tv = inject(TvService);
   readonly state = inject(SearchStateService);
 
-  /** First accessible library — genre tiles deep-link into it filtered by genre. */
-  readonly firstLibraryName = signal('');
+  /** TMDB /discover sort options (label keys resolved in the template). */
+  readonly sortOptions = [
+    { value: 'popularity.desc', labelKey: 'search.sort_popularity' },
+    { value: 'vote_average.desc', labelKey: 'search.sort_rating' },
+    { value: 'primary_release_date.desc', labelKey: 'search.sort_recent' },
+  ];
+  readonly filterSheet = viewChild<ElementRef<HTMLDialogElement>>('filterSheet');
   private lastDiscoveryKey = '';
   /** Load discovery rows whenever the empty state is showing, keyed on the
    *  active tab + external-search toggle so a tab/toggle change refreshes them. */
@@ -105,7 +109,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnInit() {
     this.scrollMemory.activate(SearchComponent.SCROLL_KEY);
     this.scrollMemory.restore(SearchComponent.SCROLL_KEY, this.injector);
-    void this.loadLibraries();
 
     // Route is cached on navigate-away (data: { reuse: true }). Search results
     // already live in SearchStateService so there's nothing to refetch — we
@@ -202,6 +205,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   setFilter(f: 'all' | 'movie' | 'series' | 'people') {
+    // Discover genres/results are type-specific — drop them when the tab changes.
+    if (f !== this.state.filter()) this.state.resetDiscover();
     this.state.filter.set(f);
     if (this.state.query().trim()) {
       if (this.searchTimer) clearTimeout(this.searchTimer);
@@ -236,21 +241,12 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     void this.router.navigate(['/profile', userId]);
   }
 
-  private async loadLibraries(): Promise<void> {
-    try {
-      const libs = await this.librariesApi.list();
-      this.firstLibraryName.set(libs[0]?.name ?? '');
-    } catch {
-      /* interceptor surfaces errors */
-    }
-  }
-
   /**
-   * Populate the empty-state discovery rows. Trending/popular come from the
-   * external providers and are only fetched when external search is enabled;
-   * suggestions + genres always come from the viewer's own libraries. Each
-   * fetch fails soft (empty row) so a missing provider / cold-start user just
-   * hides that section. Rows follow the active `movie`/`series`/`all` tab.
+   * Populate the empty-state discovery rows. Trending/popular + the discover
+   * genre list are TMDB and only fetched when external search is enabled;
+   * suggestions always come from the viewer's own library. Each fetch fails
+   * soft (empty row) so a missing provider / cold-start user just drops that
+   * section. Rows follow the active `movie`/`series`/`all` tab.
    */
   private async loadDiscovery(
     filter: 'all' | 'movie' | 'series' | 'people',
@@ -261,48 +257,62 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       const isSeries = filter === 'series';
       const isMovie = filter === 'movie';
 
-      const [recs, genres] = await Promise.all([
-        this.streamingApi.getRecommendations({ limit: 30 }).catch(() => []),
-        this.mediaService.getGenres().catch(() => [] as GenreSummary[]),
-      ]);
+      const recs = await this.streamingApi
+        .getRecommendations({ limit: 30 })
+        .catch(() => []);
       if (this.staleDiscovery(filter, external)) return;
       this.state.discoveryRecommendations.set(
         isMovie || isSeries
           ? recs.filter((r) => r.media.type === (isMovie ? 'movie' : 'series'))
           : recs,
       );
-      this.state.discoveryGenres.set(genres);
 
       if (!external) {
         this.state.discoveryTrending.set([]);
         this.state.discoveryPopular.set([]);
+        this.state.discoverGenres.set([]);
         return;
       }
-      const [trending, popular] = await Promise.all([
-        isSeries
-          ? this.metadata.getTrendingTv().catch(() => [])
-          : isMovie
-            ? this.metadata.getTrendingMovies().catch(() => [])
-            : Promise.all([
-                this.metadata.getTrendingMovies().catch(() => []),
-                this.metadata.getTrendingTv().catch(() => []),
-              ]).then(([m, t]) => this.interleave(m, t)),
-        isSeries
-          ? this.metadata.getPopularTv().catch(() => [])
-          : isMovie
-            ? this.metadata.getPopularMovies().catch(() => [])
-            : Promise.all([
-                this.metadata.getPopularMovies().catch(() => []),
-                this.metadata.getPopularTv().catch(() => []),
-              ]).then(([m, t]) => this.interleave(m, t)),
+      const [trending, popular, genres] = await Promise.all([
+        this.fetchTrending(filter, this.state.trendingWindow()),
+        this.fetchPopular(filter),
+        (isSeries ? this.metadata.getTvGenres() : this.metadata.getMovieGenres()).catch(
+          () => [],
+        ),
       ]);
       if (this.staleDiscovery(filter, external)) return;
       this.state.discoveryTrending.set(trending);
       this.state.discoveryPopular.set(popular);
+      this.state.discoverGenres.set(genres);
       this.loadRequestedIds();
     } finally {
       this.state.discoveryLoading.set(false);
     }
+  }
+
+  private async fetchTrending(
+    filter: 'all' | 'movie' | 'series' | 'people',
+    window: 'day' | 'week',
+  ): Promise<MetadataSearchResult[]> {
+    if (filter === 'series') return this.metadata.getTrendingTv(window).catch(() => []);
+    if (filter === 'movie') return this.metadata.getTrendingMovies(window).catch(() => []);
+    const [m, t] = await Promise.all([
+      this.metadata.getTrendingMovies(window).catch(() => []),
+      this.metadata.getTrendingTv(window).catch(() => []),
+    ]);
+    return this.interleave(m, t);
+  }
+
+  private async fetchPopular(
+    filter: 'all' | 'movie' | 'series' | 'people',
+  ): Promise<MetadataSearchResult[]> {
+    if (filter === 'series') return this.metadata.getPopularTv().catch(() => []);
+    if (filter === 'movie') return this.metadata.getPopularMovies().catch(() => []);
+    const [m, t] = await Promise.all([
+      this.metadata.getPopularMovies().catch(() => []),
+      this.metadata.getPopularTv().catch(() => []),
+    ]);
+    return this.interleave(m, t);
   }
 
   /** True if the tab/toggle moved on while a discovery fetch was in flight. */
@@ -330,12 +340,63 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     return ['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id];
   }
 
-  openGenre(genre: string) {
-    const lib = this.firstLibraryName();
-    if (!lib) return;
-    void this.router.navigate(['/libraries', lib], {
-      queryParams: { view: 'all', genre },
+  // ── Discover panel ──
+
+  setTrendingWindow(w: 'day' | 'week') {
+    if (this.state.trendingWindow() === w) return;
+    this.state.trendingWindow.set(w);
+    void this.fetchTrending(this.state.filter(), w).then((rows) => {
+      if (this.state.trendingWindow() === w) this.state.discoveryTrending.set(rows);
     });
+  }
+
+  toggleGenre(id: number) {
+    this.state.discoverSelectedGenres.update((set) => {
+      const next = new Set(set);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  /** Run the TMDB /discover query from the current panel filters and switch
+   *  the content area to the results grid. */
+  async applyDiscover() {
+    const filter = this.state.filter();
+    const opts: DiscoverFilters = {
+      genreIds: [...this.state.discoverSelectedGenres()],
+      sort: this.state.discoverSort(),
+      voteMin: this.state.discoverVoteMin() || undefined,
+      yearMin: this.state.discoverYearMin(),
+      yearMax: this.state.discoverYearMax(),
+    };
+    this.state.discoverActive.set(true);
+    this.state.discoverLoading.set(true);
+    this.closeFilterSheet();
+    try {
+      const rows =
+        filter === 'series'
+          ? await this.metadata.discoverTv(opts)
+          : await this.metadata.discoverMovies(opts);
+      this.state.discoverResults.set(rows);
+      this.loadRequestedIds();
+    } catch {
+      this.state.discoverResults.set([]);
+    } finally {
+      this.state.discoverLoading.set(false);
+    }
+  }
+
+  clearDiscover() {
+    this.state.resetDiscover();
+  }
+
+  openFilterSheet() {
+    this.filterSheet()?.nativeElement.showModal();
+  }
+
+  closeFilterSheet() {
+    this.filterSheet()?.nativeElement.close();
   }
 
   /** Series toggle via the bulk endpoint; movies need a local file. */

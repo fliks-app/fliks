@@ -1,6 +1,6 @@
 import { Injectable, signal, computed, effect } from '@angular/core';
-import { Media, GenreSummary } from './api/media.service';
-import { MetadataSearchResult } from './api/metadata.service';
+import { Media } from './api/media.service';
+import { MetadataSearchResult, TmdbGenre } from './api/metadata.service';
 import { RecommendationItem } from './api/streaming-api.service';
 import { SocialUser } from './api/social-api.service';
 
@@ -23,16 +23,39 @@ export class SearchStateService {
   readonly peopleLoading = signal(false);
   readonly hasQuery = computed(() => this.query().trim().length > 0);
 
-  // ── Discovery (shown when no query is typed) ──
-  /** Trending titles from external providers (only when external search is on). */
+  // ── Discovery rows (shown when no query is typed, external search on) ──
+  /** Time window for the Tendances row. */
+  readonly trendingWindow = signal<'day' | 'week'>('week');
   readonly discoveryTrending = signal<MetadataSearchResult[]>([]);
-  /** Popular titles from external providers (only when external search is on). */
   readonly discoveryPopular = signal<MetadataSearchResult[]>([]);
-  /** Personalized recommendations from the viewer's library. */
+  /** Personalized recommendations from the viewer's library (local, always). */
   readonly discoveryRecommendations = signal<RecommendationItem[]>([]);
-  /** Genres in the accessible libraries, for browse-by-genre tiles. */
-  readonly discoveryGenres = signal<GenreSummary[]>([]);
   readonly discoveryLoading = signal(false);
+
+  // ── Discover filter panel (TMDB /discover) ──
+  /** Genre list for the active tab (movie vs tv). */
+  readonly discoverGenres = signal<TmdbGenre[]>([]);
+  readonly discoverSelectedGenres = signal<Set<number>>(new Set());
+  readonly discoverSort = signal('popularity.desc');
+  readonly discoverVoteMin = signal(0);
+  readonly discoverYearMin = signal<number | null>(null);
+  readonly discoverYearMax = signal<number | null>(null);
+  /** Results of an applied discover query. */
+  readonly discoverResults = signal<MetadataSearchResult[]>([]);
+  readonly discoverLoading = signal(false);
+  /** True once a discover query has been applied (rows → results grid). */
+  readonly discoverActive = signal(false);
+
+  /** Reset the discover panel filters + results. */
+  resetDiscover(): void {
+    this.discoverSelectedGenres.set(new Set());
+    this.discoverSort.set('popularity.desc');
+    this.discoverVoteMin.set(0);
+    this.discoverYearMin.set(null);
+    this.discoverYearMax.set(null);
+    this.discoverResults.set([]);
+    this.discoverActive.set(false);
+  }
   /** Counter incremented whenever a caller (e.g. the bottom-dock
    *  search button) asks the search page to refocus its input.
    *  Search page watches this in an effect — using a counter (not a

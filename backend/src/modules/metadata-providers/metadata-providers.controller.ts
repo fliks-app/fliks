@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { TmdbProvider } from './providers/tmdb.provider';
+import { TmdbProvider, DiscoverOptions } from './providers/tmdb.provider';
 import { MetadataProviderRegistry } from './metadata-provider.registry';
 import { MetadataSearchResult } from './interfaces/metadata-provider.interface';
 import { Media } from '../media/entities/media.entity';
@@ -57,8 +57,10 @@ export class MetadataProvidersController {
   // ── Trending/Popular (TMDB only) ──
 
   @Get('trending/movie')
-  async trendingMovies() {
-    const results = await this.tmdb.getTrendingMovies();
+  async trendingMovies(@Query('window') window?: string) {
+    const results = await this.tmdb.getTrendingMovies(
+      window === 'day' ? 'day' : 'week',
+    );
     return this.enrichWithExisting(results, 'movie');
   }
 
@@ -75,8 +77,50 @@ export class MetadataProvidersController {
   }
 
   @Get('trending/tv')
-  async trendingTv() {
-    const results = await this.tmdb.getTrendingTvShows();
+  async trendingTv(@Query('window') window?: string) {
+    const results = await this.tmdb.getTrendingTvShows(
+      window === 'day' ? 'day' : 'week',
+    );
+    return this.enrichWithExisting(results, 'series');
+  }
+
+  // ── Genres + Discover (TMDB /discover) ──
+
+  @Get('genres/movie')
+  movieGenres() {
+    return this.tmdb.getMovieGenres();
+  }
+
+  @Get('genres/tv')
+  tvGenres() {
+    return this.tmdb.getTvGenres();
+  }
+
+  @Get('discover/movie')
+  async discoverMovies(
+    @Query('genres') genres?: string,
+    @Query('sort') sort?: string,
+    @Query('voteGte') voteGte?: string,
+    @Query('yearGte') yearGte?: string,
+    @Query('yearLte') yearLte?: string,
+  ) {
+    const results = await this.tmdb.discoverMovies(
+      this.parseDiscover(genres, sort, voteGte, yearGte, yearLte),
+    );
+    return this.enrichWithExisting(results, 'movie');
+  }
+
+  @Get('discover/tv')
+  async discoverTv(
+    @Query('genres') genres?: string,
+    @Query('sort') sort?: string,
+    @Query('voteGte') voteGte?: string,
+    @Query('yearGte') yearGte?: string,
+    @Query('yearLte') yearLte?: string,
+  ) {
+    const results = await this.tmdb.discoverTvShows(
+      this.parseDiscover(genres, sort, voteGte, yearGte, yearLte),
+    );
     return this.enrichWithExisting(results, 'series');
   }
 
@@ -145,6 +189,27 @@ export class MetadataProvidersController {
   }
 
   // ── Helpers ──
+
+  /** Parse the raw discover query strings into typed TMDB filter options. */
+  private parseDiscover(
+    genres?: string,
+    sort?: string,
+    voteGte?: string,
+    yearGte?: string,
+    yearLte?: string,
+  ): DiscoverOptions {
+    const genreIds = (genres ?? '')
+      .split(',')
+      .map((g) => parseInt(g, 10))
+      .filter((n) => Number.isFinite(n));
+    return {
+      genreIds: genreIds.length ? genreIds : undefined,
+      sortBy: sort || undefined,
+      voteAverageGte: voteGte ? parseFloat(voteGte) : undefined,
+      yearGte: yearGte ? parseInt(yearGte, 10) : undefined,
+      yearLte: yearLte ? parseInt(yearLte, 10) : undefined,
+    };
+  }
 
   private async searchWithFallback(
     providerName: string | undefined,
