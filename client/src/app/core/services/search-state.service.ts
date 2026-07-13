@@ -74,6 +74,18 @@ export class SearchStateService {
     this.focusRequestId.update((n) => n + 1);
   }
 
+  /** A genre a caller (e.g. a profile taste chip) asked to preload into the
+   *  discover panel. Carries a monotonic counter so repeat requests refire the
+   *  search page's effect even when the route is reused. */
+  readonly genreFilterRequest = signal<{ genre: string; n: number } | null>(
+    null,
+  );
+  private genreFilterCounter = 0;
+
+  requestGenreFilter(genre: string): void {
+    this.genreFilterRequest.set({ genre, n: ++this.genreFilterCounter });
+  }
+
   /** External results for the "add to library" section: only titles NOT already
    *  in the library (owned ones move to {@link ownedExternalResults}). */
   readonly filteredExternalResults = computed(() => {

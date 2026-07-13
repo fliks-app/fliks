@@ -247,6 +247,7 @@
     "avatar_edit_title": "Recadrer la photo",
     "avatar_zoom": "Zoom",
     "avatar_remove": "Retirer la photo",
+    "avatar_remove_confirm": "Voulez-vous vraiment retirer votre photo de profil ?",
     "avatar_invalid": "Le fichier sélectionné n'est pas une image",
     "avatar_updated": "Photo de profil mise à jour",
     "avatar_removed": "Photo de profil retirée",

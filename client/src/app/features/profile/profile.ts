@@ -28,6 +28,7 @@ import { SocialApiService } from '../../core/services/api/social-api.service';
 import { UsersApiService } from '../../core/services/api/users-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ConfirmationService } from '../../core/services/confirmation.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { initialsAvatar } from '../../core/utils/initials-avatar';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
@@ -67,6 +68,7 @@ export class ProfileComponent {
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
   private readonly navbar = inject(NavbarService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly ctx = inject(ProfileContextService);
@@ -163,6 +165,13 @@ export class ProfileComponent {
   }
 
   async removeAvatar(): Promise<void> {
+    const confirmed = await this.confirmation.confirm({
+      title: this.translate.instant('social.avatar_remove'),
+      message: this.translate.instant('social.avatar_remove_confirm'),
+      confirmLabel: this.translate.instant('social.avatar_remove'),
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     try {
       const res = await this.usersApi.deleteAvatar();
       this.ctx.patch({ avatar: res.avatar });

@@ -105,6 +105,15 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     }, 0);
   });
 
+  /** Preload the discover panel with a genre asked for from elsewhere (e.g. a
+   *  profile taste chip). Lives on the instance so it fires across route reuse,
+   *  where ngOnInit wouldn't re-run. */
+  private readonly genreFilterEffect = effect(() => {
+    const req = this.state.genreFilterRequest();
+    if (!req) return;
+    void this.applyGenreFilter(req.genre);
+  });
+
   readonly requestedTmdbIds = signal<Map<number, FliksRequestStatus>>(new Map());
 
   private static readonly SCROLL_KEY = 'search';
@@ -474,6 +483,28 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   clearDiscover() {
     this.state.resetDiscover();
+  }
+
+  /** Resolve a genre name to a TMDB id and run the discover grid for it. Taste
+   *  chips mix movies + series, so match against the movie genre list (the
+   *  discover grid defaults to the movie catalogue). */
+  private async applyGenreFilter(name: string): Promise<void> {
+    this.state.tab.set('videos');
+    this.state.query.set('');
+    try {
+      const genres = this.state.discoverGenres().length
+        ? this.state.discoverGenres()
+        : await this.metadata.getMovieGenres();
+      this.state.discoverGenres.set(genres);
+      const match = genres.find(
+        (g) => g.name.toLowerCase() === name.toLowerCase(),
+      );
+      if (!match) return;
+      this.state.discoverSelectedGenres.set(new Set([match.id]));
+      await this.applyDiscover();
+    } catch {
+      /* global error toast */
+    }
   }
 
   openFilterSheet() {

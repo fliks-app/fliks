@@ -2,15 +2,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   inject,
-  signal,
 } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { PublicProfile } from '../../core/services/api/social-api.service';
-import { LibrariesApiService } from '../../core/services/api/libraries-api.service';
+import { SearchStateService } from '../../core/services/search-state.service';
 import { ProfileContextService } from './profile-context.service';
 
 /** The profile "overview" tab: tastes, playlists, recommendations, recently
@@ -19,7 +18,6 @@ import { ProfileContextService } from './profile-context.service';
 @Component({
   selector: 'app-profile-overview',
   imports: [
-    RouterLink,
     TranslateModule,
     MosaicCardComponent,
     MediaCardComponent,
@@ -30,26 +28,16 @@ import { ProfileContextService } from './profile-context.service';
 })
 export class ProfileOverviewComponent {
   private readonly router = inject(Router);
-  private readonly librariesApi = inject(LibrariesApiService);
+  private readonly searchState = inject(SearchStateService);
   protected readonly ctx = inject(ProfileContextService);
 
   readonly profile = this.ctx.profile;
 
-  /** Name of the first library the viewer can access — genre chips link here,
-   *  filtered by the genre. Empty when the viewer has no library access. */
-  readonly firstLibraryName = signal('');
-
-  constructor() {
-    void this.loadLibraries();
-  }
-
-  private async loadLibraries(): Promise<void> {
-    try {
-      const libs = await this.librariesApi.list();
-      this.firstLibraryName.set(libs[0]?.name ?? '');
-    } catch {
-      /* interceptor surfaces errors */
-    }
+  /** Open the general search page with the discover panel preloaded on a
+   *  genre (not a library-scoped view). */
+  openGenre(genre: string): void {
+    this.searchState.requestGenreFilter(genre);
+    void this.router.navigate(['/search']);
   }
 
   mediaLink(mediaType: string, mediaId: number): string[] {

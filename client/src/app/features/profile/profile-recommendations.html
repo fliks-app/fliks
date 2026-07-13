@@ -12,7 +12,7 @@
     <section class="mb-8">
       <h2 class="text-lg font-semibold mb-3">{{ 'recommend.profile_received' | translate }}</h2>
       <div class="overflow-x-auto">
-        <table class="table table-sm">
+        <table class="table text-base">
           <thead>
             <tr>
               <th>{{ 'recommend.col_content' | translate }}</th>
@@ -27,13 +27,13 @@
                   <a [routerLink]="contentLink(item)" class="flex items-center gap-3 min-w-0">
                     <div class="w-14 aspect-video rounded bg-base-300 overflow-hidden shrink-0">
                       @if (item.stillUrl ?? item.fanartUrl ?? item.posterUrl; as img) {
-                        <img [src]="img" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
+                        <img [src]="img | resolveUrl:'thumb'" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
                       }
                     </div>
                     <div class="min-w-0">
                       <div class="font-medium truncate hover:underline">{{ item.title }}</div>
                       @if (item.label) {
-                        <div class="text-xs text-base-content/60 truncate">{{ item.label }}</div>
+                        <div class="text-sm text-base-content/60 truncate">{{ item.label }}</div>
                       }
                     </div>
                   </a>
@@ -57,7 +57,7 @@
     <section class="mb-8">
       <h2 class="text-lg font-semibold mb-3">{{ 'recommend.profile_sent' | translate }}</h2>
       <div class="overflow-x-auto">
-        <table class="table table-sm">
+        <table class="table text-base">
           <thead>
             <tr>
               <th>{{ 'recommend.col_content' | translate }}</th>
@@ -72,13 +72,13 @@
                   <a [routerLink]="contentLink(item)" class="flex items-center gap-3 min-w-0">
                     <div class="w-14 aspect-video rounded bg-base-300 overflow-hidden shrink-0">
                       @if (item.stillUrl ?? item.fanartUrl ?? item.posterUrl; as img) {
-                        <img [src]="img" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
+                        <img [src]="img | resolveUrl:'thumb'" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
                       }
                     </div>
                     <div class="min-w-0">
                       <div class="font-medium truncate hover:underline">{{ item.title }}</div>
                       @if (item.label) {
-                        <div class="text-xs text-base-content/60 truncate">{{ item.label }}</div>
+                        <div class="text-sm text-base-content/60 truncate">{{ item.label }}</div>
                       }
                     </div>
                   </a>
