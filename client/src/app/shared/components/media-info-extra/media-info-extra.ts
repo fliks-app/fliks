@@ -1,13 +1,18 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
   inject,
   input,
+  signal,
+  viewChild,
 } from '@angular/core';
 import { DatePipe, CurrencyPipe } from '@angular/common';
 import { Router } from '@angular/router';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { LucidePlay } from '@lucide/angular';
 import { Media } from '../../../core/services/api/media.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 
@@ -20,13 +25,49 @@ import { localizeLanguage } from '../../../core/utils/language.utils';
  */
 @Component({
   selector: 'app-media-info-extra',
-  imports: [DatePipe, CurrencyPipe, TranslateModule],
+  imports: [DatePipe, CurrencyPipe, TranslateModule, LucidePlay],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-info-extra.html',
 })
 export class MediaInfoExtraComponent {
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
+  private readonly sanitizer = inject(DomSanitizer);
+  private readonly trailerDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('trailerDialog');
+
+  /** Best YouTube trailer key from the stored TMDB videos (Trailer → Teaser →
+   *  any). Null when the imported metadata carries no video. */
+  readonly trailerKey = computed<string | null>(() => {
+    const vids = (this.media().metadata?.videos ?? []).filter(
+      (v) => v.site === 'YouTube',
+    );
+    const pick =
+      vids.find((v) => v.type === 'Trailer') ??
+      vids.find((v) => v.type === 'Teaser') ??
+      vids[0];
+    return pick?.key ?? null;
+  });
+
+  /** Sanitized embed URL, set only while the dialog is open so playback stops
+   *  on close. */
+  readonly trailerEmbedUrl = signal<SafeResourceUrl | null>(null);
+
+  openTrailer() {
+    const key = this.trailerKey();
+    if (!key) return;
+    this.trailerEmbedUrl.set(
+      this.sanitizer.bypassSecurityTrustResourceUrl(
+        `https://www.youtube.com/embed/${key}?autoplay=1`,
+      ),
+    );
+    this.trailerDialog()?.nativeElement.showModal();
+  }
+
+  closeTrailer() {
+    this.trailerDialog()?.nativeElement.close();
+    this.trailerEmbedUrl.set(null);
+  }
 
   readonly media = input.required<Media>();
   /** Director names. Sourced from `Media.crew` filtered by job — kept as a
@@ -96,7 +137,8 @@ export class MediaInfoExtraComponent {
       this.budget() ||
       this.revenue() ||
       this.genres().length > 0 ||
-      this.directorsLabel()
+      this.directorsLabel() ||
+      this.trailerKey()
     );
   });
 }
