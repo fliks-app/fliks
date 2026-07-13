@@ -51,9 +51,6 @@
           {{ (p.visibility === 'public' ? 'social.follow' : 'social.request_follow') | translate }}
         </button>
       }
-      <button type="button" class="btn btn-ghost btn-sm btn-square" (click)="share()" [attr.aria-label]="'social.share' | translate">
-        <svg lucideShare2 class="h-4 w-4"></svg>
-      </button>
     </div>
   </div>
 

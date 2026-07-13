@@ -10,7 +10,7 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { LucideUserPlus, LucideUserCheck, LucideClock, LucideSettings, LucideShare2 } from '@lucide/angular';
+import { LucideUserPlus, LucideUserCheck, LucideClock, LucideSettings } from '@lucide/angular';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
@@ -33,7 +33,6 @@ import { initialsAvatar } from '../../core/utils/initials-avatar';
     LucideUserCheck,
     LucideClock,
     LucideSettings,
-    LucideShare2,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile.html',
@@ -160,17 +159,5 @@ export class ProfileComponent {
 
   editPrivacy(): void {
     void this.router.navigate(['/account/privacy']);
-  }
-
-  async share(): Promise<void> {
-    const p = this.profile();
-    if (!p) return;
-    const url = `${location.origin}/profile/${p.id}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      this.toast.success(this.translate.instant('social.link_copied'));
-    } catch {
-      /* clipboard unavailable — no-op */
-    }
   }
 }
