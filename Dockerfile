@@ -68,11 +68,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 FROM ubuntu:24.04 AS vulkan-loader-build
 ARG VULKAN_LOADER_TAG=vulkan-sdk-1.4.313.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates git cmake ninja-build build-essential python3 \
+      ca-certificates git cmake ninja-build build-essential python3 pkg-config \
   && git clone --depth 1 --branch "$VULKAN_LOADER_TAG" \
        https://github.com/KhronosGroup/Vulkan-Loader.git /tmp/vkloader-src \
   && cmake -S /tmp/vkloader-src -B /tmp/vkloader-build -G Ninja \
        -DUPDATE_DEPS=ON -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release \
+       -DBUILD_WSI_XCB_SUPPORT=OFF -DBUILD_WSI_XLIB_SUPPORT=OFF \
+       -DBUILD_WSI_WAYLAND_SUPPORT=OFF -DBUILD_WSI_DIRECTFB_SUPPORT=OFF \
        -DCMAKE_INSTALL_PREFIX=/opt/vkloader \
   && cmake --build /tmp/vkloader-build --target install \
   && rm -rf /var/lib/apt/lists/* /tmp/vkloader-src /tmp/vkloader-build
