@@ -28,10 +28,13 @@ export interface PlaybackInfoResponse {
   outputContainer: string;
   hwAccel: string;
   tonemapping: boolean;
-  /** Resolved tone-mapping filter the backend will actually use
-   *  (`'auto'` resolves to opencl or vaapi depending on the boot
-   *  probe). Null when no tone-mapping pass runs on this session. */
-  tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | null;
+  /** Tone-map mechanism the backend actually runs: a HW path
+   *  (`'vaapi'` / `'opencl'` / `'qsv'`) on QSV/VAAPI encoders, or
+   *  `'cpu'` for the CPU chain (NVENC / libx26x / VideoToolbox
+   *  fallback). Null when no tone-mapping pass runs on this session. */
+  tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | 'cpu' | null;
+  /** CPU tone-map curve, set only when `tonemapAlgo === 'cpu'`. */
+  tonemapCurve?: 'hable' | 'mobius';
   /** Cibles par rung (transcodage). */
   transcodeBitrateByQuality?: Record<
     string,

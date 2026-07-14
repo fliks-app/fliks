@@ -107,13 +107,17 @@ export interface PlaybackInfoResponse {
   /** Whether HDR→SDR tone mapping is being applied */
   tonemapping: boolean;
 
-  /** Actual tone-mapping filter the session will use, after admin
-   *  setting + boot-probe resolution. `null` when no tone-mapping
-   *  pass runs. Distinct from the admin `streaming_tonemap_algo`
-   *  setting because `'auto'` resolves to `'opencl'` when the boot
-   *  probe enabled it and `'vaapi'` otherwise — stats overlays show
-   *  this value, not the (potentially-stale) admin pick. */
-  tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | null;
+  /** Tone-map mechanism the session actually runs. `'vaapi'` / `'opencl'`
+   *  / `'qsv'` for QSV/VAAPI encoders (after `auto` resolution + boot
+   *  probe); `'cpu'` for the CPU zscale chain used by NVENC / libx26x /
+   *  VideoToolbox fallback. `null` when no tone-mapping pass runs. Stats
+   *  overlays show this value, not the (encoder-agnostic) admin pick. */
+  tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | 'cpu' | null;
+
+  /** CPU tone-map curve (`hable` / `mobius`), set only when
+   *  `tonemapAlgo === 'cpu'`. Surfaced so the overlay names the exact
+   *  curve in use. */
+  tonemapCurve?: 'hable' | 'mobius';
 
   /**
    * Bitrate targets per quality rung (FFmpeg profiles).

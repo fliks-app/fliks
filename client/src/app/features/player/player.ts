@@ -763,10 +763,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       vaapi: 'tonemap_vaapi',
       opencl: 'tonemap_opencl',
       qsv: 'vpp_qsv tonemap',
+      cpu: 'CPU',
     };
+    const tonemapAlgoLabel =
+      pi?.tonemapAlgo === 'cpu' && pi?.tonemapCurve
+        ? `CPU (${pi.tonemapCurve})`
+        : pi?.tonemapAlgo
+          ? (tonemapLabel[pi.tonemapAlgo] ?? pi.tonemapAlgo)
+          : '';
     const tonemapping =
-      pi?.tonemapping && pi?.tonemapAlgo
-        ? (tonemapLabel[pi.tonemapAlgo] ?? pi.tonemapAlgo)
+      pi?.tonemapping && tonemapAlgoLabel
+        ? tonemapAlgoLabel
         : pi?.tonemapping
           ? 'enabled'
           : '';
