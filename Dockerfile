@@ -130,6 +130,17 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
     fi \
   && rm -rf /tmp/dvlibs
 
+# Register the NVIDIA OpenCL ICD so tonemap_opencl can run HDR→SDR on the GPU
+# on NVENC hosts. The container toolkit mounts libnvidia-opencl.so with the
+# `compute` capability (same path as CUDA/NVENC, no Vulkan/GLX needed) but
+# doesn't create the ICD entry — without it the OpenCL loader reports no
+# NVIDIA platform. Harmless on non-NVIDIA hosts: the loader just skips an ICD
+# whose library is absent.
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+      mkdir -p /etc/OpenCL/vendors \
+      && echo 'libnvidia-opencl.so.1' > /etc/OpenCL/vendors/nvidia.icd; \
+    fi
+
 WORKDIR /app
 
 # Copy backend production dependencies

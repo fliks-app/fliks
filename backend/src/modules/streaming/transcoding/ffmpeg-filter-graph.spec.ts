@@ -60,6 +60,15 @@ describe('buildVideoFilters', () => {
     );
   });
 
+  it('routes the tone-map through tonemap_opencl (GPU) when openclTonemap', () => {
+    const f = buildVideoFilters({ ...base, tonemap: true, openclTonemap: true });
+    expect(f.tonemapCpu).toBe(
+      'format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=hable:desat=0:format=nv12,hwdownload,format=nv12,',
+    );
+    // No CPU zscale tone-map when the GPU path is used.
+    expect(f.tonemapCpu).not.toContain('zscale');
+  });
+
   it('honours the tonemapCurve override', () => {
     const hable = buildVideoFilters({ ...base, tonemap: true });
     const mobius = buildVideoFilters({ ...base, tonemap: true, tonemapCurve: 'mobius' });
