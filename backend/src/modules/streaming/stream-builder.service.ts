@@ -619,7 +619,7 @@ export class StreamBuilderService {
       transcodeReasons: reasons,
       videoCopyStream: false,
       audioCopyStream: canCopyAudio,
-      outputVideoCodec: 'h264',
+      outputVideoCodec: selectedVariant.codec,
       outputAudioCodec,
       audioPlan: canCopyAudio
         ? { mode: 'copy', codec: srcCodec }
@@ -1021,18 +1021,17 @@ export class StreamBuilderService {
             message: `${source.videoBitDepth} bit > max ${cond.maxBitDepth} bit`,
           });
         }
-        if (cond.maxWidth && source.width && source.width > cond.maxWidth) {
+        // Match source long/short edges against the decoder's max rectangle in
+        // either orientation — Android can report the per-axis maxima rotated.
+        const srcLong = Math.max(source.width ?? 0, source.height ?? 0);
+        const srcShort = Math.min(source.width ?? 0, source.height ?? 0);
+        const capLong = Math.max(cond.maxWidth ?? 0, cond.maxHeight ?? 0);
+        const capShort = Math.min(cond.maxWidth ?? 0, cond.maxHeight ?? 0);
+        if ((capLong && srcLong > capLong) || (capShort && srcShort > capShort)) {
           videoConditionsMet = false;
           reasons.push({
             flag: 'VideoResolutionNotSupported',
-            message: `Width ${source.width} > max ${cond.maxWidth}`,
-          });
-        }
-        if (cond.maxHeight && source.height && source.height > cond.maxHeight) {
-          videoConditionsMet = false;
-          reasons.push({
-            flag: 'VideoResolutionNotSupported',
-            message: `Height ${source.height} > max ${cond.maxHeight}`,
+            message: `Resolution ${source.width}x${source.height} > max ${cond.maxWidth ?? '?'}x${cond.maxHeight ?? '?'}`,
           });
         }
       }
