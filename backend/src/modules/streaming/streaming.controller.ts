@@ -55,6 +55,7 @@ import { SessionContextBuilder } from './services/session-context-builder.servic
 import { pickAudioLayout } from './transcoding/audio-layout';
 import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { resolveTonemapCurve } from './transcoding/ffmpeg-filter-graph';
+import { isOpenclTonemapEnabled } from './transcoding/codec/opencl-tonemap-probe';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
@@ -721,20 +722,26 @@ export class StreamingController {
 
     // Surface the tonemap mechanism the session actually runs, not the admin
     // pick. QSV/VAAPI encoders run the HW tonemap (vaapi/opencl/qsv after
-    // `auto` resolution + boot probe); every other encoder (NVENC, libx26x,
-    // VideoToolbox CPU fallback) tone-maps on the CPU zscale chain — report
-    // `cpu` plus the curve so the overlay shows what's running (the admin
-    // `tonemapAlgo` HW path is inert on those encoders).
+    // `auto` resolution + boot probe); NVENC runs `tonemap_opencl` on the GPU
+    // when the OpenCL probe passed, else the CPU zscale chain; libx26x /
+    // VideoToolbox fallback always CPU. Report the real path (+ curve only for
+    // the CPU chain) so the overlay shows what's running.
     const hasCrop = resolved.mediaFile.streamInfo?.video?.[0]?.crop != null;
     const hwTonemap =
       response.hwAccel === 'qsv' || response.hwAccel === 'vaapi';
+    const nvencOpencl =
+      response.hwAccel === 'nvenc' && isOpenclTonemapEnabled();
     const tonemapAlgo = response.tonemapping
       ? hwTonemap
         ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop })
-        : 'cpu'
+        : nvencOpencl
+          ? 'opencl'
+          : 'cpu'
       : null;
     const tonemapCurve =
-      response.tonemapping && !hwTonemap ? resolveTonemapCurve() : undefined;
+      response.tonemapping && !hwTonemap && !nvencOpencl
+        ? resolveTonemapCurve()
+        : undefined;
 
     // Compute the profile hash from the inputs we just derived — no
     // tracker round-trip needed. The hash drives the cache directory
