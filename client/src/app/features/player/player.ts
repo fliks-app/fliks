@@ -792,7 +792,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // transcodes, not just raw codes. Unknown flags fall back to the raw token.
     const reasonLabel = (flag: string) => {
       const key = `player.transcode_reason.${flag}`;
-      const label = this.translate.instant(key);
+      const label = this.translate.instant(key, { codec: codecName });
       return label === key ? flag : label;
     };
     const videoTranscodeReasons = effectiveVideoCopy

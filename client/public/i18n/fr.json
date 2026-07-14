@@ -103,7 +103,7 @@
       "VideoProfileNotSupported": "Profil vidéo non supporté",
       "VideoLevelNotSupported": "Niveau vidéo trop élevé",
       "VideoBitDepthNotSupported": "10-bit non supporté",
-      "VideoResolutionNotSupported": "Résolution trop élevée",
+      "VideoResolutionNotSupported": "{{codec}} non décodable à cette résolution",
       "VideoCrop": "Suppression des bandes noires",
       "VideoQualityReduced": "Bitrate réduit (qualité choisie)",
       "VideoAbr": "Bitrate adaptatif (ABR)",
