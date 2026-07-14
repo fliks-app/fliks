@@ -464,7 +464,16 @@ export function buildFfmpegArgs(
   // Baseline and produces an SPS that doesn't match the High SPS in the
   // main session's init.mp4 — player concatenates the two and corrupts.
   const earlyPreset = early ? 'veryfast' : encoderPreset;
-  const earlyNvencPreset = early ? 'p1' : 'p4';
+  // NVENC preset is held identical across the early and steady-state
+  // sessions, for the same reason the libx264 preset is pinned above: NVENC
+  // bakes preset-dependent knobs (num_ref_frames, level, VUI) into the SPS,
+  // and the controller can serve init.mp4 from one session while serving
+  // segments from the other. A p1/p4 split shipped an init (p1) whose SPS
+  // didn't match the p4-encoded slices — fatal under hvc1 (parameter sets
+  // live only in the init), producing macroblock corruption from seg-0.
+  // NVENC encodes 1080p at >10x realtime even at p4, so pinning the warm-up
+  // session to p4 costs no meaningful first-segment latency.
+  const nvencPreset = 'p4';
   // QSV rate-control: tight VBV (bufsize = bitrate × 1) so the BRC has a
   // short horizon and can't defer big I-frames. Early uses 0.5× / 1× so
   // the encoder doesn't hold back frames waiting for the buffer to fill.
@@ -591,7 +600,7 @@ export function buildFfmpegArgs(
       frameRate: fps,
     },
     preset: earlyPreset,
-    nvencPreset: earlyNvencPreset,
+    nvencPreset,
     seekSeconds,
     early,
     forceKeyframesExpr,

@@ -1500,3 +1500,31 @@ describe('buildFfmpegArgs — pillarbox crop output sizing', () => {
     expect(vf).not.toContain('3840');
   });
 });
+
+describe('buildFfmpegArgs — NVENC early/steady-state SPS consistency', () => {
+  const presetOf = (args: string[]): string | null => {
+    const i = args.indexOf('-preset');
+    return i === -1 ? null : args[i + 1];
+  };
+
+  // The controller can serve init.mp4 from the early warm-up session and
+  // segments from the steady-state session. NVENC bakes preset-dependent
+  // knobs into the SPS, so the two sessions must build an identical video
+  // argv or the hvc1 init/segment parameter sets diverge → macroblock
+  // corruption. (Mirrors the pinned-preset invariant for libx264.)
+  it('builds an identical NVENC video argv for early and steady-state', () => {
+    const main = buildFfmpegArgs(
+      opts({ hwAccel: 'nvenc', videoVariant: HEVC_SDR }),
+      silentLog,
+    );
+    const early = buildFfmpegArgs(
+      opts({ hwAccel: 'nvenc', videoVariant: HEVC_SDR, early: true }),
+      silentLog,
+    );
+    expect(presetOf(main)).toBe('p4');
+    expect(presetOf(early)).toBe('p4');
+    // -t (early duration cap) is injected by the session layer, not here, so
+    // the argv this builder emits must be byte-identical across the two.
+    expect(early).toEqual(main);
+  });
+});
