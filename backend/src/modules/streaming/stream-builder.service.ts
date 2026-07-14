@@ -14,7 +14,6 @@ import {
   TranscodingService,
   getHdrLadderForDevice,
   getLadderForDevice,
-  cappedTranscodeVideoBitrateBps,
   isEcoProfile,
   parseBitrateToBps,
   profileFitsSource,
@@ -367,32 +366,20 @@ export class StreamBuilderService {
       }
     }
 
-    // Surface a quality-reduction reason only when the chosen explicit rung is
-    // an ACTUAL downscale or bitrate cut vs the source — not merely because a
-    // fixed rung was picked. A rung at the source resolution whose source-
-    // capped bitrate matches the source changes nothing worth flagging.
+    // An explicit rung only reaches this branch via `explicitDownscale` — a
+    // lower resolution or an eco (same-resolution, reduced-bitrate) tier the
+    // user deliberately picked, both of which re-encode the video. Surface the
+    // choice so the overlay never shows a transcode with an empty video reason.
+    // (A per-bitrate re-check used to gate this and silently dropped the reason
+    // for eco rungs whose source-capped bitrate wasn't provably below an
+    // unknown or already-low source bitrate.)
     if (forceLadder && !autoOnLadder) {
       const rung = qualityLadder.find((p) => p.name === requestedQuality);
       if (rung) {
-        const reducesResolution =
-          bucketResolutionHeight(rung.maxWidth, rung.maxHeight) <
-          bucketResolutionHeight(source.width, source.height);
-        const rungVideoBps = cappedTranscodeVideoBitrateBps(
-          parseBitrateToBps(rung.videoBitrate),
-          source.videoBitRate,
-          source.videoCodec,
-          selectedVariant.codec,
-        );
-        const reducesBitrate =
-          source.videoBitRate != null &&
-          source.videoBitRate > 0 &&
-          rungVideoBps < source.videoBitRate * 0.95;
-        if (reducesResolution || reducesBitrate) {
-          reasons.push({
-            flag: 'VideoQualityReduced',
-            message: `Reduced-quality rung selected (${requestedQuality})`,
-          });
-        }
+        reasons.push({
+          flag: 'VideoQualityReduced',
+          message: `Reduced-quality rung selected (${requestedQuality})`,
+        });
       }
     }
 
