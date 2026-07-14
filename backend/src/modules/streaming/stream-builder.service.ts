@@ -26,7 +26,10 @@ import {
 } from './transcoding/quality-ladder';
 import { resolveEncodePipeline } from './transcoding/encode-pipeline';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
-import { bucketResolutionHeight } from '../../common/utils/resolution.util';
+import {
+  bucketResolutionHeight,
+  resolutionFitsCap,
+} from '../../common/utils/resolution.util';
 import { normaliseSourceCodec } from './transcoding/codec/normalise';
 import { deriveDvInfo, isDvProfile5 } from './transcoding/codec/dolby-vision';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
@@ -1021,13 +1024,14 @@ export class StreamBuilderService {
             message: `${source.videoBitDepth} bit > max ${cond.maxBitDepth} bit`,
           });
         }
-        // Match source long/short edges against the decoder's max rectangle in
-        // either orientation — Android can report the per-axis maxima rotated.
-        const srcLong = Math.max(source.width ?? 0, source.height ?? 0);
-        const srcShort = Math.min(source.width ?? 0, source.height ?? 0);
-        const capLong = Math.max(cond.maxWidth ?? 0, cond.maxHeight ?? 0);
-        const capShort = Math.min(cond.maxWidth ?? 0, cond.maxHeight ?? 0);
-        if ((capLong && srcLong > capLong) || (capShort && srcShort > capShort)) {
+        if (
+          !resolutionFitsCap(
+            source.width,
+            source.height,
+            cond.maxWidth,
+            cond.maxHeight,
+          )
+        ) {
           videoConditionsMet = false;
           reasons.push({
             flag: 'VideoResolutionNotSupported',

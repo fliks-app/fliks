@@ -40,6 +40,30 @@ export function bucketResolutionHeight(
 }
 
 /**
+ * Whether a (width × height) frame fits within a decoder's max resolution,
+ * compared in either orientation — a device reports its per-codec maxima per
+ * axis and can return them rotated (a 4K decoder advertising 2048×2048 vs
+ * 2160×3840), so the source's long edge is checked against the cap's long edge
+ * and likewise for the short edges. An undefined/zero cap axis means "no limit
+ * declared" and passes. Shared by the direct-play codec gate (source vs cap)
+ * and the output-codec selector (target vs cap).
+ */
+export function resolutionFitsCap(
+  width?: number | null,
+  height?: number | null,
+  maxWidth?: number | null,
+  maxHeight?: number | null,
+): boolean {
+  const long = Math.max(width ?? 0, height ?? 0);
+  const short = Math.min(width ?? 0, height ?? 0);
+  const capLong = Math.max(maxWidth ?? 0, maxHeight ?? 0);
+  const capShort = Math.min(maxWidth ?? 0, maxHeight ?? 0);
+  if (capLong && long > capLong) return false;
+  if (capShort && short > capShort) return false;
+  return true;
+}
+
+/**
  * Display label for a (width × height) pair — `"4K"` for 2160 buckets,
  * `"<bucket>p"` for everything else, `null` when both inputs are
  * zero/missing. Mirrors the client's `bucketResolutionLabel` so badge

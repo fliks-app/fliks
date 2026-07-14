@@ -3,6 +3,7 @@ import type { DeviceProfileDto } from '../../dto/device-profile.dto';
 import type { HwAccelType } from '../types';
 import { encoderRegistry } from './encoders';
 import { applyQuirks, type QuirkContext } from './fallback';
+import { resolutionFitsCap } from '../../../../common/utils/resolution.util';
 
 /**
  * Resolve an encoder for `variant` whose `hwAccel` matches the detected
@@ -174,8 +175,7 @@ function clientSupports(set: Set<string>, codec: VideoCodec): boolean {
  *  A native client reports its HW decoder's per-codec max width/height; since
  *  one codec drives every rung of the master, a codec whose ceiling can't fit
  *  the top rung is unusable — a 4K source on a device that decodes AV1 only up
- *  to 2048 must fall back to HEVC. Compared in either orientation (the maxima
- *  can be reported rotated). Codecs with no declared ceiling always pass. */
+ *  to 2048 must fall back to HEVC. Codecs with no declared ceiling always pass. */
 function clientDecodesResolution(
   profile: DeviceProfileDto,
   codec: VideoCodec,
@@ -184,11 +184,5 @@ function clientDecodesResolution(
 ): boolean {
   const cond = profile.codecConditions?.find((c) => c.codec === codec);
   if (!cond) return true;
-  const long = Math.max(width, height);
-  const short = Math.min(width, height);
-  const capLong = Math.max(cond.maxWidth ?? 0, cond.maxHeight ?? 0);
-  const capShort = Math.min(cond.maxWidth ?? 0, cond.maxHeight ?? 0);
-  if (capLong && long > capLong) return false;
-  if (capShort && short > capShort) return false;
-  return true;
+  return resolutionFitsCap(width, height, cond.maxWidth, cond.maxHeight);
 }
