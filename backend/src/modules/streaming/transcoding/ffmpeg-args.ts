@@ -32,6 +32,7 @@ import { hevcMainTierCapBps } from './codec/codec-strings';
 import { varStreamMapLayout } from './audio-layout';
 import { resolveEncodePipeline } from './encode-pipeline';
 import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';
+import { isOpenclTonemapEnabled } from './codec/opencl-tonemap-probe';
 import { isLibplaceboDvEnabled } from './codec/libplacebo-dv-probe';
 import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
 
@@ -456,6 +457,16 @@ export function buildFfmpegArgs(
     );
   }
 
+  // NVENC has no tonemap_cuda, so its HDR→SDR tone-map runs off-encoder.
+  // When the OpenCL tone-map probe passed, route it through tonemap_opencl
+  // (GPU) instead of the CPU zscale chain — decisive on 4K where the CPU
+  // tone-map can't sustain real-time. Decode is forced to CPU so the frame
+  // reaches OpenCL via a plain hwupload (no CUDA↔OpenCL interop, which is
+  // unreliable); the tone-map, the expensive step, is what moves to the GPU.
+  const nvencOpencl =
+    !!tonemap && effectiveHwAccel === 'nvenc' && isOpenclTonemapEnabled();
+  const decodeHwAccel: HwAccelType = nvencOpencl ? 'none' : effectiveHwAccel;
+
   // Early sessions live ~1s before Shaka jumps to the main session — visual
   // quality on those warm-up frames is throwaway, so bias every knob towards
   // ramp-up speed. `veryfast` everywhere keeps the H.264 profile consistent
@@ -519,7 +530,7 @@ export function buildFfmpegArgs(
             codec: normalisedSourceCodec ?? 'h264',
             bitDepth: sourceBitDepth,
           },
-          effectiveHwAccel,
+          decodeHwAccel,
         );
   args.push(...decoder.buildInputArgs());
 
@@ -562,6 +573,12 @@ export function buildFfmpegArgs(
   // `derive_device=qsv` on the closing hwmap.
   if (tonemap && !useVaapiTonemap && decoder.outputSurface === 'vaapi') {
     args.push('-init_hw_device', 'opencl=ocl:0.0');
+  }
+  // NVENC OpenCL tone-map: init the OpenCL device and make it the default
+  // filter device so the chain's `hwupload` lands on it. Decode is CPU here
+  // (see nvencOpencl above), so there's no competing hwaccel device.
+  if (nvencOpencl) {
+    args.push('-init_hw_device', 'opencl=ocl', '-filter_hw_device', 'ocl');
   }
   if (useDoviTonemap) {
     args.push('-init_hw_device', 'vulkan=vk:0', '-filter_hw_device', 'vk');
@@ -619,6 +636,7 @@ export function buildFfmpegArgs(
       dovi: useDoviTonemap,
       tonemapCurve: resolveTonemapCurve(),
       scaleWidth: w,
+      openclTonemap: nvencOpencl,
     }),
     tonemap,
     tonemapPath,

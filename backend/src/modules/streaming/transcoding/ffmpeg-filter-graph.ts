@@ -27,6 +27,11 @@ export interface VideoFilterContext {
   dovi?: boolean;
   /** CPU HDR→SDR tone-map curve (`hable` default, `mobius` optional). */
   tonemapCurve?: TonemapCurve;
+  /** Route the HDR→SDR tone-map through `tonemap_opencl` (GPU) instead of the
+   *  CPU zscale chain. Set for NVENC sessions when the OpenCL tone-map probe
+   *  passed — on NVIDIA this keeps the tone-map on the GPU (there is no
+   *  tonemap_cuda), turning a 4K source's ~0.5x CPU tone-map into >1x. */
+  openclTonemap?: boolean;
   /** Target output width. The CPU tone-map downscales to it in linear light
    *  before tone-mapping, so the (CPU-bound) tone curve + gamut conversion run
    *  at the output resolution instead of the source's — decisive on a 4K
@@ -61,6 +66,7 @@ export function buildVideoFilters(
     dovi,
     tonemapCurve,
     scaleWidth,
+    openclTonemap,
   } = ctx;
   const cropStr = crop
     ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`
@@ -87,11 +93,17 @@ export function buildVideoFilters(
   // re-encodes to BT.709 transfer + matrix + limited range. Input colorimetry
   // is read from the frame tags, so PQ (smpte2084) and HLG (arib-std-b67) both
   // work. `h=-2` keeps the (post-crop) aspect at an even height.
+  // `openclTonemap` (NVENC + OpenCL GPU) keeps the tone-map on the GPU:
+  // upload the CPU frame to OpenCL, tonemap_opencl (linearises + BT.2020→709
+  // + curve internally), download back. tonemap_opencl has no bt2390 in
+  // ffmpeg 6.1, so it uses the same hable/mobius curve as the CPU chain.
   const curve = tonemapCurve ?? 'hable';
   const tonemapCpu = tonemap
     ? dovi
       ? `hwupload,libplacebo=apply_dolbyvision=1:tonemapping=bt.2390:colorspace=bt709:color_primaries=bt709:color_trc=bt709:format=nv12,hwdownload,format=nv12,`
-      : `zscale=w=${scaleWidth}:h=-2:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=${curve}:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,`
+      : openclTonemap
+        ? `format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=${curve}:desat=0:format=nv12,hwdownload,format=nv12,`
+        : `zscale=w=${scaleWidth}:h=-2:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=${curve}:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,`
     : '';
   // HW-crop round-trip: hwdownload → crop → hwupload. The explicit `format=`
   // matches the source bit depth (p010le for 10-bit) so crop runs in the

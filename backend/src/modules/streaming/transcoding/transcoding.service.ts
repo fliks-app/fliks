@@ -43,6 +43,7 @@ import {
   isTonemapOpenclEnabled,
   runTonemapOpenclProbe,
 } from './codec/tonemap-opencl-probe';
+import { runOpenclTonemapProbe } from './codec/opencl-tonemap-probe';
 import { runLibplaceboDvProbe } from './codec/libplacebo-dv-probe';
 import {
   generateMasterPlaylist,
@@ -139,6 +140,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.detectedHwAccel === 'vaapi'
     ) {
       void runTonemapOpenclProbe(this.log);
+    }
+    // Standalone OpenCL tone-map — the GPU HDR→SDR path for NVENC (no
+    // tonemap_cuda in mainline ffmpeg; OpenCL rides the same compute stack
+    // as CUDA/NVENC, unlike the GLX/Vulkan chain which fails headless).
+    if (this.detectedHwAccel === 'nvenc') {
+      void runOpenclTonemapProbe(this.log);
     }
     // Vulkan/libplacebo Dolby Vision P5 tonemap. Vendor-agnostic, so probe on
     // any non-macOS host; a GPU-less server fails device init fast (fail-closed).
