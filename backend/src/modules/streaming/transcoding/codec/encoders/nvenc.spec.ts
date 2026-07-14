@@ -88,7 +88,9 @@ describe('NVENC encoders — surface-aware filter graph', () => {
     it('cuda decode + tonemap: hwdownload pulls GPU frames to CPU', () => {
       const vf = vfOf(enc.buildArgs(makeInput({ inputSurface: 'cuda', tonemap: true })));
       expect(vf).toContain('hwdownload,format=p010le,');
-      expect(vf).toContain('tonemap=mobius');
+      // CPU tonemap must linearise + convert gamut, not just tone-curve.
+      expect(vf).toContain('zscale=t=linear');
+      expect(vf).toContain('tonemap=tonemap=hable');
       expect(vf).toContain('scale=1920:');
     });
 
@@ -96,8 +98,8 @@ describe('NVENC encoders — surface-aware filter graph', () => {
       const vf = vfOf(enc.buildArgs(makeInput({ inputSurface: 'cpu', tonemap: true })));
       expect(vf).not.toContain('hwdownload');
       expect(vf).not.toContain('scale_cuda');
-      expect(vf.startsWith('format=gbrpf32le,')).toBe(true);
-      expect(vf).toContain('tonemap=mobius');
+      expect(vf.startsWith('zscale=t=linear:npl=100,')).toBe(true);
+      expect(vf).toContain('tonemap=tonemap=hable');
       expect(vf).toContain('scale=1920:');
     });
 
@@ -105,7 +107,7 @@ describe('NVENC encoders — surface-aware filter graph', () => {
       const vf = vfOf(enc.buildArgs(makeInput({ inputSurface: 'vaapi', tonemap: true })));
       expect(vf.startsWith('hwdownload,format=p010le,')).toBe(true);
       expect(vf).not.toContain('scale_cuda');
-      expect(vf).toContain('tonemap=mobius');
+      expect(vf).toContain('tonemap=tonemap=hable');
     });
 
     it('cuda decode, no tonemap: scale_cuda stays on the GPU as nv12', () => {

@@ -1,6 +1,17 @@
 import type { BurnInSubtitle } from './types';
 import type { EncoderInput } from './codec/types';
 
+/** CPU HDR→SDR tone-map curve. `hable` is a filmic curve with a gentle
+ *  highlight rolloff (retains specular detail on high-nit HDR10); `mobius`
+ *  is punchier with a harder highlight knee. */
+export type TonemapCurve = 'hable' | 'mobius';
+
+/** Resolve the CPU tone-map curve from the optional `TRANSCODE_TONEMAP_CURVE`
+ *  env var, defaulting to `hable`. */
+export function resolveTonemapCurve(): TonemapCurve {
+  return process.env.TRANSCODE_TONEMAP_CURVE === 'mobius' ? 'mobius' : 'hable';
+}
+
 export interface VideoFilterContext {
   crop?: { width: number; height: number; x: number; y: number };
   burnIn?: BurnInSubtitle;
@@ -14,6 +25,8 @@ export interface VideoFilterContext {
   /** Dolby Vision P5: tonemap via the RPU-aware libplacebo (Vulkan) chain
    *  instead of the standard tonemap that misreads IPT-C2 (#636). */
   dovi?: boolean;
+  /** CPU HDR→SDR tone-map curve (`hable` default, `mobius` optional). */
+  tonemapCurve?: TonemapCurve;
 }
 
 /**
@@ -33,7 +46,8 @@ export interface VideoFilterContext {
 export function buildVideoFilters(
   ctx: VideoFilterContext,
 ): EncoderInput['filters'] {
-  const { crop, burnIn, tonemap, useVaapiTonemap, sourceBitDepth, dovi } = ctx;
+  const { crop, burnIn, tonemap, useVaapiTonemap, sourceBitDepth, dovi, tonemapCurve } =
+    ctx;
   const cropStr = crop
     ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`
     : '';
@@ -47,13 +61,19 @@ export function buildVideoFilters(
     useVaapiTonemap && !burnIn?.filter
       ? ',tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709'
       : '';
-  // CPU tonemap chain: HDR (PQ/HLG BT.2020) → SDR (BT.709). Float → tonemap →
-  // yuv420p; the `tonemap` filter handles PQ/HLG linearisation internally (no
-  // zscale/libzimg dependency).
+  // CPU tonemap chain: HDR (PQ/HLG BT.2020) → SDR (BT.709). zscale linearises
+  // the source transfer to linear light first — vf_tonemap operates on linear
+  // light only and does NOT linearise itself, so feeding it PQ/HLG code values
+  // collapses the picture to a washed-out grey and skips the gamut conversion.
+  // Then the BT.2020 → BT.709 primaries map runs in linear light, `tonemap`
+  // applies the tone curve, and the closing zscale re-encodes to BT.709
+  // transfer + matrix + limited range. Input colorimetry is read from the
+  // frame tags, so PQ (smpte2084) and HLG (arib-std-b67) are both handled.
+  const curve = tonemapCurve ?? 'hable';
   const tonemapCpu = tonemap
     ? dovi
       ? `hwupload,libplacebo=apply_dolbyvision=1:tonemapping=bt.2390:colorspace=bt709:color_primaries=bt709:color_trc=bt709:format=nv12,hwdownload,format=nv12,`
-      : `format=gbrpf32le,tonemap=mobius:desat=0,format=yuv420p,`
+      : `zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=${curve}:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,`
     : '';
   // HW-crop round-trip: hwdownload → crop → hwupload. The explicit `format=`
   // matches the source bit depth (p010le for 10-bit) so crop runs in the
