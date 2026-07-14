@@ -17,6 +17,12 @@ describe('resolveSourceVideoBitrateBps', () => {
     );
   });
 
+  it('falls back to the container bitrate when audio bitrate is also absent', () => {
+    // MKV with no per-stream video *or* audio bitrate: the container total is
+    // the video estimate, so the cap tracks the source instead of the rung.
+    expect(resolveSourceVideoBitrateBps(null, 12_500_000, 0)).toBe(12_500_000);
+  });
+
   it('returns undefined when neither source is usable', () => {
     expect(resolveSourceVideoBitrateBps(null, null, 0)).toBeUndefined();
     expect(resolveSourceVideoBitrateBps(0, 0, 0)).toBeUndefined();
