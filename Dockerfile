@@ -59,6 +59,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/* "$HOME/.cargo/registry" "$HOME/.rustup" \
        /tmp/dovi_tool /tmp/libplacebo
 
+# --- Newer Vulkan loader ---
+# Ubuntu 24.04 ships libvulkan1 1.3.275, which can't negotiate with the
+# current NVIDIA ICD (Vulkan 1.4): `vk_icdGetInstanceProcAddr` returns a NULL
+# vkCreateInstance, so Vulkan silently falls back to llvmpipe (software) and
+# libplacebo tonemapping crawls at ~0.03x. Build a 1.4 loader to drop in over
+# the apt one so `-init_hw_device vulkan` reaches the real GPU.
+FROM ubuntu:24.04 AS vulkan-loader-build
+ARG VULKAN_LOADER_TAG=vulkan-sdk-1.4.313.0
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates git cmake ninja-build build-essential python3 \
+  && git clone --depth 1 --branch "$VULKAN_LOADER_TAG" \
+       https://github.com/KhronosGroup/Vulkan-Loader.git /tmp/vkloader-src \
+  && cmake -S /tmp/vkloader-src -B /tmp/vkloader-build -G Ninja \
+       -DUPDATE_DEPS=ON -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release \
+       -DCMAKE_INSTALL_PREFIX=/opt/vkloader \
+  && cmake --build /tmp/vkloader-build --target install \
+  && rm -rf /var/lib/apt/lists/* /tmp/vkloader-src /tmp/vkloader-build
+
 # --- Stage 3: Production runtime ---
 FROM ubuntu:24.04
 
@@ -129,6 +147,19 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
       && ldconfig; \
     fi \
   && rm -rf /tmp/dvlibs
+
+# Replace the apt Vulkan loader (1.3.275, too old for the NVIDIA 1.4 ICD) with
+# the 1.4 build, and drop the llvmpipe software ICD so `-init_hw_device vulkan`
+# selects the real GPU (NVIDIA/Intel) instead of the CPU renderer.
+COPY --from=vulkan-loader-build /opt/vkloader/lib/ /tmp/vkloader/
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+      real="$(ls /tmp/vkloader/libvulkan.so.1.* | head -1)" \
+      && cp -a "$real" /usr/lib/x86_64-linux-gnu/ \
+      && ln -sf "$(basename "$real")" /usr/lib/x86_64-linux-gnu/libvulkan.so.1 \
+      && rm -f /usr/share/vulkan/icd.d/lvp_icd.json \
+      && ldconfig; \
+    fi \
+  && rm -rf /tmp/vkloader
 
 WORKDIR /app
 
