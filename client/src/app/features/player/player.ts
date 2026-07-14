@@ -835,9 +835,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       );
 
     let audioStreamBitrate = '';
-    if (selectedRateEntry) {
+    if (selectedRateEntry && validBps(selectedRateEntry.audioBitrateBps)) {
       audioStreamBitrate = formatBitrateBps(selectedRateEntry.audioBitrateBps);
-    } else if (validBps(sourceA) && pi?.playMethod === 'DirectStream') {
+    } else if (validBps(sourceA)) {
       audioStreamBitrate = formatBitrateBps(sourceA);
     } else {
       const trackAbw = activeVariant?.audioBandwidth;
