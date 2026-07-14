@@ -2,7 +2,10 @@ import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
 import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
 import { masterDisplayString, maxCllString } from './helpers/hdr-metadata';
-import { scaleEvenHeight } from './helpers/scale-filter';
+import {
+  nvencScaleFilter10bit,
+  nvencScaleFilter8bit,
+} from './helpers/nvenc-filters';
 
 /** NVIDIA NVENC HEVC SDR encoder — Maxwell 2nd gen (GM20x) and later.
  *  Tonemap path round-trips via CPU because mainline FFmpeg still has no
@@ -15,10 +18,9 @@ export const hevcNvenc: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => hevcMainCodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, nvencPreset, filters, tonemap, hasCrop } = input;
-    const w = target.width;
+    const { target, nvencPreset } = input;
     const bitrate = `${target.videoBitrateBps}`;
-    const common = [
+    return [
       '-c:v',
       'hevc_nvenc',
       '-preset',
@@ -29,8 +31,8 @@ export const hevcNvenc: EncoderDescriptor = {
       bitrate,
       '-maxrate',
       bitrate,
-    ];
-    const trailing = [
+      '-vf',
+      nvencScaleFilter8bit(input),
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -39,24 +41,6 @@ export const hevcNvenc: EncoderDescriptor = {
       input.forceKeyframesExpr,
       '-tag:v',
       'hvc1',
-    ];
-
-    if (tonemap) {
-      return [
-        ...common,
-        '-vf',
-        `hwdownload,format=p010le,${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleEvenHeight(w)}`,
-        ...trailing,
-      ];
-    }
-    const nvCropFilter = hasCrop
-      ? `hwdownload,format=nv12,${filters.cropStr},hwupload_cuda,`
-      : '';
-    return [
-      ...common,
-      '-vf',
-      `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=nv12`,
-      ...trailing,
     ];
   },
 };
@@ -74,12 +58,8 @@ export const hevcNvencHdr10: EncoderDescriptor = {
   supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => hevcMain10CodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, nvencPreset, filters, hasCrop } = input;
-    const w = target.width;
+    const { target, nvencPreset } = input;
     const bitrate = `${target.videoBitrateBps}`;
-    const nvCropFilter = hasCrop
-      ? `hwdownload,format=p010le,${filters.cropStr},hwupload_cuda,`
-      : '';
     return [
       '-c:v',
       'hevc_nvenc',
@@ -94,7 +74,7 @@ export const hevcNvencHdr10: EncoderDescriptor = {
       '-maxrate',
       bitrate,
       '-vf',
-      `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=p010le`,
+      nvencScaleFilter10bit(input),
       '-g',
       String(target.gopSize),
       '-keyint_min',
