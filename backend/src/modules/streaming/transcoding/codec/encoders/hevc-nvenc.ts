@@ -6,6 +6,7 @@ import {
   nvencScaleFilter10bit,
   nvencScaleFilter8bit,
 } from './helpers/nvenc-filters';
+import { NVENC_GOP_ARGS } from './helpers/nvenc-gop';
 
 /** NVIDIA NVENC HEVC SDR encoder — Maxwell 2nd gen (GM20x) and later.
  *  Tonemap path round-trips via CPU because mainline FFmpeg still has no
@@ -33,6 +34,7 @@ export const hevcNvenc: EncoderDescriptor = {
       bitrate,
       '-vf',
       nvencScaleFilter8bit(input),
+      ...NVENC_GOP_ARGS,
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -75,6 +77,7 @@ export const hevcNvencHdr10: EncoderDescriptor = {
       bitrate,
       '-vf',
       nvencScaleFilter10bit(input),
+      ...NVENC_GOP_ARGS,
       '-g',
       String(target.gopSize),
       '-keyint_min',

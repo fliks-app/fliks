@@ -1,6 +1,7 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { h264CodecString } from '../codec-strings';
 import { nvencScaleFilter8bit } from './helpers/nvenc-filters';
+import { NVENC_GOP_ARGS } from './helpers/nvenc-gop';
 
 /** NVIDIA NVENC H.264 encoder — Kepler and later. Tonemap path round-trips
  *  via CPU (hwdownload + scale + tonemap chain) because the CUDA filter
@@ -26,6 +27,7 @@ export const h264Nvenc: EncoderDescriptor = {
       bitrate,
       '-vf',
       nvencScaleFilter8bit(input),
+      ...NVENC_GOP_ARGS,
       '-g',
       String(target.gopSize),
       '-keyint_min',
