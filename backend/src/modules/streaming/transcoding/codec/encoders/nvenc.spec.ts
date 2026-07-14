@@ -48,6 +48,7 @@ function makeInput(cfg: {
       tonemap,
       useVaapiTonemap: false,
       sourceBitDepth: cfg.sourceBitDepth ?? (tonemap ? 10 : 8),
+      scaleWidth: 1920,
     }),
     tonemap,
     tonemapPath: 'opencl',
@@ -88,19 +89,18 @@ describe('NVENC encoders — surface-aware filter graph', () => {
     it('cuda decode + tonemap: hwdownload pulls GPU frames to CPU', () => {
       const vf = vfOf(enc.buildArgs(makeInput({ inputSurface: 'cuda', tonemap: true })));
       expect(vf).toContain('hwdownload,format=p010le,');
-      // CPU tonemap must linearise + convert gamut, not just tone-curve.
-      expect(vf).toContain('zscale=t=linear');
+      // CPU tonemap must downscale in linear light + convert gamut.
+      expect(vf).toContain('zscale=w=1920:h=-2:t=linear');
       expect(vf).toContain('tonemap=tonemap=hable');
-      expect(vf).toContain('scale=1920:');
     });
 
-    it('cpu decode + tonemap: no hwdownload, CPU tonemap chain only', () => {
+    it('cpu decode + tonemap: no hwdownload, downscale-then-tonemap on CPU', () => {
       const vf = vfOf(enc.buildArgs(makeInput({ inputSurface: 'cpu', tonemap: true })));
       expect(vf).not.toContain('hwdownload');
       expect(vf).not.toContain('scale_cuda');
-      expect(vf.startsWith('zscale=t=linear:npl=100,')).toBe(true);
+      // Downscale to the output width in linear light before the tone curve.
+      expect(vf.startsWith('zscale=w=1920:h=-2:t=linear:npl=100,')).toBe(true);
       expect(vf).toContain('tonemap=tonemap=hable');
-      expect(vf).toContain('scale=1920:');
     });
 
     it('vaapi decode + tonemap: hwdownload bridge before the CPU chain', () => {
