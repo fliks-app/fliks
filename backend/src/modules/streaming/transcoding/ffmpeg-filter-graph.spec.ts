@@ -46,7 +46,23 @@ describe('buildVideoFilters', () => {
     const f = buildVideoFilters({ ...base, tonemap: true });
     expect(f.tonemapOpencl).toContain('tonemap_opencl=');
     expect(f.tonemapVaapi).toBe('');
-    expect(f.tonemapCpu).toContain('tonemap=mobius');
+    expect(f.tonemapCpu).toContain('tonemap=hable');
+  });
+
+  it('CPU tone-map linearises then converts BT.2020 → BT.709 (not a bare tonemap)', () => {
+    const f = buildVideoFilters({ ...base, tonemap: true });
+    // vf_tonemap needs linear light; the chain must linearise first and
+    // convert primaries + output transfer, or the picture washes out grey.
+    expect(f.tonemapCpu).toBe(
+      'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,',
+    );
+  });
+
+  it('honours the tonemapCurve override', () => {
+    const hable = buildVideoFilters({ ...base, tonemap: true });
+    const mobius = buildVideoFilters({ ...base, tonemap: true, tonemapCurve: 'mobius' });
+    expect(hable.tonemapCpu).toContain('tonemap=tonemap=hable:');
+    expect(mobius.tonemapCpu).toContain('tonemap=tonemap=mobius:');
   });
 
   it('vaapi tone-map when useVaapiTonemap', () => {
@@ -64,14 +80,14 @@ describe('buildVideoFilters', () => {
     expect(f.tonemapOpencl).toBe('');
     expect(f.tonemapVaapi).toBe('');
     expect(f.burnInFilter).toBe(',subtitles=/tmp/x.ass');
-    expect(f.tonemapCpu).toContain('tonemap=mobius');
+    expect(f.tonemapCpu).toContain('tonemap=hable');
   });
 
   it('dovi swaps only the CPU tone-map slot for the libplacebo chain', () => {
     const plain = buildVideoFilters({ ...base, tonemap: true });
     const dv = buildVideoFilters({ ...base, tonemap: true, dovi: true });
     expect(dv.tonemapCpu).toContain('libplacebo=apply_dolbyvision=1');
-    expect(dv.tonemapCpu).not.toContain('tonemap=mobius');
+    expect(dv.tonemapCpu).not.toContain('tonemap=tonemap=hable');
     // Every other slot is identical to the non-dovi tone-map.
     for (const k of [
       'cropStr', 'cpuCropPrefix', 'hwCropPrefix',

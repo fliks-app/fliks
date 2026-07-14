@@ -31,7 +31,7 @@ import { normaliseSourceCodec } from './codec/normalise';
 import { hevcMainTierCapBps } from './codec/codec-strings';
 import { varStreamMapLayout } from './audio-layout';
 import { resolveEncodePipeline } from './encode-pipeline';
-import { buildVideoFilters } from './ffmpeg-filter-graph';
+import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';
 import { isLibplaceboDvEnabled } from './codec/libplacebo-dv-probe';
 import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
 
@@ -617,6 +617,7 @@ export function buildFfmpegArgs(
       useVaapiTonemap,
       sourceBitDepth,
       dovi: useDoviTonemap,
+      tonemapCurve: resolveTonemapCurve(),
     }),
     tonemap,
     tonemapPath,

@@ -282,7 +282,7 @@ describe('buildFfmpegArgs — CPU golden argv (characterization)', () => {
        "-bufsize",
        "16M",
        "-vf",
-       "format=gbrpf32le,tonemap=mobius:desat=0,format=yuv420p,scale=1920:ceil(ih*1920/iw/2)*2:flags=lanczos,format=yuv420p",
+       "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=1920:ceil(ih*1920/iw/2)*2:flags=lanczos,format=yuv420p",
        "-force_key_frames",
        "expr:gte(t,0+n_forced*3)",
        "-sc_threshold:v:0",
