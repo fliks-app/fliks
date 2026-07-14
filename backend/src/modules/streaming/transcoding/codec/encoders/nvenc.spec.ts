@@ -63,6 +63,11 @@ function vfOf(args: string[]): string {
   return args[i + 1];
 }
 
+function hasFlag(args: string[], flag: string, value: string): boolean {
+  const i = args.indexOf(flag);
+  return i !== -1 && args[i + 1] === value;
+}
+
 const SDR_ENCODERS: [string, EncoderDescriptor][] = [
   ['hevc_nvenc', hevcNvenc],
   ['h264_nvenc', h264Nvenc],
@@ -162,6 +167,29 @@ describe('NVENC encoders — surface-aware filter graph', () => {
       expect(vf).toBe(
         'hwdownload,format=p010le,scale=1920:ceil(ih*1920/iw/2)*2:flags=lanczos,format=p010le',
       );
+    });
+  });
+
+  // Closed-GOP, deterministic-IDR flags: every NVENC descriptor must force
+  // its keyframes to IDR and drop B-frame reordering, or HLS segments aren't
+  // independently decodable (macroblock corruption — mirrors the qsvExtra
+  // recipe). Independent of the input surface.
+  describe.each(ALL_ENCODERS)('%s (GOP flags)', (id, enc) => {
+    it('forces IDR keyframes and disables B-frames', () => {
+      const args = enc.buildArgs(makeInput({ inputSurface: 'cuda', sourceBitDepth: 10 }));
+      expect(hasFlag(args, '-forced-idr', '1')).toBe(true);
+      expect(hasFlag(args, '-bf', '0')).toBe(true);
+    });
+
+    it('gates -no-scenecut on codec support (h264/hevc yes, av1 no)', () => {
+      const args = enc.buildArgs(makeInput({ inputSurface: 'cuda', sourceBitDepth: 10 }));
+      if (id.startsWith('av1')) {
+        // av1_nvenc has no -no-scenecut option; passing it would abort the
+        // encoder and drop it to the libsvtav1 fallback.
+        expect(args).not.toContain('-no-scenecut');
+      } else {
+        expect(hasFlag(args, '-no-scenecut', '1')).toBe(true);
+      }
     });
   });
 

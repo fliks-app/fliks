@@ -6,6 +6,7 @@ import {
   nvencScaleFilter10bit,
   nvencScaleFilter8bit,
 } from './helpers/nvenc-filters';
+import { AV1_NVENC_GOP_ARGS } from './helpers/nvenc-gop';
 
 /** NVIDIA NVENC AV1 encoder — Ada Lovelace (RTX 4000 series) and later.
  *  Pascal, Turing and Ampere don't ship the AV1 encode unit, so
@@ -34,6 +35,7 @@ export const av1Nvenc: EncoderDescriptor = {
       bitrate,
       '-vf',
       nvencScaleFilter8bit(input),
+      ...AV1_NVENC_GOP_ARGS,
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -72,6 +74,7 @@ export const av1NvencHdr10: EncoderDescriptor = {
       bitrate,
       '-vf',
       nvencScaleFilter10bit(input),
+      ...AV1_NVENC_GOP_ARGS,
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -113,6 +116,7 @@ export const av1NvencHlg: EncoderDescriptor = {
       bitrate,
       '-vf',
       nvencScaleFilter10bit(input),
+      ...AV1_NVENC_GOP_ARGS,
       '-g',
       String(target.gopSize),
       '-keyint_min',
