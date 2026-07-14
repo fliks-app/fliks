@@ -6,6 +6,7 @@ const base = {
   tonemap: false,
   useVaapiTonemap: false,
   sourceBitDepth: 8,
+  scaleWidth: 1920,
 };
 
 describe('buildVideoFilters', () => {
@@ -49,12 +50,13 @@ describe('buildVideoFilters', () => {
     expect(f.tonemapCpu).toContain('tonemap=hable');
   });
 
-  it('CPU tone-map linearises then converts BT.2020 → BT.709 (not a bare tonemap)', () => {
-    const f = buildVideoFilters({ ...base, tonemap: true });
-    // vf_tonemap needs linear light; the chain must linearise first and
-    // convert primaries + output transfer, or the picture washes out grey.
+  it('CPU tone-map downscales in linear light, then converts BT.2020 → BT.709', () => {
+    const f = buildVideoFilters({ ...base, tonemap: true, scaleWidth: 1280 });
+    // Downscale to the output width in linear light first, so the CPU tone
+    // curve + gamut conversion run at output res, not the source's; vf_tonemap
+    // needs linear light and the chain must convert primaries + transfer.
     expect(f.tonemapCpu).toBe(
-      'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,',
+      'zscale=w=1280:h=-2:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,',
     );
   });
 

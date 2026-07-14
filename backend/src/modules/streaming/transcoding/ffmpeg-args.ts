@@ -618,6 +618,7 @@ export function buildFfmpegArgs(
       sourceBitDepth,
       dovi: useDoviTonemap,
       tonemapCurve: resolveTonemapCurve(),
+      scaleWidth: w,
     }),
     tonemap,
     tonemapPath,
