@@ -14,13 +14,24 @@ import { Episode } from '../../media/entities/episode.entity';
 /**
  * A user's "like" on a piece of content: a movie (media only), a season
  * (media + season) or an episode (media + episode). `media` is always the
- * parent title, so likes stay scoped to a library. Uniqueness per granularity
- * is enforced by partial unique indexes in the migration (one row per
- * user+movie, user+season, user+episode) — the NULL split a plain @Unique
- * can't express, same approach as playlist_items.
+ * parent title, so likes stay scoped to a library.
  */
 @Entity('likes')
 @Index(['user'])
+// One like per granularity (movie/series, season, episode). Declared here so dev
+// `synchronize` matches the migration — a plain @Unique can't express the NULL split.
+@Index('UQ_likes_movie', ['user', 'media'], {
+  unique: true,
+  where: '"seasonId" IS NULL AND "episodeId" IS NULL',
+})
+@Index('UQ_likes_season', ['user', 'season'], {
+  unique: true,
+  where: '"seasonId" IS NOT NULL',
+})
+@Index('UQ_likes_episode', ['user', 'episode'], {
+  unique: true,
+  where: '"episodeId" IS NOT NULL',
+})
 export class Like extends BaseEntity {
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })

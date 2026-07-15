@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   OnInit,
+  computed,
   effect,
   inject,
   input,
@@ -9,13 +10,21 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
-import { LucideX } from '@lucide/angular';
+import {
+  LucideEllipsisVertical,
+  LucideHeart,
+  LucideListPlus,
+  LucideX,
+} from '@lucide/angular';
 import {
   ReceivedRecommendation,
   SocialApiService,
 } from '../../../core/services/api/social-api.service';
 import { SseService } from '../../../core/services/sse.service';
 import { TvService } from '../../../core/services/tv.service';
+import { DropdownMenuComponent } from '../dropdown-menu';
+import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
+import { LikesApiService } from '../../../core/services/api/likes-api.service';
 
 /**
  * Home widget listing content other members have recommended to the viewer,
@@ -26,13 +35,23 @@ import { TvService } from '../../../core/services/tv.service';
  */
 @Component({
   selector: 'app-received-recommendations-card',
-  imports: [RouterLink, TranslateModule, LucideX],
+  imports: [
+    RouterLink,
+    TranslateModule,
+    DropdownMenuComponent,
+    LucideX,
+    LucideEllipsisVertical,
+    LucideHeart,
+    LucideListPlus,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './received-recommendations-card.html',
 })
 export class ReceivedRecommendationsCardComponent implements OnInit {
   private readonly api = inject(SocialApiService);
   private readonly sse = inject(SseService);
+  private readonly addToPlaylistService = inject(AddToPlaylistService);
+  private readonly likesApi = inject(LikesApiService);
   readonly tv = inject(TvService);
 
   /** Adds bottom padding when stacked above the home sections. */
@@ -40,6 +59,26 @@ export class ReceivedRecommendationsCardComponent implements OnInit {
 
   readonly items = signal<ReceivedRecommendation[]>([]);
   readonly busyId = signal<number | null>(null);
+
+  /** Recommendations grouped by sender, each group keeping the newest-first feed order. */
+  readonly grouped = computed(() => {
+    const groups: {
+      senderId: number;
+      senderName: string;
+      items: ReceivedRecommendation[];
+    }[] = [];
+    const byId = new Map<number, (typeof groups)[number]>();
+    for (const item of this.items()) {
+      let group = byId.get(item.sender.id);
+      if (!group) {
+        group = { senderId: item.sender.id, senderName: item.sender.username, items: [] };
+        byId.set(item.sender.id, group);
+        groups.push(group);
+      }
+      group.items.push(item);
+    }
+    return groups;
+  });
 
   constructor() {
     // Refresh the moment a new recommendation SSE arrives, without waiting for
@@ -79,5 +118,32 @@ export class ReceivedRecommendationsCardComponent implements OnInit {
     } finally {
       this.busyId.set(null);
     }
+  }
+
+  async toggleLike(item: ReceivedRecommendation): Promise<void> {
+    const target = {
+      mediaId: item.mediaId,
+      seasonId: item.seasonId ?? undefined,
+      episodeId: item.episodeId ?? undefined,
+    };
+    const nowLiked = !item.liked;
+    try {
+      await (nowLiked ? this.likesApi.like(target) : this.likesApi.unlike(target));
+      this.items.update((list) =>
+        list.map((r) => (r.id === item.id ? { ...r, liked: nowLiked } : r)),
+      );
+    } catch {
+      /* interceptor surfaces errors */
+    }
+  }
+
+  addToPlaylist(item: ReceivedRecommendation): void {
+    this.addToPlaylistService.open(
+      item.episodeId != null
+        ? { episodeId: item.episodeId }
+        : item.seasonId != null
+          ? { seasonId: item.seasonId }
+          : { mediaId: item.mediaId },
+    );
   }
 }

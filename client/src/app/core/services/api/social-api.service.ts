@@ -68,6 +68,7 @@ export interface RecommendationCard {
 /** A content recommendation received from another member. */
 export interface ReceivedRecommendation extends RecommendationCard {
   sender: { id: number; username: string; avatar: string | null };
+  liked: boolean;
 }
 
 /** A content recommendation the caller sent to another member. */
