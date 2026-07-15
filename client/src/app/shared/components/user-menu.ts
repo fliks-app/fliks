@@ -40,7 +40,7 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
         @if (auth.user(); as user) {
           <div class="avatar avatar-placeholder">
             <div
-              class="w-8 h-8 md:w-9 md:h-9 rounded-full text-white text-xs font-semibold"
+              class="w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-white/40 text-white text-xs font-semibold"
               [style.background-color]="'hsl(' + avatar(user.username).hue + ' 55% 45%)'"
             >
               @if (user.avatar) {
