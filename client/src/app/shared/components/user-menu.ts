@@ -37,7 +37,22 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
         class="btn btn-ghost btn-circle"
         [attr.aria-label]="'nav.user_menu' | translate"
       >
-        <svg lucideUser class="h-5 w-5 md:h-6 md:w-6"></svg>
+        @if (auth.user(); as user) {
+          <div class="avatar avatar-placeholder">
+            <div
+              class="w-8 h-8 md:w-9 md:h-9 rounded-full text-white text-xs font-semibold"
+              [style.background-color]="'hsl(' + avatar(user.username).hue + ' 55% 45%)'"
+            >
+              @if (user.avatar) {
+                <img [src]="user.avatar | resolveUrl" [alt]="user.username" />
+              } @else {
+                <span>{{ avatar(user.username).initials }}</span>
+              }
+            </div>
+          </div>
+        } @else {
+          <svg lucideUser class="h-5 w-5 md:h-6 md:w-6"></svg>
+        }
       </button>
       @if (auth.user(); as user) {
         <div class="border-b border-white/10 pb-1 mb-1">
