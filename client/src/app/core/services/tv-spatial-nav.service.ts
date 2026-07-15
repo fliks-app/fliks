@@ -412,9 +412,15 @@ export class TvSpatialNavService {
     if (submenu) {
       openModal = submenu;
     } else {
-      openModal = modals.length
-        ? modals.find((m) => active && m.contains(active)) ?? modals[0]
-        : null;
+      // Scope to the INNERMOST open modal that contains focus. A popover/sheet
+      // (`[data-tv-modal]`) rendered inside an open `<dialog>` must trap nav to
+      // itself — picking the first match would land on the enclosing dialog
+      // (which contains the whole page), letting arrows escape the menu into
+      // the content behind it.
+      const containing = modals.filter((m) => active && m.contains(active));
+      openModal = containing.length
+        ? containing.reduce((inner, m) => (inner.contains(m) ? m : inner))
+        : modals[0] ?? null;
     }
     if (!openModal && active && active !== document.body && this.containers.size > 0) {
       const tree = this.findNeighborInTree(active, dir);
