@@ -112,8 +112,13 @@ export async function postWithRetry(
   throw new Error(`${engineLabel} request failed: retries exhausted`);
 }
 
+/** True for the sentinels used when a subtitle's language is unknown. */
+export function isUnknownLanguageCode(iso: string | null | undefined): boolean {
+  return !iso || iso === 'und' || iso === 'xx';
+}
+
 function languageName(iso: string): string {
-  if (!iso || iso === 'und' || iso === 'xx') return 'the original language';
+  if (isUnknownLanguageCode(iso)) return 'the original language';
   return APP_LANGUAGES.find((l) => l.isoCode === iso)?.name ?? iso;
 }
 

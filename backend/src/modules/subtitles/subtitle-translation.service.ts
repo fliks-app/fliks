@@ -267,7 +267,7 @@ export class SubtitleTranslationService {
         mediaId: source.mediaId,
         title: media.title,
         language: target,
-        provider: 'gemini',
+        provider: config.engine,
       });
     } catch (err) {
       this.log.warn(

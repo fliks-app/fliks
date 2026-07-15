@@ -1,4 +1,8 @@
-import { TranslationRequest, postWithRetry } from './translation-core';
+import {
+  TranslationRequest,
+  isUnknownLanguageCode,
+  postWithRetry,
+} from './translation-core';
 
 export interface LibreTranslateConfig {
   /** Base URL of the LibreTranslate server, e.g. http://libretranslate:5000. */
@@ -24,8 +28,9 @@ export async function translateWithLibreTranslate(
   onProgress?: (done: number, total: number) => void,
 ): Promise<string[]> {
   const url = `${cfg.url.replace(/\/+$/, '')}/translate`;
-  const source =
-    req.sourceLanguage && req.sourceLanguage !== 'und' ? req.sourceLanguage : 'auto';
+  const source = isUnknownLanguageCode(req.sourceLanguage)
+    ? 'auto'
+    : req.sourceLanguage;
   const out: string[] = [];
   for (let i = 0; i < texts.length; i += CHUNK) {
     const chunk = texts.slice(i, i + CHUNK);
