@@ -508,12 +508,6 @@
       <span class="flex-1">{{ (monitored() ? 'media_detail.unmonitor' : 'media_detail.monitor') | translate }}</span>
     </button>
   }
-  @if (canDelete() && selectedFileId() && (mediaType() !== 'series' || episodeId())) {
-    <button type="button" class="dropdown-item text-error" (click)="onDeleteFileClick()">
-      <svg lucideTrash2 class="h-5 w-5 shrink-0"></svg>
-      <span class="flex-1">{{ 'media_detail.delete_file' | translate }}</span>
-    </button>
-  }
   @if (canDelete()) {
     <button type="button" [disabled]="deleteLoading()" class="dropdown-item text-error" (click)="deleteMedia.emit()">
       @if (deleteLoading()) { <span class="loading loading-spinner loading-sm"></span> }
