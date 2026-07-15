@@ -9,6 +9,124 @@
     </button>
   </div>
 
+  <!-- AI subtitle translation -->
+  <div class="card bg-base-100 border border-base-200">
+    <div class="card-body gap-4">
+      <div>
+        <h2 class="card-title text-lg">{{ 'settings.subtitle_providers.translation_title' | translate }}</h2>
+        <p class="text-sm text-base-content/60">{{ 'settings.subtitle_providers.translation_hint' | translate }}</p>
+      </div>
+      <label class="label cursor-pointer justify-start gap-3 w-fit">
+        <input
+          type="checkbox"
+          class="toggle toggle-primary"
+          [ngModel]="translationEnabled()"
+          (ngModelChange)="translationEnabled.set($event)"
+        />
+        <span class="label-text">{{ 'settings.subtitle_providers.translation_enabled' | translate }}</span>
+      </label>
+
+      <label class="form-control w-full max-w-md">
+        <span class="label-text">{{ 'settings.subtitle_providers.translation_engine' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          [ngModel]="translationEngine()"
+          (ngModelChange)="translationEngine.set($event)"
+        >
+          <option value="gemini">{{ 'settings.subtitle_providers.translation_engine_gemini' | translate }}</option>
+          <option value="openai">{{ 'settings.subtitle_providers.translation_engine_openai' | translate }}</option>
+          <option value="libretranslate">{{ 'settings.subtitle_providers.translation_engine_libretranslate' | translate }}</option>
+        </select>
+      </label>
+
+      @if (translationEngine() === 'gemini') {
+        <label class="form-control w-full max-w-md">
+          <span class="label-text">{{ 'settings.subtitle_providers.translation_api_key' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
+            [ngModel]="geminiApiKey()"
+            (ngModelChange)="geminiApiKey.set($event)"
+          />
+        </label>
+        <label class="form-control w-full max-w-md">
+          <span class="label-text">{{ 'settings.subtitle_providers.translation_model' | translate }}</span>
+          <select
+            class="select select-bordered select-sm w-full font-mono"
+            [ngModel]="geminiModel()"
+            (ngModelChange)="geminiModel.set($event)"
+          >
+            @if (!geminiModels.includes(geminiModel())) {
+              <option [value]="geminiModel()">{{ geminiModel() }}</option>
+            }
+            @for (m of geminiModels; track m) {
+              <option [value]="m">{{ m }}</option>
+            }
+          </select>
+        </label>
+      } @else if (translationEngine() === 'openai') {
+        <label class="form-control w-full max-w-md">
+          <span class="label-text">{{ 'settings.subtitle_providers.translation_openai_base_url' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
+            placeholder="https://api.groq.com/openai/v1"
+            [ngModel]="openaiBaseUrl()"
+            (ngModelChange)="openaiBaseUrl.set($event)"
+          />
+          <span class="text-xs text-base-content/50 mt-1">{{ 'settings.subtitle_providers.translation_openai_base_url_hint' | translate }}</span>
+        </label>
+        <label class="form-control w-full max-w-md">
+          <span class="label-text">{{ 'settings.subtitle_providers.translation_api_key_optional' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
+            [ngModel]="openaiApiKey()"
+            (ngModelChange)="openaiApiKey.set($event)"
+          />
+        </label>
+        <label class="form-control w-full max-w-md">
+          <span class="label-text">{{ 'settings.subtitle_providers.translation_openai_model' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
+            placeholder="llama-3.3-70b-versatile"
+            [ngModel]="openaiModel()"
+            (ngModelChange)="openaiModel.set($event)"
+          />
+        </label>
+      } @else {
+        <label class="form-control w-full max-w-md">
+          <span class="label-text">{{ 'settings.subtitle_providers.translation_libretranslate_url' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
+            placeholder="http://libretranslate:5000"
+            [ngModel]="libreUrl()"
+            (ngModelChange)="libreUrl.set($event)"
+          />
+          <span class="text-xs text-base-content/50 mt-1">{{ 'settings.subtitle_providers.translation_libretranslate_url_hint' | translate }}</span>
+        </label>
+        <label class="form-control w-full max-w-md">
+          <span class="label-text">{{ 'settings.subtitle_providers.translation_api_key_optional' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
+            [ngModel]="libreApiKey()"
+            (ngModelChange)="libreApiKey.set($event)"
+          />
+        </label>
+      }
+
+      <div>
+        <button type="button" class="btn btn-primary" (click)="saveTranslation()" [disabled]="savingTranslation()">
+          @if (savingTranslation()) { <span class="loading loading-spinner loading-sm"></span> }
+          {{ 'common.save' | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+
   @if (loading()) {
     <div class="flex justify-center py-16">
       <span class="loading loading-spinner loading-lg"></span>

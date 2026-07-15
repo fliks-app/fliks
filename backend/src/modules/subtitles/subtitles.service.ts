@@ -404,9 +404,20 @@ export class SubtitlesService {
     return this.repo.save(sub);
   }
 
+  /** Manually mark a subtitle as validated by pinning its score to 100 so it
+   *  wins ordering and stays the preferred track. */
+  async validateSubtitle(subtitleId: number): Promise<SubtitleFile> {
+    const sub = await this.repo.findOne({ where: { id: subtitleId } });
+    if (!sub) throw new NotFoundException(`Subtitle #${subtitleId} not found`);
+    sub.score = 100;
+    return this.repo.save(sub);
+  }
+
   /**
-   * Called after a media rescan: drop DB rows for external subtitle files that no longer exist on disk,
-   * and remove duplicate entries (same path, or same media file + language + forced/HI) keeping the best row.
+   * Called after a media rescan: drop DB rows for external subtitle files that no
+   * longer exist on disk, and collapse duplicate rows that point to the exact
+   * same file. Never deletes files from disk — alternate qualities/languages are
+   * all kept so every sidecar in the folder stays available.
    */
   async reconcileSubtitleFilesAfterRescan(mediaId: number): Promise<{
     removedMissing: number;
@@ -462,32 +473,9 @@ export class SubtitlesService {
       }
     }
 
-    // 3) Logical duplicates: same media file + language + forced + HI, different paths — keep one file
-    subs = await this.repo.find({ where: { media: { id: mediaId } } });
-    const external2 = subs.filter(isExternalFile);
-    const byKey = new Map<string, SubtitleFile[]>();
-    for (const s of external2) {
-      if (!s.relativePath?.trim()) continue;
-      const key = `${s.mediaFileId}\0${s.language}\0${s.forced}\0${s.hearingImpaired}`;
-      const list = byKey.get(key) ?? [];
-      list.push(s);
-      byKey.set(key, list);
-    }
-    for (const group of byKey.values()) {
-      if (group.length < 2) continue;
-      group.sort(pickWinner);
-      const [, ...losers] = group;
-      for (const row of losers) {
-        try {
-          await this.deleteSubtitle(row.id);
-          removedDuplicates++;
-        } catch (err) {
-          this.logger.warn(
-            `reconcile: could not delete duplicate subtitle #${row.id}: ${(err as Error).message}`,
-          );
-        }
-      }
-    }
+    // Same-language sidecars of different qualities/titles are intentionally
+    // NOT collapsed here: every file in the folder stays available, and a
+    // rescan must never delete a subtitle the user placed on disk.
 
     return { removedMissing, removedDuplicates };
   }
@@ -662,9 +650,23 @@ export class SubtitlesService {
           }
         }
 
+        // Fallback: a sidecar whose name matches no video file (different
+        // quality/title, or no language token) still belongs to this media as
+        // long as it sits in a folder with exactly one video — attach it there
+        // (or the media's only file). Folders with several videos (a season
+        // folder) are left to the precise name match so episodes aren't crossed.
+        if (!matchedFile) {
+          const videosInDir = media.files.filter(
+            (f) => path.dirname(path.join(media.path!, f.relativePath)) === dir,
+          );
+          if (videosInDir.length === 1) matchedFile = videosInDir[0];
+          else if (!videosInDir.length && media.files.length === 1)
+            matchedFile = media.files[0];
+        }
+
         if (!matchedFile) continue;
 
-        // Parse language + flags from filename
+        // Parse language + flags from filename (unknown → 'und', relabel later)
         const parsed = this.parseSubtitleFilename(entry);
         if (!parsed) continue;
 

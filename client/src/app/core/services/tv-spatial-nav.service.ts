@@ -318,7 +318,13 @@ export class TvSpatialNavService {
       // scrollIntoView animates an off-screen card in (block:'nearest'), while
       // horizontal-scroller's focusin handler owns vertical row-top alignment.
       next.focus({ preventScroll: true });
-      next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      // Positioned targets (a modal's absolute close ✕, fixed FABs, sticky
+      // headers) are already placed on screen — scrolling them "into view"
+      // shifts their scroll container and visibly displaces them, so skip it.
+      const pos = typeof getComputedStyle !== 'undefined' ? getComputedStyle(next).position : 'static';
+      if (pos !== 'absolute' && pos !== 'fixed' && pos !== 'sticky') {
+        next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      }
       return;
     }
     // No focusable neighbour: scroll the page so the user can reach info content
@@ -392,9 +398,30 @@ export class TvSpatialNavService {
     // one so a freshly-opened dropdown still scopes arrows even before
     // focus has settled inside it.
     const modals = this.openModals();
-    const openModal = modals.length
-      ? modals.find((m) => active && m.contains(active)) ?? modals[0]
-      : null;
+    // Flyout submenus (Corrections / Décalage) trap up/down inside themselves
+    // so focus can't leak into the parent menu or the page behind. Left jumps
+    // straight back to the opener the popover recorded (rect-nav would land on
+    // whatever sits behind the flyout); right has nowhere to go.
+    const submenu = active?.closest<HTMLElement>('[data-tv-submenu]') ?? null;
+    if (submenu && (dir === 'left' || dir === 'right')) {
+      const opener = (submenu as unknown as { __tvOpener?: HTMLElement })
+        .__tvOpener;
+      return dir === 'left' && opener?.isConnected ? opener : null;
+    }
+    let openModal: HTMLElement | null;
+    if (submenu) {
+      openModal = submenu;
+    } else {
+      // Scope to the INNERMOST open modal that contains focus. A popover/sheet
+      // (`[data-tv-modal]`) rendered inside an open `<dialog>` must trap nav to
+      // itself — picking the first match would land on the enclosing dialog
+      // (which contains the whole page), letting arrows escape the menu into
+      // the content behind it.
+      const containing = modals.filter((m) => active && m.contains(active));
+      openModal = containing.length
+        ? containing.reduce((inner, m) => (inner.contains(m) ? m : inner))
+        : modals[0] ?? null;
+    }
     if (!openModal && active && active !== document.body && this.containers.size > 0) {
       const tree = this.findNeighborInTree(active, dir);
       if (tree) return tree;

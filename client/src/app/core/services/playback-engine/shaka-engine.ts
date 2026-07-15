@@ -277,6 +277,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     language: string,
     _label: string,
     forced?: boolean,
+    index = 0,
   ): Promise<any> {
     if (!this.player) throw new Error('ShakaEngine not initialised');
     // Subtitles ship as HLS SUBTITLES renditions in the manifest. Shaka
@@ -285,11 +286,17 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     // so we match the chosen track by (language, forced) instead of loading
     // a sidecar VTT. Match on normalised language codes — the manifest
     // LANGUAGE may be 2-letter (`en`) while the option carries 3-letter
-    // (`eng`). Falls back to a language-only match, then the first track.
+    // (`eng`). `index` is the ordinal among tracks that share the same
+    // (language, forced), so several same-language subs can each be picked.
+    // Falls back to the first same-language match, then the first track.
     const want = normalizeLangCode(language);
     const tracks: any[] = this.player.getTextTracks();
+    const sameLangForced = tracks.filter(
+      (t) => normalizeLangCode(t.language) === want && !!t.forced === !!forced,
+    );
     return (
-      tracks.find((t) => normalizeLangCode(t.language) === want && !!t.forced === !!forced) ??
+      sameLangForced[index] ??
+      sameLangForced[0] ??
       tracks.find((t) => normalizeLangCode(t.language) === want) ??
       tracks[0] ??
       null

@@ -29,6 +29,17 @@ export type SseEvent =
       title: string;
       language: string;
       error: string;
+      /** Set to 'rate_limit' when a translation failed on a Gemini quota/rate
+       *  limit, so the client can show a specific message. */
+      reason?: string;
+    }
+  | {
+      // Machine-translation progress for a PROCESSING subtitle row. `progress`
+      // is 0–100; `subtitleId` is the placeholder row the client shows.
+      type: 'subtitle.translation_progress';
+      subtitleId: number;
+      mediaId: number;
+      progress: number;
     }
   | {
       type: 'import.complete';

@@ -10,11 +10,24 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { ToastService } from '../../../core/services/toast.service';
+import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import {
   SubtitleProvidersApiService,
   SubtitleProviderRow,
   ProviderRateLimit,
 } from '../../../core/services/api/subtitle-providers-api.service';
+
+const DEFAULT_TRANSLATION_MODEL = 'gemini-2.0-flash';
+
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-pro',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+];
 
 const PROVIDER_TYPES = [
   { value: 'opensubtitles', label: 'OpenSubtitles', fields: ['username', 'password'] },
@@ -33,8 +46,10 @@ const PROVIDER_TYPES = [
 })
 export class SubtitleProvidersSettingsComponent implements OnInit {
   private readonly api = inject(SubtitleProvidersApiService);
+  private readonly settingsApi = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly toast = inject(ToastService);
 
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
   private readonly statsDialog = viewChild<ElementRef<HTMLDialogElement>>('statsDialog');
@@ -66,8 +81,69 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly statsData = signal<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>([]);
   readonly statsProviderName = signal('');
 
+  // Machine-translation settings — stored in the app key/value store.
+  readonly geminiModels = GEMINI_MODELS;
+  readonly translationEnabled = signal(false);
+  readonly translationEngine = signal<'gemini' | 'openai' | 'libretranslate'>('gemini');
+  readonly geminiApiKey = signal('');
+  readonly geminiModel = signal(DEFAULT_TRANSLATION_MODEL);
+  readonly openaiBaseUrl = signal('');
+  readonly openaiApiKey = signal('');
+  readonly openaiModel = signal('');
+  readonly libreUrl = signal('');
+  readonly libreApiKey = signal('');
+  readonly savingTranslation = signal(false);
+
   ngOnInit() {
     this.reloadAll();
+    void this.loadTranslationSettings();
+  }
+
+  private async loadTranslationSettings() {
+    try {
+      const all = await this.settingsApi.getAll();
+      this.translationEnabled.set(all['subtitle_translation_enabled'] === 'true');
+      const engine = all['subtitle_translation_engine'];
+      this.translationEngine.set(
+        engine === 'openai' || engine === 'libretranslate' ? engine : 'gemini',
+      );
+      this.geminiApiKey.set(all['subtitle_translation_gemini_api_key'] ?? '');
+      this.geminiModel.set(
+        all['subtitle_translation_gemini_model'] || DEFAULT_TRANSLATION_MODEL,
+      );
+      this.openaiBaseUrl.set(all['subtitle_translation_openai_base_url'] ?? '');
+      this.openaiApiKey.set(all['subtitle_translation_openai_api_key'] ?? '');
+      this.openaiModel.set(all['subtitle_translation_openai_model'] ?? '');
+      this.libreUrl.set(all['subtitle_translation_libretranslate_url'] ?? '');
+      this.libreApiKey.set(all['subtitle_translation_libretranslate_api_key'] ?? '');
+    } catch {
+      // handled by global error interceptor
+    }
+  }
+
+  async saveTranslation() {
+    this.savingTranslation.set(true);
+    try {
+      await this.settingsApi.setBulk({
+        subtitle_translation_enabled: String(this.translationEnabled()),
+        subtitle_translation_engine: this.translationEngine(),
+        subtitle_translation_gemini_api_key: this.geminiApiKey().trim(),
+        subtitle_translation_gemini_model:
+          this.geminiModel().trim() || DEFAULT_TRANSLATION_MODEL,
+        subtitle_translation_openai_base_url: this.openaiBaseUrl().trim(),
+        subtitle_translation_openai_api_key: this.openaiApiKey().trim(),
+        subtitle_translation_openai_model: this.openaiModel().trim(),
+        subtitle_translation_libretranslate_url: this.libreUrl().trim(),
+        subtitle_translation_libretranslate_api_key: this.libreApiKey().trim(),
+      });
+      this.toast.success(
+        this.translate.instant('settings.subtitle_providers.translation_saved'),
+      );
+    } catch {
+      // handled by global error interceptor
+    } finally {
+      this.savingTranslation.set(false);
+    }
   }
 
   async reloadAll() {

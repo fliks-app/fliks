@@ -57,6 +57,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     language: string;
     forced: boolean;
     image: boolean;
+    index: number;
   } | null = null;
   /** Text tracks the player currently reports, refreshed on track changes. */
   private _nativeSubtitleTracks: {
@@ -251,13 +252,14 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     language: string,
     _label: string,
     forced = false,
-  ): Promise<{ language: string; forced: boolean }> {
+    index = 0,
+  ): Promise<{ language: string; forced: boolean; index: number }> {
     // Subtitles are HLS SUBTITLES renditions; the player surfaces them as
     // native text tracks. Return the desired track descriptor — actual
-    // selection is resolved against the player's reported tracks (by
-    // language), which only appear after the manifest is parsed (see
-    // resolveSubtitle).
-    return { language, forced };
+    // selection is resolved against the player's reported tracks (by language
+    // + the ordinal among same-language tracks), which only appear after the
+    // manifest is parsed (see resolveSubtitle).
+    return { language, forced, index };
   }
 
   selectTextTrack(track: any): void {
@@ -267,6 +269,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
             language: track.language,
             forced: !!track.forced,
             image: !!track.image,
+            index: Number(track.index) || 0,
           }
         : null;
     this.resolveSubtitle();
@@ -287,19 +290,23 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
    *  (fixes "subtitle selected by default but hidden" on ExoPlayer). */
   private resolveSubtitle(): void {
     if (!this._desiredSubtitle) return;
-    const { language, forced, image } = this._desiredSubtitle;
+    const { language, forced, image, index } = this._desiredSubtitle;
     const want = normalizeLangCode(language);
     const tracks = this._nativeSubtitleTracks;
     // Match image-ness first so a same-language text track isn't picked over
-    // the chosen image one (or vice versa), then narrow by forced, then fall
-    // back to language alone / a lone track on a tag mismatch.
+    // the chosen image one (or vice versa), then narrow by forced, using the
+    // ordinal to pick the Nth track that shares (language, image, forced) so
+    // several same-language subs can each be selected. Fall back to language
+    // alone / a lone track on a tag mismatch.
+    const sameTagged = tracks.filter(
+      (t) =>
+        normalizeLangCode(t.language) === want &&
+        !!t.image === !!image &&
+        !!t.forced === !!forced,
+    );
     const id =
-      tracks.find(
-        (t) =>
-          normalizeLangCode(t.language) === want &&
-          !!t.image === !!image &&
-          !!t.forced === !!forced,
-      ) ??
+      sameTagged[index] ??
+      sameTagged[0] ??
       tracks.find(
         (t) => normalizeLangCode(t.language) === want && !!t.image === !!image,
       ) ??

@@ -2648,6 +2648,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             sub.language,
             sub.label,
             sub.forced,
+            this.subtitleOrdinal(sub),
           );
           this.engine.selectTextTrack(track);
           this.engine.setTextVisibility(true);
@@ -3205,6 +3206,31 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     await this.reloadStream();
   }
 
+  /** Sort key mirroring the manifest's SUBTITLES order: embedded renditions
+   *  first (by stream index), then external files (by DB id). Lets the ordinal
+   *  below line up with the engine's own text-track order. */
+  private subtitleManifestRank(s: SubtitleOption): number {
+    if (s.id.startsWith('emb-')) return Number(s.id.slice(4)) || 0;
+    return 1_000_000 + (s.subtitleDbId ?? 0);
+  }
+
+  /** 0-based ordinal of a soft subtitle among the tracks that share its
+   *  (language, forced) — several same-language subs can't be told apart by
+   *  language alone, so the engines pick the Nth one. */
+  private subtitleOrdinal(sub: SubtitleOption): number {
+    const peers = this.availableSubtitles()
+      .filter(
+        (s) =>
+          !s.isImage &&
+          !s.burnIn &&
+          s.language === sub.language &&
+          !!s.forced === !!sub.forced,
+      )
+      .sort((a, b) => this.subtitleManifestRank(a) - this.subtitleManifestRank(b));
+    const idx = peers.findIndex((s) => s.id === sub.id);
+    return idx < 0 ? 0 : idx;
+  }
+
   async selectSubtitle(sub: SubtitleOption | null) {
     if (!this.engine) return;
     this.resetHideTimer();
@@ -3247,7 +3273,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.activeBurnInId = null;
         if (!this.isOfflinePlayback) await this.reloadStream();
       }
-      const track = await this.engine.addTextTrack(sub.url, sub.language, sub.label, sub.forced);
+      const track = await this.engine.addTextTrack(sub.url, sub.language, sub.label, sub.forced, this.subtitleOrdinal(sub));
       // Keep the engine track's own id intact: Shaka's selectTextTrack matches
       // the rendition by its numeric track id, so overriding it with the app's
       // `sub.id` made the selection a no-op (subtitles only appeared after a

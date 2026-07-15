@@ -82,6 +82,24 @@ export class SubtitlesApiService {
     );
   }
 
+  translate(mediaId: number, subtitleId: number, targetLanguage: string) {
+    return firstValueFrom(
+      this.http.post<SubtitleFileRow | null>(
+        `/api/media/${mediaId}/subtitles/${subtitleId}/translate`,
+        { targetLanguage },
+      ),
+    );
+  }
+
+  validate(mediaId: number, subtitleId: number) {
+    return firstValueFrom(
+      this.http.post<SubtitleFileRow>(
+        `/api/media/${mediaId}/subtitles/${subtitleId}/validate`,
+        {},
+      ),
+    );
+  }
+
   setLanguage(mediaId: number, subtitleId: number, language: string) {
     return firstValueFrom(
       this.http.patch<SubtitleFileRow>(

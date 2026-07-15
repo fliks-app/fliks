@@ -55,6 +55,8 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
       <div class="fixed inset-0 z-[100]" (click)="close()"></div>
       <div
         data-tv-modal
+        [attr.data-tv-submenu]="submenu() ? '' : null"
+        (focusout)="onSubmenuFocusOut($event)"
         class="fixed z-[101] bg-base-200 rounded-box shadow-xl overflow-y-auto p-2 [scroll-padding:0.5rem] [scroll-behavior:smooth]"
         [style.top.px]="position().top"
         [style.bottom.px]="position().bottom"
@@ -71,7 +73,7 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
            projected content (and its bindings) is only instantiated while the
            sheet is on screen — safe to leave the outlet unguarded here. -->
       <app-bottom-sheet [open]="open()" (closed)="close()">
-        <div data-tv-modal class="px-2 pb-2">
+        <div data-tv-modal [attr.data-tv-submenu]="submenu() ? '' : null" (focusout)="onSubmenuFocusOut($event)" class="px-2 pb-2">
           <ng-container *ngTemplateOutlet="content"></ng-container>
         </div>
       </app-bottom-sheet>
@@ -83,8 +85,14 @@ export class PopoverMenuComponent {
   readonly open = input(false);
   /** Element the dropdown should anchor to on desktop. */
   readonly anchor = input<HTMLElement | null>(null);
-  /** Where the dropdown opens relative to the anchor. */
-  readonly placement = input<'bottom-end' | 'bottom-start' | 'top-end' | 'top-start'>('bottom-end');
+  /** Where the dropdown opens relative to the anchor. `right-start` / `left-start`
+   *  are side flyouts (used for submenus) that open beside the anchor. */
+  readonly placement = input<
+    'bottom-end' | 'bottom-start' | 'top-end' | 'top-start' | 'right-start' | 'left-start'
+  >('bottom-end');
+  /** Marks this menu as a flyout submenu: spatial nav traps up/down inside it
+   *  and lets left/right return to the opener in the parent menu. */
+  readonly submenu = input(false);
   readonly closed = output<void>();
 
   private readonly tv = inject(TvService);
@@ -141,6 +149,18 @@ export class PopoverMenuComponent {
         }
       }
       queueMicrotask(() => {
+        // Record the opener on a submenu's content so spatial nav can send
+        // focus straight back to it on ArrowLeft (rect-nav would otherwise
+        // land on whatever sits behind the flyout).
+        if (this.submenu()) {
+          const content = this.host.nativeElement.querySelector<HTMLElement>(
+            '[data-tv-submenu]',
+          );
+          if (content) {
+            (content as unknown as { __tvOpener?: HTMLElement | null }).__tvOpener =
+              this.anchor();
+          }
+        }
         // Prefer the active item (caller marks it with `[autofocus]` or
         // `[aria-current]`) so the user lands on the current selection
         // instead of having to scroll through the list. Falls back to the
@@ -154,8 +174,14 @@ export class PopoverMenuComponent {
         target?.scrollIntoView({ block: 'nearest', behavior: 'instant' as ScrollBehavior });
       });
       // Register with the dismissable stack so Escape (browser) and the
-      // hardware back button (Capacitor / Tizen) close the popover.
-      const close = () => this.close();
+      // hardware back button (Capacitor / Tizen) close the popover. Return
+      // focus to the opener so keyboard / D-pad users don't lose their place
+      // (a submenu returns to its parent entry, a menu to its trigger).
+      const close = () => {
+        const opener = this.anchor();
+        if (opener?.isConnected) opener.focus({ preventScroll: true });
+        this.close();
+      };
       this.dismissStack.push(close);
       onCleanup(() => this.dismissStack.remove(close));
 
@@ -201,6 +227,38 @@ export class PopoverMenuComponent {
     const viewportH = typeof window !== 'undefined' ? window.innerHeight : 800;
     const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1280;
 
+    // Side flyout (submenu): open beside the anchor, top-aligned; flip to the
+    // other side when the preferred one can't fit the menu width.
+    if (placement === 'right-start' || placement === 'left-start') {
+      const rightLeft = r.right + GUTTER;
+      const leftLeft = r.left - WIDTH - GUTTER;
+      const fitsRight = rightLeft + WIDTH <= viewportW - GUTTER;
+      const fitsLeft = leftLeft >= GUTTER;
+      const preferRight = placement === 'right-start';
+      let left = preferRight
+        ? fitsRight || !fitsLeft
+          ? rightLeft
+          : leftLeft
+        : fitsLeft || !fitsRight
+          ? leftLeft
+          : rightLeft;
+      left = Math.min(
+        Math.max(GUTTER, left),
+        Math.max(GUTTER, viewportW - WIDTH - GUTTER),
+      );
+      const top = Math.min(
+        Math.max(GUTTER, r.top),
+        Math.max(GUTTER, viewportH - MIN_HEIGHT - GUTTER),
+      );
+      return {
+        top,
+        bottom: null as number | null,
+        left,
+        width: WIDTH,
+        maxHeight: Math.max(MIN_HEIGHT, viewportH - top - GUTTER),
+      };
+    }
+
     // Vertical: open on the requested side, but flip when it can't hold a
     // usable menu and the other side has more room.
     const spaceBelow = viewportH - r.bottom - GUTTER * 2;
@@ -228,5 +286,15 @@ export class PopoverMenuComponent {
 
   close() {
     this.closed.emit();
+  }
+
+  /** A submenu flyout closes once focus leaves it (e.g. ArrowLeft back to the
+   *  opener), so re-activating the opener re-opens + re-focuses it instead of
+   *  finding it already open. Ignored while focus stays inside. */
+  protected onSubmenuFocusOut(e: FocusEvent): void {
+    if (!this.submenu()) return;
+    const next = e.relatedTarget as Node | null;
+    if (next && this.host.nativeElement.contains(next)) return;
+    this.close();
   }
 }

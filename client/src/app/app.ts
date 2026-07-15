@@ -220,6 +220,14 @@ export class App implements OnInit, OnDestroy {
     if (this.dismissStack.dismissTop()) {
       return;
     }
+    // Close an open native <dialog> modal (subtitles editor, confirm, …) before
+    // any route-level back — Escape / hardware-back on an open modal should just
+    // close it, not navigate away. Topmost (last in DOM) first.
+    const openDialogs = document.querySelectorAll<HTMLDialogElement>('dialog[open]');
+    if (openDialogs.length) {
+      openDialogs[openDialogs.length - 1].close();
+      return;
+    }
     // On /watch, defer to the player's own back handler so the hardware
     // back / gesture matches the in-UI back arrow (replaceUrl to the
     // media detail page rather than history.back which can land on the

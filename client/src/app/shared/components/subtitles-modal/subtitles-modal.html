@@ -1,9 +1,11 @@
 <dialog #modal class="modal">
   <div class="modal-box w-11/12 max-w-5xl">
-    <form method="dialog">
-      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" [attr.aria-label]="'common.close' | translate">✕</button>
-    </form>
-    <h3 class="text-lg font-bold mb-4">{{ 'media_detail.edit_subtitles' | translate }}</h3>
+    <div class="flex items-start justify-between gap-4 mb-4">
+      <h3 class="text-lg font-bold">{{ 'media_detail.edit_subtitles' | translate }}</h3>
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost" [attr.aria-label]="'common.close' | translate">✕</button>
+      </form>
+    </div>
 
     <section class="space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
@@ -95,10 +97,17 @@
                     </td>
                     <td class="text-center text-xs">
                       @if (sub.status === 'processing') {
-                        <span class="badge badge-xs badge-warning gap-1">
-                          <span class="loading loading-spinner loading-xs"></span>
-                          {{ 'media_detail.ocr_processing' | translate }}
-                        </span>
+                        @if (sub.providerType === 'translated' && translationPercent(sub.id) !== null) {
+                          <span class="inline-flex items-center gap-1 align-middle">
+                            <progress class="progress progress-warning w-16 h-1.5 align-middle" [value]="translationPercent(sub.id)" max="100"></progress>
+                            <span class="tabular-nums text-[10px]">{{ translationPercent(sub.id) }}%</span>
+                          </span>
+                        } @else {
+                          <span class="badge badge-xs badge-warning gap-1">
+                            <span class="loading loading-spinner loading-xs"></span>
+                            {{ (sub.providerType === 'translated' ? 'media_detail.translate_processing' : 'media_detail.ocr_processing') | translate }}
+                          </span>
+                        }
                       }
                       @if (sub.forced) { <span class="badge badge-xs badge-outline mr-1">F</span> }
                       @if (sub.hearingImpaired) { <span class="badge badge-xs badge-outline">HI</span> }
@@ -161,54 +170,34 @@
           </div>
         }
       } @else {
+      @if (actionsSubIsTranslatable()) {
+        <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => translateSubtitle(s))">
+          <svg lucideLanguages class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+          {{ 'media_detail.translate' | translate }}
+        </button>
+      }
+      @if (!actionsSubIsEmbedded()) {
       <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => changeLanguage(s))">
         <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
         {{ 'media_detail.change_language' | translate }}
       </button>
-      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => openSyncModal(s.id))">
-        <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-        {{ 'media_detail.action_sync' | translate }}
+      <button #offsetTrigger type="button" class="dropdown-item text-white" (click)="openOffset(offsetTrigger)">
+        <svg lucideMoveHorizontal class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        <span class="flex-1 text-left">{{ 'media_detail.offset' | translate }}</span>
+        <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
       </button>
-      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'removeHiTags' }))">
-        <svg lucideVolume2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-        {{ 'media_detail.action_remove_hi' | translate }}
+      <button #corrTrigger type="button" class="dropdown-item text-white" (click)="openCorrections(corrTrigger)">
+        <svg lucideWandSparkles class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        <span class="flex-1 text-left">{{ 'media_detail.corrections' | translate }}</span>
+        <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
       </button>
-      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'removeStyleTags' }))">
-        <svg lucideCode class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-        {{ 'media_detail.action_remove_style' | translate }}
-      </button>
-      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'removeEmoji' }))">
-        <svg lucideSmile class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-        {{ 'media_detail.action_remove_emoji' | translate }}
-      </button>
-      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'ocrFixes' }))">
-        <svg lucideImage class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-        {{ 'media_detail.action_ocr_fixes' | translate }}
-      </button>
-      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'commonFixes' }))">
-        <svg lucideThermometer class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-        {{ 'media_detail.action_common_fixes' | translate }}
-      </button>
-      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'fixUppercase' }))">
-        <svg lucideMaximize2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-        {{ 'media_detail.action_fix_uppercase' | translate }}
-      </button>
-      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'reverseRtl' }))">
-        <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-        {{ 'media_detail.action_reverse_rtl' | translate }}
-      </button>
-      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => postProcessSubtitle({ subtitleId: s.id, action: 'convertToSrt' }))">
-        <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-        {{ 'media_detail.action_convert_srt' | translate }}
-      </button>
-      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => openAdjustModal(s.id))">
-        <svg lucideClock class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-        {{ 'media_detail.action_adjust_times' | translate }}
-      </button>
-      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => openFpsModal(s.id))">
-        <svg lucideZap class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-        {{ 'media_detail.action_change_fps' | translate }}
-      </button>
+      @if ((actionsSub()?.score ?? 0) !== 100) {
+        <button type="button" class="dropdown-item text-success" (click)="runSubAction(s => validateSubtitle(s))">
+          <svg lucideBadgeCheck class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
+          {{ 'media_detail.action_validate' | translate }}
+        </button>
+      }
+      }
       }
       @if (!actionsSubIsEmbedded()) {
         <button type="button" class="dropdown-item text-warning" (click)="runSubAction(s => blacklistSubtitle(s))">
@@ -222,8 +211,74 @@
       }
     </app-popover-menu>
 
+    <!-- Corrections flyout submenu (post-processing fixes), anchored to the
+         "Corrections" entry above. -->
+    <app-popover-menu
+      [open]="correctionsMenuOpen()"
+      [anchor]="correctionsAnchor()"
+      placement="right-start"
+      [submenu]="true"
+      (closed)="closeCorrections()"
+    >
+      <button type="button" class="dropdown-item text-white" (click)="runCorrection(s => postProcessSubtitle({ subtitleId: s.id, action: 'removeHiTags' }))">
+        <svg lucideVolume2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_remove_hi' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runCorrection(s => postProcessSubtitle({ subtitleId: s.id, action: 'removeStyleTags' }))">
+        <svg lucideCode class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_remove_style' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runCorrection(s => postProcessSubtitle({ subtitleId: s.id, action: 'removeEmoji' }))">
+        <svg lucideSmile class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_remove_emoji' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runCorrection(s => postProcessSubtitle({ subtitleId: s.id, action: 'ocrFixes' }))">
+        <svg lucideImage class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_ocr_fixes' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runCorrection(s => postProcessSubtitle({ subtitleId: s.id, action: 'commonFixes' }))">
+        <svg lucideThermometer class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_common_fixes' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runCorrection(s => postProcessSubtitle({ subtitleId: s.id, action: 'fixUppercase' }))">
+        <svg lucideMaximize2 class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_fix_uppercase' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runCorrection(s => postProcessSubtitle({ subtitleId: s.id, action: 'reverseRtl' }))">
+        <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_reverse_rtl' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runCorrection(s => postProcessSubtitle({ subtitleId: s.id, action: 'convertToSrt' }))">
+        <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_convert_srt' | translate }}
+      </button>
+    </app-popover-menu>
+
+    <!-- Décalage flyout submenu (timing: sync / adjust times / frame rate),
+         anchored to the "Décalage" entry above. -->
+    <app-popover-menu
+      [open]="offsetMenuOpen()"
+      [anchor]="offsetAnchor()"
+      placement="right-start"
+      [submenu]="true"
+      (closed)="closeOffset()"
+    >
+      <button type="button" class="dropdown-item text-white" (click)="runOffset(s => openSyncModal(s.id))">
+        <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_sync' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runOffset(s => openAdjustModal(s.id))">
+        <svg lucideClock class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_adjust_times' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runOffset(s => openFpsModal(s.id))">
+        <svg lucideZap class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_change_fps' | translate }}
+      </button>
+    </app-popover-menu>
+
   <form method="dialog" class="modal-backdrop">
-    <button>close</button>
+    <button tabindex="-1">close</button>
   </form>
 </dialog>
 
@@ -324,7 +379,7 @@
     </div>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeSyncModal()">close</button>
+    <button type="button" tabindex="-1" (click)="closeSyncModal()">close</button>
   </form>
 </dialog>
 
@@ -377,7 +432,7 @@
     </div>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeAdjustModal()">close</button>
+    <button type="button" tabindex="-1" (click)="closeAdjustModal()">close</button>
   </form>
 </dialog>
 
@@ -428,7 +483,7 @@
     </div>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeFpsModal()">close</button>
+    <button type="button" tabindex="-1" (click)="closeFpsModal()">close</button>
   </form>
 </dialog>
 
@@ -437,23 +492,26 @@
     @if (langDialogMode() === 'relabel') {
       <h3 class="text-lg font-bold">{{ 'media_detail.change_language_title' | translate }}</h3>
       <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.change_language_hint' | translate }}</p>
+    } @else if (langDialogMode() === 'translate') {
+      <h3 class="text-lg font-bold">{{ 'media_detail.translate_target_language' | translate }}</h3>
+      <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.translate_hint' | translate }}</p>
     } @else {
       <h3 class="text-lg font-bold">{{ 'media_detail.ocr_language_title' | translate }}</h3>
       <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.ocr_language_hint' | translate }}</p>
     }
     <select class="select select-bordered w-full" [ngModel]="ocrLang()" (ngModelChange)="ocrLang.set($event)">
-      @for (code of ocrLangCodes; track code) {
+      @for (code of langDialogCodes(); track code) {
         <option [value]="code">{{ code | localizeLanguage }}</option>
       }
     </select>
     <div class="modal-action">
       <button type="button" class="btn" (click)="closeOcrLangModal()">{{ 'common.cancel' | translate }}</button>
       <button type="button" class="btn btn-primary" (click)="confirmLanguage()">
-        {{ (langDialogMode() === 'relabel' ? 'common.save' : 'media_detail.action_ocr_extract') | translate }}
+        {{ (langDialogMode() === 'relabel' ? 'common.save' : langDialogMode() === 'translate' ? 'media_detail.translate' : 'media_detail.action_ocr_extract') | translate }}
       </button>
     </div>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeOcrLangModal()">close</button>
+    <button type="button" tabindex="-1" (click)="closeOcrLangModal()">close</button>
   </form>
 </dialog>
