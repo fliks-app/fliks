@@ -953,6 +953,7 @@
     "translate_target_language": "Idioma de destino",
     "translate_hint": "Escolha o idioma para o qual traduzir esta legenda. A tradução é executada em segundo plano e mantém a sincronização original.",
     "translation_started": "Tradução iniciada — a legenda aparecerá quando estiver pronta.",
+    "translation_rate_limited": "Quota ou limite de taxa do Gemini atingido — tente novamente mais tarde ou verifique o seu plano de API.",
     "ocr_unavailable": "OCR indisponível para este formato",
     "ocr_language_title": "Idioma da legenda",
     "ocr_language_hint": "O idioma desta faixa não pôde ser determinado. Escolha-o para o OCR — serve para reconhecer o texto e etiquetar a legenda.",

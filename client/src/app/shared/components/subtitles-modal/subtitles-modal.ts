@@ -483,9 +483,12 @@ export class SubtitlesModalComponent {
       void this.loadSubtitles(mediaId);
     } else if (event.type === 'subtitle.failed') {
       this.toast.error(
-        this.translate.instant('sse.subtitle_failed', {
-          lang: event['language'] ?? '',
-        }),
+        this.translate.instant(
+          event['reason'] === 'rate_limit'
+            ? 'media_detail.translation_rate_limited'
+            : 'sse.subtitle_failed',
+          { lang: event['language'] ?? '' },
+        ),
       );
       void this.loadSubtitles(mediaId);
     }

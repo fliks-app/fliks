@@ -15,7 +15,10 @@ import { Media } from '../media/entities/media.entity';
 import { SettingsService } from '../settings/settings.service';
 import { EventsService } from '../scheduler/events.service';
 import { SubtitleTranslationSettingsCache } from './subtitle-translation-settings-cache.service';
-import { translateSubtitleTexts } from './gemini-translator';
+import {
+  GeminiRateLimitError,
+  translateSubtitleTexts,
+} from './gemini-translator';
 import { parseSrt, serializeSrt } from './srt.util';
 import { cleanSubtitle } from './subtitle-cleaner';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
@@ -250,6 +253,7 @@ export class SubtitleTranslationService {
         title: media?.title ?? '',
         language: target,
         error: String(err),
+        ...(err instanceof GeminiRateLimitError ? { reason: 'rate_limit' } : {}),
       });
       await this.repo.delete(placeholderId);
     } finally {

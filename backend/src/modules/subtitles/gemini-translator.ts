@@ -1,5 +1,9 @@
 import { APP_LANGUAGES } from '../../common/constants/app-languages';
 
+/** Thrown when Gemini returns 429 (quota exhausted / rate limited) after
+ *  retries — lets the caller surface a specific message to the client. */
+export class GeminiRateLimitError extends Error {}
+
 /** Minimal media context injected into the prompt to improve translation. */
 export interface TranslationContext {
   title?: string | null;
@@ -176,6 +180,11 @@ async function callGemini(
       );
       await sleep(delay);
       continue;
+    }
+    if (res.status === 429) {
+      throw new GeminiRateLimitError(
+        `Gemini quota/rate limit exceeded: ${errText.slice(0, 300)}`,
+      );
     }
     throw new Error(`Gemini API error ${res.status}: ${errText.slice(0, 300)}`);
   }

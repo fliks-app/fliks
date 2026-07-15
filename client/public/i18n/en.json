@@ -953,6 +953,7 @@
     "translate_target_language": "Target language",
     "translate_hint": "Choose the language to translate this subtitle into. Translation runs in the background and keeps the original timing.",
     "translation_started": "Translation started — the subtitle will appear once ready.",
+    "translation_rate_limited": "Gemini quota or rate limit reached — try again later, or check your API plan.",
     "ocr_unavailable": "OCR unavailable for this format",
     "ocr_language_title": "Subtitle language",
     "ocr_language_hint": "The language of this track could not be determined. Choose it for OCR — it is used to recognize the text and to label the subtitle.",

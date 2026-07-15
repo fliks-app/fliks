@@ -953,6 +953,7 @@
     "translate_target_language": "Langue cible",
     "translate_hint": "Choisissez la langue de traduction de ce sous-titre. La traduction s'exécute en arrière-plan et conserve le minutage d'origine.",
     "translation_started": "Traduction lancée — le sous-titre apparaîtra une fois prêt.",
+    "translation_rate_limited": "Quota ou limite Gemini atteint — réessayez plus tard, ou vérifiez votre offre API.",
     "ocr_unavailable": "OCR indisponible pour ce format",
     "ocr_language_title": "Langue du sous-titre",
     "ocr_language_hint": "La langue de cette piste n'a pas pu être déterminée. Choisissez-la pour l'OCR — elle sert à reconnaître le texte et à étiqueter le sous-titre.",
