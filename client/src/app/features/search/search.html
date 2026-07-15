@@ -82,22 +82,19 @@
       <p class="text-base-content/50 text-center py-12">{{ (state.hasQuery() ? 'social.no_people_results' : 'search.discover_people_hint') | translate }}</p>
     }
   } @else if (!state.hasQuery()) {
-    @if (state.externalEnabled()) {
-      <!-- Discover: filter sidebar (desktop) + rows / results grid -->
-      <div class="flex gap-6">
-        <aside class="hidden lg:block w-60 shrink-0">
-          <ng-container *ngTemplateOutlet="filterPanel" />
-        </aside>
-        <div class="flex-1 min-w-0">
-          <button type="button" class="lg:hidden btn btn-sm btn-outline gap-2 mb-4" (click)="openFilterSheet()">
-            <svg lucideSettings class="h-4 w-4"></svg>{{ 'search.filters' | translate }}
-          </button>
+    <!-- Discover / library browse: filter sidebar (desktop) + content -->
+    <div class="flex gap-6">
+      <aside class="hidden lg:block w-60 shrink-0">
+        <ng-container *ngTemplateOutlet="filterPanel" />
+      </aside>
+      <div class="flex-1 min-w-0">
+        <button type="button" class="lg:hidden btn btn-sm btn-outline gap-2 mb-4" (click)="openFilterSheet()">
+          <svg lucideSettings class="h-4 w-4"></svg>{{ 'search.filters' | translate }}
+        </button>
 
-          @if (state.discoverActive()) {
-            <div class="flex items-center gap-3 mb-3">
-              <h2 class="text-lg font-bold">{{ 'search.discover_results' | translate }}</h2>
-              <button type="button" class="btn btn-ghost btn-xs" (click)="clearDiscover()">{{ 'search.clear' | translate }}</button>
-            </div>
+        @if (state.discoverActive()) {
+          <!-- Filters applied → results grid (TMDB discover, or the local library when external search is off) -->
+          @if (state.externalEnabled()) {
             @if (state.discoverLoading()) {
               <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
             } @else if (state.discoverResults().length) {
@@ -110,6 +107,27 @@
               <p class="text-base-content/50 text-center py-12">{{ 'search.no_results' | translate }}</p>
             }
           } @else {
+            @if (state.localLoading()) {
+              <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+            } @else if (state.localResults().length) {
+              <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
+                @for (media of state.localResults(); track media.id) {
+                  <app-media-card
+                    [media]="media"
+                    [status]="media.watched ? 'watched' : null"
+                    [progressPercent]="media.watched ? 0 : (media.progressPercent ?? 0)"
+                    [interactiveWatched]="canMarkMediaWatched(media)"
+                    (watchedToggled)="toggleMediaWatched(media, $event)"
+                  />
+                }
+              </div>
+            } @else {
+              <p class="text-base-content/50 text-center py-12">{{ 'search.no_results' | translate }}</p>
+            }
+          }
+        } @else {
+          <!-- No filters → discovery rows -->
+          @if (state.externalEnabled()) {
             @if (state.discoveryLoading() && !state.discoveryTrending().length && !state.discoveryPopular().length && !state.discoverySuggestions().length) {
               <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
             }
@@ -140,21 +158,20 @@
                 </app-horizontal-scroller>
               }
             </div>
+          } @else {
+            @if (state.discoveryRecommendations().length) {
+              <app-horizontal-scroller [title]="'search.discover_suggestions' | translate" class="block">
+                @for (rec of state.discoveryRecommendations(); track rec.media.id) {
+                  <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="rec.media.posterUrl" [title]="rec.media.title" [subtitle]="'' + (rec.media.year ?? '')" [link]="recLink(rec)" [status]="rec.media.available ? null : 'missing'" [playable]="rec.media.available" />
+                }
+              </app-horizontal-scroller>
+            } @else {
+              <p class="text-base-content/50 text-center py-12">{{ 'search.hint_local' | translate }}</p>
+            }
           }
-        </div>
+        }
       </div>
-    } @else {
-      <!-- External search off: local suggestions only -->
-      @if (state.discoveryRecommendations().length) {
-        <app-horizontal-scroller [title]="'search.discover_suggestions' | translate" class="block">
-          @for (rec of state.discoveryRecommendations(); track rec.media.id) {
-            <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="rec.media.posterUrl" [title]="rec.media.title" [subtitle]="'' + (rec.media.year ?? '')" [link]="recLink(rec)" [status]="rec.media.available ? null : 'missing'" [playable]="rec.media.available" />
-          }
-        </app-horizontal-scroller>
-      } @else {
-        <p class="text-base-content/50 text-center py-12">{{ 'search.hint_local' | translate }}</p>
-      }
-    }
+    </div>
   } @else {
     <!-- Text-search results: filter sidebar (desktop) + results column -->
     <div class="flex gap-6">
@@ -316,12 +333,9 @@
       </div>
     </div>
 
-    @if (!state.hasQuery()) {
-      <div class="flex gap-2 pt-1">
-        <button type="button" class="btn btn-primary btn-sm flex-1" (click)="applyDiscover()">{{ 'search.apply' | translate }}</button>
-        @if (state.discoverActive() || state.discoverSelectedGenres().size) {
-          <button type="button" class="btn btn-ghost btn-sm" (click)="clearDiscover()">{{ 'search.clear' | translate }}</button>
-        }
+    @if (state.filtersEngaged()) {
+      <div class="pt-1">
+        <button type="button" class="btn btn-ghost btn-sm w-full" (click)="clearDiscover()">{{ 'search.clear' | translate }}</button>
       </div>
     }
   </div>

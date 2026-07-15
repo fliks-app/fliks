@@ -128,11 +128,9 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     untracked(() => void this.ensureDiscoverGenres());
   });
 
-  /** Live-apply the discover panel filters to the local (backend) search while a
-   *  text query is active. Debounced; the run is untracked so its writes can't
-   *  feed back. Only the local search re-runs — external results re-filter
-   *  reactively via the state computeds (no TMDB refetch). Skips when the query
-   *  already reflects these filters (e.g. a content-type switch ran directly). */
+  /** Auto-apply the discover panel filters (debounced) — no explicit apply
+   *  button. The run is untracked so its writes can't feed back into the effect.
+   *  See applyFiltersNow for what each state does. */
   private readonly liveFilterEffect = effect(() => {
     this.state.discoverSelectedGenres();
     this.state.discoverSort();
@@ -140,14 +138,37 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.state.discoverYearMin();
     this.state.discoverYearMax();
     untracked(() => {
-      if (!this.state.hasQuery()) return;
-      const q = this.state.query().trim();
-      const ct = this.state.contentType();
-      if (this.filterSig(q, ct) === this.lastLocalSig) return;
+      if (this.state.tab() !== 'videos') return;
       if (this.filterDebounce) clearTimeout(this.filterDebounce);
-      this.filterDebounce = setTimeout(() => void this.runLocalSearch(q, ct), 300);
+      this.filterDebounce = setTimeout(() => void this.applyFiltersNow(), 300);
     });
   });
+
+  /** Apply the current filters to the right source:
+   *  - text query  → the local library query (external post-filters reactively);
+   *  - no query + filters + external on  → TMDB /discover;
+   *  - no query + filters + external off → filtered local library browse;
+   *  - no query + no filters → back to the discovery rows. */
+  private async applyFiltersNow(): Promise<void> {
+    if (this.state.tab() !== 'videos') return;
+    const ct = this.state.contentType();
+    if (this.state.hasQuery()) {
+      const q = this.state.query().trim();
+      if (this.filterSig(q, ct) !== this.lastLocalSig) await this.runLocalSearch(q, ct);
+      return;
+    }
+    if (!this.state.filtersEngaged()) {
+      this.state.discoverActive.set(false);
+      this.state.discoverResults.set([]);
+      return;
+    }
+    if (this.state.externalEnabled()) {
+      await this.applyDiscover();
+    } else {
+      this.state.discoverActive.set(true);
+      await this.runLocalSearch('', ct);
+    }
+  }
 
   readonly requestedTmdbIds = signal<Map<number, FliksRequestStatus>>(new Map());
 
@@ -258,6 +279,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       this.state.externalResults.set([]);
       this.state.localLoading.set(false);
       this.state.externalLoading.set(false);
+      // An engaged filter keeps browsing (discover / local) with no text query.
+      void this.applyFiltersNow();
     }
   }
 
@@ -285,15 +308,19 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   toggleExternal() {
     this.state.externalEnabled.update(v => !v);
-    if (this.state.externalEnabled()) {
-      // Re-run search to fetch external results
-      if (this.state.query().trim()) {
+    const on = this.state.externalEnabled();
+    if (!on) {
+      this.state.externalResults.set([]);
+      this.state.externalLoading.set(false);
+    }
+    if (this.state.query().trim()) {
+      if (on) {
         if (this.searchTimer) clearTimeout(this.searchTimer);
         this.runSearch();
       }
     } else {
-      this.state.externalResults.set([]);
-      this.state.externalLoading.set(false);
+      // Discover mode: switch the filter source (TMDB /discover ↔ local browse).
+      void this.applyFiltersNow();
     }
   }
 
