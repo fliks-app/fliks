@@ -951,7 +951,7 @@
     "translate_processing": "Traduzione",
     "translation_in_progress": "Traduzione dei sottotitoli in corso: {{langs}}",
     "translate_target_language": "Lingua di destinazione",
-    "translate_hint": "Scegli la lingua in cui tradurre questo sottotitolo. La traduzione viene eseguita in background e mantiene la sincronizzazione originale.",
+    "translate_hint": "Crea un nuovo sottotitolo traducendo questo. La traduzione viene eseguita in background e mantiene la sincronizzazione originale.",
     "translation_started": "Traduzione avviata — il sottotitolo apparirà una volta pronto.",
     "translation_rate_limited": "Quota o limite di frequenza Gemini raggiunto — riprova più tardi o verifica il tuo piano API.",
     "ocr_unavailable": "OCR non disponibile per questo formato",

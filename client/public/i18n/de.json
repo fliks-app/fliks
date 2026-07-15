@@ -951,7 +951,7 @@
     "translate_processing": "Übersetzen",
     "translation_in_progress": "Untertitel werden übersetzt: {{langs}}",
     "translate_target_language": "Zielsprache",
-    "translate_hint": "Wählen Sie die Sprache, in die dieser Untertitel übersetzt werden soll. Die Übersetzung läuft im Hintergrund und behält das ursprüngliche Timing bei.",
+    "translate_hint": "Erstellt einen neuen Untertitel, indem dieser übersetzt wird. Die Übersetzung läuft im Hintergrund und behält das ursprüngliche Timing bei.",
     "translation_started": "Übersetzung gestartet — der Untertitel erscheint, sobald er fertig ist.",
     "translation_rate_limited": "Gemini-Kontingent oder Ratenlimit erreicht — später erneut versuchen oder Ihren API-Tarif prüfen.",
     "ocr_unavailable": "OCR für dieses Format nicht verfügbar",
