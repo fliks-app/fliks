@@ -404,6 +404,15 @@ export class SubtitlesService {
     return this.repo.save(sub);
   }
 
+  /** Manually mark a subtitle as validated by pinning its score to 100 so it
+   *  wins ordering and stays the preferred track. */
+  async validateSubtitle(subtitleId: number): Promise<SubtitleFile> {
+    const sub = await this.repo.findOne({ where: { id: subtitleId } });
+    if (!sub) throw new NotFoundException(`Subtitle #${subtitleId} not found`);
+    sub.score = 100;
+    return this.repo.save(sub);
+  }
+
   /**
    * Called after a media rescan: drop DB rows for external subtitle files that no
    * longer exist on disk, and collapse duplicate rows that point to the exact

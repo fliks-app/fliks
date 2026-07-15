@@ -13,6 +13,7 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   LucideArrowRightLeft,
+  LucideBadgeCheck,
   LucideBan,
   LucideChevronDown,
   LucideChevronRight,
@@ -22,6 +23,7 @@ import {
   LucideImage,
   LucideLanguages,
   LucideMaximize2,
+  LucideMoveHorizontal,
   LucidePlay,
   LucideSmile,
   LucideThermometer,
@@ -83,6 +85,7 @@ interface SubtitleRow {
     MediaDetailSubtitleSearchModalComponent,
     PopoverMenuComponent,
     LucideArrowRightLeft,
+    LucideBadgeCheck,
     LucideBan,
     LucideChevronDown,
     LucideChevronRight,
@@ -92,6 +95,7 @@ interface SubtitleRow {
     LucideImage,
     LucideLanguages,
     LucideMaximize2,
+    LucideMoveHorizontal,
     LucidePlay,
     LucideSmile,
     LucideThermometer,
@@ -182,6 +186,9 @@ export class SubtitlesModalComponent {
    *  entry in the main actions menu. */
   readonly correctionsMenuOpen = signal(false);
   readonly correctionsAnchor = signal<HTMLElement | null>(null);
+  /** The "Décalage" flyout submenu (sync / adjust times / frame rate). */
+  readonly offsetMenuOpen = signal(false);
+  readonly offsetAnchor = signal<HTMLElement | null>(null);
 
   protected openSubActions(sub: SubtitleFileRow, anchor: HTMLElement) {
     this.actionsAnchor.set(anchor);
@@ -196,6 +203,8 @@ export class SubtitlesModalComponent {
     this.actionsAnchor.set(null);
     this.correctionsMenuOpen.set(false);
     this.correctionsAnchor.set(null);
+    this.offsetMenuOpen.set(false);
+    this.offsetAnchor.set(null);
   }
   protected runSubAction(action: (sub: SubtitleFileRow) => void): void {
     const sub = this.actionsSub();
@@ -203,12 +212,14 @@ export class SubtitlesModalComponent {
     // Start the close animation but keep the row's data until `(closed)` clears
     // it, so the menu's buttons don't flip while the sheet slides out.
     this.correctionsMenuOpen.set(false);
+    this.offsetMenuOpen.set(false);
     this.actionsMenuOpen.set(false);
     action(sub);
   }
 
   /** Open the Corrections flyout beside its entry (keeps the main menu open). */
   protected openCorrections(anchor: HTMLElement) {
+    this.offsetMenuOpen.set(false);
     this.correctionsAnchor.set(anchor);
     this.correctionsMenuOpen.set(true);
   }
@@ -221,6 +232,25 @@ export class SubtitlesModalComponent {
     const sub = this.actionsSub();
     if (!sub) return;
     this.correctionsMenuOpen.set(false);
+    this.actionsMenuOpen.set(false);
+    action(sub);
+  }
+
+  /** Open the Décalage flyout beside its entry (keeps the main menu open). */
+  protected openOffset(anchor: HTMLElement) {
+    this.correctionsMenuOpen.set(false);
+    this.offsetAnchor.set(anchor);
+    this.offsetMenuOpen.set(true);
+  }
+  protected closeOffset() {
+    this.offsetMenuOpen.set(false);
+    this.offsetAnchor.set(null);
+  }
+  /** Run a timing action, then close both the flyout and the main menu. */
+  protected runOffset(action: (sub: SubtitleFileRow) => void): void {
+    const sub = this.actionsSub();
+    if (!sub) return;
+    this.offsetMenuOpen.set(false);
     this.actionsMenuOpen.set(false);
     action(sub);
   }
@@ -606,6 +636,25 @@ export class SubtitlesModalComponent {
 
   async blacklistSubtitle(sub: SubtitleFileRow) {
     await this.subActions.blacklist(this.mediaId(), sub, this.subtitles);
+  }
+
+  /** Mark a subtitle as validated (pins its score to 100). */
+  async validateSubtitle(sub: SubtitleFileRow) {
+    if (
+      !(await this.confirmation.confirm({
+        title: this.translate.instant('media_detail.action_validate'),
+        message: this.translate.instant('media_detail.confirm_validate_subtitle'),
+        confirmLabel: this.translate.instant('media_detail.action_validate'),
+      }))
+    )
+      return;
+    await this.subActions.validate(
+      this.mediaId(),
+      sub.id,
+      this.subtitles,
+      this.subtitleActionBusy,
+    );
+    this.toast.success(this.translate.instant('media_detail.validate_success'));
   }
 
   /** Image-row OCR. With a known language go straight to it; otherwise let the

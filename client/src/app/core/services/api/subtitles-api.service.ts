@@ -91,6 +91,15 @@ export class SubtitlesApiService {
     );
   }
 
+  validate(mediaId: number, subtitleId: number) {
+    return firstValueFrom(
+      this.http.post<SubtitleFileRow>(
+        `/api/media/${mediaId}/subtitles/${subtitleId}/validate`,
+        {},
+      ),
+    );
+  }
+
   setLanguage(mediaId: number, subtitleId: number, language: string) {
     return firstValueFrom(
       this.http.patch<SubtitleFileRow>(

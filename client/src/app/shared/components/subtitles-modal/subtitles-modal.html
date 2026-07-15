@@ -179,17 +179,16 @@
         <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
         {{ 'media_detail.change_language' | translate }}
       </button>
-      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => openSyncModal(s.id))">
-        <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-        {{ 'media_detail.action_sync' | translate }}
-      </button>
-      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => openAdjustModal(s.id))">
-        <svg lucideClock class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-        {{ 'media_detail.action_adjust_times' | translate }}
-      </button>
-      <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => openFpsModal(s.id))">
-        <svg lucideZap class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
-        {{ 'media_detail.action_change_fps' | translate }}
+      @if ((actionsSub()?.score ?? 0) !== 100) {
+        <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => validateSubtitle(s))">
+          <svg lucideBadgeCheck class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+          {{ 'media_detail.action_validate' | translate }}
+        </button>
+      }
+      <button #offsetTrigger type="button" class="dropdown-item text-white" (click)="openOffset(offsetTrigger)">
+        <svg lucideMoveHorizontal class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        <span class="flex-1 text-left">{{ 'media_detail.offset' | translate }}</span>
+        <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
       </button>
       <button #corrTrigger type="button" class="dropdown-item text-white" (click)="openCorrections(corrTrigger)">
         <svg lucideWandSparkles class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
@@ -249,6 +248,28 @@
       <button type="button" class="dropdown-item text-white" (click)="runCorrection(s => postProcessSubtitle({ subtitleId: s.id, action: 'convertToSrt' }))">
         <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
         {{ 'media_detail.action_convert_srt' | translate }}
+      </button>
+    </app-popover-menu>
+
+    <!-- Décalage flyout submenu (timing: sync / adjust times / frame rate),
+         anchored to the "Décalage" entry above. -->
+    <app-popover-menu
+      [open]="offsetMenuOpen()"
+      [anchor]="offsetAnchor()"
+      placement="right-start"
+      (closed)="closeOffset()"
+    >
+      <button type="button" class="dropdown-item text-white" (click)="runOffset(s => openSyncModal(s.id))">
+        <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_sync' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runOffset(s => openAdjustModal(s.id))">
+        <svg lucideClock class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_adjust_times' | translate }}
+      </button>
+      <button type="button" class="dropdown-item text-white" (click)="runOffset(s => openFpsModal(s.id))">
+        <svg lucideZap class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        {{ 'media_detail.action_change_fps' | translate }}
       </button>
     </app-popover-menu>
 
