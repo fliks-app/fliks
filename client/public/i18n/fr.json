@@ -187,7 +187,10 @@
   "display_settings": {
     "title": "Affichage",
     "home_background": "Image de fond sur l'accueil",
-    "home_background_hint": "Affiche une affiche en plein écran derrière les sections de l'accueil."
+    "home_background_hint": "Affiche une affiche en plein écran derrière les sections de l'accueil.",
+    "language": "Langue de l'application",
+    "language_auto": "Automatique (langue du navigateur)",
+    "language_hint": "Langue de l'interface. Par défaut, celle de votre navigateur ou de votre système."
   },
   "storage_settings": {
     "clear_cache": "Vider le cache",

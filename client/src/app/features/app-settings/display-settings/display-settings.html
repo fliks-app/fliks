@@ -1,6 +1,21 @@
 <h1 class="text-2xl font-bold mb-4">{{ 'display_settings.title' | translate }}</h1>
 <div class="card bg-base-100 border border-base-200">
   <div class="card-body gap-5">
+    <div class="flex flex-col gap-1">
+      <span class="text-sm font-medium">{{ 'display_settings.language' | translate }}</span>
+      <select
+        class="select select-bordered w-full max-w-xs"
+        [ngModel]="language()"
+        (ngModelChange)="onLanguageChange($event)"
+      >
+        <option value="">{{ 'display_settings.language_auto' | translate }}</option>
+        @for (l of languageOptions; track l.code) {
+          <option [value]="l.code">{{ l.label }}</option>
+        }
+      </select>
+      <span class="text-sm text-base-content/60">{{ 'display_settings.language_hint' | translate }}</span>
+    </div>
+
     <app-toggle-field
       [value]="homeBackground()"
       (valueChange)="onHomeBackgroundChange($event)"

@@ -6,18 +6,26 @@ import {
   provideZonelessChangeDetection,
 } from '@angular/core';
 import { registerLocaleData } from '@angular/common';
+import localeEn from '@angular/common/locales/en';
 import localeFr from '@angular/common/locales/fr';
+import localeEs from '@angular/common/locales/es';
+import localeDe from '@angular/common/locales/de';
+import localeIt from '@angular/common/locales/it';
+import localePt from '@angular/common/locales/pt';
 import { Capacitor } from '@capacitor/core';
 import { provideServiceWorker } from '@angular/service-worker';
 import { provideRouter, RouteReuseStrategy, withInMemoryScrolling, withViewTransitions } from '@angular/router';
 import { HttpBackend, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 
-// Register French CLDR data so DatePipe / DecimalPipe / CurrencyPipe / etc.
-// honour the French locale instead of the Angular default ('en-US'). Done
-// once at module load — the registration is idempotent on Angular's side.
-registerLocaleData(localeFr);
+// Register CLDR data for every shipped UI language so DatePipe / DecimalPipe /
+// CurrencyPipe honour the active locale (resolved below) instead of the Angular
+// default. Registration is idempotent on Angular's side.
+[localeEn, localeFr, localeEs, localeDe, localeIt, localePt].forEach(
+  registerLocaleData,
+);
 import { routes } from './app.routes';
+import { resolveInitialLocale, DEFAULT_LOCALE } from './core/constants/app-locale';
 import { serverUrlInterceptor } from './core/interceptors/server-url.interceptor';
 import { credentialsInterceptor } from './core/interceptors/credentials.interceptor';
 import { errorInterceptor } from './core/interceptors/error.interceptor';
@@ -29,7 +37,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideZonelessChangeDetection(),
-    { provide: LOCALE_ID, useValue: 'fr' },
+    { provide: LOCALE_ID, useFactory: resolveInitialLocale },
     provideRouter(
       routes,
       withInMemoryScrolling({ scrollPositionRestoration: 'top' }),
@@ -54,8 +62,8 @@ export const appConfig: ApplicationConfig = {
         useFactory: translateBrowserLoaderFactory,
         deps: [HttpBackend],
       },
-      lang: 'fr',
-      fallbackLang: 'fr',
+      lang: resolveInitialLocale(),
+      fallbackLang: DEFAULT_LOCALE,
     }),
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode() && Capacitor.getPlatform() === 'web',
