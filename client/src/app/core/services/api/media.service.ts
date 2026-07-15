@@ -218,6 +218,12 @@ export interface SearchParams {
   monitored?: boolean;
   year?: number;
   genre?: string;
+  /** Multi-genre filter matched by name; all must be present (AND). */
+  genres?: string[];
+  yearMin?: number;
+  yearMax?: number;
+  /** Minimum rating (compared against media.rating). */
+  voteMin?: number;
   collectionId?: number;
   sortBy?: string;
   sortOrder?: 'ASC' | 'DESC';
@@ -325,9 +331,12 @@ export class MediaService {
   getAll(params: SearchParams = {}, opts: { force?: boolean } = {}) {
     let httpParams = new HttpParams();
     for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== null && value !== '') {
-        httpParams = httpParams.set(key, String(value));
+      if (value === undefined || value === null || value === '') continue;
+      if (Array.isArray(value)) {
+        if (value.length) httpParams = httpParams.set(key, value.join(','));
+        continue;
       }
+      httpParams = httpParams.set(key, String(value));
     }
     const headers = opts.force ? { [CACHE_BYPASS_HEADER]: '1' } : undefined;
     return firstValueFrom(
