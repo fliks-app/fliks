@@ -190,7 +190,7 @@ async function callGemini(
           ? 'per-minute'
           : 'unknown';
       throw new GeminiRateLimitError(
-        `Gemini quota/rate limit exceeded (scope=${scope}${retryMs ? `, retryDelay=${Math.round(retryMs / 1000)}s` : ''}): ${errText.slice(0, 500)}`,
+        `Gemini quota/rate limit exceeded (scope=${scope}${retryMs ? `, retryDelay=${Math.round(retryMs / 1000)}s` : ''}): ${errText.slice(0, 2000)}`,
       );
     }
     throw new Error(`Gemini API error ${res.status}: ${errText.slice(0, 300)}`);
