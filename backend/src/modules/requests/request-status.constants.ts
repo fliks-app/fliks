@@ -26,6 +26,13 @@ export const IN_FLIGHT_REQUEST_STATUSES: readonly RequestStatus[] = [
   RequestStatus.PROCESSING,
 ] as const;
 
+/** Statuses that count as "this delete is still open". A delete request is
+ *  executed at approval, so APPROVED is its terminal done-state; only a
+ *  PENDING delete blocks (and is blocked by) another delete for the title. */
+export const ACTIVE_DELETE_REQUEST_STATUSES: readonly RequestStatus[] = [
+  RequestStatus.PENDING,
+] as const;
+
 /** Resolve a request's season scope to a normalised representation:
  *  - `null` → covers everything (movie or whole-series).
  *  - `Set<number>` → covers exactly these season numbers. */
