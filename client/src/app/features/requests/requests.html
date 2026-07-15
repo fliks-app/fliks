@@ -1,19 +1,30 @@
 <div class="flex flex-col gap-4">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
     <h1 class="sr-only lg:not-sr-only text-2xl font-bold">{{ 'requests.title' | translate }}</h1>
-    <select
-      class="select select-bordered select-sm w-full sm:w-48"
-      [ngModel]="statusFilter()"
-      (ngModelChange)="onStatusChange($event)"
-    >
-      <option value="">{{ 'requests.filter_all' | translate }}</option>
-      <option value="pending">{{ 'requests.status.pending' | translate }}</option>
-      <option value="approved">{{ 'requests.status.approved' | translate }}</option>
-      <option value="declined">{{ 'requests.status.declined' | translate }}</option>
-      <option value="processing">{{ 'requests.status.processing' | translate }}</option>
-      <option value="available">{{ 'requests.status.available' | translate }}</option>
-      <option value="failed">{{ 'requests.status.failed' | translate }}</option>
-    </select>
+    <div class="flex flex-col sm:flex-row gap-2 sm:w-auto w-full">
+      <select
+        class="select select-bordered select-sm w-full sm:w-40"
+        [ngModel]="kindFilter()"
+        (ngModelChange)="onKindChange($event)"
+      >
+        <option value="">{{ 'requests.filter_kind_all' | translate }}</option>
+        <option value="add">{{ 'requests.kind_add' | translate }}</option>
+        <option value="delete">{{ 'requests.kind_delete' | translate }}</option>
+      </select>
+      <select
+        class="select select-bordered select-sm w-full sm:w-48"
+        [ngModel]="statusFilter()"
+        (ngModelChange)="onStatusChange($event)"
+      >
+        <option value="">{{ 'requests.filter_all' | translate }}</option>
+        <option value="pending">{{ 'requests.status.pending' | translate }}</option>
+        <option value="approved">{{ 'requests.status.approved' | translate }}</option>
+        <option value="declined">{{ 'requests.status.declined' | translate }}</option>
+        <option value="processing">{{ 'requests.status.processing' | translate }}</option>
+        <option value="available">{{ 'requests.status.available' | translate }}</option>
+        <option value="failed">{{ 'requests.status.failed' | translate }}</option>
+      </select>
+    </div>
   </div>
 
   @if (loading() && rows().length === 0) {
@@ -150,6 +161,12 @@
 
               <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70">
                 <app-request-status-badge [request]="row" (badgeClick)="onBadgeClick(row)" />
+                @if (row.kind === 'delete') {
+                  <span class="badge badge-error badge-outline badge-sm gap-1">
+                    <svg lucideTrash2 class="h-3 w-3 shrink-0"></svg>
+                    {{ 'requests.kind_delete' | translate }}
+                  </span>
+                }
                 <span>
                   @if (row.mediaType === 'movie') {
                     {{ 'requests.type_movie' | translate }}

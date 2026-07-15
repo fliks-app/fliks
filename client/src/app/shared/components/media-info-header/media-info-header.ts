@@ -174,6 +174,11 @@ export class MediaInfoHeaderComponent {
    *  for movies / whole-series for series). When true the Demander
    *  entry is hidden — the backend would refuse the duplicate anyway. */
   readonly userHasOpenWholeRequest = input(false);
+  /** Viewer can ask an admin to delete this title from the library (a
+   *  requester without the direct `media.delete` permission, with no pending
+   *  deletion request already on the title). Surfaces the deletion entry in
+   *  the More dropdown. */
+  readonly canRequestDeletion = input(false);
   readonly releasesLoading = input(false);
   readonly grabBusy = input<string | null>(null);
   readonly monitoredLoading = input(false);
@@ -214,6 +219,8 @@ export class MediaInfoHeaderComponent {
   readonly openDownloadDetail = output<void>();
   /** Viewer (regular requester) asks to (re-)request the current title. */
   readonly requestMedia = output<void>();
+  /** Viewer (regular requester) asks an admin to delete this title. */
+  readonly requestDeletion = output<void>();
   /** Viewer wants to add the current title to one of their playlists. */
   readonly addToPlaylist = output<void>();
   /** Viewer wants to recommend the current title to another member. */

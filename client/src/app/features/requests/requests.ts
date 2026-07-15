@@ -20,6 +20,7 @@ import {
   RequestsService,
   FliksRequestRow,
   FliksRequestStatus,
+  RequestKind,
 } from '../../core/services/api/requests.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import {
@@ -100,6 +101,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   readonly total = signal(0);
   readonly loading = signal(false);
   readonly statusFilter = signal<FliksRequestStatus | ''>('');
+  readonly kindFilter = signal<RequestKind | ''>('');
   readonly declineForId = signal<number | null>(null);
   readonly declineReasonText = signal('');
   /** Read-only modal: motif affiché après un refus. */
@@ -164,6 +166,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.reload();
   }
 
+  onKindChange(value: string) {
+    this.kindFilter.set(value as RequestKind | '');
+    this.reload();
+  }
+
   loadMore() {
     this.page++;
     this.fetch(true);
@@ -178,12 +185,14 @@ export class RequestsComponent implements OnInit, OnDestroy {
   private async fetch(append: boolean, force = false) {
     this.loading.set(true);
     const status = this.statusFilter();
+    const kind = this.kindFilter();
     try {
       const res = await this.requestsService.list(
         {
           page: this.page,
           limit: 25,
           ...(status ? { status } : {}),
+          ...(kind ? { kind } : {}),
         },
         { force },
       );
@@ -212,10 +221,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
    *  preserving the user's loaded page depth. */
   private async refreshStatuses(): Promise<void> {
     const status = this.statusFilter();
+    const kind = this.kindFilter();
     const limit = Math.max(25, this.rows().length);
     try {
       const res = await this.requestsService.list(
-        { page: 1, limit, ...(status ? { status } : {}) },
+        { page: 1, limit, ...(status ? { status } : {}), ...(kind ? { kind } : {}) },
         { force: true },
       );
       this.rows.set(res.data);

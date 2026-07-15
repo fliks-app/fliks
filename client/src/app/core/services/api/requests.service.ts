@@ -17,10 +17,15 @@ export type FliksRequestStatus =
   | 'available'
   | 'failed';
 
+/** Whether the request adds a title to the library or asks to delete one that
+ *  is already imported. Omitting `kind` on create defaults to an add request. */
+export type RequestKind = 'add' | 'delete';
+
 export interface CreateRequestBody {
   mediaType: MediaType;
   tmdbId: number;
   title: string;
+  kind?: RequestKind;
   qualityProfileId?: number;
   languageProfileId?: number;
   libraryId?: number;
@@ -57,6 +62,9 @@ export interface FliksRequestRow {
   tmdbId: number;
   title: string;
   status: FliksRequestStatus;
+  /** Discriminates an add request from a deletion request. A delete request's
+   *  APPROVED status is terminal (the media was deleted at approval). */
+  kind: RequestKind;
   approvedById: number | null;
   approvedBy: RequestUser | null;
   declinedReason: string | null;
@@ -95,6 +103,7 @@ export interface TitleRequestState {
 
 export interface ListRequestsParams {
   status?: FliksRequestStatus;
+  kind?: RequestKind;
   userId?: number;
   page?: number;
   limit?: number;
