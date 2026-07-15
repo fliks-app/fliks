@@ -174,8 +174,14 @@ export class PopoverMenuComponent {
         target?.scrollIntoView({ block: 'nearest', behavior: 'instant' as ScrollBehavior });
       });
       // Register with the dismissable stack so Escape (browser) and the
-      // hardware back button (Capacitor / Tizen) close the popover.
-      const close = () => this.close();
+      // hardware back button (Capacitor / Tizen) close the popover. Return
+      // focus to the opener so keyboard / D-pad users don't lose their place
+      // (a submenu returns to its parent entry, a menu to its trigger).
+      const close = () => {
+        const opener = this.anchor();
+        if (opener?.isConnected) opener.focus({ preventScroll: true });
+        this.close();
+      };
       this.dismissStack.push(close);
       onCleanup(() => this.dismissStack.remove(close));
 
