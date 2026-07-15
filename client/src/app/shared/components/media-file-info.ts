@@ -4,14 +4,16 @@ import {
   computed,
   inject,
   input,
+  output,
 } from '@angular/core';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { LucideVideo, LucideVolume2 } from '@lucide/angular';
+import { LucideVideo, LucideVolume2, LucideTrash2 } from '@lucide/angular';
 import {
   MediaFileInfo,
   VideoStreamInfo,
   AudioStreamInfo,
 } from '../../core/services/api/media.service';
+import { ConfirmationService } from '../../core/services/confirmation.service';
 
 type FileInput = {
   relativePath: string;
@@ -22,17 +24,37 @@ type FileInput = {
 
 @Component({
   selector: 'app-media-file-info',
-  imports: [TranslateModule, LucideVideo, LucideVolume2],
+  imports: [TranslateModule, LucideVideo, LucideVolume2, LucideTrash2],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-file-info.html',
 })
 export class MediaFileInfoComponent {
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
   readonly file = input.required<FileInput | null>();
   /** Absolute folder path of the parent media (library.path + folderName).
    *  Concatenated with `file.relativePath` so the panel exposes the
    *  full disk path instead of a basename-like fragment. */
   readonly mediaPath = input<string | null>(null);
+
+  /** Viewer holds the delete permission: exposes the delete-file action at the
+   *  bottom of the panel. */
+  readonly canDelete = input(false);
+  /** Id of the file this panel describes, required to delete it. */
+  readonly fileId = input<number | null>(null);
+  readonly deleteFile = output<{ fileId: number; deleteOnDisk: boolean }>();
+
+  async onDeleteFileClick() {
+    const id = this.fileId();
+    if (id == null) return;
+    const confirmed = await this.confirmation.confirm({
+      title: this.translate.instant('common.confirm'),
+      message: this.translate.instant('media_detail.confirm_delete_file_disk'),
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    this.deleteFile.emit({ fileId: id, deleteOnDisk: true });
+  }
 
   readonly videoStream = computed(() => this.file()?.streamInfo?.video[0] ?? null);
   readonly audioStreams = computed(() => this.file()?.streamInfo?.audio ?? []);

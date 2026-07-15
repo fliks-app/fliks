@@ -96,5 +96,18 @@
         </div>
       </div>
     }
+
+    @if (canDelete() && fileId() != null) {
+      <div class="pt-2">
+        <button
+          type="button"
+          class="btn btn-sm btn-outline btn-error"
+          (click)="onDeleteFileClick()"
+        >
+          <svg lucideTrash2 class="h-4 w-4"></svg>
+          {{ 'media_detail.delete_file' | translate }}
+        </button>
+      </div>
+    }
   </div>
 }

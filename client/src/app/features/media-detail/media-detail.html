@@ -63,7 +63,6 @@
           [releasesLoading]="epReleasesLoading()"
           [grabBusy]="epGrabBusy()"
           (selectedFileIdChange)="selectedFileId.set($event)"
-          (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
           (openDownload)="openDownloadModal()"
           (refreshMetadata)="refreshMetadata()"
           (toggleMonitored)="toggleMonitored()"
@@ -131,7 +130,13 @@
 
         @if (episodeActiveFile(); as sf) {
           <div class="divider my-6"></div>
-          <app-media-file-info [file]="sf" [mediaPath]="m.path ?? null" />
+          <app-media-file-info
+            [file]="sf"
+            [mediaPath]="m.path ?? null"
+            [canDelete]="canDelete()"
+            [fileId]="episodeActiveFileId()"
+            (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
+          />
         }
       </div>
 
@@ -176,7 +181,6 @@
           [monitoredLoading]="monitoredLoading()"
           [deleteLoading]="deleteLoading()"
           (selectedFileIdChange)="selectedFileId.set($event)"
-          (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
           (openDownload)="openDownloadModal()"
           (openProfiles)="openProfilesModal()"
           (openLibrary)="openLibraryModal()"
@@ -220,7 +224,13 @@
 
         @if (activeFile(); as af) {
           <div class="divider my-6"></div>
-          <app-media-file-info [file]="af" [mediaPath]="m.path ?? null" />
+          <app-media-file-info
+            [file]="af"
+            [mediaPath]="m.path ?? null"
+            [canDelete]="canDelete()"
+            [fileId]="activeFileId()"
+            (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
+          />
         }
 
         @if (m.type === 'series' && m.seasons?.length) {

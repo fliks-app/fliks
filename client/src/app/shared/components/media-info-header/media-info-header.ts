@@ -37,7 +37,6 @@ import {
 } from '@lucide/angular';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
-import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { PlayerSettingsService } from '../../../core/services/player-settings.service';
 import { TrackManagerService } from '../../../core/services/track-manager.service';
 import { NavbarService } from '../../../core/services/navbar.service';
@@ -112,7 +111,6 @@ interface AudioTrack {
   templateUrl: './media-info-header.html',
 })
 export class MediaInfoHeaderComponent {
-  private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly trackManager = inject(TrackManagerService);
@@ -200,7 +198,6 @@ export class MediaInfoHeaderComponent {
 
   // ── Outputs (delegated to parent) ──
   readonly selectedFileIdChange = output<number>();
-  readonly deleteFile = output<{ fileId: number; deleteOnDisk: boolean }>();
   readonly openDownload = output<void>();
   readonly openProfiles = output<void>();
   readonly openLibrary = output<void>();
@@ -515,15 +512,4 @@ export class MediaInfoHeaderComponent {
   }
 
 
-  async onDeleteFileClick() {
-    const fileId = this.selectedFileId();
-    if (!fileId) return;
-    const confirmed = await this.confirmation.confirm({
-      title: this.translate.instant('common.confirm'),
-      message: this.translate.instant('media_detail.confirm_delete_file_disk'),
-      variant: 'danger',
-    });
-    if (!confirmed) return;
-    this.deleteFile.emit({ fileId, deleteOnDisk: true });
-  }
 }
