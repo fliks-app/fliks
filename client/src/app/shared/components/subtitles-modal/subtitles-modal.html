@@ -180,8 +180,8 @@
         {{ 'media_detail.change_language' | translate }}
       </button>
       @if ((actionsSub()?.score ?? 0) !== 100) {
-        <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => validateSubtitle(s))">
-          <svg lucideBadgeCheck class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+        <button type="button" class="dropdown-item text-success" (click)="runSubAction(s => validateSubtitle(s))">
+          <svg lucideBadgeCheck class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
           {{ 'media_detail.action_validate' | translate }}
         </button>
       }
