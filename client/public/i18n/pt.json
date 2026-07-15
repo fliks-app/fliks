@@ -947,6 +947,12 @@
     "ocr_started": "Extração OCR iniciada — a legenda aparecerá quando estiver pronta.",
     "ocr_in_progress": "Extração OCR em curso: {{langs}}",
     "ocr_processing": "OCR em curso",
+    "translate": "Traduzir",
+    "translate_processing": "Traduzindo",
+    "translation_in_progress": "A traduzir legendas: {{langs}}",
+    "translate_target_language": "Idioma de destino",
+    "translate_hint": "Escolha o idioma para o qual traduzir esta legenda. A tradução é executada em segundo plano e mantém a sincronização original.",
+    "translation_started": "Tradução iniciada — a legenda aparecerá quando estiver pronta.",
     "ocr_unavailable": "OCR indisponível para este formato",
     "ocr_language_title": "Idioma da legenda",
     "ocr_language_hint": "O idioma desta faixa não pôde ser determinado. Escolha-o para o OCR — serve para reconhecer o texto e etiquetar a legenda.",
@@ -2076,7 +2082,13 @@
       "stats_queries": "Pedidos",
       "stats_avg_time": "Tempo méd.",
       "stats_results": "Resultados",
-      "stats_errors": "Erros"
+      "stats_errors": "Erros",
+      "translation_title": "Tradução de legendas (IA)",
+      "translation_hint": "Traduza uma legenda de texto existente para outro idioma com a API Gemini. Defina a sua chave de API para ativar a ação «Traduzir» nas legendas.",
+      "translation_enabled": "Ativar tradução",
+      "translation_api_key": "Chave de API Gemini",
+      "translation_model": "Modelo",
+      "translation_saved": "Definições de tradução guardadas."
     },
     "schedulers": {
       "title": "Tarefas agendadas",

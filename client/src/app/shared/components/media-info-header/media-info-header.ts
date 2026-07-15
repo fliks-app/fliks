@@ -154,6 +154,9 @@ export class MediaInfoHeaderComponent {
   /** Localized languages of OCR extractions running in the background, shown
    *  as an "extraction en cours" indicator until each result is ready. */
   readonly ocrLanguages = input<string[]>([]);
+  /** Localized languages (with live percentage) of translations running in the
+   *  background, shown as a "traduction en cours" indicator until each is ready. */
+  readonly translationLanguages = input<string[]>([]);
 
   // ── Inputs: files ──
   readonly files = input<MediaInfoHeaderFile[]>([]);

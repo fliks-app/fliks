@@ -947,6 +947,12 @@
     "ocr_started": "OCR-Extraktion gestartet — der Untertitel erscheint, sobald er fertig ist.",
     "ocr_in_progress": "OCR-Extraktion läuft: {{langs}}",
     "ocr_processing": "OCR läuft",
+    "translate": "Übersetzen",
+    "translate_processing": "Übersetzen",
+    "translation_in_progress": "Untertitel werden übersetzt: {{langs}}",
+    "translate_target_language": "Zielsprache",
+    "translate_hint": "Wählen Sie die Sprache, in die dieser Untertitel übersetzt werden soll. Die Übersetzung läuft im Hintergrund und behält das ursprüngliche Timing bei.",
+    "translation_started": "Übersetzung gestartet — der Untertitel erscheint, sobald er fertig ist.",
     "ocr_unavailable": "OCR für dieses Format nicht verfügbar",
     "ocr_language_title": "Sprache des Untertitels",
     "ocr_language_hint": "Die Sprache dieser Spur konnte nicht ermittelt werden. Wählen Sie sie für die OCR — sie dient dazu, den Text zu erkennen und den Untertitel zu kennzeichnen.",
@@ -2076,7 +2082,13 @@
       "stats_queries": "Anfragen",
       "stats_avg_time": "Durchschn. Zeit",
       "stats_results": "Ergebnisse",
-      "stats_errors": "Fehler"
+      "stats_errors": "Fehler",
+      "translation_title": "KI-Untertitelübersetzung",
+      "translation_hint": "Übersetzen Sie einen vorhandenen Textuntertitel mit der Gemini-API in eine andere Sprache. Hinterlegen Sie Ihren API-Schlüssel, um die Aktion „Übersetzen“ für Untertitel zu aktivieren.",
+      "translation_enabled": "Übersetzung aktivieren",
+      "translation_api_key": "Gemini-API-Schlüssel",
+      "translation_model": "Modell",
+      "translation_saved": "Übersetzungseinstellungen gespeichert."
     },
     "schedulers": {
       "title": "Geplante Aufgaben",

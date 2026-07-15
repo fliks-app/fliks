@@ -97,7 +97,11 @@
                       @if (sub.status === 'processing') {
                         <span class="badge badge-xs badge-warning gap-1">
                           <span class="loading loading-spinner loading-xs"></span>
-                          {{ 'media_detail.ocr_processing' | translate }}
+                          @if (sub.providerType === 'translated') {
+                            {{ 'media_detail.translate_processing' | translate }}@if (translationPercent(sub.id) !== null) { {{ translationPercent(sub.id) }}% }
+                          } @else {
+                            {{ 'media_detail.ocr_processing' | translate }}
+                          }
                         </span>
                       }
                       @if (sub.forced) { <span class="badge badge-xs badge-outline mr-1">F</span> }
@@ -161,6 +165,13 @@
           </div>
         }
       } @else {
+      @if (actionsSubIsTranslatable()) {
+        <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => translateSubtitle(s))">
+          <svg lucideLanguages class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+          {{ 'media_detail.translate' | translate }}
+        </button>
+      }
+      @if (!actionsSubIsEmbedded()) {
       <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => changeLanguage(s))">
         <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
         {{ 'media_detail.change_language' | translate }}
@@ -209,6 +220,7 @@
         <svg lucideZap class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
         {{ 'media_detail.action_change_fps' | translate }}
       </button>
+      }
       }
       @if (!actionsSubIsEmbedded()) {
         <button type="button" class="dropdown-item text-warning" (click)="runSubAction(s => blacklistSubtitle(s))">
@@ -437,19 +449,22 @@
     @if (langDialogMode() === 'relabel') {
       <h3 class="text-lg font-bold">{{ 'media_detail.change_language_title' | translate }}</h3>
       <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.change_language_hint' | translate }}</p>
+    } @else if (langDialogMode() === 'translate') {
+      <h3 class="text-lg font-bold">{{ 'media_detail.translate_target_language' | translate }}</h3>
+      <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.translate_hint' | translate }}</p>
     } @else {
       <h3 class="text-lg font-bold">{{ 'media_detail.ocr_language_title' | translate }}</h3>
       <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.ocr_language_hint' | translate }}</p>
     }
     <select class="select select-bordered w-full" [ngModel]="ocrLang()" (ngModelChange)="ocrLang.set($event)">
-      @for (code of ocrLangCodes; track code) {
+      @for (code of langDialogCodes(); track code) {
         <option [value]="code">{{ code | localizeLanguage }}</option>
       }
     </select>
     <div class="modal-action">
       <button type="button" class="btn" (click)="closeOcrLangModal()">{{ 'common.cancel' | translate }}</button>
       <button type="button" class="btn btn-primary" (click)="confirmLanguage()">
-        {{ (langDialogMode() === 'relabel' ? 'common.save' : 'media_detail.action_ocr_extract') | translate }}
+        {{ (langDialogMode() === 'relabel' ? 'common.save' : langDialogMode() === 'translate' ? 'media_detail.translate' : 'media_detail.action_ocr_extract') | translate }}
       </button>
     </div>
   </div>

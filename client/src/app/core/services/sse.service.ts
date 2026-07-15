@@ -30,6 +30,9 @@ export class SseService implements OnDestroy {
 
   readonly activeProgress = signal<Map<string, TaskProgress>>(new Map());
   readonly lastEvent = signal<SseEvent | null>(null);
+  /** Live machine-translation progress keyed by the PROCESSING subtitle id
+   *  (0–100). Read by the subtitle modal to show a per-row percentage. */
+  readonly translationProgress = signal<Record<number, number>>({});
   /** Issued by the backend on SSE connect — bound to live sessions so admin
    *  remote-control reaches only this device/tab. */
   readonly connectionId = signal<string | null>(null);
@@ -73,7 +76,11 @@ export class SseService implements OnDestroy {
         this.handleEvent(data);
         // Don't update lastEvent for high-frequency progress events
         // (handled via dedicated signals/stores instead)
-        if (data.type !== 'task.progress' && data.type !== 'download.progress') {
+        if (
+          data.type !== 'task.progress' &&
+          data.type !== 'download.progress' &&
+          data.type !== 'subtitle.translation_progress'
+        ) {
           this.lastEvent.set(data);
         }
       } catch { /* ignore parse errors */ }
@@ -119,6 +126,14 @@ export class SseService implements OnDestroy {
         void invalidatePrefix('/api/media');
         // Toasts are handled by the media-detail component (only on the right page).
         break;
+      case 'subtitle.translation_progress': {
+        const id = Number(event['subtitleId']);
+        const progress = Number(event['progress']);
+        if (Number.isFinite(id)) {
+          this.translationProgress.update((m) => ({ ...m, [id]: progress }));
+        }
+        break;
+      }
       case 'download.progress':
         this.downloadProgress.applyProgress({
           mediaId: Number(event['mediaId']),
@@ -215,6 +230,17 @@ export class SseService implements OnDestroy {
         );
         break;
     }
+  }
+
+  /** Keep only the given subtitle ids in the translation-progress map — called
+   *  after the modal reloads on a terminal event so finished/failed runs don't
+   *  leave orphan entries behind. */
+  retainTranslationProgress(activeIds: number[]) {
+    this.translationProgress.update((m) => {
+      const next: Record<number, number> = {};
+      for (const id of activeIds) if (id in m) next[id] = m[id];
+      return next;
+    });
   }
 
   ngOnDestroy() {

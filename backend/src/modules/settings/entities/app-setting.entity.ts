@@ -16,6 +16,10 @@ import { BaseEntity } from '../../../common/entities/base.entity';
  *   search_missing_auto   — "true" | "false"
  *   rss_sync_interval     — minutes, e.g. "15"
  *   streaming_auto_quality_mode — "directplay" | "abr" (how "Auto" quality resolves)
+ *   subtitle_translation_enabled — "true" | "false" (machine translation via Gemini)
+ *   subtitle_translation_gemini_api_key — Gemini API key
+ *   subtitle_translation_model — Gemini model id, e.g. "gemini-2.0-flash"
+ *   subtitle_translation_max_concurrency — parallel translation runs, e.g. "1"
  */
 @Entity('app_settings')
 export class AppSetting extends BaseEntity {

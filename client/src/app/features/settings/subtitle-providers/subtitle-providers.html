@@ -9,6 +9,49 @@
     </button>
   </div>
 
+  <!-- AI subtitle translation (Gemini) -->
+  <div class="card bg-base-100 border border-base-200">
+    <div class="card-body gap-4">
+      <div>
+        <h2 class="card-title text-lg">{{ 'settings.subtitle_providers.translation_title' | translate }}</h2>
+        <p class="text-sm text-base-content/60">{{ 'settings.subtitle_providers.translation_hint' | translate }}</p>
+      </div>
+      <label class="label cursor-pointer justify-start gap-3 w-fit">
+        <input
+          type="checkbox"
+          class="toggle toggle-primary"
+          [ngModel]="translationEnabled()"
+          (ngModelChange)="translationEnabled.set($event)"
+        />
+        <span class="label-text">{{ 'settings.subtitle_providers.translation_enabled' | translate }}</span>
+      </label>
+      <label class="form-control w-full max-w-md">
+        <span class="label-text">{{ 'settings.subtitle_providers.translation_api_key' | translate }}</span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full font-mono"
+          [ngModel]="translationApiKey()"
+          (ngModelChange)="translationApiKey.set($event)"
+        />
+      </label>
+      <label class="form-control w-full max-w-md">
+        <span class="label-text">{{ 'settings.subtitle_providers.translation_model' | translate }}</span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full font-mono"
+          [ngModel]="translationModel()"
+          (ngModelChange)="translationModel.set($event)"
+        />
+      </label>
+      <div>
+        <button type="button" class="btn btn-primary" (click)="saveTranslation()" [disabled]="savingTranslation()">
+          @if (savingTranslation()) { <span class="loading loading-spinner loading-sm"></span> }
+          {{ 'common.save' | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+
   @if (loading()) {
     <div class="flex justify-center py-16">
       <span class="loading loading-spinner loading-lg"></span>

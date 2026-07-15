@@ -38,6 +38,7 @@ import { Action } from '../auth/casl/actions.enum';
 import { Media } from './entities/media.entity';
 import { SubtitlesService } from '../subtitles/subtitles.service';
 import { SubtitleOcrService } from '../subtitles/subtitle-ocr.service';
+import { SubtitleTranslationService } from '../subtitles/subtitle-translation.service';
 import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
@@ -57,6 +58,7 @@ export class MediaController {
     private readonly episodeDownload: EpisodeDownloadService,
     private readonly subtitlesService: SubtitlesService,
     private readonly subtitleOcr: SubtitleOcrService,
+    private readonly subtitleTranslation: SubtitleTranslationService,
     private readonly subtitleSync: SubtitleSyncService,
     private readonly ffprobe: FfprobeService,
     private readonly eventsService: EventsService,
@@ -615,6 +617,21 @@ export class MediaController {
   ) {
     await this.assertMediaAccessible(id, user);
     return this.subtitleOcr.ocrSubtitle(subtitleId, body.language);
+  }
+
+  @Post(':id/subtitles/:subtitleId/translate')
+  @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
+  async translateSubtitle(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @CurrentUser() user: User,
+    @Body() body: { targetLanguage: string },
+  ) {
+    await this.assertMediaAccessible(id, user);
+    return this.subtitleTranslation.translateSubtitle(
+      subtitleId,
+      body.targetLanguage,
+    );
   }
 
   @Patch(':id/subtitles/:subtitleId/language')

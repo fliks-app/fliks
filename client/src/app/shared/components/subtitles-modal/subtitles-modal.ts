@@ -19,6 +19,7 @@ import {
   LucideCode,
   LucideFileText,
   LucideImage,
+  LucideLanguages,
   LucideMaximize2,
   LucidePlay,
   LucideSmile,
@@ -34,6 +35,7 @@ import {
   isImageBasedSubtitleCodec,
   isOcrSupportedSubtitleCodec,
 } from '../../../core/utils/subtitle-codecs';
+import { SUBTITLE_LANGUAGE_CODES } from '../../../core/constants/subtitle-languages';
 import { AppSettingsService } from '../../../core/services/app-settings.service';
 import { SubtitleFilenamePipe } from '../../pipes/subtitle-filename.pipe';
 import {
@@ -85,6 +87,7 @@ interface SubtitleRow {
     LucideCode,
     LucideFileText,
     LucideImage,
+    LucideLanguages,
     LucideMaximize2,
     LucidePlay,
     LucideSmile,
@@ -156,11 +159,19 @@ export class SubtitlesModalComponent {
   readonly actionsSubIsEmbedded = computed(
     () => this.actionsSub()?.providerType === 'embedded',
   );
+  /** The open row is a text subtitle that can be machine-translated: on-disk
+   *  text files and embedded text tracks (extracted first), never image tracks. */
+  readonly actionsSubIsTranslatable = computed(() => {
+    const sub = this.actionsSub();
+    if (!sub || isImageBasedSubtitleCodec(sub.codec)) return false;
+    return !!sub.relativePath || sub.streamIndex != null;
+  });
 
-  /** Whether a row should expose the Actions menu — external files always, and
-   *  embedded image tracks so they can be OCR'd to text. */
-  protected rowHasActions(sub: SubtitleFileRow): boolean {
-    return sub.providerType !== 'embedded' || isImageBasedSubtitleCodec(sub.codec);
+  /** Every present subtitle row has at least one action or an informational
+   *  note (external → full menu, image track → OCR/burn-in note, embedded text
+   *  → translate), so the Actions menu is always offered. */
+  protected rowHasActions(_sub: SubtitleFileRow): boolean {
+    return true;
   }
 
   protected openSubActions(sub: SubtitleFileRow, anchor: HTMLElement) {
@@ -205,9 +216,16 @@ export class SubtitlesModalComponent {
   ];
   private readonly ocrTargetId = signal<number | null>(null);
   readonly ocrLang = signal('en');
-  /** The language dialog drives both OCR (pick before converting) and relabel
-   *  (reassign an existing subtitle's language afterwards). */
-  readonly langDialogMode = signal<'ocr' | 'relabel'>('ocr');
+  /** The language dialog drives OCR (pick before converting), relabel (reassign
+   *  an existing subtitle's language) and translate (pick the target language). */
+  readonly langDialogMode = signal<'ocr' | 'relabel' | 'translate'>('ocr');
+  /** Codes offered in the language dialog: the full subtitle set for translation
+   *  targets, the OCR-capable subset otherwise. */
+  readonly langDialogCodes = computed<readonly string[]>(() =>
+    this.langDialogMode() === 'translate'
+      ? SUBTITLE_LANGUAGE_CODES
+      : this.ocrLangCodes,
+  );
 
   /** Open the subtitles modal. Called from parent via viewChild. */
   show(): void {
@@ -282,9 +300,28 @@ export class SubtitlesModalComponent {
    *  page as an "extraction en cours" indicator. */
   readonly ocrInProgress = computed<string[]>(() =>
     this.filteredSubtitles()
-      .filter((s) => s.status === 'processing')
+      .filter((s) => s.status === 'processing' && s.providerType === 'ocr')
       .map((s) => localizeLanguage(s.language, this.translate)),
   );
+
+  /** Localized languages (with live percentage) of translation runs still in
+   *  progress, surfaced by the detail page as a "traduction en cours" indicator. */
+  readonly translationInProgress = computed<string[]>(() => {
+    const progress = this.sse.translationProgress();
+    return this.filteredSubtitles()
+      .filter((s) => s.status === 'processing' && s.providerType === 'translated')
+      .map((s) => {
+        const lang = localizeLanguage(s.language, this.translate);
+        const pct = progress[s.id];
+        return pct != null ? `${lang} — ${pct}%` : lang;
+      });
+  });
+
+  /** Live translation percentage for a PROCESSING row, or null before the first
+   *  batch reports. */
+  protected translationPercent(id: number): number | null {
+    return this.sse.translationProgress()[id] ?? null;
+  }
 
   /** Formatted subtitles for the media-info-header dropdown */
   readonly headerSubtitles = computed<MediaInfoHeaderSubtitle[]>(() => {
@@ -460,6 +497,13 @@ export class SubtitlesModalComponent {
     this.subtitlesLoading.set(true);
     try {
       this.subtitles.set(await this.subtitlesApi.getForMedia(mediaId));
+      // Drop progress entries for translations that finished/failed so the map
+      // never keeps stale rows across runs.
+      this.sse.retainTranslationProgress(
+        this.subtitles()
+          .filter((s) => s.status === 'processing' && s.providerType === 'translated')
+          .map((s) => s.id),
+      );
     } catch {
       this.subtitles.set([]);
     } finally {
@@ -545,6 +589,15 @@ export class SubtitlesModalComponent {
     this.ocrLangDialog()?.nativeElement.showModal();
   }
 
+  /** Translate a text subtitle: always pick the target language first. */
+  translateSubtitle(sub: SubtitleFileRow) {
+    const src = (sub.language ?? '').toLowerCase();
+    this.langDialogMode.set('translate');
+    this.ocrTargetId.set(sub.id);
+    this.ocrLang.set(src === 'en' ? 'fr' : 'en');
+    this.ocrLangDialog()?.nativeElement.showModal();
+  }
+
   /** Reassign a subtitle's language afterwards — e.g. an OCR done with a
    *  best-guess language on an untagged track. Relabels only; doesn't re-OCR. */
   changeLanguage(sub: SubtitleFileRow) {
@@ -559,8 +612,11 @@ export class SubtitlesModalComponent {
     const id = this.ocrTargetId();
     this.ocrLangDialog()?.nativeElement.close();
     if (id == null) return;
-    if (this.langDialogMode() === 'ocr') {
+    const mode = this.langDialogMode();
+    if (mode === 'ocr') {
       void this.triggerOcr(id, this.ocrLang());
+    } else if (mode === 'translate') {
+      void this.triggerTranslate(id, this.ocrLang());
     } else {
       void this.subActions
         .setLanguage(this.mediaId(), id, this.subtitles, this.subtitleActionBusy, this.ocrLang());
@@ -580,6 +636,17 @@ export class SubtitlesModalComponent {
       language,
     );
     this.toast.info(this.translate.instant('media_detail.ocr_started'));
+  }
+
+  private async triggerTranslate(subtitleId: number, targetLanguage: string) {
+    await this.subActions.translateSubtitle(
+      this.mediaId(),
+      subtitleId,
+      this.subtitles,
+      this.subtitleActionBusy,
+      targetLanguage,
+    );
+    this.toast.info(this.translate.instant('media_detail.translation_started'));
   }
 
   async deleteSubtitle(subtitleId: number) {

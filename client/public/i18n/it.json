@@ -947,6 +947,12 @@
     "ocr_started": "Estrazione OCR avviata — il sottotitolo apparirà una volta pronto.",
     "ocr_in_progress": "Estrazione OCR in corso: {{langs}}",
     "ocr_processing": "OCR in corso",
+    "translate": "Traduci",
+    "translate_processing": "Traduzione",
+    "translation_in_progress": "Traduzione dei sottotitoli in corso: {{langs}}",
+    "translate_target_language": "Lingua di destinazione",
+    "translate_hint": "Scegli la lingua in cui tradurre questo sottotitolo. La traduzione viene eseguita in background e mantiene la sincronizzazione originale.",
+    "translation_started": "Traduzione avviata — il sottotitolo apparirà una volta pronto.",
     "ocr_unavailable": "OCR non disponibile per questo formato",
     "ocr_language_title": "Lingua del sottotitolo",
     "ocr_language_hint": "La lingua di questa traccia non è stato possibile determinarla. Scegliela per l'OCR — serve a riconoscere il testo e a etichettare il sottotitolo.",
@@ -2076,7 +2082,13 @@
       "stats_queries": "Richieste",
       "stats_avg_time": "Tempo med.",
       "stats_results": "Risultati",
-      "stats_errors": "Errori"
+      "stats_errors": "Errori",
+      "translation_title": "Traduzione sottotitoli (IA)",
+      "translation_hint": "Traduci un sottotitolo di testo esistente in un'altra lingua con l'API Gemini. Inserisci la tua chiave API per abilitare l'azione «Traduci» sui sottotitoli.",
+      "translation_enabled": "Abilita traduzione",
+      "translation_api_key": "Chiave API Gemini",
+      "translation_model": "Modello",
+      "translation_saved": "Impostazioni di traduzione salvate."
     },
     "schedulers": {
       "title": "Attività pianificate",

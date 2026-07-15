@@ -80,6 +80,20 @@ export class SubtitleActionsService {
     }
   }
 
+  async translateSubtitle(
+    mediaId: number, subtitleId: number,
+    subtitles: WritableSignal<SubtitleFileRow[]>, busy: WritableSignal<boolean>,
+    targetLanguage: string,
+  ) {
+    busy.set(true);
+    try {
+      await this.subtitlesApi.translate(mediaId, subtitleId, targetLanguage);
+      subtitles.set(await this.subtitlesApi.getForMedia(mediaId));
+    } finally {
+      busy.set(false);
+    }
+  }
+
   async setLanguage(
     mediaId: number, subtitleId: number,
     subtitles: WritableSignal<SubtitleFileRow[]>, busy: WritableSignal<boolean>,

@@ -17,4 +17,6 @@ export enum SubtitleProviderType {
   DISK = 'disk',
   /** Text subtitle produced by OCR'ing an image-based (burn-required) track */
   OCR = 'ocr',
+  /** Text subtitle produced by machine-translating an existing text subtitle */
+  TRANSLATED = 'translated',
 }

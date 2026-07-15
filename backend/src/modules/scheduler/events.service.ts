@@ -31,6 +31,14 @@ export type SseEvent =
       error: string;
     }
   | {
+      // Machine-translation progress for a PROCESSING subtitle row. `progress`
+      // is 0–100; `subtitleId` is the placeholder row the client shows.
+      type: 'subtitle.translation_progress';
+      subtitleId: number;
+      mediaId: number;
+      progress: number;
+    }
+  | {
       type: 'import.complete';
       mediaId: number;
       title: string;
