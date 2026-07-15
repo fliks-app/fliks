@@ -88,10 +88,19 @@
     }
 
     <!-- Translation in progress -->
-    @if (translationLanguages().length) {
-      <div class="mt-3 flex items-center justify-center gap-2 text-sm text-base-content/60">
-        <span class="loading loading-spinner loading-xs"></span>
-        <span>{{ 'media_detail.translation_in_progress' | translate:{ langs: translationLanguages().join(', ') } }}</span>
+    @if (translations().length) {
+      <div class="mt-3 flex flex-col items-center gap-1 text-sm text-base-content/60">
+        @for (t of translations(); track t.language) {
+          <div class="flex items-center gap-2">
+            <span>{{ 'media_detail.translation_in_progress' | translate:{ langs: t.language } }}</span>
+            @if (t.percent !== null) {
+              <progress class="progress progress-primary w-40" [value]="t.percent" max="100"></progress>
+              <span class="tabular-nums">{{ t.percent }}%</span>
+            } @else {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+          </div>
+        }
       </div>
     }
 
@@ -327,10 +336,19 @@
       }
 
       <!-- Translation in progress -->
-      @if (translationLanguages().length) {
-        <div class="mt-3 flex items-center gap-2 text-sm text-base-content/60">
-          <span class="loading loading-spinner loading-xs"></span>
-          <span>{{ 'media_detail.translation_in_progress' | translate:{ langs: translationLanguages().join(', ') } }}</span>
+      @if (translations().length) {
+        <div class="mt-3 flex flex-col gap-1 text-sm text-base-content/60">
+          @for (t of translations(); track t.language) {
+            <div class="flex items-center gap-2">
+              <span>{{ 'media_detail.translation_in_progress' | translate:{ langs: t.language } }}</span>
+              @if (t.percent !== null) {
+                <progress class="progress progress-primary w-40" [value]="t.percent" max="100"></progress>
+                <span class="tabular-nums">{{ t.percent }}%</span>
+              } @else {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+            </div>
+          }
         </div>
       }
 

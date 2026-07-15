@@ -305,16 +305,16 @@ export class SubtitlesModalComponent {
   );
 
   /** Localized languages (with live percentage) of translation runs still in
-   *  progress, surfaced by the detail page as a "traduction en cours" indicator. */
-  readonly translationInProgress = computed<string[]>(() => {
+   *  progress, surfaced by the detail page as a "traduction en cours" progress
+   *  bar. `percent` is null until the first batch reports. */
+  readonly translationInProgress = computed<{ language: string; percent: number | null }[]>(() => {
     const progress = this.sse.translationProgress();
     return this.filteredSubtitles()
       .filter((s) => s.status === 'processing' && s.providerType === 'translated')
-      .map((s) => {
-        const lang = localizeLanguage(s.language, this.translate);
-        const pct = progress[s.id];
-        return pct != null ? `${lang} — ${pct}%` : lang;
-      });
+      .map((s) => ({
+        language: localizeLanguage(s.language, this.translate),
+        percent: progress[s.id] ?? null,
+      }));
   });
 
   /** Live translation percentage for a PROCESSING row, or null before the first

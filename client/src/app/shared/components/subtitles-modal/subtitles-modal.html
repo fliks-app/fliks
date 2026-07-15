@@ -95,14 +95,17 @@
                     </td>
                     <td class="text-center text-xs">
                       @if (sub.status === 'processing') {
-                        <span class="badge badge-xs badge-warning gap-1">
-                          <span class="loading loading-spinner loading-xs"></span>
-                          @if (sub.providerType === 'translated') {
-                            {{ 'media_detail.translate_processing' | translate }}@if (translationPercent(sub.id) !== null) { {{ translationPercent(sub.id) }}% }
-                          } @else {
-                            {{ 'media_detail.ocr_processing' | translate }}
-                          }
-                        </span>
+                        @if (sub.providerType === 'translated' && translationPercent(sub.id) !== null) {
+                          <span class="inline-flex items-center gap-1 align-middle">
+                            <progress class="progress progress-warning w-16 h-1.5 align-middle" [value]="translationPercent(sub.id)" max="100"></progress>
+                            <span class="tabular-nums text-[10px]">{{ translationPercent(sub.id) }}%</span>
+                          </span>
+                        } @else {
+                          <span class="badge badge-xs badge-warning gap-1">
+                            <span class="loading loading-spinner loading-xs"></span>
+                            {{ (sub.providerType === 'translated' ? 'media_detail.translate_processing' : 'media_detail.ocr_processing') | translate }}
+                          </span>
+                        }
                       }
                       @if (sub.forced) { <span class="badge badge-xs badge-outline mr-1">F</span> }
                       @if (sub.hearingImpaired) { <span class="badge badge-xs badge-outline">HI</span> }
