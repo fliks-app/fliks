@@ -23,9 +23,10 @@ export interface GeminiTranslateOptions {
   context: TranslationContext;
 }
 
-/** Cues sent per Gemini request — kept small so the response can't outgrow the
- *  output-token budget (a truncated response re-maps as a mismatch and splits). */
-const BATCH_SIZE = 50;
+/** Cues sent per Gemini request. Large batches keep the total request count
+ *  (and thus quota consumption) low; a response that outgrows the output-token
+ *  budget re-maps as a mismatch and is split, so this stays safe. */
+const BATCH_SIZE = 150;
 const MAX_OUTPUT_TOKENS = 8192;
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 /** Per-request cap so a stalled connection can't hold a translation slot open. */
@@ -182,8 +183,14 @@ async function callGemini(
       continue;
     }
     if (res.status === 429) {
+      const retryMs = parseRetryDelayMs(errText);
+      const scope = /PerDay/i.test(errText)
+        ? 'daily'
+        : /PerMinute/i.test(errText)
+          ? 'per-minute'
+          : 'unknown';
       throw new GeminiRateLimitError(
-        `Gemini quota/rate limit exceeded: ${errText.slice(0, 300)}`,
+        `Gemini quota/rate limit exceeded (scope=${scope}${retryMs ? `, retryDelay=${Math.round(retryMs / 1000)}s` : ''}): ${errText.slice(0, 500)}`,
       );
     }
     throw new Error(`Gemini API error ${res.status}: ${errText.slice(0, 300)}`);
