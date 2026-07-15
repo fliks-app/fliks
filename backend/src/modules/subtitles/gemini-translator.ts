@@ -39,6 +39,24 @@ function backoffDelay(attempt: number): number {
   return Math.min(1000 * 2 ** (attempt - 1), 30_000);
 }
 
+/** Gemini reports the wait for a 429 in the error body's RetryInfo (e.g.
+ *  "38s"), not the Retry-After header — parse it so per-minute quota bursts
+ *  recover instead of failing on the short default backoff. */
+function parseRetryDelayMs(body: string): number | null {
+  try {
+    const details = JSON.parse(body)?.error?.details;
+    if (Array.isArray(details)) {
+      for (const d of details) {
+        const m = typeof d?.retryDelay === 'string' && d.retryDelay.match(/^([\d.]+)s$/);
+        if (m) return Math.round(parseFloat(m[1]) * 1000);
+      }
+    }
+  } catch {
+    // body wasn't JSON — fall back to the computed backoff
+  }
+  return null;
+}
+
 function languageName(iso: string): string {
   if (!iso || iso === 'und' || iso === 'xx') return 'the original language';
   return APP_LANGUAGES.find((l) => l.isoCode === iso)?.name ?? iso;
@@ -147,11 +165,15 @@ async function callGemini(
 
     const errText = await res.text().catch(() => '');
     if (RETRYABLE_STATUS.has(res.status) && attempt < MAX_ATTEMPTS) {
-      const retryAfter = Number(res.headers.get('retry-after'));
-      const delay =
-        Number.isFinite(retryAfter) && retryAfter > 0
-          ? Math.min(retryAfter * 1000, 30_000)
-          : backoffDelay(attempt);
+      const headerRetry = Number(res.headers.get('retry-after'));
+      const suggested =
+        parseRetryDelayMs(errText) ??
+        (Number.isFinite(headerRetry) && headerRetry > 0 ? headerRetry * 1000 : null);
+      // Honour the server's hint (capped) but never wait less than the backoff.
+      const delay = Math.min(
+        Math.max(suggested ?? 0, backoffDelay(attempt)),
+        60_000,
+      );
       await sleep(delay);
       continue;
     }
