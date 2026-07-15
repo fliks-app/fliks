@@ -34,6 +34,8 @@ export class LibraryDetailState {
   readonly formMovies = signal(true);
   readonly formSeries = signal(true);
   readonly formProvider = signal<string | null>(null);
+  readonly formMetadataLanguage = signal<string | null>(null);
+  readonly formMetadataRegion = signal<string | null>(null);
   readonly formCleanup = signal<StalledCleanupProfileKey | null>(null);
   readonly formQualityProfileId = signal<number | null>(null);
   readonly formLanguageProfileId = signal<number | null>(null);
@@ -51,6 +53,8 @@ export class LibraryDetailState {
     this.formMovies.set(lib.mediaTypes.includes('movie'));
     this.formSeries.set(lib.mediaTypes.includes('series'));
     this.formProvider.set(lib.preferredProvider);
+    this.formMetadataLanguage.set(lib.metadataLanguage);
+    this.formMetadataRegion.set(lib.metadataRegion);
     this.formCleanup.set(lib.stalledCleanupProfile);
     this.formQualityProfileId.set(lib.defaultQualityProfileId);
     this.formLanguageProfileId.set(lib.defaultLanguageProfileId);
@@ -94,6 +98,8 @@ export class LibraryDetailState {
         color: this.formColor(),
         mediaTypes,
         preferredProvider: this.formProvider(),
+        metadataLanguage: this.formMetadataLanguage(),
+        metadataRegion: this.formMetadataRegion(),
         stalledCleanupProfile: this.formCleanup(),
         defaultQualityProfileId: this.formQualityProfileId(),
         defaultLanguageProfileId: this.formLanguageProfileId(),

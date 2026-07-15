@@ -189,6 +189,11 @@ export class LibrariesService {
       if (dto.mediaTypes !== undefined) patch.mediaTypes = dto.mediaTypes;
       if (dto.preferredProvider !== undefined)
         patch.preferredProvider = dto.preferredProvider;
+      // Empty string from the UI clears the override (inherit the global).
+      if (dto.metadataLanguage !== undefined)
+        patch.metadataLanguage = dto.metadataLanguage || null;
+      if (dto.metadataRegion !== undefined)
+        patch.metadataRegion = dto.metadataRegion || null;
       if (dto.stalledCleanupProfile !== undefined)
         patch.stalledCleanupProfile = dto.stalledCleanupProfile;
       if (dto.defaultQualityProfileId !== undefined) {

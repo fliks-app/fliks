@@ -29,7 +29,10 @@ import type {
   TvdbSeasonBase,
   TvdbAlias,
 } from './tvdb-api.types';
-import { MetadataSettingsCache } from '../metadata-settings-cache.service';
+import {
+  MetadataSettingsCache,
+  MetadataLanguageOverride,
+} from '../metadata-settings-cache.service';
 
 const TVDB_BASE = 'https://api4.thetvdb.com/v4';
 
@@ -107,7 +110,7 @@ export class TvdbProvider implements IMetadataProvider {
     year?: number,
   ): Promise<MetadataSearchResult[]> {
     await this.ensureAuth();
-    const tvdb = (await this.metaLang.getLanguage()).tvdbCode;
+    const tvdb = (await this.metaLang.resolve()).tvdbCode;
     const params: Record<string, string> = { q: query, type: 'movie' };
     if (year) params.year = String(year);
 
@@ -123,7 +126,7 @@ export class TvdbProvider implements IMetadataProvider {
     year?: number,
   ): Promise<MetadataSearchResult[]> {
     await this.ensureAuth();
-    const tvdb = (await this.metaLang.getLanguage()).tvdbCode;
+    const tvdb = (await this.metaLang.resolve()).tvdbCode;
     const params: Record<string, string> = { q: query, type: 'series' };
     if (year) params.year = String(year);
 
@@ -136,9 +139,12 @@ export class TvdbProvider implements IMetadataProvider {
 
   // ── Movie details ──
 
-  async getMovieDetails(externalId: string): Promise<MetadataDetails> {
+  async getMovieDetails(
+    externalId: string,
+    override?: MetadataLanguageOverride,
+  ): Promise<MetadataDetails> {
     await this.ensureAuth();
-    const tvdb = (await this.metaLang.getLanguage()).tvdbCode;
+    const tvdb = (await this.metaLang.resolve(override)).tvdbCode;
     const id = parseInt(externalId, 10);
     const { data } = await this.client.get<TvdbResponse<TvdbMovieExtended>>(
       `/movies/${id}/extended`,
@@ -210,9 +216,12 @@ export class TvdbProvider implements IMetadataProvider {
 
   // ── Series details ──
 
-  async getTvShowDetails(externalId: string): Promise<MetadataDetails> {
+  async getTvShowDetails(
+    externalId: string,
+    override?: MetadataLanguageOverride,
+  ): Promise<MetadataDetails> {
     await this.ensureAuth();
-    const tvdb = (await this.metaLang.getLanguage()).tvdbCode;
+    const tvdb = (await this.metaLang.resolve(override)).tvdbCode;
     const id = parseInt(externalId, 10);
     const { data } = await this.client.get<TvdbResponse<TvdbSeriesExtended>>(
       `/series/${id}/extended`,
@@ -282,9 +291,12 @@ export class TvdbProvider implements IMetadataProvider {
 
   // ── Seasons ──
 
-  async getTvShowSeasons(externalId: string): Promise<SeasonDetails[]> {
+  async getTvShowSeasons(
+    externalId: string,
+    override?: MetadataLanguageOverride,
+  ): Promise<SeasonDetails[]> {
     await this.ensureAuth();
-    const tvdb = (await this.metaLang.getLanguage()).tvdbCode;
+    const tvdb = (await this.metaLang.resolve(override)).tvdbCode;
     const id = parseInt(externalId, 10);
 
     // Fetch all episodes (paginated) via the default season type
@@ -375,7 +387,7 @@ export class TvdbProvider implements IMetadataProvider {
 
   async getPersonDetails(externalId: string): Promise<PersonDetails> {
     await this.ensureAuth();
-    const tvdb = (await this.metaLang.getLanguage()).tvdbCode;
+    const tvdb = (await this.metaLang.resolve()).tvdbCode;
     const id = parseInt(externalId, 10);
     const { data } = await this.client.get<TvdbResponse<TvdbPeopleExtended>>(
       `/people/${id}/extended`,
@@ -440,6 +452,7 @@ export class TvdbProvider implements IMetadataProvider {
   async findByExternalId(
     source: string,
     id: string,
+    _override?: MetadataLanguageOverride,
   ): Promise<ExternalIdResult | null> {
     await this.ensureAuth();
     try {

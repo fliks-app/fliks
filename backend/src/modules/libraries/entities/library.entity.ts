@@ -36,6 +36,16 @@ export class Library extends BaseEntity {
   @Column({ type: 'varchar', nullable: true, default: null })
   preferredProvider: string | null;
 
+  /** Overrides the global metadata language for this library's media (null =
+   *  inherit the global setting). ISO 639-1 code. */
+  @Column({ type: 'varchar', length: 8, nullable: true, default: null })
+  metadataLanguage: string | null;
+
+  /** Overrides the global metadata region for this library's media (null =
+   *  inherit the global setting). ISO 3166-1 code. */
+  @Column({ type: 'varchar', length: 8, nullable: true, default: null })
+  metadataRegion: string | null;
+
   @Column({ type: 'varchar', length: 16, nullable: true, default: null })
   stalledCleanupProfile: StalledCleanupProfileKey | null;
 

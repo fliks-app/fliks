@@ -21,6 +21,7 @@ import {
   MetadataDetails,
   SeasonDetails,
 } from '../../metadata-providers/interfaces/metadata-provider.interface';
+import { MetadataLanguageOverride } from '../../metadata-providers/metadata-settings-cache.service';
 import { MediaType } from '../../../common/enums';
 import { RequestLifecycleService } from '../../requests/request-lifecycle.service';
 import { ProfilesService } from '../../profiles/profiles.service';
@@ -85,9 +86,10 @@ export class MediaImportService {
         dto.languageProfileId,
       );
 
-    const { libraryId } = await this.resolveImportTarget(dto.type, {
+    const { libraryId, library } = await this.resolveImportTarget(dto.type, {
       libraryId: dto.libraryId,
     });
+    const override = this.libraryMetadataOverride(library);
 
     const fmtKeys = [
       'naming_movie_folder_format',
@@ -101,7 +103,10 @@ export class MediaImportService {
     const fmtMap = Object.fromEntries(fmtRows.map((r) => [r.key, r.value]));
 
     if (dto.type === MediaType.MOVIE) {
-      const details = await this.tmdb.getMovieDetails(String(dto.tmdbId));
+      const details = await this.tmdb.getMovieDetails(
+        String(dto.tmdbId),
+        override,
+      );
       const movieFolderFormat =
         fmtMap['naming_movie_folder_format'] ??
         '{Original Title} ({Release Year})';
@@ -121,8 +126,14 @@ export class MediaImportService {
       );
     }
 
-    const details = await this.tmdb.getTvShowDetails(String(dto.tmdbId));
-    const seasons = await this.tmdb.getTvShowSeasons(String(dto.tmdbId));
+    const details = await this.tmdb.getTvShowDetails(
+      String(dto.tmdbId),
+      override,
+    );
+    const seasons = await this.tmdb.getTvShowSeasons(
+      String(dto.tmdbId),
+      override,
+    );
     const seriesFolderFormat =
       fmtMap['naming_series_folder_format'] ?? '{Series Title}';
     const folderName = this.naming.applySeriesFolderFormat(seriesFolderFormat, {
@@ -182,9 +193,10 @@ export class MediaImportService {
         dto.languageProfileId,
       );
 
-    const { libraryId } = await this.resolveImportTarget(dto.type, {
+    const { libraryId, library } = await this.resolveImportTarget(dto.type, {
       libraryId: dto.libraryId,
     });
+    const override = this.libraryMetadataOverride(library);
 
     const fmtKeys = [
       'naming_movie_folder_format',
@@ -198,7 +210,7 @@ export class MediaImportService {
     const fmtMap = Object.fromEntries(fmtRows.map((r) => [r.key, r.value]));
 
     if (dto.type === MediaType.MOVIE) {
-      const details = await provider.getMovieDetails(dto.externalId);
+      const details = await provider.getMovieDetails(dto.externalId, override);
       if (!details.tmdbId && details.tvdbId && this.tmdb.findByExternalId) {
         const cross = await this.tmdb.findByExternalId(
           'tvdb',
@@ -225,8 +237,8 @@ export class MediaImportService {
       );
     }
 
-    const details = await provider.getTvShowDetails(dto.externalId);
-    const seasons = await provider.getTvShowSeasons(dto.externalId);
+    const details = await provider.getTvShowDetails(dto.externalId, override);
+    const seasons = await provider.getTvShowSeasons(dto.externalId, override);
     if (!details.tmdbId && details.tvdbId && this.tmdb.findByExternalId) {
       const cross = await this.tmdb.findByExternalId(
         'tvdb',
@@ -274,7 +286,7 @@ export class MediaImportService {
   async resolveImportTarget(
     type: MediaType,
     dto: { libraryId?: number },
-  ): Promise<{ libraryId: number }> {
+  ): Promise<{ libraryId: number; library: Library }> {
     let library: Library | null = null;
 
     if (dto.libraryId) {
@@ -306,7 +318,16 @@ export class MediaImportService {
       );
     }
 
-    return { libraryId: library.id };
+    return { libraryId: library.id, library };
+  }
+
+  /** Metadata language/region override for a library's media (null fields =
+   *  inherit the global setting). */
+  private libraryMetadataOverride(library: Library): MetadataLanguageOverride {
+    return {
+      language: library.metadataLanguage,
+      region: library.metadataRegion,
+    };
   }
 
   private async persistImportedMovie(

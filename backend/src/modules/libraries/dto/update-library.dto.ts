@@ -44,6 +44,16 @@ export class UpdateLibraryDto {
   @IsString()
   preferredProvider?: string | null;
 
+  /** ISO 639-1 override; null inherits the global metadata language. */
+  @IsOptional()
+  @IsString()
+  metadataLanguage?: string | null;
+
+  /** ISO 3166-1 override; null inherits the global metadata region. */
+  @IsOptional()
+  @IsString()
+  metadataRegion?: string | null;
+
   @IsOptional()
   @IsIn([...STALLED_CLEANUP_PROFILE_KEYS, null])
   stalledCleanupProfile?: StalledCleanupProfileKey | null;

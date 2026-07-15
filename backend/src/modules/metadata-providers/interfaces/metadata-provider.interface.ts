@@ -1,3 +1,5 @@
+import type { MetadataLanguageOverride } from '../metadata-settings-cache.service';
+
 export interface MetadataSearchResult {
   tmdbId: number;
   tvdbId?: number | null;
@@ -135,13 +137,23 @@ export interface IMetadataProvider {
 
   searchMovie(query: string, year?: number): Promise<MetadataSearchResult[]>;
   searchTvShow(query: string, year?: number): Promise<MetadataSearchResult[]>;
-  getMovieDetails(externalId: string): Promise<MetadataDetails>;
-  getTvShowDetails(externalId: string): Promise<MetadataDetails>;
-  getTvShowSeasons(externalId: string): Promise<SeasonDetails[]>;
+  getMovieDetails(
+    externalId: string,
+    override?: MetadataLanguageOverride,
+  ): Promise<MetadataDetails>;
+  getTvShowDetails(
+    externalId: string,
+    override?: MetadataLanguageOverride,
+  ): Promise<MetadataDetails>;
+  getTvShowSeasons(
+    externalId: string,
+    override?: MetadataLanguageOverride,
+  ): Promise<SeasonDetails[]>;
   getPersonDetails(externalId: string): Promise<PersonDetails>;
   getPersonCredits(externalId: string): Promise<PersonCombinedCredits>;
   findByExternalId?(
     source: string,
     id: string,
+    override?: MetadataLanguageOverride,
   ): Promise<ExternalIdResult | null>;
 }

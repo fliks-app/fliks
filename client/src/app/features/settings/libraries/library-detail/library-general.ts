@@ -3,6 +3,10 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { StalledCleanupProfileKey } from '../../../../core/services/api/libraries-api.service';
 import { METADATA_PROVIDER_OPTIONS_LIBRARY } from '../../../../core/constants/metadata-providers';
+import {
+  METADATA_LANGUAGE_OPTIONS,
+  METADATA_REGION_OPTIONS,
+} from '../../../../core/constants/metadata-locale';
 import { LibraryDetailState } from './library-detail.state';
 
 @Component({
@@ -44,6 +48,8 @@ export class LibraryGeneralComponent {
   ];
 
   readonly providerOptions = METADATA_PROVIDER_OPTIONS_LIBRARY;
+  readonly metadataLanguageOptions = METADATA_LANGUAGE_OPTIONS;
+  readonly metadataRegionOptions = METADATA_REGION_OPTIONS;
   readonly cleanupOptions: { value: StalledCleanupProfileKey | null; labelKey: string }[] = [
     { value: null, labelKey: 'settings.cleanup_profiles.none' },
     { value: 'fast', labelKey: 'settings.cleanup_profiles.profile_fast' },

@@ -5,23 +5,35 @@ import {
   type ResolvedMetadataLanguage,
 } from './metadata-language';
 
-/** Resolves + caches the configured metadata language for the providers, so a
- *  library import/refresh (dozens of provider calls) resolves it once. The
- *  cache is invalidated when the admin changes the `metadata_language` setting,
- *  so the new language takes effect without a restart. */
+/** Per-library override; each field falls back to the global setting when null. */
+export interface MetadataLanguageOverride {
+  language?: string | null;
+  region?: string | null;
+}
+
+interface GlobalMetadataLanguage {
+  language: string | null;
+  region: string | null;
+}
+
+/** Resolves + caches the configured metadata language/region for the providers.
+ *  A library import/refresh (dozens of provider calls) reads the global setting
+ *  once; the cache is invalidated when the admin changes the language/region
+ *  setting, so a new value takes effect without a restart. Per-library overrides
+ *  are merged per call in {@link resolve}. */
 @Injectable()
 export class MetadataSettingsCache implements OnModuleInit {
   constructor(private readonly settings: SettingsService) {}
 
-  private cache: ResolvedMetadataLanguage | null = null;
-  private inflight: Promise<ResolvedMetadataLanguage> | null = null;
+  private cache: GlobalMetadataLanguage | null = null;
+  private inflight: Promise<GlobalMetadataLanguage> | null = null;
   /** Bumped on every change so an in-flight load that was invalidated mid-flight
    *  doesn't commit its now-stale value. */
   private epoch = 0;
 
   onModuleInit(): void {
     this.settings.addChangeListener((key) => {
-      if (key === 'metadata_language') {
+      if (key === 'metadata_language' || key === 'metadata_region') {
         this.cache = null;
         this.inflight = null;
         this.epoch++;
@@ -29,7 +41,19 @@ export class MetadataSettingsCache implements OnModuleInit {
     });
   }
 
-  async getLanguage(): Promise<ResolvedMetadataLanguage> {
+  /** Effective language/region for a call. Each field of the optional per-library
+   *  override wins over the global setting when set. */
+  async resolve(
+    override?: MetadataLanguageOverride,
+  ): Promise<ResolvedMetadataLanguage> {
+    const g = await this.getGlobal();
+    return resolveMetadataLanguage(
+      override?.language ?? g.language,
+      override?.region ?? g.region,
+    );
+  }
+
+  private async getGlobal(): Promise<GlobalMetadataLanguage> {
     if (this.cache) return this.cache;
     if (this.inflight) return this.inflight;
     const epoch = this.epoch;
@@ -47,7 +71,11 @@ export class MetadataSettingsCache implements OnModuleInit {
     return this.inflight;
   }
 
-  private async load(): Promise<ResolvedMetadataLanguage> {
-    return resolveMetadataLanguage(await this.settings.get('metadata_language'));
+  private async load(): Promise<GlobalMetadataLanguage> {
+    const [language, region] = await Promise.all([
+      this.settings.get('metadata_language'),
+      this.settings.get('metadata_region'),
+    ]);
+    return { language, region };
   }
 }

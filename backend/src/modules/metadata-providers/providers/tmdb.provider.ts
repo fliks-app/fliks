@@ -24,7 +24,10 @@ import type {
   TmdbPersonDetailsResponse,
   TmdbPersonCombinedCreditsResponse,
 } from './tmdb-api.types';
-import { MetadataSettingsCache } from '../metadata-settings-cache.service';
+import {
+  MetadataSettingsCache,
+  MetadataLanguageOverride,
+} from '../metadata-settings-cache.service';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
@@ -150,7 +153,7 @@ export class TmdbProvider implements IMetadataProvider {
     query: string,
     year?: number,
   ): Promise<MetadataSearchResult[]> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     const params: Record<string, unknown> = {
       query,
       language: lang.tmdbLocale,
@@ -168,7 +171,7 @@ export class TmdbProvider implements IMetadataProvider {
     query: string,
     year?: number,
   ): Promise<MetadataSearchResult[]> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     const params: Record<string, unknown> = {
       query,
       language: lang.tmdbLocale,
@@ -182,8 +185,11 @@ export class TmdbProvider implements IMetadataProvider {
     return data.results.map((r) => this.mapTvResult(r));
   }
 
-  async getMovieDetails(externalId: string): Promise<MetadataDetails> {
-    const lang = await this.metaLang.getLanguage();
+  async getMovieDetails(
+    externalId: string,
+    override?: MetadataLanguageOverride,
+  ): Promise<MetadataDetails> {
+    const lang = await this.metaLang.resolve(override);
     const tmdbId = parseInt(externalId, 10);
     const { data } = await this.client.get<TmdbMovieDetailsResponse>(
       `/movie/${tmdbId}`,
@@ -274,8 +280,11 @@ export class TmdbProvider implements IMetadataProvider {
     };
   }
 
-  async getTvShowDetails(externalId: string): Promise<MetadataDetails> {
-    const lang = await this.metaLang.getLanguage();
+  async getTvShowDetails(
+    externalId: string,
+    override?: MetadataLanguageOverride,
+  ): Promise<MetadataDetails> {
+    const lang = await this.metaLang.resolve(override);
     const tmdbId = parseInt(externalId, 10);
     const { data } = await this.client.get<TmdbTvDetailsResponse>(
       `/tv/${tmdbId}`,
@@ -369,7 +378,7 @@ export class TmdbProvider implements IMetadataProvider {
   async getTvSeasonStubs(
     externalId: string,
   ): Promise<{ seasonNumber: number; episodeCount: number }[]> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     const tmdbId = parseInt(externalId, 10);
     const { data: show } = await this.client.get<TmdbTvShowWithSeasons>(
       `/tv/${tmdbId}`,
@@ -388,8 +397,9 @@ export class TmdbProvider implements IMetadataProvider {
   async getTvSeason(
     externalId: string,
     seasonNumber: number,
+    override?: MetadataLanguageOverride,
   ): Promise<SeasonDetails> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve(override);
     const tmdbId = parseInt(externalId, 10);
     const { data: season } = await this.client.get<TmdbTvSeasonResponse>(
       `/tv/${tmdbId}/season/${seasonNumber}`,
@@ -416,8 +426,11 @@ export class TmdbProvider implements IMetadataProvider {
     };
   }
 
-  async getTvShowSeasons(externalId: string): Promise<SeasonDetails[]> {
-    const lang = await this.metaLang.getLanguage();
+  async getTvShowSeasons(
+    externalId: string,
+    override?: MetadataLanguageOverride,
+  ): Promise<SeasonDetails[]> {
+    const lang = await this.metaLang.resolve(override);
     const tmdbId = parseInt(externalId, 10);
     const { data: show } = await this.client.get<TmdbTvShowWithSeasons>(
       `/tv/${tmdbId}`,
@@ -465,7 +478,7 @@ export class TmdbProvider implements IMetadataProvider {
   async getTrendingMovies(
     window: 'day' | 'week' = 'week',
   ): Promise<MetadataSearchResult[]> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
       `/trending/movie/${window}`,
       { params: { language: lang.tmdbLocale } },
@@ -474,7 +487,7 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   async getPopularMovies(): Promise<MetadataSearchResult[]> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
       '/movie/popular',
       { params: { language: lang.tmdbLocale } },
@@ -483,7 +496,7 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   async getUpcomingMovies(): Promise<MetadataSearchResult[]> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
       '/movie/upcoming',
       { params: { language: lang.tmdbLocale, region: lang.region } },
@@ -494,7 +507,7 @@ export class TmdbProvider implements IMetadataProvider {
   async getTrendingTvShows(
     window: 'day' | 'week' = 'week',
   ): Promise<MetadataSearchResult[]> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
       `/trending/tv/${window}`,
       { params: { language: lang.tmdbLocale } },
@@ -503,7 +516,7 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   async getPopularTvShows(): Promise<MetadataSearchResult[]> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
       '/tv/popular',
       { params: { language: lang.tmdbLocale } },
@@ -512,7 +525,7 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   async getUpcomingTvShows(): Promise<MetadataSearchResult[]> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
       '/tv/on_the_air',
       { params: { language: lang.tmdbLocale } },
@@ -521,7 +534,7 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   async getMovieGenres(): Promise<{ id: number; name: string }[]> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<{
       genres: { id: number; name: string }[];
     }>('/genre/movie/list', { params: { language: lang.tmdbLocale } });
@@ -529,7 +542,7 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   async getTvGenres(): Promise<{ id: number; name: string }[]> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<{
       genres: { id: number; name: string }[];
     }>('/genre/tv/list', { params: { language: lang.tmdbLocale } });
@@ -537,7 +550,7 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   async discoverMovies(opts: DiscoverOptions): Promise<MetadataSearchResult[]> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     const params: Record<string, string | number> = {
       language: lang.tmdbLocale,
       include_adult: 'false',
@@ -557,7 +570,7 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   async discoverTvShows(opts: DiscoverOptions): Promise<MetadataSearchResult[]> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     // TMDB /discover/tv dates its sort on first_air_date, not release date.
     const sortBy = (opts.sortBy || 'popularity.desc').replace(
       'primary_release_date',
@@ -580,7 +593,7 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   async getPersonDetails(externalId: string): Promise<PersonDetails> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     const id = parseInt(externalId, 10);
     const { data } = await this.client.get<TmdbPersonDetailsResponse>(
       `/person/${id}`,
@@ -601,7 +614,7 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   async getPersonCredits(externalId: string): Promise<PersonCombinedCredits> {
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve();
     const id = parseInt(externalId, 10);
     const { data } = await this.client.get<TmdbPersonCombinedCreditsResponse>(
       `/person/${id}/combined_credits`,
@@ -640,6 +653,7 @@ export class TmdbProvider implements IMetadataProvider {
   async findByExternalId(
     source: string,
     id: string,
+    override?: MetadataLanguageOverride,
   ): Promise<ExternalIdResult | null> {
     const sourceMap: Record<string, string> = {
       imdb: 'imdb_id',
@@ -648,7 +662,7 @@ export class TmdbProvider implements IMetadataProvider {
     const externalSource = sourceMap[source];
     if (!externalSource) return null;
 
-    const lang = await this.metaLang.getLanguage();
+    const lang = await this.metaLang.resolve(override);
     const { data } = await this.client.get<any>(`/find/${id}`, {
       params: { external_source: externalSource, language: lang.tmdbLocale },
     });
