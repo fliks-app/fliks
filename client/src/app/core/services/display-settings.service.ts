@@ -5,6 +5,8 @@ export interface DisplaySettings {
   homeBackground: boolean;
   /** Filter home's "Recently added" + "Coming soon" rows to media the user requested. */
   onlyMyRequests: boolean;
+  /** UI language override (ISO 639-1). Empty = follow the browser/OS language. */
+  language: string;
 }
 
 const STORAGE_KEY = 'display.settings';
@@ -13,6 +15,7 @@ const LEGACY_ONLY_MY_REQUESTS_KEY = 'fliks.home.onlyMyRequests';
 const DEFAULTS: DisplaySettings = {
   homeBackground: true,
   onlyMyRequests: false,
+  language: '',
 };
 
 @Injectable({ providedIn: 'root' })
