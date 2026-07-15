@@ -88,8 +88,15 @@ export class ProfileComponent {
       const id = this.userId();
       if (Number.isFinite(id) && id > 0) void this.ctx.load(id);
     });
+    effect(() => {
+      const name = this.profile()?.username;
+      if (name) this.navbar.setPageTitle(name);
+    });
     this.navbar.showBackButton.set(true);
-    this.destroyRef.onDestroy(() => this.navbar.showBackButton.set(false));
+    this.destroyRef.onDestroy(() => {
+      this.navbar.showBackButton.set(false);
+      this.navbar.clearPageTitle();
+    });
   }
 
   async follow(): Promise<void> {
