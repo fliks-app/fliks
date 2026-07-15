@@ -189,7 +189,7 @@
     "home_background": "Imagem de fundo no início",
     "home_background_hint": "Mostra um poster em ecrã inteiro atrás das secções do início.",
     "language": "Idioma da aplicação",
-    "language_auto": "Automático (idioma do navegador)",
+    "language_auto": "Sistema",
     "language_hint": "Idioma da interface. Por predefinição, o do seu navegador ou sistema."
   },
   "storage_settings": {

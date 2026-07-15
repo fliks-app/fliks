@@ -189,7 +189,7 @@
     "home_background": "Immagine di sfondo nella home",
     "home_background_hint": "Mostra un poster a schermo intero dietro le sezioni della home.",
     "language": "Lingua dell'app",
-    "language_auto": "Automatico (lingua del browser)",
+    "language_auto": "Sistema",
     "language_hint": "Lingua dell'interfaccia. Per impostazione predefinita, quella del browser o del sistema."
   },
   "storage_settings": {

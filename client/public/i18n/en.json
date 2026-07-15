@@ -189,7 +189,7 @@
     "home_background": "Background image on home",
     "home_background_hint": "Shows a full-screen poster behind the home sections.",
     "language": "Application language",
-    "language_auto": "Automatic (browser language)",
+    "language_auto": "System",
     "language_hint": "Interface language. Defaults to your browser or system language."
   },
   "storage_settings": {

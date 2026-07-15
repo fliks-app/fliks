@@ -189,7 +189,7 @@
     "home_background": "Hintergrundbild auf der Startseite",
     "home_background_hint": "Zeigt ein Poster im Vollbild hinter den Bereichen der Startseite an.",
     "language": "App-Sprache",
-    "language_auto": "Automatisch (Browsersprache)",
+    "language_auto": "System",
     "language_hint": "Sprache der Oberfläche. Standardmäßig die deines Browsers oder Systems."
   },
   "storage_settings": {
