@@ -173,6 +173,9 @@ export class SubtitleStreamService {
     try {
       const external = await this.subtitleFileRepo.find({
         where: { mediaFile: { id: mediaFileId } },
+        // Stable id order so the manifest rendition order (and thus the
+        // client's same-language ordinal) is deterministic across requests.
+        order: { id: 'ASC' },
       });
       for (const sf of external) {
         if (!sf.relativePath) continue;

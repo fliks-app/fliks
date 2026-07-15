@@ -213,8 +213,16 @@ export interface PlaybackEngine {
   // Subtitles are HLS SUBTITLES renditions in the master playlist; each
   // engine maps a chosen track to its player's own track by (language,
   // forced) and returns a handle for `selectTextTrack`. `forced`
-  // disambiguates a full vs forced track of the same language.
-  addTextTrack(url: string, language: string, label: string, forced?: boolean): Promise<any>;
+  // disambiguates a full vs forced track of the same language; `index`
+  // disambiguates several tracks that share the same (language, forced) —
+  // it's the 0-based ordinal among them, matching the manifest order.
+  addTextTrack(
+    url: string,
+    language: string,
+    label: string,
+    forced?: boolean,
+    index?: number,
+  ): Promise<any>;
   selectTextTrack(track: any): void;
   setTextVisibility(visible: boolean): void;
 
