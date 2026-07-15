@@ -637,6 +637,7 @@ export class TmdbProvider implements IMetadataProvider {
         : null,
       rating: r.vote_average ?? 0,
       genres: [],
+      genreIds: r.genre_ids ?? [],
       mediaType: 'movie',
     };
   }
@@ -654,6 +655,7 @@ export class TmdbProvider implements IMetadataProvider {
         : null,
       rating: r.vote_average ?? 0,
       genres: [],
+      genreIds: r.genre_ids ?? [],
       mediaType: 'series',
     };
   }
