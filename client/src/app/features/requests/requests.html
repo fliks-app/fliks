@@ -212,14 +212,16 @@
                   <span class="text-base-content/50">{{ 'requests.date_label' | translate }}</span>
                   {{ row.createdAt | date: 'short' }}
                 </p>
-                <p>
-                  <span class="text-base-content/50">{{ 'discover.quality_profile' | translate }} · </span>
-                  {{ qualityProfileDisplay(row.qualityProfileId) }}
-                </p>
-                <p>
-                  <span class="text-base-content/50">{{ 'discover.language_profile' | translate }} · </span>
-                  {{ languageProfileDisplay(row.languageProfileId) }}
-                </p>
+                @if (row.kind !== 'delete') {
+                  <p>
+                    <span class="text-base-content/50">{{ 'discover.quality_profile' | translate }} · </span>
+                    {{ qualityProfileDisplay(row.qualityProfileId) }}
+                  </p>
+                  <p>
+                    <span class="text-base-content/50">{{ 'discover.language_profile' | translate }} · </span>
+                    {{ languageProfileDisplay(row.languageProfileId) }}
+                  </p>
+                }
               </div>
             </div>
 

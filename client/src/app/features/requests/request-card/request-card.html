@@ -58,14 +58,16 @@
         <span class="text-base-content/50">{{ 'requests.date_label' | translate }}</span>
         {{ request().createdAt | date: 'short' }}
       </p>
-      <p class="m-0">
-        <span class="text-base-content/50">{{ 'discover.quality_profile' | translate }} · </span>
-        {{ qualityProfileName() }}
-      </p>
-      <p class="m-0">
-        <span class="text-base-content/50">{{ 'discover.language_profile' | translate }} · </span>
-        {{ languageProfileName() }}
-      </p>
+      @if (request().kind !== 'delete') {
+        <p class="m-0">
+          <span class="text-base-content/50">{{ 'discover.quality_profile' | translate }} · </span>
+          {{ qualityProfileName() }}
+        </p>
+        <p class="m-0">
+          <span class="text-base-content/50">{{ 'discover.language_profile' | translate }} · </span>
+          {{ languageProfileName() }}
+        </p>
+      }
     </div>
 
     @if (canManage() && request().status === 'pending') {

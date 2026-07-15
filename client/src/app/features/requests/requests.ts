@@ -249,8 +249,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   /** Show Edit button when: caller is a manager OR owns this pending request.
    *  Same condition as `canCancel` — a user who can cancel can also tweak
-   *  quality / language profile before approval. */
+   *  quality / language profile before approval. Deletion requests carry no
+   *  profiles, so there is nothing to edit. */
   canEdit(row: FliksRequestRow): boolean {
+    if (row.kind === 'delete') return false;
     if (this.auth.hasPermission('requests.manage')) return true;
     return this.canCancel(row);
   }
