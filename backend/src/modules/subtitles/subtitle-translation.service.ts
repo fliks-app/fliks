@@ -14,11 +14,17 @@ import { SubtitleFile } from './entities/subtitle-file.entity';
 import { Media } from '../media/entities/media.entity';
 import { SettingsService } from '../settings/settings.service';
 import { EventsService } from '../scheduler/events.service';
-import { SubtitleTranslationSettingsCache } from './subtitle-translation-settings-cache.service';
 import {
-  GeminiRateLimitError,
-  translateSubtitleTexts,
-} from './gemini-translator';
+  ResolvedTranslationSettings,
+  SubtitleTranslationSettingsCache,
+} from './subtitle-translation-settings-cache.service';
+import {
+  TranslationRateLimitError,
+  type TranslationRequest,
+} from './translation-core';
+import { translateWithGemini } from './gemini-translator';
+import { translateWithOpenAi } from './openai-translator';
+import { translateWithLibreTranslate } from './libretranslate-translator';
 import { parseSrt, serializeSrt } from './srt.util';
 import { cleanSubtitle } from './subtitle-cleaner';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
@@ -30,7 +36,8 @@ import { normalizeLanguageCode } from '../../common/constants/app-languages';
 const execFileAsync = promisify(execFile);
 
 /**
- * Machine-translates an existing text subtitle into another language via Gemini,
+ * Machine-translates an existing text subtitle into another language via the
+ * configured engine (Gemini, an OpenAI-compatible endpoint, or LibreTranslate),
  * storing the result as a normal text sidecar tagged with the `TRANSLATED`
  * provider type and carrying the source subtitle's score. The work is slow (many
  * API calls), so callers get a `PROCESSING` placeholder row immediately and the
@@ -71,9 +78,10 @@ export class SubtitleTranslationService {
     targetLanguage: string,
   ): Promise<SubtitleFile> {
     const config = await this.translationSettings.get();
-    if (!config.enabled || !config.apiKey) {
-      throw new BadRequestException('Subtitle translation is not configured');
+    if (!config.enabled) {
+      throw new BadRequestException('Subtitle translation is disabled');
     }
+    this.assertEngineConfigured(config);
 
     const source = await this.repo.findOne({
       where: { id: subtitleId },
@@ -116,16 +124,27 @@ export class SubtitleTranslationService {
       score: source.score,
     } as any);
 
-    void this.runTranslation(placeholder.id, source, target, config.model, config.apiKey).catch(
-      (err) => {
-        this.log.error(`Translate run crashed for sub #${subtitleId}: ${err}`);
-      },
-    );
+    void this.runTranslation(placeholder.id, source, target, config).catch((err) => {
+      this.log.error(`Translate run crashed for sub #${subtitleId}: ${err}`);
+    });
     return placeholder;
   }
 
-  private async concurrencyLimit(): Promise<number> {
-    return (await this.translationSettings.get()).maxConcurrency;
+  private assertEngineConfigured(config: ResolvedTranslationSettings): void {
+    if (config.engine === 'gemini' && !config.gemini.apiKey) {
+      throw new BadRequestException('Gemini API key is not set');
+    }
+    if (
+      config.engine === 'openai' &&
+      (!config.openai.baseUrl || !config.openai.model)
+    ) {
+      throw new BadRequestException(
+        'An OpenAI-compatible base URL and model are required',
+      );
+    }
+    if (config.engine === 'libretranslate' && !config.libretranslate.url) {
+      throw new BadRequestException('The LibreTranslate URL is not set');
+    }
   }
 
   private async acquireSlot(limit: number): Promise<void> {
@@ -144,8 +163,7 @@ export class SubtitleTranslationService {
     placeholderId: number,
     source: SubtitleFile,
     target: string,
-    model: string,
-    apiKey: string,
+    config: ResolvedTranslationSettings,
   ): Promise<void> {
     const media = await this.mediaRepo.findOne({ where: { id: source.mediaId } });
     const base = path.join(
@@ -160,34 +178,42 @@ export class SubtitleTranslationService {
       const cues = parseSrt(srtIn);
       if (cues.length === 0) throw new Error('source subtitle has no text');
 
-      const limit = await this.concurrencyLimit();
-      await this.acquireSlot(limit);
+      const req: TranslationRequest = {
+        sourceLanguage: source.language,
+        targetLanguage: target,
+        context: {
+          title: media.title,
+          year: media.year,
+          mediaType: media.type,
+          genres: media.genres,
+          overview: media.overview,
+        },
+      };
+      const onProgress = (done: number, total: number) => {
+        this.events.emit({
+          type: 'subtitle.translation_progress',
+          subtitleId: placeholderId,
+          mediaId: source.mediaId,
+          progress: total > 0 ? Math.round((done / total) * 100) : 0,
+        });
+      };
+      const texts = cues.map((c) => c.text);
+
+      await this.acquireSlot(config.maxConcurrency);
       let translated: string[];
       try {
-        translated = await translateSubtitleTexts(
-          cues.map((c) => c.text),
-          {
-            apiKey,
-            model,
-            sourceLanguage: source.language,
-            targetLanguage: target,
-            context: {
-              title: media.title,
-              year: media.year,
-              mediaType: media.type,
-              genres: media.genres,
-              overview: media.overview,
-            },
-          },
-          (done, total) => {
-            this.events.emit({
-              type: 'subtitle.translation_progress',
-              subtitleId: placeholderId,
-              mediaId: source.mediaId,
-              progress: total > 0 ? Math.round((done / total) * 100) : 0,
-            });
-          },
-        );
+        if (config.engine === 'openai') {
+          translated = await translateWithOpenAi(texts, req, config.openai, onProgress);
+        } else if (config.engine === 'libretranslate') {
+          translated = await translateWithLibreTranslate(
+            texts,
+            req,
+            config.libretranslate,
+            onProgress,
+          );
+        } else {
+          translated = await translateWithGemini(texts, req, config.gemini, onProgress);
+        }
       } finally {
         this.releaseSlot();
       }
@@ -253,7 +279,7 @@ export class SubtitleTranslationService {
         title: media?.title ?? '',
         language: target,
         error: String(err),
-        ...(err instanceof GeminiRateLimitError ? { reason: 'rate_limit' } : {}),
+        ...(err instanceof TranslationRateLimitError ? { reason: 'rate_limit' } : {}),
       });
       await this.repo.delete(placeholderId);
     } finally {

@@ -2085,11 +2085,21 @@
       "stats_results": "Risultati",
       "stats_errors": "Errori",
       "translation_title": "Traduzione sottotitoli (IA)",
-      "translation_hint": "Traduci un sottotitolo di testo esistente in un'altra lingua con l'API Gemini. Inserisci la tua chiave API per abilitare l'azione «Traduci» sui sottotitoli.",
+      "translation_hint": "Traduci un sottotitolo di testo esistente in un'altra lingua. Scegli un motore e inserisci le sue credenziali per abilitare l'azione «Traduci» sui sottotitoli.",
       "translation_enabled": "Abilita traduzione",
       "translation_api_key": "Chiave API Gemini",
       "translation_model": "Modello",
-      "translation_saved": "Impostazioni di traduzione salvate."
+      "translation_saved": "Impostazioni di traduzione salvate.",
+      "translation_engine": "Motore",
+      "translation_engine_gemini": "Gemini",
+      "translation_engine_openai": "Compatibile OpenAI (Groq, OpenRouter, Ollama…)",
+      "translation_engine_libretranslate": "LibreTranslate (self-hosted)",
+      "translation_openai_base_url": "URL di base",
+      "translation_openai_base_url_hint": "es. Groq: https://api.groq.com/openai/v1 — OpenRouter: https://openrouter.ai/api/v1 — Ollama: http://host.docker.internal:11434/v1",
+      "translation_openai_model": "Modello",
+      "translation_libretranslate_url": "URL del server",
+      "translation_libretranslate_url_hint": "Punta al tuo container LibreTranslate, es. http://libretranslate:5000.",
+      "translation_api_key_optional": "Chiave API (opzionale)"
     },
     "schedulers": {
       "title": "Attività pianificate",

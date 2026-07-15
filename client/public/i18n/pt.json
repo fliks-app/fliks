@@ -2085,11 +2085,21 @@
       "stats_results": "Resultados",
       "stats_errors": "Erros",
       "translation_title": "Tradução de legendas (IA)",
-      "translation_hint": "Traduza uma legenda de texto existente para outro idioma com a API Gemini. Defina a sua chave de API para ativar a ação «Traduzir» nas legendas.",
+      "translation_hint": "Traduza uma legenda de texto existente para outro idioma. Escolha um motor e defina as suas credenciais para ativar a ação «Traduzir» nas legendas.",
       "translation_enabled": "Ativar tradução",
       "translation_api_key": "Chave de API Gemini",
       "translation_model": "Modelo",
-      "translation_saved": "Definições de tradução guardadas."
+      "translation_saved": "Definições de tradução guardadas.",
+      "translation_engine": "Motor",
+      "translation_engine_gemini": "Gemini",
+      "translation_engine_openai": "Compatível com OpenAI (Groq, OpenRouter, Ollama…)",
+      "translation_engine_libretranslate": "LibreTranslate (auto-hospedado)",
+      "translation_openai_base_url": "URL base",
+      "translation_openai_base_url_hint": "ex. Groq: https://api.groq.com/openai/v1 — OpenRouter: https://openrouter.ai/api/v1 — Ollama: http://host.docker.internal:11434/v1",
+      "translation_openai_model": "Modelo",
+      "translation_libretranslate_url": "URL do servidor",
+      "translation_libretranslate_url_hint": "Aponte para o seu contentor LibreTranslate, ex. http://libretranslate:5000.",
+      "translation_api_key_optional": "Chave de API (opcional)"
     },
     "schedulers": {
       "title": "Tarefas agendadas",

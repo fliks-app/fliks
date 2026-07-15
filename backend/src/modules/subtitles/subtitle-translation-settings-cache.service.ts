@@ -1,20 +1,28 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { SettingsService } from '../settings/settings.service';
 
+export type TranslationEngine = 'gemini' | 'openai' | 'libretranslate';
+
 /** Resolved subtitle-translation configuration read from the key/value store. */
 export interface ResolvedTranslationSettings {
   enabled: boolean;
-  apiKey: string;
-  model: string;
+  engine: TranslationEngine;
   maxConcurrency: number;
+  gemini: { apiKey: string; model: string };
+  openai: { baseUrl: string; apiKey: string; model: string };
+  libretranslate: { url: string; apiKey: string };
 }
 
 export const DEFAULT_TRANSLATION_MODEL = 'gemini-2.0-flash';
 
-/** Resolves + caches the subtitle machine-translation settings (Gemini). The
- *  translation service reads the config once per run instead of hitting the
- *  key/value store repeatedly; the cache is invalidated when the admin changes
- *  any `subtitle_translation_*` setting, so a new value takes effect without a
+function parseEngine(raw: string | null): TranslationEngine {
+  return raw === 'openai' || raw === 'libretranslate' ? raw : 'gemini';
+}
+
+/** Resolves + caches the subtitle machine-translation settings. The translation
+ *  service reads the config once per run instead of hitting the key/value store
+ *  repeatedly; the cache is invalidated when the admin changes any
+ *  `subtitle_translation_*` setting, so a new value takes effect without a
  *  restart. Mirrors {@link MetadataSettingsCache}'s epoch-guarded memoisation. */
 @Injectable()
 export class SubtitleTranslationSettingsCache implements OnModuleInit {
@@ -55,21 +63,50 @@ export class SubtitleTranslationSettingsCache implements OnModuleInit {
   }
 
   private async load(): Promise<ResolvedTranslationSettings> {
-    const [enabled, apiKey, model, maxConcurrency] = await Promise.all([
+    const [
+      enabled,
+      engine,
+      maxConcurrency,
+      geminiKey,
+      geminiModel,
+      openaiBaseUrl,
+      openaiKey,
+      openaiModel,
+      libreUrl,
+      libreKey,
+    ] = await Promise.all([
       this.settings.get('subtitle_translation_enabled'),
-      this.settings.get('subtitle_translation_gemini_api_key'),
-      this.settings.get('subtitle_translation_model'),
+      this.settings.get('subtitle_translation_engine'),
       this.settings.get('subtitle_translation_max_concurrency'),
+      this.settings.get('subtitle_translation_gemini_api_key'),
+      this.settings.get('subtitle_translation_gemini_model'),
+      this.settings.get('subtitle_translation_openai_base_url'),
+      this.settings.get('subtitle_translation_openai_api_key'),
+      this.settings.get('subtitle_translation_openai_model'),
+      this.settings.get('subtitle_translation_libretranslate_url'),
+      this.settings.get('subtitle_translation_libretranslate_api_key'),
     ]);
     const parsedConcurrency = Number(maxConcurrency ?? '1');
     return {
       enabled: enabled === 'true',
-      apiKey: (apiKey ?? '').trim(),
-      model: (model ?? '').trim() || DEFAULT_TRANSLATION_MODEL,
+      engine: parseEngine(engine),
       maxConcurrency:
         Number.isFinite(parsedConcurrency) && parsedConcurrency >= 1
           ? Math.floor(parsedConcurrency)
           : 1,
+      gemini: {
+        apiKey: (geminiKey ?? '').trim(),
+        model: (geminiModel ?? '').trim() || DEFAULT_TRANSLATION_MODEL,
+      },
+      openai: {
+        baseUrl: (openaiBaseUrl ?? '').trim(),
+        apiKey: (openaiKey ?? '').trim(),
+        model: (openaiModel ?? '').trim(),
+      },
+      libretranslate: {
+        url: (libreUrl ?? '').trim(),
+        apiKey: (libreKey ?? '').trim(),
+      },
     };
   }
 }
