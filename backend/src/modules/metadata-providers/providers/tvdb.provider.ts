@@ -29,6 +29,7 @@ import type {
   TvdbSeasonBase,
   TvdbAlias,
 } from './tvdb-api.types';
+import { MetadataSettingsCache } from '../metadata-settings-cache.service';
 
 const TVDB_BASE = 'https://api4.thetvdb.com/v4';
 
@@ -71,7 +72,10 @@ export class TvdbProvider implements IMetadataProvider {
   private token: string | null = null;
   private tokenExpiresAt = 0;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly metaLang: MetadataSettingsCache,
+  ) {
     this.client = axios.create({ baseURL: TVDB_BASE, timeout: 15000 });
   }
 
@@ -103,6 +107,7 @@ export class TvdbProvider implements IMetadataProvider {
     year?: number,
   ): Promise<MetadataSearchResult[]> {
     await this.ensureAuth();
+    const tvdb = (await this.metaLang.getLanguage()).tvdbCode;
     const params: Record<string, string> = { q: query, type: 'movie' };
     if (year) params.year = String(year);
 
@@ -110,7 +115,7 @@ export class TvdbProvider implements IMetadataProvider {
       '/search',
       { params },
     );
-    return (data.data ?? []).map((r) => this.mapSearchResult(r, 'movie'));
+    return (data.data ?? []).map((r) => this.mapSearchResult(r, 'movie', tvdb));
   }
 
   async searchTvShow(
@@ -118,6 +123,7 @@ export class TvdbProvider implements IMetadataProvider {
     year?: number,
   ): Promise<MetadataSearchResult[]> {
     await this.ensureAuth();
+    const tvdb = (await this.metaLang.getLanguage()).tvdbCode;
     const params: Record<string, string> = { q: query, type: 'series' };
     if (year) params.year = String(year);
 
@@ -125,20 +131,21 @@ export class TvdbProvider implements IMetadataProvider {
       '/search',
       { params },
     );
-    return (data.data ?? []).map((r) => this.mapSearchResult(r, 'series'));
+    return (data.data ?? []).map((r) => this.mapSearchResult(r, 'series', tvdb));
   }
 
   // ── Movie details ──
 
   async getMovieDetails(externalId: string): Promise<MetadataDetails> {
     await this.ensureAuth();
+    const tvdb = (await this.metaLang.getLanguage()).tvdbCode;
     const id = parseInt(externalId, 10);
     const { data } = await this.client.get<TvdbResponse<TvdbMovieExtended>>(
       `/movies/${id}/extended`,
       { params: { meta: 'translations' } },
     );
     const m = data.data;
-    const fr = this.pickTranslation(m.translations, 'fra');
+    const localized = this.pickTranslation(m.translations, tvdb);
     const imdbId = this.extractRemoteId(m.remoteIds, 'IMDB');
 
     return {
@@ -149,18 +156,19 @@ export class TvdbProvider implements IMetadataProvider {
       tvdbId: m.id,
       imdbId,
       provider: 'tvdb',
-      title: fr?.name ?? m.name,
+      title: localized?.name ?? m.name,
       originalTitle: m.name,
-      overview: fr?.overview ?? '',
+      overview: localized?.overview ?? '',
       year: m.year ? parseInt(m.year) : null,
-      posterUrl: this.pickArtwork(m.artworks, ART_POSTER) ?? m.image ?? null,
-      fanartUrl: this.pickArtwork(m.artworks, ART_BACKGROUND) ?? null,
-      logoUrl: this.pickArtwork(m.artworks, ART_CLEARLOGO_MOVIE) ?? null,
+      posterUrl:
+        this.pickArtwork(m.artworks, ART_POSTER, tvdb) ?? m.image ?? null,
+      fanartUrl: this.pickArtwork(m.artworks, ART_BACKGROUND, tvdb) ?? null,
+      logoUrl: this.pickArtwork(m.artworks, ART_CLEARLOGO_MOVIE, tvdb) ?? null,
       additionalFanartUrls: this.pickArtworks(
         m.artworks,
         ART_BACKGROUND,
         5,
-        this.pickArtwork(m.artworks, ART_BACKGROUND),
+        this.pickArtwork(m.artworks, ART_BACKGROUND, tvdb),
       ),
       rating: 0,
       genres: (m.genres ?? []).map((g) => g.name),
@@ -184,7 +192,7 @@ export class TvdbProvider implements IMetadataProvider {
       ],
       voteCount: null,
       popularity: null,
-      tagline: fr?.tagline ?? null,
+      tagline: localized?.tagline ?? null,
       cast: this.mapCast(m.characters),
       crew: this.mapCrew(m.characters),
       videos: (m.trailers ?? []).map((t) => ({
@@ -204,13 +212,14 @@ export class TvdbProvider implements IMetadataProvider {
 
   async getTvShowDetails(externalId: string): Promise<MetadataDetails> {
     await this.ensureAuth();
+    const tvdb = (await this.metaLang.getLanguage()).tvdbCode;
     const id = parseInt(externalId, 10);
     const { data } = await this.client.get<TvdbResponse<TvdbSeriesExtended>>(
       `/series/${id}/extended`,
       { params: { meta: 'translations' } },
     );
     const s = data.data;
-    const fr = this.pickTranslation(s.translations, 'fra');
+    const localized = this.pickTranslation(s.translations, tvdb);
     const imdbId = this.extractRemoteId(s.remoteIds, 'IMDB');
 
     return {
@@ -221,18 +230,19 @@ export class TvdbProvider implements IMetadataProvider {
       tvdbId: s.id,
       imdbId,
       provider: 'tvdb',
-      title: fr?.name ?? s.name,
+      title: localized?.name ?? s.name,
       originalTitle: s.name,
-      overview: fr?.overview ?? '',
+      overview: localized?.overview ?? '',
       year: s.year ? parseInt(s.year) : null,
-      posterUrl: this.pickArtwork(s.artworks, ART_POSTER) ?? s.image ?? null,
-      fanartUrl: this.pickArtwork(s.artworks, ART_BACKGROUND) ?? null,
-      logoUrl: this.pickArtwork(s.artworks, ART_CLEARLOGO_SERIES) ?? null,
+      posterUrl:
+        this.pickArtwork(s.artworks, ART_POSTER, tvdb) ?? s.image ?? null,
+      fanartUrl: this.pickArtwork(s.artworks, ART_BACKGROUND, tvdb) ?? null,
+      logoUrl: this.pickArtwork(s.artworks, ART_CLEARLOGO_SERIES, tvdb) ?? null,
       additionalFanartUrls: this.pickArtworks(
         s.artworks,
         ART_BACKGROUND,
         5,
-        this.pickArtwork(s.artworks, ART_BACKGROUND),
+        this.pickArtwork(s.artworks, ART_BACKGROUND, tvdb),
       ),
       rating: 0,
       genres: (s.genres ?? []).map((g) => g.name),
@@ -254,7 +264,7 @@ export class TvdbProvider implements IMetadataProvider {
       ],
       voteCount: null,
       popularity: null,
-      tagline: fr?.tagline ?? null,
+      tagline: localized?.tagline ?? null,
       cast: this.mapCast(s.characters),
       crew: this.mapCrew(s.characters),
       videos: (s.trailers ?? []).map((t) => ({
@@ -274,6 +284,7 @@ export class TvdbProvider implements IMetadataProvider {
 
   async getTvShowSeasons(externalId: string): Promise<SeasonDetails[]> {
     await this.ensureAuth();
+    const tvdb = (await this.metaLang.getLanguage()).tvdbCode;
     const id = parseInt(externalId, 10);
 
     // Fetch all episodes (paginated) via the default season type
@@ -301,23 +312,23 @@ export class TvdbProvider implements IMetadataProvider {
       (s) => s.type?.type === 'official' || s.type?.name === 'Aired Order',
     );
 
-    // Fetch FR translations for each episode
+    // Fetch localized translations for each episode that advertises them
     const epTranslations = new Map<
       number,
       { name?: string; overview?: string }
     >();
     for (const ep of allEpisodes) {
       if (
-        ep.overviewTranslations?.includes('fra') ||
-        ep.nameTranslations?.includes('fra')
+        ep.overviewTranslations?.includes(tvdb) ||
+        ep.nameTranslations?.includes(tvdb)
       ) {
         try {
           const { data: trData } = await this.client.get<
             TvdbResponse<{ name: string; overview: string }>
-          >(`/episodes/${ep.id}/translations/fra`);
+          >(`/episodes/${ep.id}/translations/${tvdb}`);
           epTranslations.set(ep.id, trData.data);
         } catch {
-          /* FR not available */
+          /* translation not available */
         }
       }
     }
@@ -364,21 +375,22 @@ export class TvdbProvider implements IMetadataProvider {
 
   async getPersonDetails(externalId: string): Promise<PersonDetails> {
     await this.ensureAuth();
+    const tvdb = (await this.metaLang.getLanguage()).tvdbCode;
     const id = parseInt(externalId, 10);
     const { data } = await this.client.get<TvdbResponse<TvdbPeopleExtended>>(
       `/people/${id}/extended`,
       { params: { meta: 'translations' } },
     );
     const p = data.data;
-    const frBio =
-      p.biographies?.find((b) => b.language === 'fra')?.biography ??
+    const bio =
+      p.biographies?.find((b) => b.language === tvdb)?.biography ??
       p.biographies?.find((b) => b.language === 'eng')?.biography ??
       '';
 
     return {
       externalId: p.id,
       name: p.name,
-      biography: frBio,
+      biography: bio,
       birthday: p.birth ?? null,
       deathday: p.death ?? null,
       placeOfBirth: p.birthPlace ?? null,
@@ -450,6 +462,7 @@ export class TvdbProvider implements IMetadataProvider {
   private mapSearchResult(
     r: TvdbSearchResult,
     mediaType: 'movie' | 'series',
+    tvdb: string,
   ): MetadataSearchResult {
     const imdbId =
       r.remote_ids?.find((rid) => rid.sourceName === 'IMDB')?.id ?? null;
@@ -462,9 +475,9 @@ export class TvdbProvider implements IMetadataProvider {
       tvdbId: parseInt(r.tvdb_id ?? r.id, 10),
       imdbId,
       provider: 'tvdb',
-      title: r.translations?.fra ?? r.name,
+      title: r.translations?.[tvdb] ?? r.name,
       originalTitle: r.name,
-      overview: r.overviews?.fra ?? r.overview ?? '',
+      overview: r.overviews?.[tvdb] ?? r.overview ?? '',
       year: r.year ? parseInt(r.year) : null,
       posterUrl: r.image_url ?? r.poster ?? null,
       rating: 0,
@@ -536,14 +549,15 @@ export class TvdbProvider implements IMetadataProvider {
   private pickArtwork(
     artworks: TvdbArtwork[] | undefined,
     type: number,
+    lang: string,
   ): string | null {
     if (!artworks) return null;
-    // Prefer French, then any, sorted by score
+    // Prefer the configured language, then any, sorted by score
     const filtered = artworks
       .filter((a) => a.type === type)
       .sort((a, b) => {
-        if (a.language === 'fra' && b.language !== 'fra') return -1;
-        if (b.language === 'fra' && a.language !== 'fra') return 1;
+        if (a.language === lang && b.language !== lang) return -1;
+        if (b.language === lang && a.language !== lang) return 1;
         return (b.score ?? 0) - (a.score ?? 0);
       });
     return filtered[0]?.image ?? null;

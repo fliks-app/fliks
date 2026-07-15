@@ -58,6 +58,38 @@
       </div>
     </div>
 
+    <!-- Metadata language -->
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-5">
+        <h2 class="card-title text-base">{{ 'settings.general.section_metadata_language' | translate }}</h2>
+
+        <label class="form-control w-full max-w-md">
+          <div class="label">
+            <span class="label-text">{{ 'settings.general.metadata_language' | translate }}</span>
+          </div>
+          <select
+            class="select select-bordered w-full"
+            [ngModel]="metadataLanguage()"
+            (ngModelChange)="metadataLanguage.set($event)"
+          >
+            @for (opt of metadataLanguageOptions; track opt.code) {
+              <option [value]="opt.code">{{ opt.label }}</option>
+            }
+          </select>
+          <div class="label">
+            <span class="label-text-alt text-base-content/50">{{ 'settings.general.metadata_language_hint' | translate }}</span>
+          </div>
+        </label>
+
+        <div class="card-actions justify-end">
+          <button type="button" class="btn btn-primary" (click)="saveMetadataLanguage()" [disabled]="savingMetadataLanguage()">
+            @if (savingMetadataLanguage()) { <span class="loading loading-spinner loading-sm"></span> }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Automation -->
     <div class="card bg-base-100 border border-base-200">
       <div class="card-body gap-5">

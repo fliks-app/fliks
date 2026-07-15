@@ -25,8 +25,8 @@ export interface TvdbSearchResult {
   genres: string[];
   remote_ids: TvdbRemoteId[];
   tvdb_id: string;
-  translations?: { fra?: string; eng?: string };
-  overviews?: { fra?: string; eng?: string };
+  translations?: Record<string, string>;
+  overviews?: Record<string, string>;
 }
 
 /** GET /movies/{id}/extended */

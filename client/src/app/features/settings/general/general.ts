@@ -30,6 +30,24 @@ export class GeneralSettingsComponent implements OnInit {
   readonly publicUrl = signal('');
   readonly savingServer = signal(false);
 
+  // Metadata language
+  readonly metadataLanguage = signal('en');
+  readonly savingMetadataLanguage = signal(false);
+  readonly metadataLanguageOptions = [
+    { code: 'en', label: 'English' },
+    { code: 'fr', label: 'Français' },
+    { code: 'es', label: 'Español' },
+    { code: 'de', label: 'Deutsch' },
+    { code: 'it', label: 'Italiano' },
+    { code: 'pt', label: 'Português' },
+    { code: 'nl', label: 'Nederlands' },
+    { code: 'pl', label: 'Polski' },
+    { code: 'ru', label: 'Русский' },
+    { code: 'ja', label: '日本語' },
+    { code: 'ko', label: '한국어' },
+    { code: 'zh', label: '中文' },
+  ] as const;
+
   // Automation
   readonly searchMissingAuto = signal('true');
   readonly autoGrabOnApproval = signal('true');
@@ -47,6 +65,7 @@ export class GeneralSettingsComponent implements OnInit {
       const map = await this.api.getAll();
       this.serverName.set(map['server_name'] ?? '');
       this.publicUrl.set(map['public_url'] ?? '');
+      this.metadataLanguage.set(map['metadata_language'] ?? 'en');
       this.searchMissingAuto.set(map['search_missing_auto'] ?? 'true');
       this.autoGrabOnApproval.set(map['requests_auto_grab_on_approval'] ?? 'true');
       this.autoDetectMarkersOnImport.set(map['markers_auto_detect_on_import'] ?? 'true');
@@ -72,6 +91,14 @@ export class GeneralSettingsComponent implements OnInit {
       });
       this.toast.success(this.translate.instant('settings.general.saved'));
     } catch { /* interceptor */ } finally { this.savingServer.set(false); }
+  }
+
+  async saveMetadataLanguage() {
+    this.savingMetadataLanguage.set(true);
+    try {
+      await this.api.setBulk({ metadata_language: this.metadataLanguage() });
+      this.toast.success(this.translate.instant('settings.general.saved'));
+    } catch { /* interceptor */ } finally { this.savingMetadataLanguage.set(false); }
   }
 
   async saveAutomation() {
