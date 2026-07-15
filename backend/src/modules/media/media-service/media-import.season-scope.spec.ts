@@ -55,9 +55,10 @@ describe('MediaImportService — season monitoring scope on import', () => {
       } as any,
       { onMediaImported: jest.fn().mockResolvedValue(undefined) } as any,
     );
-    jest
-      .spyOn(svc as any, 'resolveImportTarget')
-      .mockResolvedValue({ libraryId: 7 });
+    jest.spyOn(svc as any, 'resolveImportTarget').mockResolvedValue({
+      libraryId: 7,
+      library: { metadataLanguage: null, metadataRegion: null },
+    });
     return { svc, created };
   }
 

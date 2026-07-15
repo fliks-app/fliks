@@ -71,6 +71,32 @@
 
       <label class="form-control w-full max-w-md">
         <div class="label">
+          <span class="label-text text-base">{{ 'settings.libraries.metadata_language' | translate }}</span>
+        </div>
+        <select class="select select-bordered w-full"
+          [ngModel]="state.formMetadataLanguage() ?? ''" (ngModelChange)="state.formMetadataLanguage.set($event || null)">
+          <option value="">{{ 'settings.libraries.metadata_inherit' | translate }}</option>
+          @for (opt of metadataLanguageOptions; track opt.code) {
+            <option [value]="opt.code">{{ opt.label }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="form-control w-full max-w-md">
+        <div class="label">
+          <span class="label-text text-base">{{ 'settings.libraries.metadata_region' | translate }}</span>
+        </div>
+        <select class="select select-bordered w-full"
+          [ngModel]="state.formMetadataRegion() ?? ''" (ngModelChange)="state.formMetadataRegion.set($event || null)">
+          <option value="">{{ 'settings.libraries.metadata_inherit' | translate }}</option>
+          @for (opt of metadataRegionOptions; track opt.code) {
+            <option [value]="opt.code">{{ opt.label }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="form-control w-full max-w-md">
+        <div class="label">
           <span class="label-text text-base">{{ 'settings.libraries.stalled_cleanup' | translate }}</span>
         </div>
         <select class="select select-bordered w-full"

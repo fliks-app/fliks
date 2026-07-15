@@ -29,6 +29,8 @@ export interface Library {
   color: string | null;
   mediaTypes: ('movie' | 'series')[];
   preferredProvider: string | null;
+  metadataLanguage: string | null;
+  metadataRegion: string | null;
   stalledCleanupProfile: StalledCleanupProfileKey | null;
   defaultQualityProfileId: number | null;
   defaultLanguageProfileId: number | null;
@@ -46,6 +48,8 @@ export interface CreateLibraryBody {
   color?: string | null;
   mediaTypes?: ('movie' | 'series')[];
   preferredProvider?: string | null;
+  metadataLanguage?: string | null;
+  metadataRegion?: string | null;
   stalledCleanupProfile?: StalledCleanupProfileKey | null;
   defaultQualityProfileId?: number | null;
   defaultLanguageProfileId?: number | null;

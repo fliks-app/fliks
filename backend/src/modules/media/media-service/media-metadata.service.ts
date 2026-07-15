@@ -23,6 +23,7 @@ import {
   MetadataDetails,
   SeasonDetails,
 } from '../../metadata-providers/interfaces/metadata-provider.interface';
+import { MetadataLanguageOverride } from '../../metadata-providers/metadata-settings-cache.service';
 import { MediaType } from '../../../common/enums';
 import { ImageService } from '../../images/image.service';
 import { SchedulerService } from '../../scheduler/scheduler.service';
@@ -54,10 +55,25 @@ export class MediaMetadataService {
     private readonly scheduler: SchedulerService,
   ) {}
 
+  /** Metadata language/region override for a media's library, or undefined when
+   *  the media has no library (falls back to the global setting). Null fields on
+   *  the library inherit the global setting per field. */
+  private async loadLibraryOverride(
+    media: Media,
+  ): Promise<MetadataLanguageOverride | undefined> {
+    if (!media.libraryId) return undefined;
+    const lib = await this.libraryRepo.findOne({
+      where: { id: media.libraryId },
+    });
+    if (!lib) return undefined;
+    return { language: lib.metadataLanguage, region: lib.metadataRegion };
+  }
+
   async refreshMetadata(id: number): Promise<Media> {
     const media = await this.mediaRepo.findOne({ where: { id } });
     if (!media) throw new NotFoundException(`Media #${id} not found`);
 
+    const override = await this.loadLibraryOverride(media);
     const { provider, externalId } = await this.resolveProviderForMedia(media);
 
     this.log.log(
@@ -65,7 +81,7 @@ export class MediaMetadataService {
     );
 
     if (media.type === MediaType.MOVIE) {
-      const details = await provider.getMovieDetails(externalId);
+      const details = await provider.getMovieDetails(externalId, override);
       if (!media.tvdbId && details.tvdbId)
         await this.mediaRepo.update(media.id, { tvdbId: details.tvdbId });
       if (!media.tmdbId && details.tmdbId)
@@ -79,7 +95,7 @@ export class MediaMetadataService {
       await this.downloadMediaImages(media.id, details);
       await this.persistMediaMetadata(media, details);
     } else {
-      const details = await provider.getTvShowDetails(externalId);
+      const details = await provider.getTvShowDetails(externalId, override);
       if (!media.tvdbId && details.tvdbId)
         await this.mediaRepo.update(media.id, { tvdbId: details.tvdbId });
       if (!media.tmdbId && details.tmdbId)
@@ -130,11 +146,14 @@ export class MediaMetadataService {
     const { provider, externalId } = await this.resolveProviderForMedia(media, {
       season: episode.season,
     });
+    const override = await this.loadLibraryOverride(media);
 
     const seasonData = await this.fetchSingleSeason(
       provider,
       externalId,
       episode.season.seasonNumber,
+      undefined,
+      override,
     );
     const tmdbEp = seasonData?.episodes.find(
       (e) => e.episodeNumber === episode.episodeNumber,
@@ -170,8 +189,10 @@ export class MediaMetadataService {
     //    and we resolve on their behalf.
     const mediaResolve =
       preResolved ?? (await this.resolveProviderForMedia(media));
+    const override = await this.loadLibraryOverride(media);
     const mediaSeasons = await mediaResolve.provider.getTvShowSeasons(
       mediaResolve.externalId,
+      override,
     );
     const dbSeasons = await this.seasonRepo.find({
       where: { media: { id: media.id } },
@@ -243,6 +264,7 @@ export class MediaMetadataService {
         overrideResolve.externalId,
         dbSeason.seasonNumber,
         cache,
+        override,
       );
       if (!seasonData) {
         this.log.warn(
@@ -374,14 +396,15 @@ export class MediaMetadataService {
     externalId: string,
     seasonNumber: number,
     cache?: Map<string, SeasonDetails[]>,
+    override?: MetadataLanguageOverride,
   ): Promise<SeasonDetails | undefined> {
     if (provider.name === 'tmdb') {
-      return this.tmdb.getTvSeason(externalId, seasonNumber);
+      return this.tmdb.getTvSeason(externalId, seasonNumber, override);
     }
     const key = `${provider.name}:${externalId}`;
     let all = cache?.get(key);
     if (!all) {
-      all = await provider.getTvShowSeasons(externalId);
+      all = await provider.getTvShowSeasons(externalId, override);
       cache?.set(key, all);
     }
     return all.find((s) => s.seasonNumber === seasonNumber);
@@ -516,6 +539,8 @@ export class MediaMetadataService {
     if (providerName === 'tmdb' && media.tmdbId) return String(media.tmdbId);
     if (providerName === 'tvdb' && media.tvdbId) return String(media.tvdbId);
 
+    const override = await this.loadLibraryOverride(media);
+
     this.log.log(
       `crossRef: ${label} — need ${providerName} ID, attempting cross-reference`,
     );
@@ -526,7 +551,11 @@ export class MediaMetadataService {
         this.log.log(
           `crossRef: ${label} — trying TVDB lookup via imdbId=${media.imdbId}`,
         );
-        const cross = await provider.findByExternalId('imdb', media.imdbId);
+        const cross = await provider.findByExternalId(
+          'imdb',
+          media.imdbId,
+          override,
+        );
         if (cross) {
           this.log.log(
             `crossRef: ${label} — found tvdbId=${cross.id} via IMDB`,
@@ -543,8 +572,8 @@ export class MediaMetadataService {
         );
         const details =
           media.type === MediaType.MOVIE
-            ? await this.tmdb.getMovieDetails(String(media.tmdbId))
-            : await this.tmdb.getTvShowDetails(String(media.tmdbId));
+            ? await this.tmdb.getMovieDetails(String(media.tmdbId), override)
+            : await this.tmdb.getTvShowDetails(String(media.tmdbId), override);
         if (details.tvdbId) {
           this.log.log(
             `crossRef: ${label} — found tvdbId=${details.tvdbId} via TMDB`,
@@ -560,7 +589,11 @@ export class MediaMetadataService {
         this.log.log(
           `crossRef: ${label} — trying TMDB find via imdbId=${media.imdbId}`,
         );
-        const cross = await this.tmdb.findByExternalId('imdb', media.imdbId);
+        const cross = await this.tmdb.findByExternalId(
+          'imdb',
+          media.imdbId,
+          override,
+        );
         if (cross) {
           this.log.log(
             `crossRef: ${label} — found tmdbId=${cross.id} via IMDB`,
@@ -578,6 +611,7 @@ export class MediaMetadataService {
         const cross = await this.tmdb.findByExternalId(
           'tvdb',
           String(media.tvdbId),
+          override,
         );
         if (cross) {
           this.log.log(

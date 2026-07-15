@@ -24,6 +24,10 @@ import type {
   TmdbPersonDetailsResponse,
   TmdbPersonCombinedCreditsResponse,
 } from './tmdb-api.types';
+import {
+  MetadataSettingsCache,
+  MetadataLanguageOverride,
+} from '../metadata-settings-cache.service';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
@@ -53,13 +57,16 @@ function pickAdditionalFanarts(
 
 /**
  * Pick the best "clearlogo" from a TMDB images payload. Logos are
- * language-tagged transparent PNGs; prefer French, then English, then a
+ * language-tagged transparent PNGs; prefer `preferIso1`, then English, then a
  * language-neutral / any logo, breaking ties on the community vote. Returns
  * the original-size URL (the PNG keeps its transparency) or null when the
  * title has no logo. Requires the details request to set
- * `include_image_language` so non-`fr-FR` logos are actually returned.
+ * `include_image_language` so logos beyond the `language` locale are returned.
  */
-function pickLogo(images: TmdbImages | undefined): string | null {
+function pickLogo(
+  images: TmdbImages | undefined,
+  preferIso1: string,
+): string | null {
   const logos = (images?.logos ?? []).filter((l) => l.file_path);
   if (!logos.length) return null;
   // Community vote is the best proxy for "the clean official title logo":
@@ -68,7 +75,7 @@ function pickLogo(images: TmdbImages | undefined): string | null {
   // small bonus that tips otherwise-close calls toward the user's locale —
   // never enough to override a clearly better-voted logo in another language.
   const langBonus = (lang: string | null | undefined): number =>
-    lang === 'fr' ? 0.5 : lang === 'en' ? 0.25 : 0;
+    lang === preferIso1 ? 0.5 : lang === 'en' ? 0.25 : 0;
   const score = (l: { vote_average?: number; iso_639_1?: string | null }): number =>
     (l.vote_average ?? 0) + langBonus(l.iso_639_1);
   const best = [...logos].sort((a, b) => score(b) - score(a))[0];
@@ -131,7 +138,10 @@ export class TmdbProvider implements IMetadataProvider {
   private readonly client: AxiosInstance;
   private readonly logger = new Logger(TmdbProvider.name);
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly metaLang: MetadataSettingsCache,
+  ) {
     this.client = axios.create({
       baseURL: 'https://api.themoviedb.org/3',
       params: { api_key: this.config.get<string>('TMDB_API_KEY', '') },
@@ -143,7 +153,11 @@ export class TmdbProvider implements IMetadataProvider {
     query: string,
     year?: number,
   ): Promise<MetadataSearchResult[]> {
-    const params: Record<string, unknown> = { query, language: 'fr-FR' };
+    const lang = await this.metaLang.resolve();
+    const params: Record<string, unknown> = {
+      query,
+      language: lang.tmdbLocale,
+    };
     if (year) params.year = year;
 
     const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
@@ -157,7 +171,11 @@ export class TmdbProvider implements IMetadataProvider {
     query: string,
     year?: number,
   ): Promise<MetadataSearchResult[]> {
-    const params: Record<string, unknown> = { query, language: 'fr-FR' };
+    const lang = await this.metaLang.resolve();
+    const params: Record<string, unknown> = {
+      query,
+      language: lang.tmdbLocale,
+    };
     if (year) params.first_air_date_year = year;
 
     const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
@@ -167,23 +185,31 @@ export class TmdbProvider implements IMetadataProvider {
     return data.results.map((r) => this.mapTvResult(r));
   }
 
-  async getMovieDetails(externalId: string): Promise<MetadataDetails> {
+  async getMovieDetails(
+    externalId: string,
+    override?: MetadataLanguageOverride,
+  ): Promise<MetadataDetails> {
+    const lang = await this.metaLang.resolve(override);
     const tmdbId = parseInt(externalId, 10);
     const { data } = await this.client.get<TmdbMovieDetailsResponse>(
       `/movie/${tmdbId}`,
       {
         params: {
-          language: 'fr-FR',
-          // Logos are language-tagged; request fr + en + language-neutral so
-          // pickLogo has fallbacks beyond the fr-FR `language` default.
-          include_image_language: 'fr,en,null',
+          language: lang.tmdbLocale,
+          // Logos are language-tagged; request the configured language + en +
+          // language-neutral so pickLogo has fallbacks beyond the `language`
+          // locale.
+          include_image_language: lang.includeImageLanguage,
           append_to_response:
             'external_ids,images,release_dates,credits,videos,keywords,alternative_titles',
         },
       },
     );
 
-    const dates = this.extractReleaseDates(data.release_dates?.results ?? []);
+    const dates = this.extractReleaseDates(
+      data.release_dates?.results ?? [],
+      lang.releaseDatePriority,
+    );
 
     return {
       tmdbId: data.id,
@@ -200,7 +226,7 @@ export class TmdbProvider implements IMetadataProvider {
       fanartUrl: data.backdrop_path
         ? `${TMDB_IMAGE_BASE}/original${data.backdrop_path}`
         : null,
-      logoUrl: pickLogo(data.images),
+      logoUrl: pickLogo(data.images, lang.logoIso1),
       additionalFanartUrls: pickAdditionalFanarts(
         data.images,
         data.backdrop_path,
@@ -254,16 +280,21 @@ export class TmdbProvider implements IMetadataProvider {
     };
   }
 
-  async getTvShowDetails(externalId: string): Promise<MetadataDetails> {
+  async getTvShowDetails(
+    externalId: string,
+    override?: MetadataLanguageOverride,
+  ): Promise<MetadataDetails> {
+    const lang = await this.metaLang.resolve(override);
     const tmdbId = parseInt(externalId, 10);
     const { data } = await this.client.get<TmdbTvDetailsResponse>(
       `/tv/${tmdbId}`,
       {
         params: {
-          language: 'fr-FR',
-          // Logos are language-tagged; request fr + en + language-neutral so
-          // pickLogo has fallbacks beyond the fr-FR `language` default.
-          include_image_language: 'fr,en,null',
+          language: lang.tmdbLocale,
+          // Logos are language-tagged; request the configured language + en +
+          // language-neutral so pickLogo has fallbacks beyond the `language`
+          // locale.
+          include_image_language: lang.includeImageLanguage,
           append_to_response:
             'external_ids,images,credits,videos,keywords,alternative_titles',
         },
@@ -284,7 +315,7 @@ export class TmdbProvider implements IMetadataProvider {
       fanartUrl: data.backdrop_path
         ? `${TMDB_IMAGE_BASE}/original${data.backdrop_path}`
         : null,
-      logoUrl: pickLogo(data.images),
+      logoUrl: pickLogo(data.images, lang.logoIso1),
       additionalFanartUrls: pickAdditionalFanarts(
         data.images,
         data.backdrop_path,
@@ -347,11 +378,12 @@ export class TmdbProvider implements IMetadataProvider {
   async getTvSeasonStubs(
     externalId: string,
   ): Promise<{ seasonNumber: number; episodeCount: number }[]> {
+    const lang = await this.metaLang.resolve();
     const tmdbId = parseInt(externalId, 10);
     const { data: show } = await this.client.get<TmdbTvShowWithSeasons>(
       `/tv/${tmdbId}`,
       {
-        params: { language: 'fr-FR' },
+        params: { language: lang.tmdbLocale },
       },
     );
     return (show.seasons ?? [])
@@ -365,11 +397,13 @@ export class TmdbProvider implements IMetadataProvider {
   async getTvSeason(
     externalId: string,
     seasonNumber: number,
+    override?: MetadataLanguageOverride,
   ): Promise<SeasonDetails> {
+    const lang = await this.metaLang.resolve(override);
     const tmdbId = parseInt(externalId, 10);
     const { data: season } = await this.client.get<TmdbTvSeasonResponse>(
       `/tv/${tmdbId}/season/${seasonNumber}`,
-      { params: { language: 'fr-FR' } },
+      { params: { language: lang.tmdbLocale } },
     );
     return {
       seasonNumber: season.season_number,
@@ -392,12 +426,16 @@ export class TmdbProvider implements IMetadataProvider {
     };
   }
 
-  async getTvShowSeasons(externalId: string): Promise<SeasonDetails[]> {
+  async getTvShowSeasons(
+    externalId: string,
+    override?: MetadataLanguageOverride,
+  ): Promise<SeasonDetails[]> {
+    const lang = await this.metaLang.resolve(override);
     const tmdbId = parseInt(externalId, 10);
     const { data: show } = await this.client.get<TmdbTvShowWithSeasons>(
       `/tv/${tmdbId}`,
       {
-        params: { language: 'fr-FR' },
+        params: { language: lang.tmdbLocale },
       },
     );
 
@@ -407,7 +445,7 @@ export class TmdbProvider implements IMetadataProvider {
       try {
         const { data: season } = await this.client.get<TmdbTvSeasonResponse>(
           `/tv/${tmdbId}/season/${s.season_number}`,
-          { params: { language: 'fr-FR' } },
+          { params: { language: lang.tmdbLocale } },
         );
         seasons.push({
           seasonNumber: season.season_number,
@@ -440,25 +478,28 @@ export class TmdbProvider implements IMetadataProvider {
   async getTrendingMovies(
     window: 'day' | 'week' = 'week',
   ): Promise<MetadataSearchResult[]> {
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
       `/trending/movie/${window}`,
-      { params: { language: 'fr-FR' } },
+      { params: { language: lang.tmdbLocale } },
     );
     return data.results.map((r) => this.mapMovieResult(r));
   }
 
   async getPopularMovies(): Promise<MetadataSearchResult[]> {
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
       '/movie/popular',
-      { params: { language: 'fr-FR' } },
+      { params: { language: lang.tmdbLocale } },
     );
     return data.results.map((r) => this.mapMovieResult(r));
   }
 
   async getUpcomingMovies(): Promise<MetadataSearchResult[]> {
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
       '/movie/upcoming',
-      { params: { language: 'fr-FR', region: 'FR' } },
+      { params: { language: lang.tmdbLocale, region: lang.region } },
     );
     return data.results.map((r) => this.mapMovieResult(r));
   }
@@ -466,46 +507,52 @@ export class TmdbProvider implements IMetadataProvider {
   async getTrendingTvShows(
     window: 'day' | 'week' = 'week',
   ): Promise<MetadataSearchResult[]> {
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
       `/trending/tv/${window}`,
-      { params: { language: 'fr-FR' } },
+      { params: { language: lang.tmdbLocale } },
     );
     return data.results.map((r) => this.mapTvResult(r));
   }
 
   async getPopularTvShows(): Promise<MetadataSearchResult[]> {
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
       '/tv/popular',
-      { params: { language: 'fr-FR' } },
+      { params: { language: lang.tmdbLocale } },
     );
     return data.results.map((r) => this.mapTvResult(r));
   }
 
   async getUpcomingTvShows(): Promise<MetadataSearchResult[]> {
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
       '/tv/on_the_air',
-      { params: { language: 'fr-FR' } },
+      { params: { language: lang.tmdbLocale } },
     );
     return data.results.map((r) => this.mapTvResult(r));
   }
 
   async getMovieGenres(): Promise<{ id: number; name: string }[]> {
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<{
       genres: { id: number; name: string }[];
-    }>('/genre/movie/list', { params: { language: 'fr-FR' } });
+    }>('/genre/movie/list', { params: { language: lang.tmdbLocale } });
     return data.genres;
   }
 
   async getTvGenres(): Promise<{ id: number; name: string }[]> {
+    const lang = await this.metaLang.resolve();
     const { data } = await this.client.get<{
       genres: { id: number; name: string }[];
-    }>('/genre/tv/list', { params: { language: 'fr-FR' } });
+    }>('/genre/tv/list', { params: { language: lang.tmdbLocale } });
     return data.genres;
   }
 
   async discoverMovies(opts: DiscoverOptions): Promise<MetadataSearchResult[]> {
+    const lang = await this.metaLang.resolve();
     const params: Record<string, string | number> = {
-      language: 'fr-FR',
+      language: lang.tmdbLocale,
       include_adult: 'false',
       sort_by: opts.sortBy || 'popularity.desc',
       // Keep obscure entries out of popularity/date sorts.
@@ -523,13 +570,14 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   async discoverTvShows(opts: DiscoverOptions): Promise<MetadataSearchResult[]> {
+    const lang = await this.metaLang.resolve();
     // TMDB /discover/tv dates its sort on first_air_date, not release date.
     const sortBy = (opts.sortBy || 'popularity.desc').replace(
       'primary_release_date',
       'first_air_date',
     );
     const params: Record<string, string | number> = {
-      language: 'fr-FR',
+      language: lang.tmdbLocale,
       sort_by: sortBy,
       'vote_count.gte': 50,
     };
@@ -545,10 +593,11 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   async getPersonDetails(externalId: string): Promise<PersonDetails> {
+    const lang = await this.metaLang.resolve();
     const id = parseInt(externalId, 10);
     const { data } = await this.client.get<TmdbPersonDetailsResponse>(
       `/person/${id}`,
-      { params: { language: 'fr-FR' } },
+      { params: { language: lang.tmdbLocale } },
     );
     return {
       externalId: data.id,
@@ -565,10 +614,11 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   async getPersonCredits(externalId: string): Promise<PersonCombinedCredits> {
+    const lang = await this.metaLang.resolve();
     const id = parseInt(externalId, 10);
     const { data } = await this.client.get<TmdbPersonCombinedCreditsResponse>(
       `/person/${id}/combined_credits`,
-      { params: { language: 'fr-FR' } },
+      { params: { language: lang.tmdbLocale } },
     );
     return {
       cast: data.cast.map((c) => ({
@@ -603,6 +653,7 @@ export class TmdbProvider implements IMetadataProvider {
   async findByExternalId(
     source: string,
     id: string,
+    override?: MetadataLanguageOverride,
   ): Promise<ExternalIdResult | null> {
     const sourceMap: Record<string, string> = {
       imdb: 'imdb_id',
@@ -611,8 +662,9 @@ export class TmdbProvider implements IMetadataProvider {
     const externalSource = sourceMap[source];
     if (!externalSource) return null;
 
+    const lang = await this.metaLang.resolve(override);
     const { data } = await this.client.get<any>(`/find/${id}`, {
-      params: { external_source: externalSource, language: 'fr-FR' },
+      params: { external_source: externalSource, language: lang.tmdbLocale },
     });
 
     const movie = data.movie_results?.[0];
@@ -668,6 +720,7 @@ export class TmdbProvider implements IMetadataProvider {
       iso_3166_1: string;
       release_dates: { type: number; release_date: string }[];
     }[],
+    priority: string[],
   ): {
     inCinemas: string | null;
     digitalRelease: string | null;
@@ -675,20 +728,19 @@ export class TmdbProvider implements IMetadataProvider {
   } {
     const dates: Record<number, string> = {};
 
-    const priority = ['FR', 'US'];
     const sorted = [...results].sort((a, b) => {
       const ai = priority.indexOf(a.iso_3166_1);
       const bi = priority.indexOf(b.iso_3166_1);
       return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
     });
 
+    // Countries are in priority order, so the first one carrying a given
+    // release type wins; lower-priority countries only fill types the higher
+    // ones lack.
     for (const country of sorted) {
       for (const rd of country.release_dates) {
-        if (!rd.release_date) continue;
-        const d = rd.release_date.slice(0, 10);
-        if (!dates[rd.type] || d < dates[rd.type]) {
-          dates[rd.type] = d;
-        }
+        if (!rd.release_date || dates[rd.type]) continue;
+        dates[rd.type] = rd.release_date.slice(0, 10);
       }
     }
 
