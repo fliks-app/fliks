@@ -125,14 +125,13 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly discoverGenreEffect = effect(() => {
     this.state.tab();
     this.state.contentType();
+    this.state.externalEnabled();
     untracked(() => void this.ensureDiscoverGenres());
   });
 
-  /** Live-apply the discover panel filters to the local (backend) search while a
-   *  text query is active. Debounced; the run is untracked so its writes can't
-   *  feed back. Only the local search re-runs — external results re-filter
-   *  reactively via the state computeds (no TMDB refetch). Skips when the query
-   *  already reflects these filters (e.g. a content-type switch ran directly). */
+  /** Auto-apply the discover panel filters (debounced) — no explicit apply
+   *  button. The run is untracked so its writes can't feed back into the effect.
+   *  See applyFiltersNow for what each state does. */
   private readonly liveFilterEffect = effect(() => {
     this.state.discoverSelectedGenres();
     this.state.discoverSort();
@@ -140,14 +139,37 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.state.discoverYearMin();
     this.state.discoverYearMax();
     untracked(() => {
-      if (!this.state.hasQuery()) return;
-      const q = this.state.query().trim();
-      const ct = this.state.contentType();
-      if (this.filterSig(q, ct) === this.lastLocalSig) return;
+      if (this.state.tab() !== 'videos') return;
       if (this.filterDebounce) clearTimeout(this.filterDebounce);
-      this.filterDebounce = setTimeout(() => void this.runLocalSearch(q, ct), 300);
+      this.filterDebounce = setTimeout(() => void this.applyFiltersNow(), 300);
     });
   });
+
+  /** Apply the current filters to the right source:
+   *  - text query  → the local library query (external post-filters reactively);
+   *  - no query + filters + external on  → TMDB /discover;
+   *  - no query + filters + external off → filtered local library browse;
+   *  - no query + no filters → back to the discovery rows. */
+  private async applyFiltersNow(): Promise<void> {
+    if (this.state.tab() !== 'videos') return;
+    const ct = this.state.contentType();
+    if (this.state.hasQuery()) {
+      const q = this.state.query().trim();
+      if (this.filterSig(q, ct) !== this.lastLocalSig) await this.runLocalSearch(q, ct);
+      return;
+    }
+    if (!this.state.filtersEngaged()) {
+      this.state.discoverActive.set(false);
+      this.state.discoverResults.set([]);
+      return;
+    }
+    if (this.state.externalEnabled()) {
+      await this.applyDiscover();
+    } else {
+      this.state.discoverActive.set(true);
+      await this.runLocalSearch('', ct);
+    }
+  }
 
   readonly requestedTmdbIds = signal<Map<number, FliksRequestStatus>>(new Map());
 
@@ -258,6 +280,9 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       this.state.externalResults.set([]);
       this.state.localLoading.set(false);
       this.state.externalLoading.set(false);
+      // An engaged filter keeps browsing (discover / local) with no text query.
+      if (this.filterDebounce) clearTimeout(this.filterDebounce);
+      void this.applyFiltersNow();
     }
   }
 
@@ -285,21 +310,30 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   toggleExternal() {
     this.state.externalEnabled.update(v => !v);
-    if (this.state.externalEnabled()) {
-      // Re-run search to fetch external results
-      if (this.state.query().trim()) {
+    const on = this.state.externalEnabled();
+    if (!on) {
+      this.state.externalResults.set([]);
+      this.state.externalLoading.set(false);
+    }
+    if (this.state.query().trim()) {
+      if (on) {
         if (this.searchTimer) clearTimeout(this.searchTimer);
         this.runSearch();
       }
     } else {
-      this.state.externalResults.set([]);
-      this.state.externalLoading.set(false);
+      // Discover mode: switch the filter source (TMDB /discover ↔ local browse).
+      if (this.filterDebounce) clearTimeout(this.filterDebounce);
+      void this.applyFiltersNow();
     }
   }
 
   clearQuery() {
     this.state.clear();
     this.searchInput()?.nativeElement.focus();
+    // Clearing the query isn't tracked by liveFilterEffect, so re-apply any
+    // engaged filter (browse) instead of dropping to unfiltered discovery rows.
+    if (this.filterDebounce) clearTimeout(this.filterDebounce);
+    void this.applyFiltersNow();
   }
 
   avatar(name: string) {
@@ -339,7 +373,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       if (!external) {
         this.state.discoveryTrending.set([]);
         this.state.discoveryPopular.set([]);
-        this.state.discoverGenres.set([]);
+        // Keep discoverGenres — the filter panel's genre chips + name mapping
+        // are needed for the local-library browse when external search is off.
         this.state.discoverySuggestions.set([]);
         return;
       }
@@ -493,9 +528,11 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /** Run the TMDB /discover query from the current panel filters and switch
-   *  the content area to the results grid. */
+   *  the content area to the results grid. Stale responses (a later filter
+   *  change superseded this one) are dropped. */
   async applyDiscover() {
     const ct = this.state.contentType();
+    const sig = (this.lastDiscoverSig = this.filterSig('', ct));
     const opts: DiscoverFilters = {
       genreIds: [...this.state.discoverSelectedGenres()],
       sort: this.state.discoverSort(),
@@ -505,32 +542,35 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     };
     this.state.discoverActive.set(true);
     this.state.discoverLoading.set(true);
-    this.closeFilterSheet();
+    const fresh = () => this.lastDiscoverSig === sig;
     try {
       const rows =
         ct === 'series'
           ? await this.metadata.discoverTv(opts)
           : await this.metadata.discoverMovies(opts);
-      this.state.discoverResults.set(rows);
-      this.loadRequestedIds();
+      if (fresh()) {
+        this.state.discoverResults.set(rows);
+        this.loadRequestedIds();
+      }
     } catch {
-      this.state.discoverResults.set([]);
+      if (fresh()) this.state.discoverResults.set([]);
     } finally {
-      this.state.discoverLoading.set(false);
+      if (fresh()) this.state.discoverLoading.set(false);
     }
   }
+  private lastDiscoverSig = '';
 
   clearDiscover() {
     this.state.resetDiscover();
   }
 
-  /** Preload the discover grid on a genre id (resolved by the caller — a
-   *  profile taste chip — so it's language-proof). */
-  private async applyGenreFilter(genreId: number): Promise<void> {
+  /** Preload the discover panel on a genre id (resolved by the caller — a
+   *  profile taste chip — so it's language-proof). The filter auto-applies via
+   *  liveFilterEffect, routed to the right source by the external toggle. */
+  private applyGenreFilter(genreId: number): void {
     this.state.tab.set('videos');
     this.state.query.set('');
     this.state.discoverSelectedGenres.set(new Set([genreId]));
-    await this.applyDiscover();
   }
 
   /** Map the panel sort to the local sortBy/sortOrder, or null for the default
@@ -580,10 +620,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   openFilterSheet() {
     this.filterSheet()?.nativeElement.showModal();
-  }
-
-  closeFilterSheet() {
-    this.filterSheet()?.nativeElement.close();
   }
 
   /** Series toggle via the bulk endpoint; movies need a local file. */
@@ -645,7 +681,10 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
    *  (q + genres + year + rating + sort). Re-run standalone on a filter change. */
   private async runLocalSearch(q: string, ct: 'all' | 'movie' | 'series') {
     const sig = (this.lastLocalSig = this.filterSig(q, ct));
-    void this.ensureDiscoverGenres();
+    // Selected genres are mapped to names via the loaded genre list; wait for it
+    // when a genre is selected so the filter isn't silently dropped.
+    if (this.state.discoverSelectedGenres().size) await this.ensureDiscoverGenres();
+    else void this.ensureDiscoverGenres();
     const type: MediaType | undefined = ct === 'all' ? undefined : ct;
     const sort = this.mapPanelSort();
     const localParams: SearchParams = { q, limit: 20, sortBy: sort?.sortBy ?? 'title' };

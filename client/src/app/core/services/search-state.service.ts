@@ -54,6 +54,17 @@ export class SearchStateService {
   /** True once a discover query has been applied (rows → results grid). */
   readonly discoverActive = signal(false);
 
+  /** Any narrowing filter is set (genre / rating / year). Sort alone doesn't
+   *  count — it only reorders an already-filtered or queried set. Drives the
+   *  auto-apply and the single Clear button. */
+  readonly filtersEngaged = computed(
+    () =>
+      this.discoverSelectedGenres().size > 0 ||
+      this.discoverVoteMin() > 0 ||
+      this.discoverYearMin() != null ||
+      this.discoverYearMax() != null,
+  );
+
   /** Names of the selected discover genres (panel selects TMDB ids; results
    *  carry genre names). Used to post-filter external results by name. */
   readonly selectedGenreNames = computed(() => {
