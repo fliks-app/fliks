@@ -56,6 +56,7 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
       <div
         data-tv-modal
         [attr.data-tv-submenu]="submenu() ? '' : null"
+        (focusout)="onSubmenuFocusOut($event)"
         class="fixed z-[101] bg-base-200 rounded-box shadow-xl overflow-y-auto p-2 [scroll-padding:0.5rem] [scroll-behavior:smooth]"
         [style.top.px]="position().top"
         [style.bottom.px]="position().bottom"
@@ -72,7 +73,7 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
            projected content (and its bindings) is only instantiated while the
            sheet is on screen — safe to leave the outlet unguarded here. -->
       <app-bottom-sheet [open]="open()" (closed)="close()">
-        <div data-tv-modal [attr.data-tv-submenu]="submenu() ? '' : null" class="px-2 pb-2">
+        <div data-tv-modal [attr.data-tv-submenu]="submenu() ? '' : null" (focusout)="onSubmenuFocusOut($event)" class="px-2 pb-2">
           <ng-container *ngTemplateOutlet="content"></ng-container>
         </div>
       </app-bottom-sheet>
@@ -148,6 +149,18 @@ export class PopoverMenuComponent {
         }
       }
       queueMicrotask(() => {
+        // Record the opener on a submenu's content so spatial nav can send
+        // focus straight back to it on ArrowLeft (rect-nav would otherwise
+        // land on whatever sits behind the flyout).
+        if (this.submenu()) {
+          const content = this.host.nativeElement.querySelector<HTMLElement>(
+            '[data-tv-submenu]',
+          );
+          if (content) {
+            (content as unknown as { __tvOpener?: HTMLElement | null }).__tvOpener =
+              this.anchor();
+          }
+        }
         // Prefer the active item (caller marks it with `[autofocus]` or
         // `[aria-current]`) so the user lands on the current selection
         // instead of having to scroll through the list. Falls back to the
@@ -267,5 +280,15 @@ export class PopoverMenuComponent {
 
   close() {
     this.closed.emit();
+  }
+
+  /** A submenu flyout closes once focus leaves it (e.g. ArrowLeft back to the
+   *  opener), so re-activating the opener re-opens + re-focuses it instead of
+   *  finding it already open. Ignored while focus stays inside. */
+  protected onSubmenuFocusOut(e: FocusEvent): void {
+    if (!this.submenu()) return;
+    const next = e.relatedTarget as Node | null;
+    if (next && this.host.nativeElement.contains(next)) return;
+    this.close();
   }
 }

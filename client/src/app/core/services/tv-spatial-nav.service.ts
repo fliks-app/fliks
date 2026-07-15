@@ -393,18 +393,18 @@ export class TvSpatialNavService {
     // focus has settled inside it.
     const modals = this.openModals();
     // Flyout submenus (Corrections / Décalage) trap up/down inside themselves
-    // so focus can't leak into the parent menu or the page behind, while
-    // left/right fall back to the surrounding modal so the opener stays
-    // reachable. Everything else keeps the first-containing (outermost) scope.
+    // so focus can't leak into the parent menu or the page behind. Left jumps
+    // straight back to the opener the popover recorded (rect-nav would land on
+    // whatever sits behind the flyout); right has nowhere to go.
     const submenu = active?.closest<HTMLElement>('[data-tv-submenu]') ?? null;
+    if (submenu && (dir === 'left' || dir === 'right')) {
+      const opener = (submenu as unknown as { __tvOpener?: HTMLElement })
+        .__tvOpener;
+      return dir === 'left' && opener?.isConnected ? opener : null;
+    }
     let openModal: HTMLElement | null;
-    if (submenu && (dir === 'up' || dir === 'down')) {
+    if (submenu) {
       openModal = submenu;
-    } else if (submenu) {
-      openModal =
-        modals.find((m) => m !== submenu && active && m.contains(active)) ??
-        modals[0] ??
-        null;
     } else {
       openModal = modals.length
         ? modals.find((m) => active && m.contains(active)) ?? modals[0]
