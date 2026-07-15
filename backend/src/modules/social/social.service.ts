@@ -82,6 +82,7 @@ export interface RecommendationCard {
 /** A content recommendation received from another member. */
 export interface ReceivedRecommendation extends RecommendationCard {
   sender: { id: number; username: string; avatar: string | null };
+  liked: boolean;
 }
 
 /** A content recommendation the caller sent to another member. */
@@ -541,31 +542,26 @@ export class SocialService {
     const media = await this.mediaRepo.findOne({ where: { id: dto.mediaId } });
     if (!media) throw new NotFoundException(`Media #${dto.mediaId} not found`);
 
-    // Skip a duplicate that the recipient hasn't dismissed yet, so re-sending
-    // the same title doesn't stack identical cards on their home.
-    const existing = await this.recRepo.findOne({
-      where: {
-        sender: { id: me.id },
-        recipient: { id: dto.recipientId },
-        media: { id: dto.mediaId },
-        season: dto.seasonId ? { id: dto.seasonId } : IsNull(),
-        episode: dto.episodeId ? { id: dto.episodeId } : IsNull(),
-        dismissedAt: IsNull(),
-      },
+    // Re-recommending the same content replaces the previous card, so the fresh
+    // note resurfaces at the top of the feed instead of stacking or being suppressed.
+    await this.recRepo.delete({
+      sender: { id: me.id },
+      recipient: { id: dto.recipientId },
+      media: { id: dto.mediaId },
+      season: dto.seasonId ? { id: dto.seasonId } : IsNull(),
+      episode: dto.episodeId ? { id: dto.episodeId } : IsNull(),
     });
-    if (!existing) {
-      await this.recRepo.save(
-        this.recRepo.create({
-          sender: { id: me.id } as User,
-          recipient: { id: dto.recipientId } as User,
-          media: { id: dto.mediaId } as Media,
-          season: dto.seasonId ? ({ id: dto.seasonId } as Season) : null,
-          episode: dto.episodeId ? ({ id: dto.episodeId } as Episode) : null,
-          message: dto.message?.trim() || null,
-          dismissedAt: null,
-        }),
-      );
-    }
+    await this.recRepo.save(
+      this.recRepo.create({
+        sender: { id: me.id } as User,
+        recipient: { id: dto.recipientId } as User,
+        media: { id: dto.mediaId } as Media,
+        season: dto.seasonId ? ({ id: dto.seasonId } as Season) : null,
+        episode: dto.episodeId ? ({ id: dto.episodeId } as Episode) : null,
+        message: dto.message?.trim() || null,
+        dismissedAt: null,
+      }),
+    );
     this.events.emitToUser(dto.recipientId, {
       type: 'social.content_recommended',
       userId: me.id,
@@ -624,6 +620,10 @@ export class SocialService {
       order: { createdAt: 'DESC' },
       take: 60,
     });
+    const likedKeys = await this.likes.likedKeys(
+      me.id,
+      rows.map((r) => r.mediaId),
+    );
     const items: ReceivedRecommendation[] = [];
     for (const r of rows) {
       const card = this.contentCard(r, accessible);
@@ -635,6 +635,9 @@ export class SocialService {
           username: r.sender.username,
           avatar: r.sender.avatar ?? null,
         },
+        liked: likedKeys.has(
+          `${r.mediaId}:${r.seasonId ?? ''}:${r.episodeId ?? ''}`,
+        ),
       });
     }
     return items;

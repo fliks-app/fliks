@@ -72,6 +72,25 @@ export class LikesService {
     await qb.execute();
   }
 
+  /** Keys (`mediaId:seasonId:episodeId`) the user likes among `mediaIds`. */
+  async likedKeys(userId: number, mediaIds: number[]): Promise<Set<string>> {
+    if (!mediaIds.length) return new Set();
+    const rows: { mediaId: number; seasonId: number | null; episodeId: number | null }[] =
+      await this.likeRepo
+        .createQueryBuilder('l')
+        .select('l.mediaId', 'mediaId')
+        .addSelect('l.seasonId', 'seasonId')
+        .addSelect('l.episodeId', 'episodeId')
+        .where('l."userId" = :u AND l."mediaId" IN (:...mediaIds)', {
+          u: userId,
+          mediaIds,
+        })
+        .getRawMany();
+    return new Set(
+      rows.map((r) => `${r.mediaId}:${r.seasonId ?? ''}:${r.episodeId ?? ''}`),
+    );
+  }
+
   /** The caller's likes on one media (movie flag + liked season/episode ids). */
   async stateFor(user: User, mediaId: number): Promise<LikeState> {
     const rows: { seasonId: number | null; episodeId: number | null }[] =
