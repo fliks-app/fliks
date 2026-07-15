@@ -12,6 +12,7 @@ import {
   MediaDownloadProgress,
 } from '../../../core/services/download-progress.service';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
+import { ModalHeaderComponent } from '../modal-header';
 import {
   qbStateVariant,
   qbStateLabelKey,
@@ -51,7 +52,7 @@ interface SeasonRow {
 @Component({
   selector: 'app-download-detail-modal',
   standalone: true,
-  imports: [TranslateModule, ProgressBarComponent],
+  imports: [TranslateModule, ProgressBarComponent, ModalHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './download-detail-modal.html',
 })

@@ -11,13 +11,14 @@ import { TranslateModule } from '@ngx-translate/core';
 import { LucideDownload, LucideExternalLink, LucideRocket } from '@lucide/angular';
 import { AppUpdateService } from '../../../core/services/app-update.service';
 import { MarkdownPipe } from '../../pipes/markdown.pipe';
+import { ModalHeaderComponent } from '../modal-header';
 
 /** Changelog + install dialog for the topbar update button. Reads everything
  *  from AppUpdateService; the action adapts to the platform (in-app install on
  *  desktop, external release link on web/.deb). */
 @Component({
   selector: 'app-update-modal',
-  imports: [DatePipe, TranslateModule, MarkdownPipe, LucideDownload, LucideExternalLink, LucideRocket],
+  imports: [DatePipe, TranslateModule, MarkdownPipe, LucideDownload, LucideExternalLink, LucideRocket, ModalHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app-update-modal.html',
   styles: [

@@ -14,6 +14,7 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucidePlus } from '@lucide/angular';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
+import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import {
   Playlist,
   PlaylistsApiService,
@@ -23,7 +24,13 @@ import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 
 @Component({
   selector: 'app-playlists',
-  imports: [MosaicCardComponent, TranslateModule, FormsModule, LucidePlus],
+  imports: [
+    MosaicCardComponent,
+    TranslateModule,
+    FormsModule,
+    LucidePlus,
+    ModalHeaderComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './playlists.html',
 })

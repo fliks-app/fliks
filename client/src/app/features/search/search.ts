@@ -38,13 +38,14 @@ import { MediaCardComponent, CardBadge } from '../../shared/components/media-car
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { NgTemplateOutlet } from '@angular/common';
+import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 
 @Component({
   selector: 'app-search',
-  imports: [FormsModule, TranslateModule, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ResolveUrlPipe],
+  imports: [FormsModule, TranslateModule, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ResolveUrlPipe, ModalHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './search.html',
 })

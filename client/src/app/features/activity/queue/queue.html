@@ -202,13 +202,14 @@
 <!-- Link torrent to media modal -->
 <dialog #linkModal class="modal">
   <div class="modal-box max-w-lg">
-    <form method="dialog">
-      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
-    </form>
-    <h3 class="text-lg font-bold mb-1">{{ 'activity.link_media' | translate }}</h3>
-    @if (linkItem(); as li) {
-      <p class="text-sm text-base-content/60 mb-4 truncate" [title]="li.name">{{ li.name }}</p>
-    }
+    <app-modal-header>
+      <div class="min-w-0">
+        <h3 class="text-lg font-bold">{{ 'activity.link_media' | translate }}</h3>
+        @if (linkItem(); as li) {
+          <p class="text-sm text-base-content/60 truncate" [title]="li.name">{{ li.name }}</p>
+        }
+      </div>
+    </app-modal-header>
 
     <div class="flex gap-2 mb-4">
       <input
@@ -283,7 +284,7 @@
       </button>
     </div>
   </div>
-  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>
 
 <!-- Search a replacement release for a queue item -->
