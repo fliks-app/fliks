@@ -1,13 +1,11 @@
 <dialog #dialog class="modal">
   <div class="modal-box max-w-lg">
-    <form method="dialog">
-      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
-    </form>
-
-    <div class="flex items-center gap-2 mb-1">
-      <svg lucideRocket class="h-5 w-5 text-primary"></svg>
-      <h3 class="text-lg font-bold">{{ 'update.title' | translate }}</h3>
-    </div>
+    <app-modal-header>
+      <div class="flex items-center gap-2">
+        <svg lucideRocket class="h-5 w-5 text-primary"></svg>
+        <h3 class="text-lg font-bold">{{ 'update.title' | translate }}</h3>
+      </div>
+    </app-modal-header>
 
     @if (update.info(); as info) {
       <p class="text-sm opacity-70 mb-3">

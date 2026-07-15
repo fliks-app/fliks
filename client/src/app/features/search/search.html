@@ -259,10 +259,10 @@
 <!-- Mobile filter sheet — top-level so it opens during discovery and search alike -->
 <dialog #filterSheet class="modal">
   <div class="modal-box">
-    <form method="dialog"><button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" [attr.aria-label]="'common.close' | translate">✕</button></form>
+    <app-modal-header />
     <ng-container *ngTemplateOutlet="filterPanel" />
   </div>
-  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>
 
 <!-- Discover filter panel — projected into the desktop sidebar and the mobile sheet -->

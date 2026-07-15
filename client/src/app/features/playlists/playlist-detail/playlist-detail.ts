@@ -40,6 +40,7 @@ import {
 } from '@lucide/angular';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { BackgroundService } from '../../../core/services/background.service';
@@ -102,6 +103,7 @@ type PlaylistGroupedEntry =
     LucideBookmarkCheck,
     ToggleFieldComponent,
     DropdownMenuComponent,
+    ModalHeaderComponent,
     ResolveUrlPipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,

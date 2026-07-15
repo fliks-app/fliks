@@ -320,15 +320,7 @@
 
 <dialog #renameDialog class="modal">
   <div class="modal-box max-w-md">
-    <form method="dialog">
-      <button
-        class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
-        [attr.aria-label]="'common.close' | translate"
-      >
-        ✕
-      </button>
-    </form>
-    <h3 class="text-lg font-bold mb-4">{{ 'playlists.rename' | translate }}</h3>
+    <app-modal-header [title]="'playlists.rename' | translate" />
     <form class="flex flex-col gap-4" (ngSubmit)="confirmRename()">
       <input
         type="text"
@@ -355,20 +347,12 @@
       </div>
     </form>
   </div>
-  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>
 
 <dialog #settingsDialog class="modal">
   <div class="modal-box max-w-md">
-    <form method="dialog">
-      <button
-        class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
-        [attr.aria-label]="'common.close' | translate"
-      >
-        ✕
-      </button>
-    </form>
-    <h3 class="text-lg font-bold mb-4">{{ 'playlists.settings' | translate }}</h3>
+    <app-modal-header [title]="'playlists.settings' | translate" />
     <div class="flex flex-col gap-4">
       <div class="form-control">
         <label class="label pb-1">
@@ -422,16 +406,17 @@
       </button>
     </div>
   </div>
-  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>
 
 <dialog #membersDialog class="modal">
   <div class="modal-box max-w-md">
-    <form method="dialog">
-      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" [attr.aria-label]="'common.close' | translate">✕</button>
-    </form>
-    <h3 class="text-lg font-bold mb-1">{{ 'playlists.members' | translate }}</h3>
-    <p class="text-sm text-base-content/60 mb-4">{{ 'playlists.members_hint' | translate }}</p>
+    <app-modal-header>
+      <div>
+        <h3 class="text-lg font-bold">{{ 'playlists.members' | translate }}</h3>
+        <p class="text-sm text-base-content/60">{{ 'playlists.members_hint' | translate }}</p>
+      </div>
+    </app-modal-header>
 
     <!-- Current members -->
     <ul class="flex flex-col gap-1 mb-4">
@@ -483,5 +468,5 @@
       </ul>
     }
   </div>
-  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>

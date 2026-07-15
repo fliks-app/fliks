@@ -1,17 +1,19 @@
 <dialog #dialog class="modal">
   <div class="modal-box max-w-3xl flex flex-col max-h-[85vh] overflow-hidden">
-    <button type="button" class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
-      (click)="close()" [attr.aria-label]="'common.close' | translate">✕</button>
-
     <!-- Header (fixed) -->
     <div class="shrink-0">
-      <h2 class="text-lg font-bold">{{ 'settings.libraries.scan_title' | translate }}</h2>
+      <app-modal-header>
+        <div>
+          <h2 class="text-lg font-bold">{{ 'settings.libraries.scan_title' | translate }}</h2>
+          @if (!scanning() && !scanError()) {
+            <p class="text-sm text-base-content/60 mt-1">
+              {{ 'settings.libraries.scan_orphan_count' | translate: { count: orphanCount() } }}
+            </p>
+          }
+        </div>
+      </app-modal-header>
 
       @if (!scanning() && !scanError()) {
-        <p class="text-sm text-base-content/60 mt-1">
-          {{ 'settings.libraries.scan_orphan_count' | translate: { count: orphanCount() } }}
-        </p>
-
         @if (hasLinkable()) {
           <div class="flex items-center justify-between gap-3 mt-4">
             <label class="label cursor-pointer justify-start gap-3 max-w-max">

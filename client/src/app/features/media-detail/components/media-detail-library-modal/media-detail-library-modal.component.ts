@@ -11,10 +11,11 @@ import { TranslateModule } from '@ngx-translate/core';
 import { LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { METADATA_PROVIDER_OPTIONS_OVERRIDE } from '../../../../core/constants/metadata-providers';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
+import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 
 @Component({
   selector: 'app-media-detail-library-modal',
-  imports: [TranslateModule, FormsModule, TvSelectDirective],
+  imports: [TranslateModule, FormsModule, TvSelectDirective, ModalHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-library-modal.component.html',
 })

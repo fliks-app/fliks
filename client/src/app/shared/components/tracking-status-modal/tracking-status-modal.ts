@@ -20,6 +20,7 @@ import {
   TrackingEpisode,
   TrackingStatus,
 } from '../../../core/services/api/media.service';
+import { ModalHeaderComponent } from '../modal-header';
 
 export type TrackingScope =
   | { kind: 'movie' }
@@ -33,6 +34,7 @@ export type TrackingScope =
   imports: [
     NgTemplateOutlet,
     TranslateModule,
+    ModalHeaderComponent,
     LucideArrowRight,
     LucideCheck,
     LucideCircleAlert,

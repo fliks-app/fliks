@@ -22,6 +22,7 @@ import {
   ImportsApiService,
   OrphanGroup,
 } from '../../../../../core/services/api/imports-api.service';
+import { ModalHeaderComponent } from '../../../../../shared/components/modal-header';
 
 interface GroupVM {
   group: OrphanGroup;
@@ -47,6 +48,7 @@ interface GroupVM {
     ResolveUrlPipe,
     LucideChevronsDownUp,
     LucideChevronsUpDown,
+    ModalHeaderComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orphan-scan-modal.html',

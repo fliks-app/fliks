@@ -17,6 +17,7 @@ import {
 } from '../../../core/services/api/playlists-api.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { AutoDownloadService } from '../../../core/services/auto-download.service';
+import { ModalHeaderComponent } from '../modal-header';
 
 /**
  * Small dialog to add a media to an existing playlist or create a new one on
@@ -26,7 +27,13 @@ import { AutoDownloadService } from '../../../core/services/auto-download.servic
  */
 @Component({
   selector: 'app-add-to-playlist-modal',
-  imports: [FormsModule, TranslateModule, LucideListPlus, LucidePlus],
+  imports: [
+    FormsModule,
+    TranslateModule,
+    LucideListPlus,
+    LucidePlus,
+    ModalHeaderComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './add-to-playlist-modal.component.html',
 })

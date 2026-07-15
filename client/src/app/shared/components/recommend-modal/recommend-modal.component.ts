@@ -14,6 +14,7 @@ import {
   SocialUser,
 } from '../../../core/services/api/social-api.service';
 import { RecommendTarget } from '../../../core/services/recommend.service';
+import { ModalHeaderComponent } from '../modal-header';
 import { ToastService } from '../../../core/services/toast.service';
 
 /**
@@ -25,7 +26,7 @@ import { ToastService } from '../../../core/services/toast.service';
  */
 @Component({
   selector: 'app-recommend-modal',
-  imports: [FormsModule, TranslateModule, LucideSend],
+  imports: [FormsModule, TranslateModule, LucideSend, ModalHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './recommend-modal.component.html',
 })

@@ -41,6 +41,7 @@ import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu'
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { ReleasesModalComponent } from '../../media-detail/components/releases-modal/releases-modal.component';
 import { ProgressBarComponent } from '../../../shared/components/progress-bar/progress-bar.component';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import {
   ProgressVariant,
   formatBytes as fmtBytes,
@@ -50,7 +51,7 @@ import {
 
 @Component({
   selector: 'app-activity-queue',
-  imports: [TranslateModule, DecimalPipe, NgClass, RouterLink, FormsModule, ResolveUrlPipe, DropdownMenuComponent, PaginationComponent, ReleasesModalComponent, ProgressBarComponent, LucideRotateCcw, LucideLink2, LucideEllipsisVertical, LucideTriangleAlert, LucideDownload, LucideSearch, LucideTrash2, LucideBan],
+  imports: [TranslateModule, DecimalPipe, NgClass, RouterLink, FormsModule, ResolveUrlPipe, DropdownMenuComponent, PaginationComponent, ReleasesModalComponent, ProgressBarComponent, ModalHeaderComponent, LucideRotateCcw, LucideLink2, LucideEllipsisVertical, LucideTriangleAlert, LucideDownload, LucideSearch, LucideTrash2, LucideBan],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './queue.html',
 })
