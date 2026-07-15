@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
+import sharp from 'sharp';
 
 export type ImageType =
   | 'media'
@@ -22,10 +23,9 @@ export type MediaImageVariant =
 export type ImageSize = 'thumb' | 'medium' | 'full';
 
 /**
- * Per-(type, variant) mapping from our logical size to TMDB's native size
- * segment (https://image.tmdb.org/t/p/{size}/...). Only TMDB URLs benefit
- * from multi-size pre-fetching — non-TMDB sources fall back to a single
- * `full` download.
+ * Per-(type, variant) mapping from our logical size to a width token. `full`
+ * fetches TMDB's `original`; the `w<px>` tokens set the pixel width each
+ * smaller variant is resized to locally (provider-agnostic).
  *
  * Sizes are chosen for typical usage:
  * - thumb : grid tiles (home, library, search)
@@ -66,16 +66,22 @@ function tmdbUrlAtSize(url: string, tmdbSize: string): string | null {
   return `${m[1]}${tmdbSize}${m[2]}`;
 }
 
+/** Target pixel width for a size token (`w500` → 500); null for `original`. */
+function sizeTokenWidth(token: string): number | null {
+  const m = /^w(\d+)$/.exec(token);
+  return m ? Number(m[1]) : null;
+}
+
 @Injectable()
 export class ImageService {
   private readonly logger = new Logger(ImageService.name);
   private readonly baseDir = path.join(process.cwd(), 'images');
 
   /**
-   * Download an image from a remote URL and store it locally. For TMDB URLs,
-   * pre-fetches all configured sizes (thumb / medium / full) so the frontend
-   * can request a smaller variant via `?size=thumb` without going back to
-   * TMDB. Non-TMDB URLs fall back to a single `full` download.
+   * Download an image from a remote URL and store it locally, generating the
+   * configured sizes (thumb / medium / full) by resizing the downloaded full
+   * — so every provider yields the same size pipeline the frontend requests via
+   * `?size=thumb`.
    *
    * Returns the local API path (e.g. `/api/images/media/42/poster`) — same
    * path regardless of how many sizes were stored. Returns null if the
@@ -95,51 +101,52 @@ export class ImageService {
     const fullDest = this.getDiskPath(type, id, variant, 'full');
     fs.mkdirSync(path.dirname(fullDest), { recursive: true });
 
+    let buffer: Buffer;
     try {
       const fullUrl =
         isTmdb && sizes.full
           ? (tmdbUrlAtSize(remoteUrl, sizes.full) ?? remoteUrl)
           : remoteUrl;
-      const res = await axios.get(fullUrl, {
+      const res = await axios.get<ArrayBuffer>(fullUrl, {
         responseType: 'arraybuffer',
         timeout: 15000,
       });
-      fs.writeFileSync(fullDest, res.data);
+      buffer = Buffer.from(res.data);
+      fs.writeFileSync(fullDest, buffer);
     } catch (err) {
       this.logger.warn(`Failed to download image ${remoteUrl}: ${err.message}`);
       return null;
     }
 
-    if (isTmdb) {
-      // Download the smaller variants in parallel — they're all independent
-      // GETs on the TMDB CDN and each adds non-trivial latency. Best-effort:
-      // a failure on one variant doesn't fail the whole call (the `full`
-      // file is already on disk and the controller falls back to it).
-      const variantJobs = (Object.entries(sizes) as [ImageSize, string][])
-        .filter(([size]) => size !== 'full')
-        .map(([size, tmdbSize]) => ({
-          size,
-          url: tmdbUrlAtSize(remoteUrl, tmdbSize),
-        }))
-        .filter((job): job is { size: ImageSize; url: string } => !!job.url);
-
-      await Promise.all(
-        variantJobs.map(async ({ size, url }) => {
-          try {
-            const sizedDest = this.getDiskPath(type, id, variant, size);
-            const res = await axios.get(url, {
-              responseType: 'arraybuffer',
-              timeout: 15000,
-            });
-            fs.writeFileSync(sizedDest, res.data);
-          } catch (err) {
-            this.logger.warn(
-              `Failed to download ${size} variant ${url}: ${err.message}`,
-            );
-          }
-        }),
+    // Derive the smaller variants by resizing the downloaded full locally, so
+    // every provider yields the full size pipeline — not just TMDB, whose CDN
+    // exposes per-size URLs. Best-effort per variant: the full is already saved.
+    const asPng = variant === 'logo';
+    const targets = (Object.entries(sizes) as [ImageSize, string][])
+      .map(([size, token]) => ({ size, width: sizeTokenWidth(token) }))
+      .filter(
+        (t): t is { size: ImageSize; width: number } =>
+          t.size !== 'full' && t.width != null,
       );
-    }
+
+    await Promise.all(
+      targets.map(async ({ size, width }) => {
+        try {
+          const resized = sharp(buffer).resize({
+            width,
+            withoutEnlargement: true,
+          });
+          const out = await (
+            asPng ? resized.png() : resized.jpeg({ quality: 90 })
+          ).toBuffer();
+          fs.writeFileSync(this.getDiskPath(type, id, variant, size), out);
+        } catch (err) {
+          this.logger.warn(
+            `Failed to resize ${size} variant for ${type}/${id}: ${err.message}`,
+          );
+        }
+      }),
+    );
 
     return this.getApiPath(type, id, variant);
   }
