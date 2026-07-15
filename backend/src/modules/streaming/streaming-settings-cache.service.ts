@@ -58,12 +58,16 @@ export class StreamingSettingsCache implements OnModuleInit {
 
   private cache: StreamingSettings | null = null;
   private inflight: Promise<StreamingSettings> | null = null;
+  /** Bumped on every change so an in-flight load that was invalidated mid-flight
+   *  doesn't commit its now-stale value. */
+  private epoch = 0;
 
   onModuleInit(): void {
     this.settings.addChangeListener((key) => {
       if (key.startsWith('streaming_')) {
         this.cache = null;
         this.inflight = null;
+        this.epoch++;
       }
     });
   }
@@ -71,11 +75,18 @@ export class StreamingSettingsCache implements OnModuleInit {
   async get(): Promise<StreamingSettings> {
     if (this.cache) return this.cache;
     if (this.inflight) return this.inflight;
-    this.inflight = this.load().then((s) => {
-      this.cache = s;
-      this.inflight = null;
-      return s;
-    });
+    const epoch = this.epoch;
+    this.inflight = (async () => {
+      try {
+        const s = await this.load();
+        if (this.epoch === epoch) this.cache = s;
+        return s;
+      } finally {
+        // Clear so a rejected load can be retried, and so a fresh read after an
+        // invalidation isn't handed this superseded promise.
+        if (this.epoch === epoch) this.inflight = null;
+      }
+    })();
     return this.inflight;
   }
 
