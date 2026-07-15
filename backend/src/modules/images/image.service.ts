@@ -139,6 +139,13 @@ export class ImageService {
           }
         }),
       );
+    } else {
+      // Non-TMDB sources yield only `full`; drop stale sized variants from a
+      // prior TMDB download so the controller falls back to the fresh `full`.
+      for (const size of Object.keys(sizes) as ImageSize[]) {
+        if (size === 'full') continue;
+        fs.rmSync(this.getDiskPath(type, id, variant, size), { force: true });
+      }
     }
 
     return this.getApiPath(type, id, variant);
