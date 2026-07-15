@@ -71,6 +71,7 @@ export interface TmdbMovieListItem {
   release_date?: string;
   poster_path?: string | null;
   vote_average?: number;
+  genre_ids?: number[];
 }
 
 export interface TmdbTvListItem {
@@ -81,6 +82,7 @@ export interface TmdbTvListItem {
   first_air_date?: string;
   poster_path?: string | null;
   vote_average?: number;
+  genre_ids?: number[];
 }
 
 export interface TmdbPaginated<T> {

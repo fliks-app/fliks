@@ -16,7 +16,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
-import { MediaService, Media } from '../../core/services/api/media.service';
+import { MediaService, Media, SearchParams } from '../../core/services/api/media.service';
 import { StreamingApiService, RecommendationItem } from '../../core/services/api/streaming-api.service';
 import {
   MetadataService,
@@ -119,10 +119,43 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   });
 
+  /** Keep the discover genre list populated for the active content type so the
+   *  filter panel's genre chips render during a text search too. Movie genres
+   *  cover the "all" and "movie" tabs; series uses the TV list. */
+  private readonly discoverGenreEffect = effect(() => {
+    this.state.tab();
+    this.state.contentType();
+    untracked(() => void this.ensureDiscoverGenres());
+  });
+
+  /** Live-apply the discover panel filters to the local (backend) search while a
+   *  text query is active. Debounced; the run is untracked so its writes can't
+   *  feed back. Only the local search re-runs — external results re-filter
+   *  reactively via the state computeds (no TMDB refetch). Skips when the query
+   *  already reflects these filters (e.g. a content-type switch ran directly). */
+  private readonly liveFilterEffect = effect(() => {
+    this.state.discoverSelectedGenres();
+    this.state.discoverSort();
+    this.state.discoverVoteMin();
+    this.state.discoverYearMin();
+    this.state.discoverYearMax();
+    untracked(() => {
+      if (!this.state.hasQuery()) return;
+      const q = this.state.query().trim();
+      const ct = this.state.contentType();
+      if (this.filterSig(q, ct) === this.lastLocalSig) return;
+      if (this.filterDebounce) clearTimeout(this.filterDebounce);
+      this.filterDebounce = setTimeout(() => void this.runLocalSearch(q, ct), 300);
+    });
+  });
+
   readonly requestedTmdbIds = signal<Map<number, FliksRequestStatus>>(new Map());
 
   private static readonly SCROLL_KEY = 'search';
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
+  private filterDebounce: ReturnType<typeof setTimeout> | null = null;
+  /** Movie/series bucket the discover genre list was last loaded for. */
+  private lastGenreType = '';
   private attachedSub?: Subscription;
   private detachedSub?: Subscription;
 
@@ -155,6 +188,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     if (this.searchTimer) clearTimeout(this.searchTimer);
+    if (this.filterDebounce) clearTimeout(this.filterDebounce);
     this.scrollMemory.deactivate();
     this.attachedSub?.unsubscribe();
     this.detachedSub?.unsubscribe();
@@ -499,6 +533,51 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     await this.applyDiscover();
   }
 
+  /** Map the panel sort to the local sortBy/sortOrder, or null for the default
+   *  (keeps the title relevance order — the panel default has no local column). */
+  private mapPanelSort(): { sortBy: string; sortOrder: 'ASC' | 'DESC' } | null {
+    const s = this.state.discoverSort();
+    if (s === 'primary_release_date.desc') return { sortBy: 'year', sortOrder: 'DESC' };
+    if (s === 'vote_average.desc') return { sortBy: 'rating', sortOrder: 'DESC' };
+    return null;
+  }
+
+  /** Signature of the inputs that shape the local library query, so a re-run
+   *  can be skipped when nothing changed and a stale revalidation ignored. */
+  private filterSig(q: string, ct: string): string {
+    return JSON.stringify({
+      q,
+      ct,
+      g: [...this.state.discoverSelectedGenres()].sort((a, b) => a - b),
+      ymin: this.state.discoverYearMin(),
+      ymax: this.state.discoverYearMax(),
+      vmin: this.state.discoverVoteMin(),
+      sort: this.state.discoverSort(),
+    });
+  }
+  private lastLocalSig = '';
+
+  /** Load the discover genre list for the active content type when missing, so
+   *  the filter panel's genre chips render during a text search. Fails soft. */
+  private async ensureDiscoverGenres(): Promise<void> {
+    if (this.state.tab() !== 'videos') return;
+    const type = this.state.contentType() === 'series' ? 'series' : 'movie';
+    if (type === this.lastGenreType && this.state.discoverGenres().length) return;
+    this.lastGenreType = type;
+    const stale = () =>
+      this.state.tab() !== 'videos' ||
+      (this.state.contentType() === 'series' ? 'series' : 'movie') !== type;
+    try {
+      const genres =
+        type === 'series'
+          ? await this.metadata.getTvGenres()
+          : await this.metadata.getMovieGenres();
+      if (!stale()) this.state.discoverGenres.set(genres);
+    } catch {
+      if (!stale()) this.state.discoverGenres.set([]);
+    }
+  }
+
   openFilterSheet() {
     this.filterSheet()?.nativeElement.showModal();
   }
@@ -558,35 +637,52 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!q) return;
 
     const ct = this.state.contentType();
-    const type: MediaType | undefined = ct === 'all' ? undefined : ct;
+    await this.runLocalSearch(q, ct);
+    if (this.state.externalEnabled()) await this.runExternalSearch(q, ct);
+  }
 
-    // Search local library first
+  /** Local library query with the discover panel filters pushed to the backend
+   *  (q + genres + year + rating + sort). Re-run standalone on a filter change. */
+  private async runLocalSearch(q: string, ct: 'all' | 'movie' | 'series') {
+    const sig = (this.lastLocalSig = this.filterSig(q, ct));
+    void this.ensureDiscoverGenres();
+    const type: MediaType | undefined = ct === 'all' ? undefined : ct;
+    const sort = this.mapPanelSort();
+    const localParams: SearchParams = { q, limit: 20, sortBy: sort?.sortBy ?? 'title' };
+    if (sort) localParams.sortOrder = sort.sortOrder;
+    if (type) localParams.type = type;
+    const genres = this.state.selectedGenreNames();
+    if (genres.length) localParams.genres = genres;
+    const yearMin = this.state.discoverYearMin();
+    if (yearMin != null) localParams.yearMin = yearMin;
+    const yearMax = this.state.discoverYearMax();
+    if (yearMax != null) localParams.yearMax = yearMax;
+    const voteMin = this.state.discoverVoteMin();
+    if (voteMin) localParams.voteMin = voteMin;
+
+    const fresh = () => this.filterSig(this.state.query().trim(), this.state.contentType()) === sig;
     this.state.localLoading.set(true);
-    const localParams = { q, type, limit: 20, sortBy: 'title' } as const;
     try {
       const res = await this.mediaService.getAll(localParams);
-      this.state.localResults.set(res.data);
+      if (fresh()) this.state.localResults.set(res.data);
     } catch {
-      this.state.localResults.set([]);
+      if (fresh()) this.state.localResults.set([]);
     } finally {
       this.state.localLoading.set(false);
     }
     queueMicrotask(() => {
-      // Revalidate: cached result paints instantly, then catch up to fresh
-      // matches (a media imported since the last identical query lands here).
-      if (this.state.query().trim() !== q || this.state.contentType() !== ct) return;
+      if (!fresh()) return;
       void this.mediaService
         .getAll(localParams, { force: true })
-        .then((fresh) => {
-          if (this.state.query().trim() === q && this.state.contentType() === ct) {
-            this.state.localResults.set(fresh.data);
-          }
-        })
-        .catch(() => { /* keep cached results */ });
+        .then((data) => { if (fresh()) this.state.localResults.set(data.data); })
+        .catch(() => {});
     });
+  }
 
-    // Then search external providers (if enabled)
-    if (!this.state.externalEnabled()) return;
+  /** External provider (TMDB) title search. Not re-run on filter changes — the
+   *  state computeds re-filter the fetched rows client-side. */
+  private async runExternalSearch(q: string, ct: 'all' | 'movie' | 'series') {
+    const fresh = () => this.state.query().trim() === q && this.state.contentType() === ct;
     this.state.externalLoading.set(true);
     try {
       let rows: MetadataSearchResult[];
@@ -601,10 +697,12 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
         ]);
         rows = [...movies, ...tv].sort((a, b) => b.rating - a.rating);
       }
-      this.state.externalResults.set(rows);
-      this.loadRequestedIds();
+      if (fresh()) {
+        this.state.externalResults.set(rows);
+        this.loadRequestedIds();
+      }
     } catch {
-      this.state.externalResults.set([]);
+      if (fresh()) this.state.externalResults.set([]);
     } finally {
       this.state.externalLoading.set(false);
     }

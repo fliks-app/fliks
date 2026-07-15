@@ -16,6 +16,7 @@ export interface MetadataSearchResult {
   posterUrl: string | null;
   rating: number;
   genres: string[];
+  genreIds?: number[];
   mediaType: MediaType;
   existingMediaId: number | null;
   existingMediaType: MediaType | null;

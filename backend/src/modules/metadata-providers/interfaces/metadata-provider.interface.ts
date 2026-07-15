@@ -10,6 +10,8 @@ export interface MetadataSearchResult {
   posterUrl: string | null;
   rating: number;
   genres: string[];
+  /** TMDB genre ids — search-list results carry ids, not names. */
+  genreIds?: number[];
   mediaType: 'movie' | 'series';
 }
 

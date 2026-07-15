@@ -1018,9 +1018,23 @@ export class MediaQueryService {
     if (query.year) {
       qb.andWhere('media.year = :year', { year: query.year });
     }
+    if (query.yearMin !== undefined) {
+      qb.andWhere('media.year >= :yearMin', { yearMin: query.yearMin });
+    }
+    if (query.yearMax !== undefined) {
+      qb.andWhere('media.year <= :yearMax', { yearMax: query.yearMax });
+    }
+    if (query.voteMin !== undefined) {
+      qb.andWhere('media.rating >= :voteMin', { voteMin: query.voteMin });
+    }
     if (query.genre) {
       qb.andWhere('media.genres @> :genre', {
         genre: JSON.stringify([query.genre]),
+      });
+    }
+    if (query.genres && query.genres.length > 0) {
+      qb.andWhere('media.genres @> :genres', {
+        genres: JSON.stringify(query.genres),
       });
     }
     if (query.collectionId) {

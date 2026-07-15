@@ -143,15 +143,6 @@
           }
         </div>
       </div>
-
-      <!-- Mobile filter sheet -->
-      <dialog #filterSheet class="modal">
-        <div class="modal-box">
-          <form method="dialog"><button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" [attr.aria-label]="'common.close' | translate">✕</button></form>
-          <ng-container *ngTemplateOutlet="filterPanel" />
-        </div>
-        <form method="dialog" class="modal-backdrop"><button>close</button></form>
-      </dialog>
     } @else {
       <!-- External search off: local suggestions only -->
       @if (state.discoveryRecommendations().length) {
@@ -165,75 +156,96 @@
       }
     }
   } @else {
-    <!-- Local library results -->
-    @if (state.localLoading()) {
-      <div class="flex justify-center py-8">
-        <span class="loading loading-spinner loading-lg"></span>
-      </div>
-    } @else if (state.localResults().length > 0 || state.ownedExternalResults().length > 0) {
-      <div>
-        <h2 class="text-lg font-semibold mb-3">{{ 'search.section_library' | translate }}</h2>
-        <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
-          @for (media of state.localResults(); track media.id) {
-            <app-media-card
-              [media]="media"
-              [status]="media.watched ? 'watched' : null"
-              [progressPercent]="media.watched ? 0 : (media.progressPercent ?? 0)"
-              [interactiveWatched]="canMarkMediaWatched(media)"
-              (watchedToggled)="toggleMediaWatched(media, $event)"
-            />
-          }
-          <!-- Owned titles the local title search missed but the provider
-               matched via other metadata (franchise, keywords…). -->
-          @for (row of state.ownedExternalResults(); track row.mediaType + ':' + row.tmdbId) {
-            <app-media-card
-              [imageUrl]="row.posterUrl"
-              [title]="row.title"
-              [subtitle]="'' + (row.year ?? '')"
-              [rating]="row.rating"
-              (clicked)="onExternalCardClick(row)"
-            />
-          }
-        </div>
-      </div>
-    }
+    <!-- Text-search results: filter sidebar (desktop) + results column -->
+    <div class="flex gap-6">
+      <aside class="hidden lg:block w-60 shrink-0">
+        <ng-container *ngTemplateOutlet="filterPanel" />
+      </aside>
+      <div class="flex-1 min-w-0 flex flex-col gap-4">
+        <button type="button" class="lg:hidden btn btn-sm btn-outline gap-2 self-start" (click)="openFilterSheet()">
+          <svg lucideSettings class="h-4 w-4"></svg>{{ 'search.filters' | translate }}
+        </button>
 
-    <!-- External provider results -->
-    @if (state.externalLoading()) {
-      <div class="flex justify-center py-8">
-        <span class="loading loading-spinner loading-lg"></span>
-      </div>
-    } @else if (state.filteredExternalResults().length > 0) {
-      <div>
-        <h2 class="text-lg font-semibold mb-3">{{ 'search.section_discover' | translate }}</h2>
-        <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
-          @for (row of state.filteredExternalResults(); track row.tmdbId) {
-            <app-media-card
-              [imageUrl]="row.posterUrl"
-              [title]="row.title"
-              [subtitle]="'' + (row.year ?? '')"
-              [rating]="row.rating"
-              [badge]="cardStatus(row)"
-              (clicked)="onExternalCardClick(row)"
-            />
-          }
-        </div>
-      </div>
-    }
+        <!-- Local library results -->
+        @if (state.localLoading()) {
+          <div class="flex justify-center py-8">
+            <span class="loading loading-spinner loading-lg"></span>
+          </div>
+        } @else if (state.localResults().length > 0 || state.ownedExternalResults().length > 0) {
+          <div>
+            <h2 class="text-lg font-semibold mb-3">{{ 'search.section_library' | translate }}</h2>
+            <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
+              @for (media of state.localResults(); track media.id) {
+                <app-media-card
+                  [media]="media"
+                  [status]="media.watched ? 'watched' : null"
+                  [progressPercent]="media.watched ? 0 : (media.progressPercent ?? 0)"
+                  [interactiveWatched]="canMarkMediaWatched(media)"
+                  (watchedToggled)="toggleMediaWatched(media, $event)"
+                />
+              }
+              <!-- Owned titles the local title search missed but the provider
+                   matched via other metadata (franchise, keywords…). -->
+              @for (row of state.ownedExternalResults(); track row.mediaType + ':' + row.tmdbId) {
+                <app-media-card
+                  [imageUrl]="row.posterUrl"
+                  [title]="row.title"
+                  [subtitle]="'' + (row.year ?? '')"
+                  [rating]="row.rating"
+                  (clicked)="onExternalCardClick(row)"
+                />
+              }
+            </div>
+          </div>
+        }
 
-    <!-- No results at all -->
-    @if (!state.localLoading() && !state.externalLoading() && state.localResults().length === 0 && state.filteredExternalResults().length === 0 && state.ownedExternalResults().length === 0) {
-      <div class="text-center py-8">
-        <p class="text-base-content/50">{{ 'search.no_results' | translate }}</p>
-        @if (!state.externalEnabled()) {
-          <button class="btn btn-primary btn-sm mt-4" (click)="toggleExternal()">
-            {{ 'search.enable_external' | translate }}
-          </button>
+        <!-- External provider results -->
+        @if (state.externalLoading()) {
+          <div class="flex justify-center py-8">
+            <span class="loading loading-spinner loading-lg"></span>
+          </div>
+        } @else if (state.filteredExternalResults().length > 0) {
+          <div>
+            <h2 class="text-lg font-semibold mb-3">{{ 'search.section_discover' | translate }}</h2>
+            <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
+              @for (row of state.filteredExternalResults(); track row.tmdbId) {
+                <app-media-card
+                  [imageUrl]="row.posterUrl"
+                  [title]="row.title"
+                  [subtitle]="'' + (row.year ?? '')"
+                  [rating]="row.rating"
+                  [badge]="cardStatus(row)"
+                  (clicked)="onExternalCardClick(row)"
+                />
+              }
+            </div>
+          </div>
+        }
+
+        <!-- No results at all -->
+        @if (!state.localLoading() && !state.externalLoading() && state.localResults().length === 0 && state.filteredExternalResults().length === 0 && state.ownedExternalResults().length === 0) {
+          <div class="text-center py-8">
+            <p class="text-base-content/50">{{ 'search.no_results' | translate }}</p>
+            @if (!state.externalEnabled()) {
+              <button class="btn btn-primary btn-sm mt-4" (click)="toggleExternal()">
+                {{ 'search.enable_external' | translate }}
+              </button>
+            }
+          </div>
         }
       </div>
-    }
+    </div>
   }
 </div>
+
+<!-- Mobile filter sheet — top-level so it opens during discovery and search alike -->
+<dialog #filterSheet class="modal">
+  <div class="modal-box">
+    <form method="dialog"><button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" [attr.aria-label]="'common.close' | translate">✕</button></form>
+    <ng-container *ngTemplateOutlet="filterPanel" />
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
 
 <!-- Discover filter panel — projected into the desktop sidebar and the mobile sheet -->
 <ng-template #filterPanel>
@@ -304,11 +316,13 @@
       </div>
     </div>
 
-    <div class="flex gap-2 pt-1">
-      <button type="button" class="btn btn-primary btn-sm flex-1" (click)="applyDiscover()">{{ 'search.apply' | translate }}</button>
-      @if (state.discoverActive() || state.discoverSelectedGenres().size) {
-        <button type="button" class="btn btn-ghost btn-sm" (click)="clearDiscover()">{{ 'search.clear' | translate }}</button>
-      }
-    </div>
+    @if (!state.hasQuery()) {
+      <div class="flex gap-2 pt-1">
+        <button type="button" class="btn btn-primary btn-sm flex-1" (click)="applyDiscover()">{{ 'search.apply' | translate }}</button>
+        @if (state.discoverActive() || state.discoverSelectedGenres().size) {
+          <button type="button" class="btn btn-ghost btn-sm" (click)="clearDiscover()">{{ 'search.clear' | translate }}</button>
+        }
+      </div>
+    }
   </div>
 </ng-template>

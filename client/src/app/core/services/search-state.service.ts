@@ -54,6 +54,15 @@ export class SearchStateService {
   /** True once a discover query has been applied (rows → results grid). */
   readonly discoverActive = signal(false);
 
+  /** Names of the selected discover genres (panel selects TMDB ids; results
+   *  carry genre names). Used to post-filter external results by name. */
+  readonly selectedGenreNames = computed(() => {
+    const selected = this.discoverSelectedGenres();
+    return this.discoverGenres()
+      .filter((g) => selected.has(g.id))
+      .map((g) => g.name);
+  });
+
   /** Reset the discover panel filters + results. */
   resetDiscover(): void {
     this.discoverSelectedGenres.set(new Set());
@@ -88,12 +97,14 @@ export class SearchStateService {
   }
 
   /** External results for the "add to library" section: only titles NOT already
-   *  in the library (owned ones move to {@link ownedExternalResults}). */
+   *  in the library (owned ones move to {@link ownedExternalResults}). Narrowed
+   *  by the discover panel filters (genre/year/rating) while a query is active. */
   readonly filteredExternalResults = computed(() => {
     const localTmdbIds = new Set(this.localResults().map(m => m.tmdbId));
-    return this.externalResults().filter(
+    const rows = this.externalResults().filter(
       (r) => r.existingMediaId == null && !localTmdbIds.has(r.tmdbId),
     );
+    return this.applyPanelFilters(rows);
   });
 
   /** Library titles the provider matched by other metadata (franchise, keywords,
@@ -102,10 +113,46 @@ export class SearchStateService {
    *  library section so owned matches show at the top. Deduped against local. */
   readonly ownedExternalResults = computed(() => {
     const localTmdbIds = new Set(this.localResults().map(m => m.tmdbId));
-    return this.externalResults().filter(
+    const rows = this.externalResults().filter(
       (r) => r.existingMediaId != null && !localTmdbIds.has(r.tmdbId),
     );
+    return this.applyPanelFilters(rows);
   });
+
+  /** Narrow external rows by the discover panel filters, then sort only when the
+   *  user picked a rating/recency sort (the default keeps provider relevance).
+   *  Genre matches by TMDB id (search results carry ids, not names) with a name
+   *  fallback for providers that return names. No-op when no filter is engaged. */
+  private applyPanelFilters(
+    rows: MetadataSearchResult[],
+  ): MetadataSearchResult[] {
+    const ids = [...this.discoverSelectedGenres()];
+    const names = this.selectedGenreNames();
+    const voteMin = this.discoverVoteMin();
+    const yearMin = this.discoverYearMin();
+    const yearMax = this.discoverYearMax();
+
+    const filtered = rows.filter((row) => {
+      if (ids.length) {
+        const byId = !!row.genreIds && ids.every((id) => row.genreIds!.includes(id));
+        const byName = names.length > 0 && names.every((n) => row.genres.includes(n));
+        if (!byId && !byName) return false;
+      }
+      if (row.rating < voteMin) return false;
+      if (yearMin != null && (row.year == null || row.year < yearMin)) return false;
+      if (yearMax != null && (row.year == null || row.year > yearMax)) return false;
+      return true;
+    });
+
+    const sort = this.discoverSort();
+    if (sort === 'primary_release_date.desc') {
+      return [...filtered].sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
+    }
+    if (sort === 'vote_average.desc') {
+      return [...filtered].sort((a, b) => b.rating - a.rating);
+    }
+    return filtered;
+  }
 
   clear() {
     this.query.set('');
