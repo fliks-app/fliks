@@ -125,6 +125,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly discoverGenreEffect = effect(() => {
     this.state.tab();
     this.state.contentType();
+    this.state.externalEnabled();
     untracked(() => void this.ensureDiscoverGenres());
   });
 
@@ -280,6 +281,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       this.state.localLoading.set(false);
       this.state.externalLoading.set(false);
       // An engaged filter keeps browsing (discover / local) with no text query.
+      if (this.filterDebounce) clearTimeout(this.filterDebounce);
       void this.applyFiltersNow();
     }
   }
@@ -327,6 +329,10 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   clearQuery() {
     this.state.clear();
     this.searchInput()?.nativeElement.focus();
+    // Clearing the query isn't tracked by liveFilterEffect, so re-apply any
+    // engaged filter (browse) instead of dropping to unfiltered discovery rows.
+    if (this.filterDebounce) clearTimeout(this.filterDebounce);
+    void this.applyFiltersNow();
   }
 
   avatar(name: string) {
@@ -366,7 +372,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       if (!external) {
         this.state.discoveryTrending.set([]);
         this.state.discoveryPopular.set([]);
-        this.state.discoverGenres.set([]);
+        // Keep discoverGenres — the filter panel's genre chips + name mapping
+        // are needed for the local-library browse when external search is off.
         this.state.discoverySuggestions.set([]);
         return;
       }
@@ -520,9 +527,11 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /** Run the TMDB /discover query from the current panel filters and switch
-   *  the content area to the results grid. */
+   *  the content area to the results grid. Stale responses (a later filter
+   *  change superseded this one) are dropped. */
   async applyDiscover() {
     const ct = this.state.contentType();
+    const sig = (this.lastDiscoverSig = this.filterSig('', ct));
     const opts: DiscoverFilters = {
       genreIds: [...this.state.discoverSelectedGenres()],
       sort: this.state.discoverSort(),
@@ -532,32 +541,35 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     };
     this.state.discoverActive.set(true);
     this.state.discoverLoading.set(true);
-    this.closeFilterSheet();
+    const fresh = () => this.lastDiscoverSig === sig;
     try {
       const rows =
         ct === 'series'
           ? await this.metadata.discoverTv(opts)
           : await this.metadata.discoverMovies(opts);
-      this.state.discoverResults.set(rows);
-      this.loadRequestedIds();
+      if (fresh()) {
+        this.state.discoverResults.set(rows);
+        this.loadRequestedIds();
+      }
     } catch {
-      this.state.discoverResults.set([]);
+      if (fresh()) this.state.discoverResults.set([]);
     } finally {
-      this.state.discoverLoading.set(false);
+      if (fresh()) this.state.discoverLoading.set(false);
     }
   }
+  private lastDiscoverSig = '';
 
   clearDiscover() {
     this.state.resetDiscover();
   }
 
-  /** Preload the discover grid on a genre id (resolved by the caller — a
-   *  profile taste chip — so it's language-proof). */
-  private async applyGenreFilter(genreId: number): Promise<void> {
+  /** Preload the discover panel on a genre id (resolved by the caller — a
+   *  profile taste chip — so it's language-proof). The filter auto-applies via
+   *  liveFilterEffect, routed to the right source by the external toggle. */
+  private applyGenreFilter(genreId: number): void {
     this.state.tab.set('videos');
     this.state.query.set('');
     this.state.discoverSelectedGenres.set(new Set([genreId]));
-    await this.applyDiscover();
   }
 
   /** Map the panel sort to the local sortBy/sortOrder, or null for the default
@@ -672,7 +684,10 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
    *  (q + genres + year + rating + sort). Re-run standalone on a filter change. */
   private async runLocalSearch(q: string, ct: 'all' | 'movie' | 'series') {
     const sig = (this.lastLocalSig = this.filterSig(q, ct));
-    void this.ensureDiscoverGenres();
+    // Selected genres are mapped to names via the loaded genre list; wait for it
+    // when a genre is selected so the filter isn't silently dropped.
+    if (this.state.discoverSelectedGenres().size) await this.ensureDiscoverGenres();
+    else void this.ensureDiscoverGenres();
     const type: MediaType | undefined = ct === 'all' ? undefined : ct;
     const sort = this.mapPanelSort();
     const localParams: SearchParams = { q, limit: 20, sortBy: sort?.sortBy ?? 'title' };

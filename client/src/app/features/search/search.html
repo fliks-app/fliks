@@ -110,7 +110,7 @@
             @if (state.localLoading()) {
               <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
             } @else if (state.localResults().length) {
-              <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
+              <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 gap-3 sm:gap-4">
                 @for (media of state.localResults(); track media.id) {
                   <app-media-card
                     [media]="media"
@@ -191,7 +191,7 @@
         } @else if (state.localResults().length > 0 || state.ownedExternalResults().length > 0) {
           <div>
             <h2 class="text-lg font-semibold mb-3">{{ 'search.section_library' | translate }}</h2>
-            <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
+            <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 gap-3 sm:gap-4">
               @for (media of state.localResults(); track media.id) {
                 <app-media-card
                   [media]="media"
@@ -224,7 +224,7 @@
         } @else if (state.filteredExternalResults().length > 0) {
           <div>
             <h2 class="text-lg font-semibold mb-3">{{ 'search.section_discover' | translate }}</h2>
-            <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 gap-3 sm:gap-4">
+            <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 gap-3 sm:gap-4">
               @for (row of state.filteredExternalResults(); track row.tmdbId) {
                 <app-media-card
                   [imageUrl]="row.posterUrl"
