@@ -322,6 +322,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     } else {
       // Discover mode: switch the filter source (TMDB /discover ↔ local browse).
+      if (this.filterDebounce) clearTimeout(this.filterDebounce);
       void this.applyFiltersNow();
     }
   }
@@ -619,10 +620,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   openFilterSheet() {
     this.filterSheet()?.nativeElement.showModal();
-  }
-
-  closeFilterSheet() {
-    this.filterSheet()?.nativeElement.close();
   }
 
   /** Series toggle via the bulk endpoint; movies need a local file. */
