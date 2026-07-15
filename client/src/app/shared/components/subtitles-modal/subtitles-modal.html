@@ -276,7 +276,7 @@
     </app-popover-menu>
 
   <form method="dialog" class="modal-backdrop">
-    <button>close</button>
+    <button tabindex="-1">close</button>
   </form>
 </dialog>
 
@@ -377,7 +377,7 @@
     </div>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeSyncModal()">close</button>
+    <button type="button" tabindex="-1" (click)="closeSyncModal()">close</button>
   </form>
 </dialog>
 
@@ -430,7 +430,7 @@
     </div>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeAdjustModal()">close</button>
+    <button type="button" tabindex="-1" (click)="closeAdjustModal()">close</button>
   </form>
 </dialog>
 
@@ -481,7 +481,7 @@
     </div>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeFpsModal()">close</button>
+    <button type="button" tabindex="-1" (click)="closeFpsModal()">close</button>
   </form>
 </dialog>
 
@@ -510,6 +510,6 @@
     </div>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeOcrLangModal()">close</button>
+    <button type="button" tabindex="-1" (click)="closeOcrLangModal()">close</button>
   </form>
 </dialog>

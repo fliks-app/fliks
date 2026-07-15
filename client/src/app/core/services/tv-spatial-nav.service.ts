@@ -318,7 +318,13 @@ export class TvSpatialNavService {
       // scrollIntoView animates an off-screen card in (block:'nearest'), while
       // horizontal-scroller's focusin handler owns vertical row-top alignment.
       next.focus({ preventScroll: true });
-      next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      // Positioned targets (a modal's absolute close ✕, fixed FABs, sticky
+      // headers) are already placed on screen — scrolling them "into view"
+      // shifts their scroll container and visibly displaces them, so skip it.
+      const pos = typeof getComputedStyle !== 'undefined' ? getComputedStyle(next).position : 'static';
+      if (pos !== 'absolute' && pos !== 'fixed' && pos !== 'sticky') {
+        next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      }
       return;
     }
     // No focusable neighbour: scroll the page so the user can reach info content
