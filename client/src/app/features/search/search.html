@@ -17,7 +17,7 @@
         (blur)="onInputBlur()"
       />
       @if (state.hasQuery()) {
-        <button type="button" class="btn btn-ghost btn-circle btn-sm absolute right-1 top-1/2 -translate-y-1/2" (click)="clearQuery()">
+        <button type="button" class="btn btn-ghost btn-circle btn-sm absolute right-1 top-1/2 -translate-y-1/2 z-10" (click)="clearQuery()">
           <svg lucideX class="h-4 w-4"></svg>
         </button>
       }
