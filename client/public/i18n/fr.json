@@ -685,7 +685,11 @@
     "status_canceled": "Annulé",
     "status_returning_series": "En cours",
     "status_ended": "Terminé",
-    "status_pilot": "Pilote"
+    "status_pilot": "Pilote",
+    "status_continuing": "En cours",
+    "status_tba": "À venir",
+    "status_announced": "Annoncé",
+    "status_deleted": "Supprimé"
   },
   "library": {
     "empty": "Aucun média dans cette bibliothèque",
