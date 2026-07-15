@@ -24,6 +24,12 @@
 
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70">
       <app-request-status-badge [request]="request()" (badgeClick)="badgeClick.emit()" />
+      @if (request().kind === 'delete') {
+        <span class="badge badge-error badge-outline badge-sm gap-1">
+          <svg lucideTrash2 class="h-3 w-3 shrink-0"></svg>
+          {{ 'requests.kind_delete' | translate }}
+        </span>
+      }
       <span>
         @if (request().mediaType === 'movie') {
           {{ 'requests.type_movie' | translate }}
@@ -52,14 +58,16 @@
         <span class="text-base-content/50">{{ 'requests.date_label' | translate }}</span>
         {{ request().createdAt | date: 'short' }}
       </p>
-      <p class="m-0">
-        <span class="text-base-content/50">{{ 'discover.quality_profile' | translate }} · </span>
-        {{ qualityProfileName() }}
-      </p>
-      <p class="m-0">
-        <span class="text-base-content/50">{{ 'discover.language_profile' | translate }} · </span>
-        {{ languageProfileName() }}
-      </p>
+      @if (request().kind !== 'delete') {
+        <p class="m-0">
+          <span class="text-base-content/50">{{ 'discover.quality_profile' | translate }} · </span>
+          {{ qualityProfileName() }}
+        </p>
+        <p class="m-0">
+          <span class="text-base-content/50">{{ 'discover.language_profile' | translate }} · </span>
+          {{ languageProfileName() }}
+        </p>
+      }
     </div>
 
     @if (canManage() && request().status === 'pending') {

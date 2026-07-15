@@ -10,7 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Subscription } from 'rxjs';
 import { FliksRequest } from './entities/request.entity';
-import { MediaType, RequestStatus } from '../../common/enums';
+import { MediaType, RequestStatus, RequestKind } from '../../common/enums';
 import { Media } from '../media/entities/media.entity';
 import { MediaService } from '../media/media.service';
 import { onDiskEpisodeNumbers } from '../media/episode-coverage.util';
@@ -319,19 +319,22 @@ export class RequestLifecycleService
     if (touched.length) await this.requestRepo.save(touched);
   }
 
-  /** Admin deleted the media row. Decline every active linked request
-   *  so users see a final status instead of a stale "in progress". */
-  onMediaRemoved(media: Media): Promise<void> {
-    return this.declineActiveLinkedRequests(media, 'Media removed from library');
+  /** Admin (or an approved delete request) removed the media row. Active
+   *  delete requests get what they asked for — resolve them to APPROVED —
+   *  while active add requests for the now-gone title are declined. */
+  async onMediaRemoved(media: Media): Promise<void> {
+    await this.resolveActiveDeleteRequests(media);
+    await this.declineActiveLinkedRequests(media, 'Media removed from library');
   }
 
   // ---------------------------------------------------------------------------
   // Internals
   // ---------------------------------------------------------------------------
 
-  /** Decline every active linked request and unwire the media FK.
+  /** Decline every active linked ADD request and unwire the media FK.
    *  `AVAILABLE` requests are left intact — the user already had the
-   *  content, the cleanup is library hygiene, not a rejection. */
+   *  content, the cleanup is library hygiene, not a rejection. Delete
+   *  requests are handled by {@link resolveActiveDeleteRequests}. */
   private async declineActiveLinkedRequests(
     media: Media,
     reason: string,
@@ -339,6 +342,7 @@ export class RequestLifecycleService
     const linked = await this.requestRepo.find({
       where: {
         media: { id: media.id },
+        kind: RequestKind.ADD,
         status: In([...IN_FLIGHT_REQUEST_STATUSES]),
       },
     });
@@ -346,6 +350,26 @@ export class RequestLifecycleService
     for (const r of linked) {
       r.status = RequestStatus.DECLINED;
       r.declinedReason = reason;
+      r.media = null;
+    }
+    await this.requestRepo.save(linked);
+  }
+
+  /** The media a delete request targeted is gone — resolve every active
+   *  linked delete request (the one being approved and any concurrent
+   *  duplicate) to APPROVED, its terminal done-state, and unwire the FK. */
+  private async resolveActiveDeleteRequests(media: Media): Promise<void> {
+    const linked = await this.requestRepo.find({
+      where: {
+        media: { id: media.id },
+        kind: RequestKind.DELETE,
+        status: In([...IN_FLIGHT_REQUEST_STATUSES]),
+      },
+    });
+    if (linked.length === 0) return;
+    for (const r of linked) {
+      r.status = RequestStatus.APPROVED;
+      r.declinedReason = null;
       r.media = null;
     }
     await this.requestRepo.save(linked);

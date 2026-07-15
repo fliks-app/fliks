@@ -174,6 +174,12 @@ export class NotificationsService {
         return `Request approved: ${title}`;
       case 'request.declined':
         return `Request declined: ${title}`;
+      case 'request.delete.created':
+        return `New deletion request: ${title}`;
+      case 'request.delete.approved':
+        return `Deletion request approved: ${title}`;
+      case 'request.delete.declined':
+        return `Deletion request declined: ${title}`;
       case 'request.processing':
         return `Request downloading: ${title}`;
       case 'request.available':

@@ -9,6 +9,7 @@ import {
 import { DatePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
+import { LucideTrash2 } from '@lucide/angular';
 import { RequestPosterComponent } from '../request-poster';
 import { RequestStatusBadgeComponent } from '../request-status-badge/request-status-badge.component';
 import { FliksRequestRow } from '../../../core/services/api/requests.service';
@@ -27,6 +28,7 @@ import { FliksRequestRow } from '../../../core/services/api/requests.service';
     TranslateModule,
     RequestPosterComponent,
     RequestStatusBadgeComponent,
+    LucideTrash2,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // The host is the scroller flex item: fixed width, and a column flex so the

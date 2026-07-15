@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, In, Repository } from 'typeorm';
@@ -22,7 +23,7 @@ import { CreateRequestDto } from './dto/create-request.dto';
 import { ListRequestsDto } from './dto/list-requests.dto';
 import { UpdateRequestDto } from './dto/update-request.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
-import { MediaType, RequestStatus } from '../../common/enums';
+import { MediaType, RequestStatus, RequestKind } from '../../common/enums';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MediaService } from '../media/media.service';
 import { Media } from '../media/entities/media.entity';
@@ -32,7 +33,10 @@ import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
 import { Action } from '../auth/casl/actions.enum';
 import { ImageService } from '../images/image.service';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
-import { ACTIVE_REQUEST_STATUSES } from './request-status.constants';
+import {
+  ACTIVE_REQUEST_STATUSES,
+  ACTIVE_DELETE_REQUEST_STATUSES,
+} from './request-status.constants';
 
 export interface TitleRequestState {
   /** A movie or whole-series active request exists (blocks re-request). */
@@ -205,6 +209,7 @@ export class RequestsService {
       .createQueryBuilder('r')
       .where('r.userId = :userId', { userId: user.id })
       .andWhere('r.mediaType = :mediaType', { mediaType })
+      .andWhere('r.kind = :kind', { kind: RequestKind.ADD })
       .andWhere('r.status IN (:...statuses)', {
         statuses: [RequestStatus.PENDING, RequestStatus.APPROVED],
       })
@@ -223,6 +228,9 @@ export class RequestsService {
   // ---------------------------------------------------------------------------
 
   async create(user: User, dto: CreateRequestDto): Promise<FliksRequest> {
+    if (dto.kind === RequestKind.DELETE) {
+      return this.createDeleteRequest(user, dto);
+    }
     await this.checkQuota(user, dto.mediaType);
     await this.assertNoActiveDuplicate(dto);
     if (dto.libraryId != null) {
@@ -262,6 +270,7 @@ export class RequestsService {
 
     const partial: DeepPartial<FliksRequest> = {
       user,
+      kind: RequestKind.ADD,
       mediaType: dto.mediaType,
       tmdbId: dto.tmdbId,
       title: dto.title,
@@ -296,6 +305,70 @@ export class RequestsService {
       this.populateRequestArt(saved),
       new Promise((resolve) => setTimeout(resolve, 5_000)),
     ]);
+
+    return saved;
+  }
+
+  /**
+   * Create a deletion request against an existing library title. Unlike an add
+   * request it never auto-approves, is exempt from the add quota, and dedups
+   * only against another PENDING delete for the same title — it neither blocks
+   * nor is blocked by add requests. The target Media must already exist; its
+   * FK is linked so the media-removal lifecycle can resolve this request (and
+   * any concurrent duplicate) once the deletion is executed.
+   */
+  private async createDeleteRequest(
+    user: User,
+    dto: CreateRequestDto,
+  ): Promise<FliksRequest> {
+    const media = await this.mediaService.findByTmdbId(
+      dto.tmdbId,
+      dto.mediaType,
+    );
+    if (!media) {
+      throw new BadRequestException(
+        'This title is not in the library and cannot be deleted',
+      );
+    }
+
+    const pendingDelete = await this.requestRepo.findOne({
+      where: {
+        tmdbId: dto.tmdbId,
+        mediaType: dto.mediaType,
+        kind: RequestKind.DELETE,
+        status: In([...ACTIVE_DELETE_REQUEST_STATUSES]),
+      },
+    });
+    if (pendingDelete) {
+      throw new ConflictException(
+        'A deletion request for this title is already pending',
+      );
+    }
+
+    const partial: DeepPartial<FliksRequest> = {
+      user,
+      kind: RequestKind.DELETE,
+      mediaType: dto.mediaType,
+      tmdbId: dto.tmdbId,
+      title: dto.title,
+      seasons: null,
+      status: RequestStatus.PENDING,
+      approvedBy: null,
+      media: { id: media.id } as Media,
+      library: media.libraryId
+        ? ({ id: media.libraryId } as Library)
+        : null,
+      posterUrl: media.posterUrl ?? null,
+      fanartUrl: media.fanartUrl ?? null,
+    };
+    const row = this.requestRepo.create(partial);
+    const saved = await this.requestRepo.save(row);
+    this.projectEmbeddedUsers(saved);
+
+    void this.notifications.dispatch('request.delete.created', {
+      title: dto.title,
+      mediaType: dto.mediaType,
+    });
 
     return saved;
   }
@@ -375,6 +448,7 @@ export class RequestsService {
       where: {
         tmdbId: dto.tmdbId,
         mediaType: dto.mediaType,
+        kind: RequestKind.ADD,
         status: In([...ACTIVE_REQUEST_STATUSES]),
       },
     });
@@ -422,6 +496,7 @@ export class RequestsService {
       where: {
         tmdbId,
         mediaType: MediaType.SERIES,
+        kind: RequestKind.ADD,
         status: In([...ACTIVE_REQUEST_STATUSES]),
       },
       order: { createdAt: 'ASC' },
@@ -458,6 +533,7 @@ export class RequestsService {
       where: {
         tmdbId,
         mediaType,
+        kind: RequestKind.ADD,
         status: In([...ACTIVE_REQUEST_STATUSES]),
       },
       order: { createdAt: 'ASC' },
@@ -534,6 +610,9 @@ export class RequestsService {
     }
     if (query.status) {
       qb.andWhere('r.status = :st', { st: query.status });
+    }
+    if (query.kind) {
+      qb.andWhere('r.kind = :kind', { kind: query.kind });
     }
 
     const [data, total] = await qb
@@ -642,6 +721,10 @@ export class RequestsService {
       throw new ConflictException('Request is not pending');
     }
 
+    if (row.kind === RequestKind.DELETE) {
+      return this.approveDeleteRequest(row, admin);
+    }
+
     // Validate up front that the title can land in a library: a new import
     // needs a resolvable target (the chosen library, or a configured default
     // for the type). Resolving it here throws a clear error — surfaced to the
@@ -706,6 +789,59 @@ export class RequestsService {
     void this.notifications.dispatch('request.approved', { title: row.title });
 
     return this.findResolvedRow(id);
+  }
+
+  /**
+   * Approve a deletion request: mark it APPROVED (its terminal done-state) and
+   * remove the target media through the same pathway as DELETE /media/:id —
+   * `MediaService.remove` returns the folder to purge, deleted off the response
+   * path exactly like the media controller does. The removal fires
+   * `onMediaRemoved`, which resolves this request (and any concurrent duplicate
+   * delete) to APPROVED. A failure rolls the request back to PENDING so the
+   * admin can retry. When the media is already gone the request is simply
+   * resolved as done.
+   */
+  private async approveDeleteRequest(
+    row: FliksRequest,
+    admin: User,
+  ): Promise<FliksRequest> {
+    const media = await this.mediaService.findByTmdbId(
+      row.tmdbId,
+      row.mediaType,
+    );
+
+    row.status = RequestStatus.APPROVED;
+    row.approvedBy = admin;
+    row.declinedReason = null;
+    if (media) {
+      row.media = { id: media.id } as Media;
+    }
+    await this.requestRepo.save(row);
+
+    if (media) {
+      try {
+        const { title, diskPath } = await this.mediaService.remove(media.id);
+        if (diskPath) {
+          void this.mediaService.deleteMediaFolder(diskPath).catch((err) => {
+            this.logger.error(
+              `Media file deletion failed after delete request #${row.id} — title="${title}" path="${diskPath}" error=${(err as Error).message}`,
+            );
+          });
+        }
+      } catch (err) {
+        row.status = RequestStatus.PENDING;
+        row.approvedBy = null;
+        await this.requestRepo.save(row);
+        throw err;
+      }
+    }
+
+    void this.notifications.dispatch('request.delete.approved', {
+      title: row.title,
+      mediaType: row.mediaType,
+    });
+
+    return this.findResolvedRow(row.id);
   }
 
   /**
@@ -825,7 +961,11 @@ export class RequestsService {
     row.declinedReason = reason ?? null;
     const saved = await this.requestRepo.save(row);
     this.projectEmbeddedUsers(saved);
-    void this.notifications.dispatch('request.declined', {
+    const event =
+      saved.kind === RequestKind.DELETE
+        ? 'request.delete.declined'
+        : 'request.declined';
+    void this.notifications.dispatch(event, {
       title: saved.title,
       reason: reason ?? '',
     });

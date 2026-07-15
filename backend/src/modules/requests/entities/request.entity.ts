@@ -7,7 +7,7 @@ import {
   RelationId,
 } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { MediaType, RequestStatus } from '../../../common/enums';
+import { MediaType, RequestStatus, RequestKind } from '../../../common/enums';
 import { User } from '../../users/entities/user.entity';
 import { Media } from '../../media/entities/media.entity';
 import { Library } from '../../libraries/entities/library.entity';
@@ -26,6 +26,16 @@ export class FliksRequest extends BaseEntity {
 
   @Column({ type: 'enum', enum: MediaType })
   mediaType: MediaType;
+
+  /** Whether the request asks to add the title to a library or to delete an
+   *  existing library title. Delete requests target the whole title and
+   *  resolve to APPROVED once the media is removed. */
+  @Column({
+    type: 'enum',
+    enum: RequestKind,
+    default: RequestKind.ADD,
+  })
+  kind: RequestKind;
 
   @Column()
   tmdbId: number;

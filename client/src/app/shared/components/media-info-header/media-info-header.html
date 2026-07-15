@@ -521,4 +521,10 @@
       <span class="flex-1">{{ 'media_detail.delete_from_library' | translate }}</span>
     </button>
   }
+  @if (canRequestDeletion()) {
+    <button type="button" class="dropdown-item text-error" (click)="requestDeletion.emit()">
+      <svg lucideTrash2 class="h-5 w-5 shrink-0"></svg>
+      <span class="flex-1">{{ 'media_detail.request_deletion' | translate }}</span>
+    </button>
+  }
 </ng-template>

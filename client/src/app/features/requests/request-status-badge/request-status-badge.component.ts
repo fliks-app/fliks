@@ -51,7 +51,9 @@ export class RequestStatusBadgeComponent {
 
   readonly descriptor = computed<DownloadBadgeDescriptor>(() => {
     const r = this.request();
-    if (r.status === 'approved' || r.status === 'processing') {
+    // Delete requests are download-free: APPROVED is their terminal "done"
+    // state, so the plain status label always applies.
+    if (r.kind !== 'delete' && (r.status === 'approved' || r.status === 'processing')) {
       const id = r.media?.id;
       const progress =
         id != null ? (this.downloadProgress.progress().get(id) ?? null) : null;

@@ -635,6 +635,25 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.auth.hasPermission('requests.create'),
   );
 
+  /** Requester (no `media.delete`) can ask an admin to delete this library
+   *  title. Admins with `media.delete` delete directly and never see it. */
+  readonly canRequestDeletion = computed(
+    () =>
+      this.auth.hasPermission('requests.create') &&
+      !this.auth.hasPermission('media.delete'),
+  );
+
+  /** A deletion request on this title is already pending (submitted by the
+   *  viewer this session or found on load). Hides the deletion entry so a
+   *  duplicate can't be attempted. */
+  readonly deleteRequestPending = signal(false);
+
+  /** Surfaces the "request deletion" entry: the viewer may request it and no
+   *  deletion request is already pending. */
+  readonly showRequestDeletion = computed(
+    () => this.canRequestDeletion() && !this.deleteRequestPending(),
+  );
+
   /** Global active-request state for the current title (any user). Drives
    *  the Demander gates and the series profile lock. Null until fetched. */
   readonly titleState = signal<TitleRequestState | null>(null);
@@ -801,6 +820,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // button — admins skip the round-trip).
       if (this.canRequest()) {
         void this.loadTitleState(m.tmdbId, m.type);
+      }
+      if (this.canRequestDeletion()) {
+        void this.loadDeleteRequestState(m.tmdbId, m.type);
       }
       // Seed live download progress (users who can request/import may read the
       // queue; SSE keeps it live after). Plain viewers skip — they get no feed.
@@ -1796,6 +1818,51 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       );
     } catch {
       /* swallowed; global interceptor surfaces it */
+    }
+  }
+
+  /** Seed the pending-deletion gate from the viewer's visible requests so the
+   *  entry hides when a deletion request already exists on this title. */
+  private async loadDeleteRequestState(tmdbId: number, mediaType: MediaType) {
+    try {
+      const res = await this.requestsApi.list({ kind: 'delete', status: 'pending' });
+      this.deleteRequestPending.set(
+        res.data.some((r) => r.tmdbId === tmdbId && r.mediaType === mediaType),
+      );
+    } catch {
+      /* swallowed; the backend still rejects a duplicate on submit */
+    }
+  }
+
+  /** Ask an admin to delete this library title. Confirms first, then submits a
+   *  deletion request scoped to the whole title (movie or series). */
+  protected async requestDeletion() {
+    const m = this.media();
+    if (!m) return;
+    if (
+      !(await this.confirmation.confirm({
+        title: this.translate.instant('media_detail.request_deletion_title'),
+        message: this.translate.instant('media_detail.request_deletion_confirm', {
+          title: m.title,
+        }),
+        variant: 'danger',
+      }))
+    ) {
+      return;
+    }
+    try {
+      await this.requestsApi.create({
+        kind: 'delete',
+        mediaType: m.type,
+        tmdbId: m.tmdbId,
+        title: m.title,
+      });
+      this.deleteRequestPending.set(true);
+      this.toast.success(
+        this.translate.instant('media_detail.request_deletion_success'),
+      );
+    } catch {
+      /* error toast surfaced by the global interceptor */
     }
   }
 

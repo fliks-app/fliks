@@ -1,11 +1,15 @@
 import { IsEnum, IsInt, IsOptional, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
-import { RequestStatus } from '../../../common/enums';
+import { RequestStatus, RequestKind } from '../../../common/enums';
 
 export class ListRequestsDto {
   @IsOptional()
   @IsEnum(RequestStatus)
   status?: RequestStatus;
+
+  @IsOptional()
+  @IsEnum(RequestKind)
+  kind?: RequestKind;
 
   @IsOptional()
   @Type(() => Number)
