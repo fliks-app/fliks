@@ -179,12 +179,6 @@
         <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
         {{ 'media_detail.change_language' | translate }}
       </button>
-      @if ((actionsSub()?.score ?? 0) !== 100) {
-        <button type="button" class="dropdown-item text-success" (click)="runSubAction(s => validateSubtitle(s))">
-          <svg lucideBadgeCheck class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
-          {{ 'media_detail.action_validate' | translate }}
-        </button>
-      }
       <button #offsetTrigger type="button" class="dropdown-item text-white" (click)="openOffset(offsetTrigger)">
         <svg lucideMoveHorizontal class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
         <span class="flex-1 text-left">{{ 'media_detail.offset' | translate }}</span>
@@ -195,6 +189,12 @@
         <span class="flex-1 text-left">{{ 'media_detail.corrections' | translate }}</span>
         <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
       </button>
+      @if ((actionsSub()?.score ?? 0) !== 100) {
+        <button type="button" class="dropdown-item text-success" (click)="runSubAction(s => validateSubtitle(s))">
+          <svg lucideBadgeCheck class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
+          {{ 'media_detail.action_validate' | translate }}
+        </button>
+      }
       }
       }
       @if (!actionsSubIsEmbedded()) {
