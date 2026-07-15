@@ -5,15 +5,17 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
+import { map } from 'rxjs';
 import {
   ReceivedRecommendation,
   SentRecommendation,
   SocialApiService,
 } from '../../core/services/api/social-api.service';
+import { AuthService } from '../../core/services/auth.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
-import { ProfileContextService } from './profile-context.service';
 
 /** The profile "recommendations" tab, own-profile only: content other members
  *  recommended to the viewer, and content the viewer recommended to others.
@@ -27,11 +29,22 @@ import { ProfileContextService } from './profile-context.service';
 export class ProfileRecommendationsComponent {
   private readonly api = inject(SocialApiService);
   private readonly router = inject(Router);
-  private readonly ctx = inject(ProfileContextService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly auth = inject(AuthService);
 
   readonly loading = signal(true);
   readonly received = signal<ReceivedRecommendation[]>([]);
   readonly sent = signal<SentRecommendation[]>([]);
+
+  /** The profile being viewed, read straight from the parent route param so the
+   *  redirect below is authoritative during navigation (the shared aggregate
+   *  still holds the previously-viewed profile while its reload is in flight). */
+  private readonly viewedId = toSignal(
+    (this.route.parent ?? this.route).paramMap.pipe(
+      map((pm) => Number(pm.get('userId'))),
+    ),
+    { initialValue: 0 },
+  );
 
   private loadedFor = 0;
 
@@ -40,14 +53,15 @@ export class ProfileRecommendationsComponent {
     // viewer deep-links to someone else's /recommendations, bounce them to that
     // profile's overview.
     effect(() => {
-      const p = this.ctx.profile();
-      if (!p) return;
-      if (!p.isSelf) {
-        void this.router.navigate(['/profile', p.id]);
+      const viewedId = this.viewedId();
+      const myId = this.auth.user()?.id;
+      if (!viewedId || myId == null) return;
+      if (viewedId !== myId) {
+        void this.router.navigate(['/profile', viewedId]);
         return;
       }
-      if (this.loadedFor !== p.id) {
-        this.loadedFor = p.id;
+      if (this.loadedFor !== viewedId) {
+        this.loadedFor = viewedId;
         void this.load();
       }
     });
