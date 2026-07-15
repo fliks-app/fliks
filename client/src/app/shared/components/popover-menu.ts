@@ -55,6 +55,7 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
       <div class="fixed inset-0 z-[100]" (click)="close()"></div>
       <div
         data-tv-modal
+        [attr.data-tv-submenu]="submenu() ? '' : null"
         class="fixed z-[101] bg-base-200 rounded-box shadow-xl overflow-y-auto p-2 [scroll-padding:0.5rem] [scroll-behavior:smooth]"
         [style.top.px]="position().top"
         [style.bottom.px]="position().bottom"
@@ -71,7 +72,7 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
            projected content (and its bindings) is only instantiated while the
            sheet is on screen — safe to leave the outlet unguarded here. -->
       <app-bottom-sheet [open]="open()" (closed)="close()">
-        <div data-tv-modal class="px-2 pb-2">
+        <div data-tv-modal [attr.data-tv-submenu]="submenu() ? '' : null" class="px-2 pb-2">
           <ng-container *ngTemplateOutlet="content"></ng-container>
         </div>
       </app-bottom-sheet>
@@ -88,6 +89,9 @@ export class PopoverMenuComponent {
   readonly placement = input<
     'bottom-end' | 'bottom-start' | 'top-end' | 'top-start' | 'right-start' | 'left-start'
   >('bottom-end');
+  /** Marks this menu as a flyout submenu: spatial nav traps up/down inside it
+   *  and lets left/right return to the opener in the parent menu. */
+  readonly submenu = input(false);
   readonly closed = output<void>();
 
   private readonly tv = inject(TvService);

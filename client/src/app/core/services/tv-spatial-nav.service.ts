@@ -392,9 +392,24 @@ export class TvSpatialNavService {
     // one so a freshly-opened dropdown still scopes arrows even before
     // focus has settled inside it.
     const modals = this.openModals();
-    const openModal = modals.length
-      ? modals.find((m) => active && m.contains(active)) ?? modals[0]
-      : null;
+    // Flyout submenus (Corrections / Décalage) trap up/down inside themselves
+    // so focus can't leak into the parent menu or the page behind, while
+    // left/right fall back to the surrounding modal so the opener stays
+    // reachable. Everything else keeps the first-containing (outermost) scope.
+    const submenu = active?.closest<HTMLElement>('[data-tv-submenu]') ?? null;
+    let openModal: HTMLElement | null;
+    if (submenu && (dir === 'up' || dir === 'down')) {
+      openModal = submenu;
+    } else if (submenu) {
+      openModal =
+        modals.find((m) => m !== submenu && active && m.contains(active)) ??
+        modals[0] ??
+        null;
+    } else {
+      openModal = modals.length
+        ? modals.find((m) => active && m.contains(active)) ?? modals[0]
+        : null;
+    }
     if (!openModal && active && active !== document.body && this.containers.size > 0) {
       const tree = this.findNeighborInTree(active, dir);
       if (tree) return tree;

@@ -215,6 +215,7 @@
       [open]="correctionsMenuOpen()"
       [anchor]="correctionsAnchor()"
       placement="right-start"
+      [submenu]="true"
       (closed)="closeCorrections()"
     >
       <button type="button" class="dropdown-item text-white" (click)="runCorrection(s => postProcessSubtitle({ subtitleId: s.id, action: 'removeHiTags' }))">
@@ -257,6 +258,7 @@
       [open]="offsetMenuOpen()"
       [anchor]="offsetAnchor()"
       placement="right-start"
+      [submenu]="true"
       (closed)="closeOffset()"
     >
       <button type="button" class="dropdown-item text-white" (click)="runOffset(s => openSyncModal(s.id))">
