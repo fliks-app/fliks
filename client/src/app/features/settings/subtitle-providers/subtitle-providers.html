@@ -36,12 +36,18 @@
       </label>
       <label class="form-control w-full max-w-md">
         <span class="label-text">{{ 'settings.subtitle_providers.translation_model' | translate }}</span>
-        <input
-          type="text"
-          class="input input-bordered input-sm w-full font-mono"
+        <select
+          class="select select-bordered select-sm w-full font-mono"
           [ngModel]="translationModel()"
           (ngModelChange)="translationModel.set($event)"
-        />
+        >
+          @if (!geminiModels.includes(translationModel())) {
+            <option [value]="translationModel()">{{ translationModel() }}</option>
+          }
+          @for (m of geminiModels; track m) {
+            <option [value]="m">{{ m }}</option>
+          }
+        </select>
       </label>
       <div>
         <button type="button" class="btn btn-primary" (click)="saveTranslation()" [disabled]="savingTranslation()">

@@ -20,6 +20,15 @@ import {
 
 const DEFAULT_TRANSLATION_MODEL = 'gemini-2.0-flash';
 
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-pro',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+];
+
 const PROVIDER_TYPES = [
   { value: 'opensubtitles', label: 'OpenSubtitles', fields: ['username', 'password'] },
   { value: 'subdl', label: 'Subdl', fields: ['apiKey'] },
@@ -73,6 +82,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly statsProviderName = signal('');
 
   // Machine-translation (Gemini) settings — stored in the app key/value store.
+  readonly geminiModels = GEMINI_MODELS;
   readonly translationEnabled = signal(false);
   readonly translationApiKey = signal('');
   readonly translationModel = signal(DEFAULT_TRANSLATION_MODEL);
