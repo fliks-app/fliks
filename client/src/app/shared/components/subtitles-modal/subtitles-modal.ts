@@ -15,6 +15,7 @@ import {
   LucideArrowRightLeft,
   LucideBan,
   LucideChevronDown,
+  LucideChevronRight,
   LucideClock,
   LucideCode,
   LucideFileText,
@@ -26,6 +27,7 @@ import {
   LucideThermometer,
   LucideTrash2,
   LucideVolume2,
+  LucideWandSparkles,
   LucideZap,
 } from '@lucide/angular';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
@@ -83,6 +85,7 @@ interface SubtitleRow {
     LucideArrowRightLeft,
     LucideBan,
     LucideChevronDown,
+    LucideChevronRight,
     LucideClock,
     LucideCode,
     LucideFileText,
@@ -94,6 +97,7 @@ interface SubtitleRow {
     LucideThermometer,
     LucideTrash2,
     LucideVolume2,
+    LucideWandSparkles,
     LucideZap,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -174,6 +178,11 @@ export class SubtitlesModalComponent {
     return true;
   }
 
+  /** The "Corrections" flyout submenu (post-processing fixes) anchored to its
+   *  entry in the main actions menu. */
+  readonly correctionsMenuOpen = signal(false);
+  readonly correctionsAnchor = signal<HTMLElement | null>(null);
+
   protected openSubActions(sub: SubtitleFileRow, anchor: HTMLElement) {
     this.actionsAnchor.set(anchor);
     this.actionsOpenForId.set(sub.id);
@@ -185,12 +194,33 @@ export class SubtitlesModalComponent {
     this.actionsMenuOpen.set(false);
     this.actionsOpenForId.set(null);
     this.actionsAnchor.set(null);
+    this.correctionsMenuOpen.set(false);
+    this.correctionsAnchor.set(null);
   }
   protected runSubAction(action: (sub: SubtitleFileRow) => void): void {
     const sub = this.actionsSub();
     if (!sub) return;
     // Start the close animation but keep the row's data until `(closed)` clears
     // it, so the menu's buttons don't flip while the sheet slides out.
+    this.correctionsMenuOpen.set(false);
+    this.actionsMenuOpen.set(false);
+    action(sub);
+  }
+
+  /** Open the Corrections flyout beside its entry (keeps the main menu open). */
+  protected openCorrections(anchor: HTMLElement) {
+    this.correctionsAnchor.set(anchor);
+    this.correctionsMenuOpen.set(true);
+  }
+  protected closeCorrections() {
+    this.correctionsMenuOpen.set(false);
+    this.correctionsAnchor.set(null);
+  }
+  /** Run a correction, then close both the flyout and the main menu. */
+  protected runCorrection(action: (sub: SubtitleFileRow) => void): void {
+    const sub = this.actionsSub();
+    if (!sub) return;
+    this.correctionsMenuOpen.set(false);
     this.actionsMenuOpen.set(false);
     action(sub);
   }

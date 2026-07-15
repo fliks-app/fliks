@@ -975,6 +975,7 @@
     "sync_golden_section": "Golden-Section Search (mais lento, mais preciso)",
     "action_adjust_times": "Ajustar o timing",
     "action_change_fps": "Alterar o framerate",
+    "corrections": "Correções",
     "adjust_times_title": "Ajustar o timing",
     "adjust_times_subtitle": "Deslocar todos os timestamps da legenda.",
     "adjust_minutes": "Minutos",

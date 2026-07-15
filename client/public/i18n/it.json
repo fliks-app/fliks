@@ -975,6 +975,7 @@
     "sync_golden_section": "Golden-Section Search (più lento, più preciso)",
     "action_adjust_times": "Regola il timing",
     "action_change_fps": "Cambia il framerate",
+    "corrections": "Correzioni",
     "adjust_times_title": "Regola il timing",
     "adjust_times_subtitle": "Sposta tutti i timestamp del sottotitolo.",
     "adjust_minutes": "Minuti",

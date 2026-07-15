@@ -83,8 +83,11 @@ export class PopoverMenuComponent {
   readonly open = input(false);
   /** Element the dropdown should anchor to on desktop. */
   readonly anchor = input<HTMLElement | null>(null);
-  /** Where the dropdown opens relative to the anchor. */
-  readonly placement = input<'bottom-end' | 'bottom-start' | 'top-end' | 'top-start'>('bottom-end');
+  /** Where the dropdown opens relative to the anchor. `right-start` / `left-start`
+   *  are side flyouts (used for submenus) that open beside the anchor. */
+  readonly placement = input<
+    'bottom-end' | 'bottom-start' | 'top-end' | 'top-start' | 'right-start' | 'left-start'
+  >('bottom-end');
   readonly closed = output<void>();
 
   private readonly tv = inject(TvService);
@@ -200,6 +203,38 @@ export class PopoverMenuComponent {
     const onEnd = placement.endsWith('end');
     const viewportH = typeof window !== 'undefined' ? window.innerHeight : 800;
     const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1280;
+
+    // Side flyout (submenu): open beside the anchor, top-aligned; flip to the
+    // other side when the preferred one can't fit the menu width.
+    if (placement === 'right-start' || placement === 'left-start') {
+      const rightLeft = r.right + GUTTER;
+      const leftLeft = r.left - WIDTH - GUTTER;
+      const fitsRight = rightLeft + WIDTH <= viewportW - GUTTER;
+      const fitsLeft = leftLeft >= GUTTER;
+      const preferRight = placement === 'right-start';
+      let left = preferRight
+        ? fitsRight || !fitsLeft
+          ? rightLeft
+          : leftLeft
+        : fitsLeft || !fitsRight
+          ? leftLeft
+          : rightLeft;
+      left = Math.min(
+        Math.max(GUTTER, left),
+        Math.max(GUTTER, viewportW - WIDTH - GUTTER),
+      );
+      const top = Math.min(
+        Math.max(GUTTER, r.top),
+        Math.max(GUTTER, viewportH - MIN_HEIGHT - GUTTER),
+      );
+      return {
+        top,
+        bottom: null as number | null,
+        left,
+        width: WIDTH,
+        maxHeight: Math.max(MIN_HEIGHT, viewportH - top - GUTTER),
+      };
+    }
 
     // Vertical: open on the requested side, but flip when it can't hold a
     // usable menu and the other side has more room.
