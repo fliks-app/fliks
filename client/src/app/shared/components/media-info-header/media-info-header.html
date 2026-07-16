@@ -127,9 +127,9 @@
           </button>
         }
       }
-      <!-- Like is a taste signal, not a playback action — available with or
-           without a local file (parity with recommendations + add-to-playlist). -->
-      @if (mediaType() === 'movie' || episodeId()) {
+      <!-- Like is a taste signal, not a playback action — available on movies,
+           series and episodes, with or without a local file. -->
+      @if (mediaType() === 'movie' || mediaType() === 'series' || episodeId()) {
         <button type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer" [class.text-error]="liked()" (click)="likeToggled.emit()">
           <svg lucideHeart class="h-5 w-5" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
           {{ 'likes.like' | translate }}
@@ -303,9 +303,9 @@
           }
         }
         <ng-container *ngTemplateOutlet="downloadBadge"></ng-container>
-        <!-- Like is a taste signal, not a playback action — available with or
-             without a local file (parity with recommendations + add-to-playlist). -->
-        @if (mediaType() === 'movie' || episodeId()) {
+        <!-- Like is a taste signal, not a playback action — available on movies,
+             series and episodes, with or without a local file. -->
+        @if (mediaType() === 'movie' || mediaType() === 'series' || episodeId()) {
           <button type="button" class="btn btn-ghost btn btn-circle" [class.text-error]="liked()" [attr.aria-label]="'likes.like' | translate" (click)="likeToggled.emit()">
             <svg lucideHeart class="h-4 w-4" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
           </button>
