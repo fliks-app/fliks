@@ -56,6 +56,12 @@ internal sealed class NodeManager
         Directory.CreateDirectory(AppPaths.DataDir);
         Directory.CreateDirectory(AppPaths.LogsDir);
 
+        if (!File.Exists(AppPaths.NodeExe))
+            throw new FileNotFoundException($"node.exe not found: {AppPaths.NodeExe}");
+        if (!File.Exists(AppPaths.BackendMainJs))
+            throw new FileNotFoundException($"backend main.js not found: {AppPaths.BackendMainJs}");
+        Log.Info($"backend spawn: {AppPaths.NodeExe} {AppPaths.BackendMainJs} (cwd={AppPaths.DataDir})");
+
         var proc = new Process();
         proc.StartInfo.FileName = AppPaths.NodeExe;
         proc.StartInfo.ArgumentList.Add(AppPaths.BackendMainJs);
@@ -74,6 +80,7 @@ internal sealed class NodeManager
         proc.Exited += (_, _) =>
         {
             var code = proc.ExitCode;
+            Log.Info($"backend exited: code={code} intentional={_intentionalStop}");
             if (code != 0 && !_intentionalStop) OnCrash?.Invoke(code);
         };
 

@@ -36,16 +36,23 @@ internal sealed class AppState
         try
         {
             AppPaths.EnsureStructure();
+            Log.Info($"startup: exe={Environment.ProcessPath} repoRoot={AppPaths.RepoRoot ?? "(installed)"}");
+            Log.Info($"paths: node={AppPaths.NodeExe} main={AppPaths.BackendMainJs} pgBin={AppPaths.PgBinDir} client={AppPaths.ClientDir} data={AppPaths.AppData}");
 
             State = ServerState.StartingPostgres;
+            Log.Info("postgres: initialize");
             await _postgres.InitializeAsync();
+            Log.Info("postgres: start");
             await _postgres.StartAsync();
+            Log.Info("postgres: create database");
             await _postgres.CreateDatabaseIfNeededAsync();
 
             State = ServerState.StartingBackend;
+            Log.Info("backend: start");
             await _node.StartAsync(new BackendEnvironment(Config.Port, Config.PgPort));
 
             State = ServerState.Running;
+            Log.Info("running");
             StartHealthChecks();
 
             if (!Config.HasCompletedFirstLaunch)
@@ -56,6 +63,7 @@ internal sealed class AppState
         }
         catch (Exception ex)
         {
+            Log.Error($"startup failed: {ex}");
             State = ServerState.Errored(ex.Message);
         }
     }

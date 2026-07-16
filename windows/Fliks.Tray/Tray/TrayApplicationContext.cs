@@ -73,6 +73,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
             : state.DisplayText;
         _open.Enabled = state.Phase == ServerPhase.Running;
         _restart.Enabled = !state.IsStarting && state.Phase != ServerPhase.Stopping;
+
+        if (state.Phase == ServerPhase.Error)
+        {
+            _icon.ShowBalloonTip(10000, "Fliks failed to start",
+                state.Message ?? "Unknown error — see the tray-*.log in the logs folder.",
+                ToolTipIcon.Error);
+        }
     }
 
     private void ToggleStartAtLogin(object? sender, EventArgs e)

@@ -14,6 +14,11 @@ internal sealed class PostgresManager(ushort port = 5433)
 
     private string Tool(string name) => Path.Combine(_binDir, name + ".exe");
 
+    private static void LogResult(string tool, ProcessResult r) =>
+        Log.Info($"pg {tool}: exit={r.ExitCode}" +
+                 (r.Stdout.Length > 0 ? $" stdout={r.Stdout}" : "") +
+                 (r.Stderr.Length > 0 ? $" stderr={r.Stderr}" : ""));
+
     private IReadOnlyDictionary<string, string> PgEnv => new Dictionary<string, string>
     {
         ["PGDATA"] = _dataDir,
@@ -38,6 +43,7 @@ internal sealed class PostgresManager(ushort port = 5433)
             PgEnv,
             timeout: TimeSpan.FromSeconds(120));
 
+        LogResult("initdb", result);
         if (!result.Succeeded)
             throw new InvalidOperationException($"initdb failed: {result.Stderr}");
 
@@ -60,6 +66,7 @@ internal sealed class PostgresManager(ushort port = 5433)
             PgEnv,
             timeout: TimeSpan.FromSeconds(60));
 
+        LogResult("pg_ctl start", result);
         if (!result.Succeeded)
             throw new InvalidOperationException($"pg_ctl start failed: {result.Stderr}");
 
@@ -79,6 +86,7 @@ internal sealed class PostgresManager(ushort port = 5433)
             PgEnv,
             timeout: TimeSpan.FromSeconds(10));
 
+        LogResult("psql exists-check", check);
         if (check.Stdout.Trim() != "1")
         {
             var created = await ProcessRunner.RunAsync(
@@ -86,11 +94,12 @@ internal sealed class PostgresManager(ushort port = 5433)
                 new[] { "-h", "localhost", "-p", port.ToString(), "-U", "fliks", "fliks" },
                 PgEnv,
                 timeout: TimeSpan.FromSeconds(10));
-            if (!created.Succeeded)
+            LogResult("createdb", created);
+            if (!created.Succeeded && !created.Stderr.Contains("already exists"))
                 throw new InvalidOperationException($"createdb failed: {created.Stderr}");
         }
 
-        await ProcessRunner.RunAsync(
+        var ext = await ProcessRunner.RunAsync(
             Tool("psql"),
             new[]
             {
@@ -99,6 +108,7 @@ internal sealed class PostgresManager(ushort port = 5433)
             },
             PgEnv,
             timeout: TimeSpan.FromSeconds(10));
+        LogResult("psql pg_trgm", ext);
     }
 
     public async Task<bool> IsReadyAsync()
