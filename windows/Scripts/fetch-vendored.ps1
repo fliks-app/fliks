@@ -21,7 +21,12 @@ $NodeVersion = '24.2.0'
 # EDB "binaries" zip (no installer) — verify the build suffix at
 # https://www.enterprisedb.com/download-postgresql-binaries
 $PgVersion = '18.0-1'
-$FfmpegUrl = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip'
+# Stable release branch, NOT master: the master build tracks bleeding-edge
+# nv-codec-headers and demands a very recent NVENC API / NVIDIA driver
+# (master wanted API 13.1 / driver >= 610, which most installed drivers don't
+# provide yet). The n7.1 branch links an older NVENC API compatible with
+# mainstream drivers. One binary still covers QSV + AMF + NVENC + OpenCL.
+$FfmpegUrl = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-gpl-7.1.zip'
 
 function Get-Archive([string]$url, [string]$dest) {
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid())
