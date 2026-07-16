@@ -19,9 +19,13 @@ internal sealed class PostgresManager(ushort port = 5433)
                  (r.Stdout.Length > 0 ? $" stdout={r.Stdout}" : "") +
                  (r.Stderr.Length > 0 ? $" stderr={r.Stderr}" : ""));
 
+    // LC_ALL=C forces the PostgreSQL tools to emit English (they otherwise
+    // localise to the Windows UI language). Doesn't affect the cluster locale,
+    // which initdb pins to C.
     private IReadOnlyDictionary<string, string> PgEnv => new Dictionary<string, string>
     {
         ["PGDATA"] = _dataDir,
+        ["LC_ALL"] = "C",
     };
 
     /// <summary>Run initdb on first launch (no PG_VERSION file yet).</summary>
@@ -80,7 +84,7 @@ internal sealed class PostgresManager(ushort port = 5433)
             Tool("psql"),
             new[]
             {
-                "-h", "localhost", "-p", port.ToString(), "-U", "fliks", "-d", "postgres",
+                "-h", "127.0.0.1", "-p", port.ToString(), "-U", "fliks", "-d", "postgres",
                 "-tAc", "SELECT 1 FROM pg_database WHERE datname = 'fliks'",
             },
             PgEnv,
@@ -91,7 +95,7 @@ internal sealed class PostgresManager(ushort port = 5433)
         {
             var created = await ProcessRunner.RunAsync(
                 Tool("createdb"),
-                new[] { "-h", "localhost", "-p", port.ToString(), "-U", "fliks", "fliks" },
+                new[] { "-h", "127.0.0.1", "-p", port.ToString(), "-U", "fliks", "fliks" },
                 PgEnv,
                 timeout: TimeSpan.FromSeconds(10));
             LogResult("createdb", created);
@@ -103,7 +107,7 @@ internal sealed class PostgresManager(ushort port = 5433)
             Tool("psql"),
             new[]
             {
-                "-h", "localhost", "-p", port.ToString(), "-U", "fliks", "-d", "fliks",
+                "-h", "127.0.0.1", "-p", port.ToString(), "-U", "fliks", "-d", "fliks",
                 "-c", "CREATE EXTENSION IF NOT EXISTS pg_trgm",
             },
             PgEnv,
@@ -113,12 +117,23 @@ internal sealed class PostgresManager(ushort port = 5433)
 
     public async Task<bool> IsReadyAsync()
     {
-        var result = await ProcessRunner.RunAsync(
-            Tool("pg_isready"),
-            new[] { "-h", "localhost", "-p", port.ToString(), "-U", "fliks" },
+        // A real psql connection to the always-present `postgres` DB, not
+        // pg_isready: it verifies the exact capability the backend needs and
+        // logs why it failed. 127.0.0.1 sidesteps the Windows localhost -> ::1
+        // resolution that made the old pg_isready check time out.
+        var r = await ProcessRunner.RunAsync(
+            Tool("psql"),
+            new[]
+            {
+                "-h", "127.0.0.1", "-p", port.ToString(), "-U", "fliks",
+                "-d", "postgres", "-tAc", "SELECT 1",
+            },
             PgEnv,
             timeout: TimeSpan.FromSeconds(5));
-        return result.Succeeded;
+        if (!r.Succeeded)
+            Log.Info($"pg readiness: exit={r.ExitCode}" +
+                     (r.Stderr.Length > 0 ? $" stderr={r.Stderr}" : ""));
+        return r.Succeeded && r.Stdout.Trim() == "1";
     }
 
     public async Task StopAsync()

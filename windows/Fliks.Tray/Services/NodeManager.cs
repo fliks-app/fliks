@@ -18,7 +18,7 @@ internal sealed record BackendEnvironment(ushort Port, ushort DbPort)
         {
             ["NODE_ENV"] = "production",
             ["PORT"] = Port.ToString(),
-            ["DB_HOST"] = "localhost",
+            ["DB_HOST"] = "127.0.0.1",
             ["DB_PORT"] = DbPort.ToString(),
             ["DB_USERNAME"] = "fliks",
             ["DB_PASSWORD"] = "fliks",
@@ -129,7 +129,7 @@ internal sealed class NodeManager
     private static async Task WaitForHttpReadyAsync(ushort port, TimeSpan timeout)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-        var url = $"http://localhost:{port}/api";
+        var url = $"http://127.0.0.1:{port}/api";
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
