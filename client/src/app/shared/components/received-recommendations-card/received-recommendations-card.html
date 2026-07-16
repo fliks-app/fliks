@@ -15,7 +15,7 @@
                 <a [routerLink]="mediaLink(item)" class="shrink-0 rounded-md">
                   <div class="w-24 aspect-video rounded-md bg-base-300 overflow-hidden">
                     @if (item.stillUrl ?? item.fanartUrl ?? item.posterUrl; as img) {
-                      <img [src]="img" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
+                      <img [src]="img | resolveUrl:'thumb'" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
                     }
                   </div>
                 </a>
