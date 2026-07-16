@@ -1,10 +1,11 @@
 # Builds a self-contained Fliks Windows server (tray app + embedded
-# PostgreSQL + Node + tri-vendor FFmpeg) and packages it as an NSIS installer,
-# then uploads it as a GitHub Release asset.
+# PostgreSQL + Node + tri-vendor FFmpeg).
 #
-# Triggers:
-#   - release tag `v*` (from release-please) → attaches installer to the release
-#   - manual workflow_dispatch               → uploads artifact for testing
+# PR / workflow_dispatch → builds and uploads the runnable bundle (fast: the
+#   vendored binaries and the client/backend build are cached, and the NSIS
+#   installer is skipped — the bundle is what you run to test).
+# Release tag `v*`       → also packages the NSIS installer and attaches it to
+#   the release.
 #
 # Sibling of macos-dmg.yml (SwiftUI server host). Keep the two in sync.
 name: Build Windows server
@@ -18,12 +19,19 @@ on:
       - '.github/workflows/windows-installer.yml'
   workflow_dispatch:
 
+# Cancel a superseded run when a new commit is pushed to the same ref.
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
 jobs:
   build-installer:
     runs-on: windows-latest
+    env:
+      IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - uses: actions/checkout@v6
 
@@ -49,7 +57,30 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      # Vendored binaries (~430 MB) rarely change — key on the fetch script,
+      # which pins the versions. fetch-vendored.ps1 is idempotent, so a cache
+      # hit turns it into a no-op.
+      - name: Cache vendored binaries
+        uses: actions/cache@v4
+        with:
+          path: windows/Vendored
+          key: win-vendored-${{ hashFiles('windows/Scripts/fetch-vendored.ps1') }}
+
+      # Client + backend build outputs, keyed on their sources + lockfiles.
+      # A change touching only windows/** (the tray) hits this cache and skips
+      # the slow web build entirely.
+      - name: Cache web build
+        id: webcache
+        uses: actions/cache@v4
+        with:
+          path: |
+            client/dist
+            backend/dist
+            backend/node_modules
+          key: win-web-${{ hashFiles('client/package-lock.json', 'client/src/**', 'client/angular.json', 'client/tsconfig*.json', 'backend/package-lock.json', 'backend/src/**', 'backend/tsconfig*.json', 'backend/nest-cli.json') }}
+
       - name: Install NSIS
+        if: env.IS_TAG == 'true'
         run: choco install nsis --no-progress -y
 
       - name: Fetch vendored binaries
@@ -57,12 +88,14 @@ jobs:
         run: .\Scripts\fetch-vendored.ps1
 
       - name: Build client
+        if: steps.webcache.outputs.cache-hit != 'true'
         working-directory: client
         run: |
           npm ci
           npx ng build --configuration=production
 
       - name: Build backend
+        if: steps.webcache.outputs.cache-hit != 'true'
         working-directory: backend
         run: |
           npm ci
@@ -76,8 +109,6 @@ jobs:
           TVDB_API_KEY: ${{ secrets.TVDB_API_KEY }}
         run: .\Scripts\build-app.ps1 -SkipWeb -Version "${{ steps.version.outputs.version }}"
 
-      # Upload the runnable bundle before packaging, so a testable build is
-      # available even if the NSIS step fails.
       - name: Upload bundle artifact
         uses: actions/upload-artifact@v4
         with:
@@ -85,7 +116,10 @@ jobs:
           path: windows/build/Bundle
           if-no-files-found: error
 
+      # NSIS packaging only on release tags — PR/dispatch builds stop at the
+      # bundle above.
       - name: Make installer
+        if: env.IS_TAG == 'true'
         working-directory: windows
         env:
           CERT_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
@@ -97,6 +131,7 @@ jobs:
           -CertPassword "$env:CERT_PASSWORD"
 
       - name: Upload installer artifact
+        if: env.IS_TAG == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Fliks-Server-${{ steps.version.outputs.version }}-win-x64
@@ -104,7 +139,7 @@ jobs:
           if-no-files-found: error
 
       - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.IS_TAG == 'true'
         uses: softprops/action-gh-release@v3
         with:
           files: windows/build/Fliks-Setup-*.exe
