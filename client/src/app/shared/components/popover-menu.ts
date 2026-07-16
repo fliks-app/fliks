@@ -57,7 +57,8 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
         data-tv-modal
         [attr.data-tv-submenu]="submenu() ? '' : null"
         (focusout)="onSubmenuFocusOut($event)"
-        class="fixed z-[101] bg-base-200 rounded-box shadow-xl overflow-y-auto p-2 [scroll-padding:0.5rem] [scroll-behavior:smooth]"
+        animate.leave="popover-pop-leaving"
+        class="popover-pop-in fixed z-[101] bg-base-200 rounded-box shadow-xl overflow-y-auto p-2 [scroll-padding:0.5rem] [scroll-behavior:smooth]"
         [style.top.px]="position().top"
         [style.bottom.px]="position().bottom"
         [style.left.px]="position().left"

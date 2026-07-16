@@ -604,6 +604,30 @@ body.tv .to-base-100\/50 {
   display: none !important;
 }
 
+/* Open/close animation for the anchored popover / searchable-select panels.
+   They live under an Angular `@if`, so the base class animates the entry on
+   insert and `animate.leave="popover-pop-leaving"` holds the node in the DOM
+   for the exit before removal (same approach as card-actions-panel). */
+.popover-pop-in {
+  transform-origin: top;
+  animation: popover-pop 0.15s ease;
+}
+@keyframes popover-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+.popover-pop-leaving {
+  animation: popover-pop-out 0.12s ease forwards;
+}
+@keyframes popover-pop-out {
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
 /* Shared item style for app-dropdown-menu (desktop dropdown + mobile/TV
    bottom sheet). Caller adds a colour utility (`text-white`, `text-error`,
    …) and an icon — everything else (padding, hover, focus, layout) lives
