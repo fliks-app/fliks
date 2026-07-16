@@ -389,7 +389,9 @@ export class DiskImportService {
 
   async scanFolder(folderPath: string): Promise<ScanCandidate[]> {
     const resolved = path.resolve(folderPath);
-    this.logger.log(`Disk library scan started — folder="${resolved}"`);
+    this.logger.log(
+      `Disk library scan started — input="${folderPath}" resolved="${resolved}"`,
+    );
     let stat: fs.Stats;
     try {
       stat = fs.statSync(resolved);
