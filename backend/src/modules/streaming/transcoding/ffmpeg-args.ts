@@ -467,15 +467,18 @@ export function buildFfmpegArgs(
     );
   }
 
-  // NVENC has no tonemap_cuda, so its HDR→SDR tone-map runs off-encoder.
+  // NVENC and AMF have no on-encoder HDR→SDR tone-map, so it runs off-encoder.
   // When the OpenCL tone-map probe passed, route it through tonemap_opencl
   // (GPU) instead of the CPU zscale chain — decisive on 4K where the CPU
-  // tone-map can't sustain real-time. Decode is forced to CPU so the frame
-  // reaches OpenCL via a plain hwupload (no CUDA↔OpenCL interop, which is
-  // unreliable); the tone-map, the expensive step, is what moves to the GPU.
-  const nvencOpencl =
-    !!tonemap && effectiveHwAccel === 'nvenc' && isOpenclTonemapEnabled();
-  const decodeHwAccel: HwAccelType = nvencOpencl ? 'none' : effectiveHwAccel;
+  // tone-map can't sustain real-time, and it offloads the (often weak) APU CPU.
+  // Decode is forced to CPU so the frame reaches OpenCL via a plain hwupload
+  // (no CUDA/D3D11 ↔ OpenCL interop, which is unreliable); the tone-map, the
+  // expensive step, is what moves to the GPU.
+  const openclTonemap =
+    !!tonemap &&
+    (effectiveHwAccel === 'nvenc' || effectiveHwAccel === 'amf') &&
+    isOpenclTonemapEnabled();
+  const decodeHwAccel: HwAccelType = openclTonemap ? 'none' : effectiveHwAccel;
 
   // Early sessions live ~1s before Shaka jumps to the main session — visual
   // quality on those warm-up frames is throwaway, so bias every knob towards
@@ -584,10 +587,10 @@ export function buildFfmpegArgs(
   if (tonemap && !useVaapiTonemap && decoder.outputSurface === 'vaapi') {
     args.push('-init_hw_device', 'opencl=ocl:0.0');
   }
-  // NVENC OpenCL tone-map: init the OpenCL device and make it the default
+  // NVENC/AMF OpenCL tone-map: init the OpenCL device and make it the default
   // filter device so the chain's `hwupload` lands on it. Decode is CPU here
-  // (see nvencOpencl above), so there's no competing hwaccel device.
-  if (nvencOpencl) {
+  // (see openclTonemap above), so there's no competing hwaccel device.
+  if (openclTonemap) {
     args.push(...openclTonemapInitArgs());
   }
   if (useDoviTonemap) {
@@ -646,7 +649,7 @@ export function buildFfmpegArgs(
       dovi: useDoviTonemap,
       tonemapCurve: resolveTonemapCurve(),
       scaleWidth: w,
-      openclTonemap: nvencOpencl,
+      openclTonemap,
     }),
     tonemap,
     tonemapPath,

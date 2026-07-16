@@ -729,17 +729,18 @@ export class StreamingController {
     const hasCrop = resolved.mediaFile.streamInfo?.video?.[0]?.crop != null;
     const hwTonemap =
       response.hwAccel === 'qsv' || response.hwAccel === 'vaapi';
-    const nvencOpencl =
-      response.hwAccel === 'nvenc' && isOpenclTonemapEnabled();
+    const openclTonemap =
+      (response.hwAccel === 'nvenc' || response.hwAccel === 'amf') &&
+      isOpenclTonemapEnabled();
     const tonemapAlgo = response.tonemapping
       ? hwTonemap
         ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop })
-        : nvencOpencl
+        : openclTonemap
           ? 'opencl'
           : 'cpu'
       : null;
     const tonemapCurve =
-      response.tonemapping && !hwTonemap && !nvencOpencl
+      response.tonemapping && !hwTonemap && !openclTonemap
         ? resolveTonemapCurve()
         : undefined;
 
