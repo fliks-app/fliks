@@ -39,6 +39,9 @@ export interface ResolvedEncodePipeline {
   qsvCanCrop: boolean;
   /** tonemap_vaapi is the chosen tonemap step (the filter helpers' flag). */
   useVaapiTonemap: boolean;
+  /** Whole pipeline stays on the D3D11 device (d3d11 decode + scale_d3d11 +
+   *  AMF encode, no CPU round-trip). Opt-in via FLIKS_AMF_FULLGPU. */
+  amfFullGpuAvailable: boolean;
 }
 
 /**
@@ -63,6 +66,18 @@ export function resolveEncodePipeline(
     !ctx.burnIn &&
     normalisedSourceCodec != null &&
     isDecoderEnabled(`${normalisedSourceCodec}_qsv_native_decode`);
+  // Full-GPU AMF: d3d11 decode → scale_d3d11 → AMF encode, no CPU round-trip.
+  // Opt-in (FLIKS_AMF_FULLGPU) while the D3D11↔AMF device sharing is validated;
+  // the CPU-decode path stays the default. Only the clean SDR case — crop needs
+  // an off-GPU pass and tonemap uses the CPU/OpenCL chain.
+  const amfFullGpuAvailable =
+    process.env.FLIKS_AMF_FULLGPU === '1' &&
+    ctx.hwAccel === 'amf' &&
+    !ctx.burnIn &&
+    !ctx.crop &&
+    !ctx.tonemap &&
+    normalisedSourceCodec != null &&
+    isDecoderEnabled(`${normalisedSourceCodec}_d3d11va_native_decode`);
   // `auto` picks opencl when the boot probe enabled it, vaapi otherwise; the
   // explicit overrides bypass the probe. Drives both the qsv-native gate and
   // the useVaapiTonemap flag so the two stay in sync.
@@ -115,5 +130,6 @@ export function resolveEncodePipeline(
     qsvNativeAvailable,
     qsvCanCrop,
     useVaapiTonemap,
+    amfFullGpuAvailable,
   };
 }

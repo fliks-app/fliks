@@ -16,7 +16,12 @@ import {
   h264D3d11vaDecoder,
   hevcD3d11vaDecoder,
   av1D3d11vaDecoder,
+  h264D3d11vaNativeDecoder,
+  hevcD3d11vaNativeDecoder,
+  av1D3d11vaNativeDecoder,
 } from './d3d11va';
+
+export { findAmfNativeDecoder } from './d3d11va';
 import {
   h264VideotoolboxDecoder,
   hevcVideotoolboxDecoder,
@@ -107,6 +112,9 @@ export const ALL_DECODERS: readonly DecoderDescriptor[] = [
   h264QsvNativeDecoder,
   hevcQsvNativeDecoder,
   av1QsvNativeDecoder,
+  h264D3d11vaNativeDecoder,
+  hevcD3d11vaNativeDecoder,
+  av1D3d11vaNativeDecoder,
 ];
 
 /** Lookup a qsv-native decoder by source codec — exposed for the
