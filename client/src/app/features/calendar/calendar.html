@@ -2,7 +2,7 @@
   <div class="flex items-center justify-between">
     <div>
       <h1 class="sr-only lg:not-sr-only text-2xl font-bold">{{ 'calendar.title' | translate }}</h1>
-      <p class="text-sm text-base-content/60 capitalize">{{ monthLabel() }}</p>
+      <p class="text-sm text-base-content/60 capitalize">{{ currentDate() | localeDate:{ month: 'long', year: 'numeric' } }}</p>
     </div>
     <div class="flex gap-2">
       <button type="button" class="btn btn-ghost btn-sm" (click)="prevMonth()">«</button>

@@ -10,6 +10,7 @@ import { RouterLink } from '@angular/router';
 import { NgClass } from '@angular/common';
 import { TranslateModule } from '@ngx-translate/core';
 import { MediaService, CalendarEntry } from '../../core/services/api/media.service';
+import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 
 interface CalendarWeek {
   days: CalendarDay[];
@@ -25,7 +26,7 @@ interface CalendarDay {
 
 @Component({
   selector: 'app-calendar',
-  imports: [RouterLink, TranslateModule, NgClass],
+  imports: [RouterLink, TranslateModule, NgClass, LocaleDatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './calendar.html',
 })
@@ -48,11 +49,6 @@ export class CalendarComponent implements OnInit {
     if (!this.showPhysical()) result = result.filter((e) => e.event !== 'physical');
     if (!this.showAiring()) result = result.filter((e) => e.event !== 'airing');
     return result;
-  });
-
-  readonly monthLabel = computed(() => {
-    const d = this.currentDate();
-    return d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
   });
 
   readonly weeks = computed<CalendarWeek[]>(() => {

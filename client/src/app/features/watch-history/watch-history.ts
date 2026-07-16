@@ -1,7 +1,7 @@
 import { Component, ChangeDetectionStrategy, inject, signal, computed, Injector, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { PlaybackState, StreamingApiService, WatchHistoryItem } from '../../core/services/api/streaming-api.service';
@@ -27,6 +27,7 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
   private readonly reuseStrategy = inject(CachingReuseStrategy);
   private readonly appResume = inject(AppResumeService);
   private readonly injector = inject(Injector);
+  private readonly translate = inject(TranslateService);
   private static readonly SCROLL_KEY = 'history';
   private attachedSub?: Subscription;
   private detachedSub?: Subscription;
@@ -160,7 +161,7 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
   }
 
   formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString('fr-FR', {
+    return new Date(dateStr).toLocaleDateString(this.translate.currentLang || undefined, {
       day: 'numeric',
       month: 'short',
       year: 'numeric',

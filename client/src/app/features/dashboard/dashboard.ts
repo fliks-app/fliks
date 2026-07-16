@@ -10,7 +10,7 @@ import { HttpClient } from '@angular/common/http';
 import { TranslateModule } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { SubtitlesApiService, SubtitleStats } from '../../core/services/api/subtitles-api.service';
-import { DatePipe } from '@angular/common';
+import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 
 interface DiskSpaceEntry {
   path: string;
@@ -28,7 +28,7 @@ interface StatsReport {
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, TranslateModule, DatePipe],
+  imports: [RouterLink, TranslateModule, LocaleDatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dashboard.html',
 })

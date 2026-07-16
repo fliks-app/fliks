@@ -8,13 +8,14 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { DatePipe, CurrencyPipe } from '@angular/common';
+import { CurrencyPipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucidePlay } from '@lucide/angular';
 import { Media } from '../../../core/services/api/media.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
+import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 
 /**
  * "Extra info" panel rendered on the media-detail page above the cast,
@@ -25,7 +26,7 @@ import { localizeLanguage } from '../../../core/utils/language.utils';
  */
 @Component({
   selector: 'app-media-info-extra',
-  imports: [DatePipe, CurrencyPipe, TranslateModule, LucidePlay],
+  imports: [LocaleDatePipe, CurrencyPipe, TranslateModule, LucidePlay],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-info-extra.html',
 })

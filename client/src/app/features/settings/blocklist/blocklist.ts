@@ -5,8 +5,8 @@ import {
   inject,
   OnInit,
 } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
   BlocklistApiService,
@@ -16,7 +16,7 @@ import { PaginationComponent } from '../../../shared/components/pagination/pagin
 
 @Component({
   selector: 'app-blocklist-settings',
-  imports: [TranslateModule, DatePipe, PaginationComponent],
+  imports: [TranslateModule, LocaleDatePipe, PaginationComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './blocklist.html',
 })

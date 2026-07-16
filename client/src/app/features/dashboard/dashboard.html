@@ -149,7 +149,7 @@
                     <td class="font-mono text-sm">{{ r.language }}</td>
                     <td class="text-sm">{{ r.providerType }}</td>
                     <td class="text-center tabular-nums">{{ r.score }}</td>
-                    <td class="text-sm whitespace-nowrap">{{ r.createdAt | date:'short' }}</td>
+                    <td class="text-sm whitespace-nowrap">{{ r.createdAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}</td>
                   </tr>
                 }
               </tbody>

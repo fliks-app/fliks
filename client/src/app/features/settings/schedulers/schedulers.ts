@@ -11,7 +11,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { LucideCirclePlay } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { DatePipe } from '@angular/common';
+import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { ToastService } from '../../../core/services/toast.service';
 import { SseService } from '../../../core/services/sse.service';
 
@@ -26,7 +26,7 @@ interface SchedulerInfo {
 
 @Component({
   selector: 'app-schedulers',
-  imports: [LucideCirclePlay, TranslateModule, DatePipe],
+  imports: [LucideCirclePlay, TranslateModule, LocaleDatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './schedulers.html',
 })

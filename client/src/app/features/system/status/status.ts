@@ -1,7 +1,7 @@
 import {
   Component, ChangeDetectionStrategy, signal, inject, OnInit, effect,
 } from '@angular/core';
-import { DatePipe, DecimalPipe, NgClass, KeyValuePipe } from '@angular/common';
+import { DecimalPipe, NgClass, KeyValuePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
@@ -10,6 +10,7 @@ import { SseService } from '../../../core/services/sse.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
+import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 
 interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; body?: Record<string, unknown>; }
 interface ServiceStatus { name: string; ok: boolean; message?: string; }
@@ -17,7 +18,7 @@ interface HealthReport { version: string; uptimeSeconds: number; database: Servi
 
 @Component({
   selector: 'app-system-status',
-  imports: [TranslateModule, DatePipe, DecimalPipe, NgClass, KeyValuePipe, LucideTrash2, PaginationComponent, DropdownMenuComponent],
+  imports: [TranslateModule, LocaleDatePipe, DecimalPipe, NgClass, KeyValuePipe, LucideTrash2, PaginationComponent, DropdownMenuComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './status.html',
 })

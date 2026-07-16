@@ -6,11 +6,11 @@ import {
   inject,
   viewChild,
 } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { TranslateModule } from '@ngx-translate/core';
 import { LucideDownload, LucideExternalLink, LucideRocket } from '@lucide/angular';
 import { AppUpdateService } from '../../../core/services/app-update.service';
 import { MarkdownPipe } from '../../pipes/markdown.pipe';
+import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { ModalHeaderComponent } from '../modal-header';
 
 /** Changelog + install dialog for the topbar update button. Reads everything
@@ -18,7 +18,7 @@ import { ModalHeaderComponent } from '../modal-header';
  *  desktop, external release link on web/.deb). */
 @Component({
   selector: 'app-update-modal',
-  imports: [DatePipe, TranslateModule, MarkdownPipe, LucideDownload, LucideExternalLink, LucideRocket, ModalHeaderComponent],
+  imports: [LocaleDatePipe, TranslateModule, MarkdownPipe, LucideDownload, LucideExternalLink, LucideRocket, ModalHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app-update-modal.html',
   styles: [

@@ -45,7 +45,7 @@
               <td class="text-sm">{{ entry.quality ?? '—' }}</td>
               <td class="text-sm text-base-content/60">{{ entry.note ?? '—' }}</td>
               <td class="text-sm text-base-content/60 tabular-nums">
-                {{ entry.createdAt | date:'dd/MM/yyyy' }}
+                {{ entry.createdAt | localeDate }}
               </td>
               <td class="text-end">
                 <button
