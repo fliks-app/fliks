@@ -31,6 +31,7 @@ import { normaliseSourceCodec } from './codec/normalise';
 import { hevcMainTierCapBps } from './codec/codec-strings';
 import { varStreamMapLayout } from './audio-layout';
 import { resolveEncodePipeline } from './encode-pipeline';
+import { openclTonemapInitArgs } from './hw-device';
 import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';
 import { isOpenclTonemapEnabled } from './codec/opencl-tonemap-probe';
 import { isLibplaceboDvEnabled } from './codec/libplacebo-dv-probe';
@@ -578,7 +579,7 @@ export function buildFfmpegArgs(
   // filter device so the chain's `hwupload` lands on it. Decode is CPU here
   // (see nvencOpencl above), so there's no competing hwaccel device.
   if (nvencOpencl) {
-    args.push('-init_hw_device', 'opencl=ocl', '-filter_hw_device', 'ocl');
+    args.push(...openclTonemapInitArgs());
   }
   if (useDoviTonemap) {
     args.push('-init_hw_device', 'vulkan=vk:0', '-filter_hw_device', 'vk');

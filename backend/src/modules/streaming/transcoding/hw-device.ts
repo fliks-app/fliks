@@ -30,3 +30,16 @@ export function qsvDeviceInitArgs(
     `qsv=${QSV_DEVICE_ALIAS}@${VAAPI_DEVICE_ALIAS}`,
   ];
 }
+
+/** OpenCL device + filter selector for the NVENC/CPU standalone tonemap
+ *  chain (`hwupload,tonemap_opencl,hwdownload`). Defaults to `ocl` (auto-pick
+ *  the first usable platform — the NVIDIA GPU on an NVENC host). Set
+ *  `FLIKS_OPENCL_DEVICE` to a `platform.device` selector (e.g. `0.0`) to pin
+ *  it when a multi-GPU host auto-picks the wrong vendor. Not the QSV↔OpenCL
+ *  bridge, which stays on the Intel iGPU. */
+export function openclTonemapInitArgs(): string[] {
+  const selector = process.env.FLIKS_OPENCL_DEVICE?.trim();
+  const spec =
+    selector && selector.length > 0 ? `opencl=ocl:${selector}` : 'opencl=ocl';
+  return ['-init_hw_device', spec, '-filter_hw_device', 'ocl'];
+}

@@ -4,6 +4,7 @@ import { unlink } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
+import { openclTonemapInitArgs } from '../hw-device';
 
 const execFileAsync = promisify(execFile);
 
@@ -54,8 +55,7 @@ export async function runOpenclTonemapProbe(log: Logger): Promise<void> {
       'ffmpeg',
       [
         '-hide_banner', '-loglevel', 'error',
-        '-init_hw_device', 'opencl=ocl',
-        '-filter_hw_device', 'ocl',
+        ...openclTonemapInitArgs(),
         '-i', hdrSample,
         '-vf',
         'format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=hable:desat=0:format=nv12,hwdownload,format=nv12',
