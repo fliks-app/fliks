@@ -10,20 +10,12 @@ import type { BitDepth, VideoCodec } from '../types';
  *  - `'qsv'`         : Intel Media SDK QSV surface (sibling of vaapi
  *                      but a different libavutil hwcontext)
  *  - `'cuda'`        : NVIDIA CUDA surface
- *  - `'d3d11'`       : Direct3D 11 texture (Windows) — the full-GPU AMF
- *                      path keeps frames here (scale_d3d11 → AMF encode)
  *  - `'videotoolbox'`: macOS IOSurface produced by VT decode (we keep
  *                      the descriptor's `outputSurface` at `'cpu'` for
  *                      now because the rest of the pipeline expects
  *                      software frames on VT; future work can lift
  *                      that constraint). */
-export type SurfaceFormat =
-  | 'cpu'
-  | 'vaapi'
-  | 'qsv'
-  | 'cuda'
-  | 'd3d11'
-  | 'videotoolbox';
+export type SurfaceFormat = 'cpu' | 'vaapi' | 'qsv' | 'cuda' | 'videotoolbox';
 
 /** Just enough source-side metadata for the decoder selector. Populated
  *  from ffprobe streamInfo at session-spawn time. */

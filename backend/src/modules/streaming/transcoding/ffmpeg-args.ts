@@ -26,11 +26,7 @@ import type {
   HdrStaticMetadata,
   VideoCodec,
 } from './codec/types';
-import {
-  decoderRegistry,
-  findQsvNativeDecoder,
-  findAmfNativeDecoder,
-} from './codec/decoders';
+import { decoderRegistry, findQsvNativeDecoder } from './codec/decoders';
 import { normaliseSourceCodec } from './codec/normalise';
 import { hevcMainTierCapBps } from './codec/codec-strings';
 import { varStreamMapLayout } from './audio-layout';
@@ -455,7 +451,6 @@ export function buildFfmpegArgs(
     tonemapPath,
     qsvNativeAvailable,
     useVaapiTonemap,
-    amfFullGpuAvailable,
   } = resolveEncodePipeline(variant, {
     hwAccel: useDoviTonemap ? 'none' : hwAccel,
     crop: !!crop,
@@ -543,19 +538,13 @@ export function buildFfmpegArgs(
           },
           effectiveHwAccel,
         ))
-      : amfFullGpuAvailable &&
-          effectiveHwAccel === 'amf' &&
-          normalisedSourceCodec
-        ? // Full-GPU AMF: D3D11-native decode so scale_d3d11 + AMF stay on the
-          // device with no CPU round-trip.
-          findAmfNativeDecoder(normalisedSourceCodec)
-        : decoderRegistry.resolve(
-            {
-              codec: normalisedSourceCodec ?? 'h264',
-              bitDepth: sourceBitDepth,
-            },
-            decodeHwAccel,
-          );
+      : decoderRegistry.resolve(
+          {
+            codec: normalisedSourceCodec ?? 'h264',
+            bitDepth: sourceBitDepth,
+          },
+          decodeHwAccel,
+        );
   args.push(...decoder.buildInputArgs());
 
   // Full-Metal HDR opt-in. The h264/hevc_videotoolbox encoders can keep
