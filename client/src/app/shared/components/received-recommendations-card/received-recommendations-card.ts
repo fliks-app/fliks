@@ -22,6 +22,7 @@ import {
 import { SseService } from '../../../core/services/sse.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DropdownMenuComponent } from '../dropdown-menu';
+import { TvRowDirective } from '../../directives/tv-row.directive';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { LikesApiService } from '../../../core/services/api/likes-api.service';
 
@@ -38,6 +39,7 @@ import { LikesApiService } from '../../../core/services/api/likes-api.service';
     RouterLink,
     TranslateModule,
     DropdownMenuComponent,
+    TvRowDirective,
     LucideX,
     LucideEllipsisVertical,
     LucideHeart,

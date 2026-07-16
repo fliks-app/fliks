@@ -5,14 +5,14 @@
         <div class="flex flex-col gap-2">
           <a
             [routerLink]="['/profile', group.senderId]"
-            class="w-fit text-lg font-semibold hover:underline"
+            class="w-fit rounded text-lg font-semibold hover:underline"
           >
             {{ 'recommend.recommended_by' | translate: { username: group.senderName } }}
           </a>
           <ul class="flex flex-col divide-y divide-base-300/50">
             @for (item of group.items; track item.id) {
-              <li class="flex items-center gap-4 py-3 first:pt-0 last:pb-0">
-                <a [routerLink]="mediaLink(item)" class="shrink-0">
+              <li appTvRow class="flex items-center gap-4 py-3 first:pt-0 last:pb-0">
+                <a [routerLink]="mediaLink(item)" class="shrink-0 rounded-md">
                   <div class="w-24 aspect-video rounded-md bg-base-300 overflow-hidden">
                     @if (item.stillUrl ?? item.fanartUrl ?? item.posterUrl; as img) {
                       <img [src]="img" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
@@ -20,7 +20,7 @@
                   </div>
                 </a>
                 <div class="flex-1 min-w-0 space-y-0.5">
-                  <a [routerLink]="mediaLink(item)" class="block">
+                  <a [routerLink]="mediaLink(item)" class="block rounded">
                     <p class="text-base font-semibold truncate hover:underline">{{ item.title }}</p>
                     @if (item.label) {
                       <p class="text-sm text-base-content/70 truncate">{{ item.label }}</p>
