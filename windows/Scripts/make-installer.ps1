@@ -30,6 +30,14 @@ $bundle = Join-Path $build 'Bundle'
 $nsi    = Join-Path $winDir 'Installer\fliks.nsi'
 $outFile = Join-Path $build "Fliks-Setup-$Version.exe"
 
+# VIProductVersion needs a strict numeric X.X.X.X — derive it from the display
+# version (e.g. "1.2.3" -> "1.2.3.0", "dev-abc123" -> "0.0.0.0").
+$m = [regex]::Match($Version, '^\d+(\.\d+){0,2}')
+$numeric = if ($m.Success) { $m.Value } else { '0.0.0' }
+$parts = [System.Collections.Generic.List[string]]($numeric.Split('.'))
+while ($parts.Count -lt 4) { $parts.Add('0') }
+$versionQuad = ($parts[0..3] -join '.')
+
 if (-not (Test-Path $bundle)) {
     throw "Bundle not found at $bundle. Run .\Scripts\build-app.ps1 first."
 }
@@ -52,6 +60,7 @@ if (-not $makensisPath) {
 Write-Host "==> Building installer ($Version)"
 & $makensisPath `
     "/DVERSION=$Version" `
+    "/DVERSIONQUAD=$versionQuad" `
     "/DBUNDLE_DIR=$bundle" `
     "/DOUT_FILE=$outFile" `
     $nsi

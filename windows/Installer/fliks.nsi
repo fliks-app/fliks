@@ -9,6 +9,9 @@
 !ifndef VERSION
   !define VERSION "0.0.0"
 !endif
+!ifndef VERSIONQUAD
+  !define VERSIONQUAD "0.0.0.0"
+!endif
 !ifndef BUNDLE_DIR
   !error "BUNDLE_DIR is required"
 !endif
@@ -28,7 +31,7 @@ RequestExecutionLevel user
 InstallDir "$LOCALAPPDATA\Programs\${APPNAME}"
 InstallDirRegKey HKCU "Software\${APPNAME}" "InstallDir"
 
-VIProductVersion "${VERSION}.0"
+VIProductVersion "${VERSIONQUAD}"
 VIAddVersionKey "ProductName" "${APPNAME}"
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "CompanyName" "${COMPANY}"
