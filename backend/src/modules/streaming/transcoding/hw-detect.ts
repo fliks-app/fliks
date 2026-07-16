@@ -112,8 +112,10 @@ export async function detectHwAccel(
       await execFileAsync('ffmpeg', test.args, { timeout: 10_000 });
       log.log(`HW accel test passed: ${test.type}`);
       return test.type;
-    } catch {
-      log.log(`HW accel test failed: ${test.type}`);
+    } catch (err) {
+      const stderr = (err as { stderr?: string }).stderr?.trim();
+      const tail = stderr ? stderr.split('\n').slice(-2).join(' ') : '';
+      log.log(`HW accel test failed: ${test.type}${tail ? ` — ${tail}` : ''}`);
     }
   }
 
