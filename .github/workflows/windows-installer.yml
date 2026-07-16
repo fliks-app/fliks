@@ -1,0 +1,110 @@
+# Builds a self-contained Fliks Windows server (tray app + embedded
+# PostgreSQL + Node + tri-vendor FFmpeg) and packages it as an NSIS installer,
+# then uploads it as a GitHub Release asset.
+#
+# Triggers:
+#   - release tag `v*` (from release-please) → attaches installer to the release
+#   - manual workflow_dispatch               → uploads artifact for testing
+#
+# Sibling of macos-dmg.yml (SwiftUI server host). Keep the two in sync.
+name: Build Windows server
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'windows/**'
+      - '.github/workflows/windows-installer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            backend/package-lock.json
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
+
+      - name: Fetch vendored binaries
+        working-directory: windows
+        run: .\Scripts\fetch-vendored.ps1
+
+      - name: Build client
+        working-directory: client
+        run: |
+          npm ci
+          npx ng build --configuration=production
+
+      - name: Build backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run build
+          npm ci --omit=dev
+
+      - name: Build bundle
+        working-directory: windows
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          TVDB_API_KEY: ${{ secrets.TVDB_API_KEY }}
+        run: .\Scripts\build-app.ps1 -SkipWeb -Version "${{ steps.version.outputs.version }}"
+
+      # Upload the runnable bundle before packaging, so a testable build is
+      # available even if the NSIS step fails.
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fliks-Server-${{ steps.version.outputs.version }}-win-x64-bundle
+          path: windows/build/Bundle
+          if-no-files-found: error
+
+      - name: Make installer
+        working-directory: windows
+        env:
+          CERT_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: >
+          .\Scripts\make-installer.ps1
+          -Version "${{ steps.version.outputs.version }}"
+          -CertBase64 "$env:CERT_BASE64"
+          -CertPassword "$env:CERT_PASSWORD"
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fliks-Server-${{ steps.version.outputs.version }}-win-x64
+          path: windows/build/Fliks-Setup-*.exe
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: windows/build/Fliks-Setup-*.exe

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Fliks.Tray</RootNamespace>
+    <AssemblyName>Fliks</AssemblyName>
+    <ApplicationIcon Condition="Exists('Resources\fliks.ico')">Resources\fliks.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="Resources\fliks.ico" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Resources\fliks.ico')" />
+  </ItemGroup>
+
+  <!-- Baked at publish time: `dotnet publish -p:TmdbApiKey=... -p:TvdbApiKey=...` -->
+  <ItemGroup>
+    <AssemblyMetadata Include="TmdbApiKey" Value="$(TmdbApiKey)" />
+    <AssemblyMetadata Include="TvdbApiKey" Value="$(TvdbApiKey)" />
+  </ItemGroup>
+
+</Project>
