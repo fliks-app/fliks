@@ -11,8 +11,10 @@
     <ApplicationIcon Condition="Exists('Resources\fliks.ico')">Resources\fliks.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <!-- Embedded so the NotifyIcon can load it at runtime even from a
+       single-file publish (a side file next to the exe isn't reliable). -->
   <ItemGroup>
-    <None Include="Resources\fliks.ico" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Resources\fliks.ico')" />
+    <EmbeddedResource Include="Resources\fliks.ico" Condition="Exists('Resources\fliks.ico')" />
   </ItemGroup>
 
   <!-- Baked at publish time: `dotnet publish -p:TmdbApiKey=... -p:TvdbApiKey=...` -->

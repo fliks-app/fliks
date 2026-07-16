@@ -1,3 +1,4 @@
+using System.Reflection;
 using Fliks.Tray.Services;
 using Fliks.Tray.State;
 using Fliks.Tray.Utilities;
@@ -100,10 +101,23 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private static Icon LoadIcon()
     {
-        var bundled = Path.Combine(AppContext.BaseDirectory, "Resources", "fliks.ico");
         try
         {
-            if (File.Exists(bundled)) return new Icon(bundled);
+            var asm = Assembly.GetExecutingAssembly();
+            var name = asm
+                .GetManifestResourceNames()
+                .FirstOrDefault(n => n.EndsWith("fliks.ico", StringComparison.OrdinalIgnoreCase));
+            if (name is not null)
+            {
+                using var stream = asm.GetManifestResourceStream(name);
+                if (stream is not null) return new Icon(stream, SystemInformation.SmallIconSize);
+            }
+            // Fallback: the exe's own embedded ApplicationIcon.
+            if (Environment.ProcessPath is { } exe)
+            {
+                var extracted = Icon.ExtractAssociatedIcon(exe);
+                if (extracted is not null) return extracted;
+            }
         }
         catch
         {
