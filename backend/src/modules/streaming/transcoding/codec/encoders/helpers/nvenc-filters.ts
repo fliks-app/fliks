@@ -36,7 +36,10 @@ export function nvencScaleFilter8bit(input: EncoderInput): string {
     const nvCropFilter = hasCrop
       ? `hwdownload,format=nv12,${filters.cropStr},hwupload_cuda,`
       : '';
-    return `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=nv12`;
+    // scale_cuda keeps the decoder's native pixel format (no `format=`); the
+    // encoder owns the output bit depth (`-profile:v main` → 8-bit). Keeping
+    // format conversion out of the scaler decouples resize from pixel format.
+    return `${nvCropFilter}scale_cuda=w=${w}:h=-2`;
   }
   const download = inputSurface === 'cpu' ? '' : 'hwdownload,format=nv12,';
   return `${download}${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p`;

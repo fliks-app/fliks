@@ -110,9 +110,9 @@ describe('NVENC encoders — surface-aware filter graph', () => {
       expect(vf).toContain('tonemap=tonemap=hable');
     });
 
-    it('cuda decode, no tonemap: scale_cuda stays on the GPU as nv12', () => {
+    it('cuda decode, no tonemap: scale_cuda scales on the GPU, keeps native format', () => {
       const vf = vfOf(enc.buildArgs(makeInput({ inputSurface: 'cuda' })));
-      expect(vf).toBe('scale_cuda=w=1920:h=-2:format=nv12');
+      expect(vf).toBe('scale_cuda=w=1920:h=-2');
     });
 
     it('cpu decode, no tonemap: software scale, no GPU filters', () => {
@@ -132,7 +132,7 @@ describe('NVENC encoders — surface-aware filter graph', () => {
     it('cuda decode + crop: crop round-trips through hwupload_cuda', () => {
       const vf = vfOf(enc.buildArgs(makeInput({ inputSurface: 'cuda', crop: true })));
       expect(vf).toBe(
-        'hwdownload,format=nv12,crop=3840:1632:0:264,hwupload_cuda,scale_cuda=w=1920:h=-2:format=nv12',
+        'hwdownload,format=nv12,crop=3840:1632:0:264,hwupload_cuda,scale_cuda=w=1920:h=-2',
       );
     });
 
