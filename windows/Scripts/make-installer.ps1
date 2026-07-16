@@ -34,13 +34,23 @@ if (-not (Test-Path $bundle)) {
     throw "Bundle not found at $bundle. Run .\Scripts\build-app.ps1 first."
 }
 
-$makensis = Get-Command makensis -ErrorAction SilentlyContinue
-if (-not $makensis) {
-    throw 'makensis not found on PATH. Install NSIS (choco install nsis).'
+# choco installs makensis under Program Files but doesn't refresh the PATH
+# for this session, so fall back to the standard install locations.
+$cmd = Get-Command makensis -ErrorAction SilentlyContinue
+$makensisPath = if ($cmd) { $cmd.Source } else { $null }
+if (-not $makensisPath) {
+    foreach ($p in @(
+            "$env:ProgramFiles\NSIS\makensis.exe",
+            "${env:ProgramFiles(x86)}\NSIS\makensis.exe")) {
+        if (Test-Path $p) { $makensisPath = $p; break }
+    }
+}
+if (-not $makensisPath) {
+    throw 'makensis not found. Install NSIS (choco install nsis).'
 }
 
 Write-Host "==> Building installer ($Version)"
-& $makensis.Source `
+& $makensisPath `
     "/DVERSION=$Version" `
     "/DBUNDLE_DIR=$bundle" `
     "/DOUT_FILE=$outFile" `
