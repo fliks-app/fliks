@@ -1,6 +1,13 @@
 import { resolveEncodePipeline } from './encode-pipeline';
 import type { EncodePipelineContext } from './encode-pipeline';
 import type { CodecVariant } from './codec/types';
+import { isScaleD3d11Enabled } from './codec/scale-d3d11-probe';
+
+jest.mock('./codec/scale-d3d11-probe', () => ({
+  isScaleD3d11Enabled: jest.fn(() => false),
+}));
+
+const mockScaleD3d11 = isScaleD3d11Enabled as jest.Mock;
 
 const SDR_H264: CodecVariant = { codec: 'h264', bitDepth: 8, hdr: null };
 
@@ -48,9 +55,12 @@ describe('resolveEncodePipeline — AMF tonemap', () => {
     process,
     'platform',
   )!;
-  afterEach(() =>
-    Object.defineProperty(process, 'platform', platformDescriptor),
-  );
+  beforeEach(() => {
+    mockScaleD3d11.mockReturnValue(false);
+  });
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', platformDescriptor);
+  });
 
   it('forces the CPU tonemap (never VAAPI) for an AMF HDR->SDR encode', () => {
     // The AMF encoders gate supports() on win32; fake the platform so the
@@ -73,21 +83,35 @@ describe('resolveEncodePipeline — AMF tonemap', () => {
     expect(r.useVaapiTonemap).toBe(false);
   });
 
-  it('uses the full-GPU pipeline for a clean SDR AMF encode (default)', () => {
+  const winAmfCleanSdr = () => {
     Object.defineProperty(process, 'platform', {
       value: 'win32',
       configurable: true,
     });
-    const r = resolveEncodePipeline(
+    return resolveEncodePipeline(
       SDR_H264,
       ctx({ hwAccel: 'amf', tonemap: false, sourceVideoCodec: 'h264' }),
       'win32',
     );
+  };
+
+  it('uses the zero-copy scale_d3d11 path when its probe passed', () => {
+    mockScaleD3d11.mockReturnValue(true);
+    const r = winAmfCleanSdr();
     expect(r.effectiveHwAccel).toBe('amf');
     expect(r.amfFullGpuAvailable).toBe(true);
   });
 
+  it('degrades to the CPU scale when the scale_d3d11 probe failed', () => {
+    // The filter is absent (FFmpeg < 8.1) or the GPU rejected its output
+    // texture — must NOT crash-cycle, just fall back.
+    const r = winAmfCleanSdr();
+    expect(r.effectiveHwAccel).toBe('amf');
+    expect(r.amfFullGpuAvailable).toBe(false);
+  });
+
   it('keeps the CPU-decode path when the AMF encode tonemaps', () => {
+    mockScaleD3d11.mockReturnValue(true);
     Object.defineProperty(process, 'platform', {
       value: 'win32',
       configurable: true,
