@@ -42,7 +42,8 @@ internal sealed record BackendEnvironment(ushort Port, ushort DbPort)
 internal sealed class NodeManager
 {
     private Process? _process;
-    private StreamWriter? _logWriter;
+    private FileStream? _logStream;
+    private readonly object _logGate = new();
     private bool _intentionalStop;
 
     /// <summary>Fired when the backend exits unexpectedly (non-zero, not stopped
@@ -71,14 +72,7 @@ internal sealed class NodeManager
         proc.StartInfo.CreateNoWindow = true;
         proc.StartInfo.RedirectStandardOutput = true;
         proc.StartInfo.RedirectStandardError = true;
-        // Node writes UTF-8; decode it as such so the log isn't CP1252 mojibake.
-        proc.StartInfo.StandardOutputEncoding = Encoding.UTF8;
-        proc.StartInfo.StandardErrorEncoding = Encoding.UTF8;
         foreach (var (k, v) in config.AsEnvironment()) proc.StartInfo.Environment[k] = v;
-
-        _logWriter = OpenDailyLog();
-        proc.OutputDataReceived += (_, e) => WriteLog(e.Data);
-        proc.ErrorDataReceived += (_, e) => WriteLog(e.Data);
 
         proc.EnableRaisingEvents = true;
         proc.Exited += (_, _) =>
@@ -89,8 +83,11 @@ internal sealed class NodeManager
         };
 
         proc.Start();
-        proc.BeginOutputReadLine();
-        proc.BeginErrorReadLine();
+        _logStream = OpenDailyLog();
+        // Copy the child's raw bytes to the log — Node emits UTF-8, so passing
+        // the bytes through untouched avoids any code-page transcode.
+        PumpToLog(proc.StandardOutput.BaseStream);
+        PumpToLog(proc.StandardError.BaseStream);
         _process = proc;
 
         await WaitForHttpReadyAsync(config.Port, TimeSpan.FromSeconds(120));
@@ -112,23 +109,46 @@ internal sealed class NodeManager
 
     private void Cleanup()
     {
-        _logWriter?.Dispose();
-        _logWriter = null;
+        lock (_logGate)
+        {
+            _logStream?.Dispose();
+            _logStream = null;
+        }
         _process = null;
     }
 
-    private static StreamWriter OpenDailyLog()
+    private static FileStream OpenDailyLog()
     {
         var file = Path.Combine(AppPaths.LogsDir, $"backend-{DateTime.Now:yyyy-MM-dd}.log");
-        var writer = new StreamWriter(file, append: true) { AutoFlush = true };
-        writer.WriteLine($"\n--- Fliks backend started at {DateTime.Now:O} ---");
-        return writer;
+        var fs = new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+        var header = Encoding.UTF8.GetBytes($"\n--- Fliks backend started at {DateTime.Now:O} ---\n");
+        fs.Write(header, 0, header.Length);
+        fs.Flush();
+        return fs;
     }
 
-    private void WriteLog(string? line)
+    /// <summary>Drain a child output stream into the log file (flushed per
+    /// chunk, serialised with the sibling stream via _logGate).</summary>
+    private void PumpToLog(Stream source) => _ = Task.Run(async () =>
     {
-        if (line is not null) _logWriter?.WriteLine(line);
-    }
+        var buffer = new byte[8192];
+        try
+        {
+            int read;
+            while ((read = await source.ReadAsync(buffer)) > 0)
+            {
+                lock (_logGate)
+                {
+                    _logStream?.Write(buffer, 0, read);
+                    _logStream?.Flush();
+                }
+            }
+        }
+        catch
+        {
+            // Stream closed on process exit.
+        }
+    });
 
     private static async Task WaitForHttpReadyAsync(ushort port, TimeSpan timeout)
     {
