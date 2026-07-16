@@ -2,13 +2,17 @@
   <app-setup-checklist [padding]="true" />
 }
 <app-follow-requests-card [padding]="true" />
-<app-received-recommendations-card [padding]="true" />
 
 
 <div appTvSection appDefaultFocus="a[data-home-focus^='library:']" focusKey="home" focusIdAttr="data-home-focus" class="flex flex-col gap-8">
 
   @for (section of visibleSections(); track section.key) {
     @switch (section.type) {
+
+      <!-- Member recommendations -->
+      @case ('received-recommendations') {
+        <app-received-recommendations-card />
+      }
 
       <!-- Libraries -->
       @case ('libraries') {

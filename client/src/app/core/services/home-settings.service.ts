@@ -3,6 +3,7 @@ import { Injectable, signal } from '@angular/core';
 /** Stable identity of a home zone. Built-ins are fixed; per-library
  *  "recently added" zones are keyed by their library id. */
 export type HomeSectionKey =
+  | 'received-recommendations'
   | 'libraries'
   | 'continue-watching'
   | 'recommendations'
@@ -14,6 +15,7 @@ export type HomeSectionKey =
   | `library-recent:${number}`;
 
 export type HomeSectionType =
+  | 'received-recommendations'
   | 'libraries'
   | 'continue-watching'
   | 'recommendations'
@@ -50,6 +52,7 @@ const STORAGE_KEY = 'home.settings';
 const LIBRARY_RECENT_PREFIX = 'library-recent:';
 
 const BUILTIN_ORDER: HomeSectionKey[] = [
+  'received-recommendations',
   'libraries',
   'continue-watching',
   'recommendations',
@@ -143,6 +146,12 @@ export class HomeSettingsService {
         merged.push(pref);
         seen.add(pref.key);
       }
+    }
+    // Saved layouts predating this zone get it on top, not appended at the
+    // bottom (new users already get it first via DEFAULTS).
+    if (!seen.has('received-recommendations')) {
+      merged.unshift({ key: 'received-recommendations', visible: true });
+      seen.add('received-recommendations');
     }
     for (const key of BUILTIN_ORDER) {
       if (!seen.has(key)) {

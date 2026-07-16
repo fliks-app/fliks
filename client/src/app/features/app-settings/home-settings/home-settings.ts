@@ -87,6 +87,7 @@ export class HomeSettingsPageComponent implements OnInit {
   readonly librarySaving = signal(false);
 
   private readonly BUILTIN_LABELS: Record<string, string> = {
+    'received-recommendations': 'home_settings.section.received_recommendations',
     libraries: 'home_settings.section.libraries',
     'continue-watching': 'home_settings.section.continue_watching',
     recommendations: 'home_settings.section.recommendations',

@@ -5,7 +5,6 @@ import {
   computed,
   effect,
   inject,
-  input,
   signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -46,6 +45,7 @@ import { LikesApiService } from '../../../core/services/api/likes-api.service';
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './received-recommendations-card.html',
+  host: { class: 'contents' },
 })
 export class ReceivedRecommendationsCardComponent implements OnInit {
   private readonly api = inject(SocialApiService);
@@ -53,9 +53,6 @@ export class ReceivedRecommendationsCardComponent implements OnInit {
   private readonly addToPlaylistService = inject(AddToPlaylistService);
   private readonly likesApi = inject(LikesApiService);
   readonly tv = inject(TvService);
-
-  /** Adds bottom padding when stacked above the home sections. */
-  readonly padding = input(false);
 
   readonly items = signal<ReceivedRecommendation[]>([]);
   readonly busyId = signal<number | null>(null);
