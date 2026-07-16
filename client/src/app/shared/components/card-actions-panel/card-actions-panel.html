@@ -6,6 +6,7 @@
   ></div>
   <div
     #menu
+    data-tv-modal
     class="card-actions-menu fixed z-[101] bg-base-200 rounded-box shadow-xl overflow-hidden"
     animate.leave="card-actions-leaving"
     [style.top.px]="position()?.top"
@@ -30,7 +31,7 @@
       </div>
     }
     <ul role="menu" class="menu p-2 gap-0.5 w-full">
-      @for (a of actions(); track a; let i = $index) {
+      @for (a of actions(); track a) {
         <li [class.disabled]="a.disabled">
           <button
             type="button"
@@ -39,7 +40,6 @@
             [disabled]="a.disabled"
             class="flex items-center gap-3"
             [class.text-error]="a.tone === 'danger'"
-            [class.menu-active]="i === activeIndex()"
             (click)="trigger(a)"
           >
             @switch (a.icon) {

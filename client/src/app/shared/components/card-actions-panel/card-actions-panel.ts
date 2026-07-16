@@ -81,8 +81,6 @@ export class CardActionsPanelComponent {
 
   /** Computed style for the anchored dropdown — re-read on each open. */
   readonly position = signal<{ top: number; left: number; width: number } | null>(null);
-  /** Index of the currently highlighted action (for keyboard nav). */
-  readonly activeIndex = signal(0);
 
   readonly actions = computed(() => this.service.actions() ?? []);
   readonly title = this.service.title;
@@ -113,7 +111,6 @@ export class CardActionsPanelComponent {
     // Recompute position and reset highlight when the panel opens.
     effect(() => {
       if (!this.service.open()) return;
-      this.activeIndex.set(0);
       if (this.useDropdown()) {
         queueMicrotask(() => {
           this.computePosition();
@@ -139,36 +136,18 @@ export class CardActionsPanelComponent {
     queueMicrotask(() => action.run());
   }
 
-  /**
-   * Keyboard handler for the anchored dropdown — Up/Down move highlight,
-   * Escape closes. Bound on TV and desktop alike (the bottom sheet on touch
-   * surfaces uses tap-to-dismiss instead).
-   */
+  // Arrow nav is owned by the global spatial-nav service, scoped to this panel
+  // via `data-tv-modal` (keeps arrows inside the menu instead of leaking to the
+  // grid behind and scrolling the page); only Escape is handled locally.
   onMenuKey(e: KeyboardEvent) {
-    if (!this.useDropdown()) return;
-    const list = this.actions();
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      e.stopPropagation();
-      const next = (this.activeIndex() + 1) % list.length;
-      this.activeIndex.set(next);
-      this.focusActionAt(next);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      e.stopPropagation();
-      const prev = (this.activeIndex() - 1 + list.length) % list.length;
-      this.activeIndex.set(prev);
-      this.focusActionAt(prev);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      this.onClose();
+    if (!this.useDropdown() || e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const anchor = this.service.anchor();
+    this.onClose();
+    if (anchor?.isConnected) {
+      queueMicrotask(() => anchor.focus({ preventScroll: true }));
     }
-  }
-
-  private focusActionAt(i: number) {
-    const buttons = this.menu()?.nativeElement.querySelectorAll<HTMLButtonElement>('button[data-action]');
-    buttons?.[i]?.focus();
   }
 
   private computePosition() {
