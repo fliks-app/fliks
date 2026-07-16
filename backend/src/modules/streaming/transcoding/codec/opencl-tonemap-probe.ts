@@ -44,6 +44,11 @@ export async function runOpenclTonemapProbe(log: Logger): Promise<void> {
         '-color_primaries', 'bt2020',
         '-color_trc', 'smpte2084',
         '-colorspace', 'bt2020nc',
+        // Force the PQ transfer into the HEVC VUI — the -color_* flags alone
+        // don't reach the raw bitstream on some builds, and tonemap_opencl
+        // rejects a transfer=unknown source.
+        '-x265-params',
+        'repeat-headers=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc',
         hdrSample,
       ],
       { timeout: 15_000 },
