@@ -104,7 +104,7 @@ describe('AMF encoders', () => {
 
     it('scales on the D3D11 device (full-GPU) for d3d11 input', () => {
       const vf = vfOf(enc.buildArgs(makeInput({ inputSurface: 'd3d11' })));
-      expect(vf).toBe('scale_d3d11=1920:1080');
+      expect(vf).toBe('scale_d3d11=w=1920:h=1080');
     });
 
     it('pulls non-CPU surfaces down before the CPU scale', () => {
