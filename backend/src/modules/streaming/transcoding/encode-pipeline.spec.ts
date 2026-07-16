@@ -72,4 +72,31 @@ describe('resolveEncodePipeline — AMF tonemap', () => {
     expect(r.effectiveHwAccel).toBe('amf');
     expect(r.useVaapiTonemap).toBe(false);
   });
+
+  it('uses the full-GPU pipeline for a clean SDR AMF encode (default)', () => {
+    Object.defineProperty(process, 'platform', {
+      value: 'win32',
+      configurable: true,
+    });
+    const r = resolveEncodePipeline(
+      SDR_H264,
+      ctx({ hwAccel: 'amf', tonemap: false, sourceVideoCodec: 'h264' }),
+      'win32',
+    );
+    expect(r.effectiveHwAccel).toBe('amf');
+    expect(r.amfFullGpuAvailable).toBe(true);
+  });
+
+  it('keeps the CPU-decode path when the AMF encode tonemaps', () => {
+    Object.defineProperty(process, 'platform', {
+      value: 'win32',
+      configurable: true,
+    });
+    const r = resolveEncodePipeline(
+      SDR_H264,
+      ctx({ hwAccel: 'amf', tonemap: true, sourceVideoCodec: 'hevc' }),
+      'win32',
+    );
+    expect(r.amfFullGpuAvailable).toBe(false);
+  });
 });

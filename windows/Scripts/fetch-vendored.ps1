@@ -21,12 +21,13 @@ $NodeVersion = '24.2.0'
 # EDB "binaries" zip (no installer) — verify the build suffix at
 # https://www.enterprisedb.com/download-postgresql-binaries
 $PgVersion = '18.0-1'
-# Stable release branch, NOT master: the master build tracks bleeding-edge
-# nv-codec-headers and demands a very recent NVENC API / NVIDIA driver
-# (master wanted API 13.1 / driver >= 610, which most installed drivers don't
-# provide yet). The n7.1 branch links an older NVENC API compatible with
-# mainstream drivers. One binary still covers QSV + AMF + NVENC + OpenCL.
-$FfmpegUrl = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-gpl-7.1.zip'
+# n8.1 stable release branch (NOT master). 8.1 is the first release with the
+# native `scale_d3d11` filter, which keeps the AMD transcode pipeline fully on
+# the GPU (D3D11 decode -> scale_d3d11 -> AMF encode, zero-copy, no CPU scale).
+# The trade-off: 8.x links a newer NVENC API, so NVENC needs a recent NVIDIA
+# driver (>= 570); older drivers fall back to CPU on NVIDIA. One binary still
+# covers QSV + AMF + NVENC + OpenCL.
+$FfmpegUrl = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-win64-gpl-8.1.zip'
 
 function Get-Archive([string]$url, [string]$dest) {
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid())

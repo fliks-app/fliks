@@ -54,6 +54,9 @@ vendored binaries and the repo's `backend/dist` + `client/dist` directly.
 2. **Node.js** starts the NestJS backend on port **4848**.
 3. On first launch, your browser opens to `http://localhost:4848` for setup.
 4. Hardware transcoding is auto-detected: **QSV → AMF → NVENC → CPU**.
+   NVENC needs a recent NVIDIA driver (**≥ 570**); on older drivers NVENC is
+   skipped and NVIDIA falls back to CPU. AMD runs a full-GPU pipeline
+   (D3D11 decode → `scale_d3d11` → AMF encode) on the bundled FFmpeg 8.1.
 
 ## Tray menu
 

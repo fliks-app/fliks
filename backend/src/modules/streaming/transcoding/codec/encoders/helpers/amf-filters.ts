@@ -7,6 +7,11 @@ import { scaleEvenHeight } from './scale-filter';
 export function amfScaleFilter8bit(input: EncoderInput): string {
   const { target, filters, tonemap, inputSurface } = input;
   const w = target.width;
+  // Full-GPU: scale on the D3D11 device (no CPU round-trip), AMF encodes the
+  // texture directly. Only reached on the clean SDR path (no crop/tonemap).
+  if (inputSurface === 'd3d11') {
+    return `scale_d3d11=w=${w}:h=${target.height}`;
+  }
   const download =
     inputSurface === 'cpu'
       ? ''
@@ -22,6 +27,9 @@ export function amfScaleFilter8bit(input: EncoderInput): string {
 export function amfScaleFilter10bit(input: EncoderInput): string {
   const { target, filters, inputSurface } = input;
   const w = target.width;
+  if (inputSurface === 'd3d11') {
+    return `scale_d3d11=w=${w}:h=${target.height}`;
+  }
   const download =
     inputSurface === 'cpu' ? '' : 'hwdownload,format=p010le,';
   return `${download}${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=p010le`;
