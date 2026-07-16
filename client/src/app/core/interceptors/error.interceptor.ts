@@ -15,7 +15,12 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       // 401 — the auth guard handles unauth state by redirecting to the user
       // picker; toasting the 401 just adds noise on top of that flow.
       const showToast = (err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 401) || err.status === 500;
-      if (!showToast || req.url.includes('/i18n/')) {
+      // Discover/search/browse GETs degrade in place (stale cache or empty
+      // rows), so an upstream 500 there must not spray toasts — one discover
+      // open fires several parallel metadata calls at once.
+      const softMetadataGet =
+        req.method === 'GET' && req.url.includes('/api/metadata') && err.status === 500;
+      if (!showToast || softMetadataGet || req.url.includes('/i18n/')) {
         return throwError(() => err);
       }
       const message = extractMessage(err, translate);

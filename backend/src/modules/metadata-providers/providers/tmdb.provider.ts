@@ -28,6 +28,7 @@ import {
   MetadataSettingsCache,
   MetadataLanguageOverride,
 } from '../metadata-settings-cache.service';
+import { installCircuitBreaker } from '../http-circuit-breaker';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
@@ -147,6 +148,36 @@ export class TmdbProvider implements IMetadataProvider {
       params: { api_key: this.config.get<string>('TMDB_API_KEY', '') },
       timeout: 10000,
     });
+    // A TMDB/CloudFront outage otherwise makes every call hang for the full
+    // timeout; fail fast once it's clearly down and stop reprobing it per item.
+    installCircuitBreaker(this.client, {
+      name: 'tmdb',
+      failureThreshold: 3,
+      cooldownMs: 30_000,
+    });
+  }
+
+  /** Last successful payload per global list key, served when a live fetch
+   *  fails so a TMDB outage empties nothing that was ever loaded. */
+  private readonly listFallback = new Map<string, unknown>();
+
+  /** Fetch a global (non-user-specific) TMDB list, falling back to the last
+   *  good copy on failure. Cold misses propagate — there is nothing to serve. */
+  private async withStaleFallback<T>(
+    key: string,
+    fetch: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      const value = await fetch();
+      this.listFallback.set(key, value);
+      return value;
+    } catch (err) {
+      if (this.listFallback.has(key)) {
+        this.logger.warn(`TMDB ${key} unavailable — serving last cached copy`);
+        return this.listFallback.get(key) as T;
+      }
+      throw err;
+    }
   }
 
   async searchMovie(
@@ -479,74 +510,103 @@ export class TmdbProvider implements IMetadataProvider {
     window: 'day' | 'week' = 'week',
   ): Promise<MetadataSearchResult[]> {
     const lang = await this.metaLang.resolve();
-    const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
-      `/trending/movie/${window}`,
-      { params: { language: lang.tmdbLocale } },
+    return this.withStaleFallback(
+      `trending:movie:${window}:${lang.tmdbLocale}`,
+      async () => {
+        const { data } = await this.client.get<
+          TmdbPaginated<TmdbMovieListItem>
+        >(`/trending/movie/${window}`, {
+          params: { language: lang.tmdbLocale },
+        });
+        return data.results.map((r) => this.mapMovieResult(r));
+      },
     );
-    return data.results.map((r) => this.mapMovieResult(r));
   }
 
   async getPopularMovies(): Promise<MetadataSearchResult[]> {
     const lang = await this.metaLang.resolve();
-    const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
-      '/movie/popular',
-      { params: { language: lang.tmdbLocale } },
+    return this.withStaleFallback(
+      `popular:movie:${lang.tmdbLocale}`,
+      async () => {
+        const { data } = await this.client.get<
+          TmdbPaginated<TmdbMovieListItem>
+        >('/movie/popular', { params: { language: lang.tmdbLocale } });
+        return data.results.map((r) => this.mapMovieResult(r));
+      },
     );
-    return data.results.map((r) => this.mapMovieResult(r));
   }
 
   async getUpcomingMovies(): Promise<MetadataSearchResult[]> {
     const lang = await this.metaLang.resolve();
-    const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
-      '/movie/upcoming',
-      { params: { language: lang.tmdbLocale, region: lang.region } },
+    return this.withStaleFallback(
+      `upcoming:movie:${lang.tmdbLocale}:${lang.region}`,
+      async () => {
+        const { data } = await this.client.get<
+          TmdbPaginated<TmdbMovieListItem>
+        >('/movie/upcoming', {
+          params: { language: lang.tmdbLocale, region: lang.region },
+        });
+        return data.results.map((r) => this.mapMovieResult(r));
+      },
     );
-    return data.results.map((r) => this.mapMovieResult(r));
   }
 
   async getTrendingTvShows(
     window: 'day' | 'week' = 'week',
   ): Promise<MetadataSearchResult[]> {
     const lang = await this.metaLang.resolve();
-    const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
-      `/trending/tv/${window}`,
-      { params: { language: lang.tmdbLocale } },
+    return this.withStaleFallback(
+      `trending:tv:${window}:${lang.tmdbLocale}`,
+      async () => {
+        const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
+          `/trending/tv/${window}`,
+          { params: { language: lang.tmdbLocale } },
+        );
+        return data.results.map((r) => this.mapTvResult(r));
+      },
     );
-    return data.results.map((r) => this.mapTvResult(r));
   }
 
   async getPopularTvShows(): Promise<MetadataSearchResult[]> {
     const lang = await this.metaLang.resolve();
-    const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
-      '/tv/popular',
-      { params: { language: lang.tmdbLocale } },
-    );
-    return data.results.map((r) => this.mapTvResult(r));
+    return this.withStaleFallback(`popular:tv:${lang.tmdbLocale}`, async () => {
+      const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
+        '/tv/popular',
+        { params: { language: lang.tmdbLocale } },
+      );
+      return data.results.map((r) => this.mapTvResult(r));
+    });
   }
 
   async getUpcomingTvShows(): Promise<MetadataSearchResult[]> {
     const lang = await this.metaLang.resolve();
-    const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
-      '/tv/on_the_air',
-      { params: { language: lang.tmdbLocale } },
-    );
-    return data.results.map((r) => this.mapTvResult(r));
+    return this.withStaleFallback(`upcoming:tv:${lang.tmdbLocale}`, async () => {
+      const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
+        '/tv/on_the_air',
+        { params: { language: lang.tmdbLocale } },
+      );
+      return data.results.map((r) => this.mapTvResult(r));
+    });
   }
 
   async getMovieGenres(): Promise<{ id: number; name: string }[]> {
     const lang = await this.metaLang.resolve();
-    const { data } = await this.client.get<{
-      genres: { id: number; name: string }[];
-    }>('/genre/movie/list', { params: { language: lang.tmdbLocale } });
-    return data.genres;
+    return this.withStaleFallback(`genres:movie:${lang.tmdbLocale}`, async () => {
+      const { data } = await this.client.get<{
+        genres: { id: number; name: string }[];
+      }>('/genre/movie/list', { params: { language: lang.tmdbLocale } });
+      return data.genres;
+    });
   }
 
   async getTvGenres(): Promise<{ id: number; name: string }[]> {
     const lang = await this.metaLang.resolve();
-    const { data } = await this.client.get<{
-      genres: { id: number; name: string }[];
-    }>('/genre/tv/list', { params: { language: lang.tmdbLocale } });
-    return data.genres;
+    return this.withStaleFallback(`genres:tv:${lang.tmdbLocale}`, async () => {
+      const { data } = await this.client.get<{
+        genres: { id: number; name: string }[];
+      }>('/genre/tv/list', { params: { language: lang.tmdbLocale } });
+      return data.genres;
+    });
   }
 
   async discoverMovies(opts: DiscoverOptions): Promise<MetadataSearchResult[]> {
