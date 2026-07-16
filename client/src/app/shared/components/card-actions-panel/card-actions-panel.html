@@ -1,111 +1,44 @@
-@if (service.open() && useDropdown()) {
-  <!-- TV / desktop: anchored dropdown — DaisyUI menu styling -->
-  <div
-    class="fixed inset-0 z-[100]"
-    (click)="onClose()"
-  ></div>
-  <div
-    #menu
-    data-tv-modal
-    class="card-actions-menu fixed z-[101] bg-base-200 rounded-box shadow-xl overflow-hidden"
-    animate.leave="card-actions-leaving"
-    [style.top.px]="position()?.top"
-    [style.left.px]="position()?.left"
-    [style.width.px]="position()?.width"
-    (keydown)="onMenuKey($event)"
-  >
-    @if (title()) {
-      <div class="flex items-start gap-3 px-4 py-3 border-b border-base-content/10">
-        @if (imageUrl(); as img) {
-          <img [src]="img | resolveUrl" alt="" loading="lazy"
-            class="shrink-0 rounded object-cover bg-base-300"
-            [style.width.px]="imageAspect() === 'landscape' ? 80 : 60"
-            [style.aspect-ratio]="imageAspect() === 'landscape' ? '16 / 9' : '2 / 3'" />
+<app-popover-menu
+  [open]="service.open()"
+  [anchor]="service.anchor()"
+  [placement]="placement()"
+  [width]="width()"
+  (closed)="onClose()"
+>
+  @if (title()) {
+    <div class="flex items-start gap-3 px-2 pb-3 mb-1 border-b border-base-content/10">
+      @if (imageUrl(); as img) {
+        <img [src]="img | resolveUrl" alt="" loading="lazy"
+          class="shrink-0 rounded object-cover bg-base-300"
+          [style.width.px]="imageAspect() === 'landscape' ? 80 : 60"
+          [style.aspect-ratio]="imageAspect() === 'landscape' ? '16 / 9' : '2 / 3'" />
+      }
+      <div class="min-w-0">
+        <div class="text-sm font-semibold line-clamp-2">{{ title() }}</div>
+        @if (subtitle()) {
+          <div class="text-xs text-base-content/60 line-clamp-2">{{ subtitle() }}</div>
         }
-        <div class="min-w-0">
-          <div class="text-sm font-semibold line-clamp-2">{{ title() }}</div>
-          @if (subtitle()) {
-            <div class="text-xs text-base-content/60 line-clamp-2">{{ subtitle() }}</div>
-          }
-        </div>
       </div>
-    }
-    <ul role="menu" class="menu p-2 gap-0.5 w-full">
-      @for (a of actions(); track a) {
-        <li [class.disabled]="a.disabled">
-          <button
-            type="button"
-            role="menuitem"
-            data-action
-            [disabled]="a.disabled"
-            class="flex items-center gap-3"
-            [class.text-error]="a.tone === 'danger'"
-            (click)="trigger(a)"
-          >
-            @switch (a.icon) {
-              @case ('play') { <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70"></svg> }
-              @case ('external-link') { <svg lucideExternalLink class="h-4 w-4 shrink-0 opacity-70"></svg> }
-              @case ('eye') { <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg> }
-              @case ('eye-off') { <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg> }
-              @case ('trash-2') { <svg lucideTrash2 class="h-4 w-4 shrink-0 opacity-70"></svg> }
-              @case ('list-plus') { <svg lucideListPlus class="h-4 w-4 shrink-0 opacity-70"></svg> }
-              @case ('user-plus') { <svg lucideUserPlus class="h-4 w-4 shrink-0 opacity-70"></svg> }
-            }
-            <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
-          </button>
-        </li>
-      }
-    </ul>
-  </div>
-}
-@if (!useDropdown()) {
-  <!-- Mobile / TV: bottom sheet. Kept mounted (driven by [open], not gated
-       behind @if(service.open())) so service.close() plays the sheet's
-       slide-down exit. The sheet gates <ng-content> behind its own
-       @if(visible()), so the projected list is only instantiated while the
-       sheet is on screen. The list survives the slide-out because close()
-       keeps actions() populated until clear() runs once closed; actions()
-       falls back to [] so the @for/@if below stay null-safe. -->
-  <app-bottom-sheet [open]="service.open()" (closed)="onClose()">
-    <div #sheet data-tv-modal class="px-2 pb-2">
-      @if (title()) {
-        <div class="flex items-start gap-3 px-4 py-3 mb-1 border-b border-white/10">
-          @if (imageUrl(); as img) {
-            <img [src]="img | resolveUrl" alt="" loading="lazy"
-              class="shrink-0 rounded object-cover bg-white/10"
-              [style.width.px]="imageAspect() === 'landscape' ? 92 : 70"
-              [style.aspect-ratio]="imageAspect() === 'landscape' ? '16 / 9' : '2 / 3'" />
-          }
-          <div class="min-w-0">
-            <div class="text-white text-base font-semibold line-clamp-2">{{ title() }}</div>
-            @if (subtitle()) {
-              <div class="text-white/60 text-sm line-clamp-2">{{ subtitle() }}</div>
-            }
-          </div>
-        </div>
-      }
-      @for (a of actions(); track a) {
-        <button
-          type="button"
-          [disabled]="a.disabled"
-          class="w-full flex items-center gap-3 px-4 py-3.5 text-left text-base rounded-lg active:bg-white/10"
-          [class.text-white]="a.tone !== 'danger'"
-          [class.text-error]="a.tone === 'danger'"
-          [class.opacity-40]="a.disabled"
-          (click)="trigger(a)"
-        >
-          @switch (a.icon) {
-            @case ('play') { <svg lucidePlay class="h-5 w-5 shrink-0 opacity-80"></svg> }
-            @case ('external-link') { <svg lucideExternalLink class="h-5 w-5 shrink-0 opacity-80"></svg> }
-            @case ('eye') { <svg lucideEye class="h-5 w-5 shrink-0 opacity-80"></svg> }
-            @case ('eye-off') { <svg lucideEyeOff class="h-5 w-5 shrink-0 opacity-80"></svg> }
-            @case ('trash-2') { <svg lucideTrash2 class="h-5 w-5 shrink-0 opacity-80"></svg> }
-            @case ('list-plus') { <svg lucideListPlus class="h-5 w-5 shrink-0 opacity-80"></svg> }
-            @case ('user-plus') { <svg lucideUserPlus class="h-5 w-5 shrink-0 opacity-80"></svg> }
-          }
-          <span class="flex-1">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
-        </button>
-      }
     </div>
-  </app-bottom-sheet>
-}
+  }
+  @for (a of actions(); track a) {
+    <button
+      type="button"
+      class="dropdown-item"
+      [class.text-error]="a.tone === 'danger'"
+      [disabled]="a.disabled"
+      (click)="trigger(a)"
+    >
+      @switch (a.icon) {
+        @case ('play') { <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70"></svg> }
+        @case ('external-link') { <svg lucideExternalLink class="h-4 w-4 shrink-0 opacity-70"></svg> }
+        @case ('eye') { <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg> }
+        @case ('eye-off') { <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg> }
+        @case ('trash-2') { <svg lucideTrash2 class="h-4 w-4 shrink-0 opacity-70"></svg> }
+        @case ('list-plus') { <svg lucideListPlus class="h-4 w-4 shrink-0 opacity-70"></svg> }
+        @case ('user-plus') { <svg lucideUserPlus class="h-4 w-4 shrink-0 opacity-70"></svg> }
+      }
+      <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
+    </button>
+  }
+</app-popover-menu>

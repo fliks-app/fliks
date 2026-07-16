@@ -86,11 +86,20 @@ export class PopoverMenuComponent {
   readonly open = input(false);
   /** Element the dropdown should anchor to on desktop. */
   readonly anchor = input<HTMLElement | null>(null);
-  /** Where the dropdown opens relative to the anchor. `right-start` / `left-start`
-   *  are side flyouts (used for submenus) that open beside the anchor. */
+  /** Where the dropdown opens relative to the anchor. `*-center` centers it
+   *  under the anchor; `right-start` / `left-start` are side flyouts (used for
+   *  submenus) that open beside the anchor. */
   readonly placement = input<
-    'bottom-end' | 'bottom-start' | 'top-end' | 'top-start' | 'right-start' | 'left-start'
+    | 'bottom-end'
+    | 'bottom-start'
+    | 'bottom-center'
+    | 'top-end'
+    | 'top-start'
+    | 'right-start'
+    | 'left-start'
   >('bottom-end');
+  /** Dropdown width in px (the sheet ignores it). */
+  readonly width = input(240);
   /** Marks this menu as a flyout submenu: spatial nav traps up/down inside it
    *  and lets left/right return to the opener in the parent menu. */
   readonly submenu = input(false);
@@ -216,7 +225,7 @@ export class PopoverMenuComponent {
   readonly position = computed(() => {
     this.viewportTick(); // dependency: forces recompute on scroll / resize
     const GUTTER = 8;
-    const WIDTH = 240;
+    const WIDTH = this.width();
     const MIN_HEIGHT = 120;
     const a = this.anchor();
     if (!a)
@@ -269,8 +278,12 @@ export class PopoverMenuComponent {
       : spaceBelow < MIN_HEIGHT && spaceAbove > spaceBelow;
     const maxHeight = Math.max(MIN_HEIGHT, openTop ? spaceAbove : spaceBelow);
 
-    // Horizontal: anchor to the requested edge, then clamp into the viewport.
-    const rawLeft = onEnd ? r.right - WIDTH : r.left;
+    // Horizontal: anchor to the requested edge (or centre), then clamp.
+    const rawLeft = placement.endsWith('center')
+      ? r.left + (r.width - WIDTH) / 2
+      : onEnd
+        ? r.right - WIDTH
+        : r.left;
     const left = Math.min(
       Math.max(GUTTER, rawLeft),
       Math.max(GUTTER, viewportW - WIDTH - GUTTER),
