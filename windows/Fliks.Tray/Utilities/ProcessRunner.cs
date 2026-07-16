@@ -34,6 +34,12 @@ internal static class ProcessRunner
         process.StartInfo.CreateNoWindow = true;
         process.StartInfo.RedirectStandardOutput = captureOutput;
         process.StartInfo.RedirectStandardError = captureOutput;
+        if (captureOutput)
+        {
+            // Decode tool output as UTF-8, not the Windows ANSI code page.
+            process.StartInfo.StandardOutputEncoding = Encoding.UTF8;
+            process.StartInfo.StandardErrorEncoding = Encoding.UTF8;
+        }
         if (workingDirectory is not null) process.StartInfo.WorkingDirectory = workingDirectory;
         if (environment is not null)
             foreach (var (k, v) in environment) process.StartInfo.Environment[k] = v;
