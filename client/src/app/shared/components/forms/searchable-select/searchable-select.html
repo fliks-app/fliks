@@ -17,7 +17,8 @@
 
 @if (open()) {
   <div
-    class="absolute left-0 right-0 mt-1 z-40 bg-base-100 border border-base-300 rounded-lg shadow-lg overflow-hidden"
+    animate.leave="popover-pop-leaving"
+    class="popover-pop-in absolute left-0 right-0 mt-1 z-40 bg-base-100 border border-base-300 rounded-lg shadow-lg overflow-hidden"
   >
     <div class="p-2 border-b border-base-200">
       <input
