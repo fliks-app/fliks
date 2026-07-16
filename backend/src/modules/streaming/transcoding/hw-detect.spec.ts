@@ -33,9 +33,7 @@ describe('detectHwAccel', () => {
   });
 
   it('picks AMF second on Windows when QSV fails', async () => {
-    programProbes(
-      (args) => args.includes('d3d11va') && args.includes('h264_amf'),
-    );
+    programProbes((args) => args.includes('h264_amf'));
     expect(await detectHwAccel(log, 'win32')).toBe('amf');
   });
 

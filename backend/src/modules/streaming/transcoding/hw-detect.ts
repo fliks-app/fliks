@@ -8,7 +8,9 @@ const execFileAsync = promisify(execFile);
 
 type HwTest = { type: HwAccelType; args: string[] };
 
-const BLACK_INPUT = ['-f', 'lavfi', '-i', 'color=black:s=64x64:d=0.1'];
+// 320x240, not a tiny 64x64: AMD's VCN encoder rejects sub-minimum
+// resolutions with "Invalid argument", which made the AMF probe fail on iGPUs.
+const BLACK_INPUT = ['-f', 'lavfi', '-i', 'color=black:s=320x240:d=0.1'];
 const ONE_FRAME_NULL = ['-frames:v', '1', '-f', 'null', '-'];
 
 /** QSV one-frame probe. On Windows QSV initialises natively (`qsv=qs`); on
@@ -51,14 +53,14 @@ const VAAPI_TEST: HwTest = {
   ],
 };
 
+// No -hwaccel here: this probes the AMF *encoder* only. A decode hwaccel is
+// irrelevant and can conflict with the AMF device init.
 const AMF_TEST: HwTest = {
   type: 'amf',
   args: [
     '-hide_banner',
     '-loglevel',
     'error',
-    '-hwaccel',
-    'd3d11va',
     ...BLACK_INPUT,
     '-c:v',
     'h264_amf',
