@@ -141,10 +141,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     ) {
       void runTonemapOpenclProbe(this.log);
     }
-    // Standalone OpenCL tone-map — the GPU HDR→SDR path for NVENC (no
-    // tonemap_cuda in mainline ffmpeg; OpenCL rides the same compute stack
-    // as CUDA/NVENC, unlike the GLX/Vulkan chain which fails headless).
-    if (this.detectedHwAccel === 'nvenc') {
+    // Standalone OpenCL tone-map — the GPU HDR→SDR path for NVENC and AMF
+    // (neither has an on-encoder tonemap; OpenCL rides the same compute stack
+    // as CUDA/NVENC and AMD's driver, unlike the GLX/Vulkan chain which fails
+    // headless).
+    if (this.detectedHwAccel === 'nvenc' || this.detectedHwAccel === 'amf') {
       void runOpenclTonemapProbe(this.log);
     }
     // Vulkan/libplacebo Dolby Vision P5 tonemap. Vendor-agnostic, so probe on
