@@ -2,6 +2,7 @@ import { Component, ChangeDetectionStrategy, inject, signal, computed, effect, O
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
+import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media, CalendarEntry } from '../../core/services/api/media.service';
 import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '../../core/services/api/streaming-api.service';
@@ -77,6 +78,7 @@ import { RequestDeclineModalComponent } from '../requests/request-decline-modal/
   selector: 'app-home',
   imports: [
     RouterLink, TranslateModule, DefaultFocusDirective,
+    LocaleDatePipe,
     MediaCardComponent,
     MosaicCardComponent,
     HorizontalScrollerComponent,

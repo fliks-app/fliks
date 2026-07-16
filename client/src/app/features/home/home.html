@@ -154,7 +154,7 @@
                 [attr.data-home-focus]="'soon:' + entry.id"
                 [imageUrl]="entry.posterUrl"
                 [title]="entry.title"
-                [subtitle]="entry.date"
+                [subtitle]="entry.date | localeDate"
                 [link]="['/' + (entry.type === 'series' ? 'series' : 'movies'), '' + entry.mediaId]"
                 [playlistMediaId]="entry.mediaId"
               />
