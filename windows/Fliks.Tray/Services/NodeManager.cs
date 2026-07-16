@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Fliks.Tray.Utilities;
 
 namespace Fliks.Tray.Services;
@@ -70,6 +71,9 @@ internal sealed class NodeManager
         proc.StartInfo.CreateNoWindow = true;
         proc.StartInfo.RedirectStandardOutput = true;
         proc.StartInfo.RedirectStandardError = true;
+        // Node writes UTF-8; decode it as such so the log isn't CP1252 mojibake.
+        proc.StartInfo.StandardOutputEncoding = Encoding.UTF8;
+        proc.StartInfo.StandardErrorEncoding = Encoding.UTF8;
         foreach (var (k, v) in config.AsEnvironment()) proc.StartInfo.Environment[k] = v;
 
         _logWriter = OpenDailyLog();
