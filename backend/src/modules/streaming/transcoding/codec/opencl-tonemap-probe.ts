@@ -25,6 +25,7 @@ export function isOpenclTonemapEnabled(): boolean {
 
 export async function runOpenclTonemapProbe(log: Logger): Promise<void> {
   const t0 = Date.now();
+  let failure = '';
   const hdrSample = path.join(
     os.tmpdir(),
     `fliks-opencl-tonemap-probe-${process.pid}.hevc`,
@@ -65,13 +66,15 @@ export async function runOpenclTonemapProbe(log: Logger): Promise<void> {
       { timeout: 20_000 },
     );
     enabled = true;
-  } catch {
+  } catch (err) {
     enabled = false;
+    const stderr = (err as { stderr?: string }).stderr?.trim();
+    failure = stderr ? stderr.split('\n').slice(-2).join(' ') : '';
   } finally {
     await unlink(hdrSample).catch(() => {});
     probedOnce = true;
     log.log(
-      `[opencl-tonemap-probe] enabled=${enabled} (${Date.now() - t0}ms)`,
+      `[opencl-tonemap-probe] enabled=${enabled} (${Date.now() - t0}ms)${failure ? ` — ${failure}` : ''}`,
     );
   }
 }
