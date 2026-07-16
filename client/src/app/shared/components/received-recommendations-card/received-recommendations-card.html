@@ -1,73 +1,71 @@
 @if (!tv.isTv() && items().length > 0) {
-  <div [class.pb-4]="padding()">
-    <section class="card bg-base-200/60 backdrop-blur-sm shadow-sm">
-      <div class="card-body p-4 sm:p-5 gap-4">
-        @for (group of grouped(); track group.senderId) {
-          <div class="flex flex-col gap-2">
-            <a
-              [routerLink]="['/profile', group.senderId]"
-              class="w-fit text-lg font-semibold hover:underline"
-            >
-              {{ 'recommend.recommended_by' | translate: { username: group.senderName } }}
-            </a>
-            <ul class="flex flex-col divide-y divide-base-300/50">
-              @for (item of group.items; track item.id) {
-                <li class="flex items-center gap-4 py-3 first:pt-0 last:pb-0">
-                  <a [routerLink]="mediaLink(item)" class="shrink-0">
-                    <div class="w-24 aspect-video rounded-md bg-base-300 overflow-hidden">
-                      @if (item.stillUrl ?? item.fanartUrl ?? item.posterUrl; as img) {
-                        <img [src]="img" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
-                      }
-                    </div>
-                  </a>
-                  <div class="flex-1 min-w-0 space-y-0.5">
-                    <a [routerLink]="mediaLink(item)" class="block">
-                      <p class="text-base font-semibold truncate hover:underline">{{ item.title }}</p>
-                      @if (item.label) {
-                        <p class="text-sm text-base-content/70 truncate">{{ item.label }}</p>
-                      }
-                    </a>
-                    @if (item.message) {
-                      <p class="text-sm text-base-content/80 italic truncate">« {{ item.message }} »</p>
+  <section class="card bg-base-200/60 backdrop-blur-sm shadow-sm">
+    <div class="card-body p-4 sm:p-5 gap-4">
+      @for (group of grouped(); track group.senderId) {
+        <div class="flex flex-col gap-2">
+          <a
+            [routerLink]="['/profile', group.senderId]"
+            class="w-fit rounded text-lg font-semibold hover:underline"
+          >
+            {{ 'recommend.recommended_by' | translate: { username: group.senderName } }}
+          </a>
+          <ul class="flex flex-col divide-y divide-base-300/50">
+            @for (item of group.items; track item.id) {
+              <li appTvRow class="flex items-center gap-4 py-3 first:pt-0 last:pb-0">
+                <a [routerLink]="mediaLink(item)" class="shrink-0 rounded-md">
+                  <div class="w-24 aspect-video rounded-md bg-base-300 overflow-hidden">
+                    @if (item.stillUrl ?? item.fanartUrl ?? item.posterUrl; as img) {
+                      <img [src]="img" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
                     }
                   </div>
-                  <div class="flex items-center gap-1 shrink-0">
-                    <app-dropdown-menu placement="bottom-end">
-                      <button
-                        trigger
-                        type="button"
-                        class="btn btn-ghost btn-sm btn-square"
-                        [attr.aria-label]="'media_card.actions' | translate"
-                      >
-                        <svg lucideEllipsisVertical class="h-5 w-5"></svg>
-                      </button>
-                      <button type="button" class="dropdown-item" (click)="toggleLike(item); $event.stopPropagation()">
-                        <svg lucideHeart class="h-4 w-4 text-error" [attr.fill]="item.liked ? 'currentColor' : 'none'"></svg>
-                        <span class="flex-1">{{ (item.liked ? 'likes.unlike' : 'likes.like') | translate }}</span>
-                      </button>
-                      <button type="button" class="dropdown-item" (click)="addToPlaylist(item)">
-                        <svg lucideListPlus class="h-4 w-4"></svg>
-                        <span class="flex-1">{{ 'playlists.add_to_playlist_title' | translate }}</span>
-                      </button>
-                    </app-dropdown-menu>
-                    <span class="tooltip tooltip-left" [attr.data-tip]="'recommend.dismiss' | translate">
-                      <button
-                        type="button"
-                        class="btn btn-ghost btn-sm btn-square"
-                        [disabled]="busyId() === item.id"
-                        (click)="dismiss(item)"
-                        [attr.aria-label]="'recommend.dismiss' | translate"
-                      >
-                        <svg lucideX class="h-5 w-5"></svg>
-                      </button>
-                    </span>
-                  </div>
-                </li>
-              }
-            </ul>
-          </div>
-        }
-      </div>
-    </section>
-  </div>
+                </a>
+                <div class="flex-1 min-w-0 space-y-0.5">
+                  <a [routerLink]="mediaLink(item)" class="block rounded">
+                    <p class="text-base font-semibold truncate hover:underline">{{ item.title }}</p>
+                    @if (item.label) {
+                      <p class="text-sm text-base-content/70 truncate">{{ item.label }}</p>
+                    }
+                  </a>
+                  @if (item.message) {
+                    <p class="text-sm text-base-content/80 italic truncate">« {{ item.message }} »</p>
+                  }
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                  <app-dropdown-menu placement="bottom-end">
+                    <button
+                      trigger
+                      type="button"
+                      class="btn btn-ghost btn-sm btn-square"
+                      [attr.aria-label]="'media_card.actions' | translate"
+                    >
+                      <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+                    </button>
+                    <button type="button" class="dropdown-item" (click)="toggleLike(item); $event.stopPropagation()">
+                      <svg lucideHeart class="h-4 w-4 text-error" [attr.fill]="item.liked ? 'currentColor' : 'none'"></svg>
+                      <span class="flex-1">{{ (item.liked ? 'likes.unlike' : 'likes.like') | translate }}</span>
+                    </button>
+                    <button type="button" class="dropdown-item" (click)="addToPlaylist(item)">
+                      <svg lucideListPlus class="h-4 w-4"></svg>
+                      <span class="flex-1">{{ 'playlists.add_to_playlist_title' | translate }}</span>
+                    </button>
+                  </app-dropdown-menu>
+                  <span class="tooltip tooltip-left" [attr.data-tip]="'recommend.dismiss' | translate">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-sm btn-square"
+                      [disabled]="busyId() === item.id"
+                      (click)="dismiss(item)"
+                      [attr.aria-label]="'recommend.dismiss' | translate"
+                    >
+                      <svg lucideX class="h-5 w-5"></svg>
+                    </button>
+                  </span>
+                </div>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    </div>
+  </section>
 }
