@@ -1258,7 +1258,16 @@
     "outro": "Outro",
     "recap": "Resumen"
   },
+  "folder_picker": {
+    "title": "Seleccionar una carpeta",
+    "select": "Seleccionar esta carpeta",
+    "up": "Subir",
+    "empty": "Sin subcarpetas",
+    "roots": "Este equipo",
+    "unreadable": "Carpeta ilegible"
+  },
   "common": {
+    "browse": "Explorar…",
     "item_count_one": "{{count}} elemento",
     "item_count_other": "{{count}} elementos",
     "search": "Buscar…",

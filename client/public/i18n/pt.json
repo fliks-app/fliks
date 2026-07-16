@@ -1258,7 +1258,16 @@
     "outro": "Outro",
     "recap": "Resumo"
   },
+  "folder_picker": {
+    "title": "Selecionar uma pasta",
+    "select": "Selecionar esta pasta",
+    "up": "Acima",
+    "empty": "Sem subpastas",
+    "roots": "Este PC",
+    "unreadable": "Pasta ilegível"
+  },
   "common": {
+    "browse": "Procurar…",
     "item_count_one": "{{count}} elemento",
     "item_count_other": "{{count}} elementos",
     "search": "Pesquisar…",

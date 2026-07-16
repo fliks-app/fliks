@@ -1258,7 +1258,16 @@
     "outro": "Outro",
     "recap": "Résumé"
   },
+  "folder_picker": {
+    "title": "Sélectionner un dossier",
+    "select": "Sélectionner ce dossier",
+    "up": "Remonter",
+    "empty": "Aucun sous-dossier",
+    "roots": "Ce PC",
+    "unreadable": "Dossier illisible"
+  },
   "common": {
+    "browse": "Parcourir…",
     "item_count_one": "{{count}} élément",
     "item_count_other": "{{count}} éléments",
     "search": "Rechercher…",

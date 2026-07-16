@@ -24,6 +24,7 @@ import {
   LanguageProfile,
 } from '../../../core/services/api/profiles.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { FolderPickerService } from '../../../core/services/folder-picker.service';
 import { METADATA_PROVIDER_OPTIONS_LIBRARY } from '../../../core/constants/metadata-providers';
 
 @Component({
@@ -38,6 +39,7 @@ export class LibrariesSettingsComponent implements OnInit {
   private readonly profilesApi = inject(ProfilesService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
+  private readonly folderPicker = inject(FolderPickerService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
@@ -153,6 +155,11 @@ export class LibrariesSettingsComponent implements OnInit {
 
   closeEditor() {
     this.editorDialog()?.nativeElement.close();
+  }
+
+  async browsePath() {
+    const picked = await this.folderPicker.open(this.formPath().trim());
+    if (picked) this.formPath.set(picked);
   }
 
   toggleUser(id: number) {

@@ -26,6 +26,7 @@ import { MarkersModule } from './modules/markers/markers.module';
 import { PersonsModule } from './modules/persons/persons.module';
 import { ImageModule } from './modules/images/image.module';
 import { ImportsModule } from './modules/imports/imports.module';
+import { FilesystemModule } from './modules/filesystem/filesystem.module';
 import { SetupChecklistModule } from './modules/setup-checklist/setup-checklist.module';
 import { CountsModule } from './modules/counts/counts.module';
 import { CommonModule } from './common/common.module';
@@ -101,6 +102,7 @@ import { join } from 'path';
     ImageModule,
     MarkersModule,
     ImportsModule,
+    FilesystemModule,
     SetupChecklistModule,
     CountsModule,
   ],
