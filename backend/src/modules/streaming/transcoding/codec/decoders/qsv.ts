@@ -1,5 +1,6 @@
 import type { DecoderDescriptor } from './types';
 import type { VideoCodec } from '../types';
+import { qsvDeviceInitArgs } from '../../hw-device';
 
 /** Build a QSV decoder descriptor for `codec`. Decode actually happens
  *  on the VAAPI driver (Linux Intel) — libavcodec wires the qsv encoder
@@ -20,12 +21,11 @@ function qsvDecoder(codec: VideoCodec, maxBitDepth: 8 | 10): DecoderDescriptor {
     // qsv-native variant below emits QSV surfaces directly for chains
     // (e.g. vpp_qsv crop) that consume them without hwmap.
     outputSurface: 'vaapi',
-    supports: () => true,
+    // VAAPI-output QSV path: Linux-only (no VAAPI on Windows). win32 QSV
+    // always goes through qsvNativeDecoder below.
+    supports: () => process.platform !== 'win32',
     buildInputArgs: () => [
-      '-init_hw_device',
-      'vaapi=va:/dev/dri/renderD128',
-      '-init_hw_device',
-      'qsv=qs@va',
+      ...qsvDeviceInitArgs(),
       '-hwaccel',
       'vaapi',
       '-hwaccel_output_format',
@@ -55,10 +55,7 @@ function qsvNativeDecoder(
     outputSurface: 'qsv',
     supports: () => true,
     buildInputArgs: () => [
-      '-init_hw_device',
-      'vaapi=va:/dev/dri/renderD128',
-      '-init_hw_device',
-      'qsv=qs@va',
+      ...qsvDeviceInitArgs(),
       '-filter_hw_device',
       'qs',
       '-hwaccel',

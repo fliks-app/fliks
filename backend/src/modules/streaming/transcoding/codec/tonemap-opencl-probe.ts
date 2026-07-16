@@ -4,6 +4,7 @@ import { unlink } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
+import { qsvDeviceInitArgs } from '../hw-device';
 
 const execFileAsync = promisify(execFile);
 
@@ -101,10 +102,7 @@ export async function runTonemapOpenclProbe(log: Logger): Promise<void> {
       '-hide_banner',
       '-loglevel',
       'error',
-      '-init_hw_device',
-      'vaapi=va:/dev/dri/renderD128',
-      '-init_hw_device',
-      'qsv=qs@va',
+      ...qsvDeviceInitArgs(),
       '-init_hw_device',
       'opencl=ocl:0.0',
       '-filter_hw_device',

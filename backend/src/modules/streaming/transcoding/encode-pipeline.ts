@@ -54,7 +54,9 @@ export interface ResolvedEncodePipeline {
 export function resolveEncodePipeline(
   variant: CodecVariant,
   ctx: EncodePipelineContext,
+  platform: NodeJS.Platform = process.platform,
 ): ResolvedEncodePipeline {
+  const isWindows = platform === 'win32';
   const normalisedSourceCodec = normaliseSourceCodec(ctx.sourceVideoCodec);
   const hasUsableQsvNativeDecoder =
     ctx.hwAccel === 'qsv' &&
@@ -73,9 +75,14 @@ export function resolveEncodePipeline(
   // Keep the whole pipeline on QSV (no hwdownload→crop→hwupload round-trip):
   // crop-only always; tonemap via vpp_qsv LUT or via opencl when probed;
   // tonemap via vaapi is NOT qsv-native compatible.
+  // Windows QSV has no VAAPI chain, so the qsv-native pipeline is the only
+  // QSV path — used for every session (not just crop/tonemap as on Linux).
   const qsvNativeAvailable =
     hasUsableQsvNativeDecoder &&
-    (ctx.crop || tonemapPath === 'qsv' || tonemapPath === 'opencl') &&
+    (isWindows ||
+      ctx.crop ||
+      tonemapPath === 'qsv' ||
+      tonemapPath === 'opencl') &&
     (!ctx.tonemap ||
       (tonemapPath === 'qsv' && isVppQsvTonemapEnabled()) ||
       (tonemapPath === 'opencl' && tonemapOpenclOk));
@@ -83,14 +90,22 @@ export function resolveEncodePipeline(
     qsvNativeAvailable ||
     (ctx.hwAccel === 'qsv' && ctx.crop && ctx.tonemap && !ctx.burnIn);
 
-  const requestedHwAccel = requestedHwAccelFor(ctx.hwAccel, {
-    burnIn: ctx.burnIn,
-    crop: ctx.crop,
-    qsvCanCrop,
-  });
+  let requestedHwAccel = requestedHwAccelFor(
+    ctx.hwAccel,
+    { burnIn: ctx.burnIn, crop: ctx.crop, qsvCanCrop },
+    platform,
+  );
+  // On Windows, QSV without a viable native pipeline (e.g. HDR tonemap with
+  // no vpp_qsv/opencl) has no fallback chain — drop to CPU encode.
+  if (isWindows && ctx.hwAccel === 'qsv' && !qsvNativeAvailable) {
+    requestedHwAccel = 'none';
+  }
   const encoder = encoderRegistry.resolve(variant, requestedHwAccel);
   const effectiveHwAccel: HwAccelType = encoder?.hwAccel ?? 'none';
-  const useVaapiTonemap = ctx.tonemap && tonemapPath === 'vaapi';
+  // AMF tonemaps HDR->SDR on CPU (no VAAPI to host the tonemap), so it needs
+  // the CPU tonemap chain populated — never the vaapi in-place path.
+  const useVaapiTonemap =
+    ctx.tonemap && tonemapPath === 'vaapi' && effectiveHwAccel !== 'amf';
 
   return {
     requestedHwAccel,

@@ -13,6 +13,11 @@ import {
 import { h264VaapiDecoder, hevcVaapiDecoder, av1VaapiDecoder } from './vaapi';
 import { h264CudaDecoder, hevcCudaDecoder, av1CudaDecoder } from './nvenc';
 import {
+  h264D3d11vaDecoder,
+  hevcD3d11vaDecoder,
+  av1D3d11vaDecoder,
+} from './d3d11va';
+import {
   h264VideotoolboxDecoder,
   hevcVideotoolboxDecoder,
 } from './videotoolbox';
@@ -42,6 +47,10 @@ const DESCRIPTORS: readonly DecoderDescriptor[] = [
   h264CudaDecoder,
   hevcCudaDecoder,
   av1CudaDecoder,
+  // AMD / Windows D3D11VA (paired with AMF encode).
+  h264D3d11vaDecoder,
+  hevcD3d11vaDecoder,
+  av1D3d11vaDecoder,
   // Apple.
   h264VideotoolboxDecoder,
   hevcVideotoolboxDecoder,

@@ -1,5 +1,6 @@
 import type { DecoderDescriptor } from './types';
 import type { VideoCodec } from '../types';
+import { vaapiDeviceInitArgs } from '../../hw-device';
 
 /** VAAPI decode — universal Linux path. Output surfaces stay in VAAPI
  *  memory until either the encoder consumes them (h264_vaapi / hevc_vaapi
@@ -17,8 +18,7 @@ function vaapiDecoder(
     outputSurface: 'vaapi',
     supports: () => true,
     buildInputArgs: () => [
-      '-init_hw_device',
-      'vaapi=va:/dev/dri/renderD128',
+      ...vaapiDeviceInitArgs(),
       '-filter_hw_device',
       'va',
       '-hwaccel',

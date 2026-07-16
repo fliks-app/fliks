@@ -2,110 +2,110 @@ import { Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { HwAccelType } from './types';
+import { qsvDeviceInitArgs, vaapiDeviceInitArgs } from './hw-device';
 
 const execFileAsync = promisify(execFile);
 
-export async function detectHwAccel(log: Logger): Promise<HwAccelType> {
-  // Priority: macOS first (VideoToolbox is the only HW path there), then
-  // Linux x86 stack (QSV → VAAPI → NVENC), then CPU fallback.
-  const isMac = process.platform === 'darwin';
-  const tests: { type: HwAccelType; args: string[] }[] = isMac
-    ? [
-        {
-          type: 'videotoolbox',
-          args: [
-            '-hide_banner',
-            '-loglevel',
-            'error',
-            '-f',
-            'lavfi',
-            '-i',
-            'color=black:s=64x64:d=0.1',
-            '-c:v',
-            'h264_videotoolbox',
-            '-frames:v',
-            '1',
-            '-f',
-            'null',
-            '-',
-          ],
-        },
-      ]
-    : [
-        {
-          type: 'qsv',
-          args: [
-            '-hide_banner',
-            '-loglevel',
-            'error',
-            '-init_hw_device',
-            'vaapi=va:/dev/dri/renderD128',
-            '-init_hw_device',
-            'qsv=qs@va',
-            '-filter_hw_device',
-            'qs',
-            '-f',
-            'lavfi',
-            '-i',
-            'color=black:s=64x64:d=0.1',
-            '-vf',
-            'hwupload=extra_hw_frames=64,format=qsv',
-            '-c:v',
-            'h264_qsv',
-            '-frames:v',
-            '1',
-            '-f',
-            'null',
-            '-',
-          ],
-        },
-        {
-          type: 'vaapi',
-          args: [
-            '-hide_banner',
-            '-loglevel',
-            'error',
-            '-init_hw_device',
-            'vaapi=va:/dev/dri/renderD128',
-            '-f',
-            'lavfi',
-            '-i',
-            'color=black:s=64x64:d=0.1',
-            '-filter_hw_device',
-            'va',
-            '-vf',
-            'format=nv12,hwupload',
-            '-c:v',
-            'h264_vaapi',
-            '-frames:v',
-            '1',
-            '-f',
-            'null',
-            '-',
-          ],
-        },
-        {
-          type: 'nvenc',
-          args: [
-            '-hide_banner',
-            '-loglevel',
-            'error',
-            '-hwaccel',
-            'cuda',
-            '-f',
-            'lavfi',
-            '-i',
-            'color=black:s=64x64:d=0.1',
-            '-c:v',
-            'h264_nvenc',
-            '-frames:v',
-            '1',
-            '-f',
-            'null',
-            '-',
-          ],
-        },
-      ];
+type HwTest = { type: HwAccelType; args: string[] };
+
+const BLACK_INPUT = ['-f', 'lavfi', '-i', 'color=black:s=64x64:d=0.1'];
+const ONE_FRAME_NULL = ['-frames:v', '1', '-f', 'null', '-'];
+
+/** QSV one-frame probe. On Windows QSV initialises natively (`qsv=qs`); on
+ *  Linux it derives from VAAPI (see {@link qsvDeviceInitArgs}). */
+function qsvTest(platform: NodeJS.Platform): HwTest {
+  return {
+    type: 'qsv',
+    args: [
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      ...qsvDeviceInitArgs(platform),
+      '-filter_hw_device',
+      'qs',
+      ...BLACK_INPUT,
+      '-vf',
+      'hwupload=extra_hw_frames=64,format=qsv',
+      '-c:v',
+      'h264_qsv',
+      ...ONE_FRAME_NULL,
+    ],
+  };
+}
+
+const VAAPI_TEST: HwTest = {
+  type: 'vaapi',
+  args: [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    ...vaapiDeviceInitArgs(),
+    ...BLACK_INPUT,
+    '-filter_hw_device',
+    'va',
+    '-vf',
+    'format=nv12,hwupload',
+    '-c:v',
+    'h264_vaapi',
+    ...ONE_FRAME_NULL,
+  ],
+};
+
+const AMF_TEST: HwTest = {
+  type: 'amf',
+  args: [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-hwaccel',
+    'd3d11va',
+    ...BLACK_INPUT,
+    '-c:v',
+    'h264_amf',
+    ...ONE_FRAME_NULL,
+  ],
+};
+
+const NVENC_TEST: HwTest = {
+  type: 'nvenc',
+  args: [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-hwaccel',
+    'cuda',
+    ...BLACK_INPUT,
+    '-c:v',
+    'h264_nvenc',
+    ...ONE_FRAME_NULL,
+  ],
+};
+
+const VIDEOTOOLBOX_TEST: HwTest = {
+  type: 'videotoolbox',
+  args: [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    ...BLACK_INPUT,
+    '-c:v',
+    'h264_videotoolbox',
+    ...ONE_FRAME_NULL,
+  ],
+};
+
+export async function detectHwAccel(
+  log: Logger,
+  platform: NodeJS.Platform = process.platform,
+): Promise<HwAccelType> {
+  // Per-platform probe order. macOS: VideoToolbox only. Windows: native
+  // QSV → AMF → NVENC (no VAAPI). Linux: QSV → VAAPI → NVENC.
+  const tests: HwTest[] =
+    platform === 'darwin'
+      ? [VIDEOTOOLBOX_TEST]
+      : platform === 'win32'
+        ? [qsvTest(platform), AMF_TEST, NVENC_TEST]
+        : [qsvTest(platform), VAAPI_TEST, NVENC_TEST];
 
   for (const test of tests) {
     try {
@@ -133,7 +133,8 @@ export async function detectHwAccel(log: Logger): Promise<HwAccelType> {
  *    `qsvCanCrop=true` we stay on QSV — that flag means the caller has
  *    a qsv-native decoder + `vpp_qsv` filter path ready, which crops
  *    on the QSV device without touching vaapi pools. Without it we
- *    fall back to VAAPI like before.
+ *    fall back to VAAPI like before — except on Windows, where there is
+ *    no VAAPI and QSV always crops natively via `vpp_qsv`.
  *
  *  Centralised here so `ffmpeg-args` and `stream-builder` (the stats
  *  overlay path) can't drift on the rule. The registry still has the
@@ -141,8 +142,15 @@ export async function detectHwAccel(log: Logger): Promise<HwAccelType> {
 export function requestedHwAccelFor(
   detected: HwAccelType,
   needs: { burnIn: boolean; crop: boolean; qsvCanCrop?: boolean },
+  platform: NodeJS.Platform = process.platform,
 ): HwAccelType {
   if (needs.burnIn && detected !== 'videotoolbox') return 'none';
-  if (detected === 'qsv' && needs.crop && !needs.qsvCanCrop) return 'vaapi';
+  if (
+    detected === 'qsv' &&
+    needs.crop &&
+    !needs.qsvCanCrop &&
+    platform !== 'win32'
+  )
+    return 'vaapi';
   return detected;
 }

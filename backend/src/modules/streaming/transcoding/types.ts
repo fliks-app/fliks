@@ -46,7 +46,13 @@ export interface SubtitleRenditionMeta {
   forced?: boolean;
 }
 
-export type HwAccelType = 'vaapi' | 'nvenc' | 'qsv' | 'videotoolbox' | 'none';
+export type HwAccelType =
+  | 'vaapi'
+  | 'nvenc'
+  | 'qsv'
+  | 'amf'
+  | 'videotoolbox'
+  | 'none';
 
 /** Short human-readable label for each HW accel type (used in admin
  *  dashboard and player stats overlay). */
@@ -54,6 +60,7 @@ export const HW_ACCEL_LABEL: Record<HwAccelType, string> = {
   qsv: 'QSV',
   vaapi: 'VAAPI',
   nvenc: 'NVENC',
+  amf: 'AMF',
   videotoolbox: 'Apple VT',
   none: 'CPU',
 };
