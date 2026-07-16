@@ -6,13 +6,13 @@ import {
   input,
   output,
 } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { LucideTrash2 } from '@lucide/angular';
 import { RequestPosterComponent } from '../request-poster';
 import { RequestStatusBadgeComponent } from '../request-status-badge/request-status-badge.component';
 import { FliksRequestRow } from '../../../core/services/api/requests.service';
+import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 
 /**
  * Compact request card for the home "Demandes récentes" scroller: a fanart
@@ -23,7 +23,7 @@ import { FliksRequestRow } from '../../../core/services/api/requests.service';
 @Component({
   selector: 'app-request-card',
   imports: [
-    DatePipe,
+    LocaleDatePipe,
     RouterLink,
     TranslateModule,
     RequestPosterComponent,

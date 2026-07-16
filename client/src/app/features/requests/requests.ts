@@ -11,7 +11,6 @@ import {
 } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { FormsModule } from '@angular/forms';
-import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
@@ -42,12 +41,13 @@ import {
 import { RequestStatusBadgeComponent } from './request-status-badge/request-status-badge.component';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { LucideEllipsisVertical, LucideLibrary, LucidePencil, LucideTrash2 } from '@lucide/angular';
+import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 
 @Component({
   selector: 'app-requests',
   imports: [
     FormsModule,
-    DatePipe,
+    LocaleDatePipe,
     TranslateModule,
     RouterLink,
     RequestPosterComponent,

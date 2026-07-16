@@ -345,7 +345,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly episodeDateLabel = computed(() => {
     const ep = this.focusedEpisode();
     if (!ep?.airDate) return null;
-    return new Date(ep.airDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    return new Date(ep.airDate).toLocaleDateString(this.translate.currentLang || undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
   });
 
   /**

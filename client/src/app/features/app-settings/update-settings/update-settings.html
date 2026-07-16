@@ -54,7 +54,7 @@
               {{ 'update.version_available' | translate: { version: info.version } }}
             }
             @if (info.releaseDate) {
-              · {{ info.releaseDate | date: 'mediumDate' }}
+              · {{ info.releaseDate | localeDate:{ dateStyle: 'medium' } }}
             }
           </p>
 

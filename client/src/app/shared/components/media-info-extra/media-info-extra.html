@@ -22,7 +22,7 @@
       @if (media().releaseDate) {
         <div>
           <dt class="text-base-content/50 text-sm">{{ 'discover.preview_release_date' | translate }}</dt>
-          <dd class="font-medium text-base">{{ media().releaseDate | date:'longDate' }}</dd>
+          <dd class="font-medium text-base">{{ media().releaseDate | localeDate:{ dateStyle: 'long' } }}</dd>
         </div>
       }
       @if (originalLanguage() && originalLanguage() !== 'und') {

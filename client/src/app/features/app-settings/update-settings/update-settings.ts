@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { TranslateModule } from '@ngx-translate/core';
 import {
   LucideCircleAlert,
@@ -10,6 +9,7 @@ import {
 } from '@lucide/angular';
 import { AppUpdateService } from '../../../core/services/app-update.service';
 import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
+import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 
 /** Full-page counterpart to the topbar update button: shows the running
  *  version, lets the user re-check on demand, and surfaces the check result —
@@ -19,7 +19,7 @@ import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
 @Component({
   selector: 'app-update-settings',
   imports: [
-    DatePipe,
+    LocaleDatePipe,
     TranslateModule,
     MarkdownPipe,
     LucideCircleAlert,

@@ -59,7 +59,7 @@
                 <span class="text-xs text-base-content/50 ml-1" [title]="req.declinedReason">— {{ req.declinedReason }}</span>
               }
             </td>
-            <td class="text-sm text-base-content/60">{{ req.createdAt | date:'dd/MM/yyyy' }}</td>
+            <td class="text-sm text-base-content/60">{{ req.createdAt | localeDate }}</td>
           </tr>
         }
       </tbody>

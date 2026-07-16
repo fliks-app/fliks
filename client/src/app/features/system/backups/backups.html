@@ -25,7 +25,7 @@
           <tr>
             <td class="font-mono text-sm">{{ b.filename }}</td>
             <td class="text-right tabular-nums text-sm">{{ formatBytes(b.size) }}</td>
-            <td class="text-sm">{{ b.date | date:'dd/MM/yyyy HH:mm' }}</td>
+            <td class="text-sm">{{ b.date | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}</td>
             <td class="text-end">
               <a class="btn btn-ghost btn-xs" [href]="'/api/system/backups/' + b.filename" target="_blank">{{ 'system.download_backup' | translate }}</a>
               <button type="button" class="btn btn-ghost btn-xs text-warning" (click)="restore(b.filename)">{{ 'system.restore_backup' | translate }}</button>

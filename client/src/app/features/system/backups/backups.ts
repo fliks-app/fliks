@@ -1,15 +1,15 @@
 import {
   Component, ChangeDetectionStrategy, signal, inject, OnInit,
 } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 
 @Component({
   selector: 'app-system-backups',
-  imports: [TranslateModule, DatePipe],
+  imports: [TranslateModule, LocaleDatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './backups.html',
 })

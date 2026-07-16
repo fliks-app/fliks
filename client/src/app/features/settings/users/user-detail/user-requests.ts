@@ -6,8 +6,8 @@ import {
   inject,
   OnInit,
 } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { TranslateModule } from '@ngx-translate/core';
+import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 import {
   RequestsService,
   FliksRequestRow,
@@ -16,7 +16,7 @@ import { UserDetailState } from './user-detail.state';
 
 @Component({
   selector: 'app-user-requests',
-  imports: [DatePipe, TranslateModule],
+  imports: [LocaleDatePipe, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './user-requests.html',
 })

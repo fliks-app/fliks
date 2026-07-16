@@ -5,7 +5,7 @@ import {
   inject,
   OnInit,
 } from '@angular/core';
-import { DatePipe, NgClass } from '@angular/common';
+import { NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -14,10 +14,11 @@ import {
   SubtitleHistoryEntry,
 } from '../../../core/services/api/subtitles-api.service';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
+import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 
 @Component({
   selector: 'app-activity-subtitles',
-  imports: [TranslateModule, DatePipe, NgClass, RouterLink, FormsModule, PaginationComponent],
+  imports: [TranslateModule, LocaleDatePipe, NgClass, RouterLink, FormsModule, PaginationComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitles.html',
 })

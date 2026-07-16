@@ -11,7 +11,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
+import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -33,10 +33,11 @@ import { LucideFilm, LucideUser, LucidePlay, LucidePlus } from '@lucide/angular'
 import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, TranslateModule, ResolveUrlPipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
+  imports: [FormsModule, CurrencyPipe, DecimalPipe, TranslateModule, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })

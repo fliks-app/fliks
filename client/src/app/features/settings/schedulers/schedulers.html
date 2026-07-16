@@ -28,7 +28,7 @@
               <td class="text-sm text-base-content/60 font-mono">{{ s.cron }}</td>
               <td class="text-sm text-base-content/60">
                 @if (s.lastRun) {
-                  {{ s.lastRun | date:'dd/MM/yyyy HH:mm' }}
+                  {{ s.lastRun | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}
                 } @else {
                   <span class="text-base-content/30">{{ 'settings.schedulers.never' | translate }}</span>
                 }
@@ -42,7 +42,7 @@
                   <span class="text-sm text-base-content/30">—</span>
                 }
               </td>
-              <td class="text-sm text-base-content/60">{{ s.nextRun | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td class="text-sm text-base-content/60">{{ s.nextRun | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}</td>
               <td>
                 @if (s.triggerable) {
                   <button

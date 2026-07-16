@@ -48,7 +48,7 @@
       <tbody>
         @for (entry of subHistory(); track entry.id) {
           <tr>
-            <td class="text-sm whitespace-nowrap">{{ entry.createdAt | date:'short' }}</td>
+            <td class="text-sm whitespace-nowrap">{{ entry.createdAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}</td>
             <td class="font-medium max-w-[14rem] truncate" [title]="entry.mediaTitle">
               <a
                 [routerLink]="['/' + (entry.mediaType === 'series' ? 'series' : 'movies'), entry.mediaId]"

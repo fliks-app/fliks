@@ -130,8 +130,8 @@
               </td>
               <td class="text-sm text-base-content/60">{{ cmd.trigger }}</td>
               <td><span class="badge badge-sm" [ngClass]="statusClass(cmd.status)">{{ cmd.status }}</span></td>
-              <td class="text-sm text-base-content/60 tabular-nums">{{ cmd.startedOn | date:'dd/MM HH:mm:ss' }}</td>
-              <td class="text-sm text-base-content/60 tabular-nums">{{ cmd.endedOn ? (cmd.endedOn | date:'dd/MM HH:mm:ss') : '—' }}</td>
+              <td class="text-sm text-base-content/60 tabular-nums">{{ cmd.startedOn | localeDate:{ dateStyle: 'short', timeStyle: 'medium' } }}</td>
+              <td class="text-sm text-base-content/60 tabular-nums">{{ cmd.endedOn ? (cmd.endedOn | localeDate:{ dateStyle: 'short', timeStyle: 'medium' }) : '—' }}</td>
             </tr>
           }
         </tbody>
