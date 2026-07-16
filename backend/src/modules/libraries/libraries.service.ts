@@ -16,6 +16,7 @@ import { LanguageProfile } from '../profiles/entities/language-profile.entity';
 import { CreateLibraryDto } from './dto/create-library.dto';
 import { UpdateLibraryDto } from './dto/update-library.dto';
 import { MediaType } from '../../common/enums/media-type.enum';
+import { sanitizeFsPath } from '../../common/utils/fs-path.util';
 
 interface DiskMetrics {
   freeSpace: number;
@@ -287,7 +288,7 @@ export class LibrariesService {
   ): Promise<void> {
     const lib = await m.findOne(Library, { where: { id: libraryId } });
     if (!lib) throw new NotFoundException(`Library #${libraryId} not found`);
-    const trimmed = rawPath.trim();
+    const trimmed = sanitizeFsPath(rawPath);
 
     if (!trimmed) {
       if (!lib.path) return;
