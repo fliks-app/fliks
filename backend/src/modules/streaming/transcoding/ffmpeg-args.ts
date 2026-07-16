@@ -53,6 +53,15 @@ import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
  */
 const TRUSTED_PROBE_SIZE = '5000000';
 
+/** Join an HLS output path with forward slashes. ffmpeg's HLS muxer derives
+ *  the fmp4 init directory with POSIX separators, so a backslash path (what
+ *  path.join yields on Windows) makes it silently skip writing init_%v.mp4 —
+ *  the player then stalls waiting for EXT-X-MAP. ffmpeg accepts forward slashes
+ *  on Windows, and this matches path.join's output on POSIX. */
+function ffOutPath(...parts: string[]): string {
+  return parts.join('/').replace(/\\/g, '/');
+}
+
 export interface BuildFfmpegArgsOptions {
   inputPath: string;
   profile: TranscodeProfile;
@@ -781,8 +790,8 @@ export function buildFfmpegArgs(
       '-var_stream_map',
       varParts.join(' '),
       '-hls_segment_filename',
-      path.join(outputDir, '%v', `seg-%04d.${segExt}`),
-      path.join(outputDir, '%v', 'index.m3u8'),
+      ffOutPath(outputDir, '%v', `seg-%04d.${segExt}`),
+      ffOutPath(outputDir, '%v', 'index.m3u8'),
     );
   } else {
     // Standard single-stream output: video + one audio track muxed.
@@ -822,10 +831,10 @@ export function buildFfmpegArgs(
       segType,
       ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init.mp4']),
       '-hls_segment_filename',
-      path.join(outputDir, `seg-%04d.${segExt}`),
+      ffOutPath(outputDir, `seg-%04d.${segExt}`),
       '-hls_flags',
       'independent_segments+temp_file',
-      path.join(outputDir, 'index.m3u8'),
+      ffOutPath(outputDir, 'index.m3u8'),
     );
   }
 
@@ -919,10 +928,10 @@ export function buildAudioOnlyFfmpegArgs(
     segType,
     ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init.mp4']),
     '-hls_segment_filename',
-    path.join(outputDir, `seg-%04d.${segExt}`),
+    ffOutPath(outputDir, `seg-%04d.${segExt}`),
     '-hls_flags',
     'independent_segments+temp_file',
-    path.join(outputDir, 'index.m3u8'),
+    ffOutPath(outputDir, 'index.m3u8'),
   );
 
   return args;
