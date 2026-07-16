@@ -67,11 +67,10 @@ export function resolveEncodePipeline(
     normalisedSourceCodec != null &&
     isDecoderEnabled(`${normalisedSourceCodec}_qsv_native_decode`);
   // Full-GPU AMF: d3d11 decode → scale_d3d11 → AMF encode, no CPU round-trip.
-  // Opt-in (FLIKS_AMF_FULLGPU) while the D3D11↔AMF device sharing is validated;
-  // the CPU-decode path stays the default. Only the clean SDR case — crop needs
-  // an off-GPU pass and tonemap uses the CPU/OpenCL chain.
+  // Gated on the d3d11-native decode probe (falls back to the CPU-decode path
+  // when D3D11 decode isn't available) and the clean SDR case — crop needs an
+  // off-GPU pass and HDR→SDR uses the CPU/OpenCL tonemap chain.
   const amfFullGpuAvailable =
-    process.env.FLIKS_AMF_FULLGPU === '1' &&
     ctx.hwAccel === 'amf' &&
     !ctx.burnIn &&
     !ctx.crop &&
