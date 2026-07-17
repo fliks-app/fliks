@@ -476,14 +476,13 @@ export function buildFfmpegArgs(
   // When the OpenCL tone-map probe passed, route it through tonemap_opencl
   // (GPU) instead of the CPU zscale chain — decisive on 4K where the CPU
   // tone-map can't sustain real-time, and it offloads the (often weak) APU CPU.
-  // Decode is forced to CPU so the frame reaches OpenCL via a plain hwupload
-  // (no CUDA/D3D11 ↔ OpenCL interop, which is unreliable); the tone-map, the
-  // expensive step, is what moves to the GPU.
   const openclTonemap =
     !!tonemap &&
     (effectiveHwAccel === 'nvenc' || effectiveHwAccel === 'amf') &&
     isOpenclTonemapEnabled();
-  const decodeHwAccel: HwAccelType = openclTonemap ? 'none' : effectiveHwAccel;
+  // GPU decode whenever available, including the tone-map path — the frame
+  // reaches OpenCL via hwdownload→hwupload (a copy, no CUDA/D3D11↔OpenCL interop).
+  const decodeHwAccel: HwAccelType = effectiveHwAccel;
 
   // Early sessions live ~1s before Shaka jumps to the main session — visual
   // quality on those warm-up frames is throwaway, so bias every knob towards
@@ -595,12 +594,18 @@ export function buildFfmpegArgs(
   // its device from the upstream `hwmap=derive_device=opencl` frame
   // context, and the round-trip back to qsv uses an explicit
   // `derive_device=qsv` on the closing hwmap.
-  if (tonemap && !useVaapiTonemap && decoder.outputSurface === 'vaapi') {
+  // `!openclTonemap`: that path inits `ocl` below — skip here to avoid a
+  // duplicate `-init_hw_device` alias when a vaapi decoder feeds an AMF/NVENC encode.
+  if (
+    tonemap &&
+    !useVaapiTonemap &&
+    decoder.outputSurface === 'vaapi' &&
+    !openclTonemap
+  ) {
     args.push('-init_hw_device', 'opencl=ocl:0.0');
   }
-  // NVENC/AMF OpenCL tone-map: init the OpenCL device and make it the default
-  // filter device so the chain's `hwupload` lands on it. Decode is CPU here
-  // (see openclTonemap above), so there's no competing hwaccel device.
+  // NVENC/AMF OpenCL tone-map: OpenCL as the default filter device so `hwupload`
+  // lands on it, coexisting with the HW decode device (validated by the probe).
   if (openclTonemap) {
     args.push(...openclTonemapInitArgs());
   }
