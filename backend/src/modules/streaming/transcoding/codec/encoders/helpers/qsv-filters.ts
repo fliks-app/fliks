@@ -43,8 +43,20 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
       ? `cw=${cropArgs.w}:ch=${cropArgs.h}:cx=${cropArgs.x}:cy=${cropArgs.y}:`
       : '';
     if (tonemap && tonemapPath === 'opencl') {
+      if (input.inputSurface === 'd3d11') {
+        // Windows: no zero-copy QSV↔OpenCL bridge (D3D11↔OpenCL is NV12-only,
+        // can't carry the 10-bit HDR surface). Scale on the QSV VPP (p010),
+        // bounce through CPU into OpenCL for the tone-map, hand nv12 back to
+        // the encoder (which auto-uploads to the QSV device).
+        return (
+          `hwmap=derive_device=qsv,vpp_qsv=${cropOpts}w=${w}:h=${targetH}:format=p010le,` +
+          `hwdownload,format=p010le,hwupload,` +
+          `tonemap_opencl=tonemap=hable:t=bt709:m=bt709:p=bt709:format=nv12,` +
+          `hwdownload,format=nv12`
+        );
+      }
       return (
-        `${qsvMap}vpp_qsv=${cropOpts}w=${w}:h=${targetH}:format=p010le,` +
+        `vpp_qsv=${cropOpts}w=${w}:h=${targetH}:format=p010le,` +
         `hwmap=derive_device=opencl:mode=read,` +
         `tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,` +
         `hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,` +

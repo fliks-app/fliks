@@ -91,6 +91,15 @@ services:
       #
       # How often the cache garbage collector runs. Default 300000 (5 min).
       # TRANSCODE_CACHE_GC_INTERVAL_MS: 300000
+      #
+      # HDR->SDR tone-mapping method for hardware transcodes (Intel/AMD).
+      # 'auto' (default) picks per-GPU from the boot probes: OpenCL when
+      # available (best quality — a proper tone curve), else the fixed-function
+      # LUT (faster and lighter, but can look darker/flatter). OpenCL costs more
+      # (on Intel it bounces through the CPU): fine at 1080p, ~single-stream at
+      # 4K. Force one to override the probe-driven default:
+      #   auto | opencl | vaapi | qsv
+      # TRANSCODE_TONEMAP_ALGO: auto
     volumes:
       # ---- Media library ------------------------------------------------
       # Map your existing media tree here. Match the path Fliks tells the

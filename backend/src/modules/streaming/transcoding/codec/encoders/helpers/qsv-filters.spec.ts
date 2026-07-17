@@ -49,6 +49,33 @@ describe('qsvScaleFilter8bit', () => {
       ),
     ).toBe('hwmap=derive_device=qsv,vpp_qsv=tonemap=1:w=1920:h=804:format=nv12');
   });
+
+  it('tone-maps a Windows d3d11 surface via a CPU-bounce OpenCL chain', () => {
+    expect(
+      qsvScaleFilter8bit(
+        input({ inputSurface: 'd3d11', tonemap: true, tonemapPath: 'opencl' }),
+      ),
+    ).toBe(
+      'hwmap=derive_device=qsv,vpp_qsv=w=1920:h=804:format=p010le,' +
+        'hwdownload,format=p010le,hwupload,' +
+        'tonemap_opencl=tonemap=hable:t=bt709:m=bt709:p=bt709:format=nv12,' +
+        'hwdownload,format=nv12',
+    );
+  });
+
+  it('keeps the zero-copy QSV↔OpenCL chain for a Linux qsv surface', () => {
+    expect(
+      qsvScaleFilter8bit(
+        input({ inputSurface: 'qsv', tonemap: true, tonemapPath: 'opencl' }),
+      ),
+    ).toBe(
+      'vpp_qsv=w=1920:h=804:format=p010le,' +
+        'hwmap=derive_device=opencl:mode=read,' +
+        'tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,' +
+        'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,' +
+        'format=qsv',
+    );
+  });
 });
 
 describe('qsvScaleFilter10bit', () => {
