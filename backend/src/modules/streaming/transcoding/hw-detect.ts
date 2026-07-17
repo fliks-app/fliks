@@ -27,7 +27,7 @@ function qsvTest(platform: NodeJS.Platform): HwTest {
       'qs',
       ...BLACK_INPUT,
       '-vf',
-      'hwupload=extra_hw_frames=64,format=qsv',
+      'hwupload,format=qsv',
       '-c:v',
       'h264_qsv',
       ...ONE_FRAME_NULL,
