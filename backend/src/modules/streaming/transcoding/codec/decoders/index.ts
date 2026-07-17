@@ -9,6 +9,9 @@ import {
   h264QsvNativeDecoder,
   hevcQsvNativeDecoder,
   av1QsvNativeDecoder,
+  h264QsvD3d11Decoder,
+  hevcQsvD3d11Decoder,
+  av1QsvD3d11Decoder,
 } from './qsv';
 import { h264VaapiDecoder, hevcVaapiDecoder, av1VaapiDecoder } from './vaapi';
 import { h264CudaDecoder, hevcCudaDecoder, av1CudaDecoder } from './nvenc';
@@ -112,23 +115,30 @@ export const ALL_DECODERS: readonly DecoderDescriptor[] = [
   h264QsvNativeDecoder,
   hevcQsvNativeDecoder,
   av1QsvNativeDecoder,
+  h264QsvD3d11Decoder,
+  hevcQsvD3d11Decoder,
+  av1QsvD3d11Decoder,
   h264D3d11vaNativeDecoder,
   hevcD3d11vaNativeDecoder,
   av1D3d11vaNativeDecoder,
 ];
 
-/** Lookup a qsv-native decoder by source codec — exposed for the
- *  vpp_qsv crop path that bypasses the registry resolver. */
+/** Lookup the QSV encode-path decoder for `codec` — exposed for the vpp_qsv
+ *  crop / scale path that bypasses the registry resolver. Windows decodes on
+ *  D3D11VA and maps into QSV ({@link h264QsvD3d11Decoder}); every other
+ *  platform decodes qsv-native (derived from VAAPI). */
 export function findQsvNativeDecoder(
   codec: 'h264' | 'hevc' | 'av1',
+  platform: NodeJS.Platform = process.platform,
 ): DecoderDescriptor | null {
+  const win = platform === 'win32';
   switch (codec) {
     case 'h264':
-      return h264QsvNativeDecoder;
+      return win ? h264QsvD3d11Decoder : h264QsvNativeDecoder;
     case 'hevc':
-      return hevcQsvNativeDecoder;
+      return win ? hevcQsvD3d11Decoder : hevcQsvNativeDecoder;
     case 'av1':
-      return av1QsvNativeDecoder;
+      return win ? av1QsvD3d11Decoder : av1QsvNativeDecoder;
   }
 }
 

@@ -2,6 +2,7 @@ import { requestedHwAccelFor } from './hw-detect';
 import { hostHasVaapi } from './hw-device';
 import { encoderRegistry } from './codec/encoders';
 import { isDecoderEnabled } from './codec/decoder-probe';
+import { findQsvNativeDecoder } from './codec/decoders';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
 import {
   isTonemapOpenclEnabled,
@@ -63,11 +64,18 @@ export function resolveEncodePipeline(
 ): ResolvedEncodePipeline {
   const noVaapi = !hostHasVaapi(platform);
   const normalisedSourceCodec = normaliseSourceCodec(ctx.sourceVideoCodec);
+  // The QSV encode-path decoder is platform-specific (qsv-native on Linux,
+  // d3d11va→qsv on Windows); resolve it by platform rather than a hard-coded id
+  // so the gate can't drift from the descriptor the segment builder picks.
+  const qsvNativeDecoder =
+    normalisedSourceCodec != null
+      ? findQsvNativeDecoder(normalisedSourceCodec, platform)
+      : null;
   const hasUsableQsvNativeDecoder =
     ctx.hwAccel === 'qsv' &&
     !ctx.burnIn &&
-    normalisedSourceCodec != null &&
-    isDecoderEnabled(`${normalisedSourceCodec}_qsv_native_decode`);
+    qsvNativeDecoder != null &&
+    isDecoderEnabled(qsvNativeDecoder.id);
   // Full-GPU AMF: d3d11 decode → scale_d3d11 → AMF encode, zero-copy. Scoped to
   // the clean SDR case (crop needs an off-GPU pass, HDR→SDR uses the CPU/OpenCL
   // tonemap chain). Gated on the d3d11-native decode probe AND the scale_d3d11

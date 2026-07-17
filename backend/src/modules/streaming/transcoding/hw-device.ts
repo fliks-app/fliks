@@ -3,6 +3,7 @@
 
 export const VAAPI_DEVICE_ALIAS = 'va';
 export const QSV_DEVICE_ALIAS = 'qs';
+export const D3D11VA_DEVICE_ALIAS = 'dx';
 
 /** DRI render node for the VAAPI/Linux-QSV device. Override with
  *  `FLIKS_VAAPI_RENDER_NODE`; ignored on Windows (MFX/D3D11, no node). */
@@ -28,6 +29,21 @@ export function qsvDeviceInitArgs(
     ...vaapiDeviceInitArgs(),
     '-init_hw_device',
     `qsv=${QSV_DEVICE_ALIAS}@${VAAPI_DEVICE_ALIAS}`,
+  ];
+}
+
+/** Windows QSV device derived from an explicit D3D11VA device (`dx`):
+ *  `-init_hw_device d3d11va=dx -init_hw_device qsv=qs@dx`. Paired with a
+ *  `d3d11va` decode + `hwmap=derive_device=qsv` so the decoded texture and the
+ *  `vpp_qsv`/encoder share one D3D11 device. Preferred over the native
+ *  `-hwaccel qsv` decode on Windows, whose AV1 decoder fails on real streams.
+ *  Windows-only. */
+export function qsvViaD3d11DeviceInitArgs(): string[] {
+  return [
+    '-init_hw_device',
+    `d3d11va=${D3D11VA_DEVICE_ALIAS}`,
+    '-init_hw_device',
+    `qsv=${QSV_DEVICE_ALIAS}@${D3D11VA_DEVICE_ALIAS}`,
   ];
 }
 
