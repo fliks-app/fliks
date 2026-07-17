@@ -2,12 +2,21 @@ import { resolveEncodePipeline } from './encode-pipeline';
 import type { EncodePipelineContext } from './encode-pipeline';
 import type { CodecVariant } from './codec/types';
 import { isScaleD3d11Enabled } from './codec/scale-d3d11-probe';
+import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
 
 jest.mock('./codec/scale-d3d11-probe', () => ({
   isScaleD3d11Enabled: jest.fn(() => false),
 }));
+jest.mock('./codec/vpp-qsv-probe', () => ({
+  isVppQsvTonemapEnabled: jest.fn(() => false),
+}));
 
 const mockScaleD3d11 = isScaleD3d11Enabled as jest.Mock;
+const mockVppQsvTonemap = isVppQsvTonemapEnabled as jest.Mock;
+
+beforeEach(() => {
+  mockVppQsvTonemap.mockReturnValue(false);
+});
 
 const SDR_H264: CodecVariant = { codec: 'h264', bitDepth: 8, hdr: null };
 
@@ -47,6 +56,19 @@ describe('resolveEncodePipeline — Windows QSV routing', () => {
     expect(r.qsvNativeAvailable).toBe(false);
     expect(r.requestedHwAccel).toBe('none');
     expect(r.effectiveHwAccel).toBe('none');
+  });
+
+  it('keeps a Windows auto HDR tonemap on QSV via the vpp_qsv LUT (no CPU drop)', () => {
+    mockVppQsvTonemap.mockReturnValue(true);
+    const r = resolveEncodePipeline(
+      SDR_H264,
+      ctx({ tonemap: true, tonemapAlgo: 'auto', sourceVideoCodec: 'hevc' }),
+      'win32',
+    );
+    expect(r.tonemapPath).toBe('qsv');
+    expect(r.qsvNativeAvailable).toBe(true);
+    expect(r.requestedHwAccel).toBe('qsv');
+    expect(r.effectiveHwAccel).toBe('qsv');
   });
 });
 

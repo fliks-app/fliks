@@ -1,4 +1,5 @@
 import { requestedHwAccelFor } from './hw-detect';
+import { hostHasVaapi } from './hw-device';
 import { encoderRegistry } from './codec/encoders';
 import { isDecoderEnabled } from './codec/decoder-probe';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
@@ -60,7 +61,7 @@ export function resolveEncodePipeline(
   ctx: EncodePipelineContext,
   platform: NodeJS.Platform = process.platform,
 ): ResolvedEncodePipeline {
-  const isWindows = platform === 'win32';
+  const noVaapi = !hostHasVaapi(platform);
   const normalisedSourceCodec = normaliseSourceCodec(ctx.sourceVideoCodec);
   const hasUsableQsvNativeDecoder =
     ctx.hwAccel === 'qsv' &&
@@ -84,20 +85,22 @@ export function resolveEncodePipeline(
   // `auto` picks opencl when the boot probe enabled it, vaapi otherwise; the
   // explicit overrides bypass the probe. Drives both the qsv-native gate and
   // the useVaapiTonemap flag so the two stay in sync.
-  const tonemapPath = resolveTonemapPath(ctx.tonemapAlgo, {
-    hasCrop: ctx.crop,
-  });
+  const tonemapPath = resolveTonemapPath(
+    ctx.tonemapAlgo,
+    { hasCrop: ctx.crop },
+    platform,
+  );
   const tonemapOpenclOk = ctx.crop
     ? isTonemapOpenclEnabledWithCrop()
     : isTonemapOpenclEnabled();
   // Keep the whole pipeline on QSV (no hwdownload→crop→hwupload round-trip):
   // crop-only always; tonemap via vpp_qsv LUT or via opencl when probed;
   // tonemap via vaapi is NOT qsv-native compatible.
-  // Windows QSV has no VAAPI chain, so the qsv-native pipeline is the only
-  // QSV path — used for every session (not just crop/tonemap as on Linux).
+  // Without VAAPI (Windows) the qsv-native pipeline is the only QSV path, so
+  // it's used for every session (not just crop/tonemap as on Linux).
   const qsvNativeAvailable =
     hasUsableQsvNativeDecoder &&
-    (isWindows ||
+    (noVaapi ||
       ctx.crop ||
       tonemapPath === 'qsv' ||
       tonemapPath === 'opencl') &&
@@ -113,9 +116,10 @@ export function resolveEncodePipeline(
     { burnIn: ctx.burnIn, crop: ctx.crop, qsvCanCrop },
     platform,
   );
-  // On Windows, QSV without a viable native pipeline (e.g. HDR tonemap with
-  // no vpp_qsv/opencl) has no fallback chain — drop to CPU encode.
-  if (isWindows && ctx.hwAccel === 'qsv' && !qsvNativeAvailable) {
+  // Without a VAAPI fallback (Windows), QSV without a viable native pipeline
+  // (e.g. HDR tonemap with no vpp_qsv/opencl) has no fallback chain — drop to
+  // CPU encode.
+  if (noVaapi && ctx.hwAccel === 'qsv' && !qsvNativeAvailable) {
     requestedHwAccel = 'none';
   }
   const encoder = encoderRegistry.resolve(variant, requestedHwAccel);

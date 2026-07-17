@@ -31,6 +31,17 @@ export function qsvDeviceInitArgs(
   ];
 }
 
+/** Whether QSV is backed by a VAAPI device on this host: true on Linux
+ *  (`qsv=qs@va`), false on Windows (native D3D11). The QSV→VAAPI crop
+ *  fallback and the VAAPI/`tonemap_vaapi` tone-map paths need a VAAPI device,
+ *  so when this is false they must stay QSV-native (`vpp_qsv`) or drop to CPU —
+ *  there is no VAAPI to route through. (macOS has no QSV, so it never asks.) */
+export function hostHasVaapi(
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return platform !== 'win32';
+}
+
 /** OpenCL device + filter selector for the NVENC/CPU standalone tonemap
  *  chain (`hwupload,tonemap_opencl,hwdownload`). Defaults to `ocl` (auto-pick
  *  the first usable platform — the NVIDIA GPU on an NVENC host). Set
