@@ -3,8 +3,19 @@ import {
   isTonemapOpenclEnabledWithCrop,
 } from './codec/tonemap-opencl-probe';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
+import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
 import { hostHasVaapi } from './hw-device';
 import type { TonemapAlgo } from './types';
+
+/** `TRANSCODE_TONEMAP_ALGO` override (auto/qsv/vaapi/opencl), applied on every
+ *  platform before the `auto` resolution — pins the HDR→SDR tone-map without
+ *  the admin UI (see docker-compose). Invalid/unset → null (no override). */
+export function tonemapAlgoOverride(): TonemapAlgo | null {
+  const v = process.env.TRANSCODE_TONEMAP_ALGO?.trim().toLowerCase();
+  return v === 'auto' || v === 'qsv' || v === 'vaapi' || v === 'opencl'
+    ? (v as TonemapAlgo)
+    : null;
+}
 
 /** Concrete filter chain the session-time graph will actually use,
  *  derived from the admin `TonemapAlgo` setting + boot probe results.
@@ -31,10 +42,16 @@ export function resolveTonemapPath(
   opts: { hasCrop: boolean } = { hasCrop: false },
   platform: NodeJS.Platform = process.platform,
 ): ResolvedTonemapPath {
-  if (algo === 'auto') {
-    const openclOk = opts.hasCrop
-      ? isTonemapOpenclEnabledWithCrop()
-      : isTonemapOpenclEnabled();
+  const effective = tonemapAlgoOverride() ?? algo;
+  if (effective === 'auto') {
+    // Windows QSV OpenCL is the CPU-bounce path (its own probe); elsewhere it's
+    // the VAAPI-derived bridge.
+    const openclOk =
+      platform === 'win32'
+        ? isQsvOpenclTonemapEnabled()
+        : opts.hasCrop
+          ? isTonemapOpenclEnabledWithCrop()
+          : isTonemapOpenclEnabled();
     if (openclOk) return 'opencl';
     // No VAAPI device (Windows): 'vaapi' isn't a QSV path, so prefer the
     // vpp_qsv fixed-function LUT when its probe passed rather than force a
@@ -42,5 +59,5 @@ export function resolveTonemapPath(
     if (!hostHasVaapi(platform) && isVppQsvTonemapEnabled()) return 'qsv';
     return 'vaapi';
   }
-  return algo;
+  return effective;
 }

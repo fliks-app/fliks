@@ -45,6 +45,7 @@ import {
   runTonemapOpenclProbe,
 } from './codec/tonemap-opencl-probe';
 import { runOpenclTonemapProbe } from './codec/opencl-tonemap-probe';
+import { runQsvOpenclTonemapProbe } from './codec/qsv-opencl-probe';
 import { runLibplaceboDvProbe } from './codec/libplacebo-dv-probe';
 import { runScaleD3d11Probe } from './codec/scale-d3d11-probe';
 import {
@@ -132,14 +133,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // probe times out at 15s on hosts without the qsv encoder).
     if (this.detectedHwAccel === 'qsv') {
       void runVppQsvTonemapProbe(this.log);
+      // Windows QSV OpenCL tone-map (CPU-bounce). The VAAPI-based
+      // tonemap-opencl probe below can't run here (no VAAPI on Windows).
+      if (process.platform === 'win32') {
+        void runQsvOpenclTonemapProbe(this.log);
+      }
     }
     // tonemap_opencl probe runs on every Linux Intel host (QSV or VAAPI):
     // both paths can route through the opencl tonemap chain at session
     // time, but the QSV↔OpenCL bridge is fragile and we need to know
     // upfront whether `tonemapAlgo='auto'` can safely default to opencl.
     if (
-      this.detectedHwAccel === 'qsv' ||
-      this.detectedHwAccel === 'vaapi'
+      (this.detectedHwAccel === 'qsv' || this.detectedHwAccel === 'vaapi') &&
+      process.platform !== 'win32'
     ) {
       void runTonemapOpenclProbe(this.log);
     }

@@ -26,6 +26,17 @@ describe('stripBenignFfmpegStderr', () => {
     );
   });
 
+  it('drops the benign QSV→OpenCL mapping warning (unused zero-copy path)', () => {
+    const raw = [
+      '[OpenCL @ 0x1] The cl_intel_va_api_media_sharing extension is required for QSV to OpenCL mapping.',
+      '[OpenCL @ 0x1] QSV to OpenCL mapping not usable.',
+      '[vost#0:0/h264_qsv @ 0x2] frame= 100',
+    ].join('\n');
+    expect(stripBenignFfmpegStderr(raw)).toBe(
+      '[vost#0:0/h264_qsv @ 0x2] frame= 100',
+    );
+  });
+
   it('leaves a codec-param warning for a non-subtitle stream untouched', () => {
     const raw =
       '[in#0/matroska,webm @ 0x1] Could not find codec parameters for stream 0 (Video: hevc): unspecified size';

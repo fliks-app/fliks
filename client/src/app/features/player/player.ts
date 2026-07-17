@@ -760,17 +760,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // setting says `auto`/`opencl`. Source of truth is `pi.tonemapAlgo`
     // set by the backend in playback-info.
     const tonemapLabel: Record<string, string> = {
-      vaapi: 'tonemap_vaapi',
-      opencl: 'tonemap_opencl',
-      qsv: 'vpp_qsv tonemap',
+      vaapi: 'VAAPI',
+      opencl: 'OpenCL',
+      qsv: 'vpp_qsv',
       cpu: 'CPU',
     };
-    const tonemapAlgoLabel =
-      pi?.tonemapAlgo === 'cpu' && pi?.tonemapCurve
-        ? `CPU (${pi.tonemapCurve})`
-        : pi?.tonemapAlgo
-          ? (tonemapLabel[pi.tonemapAlgo] ?? pi.tonemapAlgo)
-          : '';
+    // The opencl and CPU paths run a tunable curve (tonemap_opencl / tonemap),
+    // surfaced in parentheses; the vpp_qsv / VAAPI LUTs carry no curve.
+    const curve = pi?.tonemapCurve
+      ? ` (${pi.tonemapCurve.charAt(0).toUpperCase()}${pi.tonemapCurve.slice(1)})`
+      : '';
+    const tonemapAlgoLabel = pi?.tonemapAlgo
+      ? `${tonemapLabel[pi.tonemapAlgo] ?? pi.tonemapAlgo}${curve}`
+      : '';
     const tonemapping =
       pi?.tonemapping && tonemapAlgoLabel
         ? tonemapAlgoLabel

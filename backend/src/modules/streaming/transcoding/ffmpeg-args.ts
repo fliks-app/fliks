@@ -609,6 +609,23 @@ export function buildFfmpegArgs(
   if (openclTonemap) {
     args.push(...openclTonemapInitArgs());
   }
+  // Windows QSV OpenCL tone-map (zero-copy): the frame maps D3D11→OpenCL and
+  // back to QSV, so OpenCL must be the default filter device AND derived from
+  // the same D3D11 device (`opencl=ocl@dx`) to share surfaces. ffmpeg accepts
+  // only one filter device, so repoint the decoder's `-filter_hw_device qs` to
+  // `ocl` and add the derived OpenCL device just before it.
+  const qsvOpenclTonemap =
+    !!tonemap &&
+    tonemapPath === 'opencl' &&
+    effectiveHwAccel === 'qsv' &&
+    decoder.outputSurface === 'd3d11';
+  if (qsvOpenclTonemap) {
+    const fhd = args.lastIndexOf('-filter_hw_device');
+    if (fhd !== -1) {
+      args[fhd + 1] = 'ocl';
+      args.splice(fhd, 0, '-init_hw_device', 'opencl=ocl@dx');
+    }
+  }
   if (useDoviTonemap) {
     args.push('-init_hw_device', 'vulkan=vk:0', '-filter_hw_device', 'vk');
   }
@@ -636,6 +653,7 @@ export function buildFfmpegArgs(
     args.push('-ss', String(seekSeconds));
   }
 
+  const tonemapCurve = resolveTonemapCurve();
   const encoderInput: EncoderInput = {
     variant,
     target: {
@@ -663,12 +681,13 @@ export function buildFfmpegArgs(
       useVaapiTonemap,
       sourceBitDepth,
       dovi: useDoviTonemap,
-      tonemapCurve: resolveTonemapCurve(),
+      tonemapCurve,
       scaleWidth: w,
       openclTonemap,
     }),
     tonemap,
     tonemapPath,
+    tonemapCurve,
     hasBurnIn: !!burnIn?.filter,
     hasCrop: !!crop,
     hdrMetadata: sourceHdrMetadata,

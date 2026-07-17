@@ -1,15 +1,11 @@
 import type { BurnInSubtitle } from './types';
-import type { EncoderInput } from './codec/types';
+import type { EncoderInput, TonemapCurve } from './codec/types';
 
-/** CPU HDR→SDR tone-map curve. `hable` is a filmic curve with a gentle
- *  highlight rolloff (retains specular detail on high-nit HDR10); `mobius`
- *  is punchier with a harder highlight knee. */
-export type TonemapCurve = 'hable' | 'mobius';
-
-/** Resolve the CPU tone-map curve from the optional `TRANSCODE_TONEMAP_CURVE`
- *  env var, defaulting to `hable`. */
+/** Resolve the tone-map curve from the optional `TRANSCODE_TONEMAP_CURVE`
+ *  env var, defaulting to `hable`. Shared by the CPU and GPU tone-map paths. */
 export function resolveTonemapCurve(): TonemapCurve {
-  return process.env.TRANSCODE_TONEMAP_CURVE === 'mobius' ? 'mobius' : 'hable';
+  const v = process.env.TRANSCODE_TONEMAP_CURVE;
+  return v === 'mobius' || v === 'reinhard' ? v : 'hable';
 }
 
 export interface VideoFilterContext {
@@ -68,6 +64,7 @@ export function buildVideoFilters(
     scaleWidth,
     openclTonemap,
   } = ctx;
+  const curve = tonemapCurve ?? 'hable';
   const cropStr = crop
     ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`
     : '';
@@ -75,7 +72,7 @@ export function buildVideoFilters(
   const burnInFilter = burnIn?.filter ? `,${burnIn.filter}` : '';
   const tonemapOpencl =
     tonemap && !useVaapiTonemap && !burnIn?.filter
-      ? ',hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0'
+      ? `,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0`
       : '';
   const tonemapVaapi =
     useVaapiTonemap && !burnIn?.filter
@@ -97,7 +94,6 @@ export function buildVideoFilters(
   // upload the CPU frame to OpenCL, tonemap_opencl (linearises + BT.2020→709
   // + curve internally), download back. tonemap_opencl has no bt2390 in
   // ffmpeg 6.1, so it uses the same hable/mobius curve as the CPU chain.
-  const curve = tonemapCurve ?? 'hable';
   const tonemapCpu = tonemap
     ? dovi
       ? `hwupload,libplacebo=apply_dolbyvision=1:tonemapping=bt.2390:colorspace=bt709:color_primaries=bt709:color_trc=bt709:format=nv12,hwdownload,format=nv12,`

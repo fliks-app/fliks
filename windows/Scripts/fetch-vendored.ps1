@@ -21,14 +21,13 @@ $NodeVersion = '24.2.0'
 # EDB "binaries" zip (no installer) — verify the build suffix at
 # https://www.enterprisedb.com/download-postgresql-binaries
 $PgVersion = '18.0-1'
-# n8.1 stable release branch (NOT master). 8.1 carries the native scale_d3d11
-# filter (zero-copy AMD scale, dormant until a GPU accepts it). 8.1's scale_cuda
-# has a green-frame bug on non-scaling format conversion (p010→nv12 with no
-# resize); we sidestep it in the encoder filter graph (scale_cuda keeps the
-# native format, the encoder owns the output bit depth) so this pin is safe.
-# Note: 8.x links a newer NVENC API — NVENC needs an NVIDIA driver >= 570; older
-# drivers fall back to CPU. One binary covers QSV + AMF + NVENC + OpenCL.
-$FfmpegUrl = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-win64-gpl-8.1.zip'
+# jellyfin-ffmpeg (GPL) — same FFmpeg 8.1 base as BtbN plus HW-interop patches.
+# The one that matters on Windows: zero-copy D3D11<->OpenCL P010, so HDR->SDR
+# tone-maps on OpenCL (proper tone curve) with no CPU round-trip — ~8x @4K vs
+# ~1.2x for the stock CPU bounce. Also ships a P010-capable Intel OpenCL ICD.
+# One binary covers QSV + AMF + NVENC + OpenCL; NVENC still needs an NVIDIA
+# driver >= 570 (8.x NVENC API). Pin the exact tag (their `latest` moves).
+$FfmpegUrl = 'https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.2-1/jellyfin-ffmpeg_8.1.2-1_portable_win64-clang-gpl.zip'
 
 function Get-Archive([string]$url, [string]$dest) {
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid())
@@ -90,18 +89,21 @@ if (Test-Path $mp) {
     Write-Warning 'MSVCP140.dll not bundled; postgres/node may crash on hosts with an old VC++ runtime'
 }
 
-# ── FFmpeg (BtbN gpl static) ──
+# ── FFmpeg (jellyfin-ffmpeg gpl) ──
 if (Test-Path (Join-Path $vendored 'ffmpeg\bin\ffmpeg.exe')) {
     Write-Host '    [skip] FFmpeg already present'
 } else {
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid())
     Get-Archive $FfmpegUrl $tmp
-    $ffBin = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1 | ForEach-Object { Join-Path $_.FullName 'bin' }
-    New-Item -ItemType Directory -Force -Path (Join-Path $vendored 'ffmpeg\bin') | Out-Null
-    Copy-Item (Join-Path $ffBin 'ffmpeg.exe') (Join-Path $vendored 'ffmpeg\bin\ffmpeg.exe')
-    Copy-Item (Join-Path $ffBin 'ffprobe.exe') (Join-Path $vendored 'ffmpeg\bin\ffprobe.exe')
+    # Copy the whole binary dir (ffmpeg/ffprobe + bundled runtime/ICD DLLs),
+    # located by finding ffmpeg.exe wherever this archive nests it.
+    $ffExe = Get-ChildItem -Path $tmp -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+    if (-not $ffExe) { throw "ffmpeg.exe not found in $FfmpegUrl" }
+    $dst = Join-Path $vendored 'ffmpeg\bin'
+    New-Item -ItemType Directory -Force -Path $dst | Out-Null
+    Copy-Item (Join-Path $ffExe.Directory.FullName '*') $dst -Recurse -Force
     Remove-Item -Recurse -Force $tmp
-    Write-Host '    [done] FFmpeg (gpl)'
+    Write-Host '    [done] FFmpeg (jellyfin-ffmpeg gpl)'
 }
 
 Write-Host ''

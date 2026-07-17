@@ -94,7 +94,7 @@
     "stats_stream": "Stream",
     "stats_dropped_frames": "Dropped frames:",
     "stats_crop": "Crop:",
-    "stats_tonemapping": "Tone mapping",
+    "stats_tonemapping": "Tone mapping:",
     "stats_reasons": "Reasons:",
     "stats_sample_rate": "Sample rate",
     "transcode_reason": {

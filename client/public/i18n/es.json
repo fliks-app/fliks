@@ -94,7 +94,7 @@
     "stats_stream": "Flujo",
     "stats_dropped_frames": "Imágenes perdidas:",
     "stats_crop": "Recorte:",
-    "stats_tonemapping": "Mapeo tonal",
+    "stats_tonemapping": "Mapeo tonal:",
     "stats_reasons": "Motivos:",
     "stats_sample_rate": "Frecuencia de muestreo",
     "transcode_reason": {

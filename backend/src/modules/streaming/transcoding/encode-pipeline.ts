@@ -8,6 +8,7 @@ import {
   isTonemapOpenclEnabled,
   isTonemapOpenclEnabledWithCrop,
 } from './codec/tonemap-opencl-probe';
+import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
 import { isScaleD3d11Enabled } from './codec/scale-d3d11-probe';
 import { resolveTonemapPath } from './tonemap-path';
 import { normaliseSourceCodec } from './codec/normalise';
@@ -98,9 +99,11 @@ export function resolveEncodePipeline(
     { hasCrop: ctx.crop },
     platform,
   );
-  const tonemapOpenclOk = ctx.crop
-    ? isTonemapOpenclEnabledWithCrop()
-    : isTonemapOpenclEnabled();
+  const tonemapOpenclOk = noVaapi
+    ? isQsvOpenclTonemapEnabled()
+    : ctx.crop
+      ? isTonemapOpenclEnabledWithCrop()
+      : isTonemapOpenclEnabled();
   // Keep the whole pipeline on QSV (no hwdownload→crop→hwupload round-trip):
   // crop-only always; tonemap via vpp_qsv LUT or via opencl when probed;
   // tonemap via vaapi is NOT qsv-native compatible.

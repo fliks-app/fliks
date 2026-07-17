@@ -16,6 +16,7 @@ import type { EncoderInput } from '../../types';
 export function qsvScaleFilter8bit(input: EncoderInput): string {
   const { target, filters, hasCrop, tonemap, tonemapPath } = input;
   const w = target.width;
+  const curve = input.tonemapCurve ?? 'hable';
   if (input.inputSurface === 'qsv' || input.inputSurface === 'd3d11') {
     // Windows decodes on D3D11VA and hands the frame here as a `d3d11`
     // surface; map it onto the QSV device before `vpp_qsv`. A Linux qsv-native
@@ -43,10 +44,24 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
       ? `cw=${cropArgs.w}:ch=${cropArgs.h}:cx=${cropArgs.x}:cy=${cropArgs.y}:`
       : '';
     if (tonemap && tonemapPath === 'opencl') {
+      if (input.inputSurface === 'd3d11') {
+        // Windows zero-copy (jellyfin-ffmpeg P010 D3D11↔OpenCL): crop + scale on
+        // vpp_qsv (p010, HDR kept) so the tone-map runs at output resolution,
+        // map onto OpenCL, tone-map, map back onto the QSV device. No CPU
+        // round-trip. vpp_qsv can't ingest a reverse-mapped OpenCL surface, so
+        // the scale precedes the OpenCL step.
+        return (
+          `hwmap=derive_device=qsv,` +
+          `vpp_qsv=${cropOpts}w=${w}:h=${targetH}:format=p010le,` +
+          `hwmap=derive_device=opencl,` +
+          `tonemap_opencl=tonemap=${curve}:t=bt709:m=bt709:p=bt709:format=nv12,` +
+          `hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`
+        );
+      }
       return (
-        `${qsvMap}vpp_qsv=${cropOpts}w=${w}:h=${targetH}:format=p010le,` +
+        `vpp_qsv=${cropOpts}w=${w}:h=${targetH}:format=p010le,` +
         `hwmap=derive_device=opencl:mode=read,` +
-        `tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,` +
+        `tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0,` +
         `hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,` +
         `format=qsv`
       );
