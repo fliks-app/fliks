@@ -56,10 +56,11 @@ describe('qsvScaleFilter8bit', () => {
         input({ inputSurface: 'd3d11', tonemap: true, tonemapPath: 'opencl' }),
       ),
     ).toBe(
-      'hwmap=derive_device=opencl:mode=read,' +
+      'hwmap=derive_device=qsv,' +
+        'vpp_qsv=w=1920:h=804:format=p010le,' +
+        'hwmap=derive_device=opencl,' +
         'tonemap_opencl=tonemap=hable:t=bt709:m=bt709:p=bt709:format=nv12,' +
-        'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv,' +
-        'vpp_qsv=w=1920:h=804:format=nv12',
+        'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv',
     );
   });
 
