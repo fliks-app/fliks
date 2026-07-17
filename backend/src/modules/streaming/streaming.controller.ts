@@ -724,8 +724,8 @@ export class StreamingController {
     // pick. QSV/VAAPI encoders run the HW tonemap (vaapi/opencl/qsv after
     // `auto` resolution + boot probe); NVENC runs `tonemap_opencl` on the GPU
     // when the OpenCL probe passed, else the CPU zscale chain; libx26x /
-    // VideoToolbox fallback always CPU. Report the real path (+ curve only for
-    // the CPU chain) so the overlay shows what's running.
+    // VideoToolbox fallback always CPU. Report the real path (+ curve for the
+    // opencl/CPU chains, which honour it) so the overlay shows what's running.
     const hasCrop = resolved.mediaFile.streamInfo?.video?.[0]?.crop != null;
     const hwTonemap =
       response.hwAccel === 'qsv' || response.hwAccel === 'vaapi';
@@ -739,8 +739,10 @@ export class StreamingController {
           ? 'opencl'
           : 'cpu'
       : null;
+    // The curve is a `tonemap`/`tonemap_opencl` operator, so it only applies to
+    // the opencl and CPU paths — the vpp_qsv / tonemap_vaapi LUTs ignore it.
     const tonemapCurve =
-      response.tonemapping && !hwTonemap && !openclTonemap
+      tonemapAlgo === 'opencl' || tonemapAlgo === 'cpu'
         ? resolveTonemapCurve()
         : undefined;
 

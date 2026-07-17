@@ -94,7 +94,7 @@
     "stats_stream": "Stream",
     "stats_dropped_frames": "Verworfene Bilder:",
     "stats_crop": "Zuschnitt:",
-    "stats_tonemapping": "Tone-Mapping",
+    "stats_tonemapping": "Tone-Mapping:",
     "stats_reasons": "Gründe:",
     "stats_sample_rate": "Abtastrate",
     "transcode_reason": {
