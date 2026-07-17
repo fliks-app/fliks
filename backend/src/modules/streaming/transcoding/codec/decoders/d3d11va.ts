@@ -45,6 +45,8 @@ function d3d11NativeDecoder(
       'd3d11va',
       '-hwaccel_output_format',
       'd3d11',
+      '-extra_hw_frames',
+      '32',
       '-noautorotate',
     ],
   };
