@@ -6,6 +6,7 @@ const base = {
   tonemap: false,
   useVaapiTonemap: false,
   sourceBitDepth: 8,
+  scaleWidth: 1920,
 };
 
 describe('buildVideoFilters', () => {
@@ -46,7 +47,33 @@ describe('buildVideoFilters', () => {
     const f = buildVideoFilters({ ...base, tonemap: true });
     expect(f.tonemapOpencl).toContain('tonemap_opencl=');
     expect(f.tonemapVaapi).toBe('');
-    expect(f.tonemapCpu).toContain('tonemap=mobius');
+    expect(f.tonemapCpu).toContain('tonemap=hable');
+  });
+
+  it('CPU tone-map downscales in linear light, then converts BT.2020 → BT.709', () => {
+    const f = buildVideoFilters({ ...base, tonemap: true, scaleWidth: 1280 });
+    // Downscale to the output width in linear light first, so the CPU tone
+    // curve + gamut conversion run at output res, not the source's; vf_tonemap
+    // needs linear light and the chain must convert primaries + transfer.
+    expect(f.tonemapCpu).toBe(
+      'zscale=w=1280:h=-2:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,',
+    );
+  });
+
+  it('routes the tone-map through tonemap_opencl (GPU) when openclTonemap', () => {
+    const f = buildVideoFilters({ ...base, tonemap: true, openclTonemap: true });
+    expect(f.tonemapCpu).toBe(
+      'format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=hable:desat=0:format=nv12,hwdownload,format=nv12,',
+    );
+    // No CPU zscale tone-map when the GPU path is used.
+    expect(f.tonemapCpu).not.toContain('zscale');
+  });
+
+  it('honours the tonemapCurve override', () => {
+    const hable = buildVideoFilters({ ...base, tonemap: true });
+    const mobius = buildVideoFilters({ ...base, tonemap: true, tonemapCurve: 'mobius' });
+    expect(hable.tonemapCpu).toContain('tonemap=tonemap=hable:');
+    expect(mobius.tonemapCpu).toContain('tonemap=tonemap=mobius:');
   });
 
   it('vaapi tone-map when useVaapiTonemap', () => {
@@ -64,14 +91,14 @@ describe('buildVideoFilters', () => {
     expect(f.tonemapOpencl).toBe('');
     expect(f.tonemapVaapi).toBe('');
     expect(f.burnInFilter).toBe(',subtitles=/tmp/x.ass');
-    expect(f.tonemapCpu).toContain('tonemap=mobius');
+    expect(f.tonemapCpu).toContain('tonemap=hable');
   });
 
   it('dovi swaps only the CPU tone-map slot for the libplacebo chain', () => {
     const plain = buildVideoFilters({ ...base, tonemap: true });
     const dv = buildVideoFilters({ ...base, tonemap: true, dovi: true });
     expect(dv.tonemapCpu).toContain('libplacebo=apply_dolbyvision=1');
-    expect(dv.tonemapCpu).not.toContain('tonemap=mobius');
+    expect(dv.tonemapCpu).not.toContain('tonemap=tonemap=hable');
     // Every other slot is identical to the non-dovi tone-map.
     for (const k of [
       'cropStr', 'cpuCropPrefix', 'hwCropPrefix',

@@ -54,6 +54,8 @@ import { SessionRouter } from './services/session-router.service';
 import { SessionContextBuilder } from './services/session-context-builder.service';
 import { pickAudioLayout } from './transcoding/audio-layout';
 import { resolveTonemapPath } from './transcoding/tonemap-path';
+import { resolveTonemapCurve } from './transcoding/ffmpeg-filter-graph';
+import { isOpenclTonemapEnabled } from './transcoding/codec/opencl-tonemap-probe';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
@@ -718,13 +720,29 @@ export class StreamingController {
       ? resolved.mediaFile.streamInfo.chapters
       : undefined;
 
-    // Surface the actually-used tonemap filter (after `auto` resolution
-    // + boot probe). Stats overlay reads this so it can show what's
-    // running, not what was originally requested.
+    // Surface the tonemap mechanism the session actually runs, not the admin
+    // pick. QSV/VAAPI encoders run the HW tonemap (vaapi/opencl/qsv after
+    // `auto` resolution + boot probe); NVENC runs `tonemap_opencl` on the GPU
+    // when the OpenCL probe passed, else the CPU zscale chain; libx26x /
+    // VideoToolbox fallback always CPU. Report the real path (+ curve only for
+    // the CPU chain) so the overlay shows what's running.
     const hasCrop = resolved.mediaFile.streamInfo?.video?.[0]?.crop != null;
+    const hwTonemap =
+      response.hwAccel === 'qsv' || response.hwAccel === 'vaapi';
+    const openclTonemap =
+      (response.hwAccel === 'nvenc' || response.hwAccel === 'amf') &&
+      isOpenclTonemapEnabled();
     const tonemapAlgo = response.tonemapping
-      ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop })
+      ? hwTonemap
+        ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop })
+        : openclTonemap
+          ? 'opencl'
+          : 'cpu'
       : null;
+    const tonemapCurve =
+      response.tonemapping && !hwTonemap && !openclTonemap
+        ? resolveTonemapCurve()
+        : undefined;
 
     // Compute the profile hash from the inputs we just derived — no
     // tracker round-trip needed. The hash drives the cache directory
@@ -868,6 +886,7 @@ export class StreamingController {
       ...response,
       playUrl: playUrlWithSid,
       tonemapAlgo,
+      tonemapCurve,
       durationSeconds: duration,
       markers,
       chapters,

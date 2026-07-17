@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
+import { sanitizeFsPath } from '../../common/utils/fs-path.util';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Season } from '../media/entities/season.entity';
@@ -388,7 +389,7 @@ export class DiskImportService {
   }
 
   async scanFolder(folderPath: string): Promise<ScanCandidate[]> {
-    const resolved = path.resolve(folderPath);
+    const resolved = path.resolve(sanitizeFsPath(folderPath));
     this.logger.log(`Disk library scan started — folder="${resolved}"`);
     let stat: fs.Stats;
     try {

@@ -1,6 +1,7 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { h264CodecString } from '../codec-strings';
-import { scaleEvenHeight } from './helpers/scale-filter';
+import { nvencScaleFilter8bit } from './helpers/nvenc-filters';
+import { NVENC_GOP_ARGS } from './helpers/nvenc-gop';
 
 /** NVIDIA NVENC H.264 encoder — Kepler and later. Tonemap path round-trips
  *  via CPU (hwdownload + scale + tonemap chain) because the CUDA filter
@@ -13,10 +14,9 @@ export const h264Nvenc: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => h264CodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, nvencPreset, filters, tonemap, hasCrop } = input;
-    const w = target.width;
+    const { target, nvencPreset } = input;
     const bitrate = `${target.videoBitrateBps}`;
-    const common = [
+    return [
       '-c:v',
       'h264_nvenc',
       '-preset',
@@ -25,33 +25,15 @@ export const h264Nvenc: EncoderDescriptor = {
       bitrate,
       '-maxrate',
       bitrate,
-    ];
-    const trailing = [
+      '-vf',
+      nvencScaleFilter8bit(input),
+      ...NVENC_GOP_ARGS,
       '-g',
       String(target.gopSize),
       '-keyint_min',
       String(target.gopSize),
       '-force_key_frames',
       input.forceKeyframesExpr,
-    ];
-
-    if (tonemap) {
-      // Download to CPU, tonemap on CPU, encode on NVENC.
-      return [
-        ...common,
-        '-vf',
-        `hwdownload,format=p010le,${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleEvenHeight(w)}`,
-        ...trailing,
-      ];
-    }
-    const nvCropFilter = hasCrop
-      ? `hwdownload,format=nv12,${filters.cropStr},hwupload_cuda,`
-      : '';
-    return [
-      ...common,
-      '-vf',
-      `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=nv12`,
-      ...trailing,
     ];
   },
 };

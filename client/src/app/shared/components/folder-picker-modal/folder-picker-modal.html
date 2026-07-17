@@ -1,0 +1,62 @@
+<dialog #dialog class="modal" role="dialog" aria-modal="true" (close)="cancel()">
+  <div class="modal-box max-w-2xl">
+    <h3 class="text-lg font-bold">{{ 'folder_picker.title' | translate }}</h3>
+
+    <div class="mt-2 flex items-center gap-2">
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs"
+        [disabled]="listing()?.parent === null || loading()"
+        (click)="navigate(listing()?.parent ?? '')"
+      >
+        ↑ {{ 'folder_picker.up' | translate }}
+      </button>
+      <span class="font-mono text-sm truncate text-base-content/70">
+        {{ listing()?.current || ('folder_picker.roots' | translate) }}
+      </span>
+    </div>
+
+    <div class="mt-3 h-72 overflow-y-auto rounded-box border border-base-300">
+      @if (loading()) {
+        <div class="flex h-full items-center justify-center">
+          <span class="loading loading-spinner"></span>
+        </div>
+      } @else if (error()) {
+        <div class="p-4 text-sm text-error">{{ error() | translate }}</div>
+      } @else if (!listing()?.entries?.length) {
+        <div class="p-4 text-sm text-base-content/50">
+          {{ 'folder_picker.empty' | translate }}
+        </div>
+      } @else {
+        <ul class="menu menu-sm w-full">
+          @for (entry of listing()?.entries ?? []; track entry.path) {
+            <li>
+              <button type="button" class="font-mono" (click)="navigate(entry.path)">
+                📁 {{ entry.name }}
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+
+    <div class="modal-action">
+      <button type="button" class="btn" (click)="cancel()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        [disabled]="!listing()?.current || loading()"
+        (click)="selectCurrent()"
+      >
+        {{ 'folder_picker.select' | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="cancel()" [attr.aria-label]="'common.close' | translate">
+      {{ 'common.close' | translate }}
+    </button>
+  </form>
+</dialog>

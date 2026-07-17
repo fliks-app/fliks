@@ -24,6 +24,9 @@ import { av1Qsv, av1QsvHdr10 } from './av1-qsv';
 import { av1Vaapi, av1VaapiHdr10 } from './av1-vaapi';
 import { av1Nvenc, av1NvencHdr10, av1NvencHlg } from './av1-nvenc';
 import { av1Cpu, av1CpuHdr10, av1CpuHlg } from './av1-cpu';
+import { h264Amf } from './h264-amf';
+import { hevcAmf, hevcAmfHdr10, hevcAmfHlg } from './hevc-amf';
+import { av1Amf, av1AmfHdr10, av1AmfHlg } from './av1-amf';
 
 /** Static registry of every encoder descriptor compiled in. The order
  *  matters: when multiple descriptors match a `(variant, hwAccel)` query
@@ -40,6 +43,9 @@ const DESCRIPTORS: readonly EncoderDescriptor[] = [
   hevcNvenc,
   hevcNvencHdr10,
   hevcNvencHlg,
+  hevcAmf,
+  hevcAmfHdr10,
+  hevcAmfHlg,
   hevcVideotoolbox,
   hevcVideotoolboxHdr10,
   hevcVideotoolboxHlg,
@@ -51,10 +57,14 @@ const DESCRIPTORS: readonly EncoderDescriptor[] = [
   av1Nvenc,
   av1NvencHdr10,
   av1NvencHlg,
+  av1Amf,
+  av1AmfHdr10,
+  av1AmfHlg,
   // H.264 HW
   h264Qsv,
   h264Vaapi,
   h264Nvenc,
+  h264Amf,
   h264Videotoolbox,
   // CPU fallback last — `candidates()` returns it as a last resort.
   hevcCpu,

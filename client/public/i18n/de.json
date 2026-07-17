@@ -1258,7 +1258,16 @@
     "outro": "Outro",
     "recap": "Rückblick"
   },
+  "folder_picker": {
+    "title": "Ordner auswählen",
+    "select": "Diesen Ordner auswählen",
+    "up": "Nach oben",
+    "empty": "Keine Unterordner",
+    "roots": "Dieser PC",
+    "unreadable": "Ordner nicht lesbar"
+  },
   "common": {
+    "browse": "Durchsuchen…",
     "item_count_one": "{{count}} Element",
     "item_count_other": "{{count}} Elemente",
     "search": "Suchen…",

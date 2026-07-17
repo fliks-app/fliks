@@ -14,7 +14,6 @@ import {
   TranscodingService,
   getHdrLadderForDevice,
   getLadderForDevice,
-  cappedTranscodeVideoBitrateBps,
   isEcoProfile,
   parseBitrateToBps,
   profileFitsSource,
@@ -27,7 +26,10 @@ import {
 } from './transcoding/quality-ladder';
 import { resolveEncodePipeline } from './transcoding/encode-pipeline';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
-import { bucketResolutionHeight } from '../../common/utils/resolution.util';
+import {
+  bucketResolutionHeight,
+  resolutionFitsCap,
+} from '../../common/utils/resolution.util';
 import { normaliseSourceCodec } from './transcoding/codec/normalise';
 import { deriveDvInfo, isDvProfile5 } from './transcoding/codec/dolby-vision';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
@@ -367,32 +369,20 @@ export class StreamBuilderService {
       }
     }
 
-    // Surface a quality-reduction reason only when the chosen explicit rung is
-    // an ACTUAL downscale or bitrate cut vs the source — not merely because a
-    // fixed rung was picked. A rung at the source resolution whose source-
-    // capped bitrate matches the source changes nothing worth flagging.
+    // An explicit rung only reaches this branch via `explicitDownscale` — a
+    // lower resolution or an eco (same-resolution, reduced-bitrate) tier the
+    // user deliberately picked, both of which re-encode the video. Surface the
+    // choice so the overlay never shows a transcode with an empty video reason.
+    // (A per-bitrate re-check used to gate this and silently dropped the reason
+    // for eco rungs whose source-capped bitrate wasn't provably below an
+    // unknown or already-low source bitrate.)
     if (forceLadder && !autoOnLadder) {
       const rung = qualityLadder.find((p) => p.name === requestedQuality);
       if (rung) {
-        const reducesResolution =
-          bucketResolutionHeight(rung.maxWidth, rung.maxHeight) <
-          bucketResolutionHeight(source.width, source.height);
-        const rungVideoBps = cappedTranscodeVideoBitrateBps(
-          parseBitrateToBps(rung.videoBitrate),
-          source.videoBitRate,
-          source.videoCodec,
-          selectedVariant.codec,
-        );
-        const reducesBitrate =
-          source.videoBitRate != null &&
-          source.videoBitRate > 0 &&
-          rungVideoBps < source.videoBitRate * 0.95;
-        if (reducesResolution || reducesBitrate) {
-          reasons.push({
-            flag: 'VideoQualityReduced',
-            message: `Reduced-quality rung selected (${requestedQuality})`,
-          });
-        }
+        reasons.push({
+          flag: 'VideoQualityReduced',
+          message: `Reduced-quality rung selected (${requestedQuality})`,
+        });
       }
     }
 
@@ -632,7 +622,7 @@ export class StreamBuilderService {
       transcodeReasons: reasons,
       videoCopyStream: false,
       audioCopyStream: canCopyAudio,
-      outputVideoCodec: 'h264',
+      outputVideoCodec: selectedVariant.codec,
       outputAudioCodec,
       audioPlan: canCopyAudio
         ? { mode: 'copy', codec: srcCodec }
@@ -1034,18 +1024,18 @@ export class StreamBuilderService {
             message: `${source.videoBitDepth} bit > max ${cond.maxBitDepth} bit`,
           });
         }
-        if (cond.maxWidth && source.width && source.width > cond.maxWidth) {
+        if (
+          !resolutionFitsCap(
+            source.width,
+            source.height,
+            cond.maxWidth,
+            cond.maxHeight,
+          )
+        ) {
           videoConditionsMet = false;
           reasons.push({
             flag: 'VideoResolutionNotSupported',
-            message: `Width ${source.width} > max ${cond.maxWidth}`,
-          });
-        }
-        if (cond.maxHeight && source.height && source.height > cond.maxHeight) {
-          videoConditionsMet = false;
-          reasons.push({
-            flag: 'VideoResolutionNotSupported',
-            message: `Height ${source.height} > max ${cond.maxHeight}`,
+            message: `Resolution ${source.width}x${source.height} > max ${cond.maxWidth ?? '?'}x${cond.maxHeight ?? '?'}`,
           });
         }
       }

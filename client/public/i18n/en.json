@@ -1258,7 +1258,16 @@
     "outro": "Outro",
     "recap": "Recap"
   },
+  "folder_picker": {
+    "title": "Select a folder",
+    "select": "Select this folder",
+    "up": "Up",
+    "empty": "No sub-folders",
+    "roots": "This PC",
+    "unreadable": "Folder not readable"
+  },
   "common": {
+    "browse": "Browse…",
     "item_count_one": "{{count}} item",
     "item_count_other": "{{count}} items",
     "search": "Search…",

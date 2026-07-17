@@ -1258,7 +1258,16 @@
     "outro": "Outro",
     "recap": "Riepilogo"
   },
+  "folder_picker": {
+    "title": "Seleziona una cartella",
+    "select": "Seleziona questa cartella",
+    "up": "Su",
+    "empty": "Nessuna sottocartella",
+    "roots": "Questo PC",
+    "unreadable": "Cartella non leggibile"
+  },
   "common": {
+    "browse": "Sfoglia…",
     "item_count_one": "{{count}} elemento",
     "item_count_other": "{{count}} elementi",
     "search": "Cerca…",

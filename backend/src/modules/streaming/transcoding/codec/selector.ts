@@ -3,6 +3,7 @@ import type { DeviceProfileDto } from '../../dto/device-profile.dto';
 import type { HwAccelType } from '../types';
 import { encoderRegistry } from './encoders';
 import { applyQuirks, type QuirkContext } from './fallback';
+import { resolutionFitsCap } from '../../../../common/utils/resolution.util';
 
 /**
  * Resolve an encoder for `variant` whose `hwAccel` matches the detected
@@ -70,6 +71,8 @@ export function pickVariants(
     for (const codec of codecOrder) {
       if (codec === 'h264') continue;
       if (!clientSupports(clientCodecs, codec)) continue;
+      if (!clientDecodesResolution(profile, codec, source.width, source.height))
+        continue;
       const variant: CodecVariant = { codec, bitDepth: 10, hdr: source.hdr };
       if (resolveHwEncoder(variant, hwAccel)) {
         candidates.push(variant);
@@ -80,6 +83,8 @@ export function pickVariants(
       for (const codec of codecOrder) {
         if (codec === 'h264') continue;
         if (!clientSupports(clientCodecs, codec)) continue;
+        if (!clientDecodesResolution(profile, codec, source.width, source.height))
+          continue;
         const variant: CodecVariant = { codec, bitDepth: 10, hdr: source.hdr };
         if (encoderRegistry.resolve(variant, hwAccel)) {
           candidates.push(variant);
@@ -99,6 +104,8 @@ export function pickVariants(
   const beforeSdr = candidates.length;
   for (const codec of codecOrder) {
     if (!clientSupports(clientCodecs, codec)) continue;
+    if (!clientDecodesResolution(profile, codec, source.width, source.height))
+      continue;
     const variant: CodecVariant = { codec, bitDepth: 8, hdr: null };
     if (resolveHwEncoder(variant, hwAccel)) {
       candidates.push(variant);
@@ -107,6 +114,8 @@ export function pickVariants(
   if (candidates.length === beforeSdr) {
     for (const codec of codecOrder) {
       if (!clientSupports(clientCodecs, codec)) continue;
+      if (!clientDecodesResolution(profile, codec, source.width, source.height))
+        continue;
       const variant: CodecVariant = { codec, bitDepth: 8, hdr: null };
       if (encoderRegistry.resolve(variant, hwAccel)) {
         candidates.push(variant);
@@ -160,4 +169,20 @@ function clientSupports(set: Set<string>, codec: VideoCodec): boolean {
     case 'av1':
       return set.has('av1') || set.has('av01');
   }
+}
+
+/** Whether the client can DECODE `codec` at the resolution we intend to emit.
+ *  A native client reports its HW decoder's per-codec max width/height; since
+ *  one codec drives every rung of the master, a codec whose ceiling can't fit
+ *  the top rung is unusable — a 4K source on a device that decodes AV1 only up
+ *  to 2048 must fall back to HEVC. Codecs with no declared ceiling always pass. */
+function clientDecodesResolution(
+  profile: DeviceProfileDto,
+  codec: VideoCodec,
+  width: number,
+  height: number,
+): boolean {
+  const cond = profile.codecConditions?.find((c) => c.codec === codec);
+  if (!cond) return true;
+  return resolutionFitsCap(width, height, cond.maxWidth, cond.maxHeight);
 }

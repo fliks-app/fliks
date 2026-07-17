@@ -763,10 +763,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       vaapi: 'tonemap_vaapi',
       opencl: 'tonemap_opencl',
       qsv: 'vpp_qsv tonemap',
+      cpu: 'CPU',
     };
+    const tonemapAlgoLabel =
+      pi?.tonemapAlgo === 'cpu' && pi?.tonemapCurve
+        ? `CPU (${pi.tonemapCurve})`
+        : pi?.tonemapAlgo
+          ? (tonemapLabel[pi.tonemapAlgo] ?? pi.tonemapAlgo)
+          : '';
     const tonemapping =
-      pi?.tonemapping && pi?.tonemapAlgo
-        ? (tonemapLabel[pi.tonemapAlgo] ?? pi.tonemapAlgo)
+      pi?.tonemapping && tonemapAlgoLabel
+        ? tonemapAlgoLabel
         : pi?.tonemapping
           ? 'enabled'
           : '';
@@ -785,7 +792,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // transcodes, not just raw codes. Unknown flags fall back to the raw token.
     const reasonLabel = (flag: string) => {
       const key = `player.transcode_reason.${flag}`;
-      const label = this.translate.instant(key);
+      const label = this.translate.instant(key, { codec: codecName });
       return label === key ? flag : label;
     };
     const videoTranscodeReasons = effectiveVideoCopy
@@ -828,9 +835,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       );
 
     let audioStreamBitrate = '';
-    if (selectedRateEntry) {
+    if (selectedRateEntry && validBps(selectedRateEntry.audioBitrateBps)) {
       audioStreamBitrate = formatBitrateBps(selectedRateEntry.audioBitrateBps);
-    } else if (validBps(sourceA) && pi?.playMethod === 'DirectStream') {
+    } else if (validBps(sourceA)) {
       audioStreamBitrate = formatBitrateBps(sourceA);
     } else {
       const trackAbw = activeVariant?.audioBandwidth;

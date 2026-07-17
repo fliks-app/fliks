@@ -16,6 +16,13 @@
         </label>
         <button
           type="button"
+          class="btn btn-outline btn-sm"
+          (click)="browse()"
+        >
+          {{ 'common.browse' | translate }}
+        </button>
+        <button
+          type="button"
           class="btn btn-primary btn-sm"
           (click)="scan()"
           [disabled]="scanning() || !folderPath().trim()"

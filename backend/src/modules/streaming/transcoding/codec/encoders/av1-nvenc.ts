@@ -2,7 +2,11 @@ import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { av1CodecString } from '../codec-strings';
 import { hdrColorArgs } from './helpers/hdr-variants';
 import { masterDisplayString, maxCllString } from './helpers/hdr-metadata';
-import { scaleEvenHeight } from './helpers/scale-filter';
+import {
+  nvencScaleFilter10bit,
+  nvencScaleFilter8bit,
+} from './helpers/nvenc-filters';
+import { AV1_NVENC_GOP_ARGS } from './helpers/nvenc-gop';
 
 /** NVIDIA NVENC AV1 encoder — Ada Lovelace (RTX 4000 series) and later.
  *  Pascal, Turing and Ampere don't ship the AV1 encode unit, so
@@ -18,10 +22,9 @@ export const av1Nvenc: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => av1CodecString(target, 8),
   buildArgs(input: EncoderInput): string[] {
-    const { target, nvencPreset, filters, tonemap, hasCrop } = input;
-    const w = target.width;
+    const { target, nvencPreset } = input;
     const bitrate = `${target.videoBitrateBps}`;
-    const common = [
+    return [
       '-c:v',
       'av1_nvenc',
       '-preset',
@@ -30,32 +33,15 @@ export const av1Nvenc: EncoderDescriptor = {
       bitrate,
       '-maxrate',
       bitrate,
-    ];
-    const trailing = [
+      '-vf',
+      nvencScaleFilter8bit(input),
+      ...AV1_NVENC_GOP_ARGS,
       '-g',
       String(target.gopSize),
       '-keyint_min',
       String(target.gopSize),
       '-force_key_frames',
       input.forceKeyframesExpr,
-    ];
-
-    if (tonemap) {
-      return [
-        ...common,
-        '-vf',
-        `hwdownload,format=p010le,${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleEvenHeight(w)}`,
-        ...trailing,
-      ];
-    }
-    const nvCropFilter = hasCrop
-      ? `hwdownload,format=nv12,${filters.cropStr},hwupload_cuda,`
-      : '';
-    return [
-      ...common,
-      '-vf',
-      `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=nv12`,
-      ...trailing,
     ];
   },
 };
@@ -73,12 +59,8 @@ export const av1NvencHdr10: EncoderDescriptor = {
   supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => av1CodecString(target, 10),
   buildArgs(input: EncoderInput): string[] {
-    const { target, nvencPreset, filters, hasCrop } = input;
-    const w = target.width;
+    const { target, nvencPreset } = input;
     const bitrate = `${target.videoBitrateBps}`;
-    const nvCropFilter = hasCrop
-      ? `hwdownload,format=p010le,${filters.cropStr},hwupload_cuda,`
-      : '';
     return [
       '-c:v',
       'av1_nvenc',
@@ -91,7 +73,8 @@ export const av1NvencHdr10: EncoderDescriptor = {
       '-maxrate',
       bitrate,
       '-vf',
-      `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=p010le`,
+      nvencScaleFilter10bit(input),
+      ...AV1_NVENC_GOP_ARGS,
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -118,12 +101,8 @@ export const av1NvencHlg: EncoderDescriptor = {
   supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => av1CodecString(target, 10),
   buildArgs(input: EncoderInput): string[] {
-    const { target, nvencPreset, filters, hasCrop } = input;
-    const w = target.width;
+    const { target, nvencPreset } = input;
     const bitrate = `${target.videoBitrateBps}`;
-    const nvCropFilter = hasCrop
-      ? `hwdownload,format=p010le,${filters.cropStr},hwupload_cuda,`
-      : '';
     return [
       '-c:v',
       'av1_nvenc',
@@ -136,7 +115,8 @@ export const av1NvencHlg: EncoderDescriptor = {
       '-maxrate',
       bitrate,
       '-vf',
-      `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=p010le`,
+      nvencScaleFilter10bit(input),
+      ...AV1_NVENC_GOP_ARGS,
       '-g',
       String(target.gopSize),
       '-keyint_min',

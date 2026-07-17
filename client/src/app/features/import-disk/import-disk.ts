@@ -12,6 +12,7 @@ import { HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { MediaService } from '../../core/services/api/media.service';
+import { FolderPickerService } from '../../core/services/folder-picker.service';
 import { LibrariesApiService, Library } from '../../core/services/api/libraries-api.service';
 import { MediaType } from '../../core/enums/media-type.enum';
 import {
@@ -61,6 +62,7 @@ export type ImportMethod = 'copy' | 'move';
 })
 export class ImportDiskComponent implements OnInit {
   private readonly http = inject(HttpClient);
+  private readonly folderPicker = inject(FolderPickerService);
   private readonly mediaApi = inject(MediaService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly translate = inject(TranslateService);
@@ -131,6 +133,11 @@ export class ImportDiskComponent implements OnInit {
     } finally {
       this.mediaOptionsLoading.set(false);
     }
+  }
+
+  async browse() {
+    const picked = await this.folderPicker.open(this.folderPath().trim());
+    if (picked) this.folderPath.set(picked);
   }
 
   async scan() {

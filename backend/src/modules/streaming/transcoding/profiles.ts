@@ -24,10 +24,13 @@ const CODEC_BITRATE_FACTOR: Record<string, number> = {
 
 /**
  * Source video bitrate in bps: the probed per-stream value, or an estimate
- * from the container bitrate minus audio when the stream omits it (common in
- * MKV, where ffprobe leaves the per-stream bitrate unset). Returns undefined
- * when neither is known. Shared by the stream-builder decision and the session
- * context so the encode cap and the overlay agree on the source bitrate.
+ * from the container bitrate when the stream omits it (common in MKV, where
+ * ffprobe leaves the per-stream bitrate unset). Audio is subtracted when its
+ * bitrate is known; when the container omits that too, the overall container
+ * bitrate stands as the video estimate — a hair generous but a far better cap
+ * than the ladder nominal. Returns undefined when no container bitrate is
+ * known. Shared by the stream-builder decision and the session context so the
+ * encode cap and the overlay agree on the source bitrate.
  */
 export function resolveSourceVideoBitrateBps(
   videoStreamBitrateBps: number | null | undefined,
@@ -37,12 +40,8 @@ export function resolveSourceVideoBitrateBps(
   if (videoStreamBitrateBps != null && videoStreamBitrateBps > 0) {
     return videoStreamBitrateBps;
   }
-  if (
-    formatBitrateBps != null &&
-    formatBitrateBps > 0 &&
-    audioSumBitrateBps > 0
-  ) {
-    const est = formatBitrateBps - audioSumBitrateBps;
+  if (formatBitrateBps != null && formatBitrateBps > 0) {
+    const est = formatBitrateBps - Math.max(0, audioSumBitrateBps);
     if (est > 10_000) return est;
   }
   return undefined;

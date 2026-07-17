@@ -43,7 +43,9 @@ import {
   isTonemapOpenclEnabled,
   runTonemapOpenclProbe,
 } from './codec/tonemap-opencl-probe';
+import { runOpenclTonemapProbe } from './codec/opencl-tonemap-probe';
 import { runLibplaceboDvProbe } from './codec/libplacebo-dv-probe';
+import { runScaleD3d11Probe } from './codec/scale-d3d11-probe';
 import {
   generateMasterPlaylist,
   getAvailableProfiles,
@@ -139,6 +141,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.detectedHwAccel === 'vaapi'
     ) {
       void runTonemapOpenclProbe(this.log);
+    }
+    // Standalone OpenCL tone-map — the GPU HDR→SDR path for NVENC and AMF
+    // (neither has an on-encoder tonemap; OpenCL rides the same compute stack
+    // as CUDA/NVENC and AMD's driver, unlike the GLX/Vulkan chain which fails
+    // headless).
+    if (this.detectedHwAccel === 'nvenc' || this.detectedHwAccel === 'amf') {
+      void runOpenclTonemapProbe(this.log);
+    }
+    // Zero-copy AMD GPU scale for the AMF encode (scale_d3d11, needs FFmpeg
+    // ≥ 8.1 and a GPU that accepts its output texture). Probed so an unavailable
+    // filter degrades to the CPU scale instead of crashing every session.
+    if (this.detectedHwAccel === 'amf') {
+      void runScaleD3d11Probe(this.log);
     }
     // Vulkan/libplacebo Dolby Vision P5 tonemap. Vendor-agnostic, so probe on
     // any non-macOS host; a GPU-less server fails device init fast (fail-closed).

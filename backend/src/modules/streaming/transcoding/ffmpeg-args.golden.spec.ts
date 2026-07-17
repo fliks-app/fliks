@@ -282,7 +282,7 @@ describe('buildFfmpegArgs — CPU golden argv (characterization)', () => {
        "-bufsize",
        "16M",
        "-vf",
-       "format=gbrpf32le,tonemap=mobius:desat=0,format=yuv420p,scale=1920:ceil(ih*1920/iw/2)*2:flags=lanczos,format=yuv420p",
+       "zscale=w=1920:h=-2:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=1920:ceil(ih*1920/iw/2)*2:flags=lanczos,format=yuv420p",
        "-force_key_frames",
        "expr:gte(t,0+n_forced*3)",
        "-sc_threshold:v:0",
@@ -1498,5 +1498,33 @@ describe('buildFfmpegArgs — pillarbox crop output sizing', () => {
     // over-declares the level and trips strict MSE decoders).
     expect(vf).toContain('crop=2880:2160:480:0');
     expect(vf).not.toContain('3840');
+  });
+});
+
+describe('buildFfmpegArgs — NVENC early/steady-state SPS consistency', () => {
+  const presetOf = (args: string[]): string | null => {
+    const i = args.indexOf('-preset');
+    return i === -1 ? null : args[i + 1];
+  };
+
+  // The controller can serve init.mp4 from the early warm-up session and
+  // segments from the steady-state session. NVENC bakes preset-dependent
+  // knobs into the SPS, so the two sessions must build an identical video
+  // argv or the hvc1 init/segment parameter sets diverge → macroblock
+  // corruption. (Mirrors the pinned-preset invariant for libx264.)
+  it('builds an identical NVENC video argv for early and steady-state', () => {
+    const main = buildFfmpegArgs(
+      opts({ hwAccel: 'nvenc', videoVariant: HEVC_SDR }),
+      silentLog,
+    );
+    const early = buildFfmpegArgs(
+      opts({ hwAccel: 'nvenc', videoVariant: HEVC_SDR, early: true }),
+      silentLog,
+    );
+    expect(presetOf(main)).toBe('p4');
+    expect(presetOf(early)).toBe('p4');
+    // -t (early duration cap) is injected by the session layer, not here, so
+    // the argv this builder emits must be byte-identical across the two.
+    expect(early).toEqual(main);
   });
 });

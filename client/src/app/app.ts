@@ -14,6 +14,7 @@ import { TvService } from './core/services/tv.service';
 import { TvSpatialNavService } from './core/services/tv-spatial-nav.service';
 import { ToastContainerComponent } from './shared/components/toast-container';
 import { ConfirmationModalComponent } from './shared/components/confirmation-modal';
+import { FolderPickerModalComponent } from './shared/components/folder-picker-modal/folder-picker-modal';
 import { SelectPickerComponent } from './shared/components/select-picker';
 import { DismissableStackService } from './core/services/dismissable-stack.service';
 import { NavbarService } from './core/services/navbar.service';
@@ -22,7 +23,7 @@ import { AppResumeService } from './core/services/app-resume.service';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, ToastContainerComponent, ConfirmationModalComponent, SelectPickerComponent],
+  imports: [RouterOutlet, ToastContainerComponent, ConfirmationModalComponent, FolderPickerModalComponent, SelectPickerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app.html',
 })

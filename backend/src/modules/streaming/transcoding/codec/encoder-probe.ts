@@ -3,6 +3,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { EncoderDescriptor } from './types';
 import type { HwAccelType } from '../types';
+import { qsvDeviceInitArgs, vaapiDeviceInitArgs } from '../hw-device';
 
 const execFileAsync = promisify(execFile);
 
@@ -45,6 +46,8 @@ export function probeableAccels(detected: HwAccelType): Set<HwAccelType> {
       return new Set(['qsv', 'vaapi', 'none']);
     case 'vaapi':
       return new Set(['vaapi', 'none']);
+    case 'amf':
+      return new Set(['amf', 'none']);
     case 'nvenc':
       return new Set(['nvenc', 'none']);
     case 'videotoolbox':
@@ -166,8 +169,7 @@ async function probeOne(d: EncoderDescriptor, _log: Logger): Promise<boolean> {
   switch (d.hwAccel) {
     case 'vaapi':
       inputArgs = [
-        '-init_hw_device',
-        'vaapi=va:/dev/dri/renderD128',
+        ...vaapiDeviceInitArgs(),
         '-filter_hw_device',
         'va',
         '-f',
@@ -179,10 +181,7 @@ async function probeOne(d: EncoderDescriptor, _log: Logger): Promise<boolean> {
       break;
     case 'qsv':
       inputArgs = [
-        '-init_hw_device',
-        'vaapi=va:/dev/dri/renderD128',
-        '-init_hw_device',
-        'qsv=qs@va',
+        ...qsvDeviceInitArgs(),
         '-filter_hw_device',
         'qs',
         '-f',
@@ -245,6 +244,10 @@ function encoderName(d: EncoderDescriptor): string {
       if (d.variant.codec === 'av1') return 'av1_nvenc';
       if (d.variant.codec === 'hevc') return 'hevc_nvenc';
       return 'h264_nvenc';
+    case 'amf':
+      if (d.variant.codec === 'av1') return 'av1_amf';
+      if (d.variant.codec === 'hevc') return 'hevc_amf';
+      return 'h264_amf';
     case 'videotoolbox':
       if (d.variant.codec === 'hevc') return 'hevc_videotoolbox';
       return 'h264_videotoolbox';

@@ -26,12 +26,18 @@ import type {
   HdrStaticMetadata,
   VideoCodec,
 } from './codec/types';
-import { decoderRegistry, findQsvNativeDecoder } from './codec/decoders';
+import {
+  decoderRegistry,
+  findQsvNativeDecoder,
+  findAmfNativeDecoder,
+} from './codec/decoders';
 import { normaliseSourceCodec } from './codec/normalise';
 import { hevcMainTierCapBps } from './codec/codec-strings';
 import { varStreamMapLayout } from './audio-layout';
 import { resolveEncodePipeline } from './encode-pipeline';
-import { buildVideoFilters } from './ffmpeg-filter-graph';
+import { openclTonemapInitArgs } from './hw-device';
+import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';
+import { isOpenclTonemapEnabled } from './codec/opencl-tonemap-probe';
 import { isLibplaceboDvEnabled } from './codec/libplacebo-dv-probe';
 import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
 
@@ -50,6 +56,15 @@ import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
  * startup cost on the common (small-header) case.
  */
 const TRUSTED_PROBE_SIZE = '5000000';
+
+/** Join an HLS output path with forward slashes. ffmpeg's HLS muxer derives
+ *  the fmp4 init directory with POSIX separators, so a backslash path (what
+ *  path.join yields on Windows) makes it silently skip writing init_%v.mp4 —
+ *  the player then stalls waiting for EXT-X-MAP. ffmpeg accepts forward slashes
+ *  on Windows, and this matches path.join's output on POSIX. */
+function ffOutPath(...parts: string[]): string {
+  return parts.join('/').replace(/\\/g, '/');
+}
 
 export interface BuildFfmpegArgsOptions {
   inputPath: string;
@@ -440,6 +455,7 @@ export function buildFfmpegArgs(
     tonemapPath,
     qsvNativeAvailable,
     useVaapiTonemap,
+    amfFullGpuAvailable,
   } = resolveEncodePipeline(variant, {
     hwAccel: useDoviTonemap ? 'none' : hwAccel,
     crop: !!crop,
@@ -456,6 +472,19 @@ export function buildFfmpegArgs(
     );
   }
 
+  // NVENC and AMF have no on-encoder HDR→SDR tone-map, so it runs off-encoder.
+  // When the OpenCL tone-map probe passed, route it through tonemap_opencl
+  // (GPU) instead of the CPU zscale chain — decisive on 4K where the CPU
+  // tone-map can't sustain real-time, and it offloads the (often weak) APU CPU.
+  // Decode is forced to CPU so the frame reaches OpenCL via a plain hwupload
+  // (no CUDA/D3D11 ↔ OpenCL interop, which is unreliable); the tone-map, the
+  // expensive step, is what moves to the GPU.
+  const openclTonemap =
+    !!tonemap &&
+    (effectiveHwAccel === 'nvenc' || effectiveHwAccel === 'amf') &&
+    isOpenclTonemapEnabled();
+  const decodeHwAccel: HwAccelType = openclTonemap ? 'none' : effectiveHwAccel;
+
   // Early sessions live ~1s before Shaka jumps to the main session — visual
   // quality on those warm-up frames is throwaway, so bias every knob towards
   // ramp-up speed. `veryfast` everywhere keeps the H.264 profile consistent
@@ -464,7 +493,16 @@ export function buildFfmpegArgs(
   // Baseline and produces an SPS that doesn't match the High SPS in the
   // main session's init.mp4 — player concatenates the two and corrupts.
   const earlyPreset = early ? 'veryfast' : encoderPreset;
-  const earlyNvencPreset = early ? 'p1' : 'p4';
+  // NVENC preset is held identical across the early and steady-state
+  // sessions, for the same reason the libx264 preset is pinned above: NVENC
+  // bakes preset-dependent knobs (num_ref_frames, level, VUI) into the SPS,
+  // and the controller can serve init.mp4 from one session while serving
+  // segments from the other. A p1/p4 split shipped an init (p1) whose SPS
+  // didn't match the p4-encoded slices — fatal under hvc1 (parameter sets
+  // live only in the init), producing macroblock corruption from seg-0.
+  // NVENC encodes 1080p at >10x realtime even at p4, so pinning the warm-up
+  // session to p4 costs no meaningful first-segment latency.
+  const nvencPreset = 'p4';
   // QSV rate-control: tight VBV (bufsize = bitrate × 1) so the BRC has a
   // short horizon and can't defer big I-frames. Early uses 0.5× / 1× so
   // the encoder doesn't hold back frames waiting for the buffer to fill.
@@ -505,13 +543,19 @@ export function buildFfmpegArgs(
           },
           effectiveHwAccel,
         ))
-      : decoderRegistry.resolve(
-          {
-            codec: normalisedSourceCodec ?? 'h264',
-            bitDepth: sourceBitDepth,
-          },
-          effectiveHwAccel,
-        );
+      : amfFullGpuAvailable &&
+          effectiveHwAccel === 'amf' &&
+          normalisedSourceCodec
+        ? // Full-GPU AMF: D3D11-native decode so scale_d3d11 + AMF stay on the
+          // device with no CPU round-trip.
+          findAmfNativeDecoder(normalisedSourceCodec)
+        : decoderRegistry.resolve(
+            {
+              codec: normalisedSourceCodec ?? 'h264',
+              bitDepth: sourceBitDepth,
+            },
+            decodeHwAccel,
+          );
   args.push(...decoder.buildInputArgs());
 
   // Full-Metal HDR opt-in. The h264/hevc_videotoolbox encoders can keep
@@ -554,6 +598,12 @@ export function buildFfmpegArgs(
   if (tonemap && !useVaapiTonemap && decoder.outputSurface === 'vaapi') {
     args.push('-init_hw_device', 'opencl=ocl:0.0');
   }
+  // NVENC/AMF OpenCL tone-map: init the OpenCL device and make it the default
+  // filter device so the chain's `hwupload` lands on it. Decode is CPU here
+  // (see openclTonemap above), so there's no competing hwaccel device.
+  if (openclTonemap) {
+    args.push(...openclTonemapInitArgs());
+  }
   if (useDoviTonemap) {
     args.push('-init_hw_device', 'vulkan=vk:0', '-filter_hw_device', 'vk');
   }
@@ -591,7 +641,7 @@ export function buildFfmpegArgs(
       frameRate: fps,
     },
     preset: earlyPreset,
-    nvencPreset: earlyNvencPreset,
+    nvencPreset,
     seekSeconds,
     early,
     forceKeyframesExpr,
@@ -608,6 +658,9 @@ export function buildFfmpegArgs(
       useVaapiTonemap,
       sourceBitDepth,
       dovi: useDoviTonemap,
+      tonemapCurve: resolveTonemapCurve(),
+      scaleWidth: w,
+      openclTonemap,
     }),
     tonemap,
     tonemapPath,
@@ -751,8 +804,8 @@ export function buildFfmpegArgs(
       '-var_stream_map',
       varParts.join(' '),
       '-hls_segment_filename',
-      path.join(outputDir, '%v', `seg-%04d.${segExt}`),
-      path.join(outputDir, '%v', 'index.m3u8'),
+      ffOutPath(outputDir, '%v', `seg-%04d.${segExt}`),
+      ffOutPath(outputDir, '%v', 'index.m3u8'),
     );
   } else {
     // Standard single-stream output: video + one audio track muxed.
@@ -792,10 +845,10 @@ export function buildFfmpegArgs(
       segType,
       ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init.mp4']),
       '-hls_segment_filename',
-      path.join(outputDir, `seg-%04d.${segExt}`),
+      ffOutPath(outputDir, `seg-%04d.${segExt}`),
       '-hls_flags',
       'independent_segments+temp_file',
-      path.join(outputDir, 'index.m3u8'),
+      ffOutPath(outputDir, 'index.m3u8'),
     );
   }
 
@@ -889,10 +942,10 @@ export function buildAudioOnlyFfmpegArgs(
     segType,
     ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init.mp4']),
     '-hls_segment_filename',
-    path.join(outputDir, `seg-%04d.${segExt}`),
+    ffOutPath(outputDir, `seg-%04d.${segExt}`),
     '-hls_flags',
     'independent_segments+temp_file',
-    path.join(outputDir, 'index.m3u8'),
+    ffOutPath(outputDir, 'index.m3u8'),
   );
 
   return args;
