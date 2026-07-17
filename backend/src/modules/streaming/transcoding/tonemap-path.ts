@@ -3,6 +3,7 @@ import {
   isTonemapOpenclEnabledWithCrop,
 } from './codec/tonemap-opencl-probe';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
+import { hostHasVaapi } from './hw-device';
 import type { TonemapAlgo } from './types';
 
 /** Concrete filter chain the session-time graph will actually use,
@@ -35,7 +36,10 @@ export function resolveTonemapPath(
       ? isTonemapOpenclEnabledWithCrop()
       : isTonemapOpenclEnabled();
     if (openclOk) return 'opencl';
-    if (platform === 'win32' && isVppQsvTonemapEnabled()) return 'qsv';
+    // No VAAPI device (Windows): 'vaapi' isn't a QSV path, so prefer the
+    // vpp_qsv fixed-function LUT when its probe passed rather than force a
+    // CPU encode.
+    if (!hostHasVaapi(platform) && isVppQsvTonemapEnabled()) return 'qsv';
     return 'vaapi';
   }
   return algo;

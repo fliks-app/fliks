@@ -1,4 +1,5 @@
 import {
+  hostHasVaapi,
   openclTonemapInitArgs,
   qsvDeviceInitArgs,
   vaapiDeviceInitArgs,
@@ -64,6 +65,15 @@ describe('hw-device', () => {
         '-init_hw_device',
         'qsv=qs@va',
       ]);
+    });
+  });
+
+  describe('hostHasVaapi', () => {
+    it('is true on Linux (QSV is VAAPI-backed)', () => {
+      expect(hostHasVaapi('linux')).toBe(true);
+    });
+    it('is false on Windows (QSV runs natively on D3D11)', () => {
+      expect(hostHasVaapi('win32')).toBe(false);
     });
   });
 

@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { HwAccelType } from './types';
-import { qsvDeviceInitArgs, vaapiDeviceInitArgs } from './hw-device';
+import { hostHasVaapi, qsvDeviceInitArgs, vaapiDeviceInitArgs } from './hw-device';
 
 const execFileAsync = promisify(execFile);
 
@@ -153,7 +153,7 @@ export function requestedHwAccelFor(
     detected === 'qsv' &&
     needs.crop &&
     !needs.qsvCanCrop &&
-    platform !== 'win32'
+    hostHasVaapi(platform)
   )
     return 'vaapi';
   return detected;
