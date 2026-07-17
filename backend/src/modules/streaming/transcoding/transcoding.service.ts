@@ -147,7 +147,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // as CUDA/NVENC and AMD's driver, unlike the GLX/Vulkan chain which fails
     // headless).
     if (this.detectedHwAccel === 'nvenc' || this.detectedHwAccel === 'amf') {
-      void runOpenclTonemapProbe(this.log);
+      void runOpenclTonemapProbe(this.log, this.detectedHwAccel);
     }
     // Zero-copy AMD GPU scale for the AMF encode (scale_d3d11, needs FFmpeg
     // ≥ 8.1 and a GPU that accepts its output texture). Probed so an unavailable

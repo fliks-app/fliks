@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
 import { openclTonemapInitArgs } from '../hw-device';
+import type { HwAccelType } from '../types';
 
 const execFileAsync = promisify(execFile);
 
@@ -23,7 +24,10 @@ export function isOpenclTonemapEnabled(): boolean {
   return probedOnce && enabled;
 }
 
-export async function runOpenclTonemapProbe(log: Logger): Promise<void> {
+export async function runOpenclTonemapProbe(
+  log: Logger,
+  hwAccel: HwAccelType,
+): Promise<void> {
   const t0 = Date.now();
   let failure = '';
   const hdrSample = path.join(
@@ -54,17 +58,25 @@ export async function runOpenclTonemapProbe(log: Logger): Promise<void> {
       { timeout: 15_000 },
     );
 
-    // The exact chain a session uses: CPU frame → OpenCL → tonemap → CPU.
-    // `opencl=ocl` auto-picks the first usable device (the NVIDIA GPU on an
-    // NVENC host; a bare Intel platform with no device is skipped).
+    // Mirror the session graph so a pass implies the real graph inits: HW
+    // decode (NVDEC / d3d11va) coexisting with the OpenCL filter device. cuda
+    // surfaces are downloaded before the OpenCL hwupload; d3d11va auto-downloads.
+    const decodeArgs =
+      hwAccel === 'nvenc'
+        ? ['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda']
+        : hwAccel === 'amf'
+          ? ['-hwaccel', 'd3d11va']
+          : [];
+    const download = hwAccel === 'nvenc' ? 'hwdownload,format=p010le,' : '';
     await execFileAsync(
       'ffmpeg',
       [
         '-hide_banner', '-loglevel', 'error',
+        ...decodeArgs,
         ...openclTonemapInitArgs(),
         '-i', hdrSample,
         '-vf',
-        'format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=hable:desat=0:format=nv12,hwdownload,format=nv12',
+        `${download}format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=hable:desat=0:format=nv12,hwdownload,format=nv12`,
         '-frames:v', '1',
         '-f', 'null', '-',
       ],
