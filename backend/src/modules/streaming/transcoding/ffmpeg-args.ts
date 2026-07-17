@@ -653,6 +653,7 @@ export function buildFfmpegArgs(
     args.push('-ss', String(seekSeconds));
   }
 
+  const tonemapCurve = resolveTonemapCurve();
   const encoderInput: EncoderInput = {
     variant,
     target: {
@@ -680,12 +681,13 @@ export function buildFfmpegArgs(
       useVaapiTonemap,
       sourceBitDepth,
       dovi: useDoviTonemap,
-      tonemapCurve: resolveTonemapCurve(),
+      tonemapCurve,
       scaleWidth: w,
       openclTonemap,
     }),
     tonemap,
     tonemapPath,
+    tonemapCurve,
     hasBurnIn: !!burnIn?.filter,
     hasCrop: !!crop,
     hdrMetadata: sourceHdrMetadata,

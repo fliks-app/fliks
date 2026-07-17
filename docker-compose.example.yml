@@ -63,7 +63,7 @@ services:
       # the fixed-function LUT (also fast, but can look darker/flatter).
       # Values: auto | opencl | vaapi | qsv
       # TRANSCODE_TONEMAP_ALGO: auto
-      # CPU/OpenCL tonemap curve. Default hable. Values: hable | mobius
+      # HDR->SDR tonemap curve (CPU + OpenCL). Default hable. Values: hable | mobius | reinhard
       # TRANSCODE_TONEMAP_CURVE: hable
       # DRI render node for VAAPI / Linux QSV. Default /dev/dri/renderD128.
       # FLIKS_VAAPI_RENDER_NODE: /dev/dri/renderD128

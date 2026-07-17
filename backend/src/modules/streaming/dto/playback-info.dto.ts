@@ -114,10 +114,10 @@ export interface PlaybackInfoResponse {
    *  overlays show this value, not the (encoder-agnostic) admin pick. */
   tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | 'cpu' | null;
 
-  /** CPU tone-map curve (`hable` / `mobius`), set only when
+  /** Tone-map curve (`hable` / `mobius` / `reinhard`), set only when
    *  `tonemapAlgo === 'cpu'`. Surfaced so the overlay names the exact
    *  curve in use. */
-  tonemapCurve?: 'hable' | 'mobius';
+  tonemapCurve?: 'hable' | 'mobius' | 'reinhard';
 
   /**
    * Bitrate targets per quality rung (FFmpeg profiles).
