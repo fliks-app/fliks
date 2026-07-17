@@ -1,13 +1,8 @@
 # Example Docker Compose for self-hosting Fliks.
-#
-# Copy this file to `docker-compose.yml`, edit the volume paths and the
-# DB password, then `docker compose up -d`. The web UI lives at
-# http://<host>:4848.
-#
-# Image is pulled from GitHub Container Registry — no auth required for
-# public images. To pin a specific version replace `:latest` with `:1.2.3`
-# (see https://github.com/fliks-app/fliks/pkgs/container/fliks for the
-# full tag list).
+# Copy to `docker-compose.yml`, edit the volume paths + DB password, then
+# `docker compose up -d`. Web UI: http://<host>:4848.
+# Pin a version by replacing `:latest` with `:1.2.3` (tags:
+# https://github.com/fliks-app/fliks/pkgs/container/fliks).
 
 services:
   postgres:
@@ -15,10 +10,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: fliks
-      # Change me before exposing the stack to anything other than
-      # localhost. The DB is reached over the internal compose network
-      # only, but a default password in published Compose files is a
-      # well-known footgun.
+      # Change before exposing the stack beyond localhost.
       POSTGRES_PASSWORD: changeme
       POSTGRES_DB: fliks
     volumes:
@@ -35,19 +27,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # Publish the web UI / API on host port 4848. The container runs on the
-    # default compose bridge network and reaches Postgres by its service name.
-    #
-    # Note: on a bridge network, LAN Chromecast / DLNA discovery (mDNS) does
-    # not reach the container. If you rely on Cast-device auto-discovery from
-    # this server, either run a host-network sidecar for discovery or switch
-    # this service to `network_mode: host` (then drop the `ports:` block and
-    # set DB_HOST to 127.0.0.1 with Postgres also reachable on the host).
+    # On a bridge network, LAN Chromecast/DLNA discovery (mDNS) can't reach the
+    # container. For Cast auto-discovery use `network_mode: host` (then drop
+    # `ports:` and set DB_HOST to 127.0.0.1).
     ports:
       - '4848:4848'
     environment:
-      # Default port. Override (and the published port above) if 4848 is
-      # already used on the host.
       PORT: 4848
       DB_HOST: postgres
       DB_PORT: 5432
@@ -55,98 +40,56 @@ services:
       DB_PASSWORD: changeme
       DB_NAME: fliks
       NODE_ENV: production
-      # Set to disable the GitHub update check: no outbound api.github.com
-      # request, and /api/system/update always reports "up to date". Default:
-      # enabled (a single cached read request, no token, no data sent).
+      # Disable the GitHub update check (no outbound request). Default: enabled.
       # FLIKS_DISABLE_UPDATE_CHECK: '1'
-      # ---- Streaming session tuning (optional) -----------------------
-      # All values below have safe defaults baked in. Override only if
-      # you know what you're doing.
-      #
-      # How long a "live viewer" entry survives without any heartbeat
-      # from the client. The client beats every 10 s, so 30 s tolerates
-      # three missed beats (background tab, network blip). Default 30000.
+
+      # ---- Streaming tuning (optional, safe defaults) ----
+      # Live-viewer TTL without a heartbeat (client beats every 10s). Default 30000.
       # STREAM_LIVE_SESSION_TTL_MS: 30000
-      #
-      # Grace window after the last live viewer for a given
-      # (user, file, profileHash) disappears, before the matching
-      # ffmpeg encoder is killed. Cache stays so a reconnect within the
-      # next few hours reattaches without retranscoding. Default 60000.
+      # Grace before the encoder is killed after the last viewer leaves. Default 60000.
       # STREAM_JOB_GRACE_MS: 60000
-      #
-      # Idle timeout for transcode sessions that were never paired with
-      # a live session (legacy URL fetches, admin scrubbing). Mirrors
-      # the pre-heartbeat behaviour. Default 1800000 (30 min).
+      # Idle timeout for sessions never paired with a live viewer. Default 1800000.
       # STREAM_JOB_FALLBACK_TIMEOUT_MS: 1800000
-      #
-      # How long transcoded segments stay on disk after their last
-      # access. Default 14400000 (4 h). Set lower to free disk faster,
-      # higher to cover users who pause for a long time and come back.
+      # Segment retention on disk after last access. Default 14400000 (4 h).
       # TRANSCODE_CACHE_TTL_MS: 14400000
-      #
-      # Hard cap on the total size of the transcode cache. Above this,
-      # LRU eviction kicks in even if entries are still within TTL.
-      # Default 21474836480 (20 GB).
+      # Transcode cache size cap (LRU eviction above it). Default 21474836480 (20 GB).
       # TRANSCODE_CACHE_MAX_BYTES: 21474836480
-      #
-      # How often the cache garbage collector runs. Default 300000 (5 min).
+      # Cache GC interval. Default 300000 (5 min).
       # TRANSCODE_CACHE_GC_INTERVAL_MS: 300000
-      #
-      # HDR->SDR tone-mapping method for hardware transcodes (Intel/AMD).
-      # 'auto' (default) picks per-GPU from the boot probes: OpenCL when
-      # available (best quality — a proper tone curve), else the fixed-function
-      # LUT (faster and lighter, but can look darker/flatter). OpenCL costs more
-      # (on Intel it bounces through the CPU): fine at 1080p, ~single-stream at
-      # 4K. Force one to override the probe-driven default:
-      #   auto | opencl | vaapi | qsv
+
+      # ---- HW transcode / HDR (optional) ----
+      # HDR->SDR tonemap method. auto (default) uses OpenCL when the GPU probe
+      # passes (best quality), else the fixed-function LUT (faster, can look
+      # darker). OpenCL costs more (CPU bounce on Intel): fine <=1080p,
+      # ~single-stream at 4K. Values: auto | opencl | vaapi | qsv
       # TRANSCODE_TONEMAP_ALGO: auto
+      # CPU/OpenCL tonemap curve. Default hable. Values: hable | mobius
+      # TRANSCODE_TONEMAP_CURVE: hable
+      # DRI render node for VAAPI / Linux QSV. Default /dev/dri/renderD128.
+      # FLIKS_VAAPI_RENDER_NODE: /dev/dri/renderD128
+      # Pin the OpenCL platform.device on multi-GPU hosts. Default: auto-pick.
+      # FLIKS_OPENCL_DEVICE: '0.0'
     volumes:
-      # ---- Media library ------------------------------------------------
-      # Map your existing media tree here. Match the path Fliks tells the
-      # user to use when adding a library in the UI.
-      #
-      # Add as many of these as you need — every mount you expose here
-      # can be picked as a separate library root in Fliks (Settings →
-      # Libraries → Add). Example with a second drive:
-      #   - /path/to/your/movies:/medias/movies
-      #   - /path/to/your/series:/medias/series
+      # Media library: use this container path when adding a library in the UI.
+      # Add more mounts for more roots (e.g. /medias/movies, /medias/series).
       - /path/to/your/media:/medias
-
-      # ---- Download folder ---------------------------------------------
-      # Where freshly-downloaded files land before Fliks imports them
-      # into the library above. Mount the SAME path here and on whichever
-      # download client you use so the two services share the working
-      # directory.
+      # Download folder: mount the SAME path here and on your download client.
       - /path/to/download/folder:/downloads
-
-      # ---- App-managed storage -----------------------------------------
-      # Server-side secrets auto-generated on first boot (JWT signing
-      # key, future encryption keys). Must be persisted across container
-      # restarts — losing this file invalidates every JWT and forces all
-      # users to log back in. Permissions inside are 0700 / 0600.
+      # Server secrets (JWT key) — persist across restarts or all users re-login.
       - fliks_conf:/app/conf
-      # Cached TMDB / fanart images, sprite sheets for player seek preview.
+      # Cached images + seek-preview sprites.
       - fliks_images:/app/images
-      # Optional: persistent transcoding cache (HLS segments, etc.)
-      # If omitted, a tmpfs is used per-container restart.
+      # Transcode cache (HLS segments). Omit to use a per-restart tmpfs.
       - fliks_transcode:/app/transcode
 
-  # Optional GPU-accelerated transcoding via Intel QSV / VAAPI. Uncomment
-  # the `devices` block above (under the fliks service) and pick the
-  # right /dev/dri device for your host. NVIDIA NVENC needs a different
-  # setup (runtime: nvidia + nvidia-container-toolkit on the host) and
-  # is not covered by this example.
-  #
-  # services:
+  # GPU transcode (Intel QSV / VAAPI): add a `devices` block to the fliks
+  # service with your /dev/dri node. NVENC needs runtime: nvidia +
+  # nvidia-container-toolkit (not covered here).
   #   fliks:
   #     devices:
   #       - /dev/dri:/dev/dri
-  #
-  # ARM hosts (Apple Silicon Docker Desktop, Pi 5, ARM NAS): the image
-  # is published for linux/arm64 too — Docker pulls the right variant
-  # automatically. No HW transcode there (the Intel GPU stack ships only
-  # in the amd64 image, and Metal/VideoToolbox aren't reachable from a
-  # Linux container), so streams fall back to libx264 CPU encoding.
+  # ARM (Apple Silicon, Pi 5, ARM NAS): linux/arm64 is auto-pulled, but there's
+  # no HW transcode (Intel stack is amd64-only) -> CPU libx264 fallback.
 
 volumes:
   fliks_pgdata:
