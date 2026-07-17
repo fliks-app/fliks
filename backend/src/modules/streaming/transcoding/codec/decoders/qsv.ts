@@ -1,6 +1,6 @@
 import type { DecoderDescriptor } from './types';
 import type { VideoCodec } from '../types';
-import { qsvDeviceInitArgs } from '../../hw-device';
+import { qsvDeviceInitArgs, qsvViaD3d11DeviceInitArgs } from '../../hw-device';
 
 /** Build a QSV decoder descriptor for `codec`. Decode actually happens
  *  on the VAAPI driver (Linux Intel) — libavcodec wires the qsv encoder
@@ -39,10 +39,10 @@ function qsvDecoder(codec: VideoCodec, maxBitDepth: 8 | 10): DecoderDescriptor {
   };
 }
 
-/** QSV-native decoder variant — same iGPU but emits QSV surfaces
- *  directly. Selected by `vpp_qsv` crop / scale paths that consume
- *  QSV surfaces; the default qsv decoder above stays VAAPI-output for
- *  compatibility with the scale_vaapi-based encoder chains. */
+/** QSV-native decoder variant (Linux) — decodes on the iGPU (derived from
+ *  VAAPI) and emits `qsv` surfaces the `vpp_qsv` encoder chain consumes
+ *  directly, no hwmap. Selected by the vpp_qsv crop / scale paths. Windows
+ *  uses {@link qsvD3d11Decoder} instead (see there for why). */
 function qsvNativeDecoder(
   codec: VideoCodec,
   maxBitDepth: 8 | 10,
@@ -53,7 +53,7 @@ function qsvNativeDecoder(
     sourceCodec: codec,
     maxBitDepth,
     outputSurface: 'qsv',
-    supports: () => true,
+    supports: () => process.platform !== 'win32',
     buildInputArgs: () => [
       ...qsvDeviceInitArgs(),
       '-filter_hw_device',
@@ -71,6 +71,42 @@ function qsvNativeDecoder(
   };
 }
 
+/** Windows QSV decoder — decodes on **D3D11VA** and derives QSV from the same
+ *  D3D11 device (`qsv=qs@dx`). The frame lands as a `d3d11` surface; the QSV
+ *  encoder filter maps it onto the QSV device (`hwmap=derive_device=qsv`)
+ *  before `vpp_qsv`. Distinct from the native `-hwaccel qsv` decode
+ *  ({@link qsvNativeDecoder}), which is avoided on Windows because its AV1 path
+ *  fails on Intel/oneVPL for real streams (the tiny boot probe passes, a real
+ *  2160p AV1 exits `-17`) while D3D11VA decode is solid. Pairs with the QSV
+ *  encoders (`hwAccel: 'qsv'`). Windows-only. */
+function qsvD3d11Decoder(
+  codec: VideoCodec,
+  maxBitDepth: 8 | 10,
+): DecoderDescriptor {
+  return {
+    id: `${codec}_qsv_d3d11_decode`,
+    hwAccel: 'qsv',
+    sourceCodec: codec,
+    maxBitDepth,
+    outputSurface: 'd3d11',
+    supports: () => process.platform === 'win32',
+    buildInputArgs: () => [
+      ...qsvViaD3d11DeviceInitArgs(),
+      '-filter_hw_device',
+      'qs',
+      '-hwaccel',
+      'd3d11va',
+      '-hwaccel_output_format',
+      'd3d11',
+      '-hwaccel_device',
+      'dx',
+      '-extra_hw_frames',
+      '32',
+      '-noautorotate',
+    ],
+  };
+}
+
 export const h264QsvDecoder = qsvDecoder('h264', 8);
 export const hevcQsvDecoder = qsvDecoder('hevc', 10);
 export const av1QsvDecoder = qsvDecoder('av1', 10);
@@ -78,3 +114,7 @@ export const av1QsvDecoder = qsvDecoder('av1', 10);
 export const h264QsvNativeDecoder = qsvNativeDecoder('h264', 8);
 export const hevcQsvNativeDecoder = qsvNativeDecoder('hevc', 10);
 export const av1QsvNativeDecoder = qsvNativeDecoder('av1', 10);
+
+export const h264QsvD3d11Decoder = qsvD3d11Decoder('h264', 8);
+export const hevcQsvD3d11Decoder = qsvD3d11Decoder('hevc', 10);
+export const av1QsvD3d11Decoder = qsvD3d11Decoder('av1', 10);
