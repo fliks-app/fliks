@@ -155,12 +155,14 @@ async function probeOne(d: EncoderDescriptor, _log: Logger): Promise<boolean> {
   //    'internal encoding error 24' at 320x180 specifically (probe
   //    false-negative we hit). nv12 / p010le sidestep the small-frame
   //    layout quirk.
-  //  - QSV: same `vaapi=va` + `qsv=qs@va` chain as `decoders/qsv.ts`
-  //    runtime decode, then `hwupload=extra_hw_frames=64,format=qsv`.
-  //    Earlier versions fed lavfi CPU input directly relying on
-  //    ffmpeg's auto-conversion; that produced false-positive PASSes
-  //    on hosts where the auto-converter is missing in the build,
-  //    only to crash at first real session.
+  //  - QSV: the platform device chain from `hw-device.ts` (native
+  //    `qsv=qs` on Windows, `vaapi=va` + `qsv=qs@va` on Linux), then
+  //    `hwupload,format=qsv`. Feeding qsv surfaces (not raw lavfi CPU
+  //    input relying on ffmpeg's auto-converter) keeps the probe honest
+  //    on builds without that converter. No `extra_hw_frames`: a padded
+  //    upload pool becomes a larger D3D11 array texture that the Intel
+  //    D3D11 stack rejects with E_INVALIDARG, so the plain upload is
+  //    both representative and the allocation that actually succeeds.
   //  - CPU (`'none'`): plain lavfi input — no device.
   const surfaceFmt = d.variant.bitDepth === 10 ? 'p010le' : 'nv12';
   const lavfi = `nullsrc=size=320x180:rate=30,format=${pixFmt}`;
@@ -189,10 +191,7 @@ async function probeOne(d: EncoderDescriptor, _log: Logger): Promise<boolean> {
         '-i',
         lavfi,
       ];
-      filterArgs = [
-        '-vf',
-        `format=${surfaceFmt},hwupload=extra_hw_frames=64,format=qsv`,
-      ];
+      filterArgs = ['-vf', `format=${surfaceFmt},hwupload,format=qsv`];
       break;
     default:
       inputArgs = ['-f', 'lavfi', '-i', lavfi];
