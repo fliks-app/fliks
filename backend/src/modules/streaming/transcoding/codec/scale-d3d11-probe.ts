@@ -47,6 +47,7 @@ export async function runScaleD3d11Probe(log: Logger): Promise<void> {
       [
         '-hide_banner', '-loglevel', 'error',
         '-hwaccel', 'd3d11va', '-hwaccel_output_format', 'd3d11',
+        '-extra_hw_frames', '32',
         '-i', sample,
         '-vf', 'scale_d3d11=width=1280:height=720:format=nv12',
         '-c:v', 'hevc_amf', '-frames:v', '2', '-f', 'null', '-',
