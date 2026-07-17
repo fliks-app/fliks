@@ -16,7 +16,7 @@ mechanisms.
 | Tray UI | SwiftUI `MenuBarExtra` | C#/.NET 8 WinForms `NotifyIcon` |
 | Code discovery | symlink dist/node_modules into a writable cwd | run `node <dist>\main.js` by absolute path, cwd = writable data dir (Node resolves `node_modules` from the script path — no symlinks) |
 | PostgreSQL | Homebrew bottle + dylib relocation | EDB binaries zip (self-contained, no relocation) |
-| FFmpeg | Homebrew + dylib relocation | BtbN gpl static build (one exe: QSV + AMF + NVENC + OpenCL) |
+| FFmpeg | Homebrew + dylib relocation | jellyfin-ffmpeg gpl build (QSV + AMF + NVENC + OpenCL, incl. zero-copy D3D11↔OpenCL P010 for HDR tone-map) |
 | Autostart | `SMAppService` | `HKCU\…\Run` registry value |
 | Package | DMG | NSIS per-user installer |
 

@@ -59,9 +59,9 @@ services:
 
       # ---- HW transcode / HDR (optional) ----
       # HDR->SDR tonemap method. auto (default) uses OpenCL when the GPU probe
-      # passes (best quality), else the fixed-function LUT (faster, can look
-      # darker). OpenCL costs more (CPU bounce on Intel): fine <=1080p,
-      # ~single-stream at 4K. Values: auto | opencl | vaapi | qsv
+      # passes (best quality — a proper tone curve, zero-copy on the GPU), else
+      # the fixed-function LUT (also fast, but can look darker/flatter).
+      # Values: auto | opencl | vaapi | qsv
       # TRANSCODE_TONEMAP_ALGO: auto
       # CPU/OpenCL tonemap curve. Default hable. Values: hable | mobius
       # TRANSCODE_TONEMAP_CURVE: hable

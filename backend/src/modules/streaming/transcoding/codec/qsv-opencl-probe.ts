@@ -7,16 +7,14 @@ import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 
-/** Result of the Windows QSV↔OpenCL tone-map probe. The Windows QSV encode
- *  path decodes on D3D11VA and can't zero-copy-map its 10-bit surface into
- *  OpenCL (the D3D11↔OpenCL bridge is NV12-only), so the higher-quality
- *  `tonemap_opencl` runs through a CPU bounce: `vpp_qsv` scales on the QSV
- *  device, the frame is downloaded, OpenCL tone-maps it, and it's handed back
- *  to the QSV encoder. This probe runs that exact chain once at boot so
- *  `tonemapAlgo='auto'` (and the encode-pipeline gate) only pick OpenCL when it
- *  actually works — otherwise it falls back to the fixed-function vpp_qsv LUT.
+/** Result of the Windows QSV OpenCL tone-map probe. With jellyfin-ffmpeg (P010
+ *  D3D11↔OpenCL sharing) the HDR surface maps straight D3D11→OpenCL, tone-maps,
+ *  and maps back to QSV — zero-copy, no CPU round-trip. This probe runs that
+ *  exact chain once at boot (needs the ffmpeg P010 patch AND a P010-capable
+ *  Intel OpenCL ICD) so `tonemapAlgo='auto'` and the encode-pipeline gate only
+ *  pick OpenCL when it actually works — else they fall back to the vpp_qsv LUT.
  *
- *  Linux QSV derives from VAAPI and uses the zero-copy QSV↔OpenCL bridge
+ *  Linux QSV derives from VAAPI and uses the QSV↔OpenCL bridge
  *  (`tonemap-opencl-probe.ts`), so this probe is win32-only. */
 let probedOnce = false;
 let enabled = false;
@@ -71,7 +69,8 @@ export async function runQsvOpenclTonemapProbe(log: Logger): Promise<void> {
     );
 
     // The exact Windows chain a session runs: d3d11va decode → map to QSV →
-    // vpp_qsv scale (p010) → CPU bounce → tonemap_opencl (nv12) → h264_qsv.
+    // Zero-copy: d3d11 decode → map D3D11→OpenCL → tonemap → map back to QSV →
+    // vpp_qsv scale → h264_qsv. Same chain the encoder emits.
     await execFileAsync(
       'ffmpeg',
       [
@@ -83,7 +82,7 @@ export async function runQsvOpenclTonemapProbe(log: Logger): Promise<void> {
         '-init_hw_device',
         'qsv=qs@dx',
         '-init_hw_device',
-        'opencl=ocl',
+        'opencl=ocl@dx',
         '-filter_hw_device',
         'ocl',
         '-hwaccel',
@@ -95,10 +94,10 @@ export async function runQsvOpenclTonemapProbe(log: Logger): Promise<void> {
         '-i',
         hdrSample,
         '-vf',
-        'hwmap=derive_device=qsv,vpp_qsv=w=320:h=176:format=p010le,' +
-          'hwdownload,format=p010le,hwupload,' +
+        'hwmap=derive_device=opencl:mode=read,' +
           'tonemap_opencl=tonemap=hable:t=bt709:m=bt709:p=bt709:format=nv12,' +
-          'hwdownload,format=nv12',
+          'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv,' +
+          'vpp_qsv=w=320:h=176:format=nv12',
         '-c:v',
         'h264_qsv',
         '-preset',

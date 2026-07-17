@@ -609,13 +609,11 @@ export function buildFfmpegArgs(
   if (openclTonemap) {
     args.push(...openclTonemapInitArgs());
   }
-  // Windows QSV OpenCL tone-map: the D3D11VA/QSV decode stays, but the
-  // tone-map bounces through OpenCL (no zero-copy D3D11↔OpenCL for HDR). OpenCL
-  // has to be the default filter device for the chain's `hwupload` — and ffmpeg
-  // allows only one, so repoint the decoder's `-filter_hw_device qs` to `ocl`
-  // and add the OpenCL device just before it (vpp_qsv still uses its hwmap'd
-  // qsv frames' device; the encoder auto-uploads the returned CPU frames via
-  // `qsv=qs@dx`).
+  // Windows QSV OpenCL tone-map (zero-copy): the frame maps D3D11→OpenCL and
+  // back to QSV, so OpenCL must be the default filter device AND derived from
+  // the same D3D11 device (`opencl=ocl@dx`) to share surfaces. ffmpeg accepts
+  // only one filter device, so repoint the decoder's `-filter_hw_device qs` to
+  // `ocl` and add the derived OpenCL device just before it.
   const qsvOpenclTonemap =
     !!tonemap &&
     tonemapPath === 'opencl' &&
@@ -625,7 +623,7 @@ export function buildFfmpegArgs(
     const fhd = args.lastIndexOf('-filter_hw_device');
     if (fhd !== -1) {
       args[fhd + 1] = 'ocl';
-      args.splice(fhd, 0, '-init_hw_device', 'opencl=ocl');
+      args.splice(fhd, 0, '-init_hw_device', 'opencl=ocl@dx');
     }
   }
   if (useDoviTonemap) {

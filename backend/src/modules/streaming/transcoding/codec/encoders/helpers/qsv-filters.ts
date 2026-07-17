@@ -44,15 +44,16 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
       : '';
     if (tonemap && tonemapPath === 'opencl') {
       if (input.inputSurface === 'd3d11') {
-        // Windows: no zero-copy QSV↔OpenCL bridge (D3D11↔OpenCL is NV12-only,
-        // can't carry the 10-bit HDR surface). Scale on the QSV VPP (p010),
-        // bounce through CPU into OpenCL for the tone-map, hand nv12 back to
-        // the encoder (which auto-uploads to the QSV device).
+        // Windows zero-copy (jellyfin-ffmpeg P010 D3D11↔OpenCL): map the HDR
+        // surface straight into OpenCL, tone-map, map back onto the QSV device,
+        // then scale + crop on vpp_qsv. No CPU round-trip. Mapping goes via
+        // D3D11 (not QSV→OpenCL, which needs a Linux-only extension), so the
+        // OpenCL step precedes vpp_qsv and the scale happens after.
         return (
-          `hwmap=derive_device=qsv,vpp_qsv=${cropOpts}w=${w}:h=${targetH}:format=p010le,` +
-          `hwdownload,format=p010le,hwupload,` +
+          `hwmap=derive_device=opencl:mode=read,` +
           `tonemap_opencl=tonemap=hable:t=bt709:m=bt709:p=bt709:format=nv12,` +
-          `hwdownload,format=nv12`
+          `hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv,` +
+          `vpp_qsv=${cropOpts}w=${w}:h=${targetH}:format=nv12`
         );
       }
       return (

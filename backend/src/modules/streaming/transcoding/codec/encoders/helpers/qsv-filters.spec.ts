@@ -50,16 +50,16 @@ describe('qsvScaleFilter8bit', () => {
     ).toBe('hwmap=derive_device=qsv,vpp_qsv=tonemap=1:w=1920:h=804:format=nv12');
   });
 
-  it('tone-maps a Windows d3d11 surface via a CPU-bounce OpenCL chain', () => {
+  it('tone-maps a Windows d3d11 surface zero-copy through OpenCL', () => {
     expect(
       qsvScaleFilter8bit(
         input({ inputSurface: 'd3d11', tonemap: true, tonemapPath: 'opencl' }),
       ),
     ).toBe(
-      'hwmap=derive_device=qsv,vpp_qsv=w=1920:h=804:format=p010le,' +
-        'hwdownload,format=p010le,hwupload,' +
+      'hwmap=derive_device=opencl:mode=read,' +
         'tonemap_opencl=tonemap=hable:t=bt709:m=bt709:p=bt709:format=nv12,' +
-        'hwdownload,format=nv12',
+        'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv,' +
+        'vpp_qsv=w=1920:h=804:format=nv12',
     );
   });
 
