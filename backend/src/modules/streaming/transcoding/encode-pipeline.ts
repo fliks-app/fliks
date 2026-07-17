@@ -84,9 +84,11 @@ export function resolveEncodePipeline(
   // `auto` picks opencl when the boot probe enabled it, vaapi otherwise; the
   // explicit overrides bypass the probe. Drives both the qsv-native gate and
   // the useVaapiTonemap flag so the two stay in sync.
-  const tonemapPath = resolveTonemapPath(ctx.tonemapAlgo, {
-    hasCrop: ctx.crop,
-  });
+  const tonemapPath = resolveTonemapPath(
+    ctx.tonemapAlgo,
+    { hasCrop: ctx.crop },
+    platform,
+  );
   const tonemapOpenclOk = ctx.crop
     ? isTonemapOpenclEnabledWithCrop()
     : isTonemapOpenclEnabled();

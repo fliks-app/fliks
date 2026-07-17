@@ -2,6 +2,7 @@ import {
   isTonemapOpenclEnabled,
   isTonemapOpenclEnabledWithCrop,
 } from './codec/tonemap-opencl-probe';
+import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
 import type { TonemapAlgo } from './types';
 
 /** Concrete filter chain the session-time graph will actually use,
@@ -10,10 +11,12 @@ import type { TonemapAlgo } from './types';
  *  - `'auto'` resolves to `'opencl'` when the matching boot probe
  *    enabled it (separate probes run with and without a crop prefix
  *    because some Intel iHD builds accept the basic opencl chain but
- *    fail the cropped variant), else `'vaapi'` — that fallback
- *    covers macOS, containers without an OpenCL stack, and Intel
- *    hosts whose iHD driver fails the bridge with the
- *    `QSV to OpenCL mapping not usable` / exit=218 pattern.
+ *    fail the cropped variant). Otherwise it falls back to `'qsv'` on
+ *    Windows (the vpp_qsv fixed-function LUT) when that probe passed,
+ *    and to `'vaapi'` elsewhere. The Windows split matters because
+ *    Windows has no VAAPI device: `'vaapi'` there is not a QSV path at
+ *    all, so it would force the session onto a CPU encode. On Linux
+ *    QSV is VAAPI-backed, so `'vaapi'` stays a valid on-GPU tone-map.
  *  - Explicit picks (`'vaapi'` / `'qsv'` / `'opencl'`) bypass the
  *    probe and trust the admin to know their hardware.
  *
@@ -25,12 +28,15 @@ export type ResolvedTonemapPath = 'vaapi' | 'opencl' | 'qsv';
 export function resolveTonemapPath(
   algo: TonemapAlgo,
   opts: { hasCrop: boolean } = { hasCrop: false },
+  platform: NodeJS.Platform = process.platform,
 ): ResolvedTonemapPath {
   if (algo === 'auto') {
     const openclOk = opts.hasCrop
       ? isTonemapOpenclEnabledWithCrop()
       : isTonemapOpenclEnabled();
-    return openclOk ? 'opencl' : 'vaapi';
+    if (openclOk) return 'opencl';
+    if (platform === 'win32' && isVppQsvTonemapEnabled()) return 'qsv';
+    return 'vaapi';
   }
   return algo;
 }
