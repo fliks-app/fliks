@@ -24,6 +24,12 @@ function probedEncoders(): string[] {
   });
 }
 
+/** The `-vf` filter string of the first probe invocation. */
+function firstProbeFilter(): string {
+  const args = mockExecFile.mock.calls[0][1] as string[];
+  return args[args.indexOf('-vf') + 1];
+}
+
 describe('detectHwAccel', () => {
   beforeEach(() => mockExecFile.mockReset());
 
@@ -71,6 +77,18 @@ describe('detectHwAccel', () => {
     const qsvCall = mockExecFile.mock.calls[0][1] as string[];
     expect(qsvCall).toContain('vaapi=va:/dev/dri/renderD128');
     expect(qsvCall).toContain('qsv=qs@va');
+  });
+
+  it('drives vpp_qsv in the Windows QSV probe so it matches the real path', async () => {
+    programProbes(() => false);
+    await detectHwAccel(log, 'win32');
+    expect(firstProbeFilter()).toContain('vpp_qsv');
+  });
+
+  it('keeps the plain upload probe for Linux QSV (no vpp_qsv)', async () => {
+    programProbes(() => false);
+    await detectHwAccel(log, 'linux');
+    expect(firstProbeFilter()).not.toContain('vpp_qsv');
   });
 });
 

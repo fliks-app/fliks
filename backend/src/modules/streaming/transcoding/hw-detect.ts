@@ -14,8 +14,21 @@ const BLACK_INPUT = ['-f', 'lavfi', '-i', 'color=black:s=320x240:d=0.1'];
 const ONE_FRAME_NULL = ['-frames:v', '1', '-f', 'null', '-'];
 
 /** QSV one-frame probe. On Windows QSV initialises natively (`qsv=qs`); on
- *  Linux it derives from VAAPI (see {@link qsvDeviceInitArgs}). */
+ *  Linux it derives from VAAPI (see {@link qsvDeviceInitArgs}).
+ *
+ *  Windows transcodes run qsv-native decode + `vpp_qsv` scaling on the QSV
+ *  device, so the probe drives `vpp_qsv`: its output pool is a D3D11
+ *  `RENDER_TARGET` array texture — a strictly stronger allocation than a
+ *  plain `hwupload` (`BIND_DECODER`) pool, and one an outdated Intel driver
+ *  can reject on its own. Exercising the full filter path keeps detection
+ *  honest: QSV is green-lit only when the real transcode can run. Linux QSV
+ *  derives from VAAPI and scales via `scale_vaapi`→`hwmap`, so it keeps the
+ *  plain upload probe. */
 function qsvTest(platform: NodeJS.Platform): HwTest {
+  const filter =
+    platform === 'win32'
+      ? 'format=nv12,hwupload,vpp_qsv=w=160:h=120:format=nv12'
+      : 'hwupload,format=qsv';
   return {
     type: 'qsv',
     args: [
@@ -27,7 +40,7 @@ function qsvTest(platform: NodeJS.Platform): HwTest {
       'qs',
       ...BLACK_INPUT,
       '-vf',
-      'hwupload,format=qsv',
+      filter,
       '-c:v',
       'h264_qsv',
       ...ONE_FRAME_NULL,
