@@ -67,6 +67,29 @@ if (Test-Path (Join-Path $vendored 'pgsql\bin\postgres.exe')) {
     Write-Host "    [done] PostgreSQL $PgVersion"
 }
 
+# ── VC++ 2015-2022 runtime, app-local next to the exes that link it ──
+# The PG18 EDB and Node binaries are built with a recent VS toolset; on a host
+# whose system MSVCP140.dll is older they crash (0xC0000005 ACCESS_VIOLATION —
+# seen at initdb). Windows searches the exe's own directory before System32, so
+# bundling the runtime beside each exe makes it load the correct version.
+$vcDlls = @(
+    'MSVCP140.dll', 'MSVCP140_1.dll', 'MSVCP140_2.dll', 'MSVCP140_atomic_wait.dll',
+    'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll', 'CONCRT140.dll'
+)
+foreach ($dir in @((Join-Path $vendored 'pgsql\bin'), (Join-Path $vendored 'node'))) {
+    foreach ($dll in $vcDlls) {
+        $src = Join-Path $env:SystemRoot "System32\$dll"
+        $dst = Join-Path $dir $dll
+        if ((Test-Path $src) -and -not (Test-Path $dst)) { Copy-Item $src $dst -Force }
+    }
+}
+$mp = Join-Path $vendored 'pgsql\bin\MSVCP140.dll'
+if (Test-Path $mp) {
+    Write-Host "    [done] VC++ runtime bundled ($((Get-Item $mp).VersionInfo.FileVersion))"
+} else {
+    Write-Warning 'MSVCP140.dll not bundled; postgres/node may crash on hosts with an old VC++ runtime'
+}
+
 # ── FFmpeg (BtbN gpl static) ──
 if (Test-Path (Join-Path $vendored 'ffmpeg\bin\ffmpeg.exe')) {
     Write-Host '    [skip] FFmpeg already present'
