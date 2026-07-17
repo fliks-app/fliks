@@ -30,6 +30,7 @@ import {
   type BuildFfmpegArgsOptions,
 } from './ffmpeg-args';
 import { varStreamMapLayout } from './audio-layout';
+import { stripBenignFfmpegStderr } from './ffmpeg-stderr';
 import { detectHwAccel } from './hw-detect';
 import { ALL_DESCRIPTORS, encoderRegistry } from './codec/encoders';
 import { runEncoderProbes } from './codec/encoder-probe';
@@ -689,7 +690,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         return this.sessions.get(key) ?? session;
       }
       this.log.warn(
-        `Transcode [${key}]: HW accel (${this.detectedHwAccel}) crashed (exit=${session.process.exitCode}), falling back to CPU\n${(session.stderr ?? '').slice(-1000)}`,
+        `Transcode [${key}]: HW accel (${this.detectedHwAccel}) crashed (exit=${session.process.exitCode}), falling back to CPU\n${stripBenignFfmpegStderr(session.stderr ?? '').slice(-1000)}`,
       );
       this.sessions.delete(key);
       await this.killAndClean(session.process, sessionDir);
@@ -931,7 +932,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         // seek that "does nothing" is traceable in prod.
         const running = session.process.exitCode === null;
         this.log.warn(
-          `[${session.id}] segment ${name} not produced within ${timeoutMs}ms — ffmpeg ${running ? 'still running' : `exited ${session.process.exitCode}`}${session.stderr ? `\nlast stderr:\n${session.stderr.slice(-1500)}` : ''}`,
+          `[${session.id}] segment ${name} not produced within ${timeoutMs}ms — ffmpeg ${running ? 'still running' : `exited ${session.process.exitCode}`}${session.stderr ? `\nlast stderr:\n${stripBenignFfmpegStderr(session.stderr).slice(-1500)}` : ''}`,
         );
         finish(null);
       }, timeoutMs);
@@ -1065,7 +1066,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         // `code !== 0` also catches a null code (process killed by a signal we
         // didn't issue); our own kills set `intentionallyKilled` and skip this.
         this.log.error(
-          `FFmpeg [${id}] exited code=${code}${firstSegProduced ? '' : ` before producing ${firstSegName}`}:\n${stderr.slice(-2000)}`,
+          `FFmpeg [${id}] exited code=${code}${firstSegProduced ? '' : ` before producing ${firstSegName}`}:\n${stripBenignFfmpegStderr(stderr).slice(-2000)}`,
         );
       }
     });
