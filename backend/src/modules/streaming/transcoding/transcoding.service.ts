@@ -30,7 +30,11 @@ import {
   type BuildFfmpegArgsOptions,
 } from './ffmpeg-args';
 import { varStreamMapLayout } from './audio-layout';
-import { stripBenignFfmpegStderr } from './ffmpeg-stderr';
+import {
+  matchTimingWarnings,
+  stripBenignFfmpegStderr,
+  TIMING_WARNING_KINDS,
+} from './ffmpeg-stderr';
 import { detectHwAccel } from './hw-detect';
 import { ALL_DESCRIPTORS, encoderRegistry } from './codec/encoders';
 import { runEncoderProbes } from './codec/encoder-probe';
@@ -1017,6 +1021,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     });
 
     let stderr = '';
+    const warnedTimingLabels = new Set<string>();
     let resolved = false;
     const segDir = segSubDir ? path.join(sessionDir, segSubDir) : sessionDir;
     const firstSeg = path.join(
@@ -1050,6 +1055,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     proc.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk.toString();
+      // Timestamp-anomaly lines print during normal exit-0 playback, where the
+      // stderr tail is never logged — surface the first of each kind so an A/V
+      // desync in the wild is diagnosable. Re-scan a bounded tail (a line can
+      // split across chunks) and stop once every kind has been seen.
+      if (warnedTimingLabels.size < TIMING_WARNING_KINDS) {
+        for (const { label, line } of matchTimingWarnings(stderr.slice(-4000))) {
+          if (warnedTimingLabels.has(label)) continue;
+          warnedTimingLabels.add(label);
+          this.log.warn(
+            `FFmpeg [${id}] timestamp anomaly (${label}) — possible A/V desync: ${line}`,
+          );
+        }
+      }
       checkReady();
     });
 
