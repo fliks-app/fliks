@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { TonemapAlgo } from './transcoding';
+import { DEFAULT_SEGMENT_DURATION } from './transcoding/constants';
 
 /**
  * Cross-cutting bookkeeping for streaming. Per-playback session state lives on
@@ -46,6 +47,18 @@ export class ActiveStreamTracker {
   }
   getQsvOptions(): { lowPower: boolean } {
     return { lowPower: this.qsvLowPowerCache };
+  }
+
+  /** HLS segment duration in seconds (admin-configurable, global). Read once
+   *  per session when the context is built and frozen onto the session, so a
+   *  later change never re-grids a session mid-playback against segments
+   *  already cut on its old grid. */
+  private segmentDurationCache = DEFAULT_SEGMENT_DURATION;
+  setSegmentDuration(seconds: number) {
+    this.segmentDurationCache = seconds;
+  }
+  getSegmentDuration(): number {
+    return this.segmentDurationCache;
   }
 
   /** HDR → SDR tone-mapping algorithm (admin-configurable, global). */

@@ -9,13 +9,12 @@ import { existsSync, watch, FSWatcher } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import {
+  DEFAULT_SEGMENT_DURATION,
   EARLY_PROBE_SEGMENTS,
   JOB_GRACE_MS,
   SEEK_WAIT_THRESHOLD,
   SESSION_TIMEOUT_MS,
-  getSegmentDuration,
   segmentIndexToSeconds,
-  setSegmentDuration as applySegmentDuration,
 } from './constants';
 import { LiveSessionRegistry } from '../live-session.service';
 import {
@@ -289,15 +288,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return out;
   }
 
-  /** Update segment duration from admin streaming settings. */
-  setSegmentDuration(segDuration: number) {
-    applySegmentDuration(segDuration);
-  }
-
-  getSegmentDuration(): number {
-    return getSegmentDuration();
-  }
-
   getActiveSessions(): TranscodeSession[] {
     return Array.from(this.sessions.values());
   }
@@ -308,7 +298,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    *  profile variants of the same `(file, user)` coexist as siblings. */
   computeProfileHashForCtx(ctx: SessionContext | undefined): string {
     const base = computeProfileHash(
-      buildPlaybackProfileFromContext(ctx, getSegmentDuration() * 1000),
+      buildPlaybackProfileFromContext(
+        ctx,
+        (ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION) * 1000,
+      ),
     );
     // Instance suffix forks a concurrent playback onto its own job (#638);
     // absent for the sole playback, so the hash is unchanged there.
@@ -442,7 +435,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         if (maxSeg >= 0) break;
       }
       if (maxSeg < 0) return 0;
-      const transcodedUpTo = segmentIndexToSeconds(maxSeg + 1);
+      const transcodedUpTo = segmentIndexToSeconds(
+        maxSeg + 1,
+        session.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
+      );
       return Math.min(100, (transcodedUpTo / durationSeconds) * 100);
     } catch {
       return 0;
@@ -745,7 +741,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    *
    * Bounded by an input-side `-t` of EARLY_PROBE_SEGMENTS segments (+1s) so
    * ffmpeg exits shortly after flushing seg-0 .. seg-(EARLY_PROBE_SEGMENTS-1),
-   * each a full `getSegmentDuration()` long (there is no `hls_init_time`, so
+   * each a full segment long (there is no `hls_init_time`, so
    * seg-0 is not shortened). Same encoder profile + audio layout as the main
    * session so segments and
    * init.mp4 are decode-compatible (Shaka can mix-and-match across the two
@@ -829,7 +825,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       // ffmpeg exits cleanly. Derived from the configured segment duration —
       // a hardcoded 4s only covered two segments at the 3s default and left
       // seg-1 unwritten at 4s/6s grids. Insert as an INPUT option (before -i).
-      const earlyReadSec = EARLY_PROBE_SEGMENTS * getSegmentDuration() + 1;
+      const earlyReadSec =
+        EARLY_PROBE_SEGMENTS *
+          (ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION) +
+        1;
       const inputIdx = args.indexOf('-i');
       if (inputIdx >= 0) args.splice(inputIdx, 0, '-t', String(earlyReadSec));
 
@@ -1335,6 +1334,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         sourceVideoCodec: ctx?.sourceVideoCodec,
         audioStreams: ctx?.audioStreams,
         segmentBoundaries,
+        segmentDuration: ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
       },
       this.log,
     );
@@ -1454,6 +1454,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         useTs: ctx?.useTs ?? false,
         audioStreams: ctx?.audioStreams,
         sourceFps: ctx?.sourceFps,
+        segmentDuration: ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
       },
       this.log,
     );
@@ -1640,6 +1641,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       qsvOptions: ctx?.qsvOptions,
       tonemapAlgo: ctx?.tonemapAlgo,
       sourceFps: ctx?.sourceFps,
+      segmentDuration: ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
       trustedStreamInfo: ctx?.trustedStreamInfo,
       useTs: ctx?.useTs ?? false,
       videoVariant: ctx?.videoVariant,
@@ -1676,6 +1678,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ? 'var-stream-map'
       : 'inline';
     session.sourceFps = ctx.sourceFps;
+    session.segmentDuration = ctx.segmentDuration ?? DEFAULT_SEGMENT_DURATION;
     if (!session.startedAt) session.startedAt = new Date();
   }
 

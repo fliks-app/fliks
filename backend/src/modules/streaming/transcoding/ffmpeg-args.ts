@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import * as path from 'path';
 import {
-  getSegmentDuration,
+  DEFAULT_SEGMENT_DURATION,
   realSegmentSeconds,
   segmentIndexToSeconds,
 } from './constants';
@@ -140,6 +140,10 @@ export interface BuildFfmpegArgsOptions {
    *  which preserves the historical vaapi-when-available preference. */
   tonemapAlgo?: TonemapAlgo;
   sourceFps?: number;
+  /** HLS segment duration (seconds) this session cuts on. Sets the GOP length
+   *  and the forced-IDR / seek grid. Defaults to {@link DEFAULT_SEGMENT_DURATION}
+   *  when omitted. */
+  segmentDuration?: number;
   trustedStreamInfo?: boolean;
   /** Short-lived parallel session producing only seg-0/seg-1 during a
    *  mid-file resume. Trades visual quality on the discarded warm-up frames
@@ -249,6 +253,7 @@ export function buildFfmpegArgs(
     encoderPreset = 'faster',
     qsvOptions = { lowPower: false },
     sourceFps,
+    segmentDuration = DEFAULT_SEGMENT_DURATION,
     trustedStreamInfo = false,
     early = false,
     useTs = false,
@@ -270,8 +275,6 @@ export function buildFfmpegArgs(
   // we ship, so `useTs` defaults to false everywhere.
   const segType = useTs ? 'mpegts' : 'fmp4';
   const segExt = useTs ? 'ts' : 'm4s';
-
-  const SEGMENT_DURATION = getSegmentDuration();
 
   // Audio output args derived from the stream-builder decision. No
   // re-derivation here — we just emit what we were told. Safe fallback to
@@ -298,21 +301,26 @@ export function buildFfmpegArgs(
   // GOP = segment_duration × fps so each segment starts exactly on an IDR.
   // Fallback to 24 fps when source fps is unknown (safe for most content).
   const fps = sourceFps && sourceFps > 0 ? sourceFps : 24;
-  const gopSize = Math.max(1, Math.round(SEGMENT_DURATION * fps));
+  const gopSize = Math.max(1, Math.round(segmentDuration * fps));
   // Real segment length on the wire (gop/fps). The seek grid, the force-IDR
   // cadence, the playlist EXTINF and the fMP4 tfdt all anchor on this so they
-  // agree on fractional-fps sources. Equals SEGMENT_DURATION for integer fps.
-  const realSeg = realSegmentSeconds(sourceFps);
+  // agree on fractional-fps sources. Equals segmentDuration for integer fps.
+  const realSeg = realSegmentSeconds(segmentDuration, sourceFps);
 
-  // Resume point for mid-file seek (`startSegment > 0`). Seek to T,
-  // then `-copyts` (set after `-i` below) threads source PTS through
-  // to the muxer so the first segment lands at tfdt = T × timescale.
+  // Resume point for mid-file seek (`startSegment > 0`). The HLS-fMP4 muxer
+  // restarts each run's fragment timeline at tfdt 0; the serve-time anchor
+  // (SegmentPackagingService) rebases every served segment back onto the single
+  // absolute presentation grid, so a resumed run splices seamlessly.
   const seekSeconds =
-    startSegment > 0 ? segmentIndexToSeconds(startSegment, sourceFps) : 0;
+    startSegment > 0
+      ? segmentIndexToSeconds(startSegment, segmentDuration, sourceFps)
+      : 0;
 
   // Force an IDR every `realSeg` seconds so the HLS muxer cuts on the same grid
-  // the playlist declares. `-copyts` keeps the encoder's `t` in source time, so
-  // the expression anchors at `seekSeconds` and IDRs survive a seek-resume.
+  // the playlist declares. ffmpeg evaluates the expression's `t` relative to the
+  // first frame of THIS run, not source time — so on a seek-resume the first
+  // forced tick only lands after `seekSeconds` of output. The GOP (`-g gopSize`,
+  // set by every encoder descriptor) keeps cuts on the grid through that window.
   const forceKeyframesExpr = `expr:gte(t,${seekSeconds}+n_forced*${realSeg})`;
   // Closed-GOP, deterministic IDR placement on h264_qsv:
   //  - `-forced_idr 1` : every `force_key_frames` tick lands as a real
@@ -860,7 +868,7 @@ export function buildFfmpegArgs(
       '-f',
       'hls',
       '-hls_time',
-      String(SEGMENT_DURATION),
+      String(segmentDuration),
       '-hls_list_size',
       '0',
       '-start_number',
@@ -893,6 +901,9 @@ export interface BuildAudioOnlyArgsOptions {
   audioStreams?: AudioStreamMeta[];
   /** Source fps, so the resume seek lands on the same fps-aware grid as video. */
   sourceFps?: number;
+  /** Segment duration (seconds) — same grid the paired video session uses.
+   *  Defaults to {@link DEFAULT_SEGMENT_DURATION}. */
+  segmentDuration?: number;
 }
 
 /**
@@ -913,13 +924,14 @@ export function buildAudioOnlyFfmpegArgs(
     useTs = false,
     audioStreams,
     sourceFps,
+    segmentDuration = DEFAULT_SEGMENT_DURATION,
   } = opts;
   const segType = useTs ? 'mpegts' : 'fmp4';
   const segExt = useTs ? 'ts' : 'm4s';
   // fps-aware segment length so audio renditions cut on the same grid as the
   // video IDRs / playlist EXTINF (see buildFfmpegArgs). Equals the integer
   // setting for integer / unknown fps.
-  const realSeg = realSegmentSeconds(sourceFps);
+  const realSeg = realSegmentSeconds(segmentDuration, sourceFps);
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
   if (trustedStreamInfo) {
@@ -935,7 +947,9 @@ export function buildAudioOnlyFfmpegArgs(
   }
 
   const seekSeconds =
-    startSegment > 0 ? segmentIndexToSeconds(startSegment, sourceFps) : 0;
+    startSegment > 0
+      ? segmentIndexToSeconds(startSegment, segmentDuration, sourceFps)
+      : 0;
 
   if (startSegment > 0) {
     args.push('-ss', String(seekSeconds));
@@ -1002,6 +1016,9 @@ export interface BuildRemuxArgsOptions {
    *  the real start of `startSegment` — not the uniform-grid `index * segDur`,
    *  which lands on the wrong content and desyncs the post-seek playlist. */
   segmentBoundaries?: number[];
+  /** Nominal segment duration (seconds) for `-hls_time` and the uniform-grid
+   *  seek fallback. Defaults to {@link DEFAULT_SEGMENT_DURATION}. */
+  segmentDuration?: number;
 }
 
 export function buildRemuxArgs(
@@ -1020,8 +1037,8 @@ export function buildRemuxArgs(
     sourceVideoCodec,
     audioStreams,
     segmentBoundaries,
+    segmentDuration = DEFAULT_SEGMENT_DURATION,
   } = opts;
-  const SEGMENT_DURATION = getSegmentDuration();
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
   if (trustedStreamInfo) {
@@ -1037,7 +1054,7 @@ export function buildRemuxArgs(
   const remuxSeekSeconds =
     startSegment > 0
       ? (segmentBoundaries?.[startSegment] ??
-        segmentIndexToSeconds(startSegment))
+        segmentIndexToSeconds(startSegment, segmentDuration))
       : 0;
   if (startSegment > 0) {
     args.push('-ss', String(remuxSeekSeconds));
@@ -1116,7 +1133,7 @@ export function buildRemuxArgs(
     '-f',
     'hls',
     '-hls_time',
-    String(SEGMENT_DURATION),
+    String(segmentDuration),
     '-hls_list_size',
     '0',
     '-start_number',

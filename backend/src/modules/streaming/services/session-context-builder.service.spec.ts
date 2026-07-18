@@ -26,6 +26,7 @@ describe('SessionContextBuilder.build', () => {
     getQsvOptions: jest.Mock;
     getTonemapAlgo: jest.Mock;
     getAutoCropEnabled: jest.Mock;
+    getSegmentDuration: jest.Mock;
   };
   let builder: SessionContextBuilder;
 
@@ -35,6 +36,7 @@ describe('SessionContextBuilder.build', () => {
       getQsvOptions: jest.fn().mockReturnValue({ lowPower: false }),
       getTonemapAlgo: jest.fn().mockReturnValue('auto'),
       getAutoCropEnabled: jest.fn().mockReturnValue(true),
+      getSegmentDuration: jest.fn().mockReturnValue(3),
     };
     builder = new SessionContextBuilder(tracker as never, sessionRouter as never);
   });
@@ -52,6 +54,11 @@ describe('SessionContextBuilder.build', () => {
     expect(ctx.sourceVideoCodec).toBe('hevc');
     expect(ctx.sourceFps).toBe(24);
     expect(ctx.userId).toBe(7);
+  });
+
+  it('snapshots the admin segment duration onto the context', () => {
+    tracker.getSegmentDuration.mockReturnValue(6);
+    expect(builder.build(req, resolved(1), 1).segmentDuration).toBe(6);
   });
 
   it('gates the crop on the auto-crop toggle', () => {

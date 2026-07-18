@@ -38,8 +38,8 @@ describe('buildAudioOnlyFfmpegArgs', () => {
     );
     const seek = args[args.indexOf('-ss') + 1];
     // Must match the video path's fps-aware seek, not the integer-grid value.
-    expect(seek).toBe(String(segmentIndexToSeconds(5, fps)));
-    expect(seek).not.toBe(String(segmentIndexToSeconds(5)));
+    expect(seek).toBe(String(segmentIndexToSeconds(5, 3, fps)));
+    expect(seek).not.toBe(String(segmentIndexToSeconds(5, 3)));
   });
 
   it('cuts on the fps-aware grid so audio renditions stay aligned with the video IDRs', () => {
@@ -57,7 +57,7 @@ describe('buildAudioOnlyFfmpegArgs', () => {
     const hlsTime = args[args.indexOf('-hls_time') + 1];
     // Must match the video IDR / EXTINF grid (3.003s), not the integer 3.0s
     // setting — otherwise the audio tfdt drifts a whole segment mid-film.
-    expect(hlsTime).toBe(String(realSegmentSeconds(fps)));
+    expect(hlsTime).toBe(String(realSegmentSeconds(3, fps)));
     expect(hlsTime).not.toBe('3');
   });
 
