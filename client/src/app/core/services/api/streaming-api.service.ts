@@ -655,6 +655,17 @@ export class StreamingApiService {
       this.http.get<{ available: string[] }>('/api/stream/info/tonemap-algos'),
     );
   }
+
+  /** GPU render nodes the server detected, with a friendly label and
+   *  accel kind. Drives the admin streaming-settings device picker so a
+   *  multi-GPU host can pin transcoding to a specific adapter. */
+  getGpus() {
+    return firstValueFrom(
+      this.http.get<{ gpus: { renderNode: string; label: string; kind: string; accel: string }[]; defaultNode: string }>(
+        '/api/stream/info/gpus',
+      ),
+    );
+  }
 }
 
 export interface DownloadQuality {

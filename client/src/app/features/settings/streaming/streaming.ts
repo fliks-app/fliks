@@ -46,12 +46,19 @@ export class StreamingSettingsComponent implements OnInit {
    *  whole row in the template: the select would carry no meaningful
    *  choice. */
   readonly tonemapAlgosAvailable = signal<string[]>(['auto']);
+  /** Selected GPU render node, or 'auto' to let the backend pick. */
+  readonly gpuRenderNode = signal('auto');
+  /** GPU render nodes the server detected. The device-picker row in the
+   *  template only shows when more than one is present — a single-GPU
+   *  host has nothing to choose. */
+  readonly gpus = signal<{ renderNode: string; label: string; kind: string; accel: string }[]>([]);
 
   async ngOnInit() {
     try {
-      const [all, algos] = await Promise.all([
+      const [all, algos, gpusResp] = await Promise.all([
         this.api.getAll(),
         this.streamingApi.getTonemapAlgos().catch(() => ({ available: ['auto'] })),
+        this.streamingApi.getGpus().catch(() => ({ gpus: [], defaultNode: '' })),
       ]);
       this.refreshCacheStats();
       this.segmentDuration.set(all['streaming_segment_duration'] ?? '3');
@@ -70,6 +77,8 @@ export class StreamingSettingsComponent implements OnInit {
       this.tonemapAlgo.set(
         this.tonemapAlgosAvailable().includes(saved) ? saved : 'auto',
       );
+      this.gpus.set(gpusResp.gpus ?? []);
+      this.gpuRenderNode.set(all['streaming_gpu_render_node'] ?? 'auto');
     } catch { /* interceptor */ }
     this.loading.set(false);
   }
@@ -82,6 +91,7 @@ export class StreamingSettingsComponent implements OnInit {
         streaming_qsv_preset: this.qsvPreset(),
         streaming_qsv_low_power: String(this.qsvLowPower()),
         streaming_tonemap_algo: this.tonemapAlgo(),
+        streaming_gpu_render_node: this.gpuRenderNode(),
         streaming_auto_quality_mode: this.autoQualityMode(),
         streaming_auto_crop_enabled: String(this.autoCropEnabled()),
       });

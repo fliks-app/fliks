@@ -47,6 +47,7 @@ import {
   getRemuxSegmentGrid,
   secondsToSegmentIndex as boundarySecondsToIndex,
 } from './transcoding/segment-boundaries';
+import { setSelectedRenderNode } from './transcoding/hw-device';
 import { LiveSessionRegistry } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
@@ -602,6 +603,14 @@ export class StreamingController {
     };
   }
 
+  /** Detected GPUs for the admin device picker. `defaultNode` is what the
+   *  `'auto'` selection currently resolves to; an empty `gpus` list tells the
+   *  UI to hide the picker (single/opaque device, Windows/macOS). */
+  @Get('info/gpus')
+  gpusInfo() {
+    return this.transcodingService.getGpus();
+  }
+
   /**
    * PlaybackInfo — the client sends its DeviceProfile, the server decides
    * how to play the file: DirectPlay, DirectStream (remux), or Transcode.
@@ -662,6 +671,9 @@ export class StreamingController {
     this.activeStreamTracker.setQsvOptions({ lowPower: ss.qsvLowPower });
     this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
     this.activeStreamTracker.setAutoCropEnabled(ss.autoCropEnabled);
+    // Pin HW transcoding to the admin-selected GPU (multi-GPU hosts); 'auto'
+    // clears the override and falls back to the env / detected default.
+    setSelectedRenderNode(ss.gpuRenderNode);
     this.activeStreamTracker.setDeviceName(
       userId,
       mediaFileId,

@@ -36,6 +36,10 @@ export interface StreamingSettings {
    * Direct Play / remux with the black bars intact instead of transcoding.
    */
   autoCropEnabled: boolean;
+  /** Admin-selected GPU render node for hardware transcoding, or `'auto'`
+   *  (default) to let the host pick. On a multi-GPU box, pinning a specific
+   *  `/dev/dri/renderD*` keeps sessions off the wrong adapter. */
+  gpuRenderNode: string;
 }
 
 export type AutoQualityMode = 'directplay' | 'abr';
@@ -47,6 +51,7 @@ const KEYS = [
   'streaming_tonemap_algo',
   'streaming_auto_quality_mode',
   'streaming_auto_crop_enabled',
+  'streaming_gpu_render_node',
 ] as const;
 
 const TONEMAP_ALGOS: TonemapAlgo[] = ['auto', 'opencl', 'vaapi', 'qsv'];
@@ -99,6 +104,7 @@ export class StreamingSettingsCache implements OnModuleInit {
       tonemapAlgo,
       autoQualityMode,
       autoCropEnabled,
+      gpuRenderNode,
     ] = values;
     return {
       segmentDuration: parseFloat(duration ?? '3') || 3,
@@ -115,6 +121,8 @@ export class StreamingSettingsCache implements OnModuleInit {
       // Default on (preserve current behaviour); only the explicit string
       // 'false' disables cropping.
       autoCropEnabled: autoCropEnabled !== 'false',
+      // 'auto' (or unset) lets the host pick the default render node.
+      gpuRenderNode: gpuRenderNode?.trim() || 'auto',
     };
   }
 }
