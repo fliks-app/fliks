@@ -37,8 +37,8 @@ import {
   type BurnInSubtitle,
 } from './transcoding';
 import {
+  DEFAULT_SEGMENT_DURATION,
   EARLY_PROBE_SEGMENTS,
-  getSegmentDuration,
   parseSourceFps,
   realSegmentSeconds,
   secondsToSegmentIndex,
@@ -203,8 +203,8 @@ function statSizeOrNull(filePath: string): number | null {
 export function buildVodPlaylist(
   duration: number,
   segmentUrl: (index: string) => string,
-  initUrl?: string,
-  segDuration: number = getSegmentDuration(),
+  initUrl: string | undefined,
+  segDuration: number,
 ): string {
   // Subtract small epsilon before ceil to avoid phantom last segment when
   // ffprobe duration has floating-point imprecision (e.g. 120.001 → ceil
@@ -342,7 +342,11 @@ export class StreamingController {
   private resumeFloor(
     live: { position: number } | null | undefined,
     existing:
-      | { startSegment?: number | null; sourceFps?: number }
+      | {
+          startSegment?: number | null;
+          sourceFps?: number;
+          segmentDuration?: number;
+        }
       | null
       | undefined,
     boundaries?: number[],
@@ -350,9 +354,22 @@ export class StreamingController {
     const posIndex = live
       ? boundaries
         ? boundarySecondsToIndex(boundaries, live.position)
-        : secondsToSegmentIndex(live.position, existing?.sourceFps)
+        : secondsToSegmentIndex(
+            live.position,
+            this.segDur(existing ?? undefined),
+            existing?.sourceFps,
+          )
       : 0;
     return Math.max(existing?.startSegment ?? 0, posIndex);
+  }
+
+  /** Segment duration for a request: the session's frozen grid when serving an
+   *  existing session, else the current admin setting (which a spawn will
+   *  freeze, so playlist and session agree). Never reads a mutable global. */
+  private segDur(session?: { segmentDuration?: number }): number {
+    return (
+      session?.segmentDuration ?? this.activeStreamTracker.getSegmentDuration()
+    );
   }
 
   /** Keyframe-aligned cumulative segment boundaries for the remux/copy path,
@@ -361,9 +378,10 @@ export class StreamingController {
    *  fetched before segments, so segment-time lookups hit the warm cache. */
   private async remuxBoundaries(
     absolutePath: string,
+    segDur: number,
     durationHint = 0,
   ): Promise<number[] | null> {
-    const grid = await getRemuxSegmentGrid(absolutePath, durationHint);
+    const grid = await getRemuxSegmentGrid(absolutePath, durationHint, segDur);
     return grid ? grid.boundaries : null;
   }
 
@@ -447,7 +465,11 @@ export class StreamingController {
           : startQuality;
       const startSegment = Math.max(
         0,
-        secondsToSegmentIndex(effectiveStartAt, ctx.sourceFps),
+        secondsToSegmentIndex(
+          effectiveStartAt,
+          this.segDur(ctx),
+          ctx.sourceFps,
+        ),
       );
 
       // The seg-0 early-start companion runs in parallel with main and serves
@@ -636,7 +658,7 @@ export class StreamingController {
 
     // File-scoped + global tracker state (kept in the tracker because
     // these don't vary per playback session).
-    this.transcodingService.setSegmentDuration(ss.segmentDuration);
+    this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
     this.activeStreamTracker.setQsvOptions({ lowPower: ss.qsvLowPower });
     this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
     this.activeStreamTracker.setAutoCropEnabled(ss.autoCropEnabled);
@@ -1307,7 +1329,7 @@ export class StreamingController {
         audioIndex,
         resolved.absolutePath,
         0,
-        { userId: user?.id },
+        { userId: user?.id, segmentDuration: this.segDur() },
       );
     }
 
@@ -1321,7 +1343,9 @@ export class StreamingController {
       resolved.mediaFile.streamInfo?.video?.[0]?.frameRate,
     );
     const audioSegDuration =
-      useExtXMedia && !useTs ? realSegmentSeconds(sourceFps) : getSegmentDuration();
+      useExtXMedia && !useTs
+        ? realSegmentSeconds(this.segDur(), sourceFps)
+        : this.segDur();
     const playlist = buildVodPlaylist(
       duration,
       (seg) => `${basePath}/seg-${seg}.${segExt}${tokenParam}`,
@@ -1532,7 +1556,10 @@ export class StreamingController {
       segPath,
       segmentContentType(segment),
       {
-        segDuration: realSegmentSeconds(videoSession.sourceFps),
+        segDuration: realSegmentSeconds(
+          this.segDur(videoSession),
+          videoSession.sourceFps,
+        ),
       },
     );
   }
@@ -1586,11 +1613,12 @@ export class StreamingController {
           // (and seek) via the real keyframe boundaries, not the uniform grid.
           const boundaries = await this.remuxBoundaries(
             resolved.absolutePath,
+            this.segDur(ctx),
             duration,
           );
           const startSegment = boundaries
             ? boundarySecondsToIndex(boundaries, startAtSec)
-            : secondsToSegmentIndex(startAtSec);
+            : secondsToSegmentIndex(startAtSec, this.segDur(ctx));
           void this.transcodingService.getOrCreateRemuxSession(
             mediaFileId,
             resolved.absolutePath,
@@ -1604,7 +1632,7 @@ export class StreamingController {
             mediaFileId,
             quality,
             resolved.absolutePath,
-            secondsToSegmentIndex(startAtSec, ctx.sourceFps),
+            secondsToSegmentIndex(startAtSec, this.segDur(ctx), ctx.sourceFps),
             ctx,
           );
         }
@@ -1645,7 +1673,7 @@ export class StreamingController {
     let remuxDurations: number[] | null = null;
     if (quality === 'remux' && !useTs) {
       remuxDurations =
-        (await getRemuxSegmentGrid(resolved.absolutePath, duration))
+        (await getRemuxSegmentGrid(resolved.absolutePath, duration, this.segDur()))
           ?.durations ?? null;
     }
     // Transcoded fMP4 segments span one GOP each — declare their real length
@@ -1661,7 +1689,7 @@ export class StreamingController {
           duration,
           segmentUrl,
           initRef,
-          transcodeFmp4 ? realSegmentSeconds(sourceFps) : getSegmentDuration(),
+          transcodeFmp4 ? realSegmentSeconds(this.segDur(), sourceFps) : this.segDur(),
         );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -1768,7 +1796,7 @@ export class StreamingController {
           res,
           initPath,
           segmentContentType(segment),
-          { segDuration: realSegmentSeconds(src.sourceFps) },
+          { segDuration: realSegmentSeconds(this.segDur(src), src.sourceFps) },
         );
         return;
       }
@@ -1804,7 +1832,10 @@ export class StreamingController {
           segPath,
           segmentContentType(segment),
           {
-            segDuration: realSegmentSeconds(existing.sourceFps),
+            segDuration: realSegmentSeconds(
+              this.segDur(existing),
+              existing.sourceFps,
+            ),
             // Remux carries its own keyframe-cut timeline; the grid tfdt anchor
             // shifts each remux segment by its IDR-vs-grid offset and must be
             // skipped, exactly as the slow-path serve below does (#349).
@@ -1901,7 +1932,10 @@ export class StreamingController {
             segPath,
             segmentContentType(segment),
             {
-              segDuration: realSegmentSeconds(earlySession.sourceFps),
+              segDuration: realSegmentSeconds(
+                this.segDur(earlySession),
+                earlySession.sourceFps,
+              ),
             },
           );
           return;
@@ -1921,7 +1955,10 @@ export class StreamingController {
     // aligned. Non-remux keeps the uniform grid (force_key_frames makes it true).
     const remuxBounds =
       quality === 'remux'
-        ? ((await this.remuxBoundaries(resolved.absolutePath)) ?? undefined)
+        ? ((await this.remuxBoundaries(
+            resolved.absolutePath,
+            this.segDur(ctx),
+          )) ?? undefined)
         : undefined;
     const anchorSeg = this.anchorSegment(
       live,
@@ -1991,7 +2028,7 @@ export class StreamingController {
       segPath,
       segmentContentType(segment),
       {
-        segDuration: realSegmentSeconds(session.sourceFps),
+        segDuration: realSegmentSeconds(this.segDur(session), session.sourceFps),
         skipTimelineRewrite: quality === 'remux',
       },
     );

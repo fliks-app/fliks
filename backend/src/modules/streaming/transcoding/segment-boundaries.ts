@@ -2,7 +2,6 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { Logger } from '@nestjs/common';
 import { statSync } from 'fs';
-import { getSegmentDuration } from './constants';
 
 const execFileAsync = promisify(execFile);
 const log = new Logger('SegmentBoundaries');
@@ -77,7 +76,7 @@ export async function extractKeyframeTimes(filePath: string): Promise<number[]> 
 export function computeSegmentDurations(
   keyframeTimes: number[],
   totalDuration: number,
-  segDur: number = getSegmentDuration(),
+  segDur: number,
 ): number[] {
   if (keyframeTimes.length === 0 || segDur <= 0) return [];
   // A keyframe past the container-reported duration extends the timeline so the
@@ -141,7 +140,7 @@ export function secondsToSegmentIndex(
 export async function getRemuxSegmentGrid(
   filePath: string,
   totalDuration: number,
-  segDur: number = getSegmentDuration(),
+  segDur: number,
 ): Promise<SegmentGrid | null> {
   let mtimeMs = 0;
   try {

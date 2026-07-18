@@ -27,24 +27,22 @@ export const SEEK_WAIT_THRESHOLD = 15;
  *  session that never wrote that segment. Independent of segment duration. */
 export const EARLY_PROBE_SEGMENTS = 2;
 
-/** Mutable runtime state for HLS segment duration. Updated from admin
- *  streaming settings via `setSegmentDuration()`. Read by FFmpeg arg
- *  builders and the session manager. */
-let segmentDuration = 3;
-
-export function getSegmentDuration(): number {
-  return segmentDuration;
-}
-
-export function setSegmentDuration(seg: number): void {
-  segmentDuration = seg;
-}
+/** Default HLS segment duration (seconds) when the admin setting is
+ *  unavailable. The live value is an admin streaming setting held by
+ *  `ActiveStreamTracker`, frozen onto each session at spawn (`sourceFps`'s
+ *  sibling), and threaded explicitly into the grid helpers below — never a
+ *  module-mutable global, so a mid-playback setting change can't re-grid a
+ *  session against the segments already cut on its old grid. */
+export const DEFAULT_SEGMENT_DURATION = 3;
 
 /** Real length of one transcoded segment = a pinned GOP of
  *  `round(segmentDuration · fps)` frames = `gop / fps` seconds. Equals
  *  `segmentDuration` for integer / unknown fps; differs only for fractional
  *  rates (24000/1001 → 3.003s at a 3s setting). */
-export function realSegmentSeconds(fps?: number): number {
+export function realSegmentSeconds(
+  segmentDuration: number,
+  fps?: number,
+): number {
   if (!fps || fps <= 0) return segmentDuration;
   return Math.max(1, Math.round(segmentDuration * fps)) / fps;
 }
@@ -59,13 +57,21 @@ export function parseSourceFps(frameRate: string | undefined): number | undefine
 
 /** Presentation time (seconds) → containing FFmpeg segment number, on the
  *  `fps`-aware real-duration grid. */
-export function secondsToSegmentIndex(seconds: number, fps?: number): number {
+export function secondsToSegmentIndex(
+  seconds: number,
+  segmentDuration: number,
+  fps?: number,
+): number {
   if (seconds <= 0) return 0;
-  return Math.floor(seconds / realSegmentSeconds(fps));
+  return Math.floor(seconds / realSegmentSeconds(segmentDuration, fps));
 }
 
 /** Inverse of `secondsToSegmentIndex` — start time of an FFmpeg segment. */
-export function segmentIndexToSeconds(segment: number, fps?: number): number {
+export function segmentIndexToSeconds(
+  segment: number,
+  segmentDuration: number,
+  fps?: number,
+): number {
   if (segment <= 0) return 0;
-  return segment * realSegmentSeconds(fps);
+  return segment * realSegmentSeconds(segmentDuration, fps);
 }

@@ -126,8 +126,12 @@ export interface SessionContext {
    *  let the codec selector keep its built-in preference order). Forwarded
    *  to `ffmpeg-args` to override the default `useVaapiTonemap` decision. */
   tonemapAlgo?: TonemapAlgo;
-  /** Source framerate (fps). Used to compute GOP = SEGMENT_DURATION * fps. */
+  /** Source framerate (fps). Used to compute GOP = segmentDuration * fps. */
   sourceFps?: number;
+  /** HLS segment duration (seconds) this session cuts on — read from the admin
+   *  setting when the context is built and frozen onto the session, so the
+   *  serve/seek grid stays fixed for the session's lifetime. */
+  segmentDuration?: number;
   /**
    * True when the backend already has a trusted `streamInfo` for this file
    * (populated by ffprobe at import / rescan). If set, FFmpeg can use an
@@ -270,6 +274,11 @@ export interface TranscodeSession {
   /** Source frame rate this session encodes at. Lets the segment-serve path
    *  resolve the real segment-duration grid without re-probing streamInfo. */
   sourceFps?: number;
+  /** Segment duration (seconds) this session was spawned with, frozen from the
+   *  admin setting at spawn. The serve/seek grid reads this — never the live
+   *  admin value — so an admin change mid-playback can't shift the timeline of
+   *  segments already on disk. */
+  segmentDuration?: number;
   /** Marks the session as killed intentionally (seek restart, quality
    *  change, etc.) so the close handler doesn't log a spurious "exited
    *  WITHOUT producing first segment" warning. */
