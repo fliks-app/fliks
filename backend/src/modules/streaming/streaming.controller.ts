@@ -1805,6 +1805,10 @@ export class StreamingController {
           segmentContentType(segment),
           {
             segDuration: realSegmentSeconds(existing.sourceFps),
+            // Remux carries its own keyframe-cut timeline; the grid tfdt anchor
+            // shifts each remux segment by its IDR-vs-grid offset and must be
+            // skipped, exactly as the slow-path serve below does (#349).
+            skipTimelineRewrite: quality === 'remux',
           },
         );
         return;
@@ -1978,10 +1982,10 @@ export class StreamingController {
       sendTransientUnavailable(res);
       return;
     }
-    // Remux segments skip the tfdt anchor — they already carry an absolute
-    // -copyts timeline (see SegmentPackagingService / #349). The early-probe
-    // paths above never run for remux (gated on quality !== 'remux'), so this
-    // main serve is the only remux-reachable tfdt path.
+    // Remux segments skip the tfdt anchor — they already carry a keyframe-cut
+    // -copyts timeline (see SegmentPackagingService / #349). The on-disk fast
+    // path above serves remux too, so it passes the same flag; only the
+    // early-probe paths never run for remux (gated on quality !== 'remux').
     await this.segmentPackaging.serve(
       res,
       segPath,
