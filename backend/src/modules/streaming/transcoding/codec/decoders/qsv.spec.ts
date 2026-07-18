@@ -1,4 +1,9 @@
-import { h264QsvNativeDecoder, h264QsvD3d11Decoder } from './qsv';
+import {
+  h264QsvNativeDecoder,
+  hevcQsvNativeDecoder,
+  av1QsvNativeDecoder,
+  h264QsvD3d11Decoder,
+} from './qsv';
 import { findQsvNativeDecoder } from './index';
 
 describe('QSV encode-path decoders', () => {
@@ -30,5 +35,15 @@ describe('QSV encode-path decoders', () => {
     // supports() reads the real process.platform (linux under CI).
     expect(h264QsvNativeDecoder.supports()).toBe(process.platform !== 'win32');
     expect(h264QsvD3d11Decoder.supports()).toBe(process.platform === 'win32');
+  });
+
+  it('force-disables av1 qsv-native decode (broken on ffmpeg 8.x) but keeps h264/hevc', () => {
+    // AV1_QSV_DECODE_BROKEN: av1_qsv decode regresses on jellyfin-ffmpeg 8.x
+    // (oneVPL dynamic frame pool -17), so AV1 falls back to VAAPI decode. The
+    // boot decoder-probe honours supports() and disables it accordingly.
+    expect(av1QsvNativeDecoder.supports()).toBe(false);
+    // Only AV1 is disabled — h264/hevc qsv-native decode stays available.
+    expect(hevcQsvNativeDecoder.supports()).toBe(process.platform !== 'win32');
+    expect(h264QsvNativeDecoder.supports()).toBe(process.platform !== 'win32');
   });
 });

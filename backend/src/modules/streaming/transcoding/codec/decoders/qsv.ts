@@ -113,7 +113,22 @@ export const av1QsvDecoder = qsvDecoder('av1', 10);
 
 export const h264QsvNativeDecoder = qsvNativeDecoder('h264', 8);
 export const hevcQsvNativeDecoder = qsvNativeDecoder('hevc', 10);
-export const av1QsvNativeDecoder = qsvNativeDecoder('av1', 10);
+/** AV1 QSV-native decode is force-disabled on the bundled jellyfin-ffmpeg 8.x:
+ *  `av1_qsv` hits the oneVPL 2.9+ dynamic frame pool, whose surface allocation
+ *  returns -17 on a real AV1 DPB (regression vs 7.1.x — verified on Iris Xe; a
+ *  synthetic clip decodes fine so the boot probe can't catch it). AV1 therefore
+ *  falls back to VAAPI *decode* only — the QSV *encoder* is unaffected and still
+ *  runs (VAAPI decode → scale_vaapi → hwmap qsv → hevc/h264_qsv). Windows decodes
+ *  AV1 on D3D11VA (av1QsvD3d11Decoder), so this only affects Linux.
+ *
+ *  Removal: flip to `false` once the shipped ffmpeg/oneVPL no longer regresses
+ *  av1_qsv (e.g. a fixed 8.x point release, or reverting to a 7.1.x build). */
+const AV1_QSV_DECODE_BROKEN = true;
+
+export const av1QsvNativeDecoder: DecoderDescriptor = {
+  ...qsvNativeDecoder('av1', 10),
+  supports: () => !AV1_QSV_DECODE_BROKEN && process.platform !== 'win32',
+};
 
 export const h264QsvD3d11Decoder = qsvD3d11Decoder('h264', 8);
 export const hevcQsvD3d11Decoder = qsvD3d11Decoder('hevc', 10);
