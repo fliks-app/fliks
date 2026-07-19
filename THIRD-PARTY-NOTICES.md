@@ -23,6 +23,10 @@ archives and the upstream projects linked here.
 | Node.js runtime | MIT-style | https://github.com/nodejs/node |
 | PostgreSQL client | PostgreSQL License | https://www.postgresql.org |
 
+The macOS server app bundles **jellyfin-ffmpeg** (GPL-2.0-or-later,
+https://github.com/jellyfin/jellyfin-ffmpeg — FFmpeg with VideoToolbox + OpenCL)
+in place of the FFmpeg row above, plus PostgreSQL and Node.js.
+
 Node/npm package dependencies declare their own licenses in their respective
 `package.json` and `node_modules`; this file covers the non-npm programs
 embedded in the runtime image.

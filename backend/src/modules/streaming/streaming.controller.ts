@@ -766,9 +766,10 @@ export class StreamingController {
     const openclTonemap =
       (response.hwAccel === 'nvenc' || response.hwAccel === 'amf') &&
       isOpenclTonemapEnabled();
-    // mirrors ffmpeg-args useVtMetalPath (scale_vt HW tone-map)
+    // VideoToolbox HW tone-map: scale_vt (no crop) or tonemap_videotoolbox
+    // (crop); burn-in still falls back to the CPU chain.
     const vtMetalTonemap =
-      response.hwAccel === 'videotoolbox' && !hasCrop && !burnInSubtitleId;
+      response.hwAccel === 'videotoolbox' && !burnInSubtitleId;
     const tonemapAlgo = response.tonemapping
       ? hwTonemap
         ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop })

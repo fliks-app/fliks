@@ -37,16 +37,16 @@ export const h264Videotoolbox: EncoderDescriptor = {
       '-force_key_frames',
       input.forceKeyframesExpr,
     ];
-    // Full-Metal HDR pipeline — see the matching comment in
-    // `hevc-videotoolbox.ts`. Active when the orchestrator already
-    // configured the decoder to emit videotoolbox_vld IOSurfaces.
+    // VideoToolbox surface path — see the matching comment in
+    // `hevc-videotoolbox.ts`. No crop → scale_vt; crop → tonemap_videotoolbox
+    // then hwdownload for the CPU crop.
     if (inputSurface === 'videotoolbox') {
-      return [
-        ...common,
-        '-vf',
-        `scale_vt=w=${w}:h=-2:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709`,
-        ...trailing,
-      ];
+      const vf = input.hasCrop
+        ? `tonemap_videotoolbox=tonemap=${input.tonemapCurve ?? 'hable'}:t=bt709:m=bt709:p=bt709:range=tv,` +
+          `hwdownload,format=p010le,${filters.cpuCropPrefix}` +
+          `scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p`
+        : `scale_vt=w=${w}:h=-2:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709`;
+      return [...common, '-vf', vf, ...trailing];
     }
     return [
       ...common,
