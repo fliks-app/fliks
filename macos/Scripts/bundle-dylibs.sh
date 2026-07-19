@@ -94,9 +94,12 @@ bundle_one() {
     done
 }
 
-# Collect all binaries to process.
+# Collect all binaries to process. Match executables (-perm +111) AND *.dylib
+# by name: the PostgreSQL extension libs (plpgsql, pg_trgm, …) ship as 0444
+# (no exec bit), so a -perm-only scan would miss them and their Homebrew deps
+# (gettext/libintl, …) would not be relocated.
 if [ -d "$TARGET" ]; then
-    BINARIES="$(find "$TARGET" -type f -perm +111 2>/dev/null)"
+    BINARIES="$(find "$TARGET" -type f \( -perm +111 -o -name '*.dylib' \) 2>/dev/null)"
 else
     BINARIES="$TARGET"
 fi
@@ -107,6 +110,18 @@ echo "==> Bundling dylibs into $LIB_DIR"
 echo "$BINARIES" | while IFS= read -r bin; do
     [ -z "$bin" ] && continue
     echo "    Processing $(basename "$bin")..."
+    # A dylib carries its own install id (otool -D). For Homebrew's postgres
+    # client libs (libpq, libecpg, libpgtypes) that id is an absolute
+    # /opt/homebrew path, and -change below only touches DEPENDENCIES, not the
+    # id — so the id would still resolve back to the build host. Rewrite it to
+    # @loader_path, but only when it is actually a Homebrew path so we don't
+    # clobber an id an earlier step deliberately set (e.g. libpq.5.dylib).
+    cur_id="$(otool -D "$bin" 2>/dev/null | tail -1)"
+    case "$cur_id" in
+        /opt/homebrew/*)
+            install_name_tool -id "@loader_path/$(basename "$bin")" "$bin" 2>/dev/null || true
+            ;;
+    esac
     for dep in $(get_brew_deps "$bin"); do
         dep_name="$(basename "$dep")"
         install_name_tool -change "$dep" "@executable_path/../lib/$dep_name" "$bin" 2>/dev/null || true

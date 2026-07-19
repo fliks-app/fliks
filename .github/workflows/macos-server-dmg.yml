@@ -1,4 +1,4 @@
-# Builds a self-contained Fliks.app and packages it as a DMG,
+# Builds a self-contained Fliks Server.app and packages it as a DMG,
 # then uploads it as a GitHub Release asset.
 #
 # Triggers:
@@ -108,7 +108,7 @@ jobs:
       # then read at runtime by BuildConfig.swift. MAC_SIGN_IDENTITY tells
       # build-app.sh to Developer ID sign (hardened runtime) instead of ad-hoc;
       # the single imported cert matches the identity prefix uniquely.
-      - name: Build Fliks.app
+      - name: Build Fliks Server.app
         working-directory: macos
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}

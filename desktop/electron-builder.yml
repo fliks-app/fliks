@@ -16,7 +16,7 @@ appId: media.fliks.desktop
 productName: Fliks
 # Bake the version into every installer filename (the CI injects the resolved
 # version via -c.extraMetadata.version). The "Client" marker distinguishes these
-# thin-client installers from the SwiftUI server-host DMG (macos-dmg.yml ships
+# thin-client installers from the SwiftUI server-host DMG (macos-server-dmg.yml ships
 # Fliks-Server-<ver>-<arch>.dmg); both attach to the same release-please v*
 # release, so a shared filename would overwrite. e.g. Fliks-Client-1.2.3-x64.dmg.
 artifactName: ${productName}-Client-${version}-${arch}.${ext}

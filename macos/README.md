@@ -69,7 +69,7 @@ xcodebuild -project Fliks.xcodeproj -scheme Fliks -configuration Debug build ONL
 Then launch:
 
 ```bash
-open "$(find ~/Library/Developer/Xcode/DerivedData/Fliks-*/Build/Products/Debug -name 'Fliks.app' -type d | head -1)"
+open "$(find ~/Library/Developer/Xcode/DerivedData/Fliks-*/Build/Products/Debug -name 'Fliks Server.app' -type d | head -1)"
 ```
 
 ## Release build (DMG)

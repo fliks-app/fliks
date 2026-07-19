@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Fetch arm64 macOS binaries for bundling into Fliks.app.
+# Fetch arm64 macOS binaries for bundling into Fliks Server.app.
 #
 # Usage: ./fetch-vendored.sh
 #

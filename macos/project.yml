@@ -22,6 +22,12 @@ targets:
           - Info.plist
     settings:
       base:
+        # The .app bundle, executable, and Activity Monitor process name all
+        # derive from PRODUCT_NAME. The Electron thin client under desktop/ also
+        # ships as "Fliks", so name this server host "Fliks Server" to keep the
+        # two unambiguous. The Xcode target/scheme stays "Fliks" (build-app.sh
+        # runs `-scheme Fliks`); only the product name carries the space.
+        PRODUCT_NAME: Fliks Server
         PRODUCT_BUNDLE_IDENTIFIER: app.fliks.macos
         INFOPLIST_FILE: Fliks/Info.plist
         CODE_SIGN_ENTITLEMENTS: Fliks/Fliks.entitlements
@@ -34,5 +40,15 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: ""
     entitlements:
       path: Fliks/Fliks.entitlements
-      properties: {}
+      # These MUST live here: xcodegen regenerates the .plist at `path` from
+      # these properties on every `generate`, and CI runs `xcodegen generate`
+      # right before build-app.sh signs. An empty `properties: {}` emits an empty
+      # `<dict/>`, which would drop the entitlements the signed node needs.
+      properties:
+        # Node's V8 JIT under the hardened runtime (required for notarization).
+        com.apple.security.cs.allow-jit: true
+        com.apple.security.cs.allow-unsigned-executable-memory: true
+        # The bundled node / postgres / ffmpeg load relocated Homebrew dylibs;
+        # allow loading libraries not signed with this app's Team ID.
+        com.apple.security.cs.disable-library-validation: true
 

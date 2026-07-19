@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Create a distributable DMG from the built Fliks.app.
+# Create a distributable DMG from the built Fliks Server.app.
 #
 # Prerequisites: ./build-app.sh must have been run first.
 #
@@ -12,10 +12,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 BUILD_DIR="$(pwd)/build"
-APP_BUNDLE="$(find "$BUILD_DIR" -name "Fliks.app" -type d 2>/dev/null | head -1)"
+APP_BUNDLE="$(find "$BUILD_DIR" -name "Fliks Server.app" -type d 2>/dev/null | head -1)"
 
 if [ -z "$APP_BUNDLE" ] || [ ! -d "$APP_BUNDLE" ]; then
-    echo "Error: Fliks.app not found. Run ./Scripts/build-app.sh first."
+    echo "Error: Fliks Server.app not found. Run ./Scripts/build-app.sh first."
     exit 1
 fi
 
@@ -36,7 +36,7 @@ make_dmg_hdiutil() {
     cp -R "$APP_BUNDLE" "$staging/"
     ln -s /Applications "$staging/Applications"
     hdiutil create \
-        -volname "Fliks" \
+        -volname "Fliks Server" \
         -srcfolder "$staging" \
         -ov -format UDZO \
         "$DMG_PATH"
@@ -47,11 +47,11 @@ if command -v create-dmg &>/dev/null; then
     # create-dmg produces a nice DMG with icon layout and
     # a symlink to /Applications for drag-and-drop install.
     create-dmg \
-        --volname "Fliks" \
+        --volname "Fliks Server" \
         --window-pos 200 120 \
         --window-size 600 400 \
         --icon-size 100 \
-        --icon "Fliks.app" 150 190 \
+        --icon "Fliks Server.app" 150 190 \
         --app-drop-link 450 190 \
         --no-internet-enable \
         "$DMG_PATH" \
@@ -73,7 +73,7 @@ if [ -f "$DMG_PATH" ]; then
     SIZE="$(du -h "$DMG_PATH" | awk '{print $1}')"
     echo ""
     echo "==> DMG created: $DMG_PATH ($SIZE)"
-    echo "    To install: open the DMG and drag Fliks to Applications"
+    echo "    To install: open the DMG and drag Fliks Server to Applications"
 else
     echo "Error: DMG creation failed"
     exit 1
