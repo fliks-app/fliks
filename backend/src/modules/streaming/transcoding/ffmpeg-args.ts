@@ -411,6 +411,138 @@ export function perStreamAudioArgs(
   return out;
 }
 
+/**
+ * Audio track mapping + HLS muxer args — the terminal block of a video
+ * transcode. Two shapes: the EXT-X-MEDIA layout (`var_stream_map`, one FFmpeg
+ * process for video + every audio rendition, cut on the fps-aware grid) and the
+ * single muxed video+audio stream. Pure: consumes the resolved video map spec,
+ * audio plans and segment grid, returns the args to append.
+ */
+function buildAudioAndMuxerArgs(opts: {
+  videoMapSpec: string;
+  audioStreams: AudioStreamMeta[] | undefined;
+  videoOnly: boolean;
+  audioStreamIndex: number | undefined;
+  audioTrackPlans: BuildFfmpegArgsOptions['audioTrackPlans'];
+  audioArgs: string[];
+  audioBitrate: string;
+  useTs: boolean;
+  segType: string;
+  segExt: string;
+  realSeg: number;
+  segmentDuration: number;
+  startSegment: number;
+  outputDir: string;
+}): string[] {
+  const {
+    videoMapSpec,
+    audioStreams,
+    videoOnly,
+    audioStreamIndex,
+    audioTrackPlans,
+    audioArgs,
+    audioBitrate,
+    useTs,
+    segType,
+    segExt,
+    realSeg,
+    segmentDuration,
+    startSegment,
+    outputDir,
+  } = opts;
+  const args: string[] = [];
+
+  // Use var_stream_map whenever the caller asked for the EXT-X-MEDIA
+  // layout (`videoOnly + audioStreams[]`), even for a SINGLE audio
+  // track. Multi-audio was the original driver (Shaka switches
+  // client-side via EXT-X-MEDIA without a backend reload), but Samsung
+  // Tizen AVPlay's HLS-fMP4 parser ALSO requires the same shape on
+  // single-audio sources — Tizen muxed-fMP4 stalls silently
+  // (issue #148). The controller forces `videoOnly=true` even with
+  // 1 audio on fMP4 to trigger this branch.
+  const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
+  const useVarStreamMap =
+    !!audioStreams && varStreamMapLayout(videoOnly, audioStreams.length);
+
+  if (useVarStreamMap) {
+    // Single FFmpeg process for video + all audio renditions (perfect sync).
+    args.push('-map', videoMapSpec);
+    for (let i = 0; i < audioStreams!.length; i++) {
+      args.push('-map', audioMapSpec(audioStreams, i));
+    }
+    // Per-rendition audio (uniform output codec; copy or transcode per track).
+    // Falls back to the single `audioArgs` only when no plans were threaded.
+    const perStream = perStreamAudioArgs(
+      audioStreams!,
+      audioTrackPlans,
+      audioBitrate,
+    );
+    args.push(...(perStream ?? audioArgs));
+
+    // Build var_stream_map: "v:0,agroup:audio a:0,agroup:audio,language:fre ..."
+    const varParts = ['v:0,agroup:audio'];
+    for (let i = 0; i < audioStreams!.length; i++) {
+      const lang = audioStreams![i].language || 'und';
+      varParts.push(`a:${i},agroup:audio,language:${lang}`);
+    }
+
+    // Cut on the fps-aware grid (== the forced-IDR cadence and the playlist
+    // EXTINF), not the integer setting. On fractional-fps sources the audio
+    // renditions would otherwise be cut on the 3.0s grid while video IDRs land
+    // on 3.003s; the per-segment drift accumulates until the tfdt anchor snaps
+    // audio a whole segment late mid-film (sudden A/V desync).
+    args.push(
+      ...hlsMuxerArgs({
+        useTs,
+        hlsTime: String(realSeg),
+        startSegment,
+        segType,
+        initFilename: 'init_%v.mp4',
+        varStreamMap: varParts.join(' '),
+        segmentFilename: ffOutPath(outputDir, '%v', `seg-%04d.${segExt}`),
+        indexPath: ffOutPath(outputDir, '%v', 'index.m3u8'),
+      }),
+    );
+    return args;
+  }
+
+  // Standard single-stream output: video + one audio track muxed.
+  // When the user picked a track from the UI honour it; otherwise default
+  // to the first audio. Explicit -map skips ffmpeg's auto-pick of a
+  // subtitle stream — mandatory on sources with many subtitle tracks
+  // (some HEVC MKVs have 28+) where the parallel subrip→webvtt pipeline
+  // starves the VAAPI HEVC decoder buffer pool, making the early session
+  // loop on "thread_get_buffer() failed".
+  // Audio-less sources (silent video, corrupted track, etc.) must NOT
+  // emit a `-map` for audio — FFmpeg fails with "Stream map matches no
+  // streams" otherwise.
+  if (hasNoAudio(audioStreams)) {
+    args.push('-map', videoMapSpec, '-an');
+  } else {
+    const pickedRel = userPickedAudio ? audioStreamIndex! : 0;
+    args.push(
+      '-map',
+      videoMapSpec,
+      '-map',
+      audioMapSpec(audioStreams, pickedRel),
+    );
+    args.push(...audioArgs);
+  }
+
+  args.push(
+    ...hlsMuxerArgs({
+      useTs,
+      hlsTime: String(segmentDuration),
+      startSegment,
+      segType,
+      initFilename: 'init.mp4',
+      segmentFilename: ffOutPath(outputDir, `seg-%04d.${segExt}`),
+      indexPath: ffOutPath(outputDir, 'index.m3u8'),
+    }),
+  );
+  return args;
+}
+
 export function buildFfmpegArgs(
   opts: BuildFfmpegArgsOptions,
   log: Logger,
@@ -884,96 +1016,24 @@ export function buildFfmpegArgs(
     args.push(...colorTagArgs(sdrColor));
   }
 
-  // ── Audio mapping + HLS output ──
-  // Use var_stream_map whenever the caller asked for the EXT-X-MEDIA
-  // layout (`videoOnly + audioStreams[]`), even for a SINGLE audio
-  // track. Multi-audio was the original driver (Shaka switches
-  // client-side via EXT-X-MEDIA without a backend reload), but Samsung
-  // Tizen AVPlay's HLS-fMP4 parser ALSO requires the same shape on
-  // single-audio sources — Tizen muxed-fMP4 stalls silently
-  // (issue #148). The controller forces `videoOnly=true` even with
-  // 1 audio on fMP4 to trigger this branch.
-  const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
-  const useVarStreamMap =
-    !!audioStreams && varStreamMapLayout(videoOnly, audioStreams.length);
-
-  if (useVarStreamMap) {
-    // Single FFmpeg process for video + all audio renditions (perfect sync).
-    if (!args.some((a) => a === '-map')) {
-      args.push('-map', videoMapSpec);
-    }
-    for (let i = 0; i < audioStreams.length; i++) {
-      args.push('-map', audioMapSpec(audioStreams, i));
-    }
-    // Per-rendition audio (uniform output codec; copy or transcode per track).
-    // Falls back to the single `audioArgs` only when no plans were threaded.
-    const perStream = perStreamAudioArgs(
+  args.push(
+    ...buildAudioAndMuxerArgs({
+      videoMapSpec,
       audioStreams,
+      videoOnly,
+      audioStreamIndex,
       audioTrackPlans,
-      profile.audioBitrate,
-    );
-    args.push(...(perStream ?? audioArgs));
-
-    // Build var_stream_map: "v:0,agroup:audio a:0,agroup:audio,language:fre ..."
-    const varParts = ['v:0,agroup:audio'];
-    for (let i = 0; i < audioStreams.length; i++) {
-      const lang = audioStreams[i].language || 'und';
-      varParts.push(`a:${i},agroup:audio,language:${lang}`);
-    }
-
-    // Cut on the fps-aware grid (== the forced-IDR cadence and the playlist
-    // EXTINF), not the integer setting. On fractional-fps sources the audio
-    // renditions would otherwise be cut on the 3.0s grid while video IDRs land
-    // on 3.003s; the per-segment drift accumulates until the tfdt anchor snaps
-    // audio a whole segment late mid-film (sudden A/V desync).
-    args.push(
-      ...hlsMuxerArgs({
-        useTs,
-        hlsTime: String(realSeg),
-        startSegment,
-        segType,
-        initFilename: 'init_%v.mp4',
-        varStreamMap: varParts.join(' '),
-        segmentFilename: ffOutPath(outputDir, '%v', `seg-%04d.${segExt}`),
-        indexPath: ffOutPath(outputDir, '%v', 'index.m3u8'),
-      }),
-    );
-  } else {
-    // Standard single-stream output: video + one audio track muxed.
-    // When the user picked a track from the UI honour it; otherwise default
-    // to the first audio. Explicit -map skips ffmpeg's auto-pick of a
-    // subtitle stream — mandatory on sources with many subtitle tracks
-    // (some HEVC MKVs have 28+) where the parallel subrip→webvtt pipeline
-    // starves the VAAPI HEVC decoder buffer pool, making the early session
-    // loop on "thread_get_buffer() failed".
-    // Audio-less sources (silent video, corrupted track, etc.) must NOT
-    // emit a `-map` for audio — FFmpeg fails with "Stream map matches no
-    // streams" otherwise.
-    if (hasNoAudio(audioStreams)) {
-      args.push('-map', videoMapSpec, '-an');
-    } else {
-      const pickedRel = userPickedAudio ? audioStreamIndex! : 0;
-      args.push(
-        '-map',
-        videoMapSpec,
-        '-map',
-        audioMapSpec(audioStreams, pickedRel),
-      );
-      args.push(...audioArgs);
-    }
-
-    args.push(
-      ...hlsMuxerArgs({
-        useTs,
-        hlsTime: String(segmentDuration),
-        startSegment,
-        segType,
-        initFilename: 'init.mp4',
-        segmentFilename: ffOutPath(outputDir, `seg-%04d.${segExt}`),
-        indexPath: ffOutPath(outputDir, 'index.m3u8'),
-      }),
-    );
-  }
+      audioArgs,
+      audioBitrate: profile.audioBitrate,
+      useTs,
+      segType,
+      segExt,
+      realSeg,
+      segmentDuration,
+      startSegment,
+      outputDir,
+    }),
+  );
 
   return args;
 }
