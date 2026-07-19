@@ -35,6 +35,8 @@ import {
   TIMING_WARNING_KINDS,
 } from './ffmpeg-stderr';
 import { detectHwAccel } from './hw-detect';
+import { setSelectedRenderNode, vaapiRenderNode } from './hw-device';
+import { enumerateGpus, type GpuInfo } from './gpu-registry';
 import { ALL_DESCRIPTORS, encoderRegistry } from './codec/encoders';
 import { runEncoderProbes } from './codec/encoder-probe';
 import { ALL_DECODERS } from './codec/decoders';
@@ -69,6 +71,7 @@ import {
   computeProfileHash,
 } from './profile-hash';
 import { TranscodeCacheService } from './transcode-cache.service';
+import { StreamingSettingsCache } from '../streaming-settings-cache.service';
 import {
   VARIANT_EARLY,
   VARIANT_MAIN,
@@ -94,9 +97,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   private readonly locks = new Map<string, Promise<void>>();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private detectedHwAccel: HwAccelType = 'none';
+  private gpus: GpuInfo[] = [];
   constructor(
     private readonly cacheService: TranscodeCacheService,
     private readonly liveSessions: LiveSessionRegistry,
+    private readonly streamingSettings: StreamingSettingsCache,
   ) {}
 
   async onModuleInit() {
@@ -114,6 +119,24 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     this.detectedHwAccel = await detectHwAccel(this.log);
     this.log.log(`Hardware acceleration: ${this.detectedHwAccel}`);
+
+    this.gpus = enumerateGpus();
+    if (this.gpus.length > 1) {
+      this.log.log(
+        `GPUs detected: ${this.gpus.map((g) => g.label).join(' | ')}`,
+      );
+    }
+    // Apply the admin GPU pin before the encoder/decoder probes so they run on
+    // the selected adapter. Falls back to the default node on any read error.
+    try {
+      const { gpuRenderNode } = await this.streamingSettings.get();
+      setSelectedRenderNode(gpuRenderNode);
+      if (gpuRenderNode && gpuRenderNode !== 'auto') {
+        this.log.log(`GPU pinned to ${gpuRenderNode} (admin setting)`);
+      }
+    } catch {
+      /* settings unavailable at boot — keep the default node */
+    }
 
     // Probe every compiled-in encoder. Each runs a single black-frame
     // ffmpeg encode; the descriptors that fail to open are blacklisted
@@ -286,6 +309,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       out.push('opencl');
     }
     return out;
+  }
+
+  /** Detected GPUs + the render node "auto" currently resolves to, for the
+   *  admin device picker. Empty list on single-opaque-device hosts
+   *  (Windows/macOS, or a box with one render node) — the UI hides the row. */
+  getGpus(): { gpus: GpuInfo[]; defaultNode: string } {
+    return { gpus: this.gpus, defaultNode: vaapiRenderNode() };
   }
 
   getActiveSessions(): TranscodeSession[] {

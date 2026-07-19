@@ -70,6 +70,20 @@
       </div>
     }
 
+    <!-- GPU device pinning. Hidden on single-GPU hosts: nothing to choose. -->
+    @if (gpus().length > 1) {
+      <div class="form-control">
+        <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.gpu_device' | translate }}</span></label>
+        <select class="select select-bordered w-full" [ngModel]="gpuRenderNode()" (ngModelChange)="gpuRenderNode.set($event)">
+          <option value="auto">{{ 'settings.streaming.gpu_device_auto' | translate }}</option>
+          @for (g of gpus(); track g.renderNode) {
+            <option [value]="g.renderNode">{{ g.label }}</option>
+          }
+        </select>
+        <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.gpu_device_help' | translate }}</span></label>
+      </div>
+    }
+
     <!-- QSV advanced options (Intel Quick Sync only) -->
     <div class="divider">{{ 'settings.streaming.qsv_advanced' | translate }}</div>
 
