@@ -141,10 +141,11 @@ export interface BuildFfmpegArgsOptions {
   tonemapAlgo?: TonemapAlgo;
   sourceFps?: number;
   /** Source colorimetry (ffprobe names). An SDR transcode preserves these on
-   *  input and output; undefined/`unknown` falls back to BT.709. */
+   *  input and output; undefined/`unknown` falls back to BT.709 limited. */
   sourceColorSpace?: string;
   sourceColorPrimaries?: string;
   sourceColorTransfer?: string;
+  sourceColorRange?: string;
   /** HLS segment duration (seconds) this session cuts on. Sets the GOP length
    *  and the forced-IDR / seek grid. Defaults to {@link DEFAULT_SEGMENT_DURATION}
    *  when omitted. */
@@ -261,6 +262,7 @@ export function buildFfmpegArgs(
     sourceColorSpace,
     sourceColorPrimaries,
     sourceColorTransfer,
+    sourceColorRange,
     segmentDuration = DEFAULT_SEGMENT_DURATION,
     trustedStreamInfo = false,
     early = false,
@@ -662,6 +664,14 @@ export function buildFfmpegArgs(
   const outColorTransfer = tonemap
     ? 'bt709'
     : (sdrTag(sourceColorTransfer) ?? 'bt709');
+  // Range is `pc`/`tv` (or full/limited); preserve a signed full-range source,
+  // else limited (`tv`) — the near-universal SDR default and the safe fallback.
+  const rawRange = sourceColorRange?.toLowerCase();
+  const outColorRange = tonemap
+    ? 'tv'
+    : rawRange === 'pc' || rawRange === 'full' || rawRange === 'jpeg'
+      ? 'pc'
+      : 'tv';
 
   if (!isHdrOutput && !useVtMetalPath && !tonemap) {
     args.push(
@@ -672,7 +682,7 @@ export function buildFfmpegArgs(
       '-color_trc',
       outColorTransfer,
       '-color_range',
-      'tv',
+      outColorRange,
     );
   }
 
@@ -791,7 +801,7 @@ export function buildFfmpegArgs(
       '-colorspace',
       outColorSpace,
       '-color_range',
-      'tv',
+      outColorRange,
     );
   }
 

@@ -1644,6 +1644,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       sourceColorSpace: ctx?.sourceColorSpace,
       sourceColorPrimaries: ctx?.sourceColorPrimaries,
       sourceColorTransfer: ctx?.sourceColorTransfer,
+      sourceColorRange: ctx?.sourceColorRange,
       segmentDuration: ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
       trustedStreamInfo: ctx?.trustedStreamInfo,
       useTs: ctx?.useTs ?? false,

@@ -135,6 +135,7 @@ export interface SessionContext {
   sourceColorSpace?: string;
   sourceColorPrimaries?: string;
   sourceColorTransfer?: string;
+  sourceColorRange?: string;
   /** HLS segment duration (seconds) this session cuts on — read from the admin
    *  setting when the context is built and frozen onto the session, so the
    *  serve/seek grid stays fixed for the session's lifetime. */

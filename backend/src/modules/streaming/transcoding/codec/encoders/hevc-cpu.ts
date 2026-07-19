@@ -17,7 +17,7 @@ export const hevcCpu: EncoderDescriptor = {
   supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => hevcMainCodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, preset, filters } = input;
+    const { target, preset, filters, libx264BufsizeMb } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     return [
@@ -31,6 +31,8 @@ export const hevcCpu: EncoderDescriptor = {
       bitrate,
       '-maxrate',
       bitrate,
+      '-bufsize',
+      libx264BufsizeMb,
       '-vf',
       `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p${filters.burnInFilter}`,
       '-g',
@@ -58,7 +60,7 @@ export const hevcCpuHdr10: EncoderDescriptor = {
   supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => hevcMain10CodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, preset, filters } = input;
+    const { target, preset, filters, libx264BufsizeMb } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     const x265Params = [
@@ -83,6 +85,8 @@ export const hevcCpuHdr10: EncoderDescriptor = {
       bitrate,
       '-maxrate',
       bitrate,
+      '-bufsize',
+      libx264BufsizeMb,
       '-vf',
       `${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
       '-g',
@@ -110,7 +114,7 @@ export const hevcCpuHlg: EncoderDescriptor = {
   supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => hevcMain10CodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, preset, filters } = input;
+    const { target, preset, filters, libx264BufsizeMb } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     const x265Params = [
@@ -132,6 +136,8 @@ export const hevcCpuHlg: EncoderDescriptor = {
       bitrate,
       '-maxrate',
       bitrate,
+      '-bufsize',
+      libx264BufsizeMb,
       '-vf',
       `${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
       '-g',

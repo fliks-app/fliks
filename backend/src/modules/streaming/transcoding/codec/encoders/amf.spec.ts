@@ -153,8 +153,8 @@ describe('AMF encoders', () => {
       expect(trc).toBe(id.endsWith('hlg') ? 'arib-std-b67' : 'smpte2084');
     });
 
-    it('advertises HDR metadata support', () => {
-      expect(enc.supportsHdrMetadata()).toBe(true);
+    it('does not claim HDR static-metadata support (AMF writes no mdcv/clli)', () => {
+      expect(enc.supportsHdrMetadata()).toBe(false);
     });
   });
 

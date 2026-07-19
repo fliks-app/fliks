@@ -77,6 +77,7 @@ export class SessionContextBuilder {
       sourceColorSpace: si?.video?.[0]?.colorSpace,
       sourceColorPrimaries: si?.video?.[0]?.colorPrimaries,
       sourceColorTransfer: si?.video?.[0]?.colorTransfer,
+      sourceColorRange: si?.video?.[0]?.colorRange,
       // Admin segment-duration setting, snapshotted here and frozen onto the
       // session at spawn so the serve/seek grid never shifts under a live
       // session if the admin later changes it.
