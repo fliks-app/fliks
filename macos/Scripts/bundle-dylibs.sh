@@ -94,9 +94,12 @@ bundle_one() {
     done
 }
 
-# Collect all binaries to process.
+# Collect all binaries to process. Match executables (-perm +111) AND *.dylib
+# by name: the PostgreSQL extension libs (plpgsql, pg_trgm, …) ship as 0444
+# (no exec bit), so a -perm-only scan silently skips them and leaves their
+# Homebrew deps (gettext/libintl, …) unrelocated.
 if [ -d "$TARGET" ]; then
-    BINARIES="$(find "$TARGET" -type f -perm +111 2>/dev/null)"
+    BINARIES="$(find "$TARGET" -type f \( -perm +111 -o -name '*.dylib' \) 2>/dev/null)"
 else
     BINARIES="$TARGET"
 fi
