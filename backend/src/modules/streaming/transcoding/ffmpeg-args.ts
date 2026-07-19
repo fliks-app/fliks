@@ -570,6 +570,7 @@ function resolveDecodeStage(opts: {
   decodeArgs: string[];
   decoder: ReturnType<typeof decoderRegistry.resolve>;
   useVtMetalPath: boolean;
+  useVtHwTonemap: boolean;
 } {
   const {
     sourceVideoCodec,
@@ -628,13 +629,17 @@ function resolveDecodeStage(opts: {
   // input args here when the Metal fast path is eligible. The encoder
   // branches on `inputSurface === 'videotoolbox'` to pick the scale_vt
   // filter; falls back to the CPU tonemap chain otherwise.
-  const useVtMetalPath =
+  const vtSurfaceEligible =
     decoder.hwAccel === 'videotoolbox' &&
     (encoderId === 'h264_videotoolbox' || encoderId === 'hevc_videotoolbox') &&
     tonemap &&
-    !hasBurnInFilter &&
-    !hasCrop;
-  if (useVtMetalPath) {
+    !hasBurnInFilter;
+  // No crop: scale_vt keeps the SDR result on a VT surface. Crop: no VT crop
+  // filter exists, so the encoder tone-maps on the surface (tonemap_videotoolbox)
+  // then hwdownloads for the cheap CPU crop. Both need videotoolbox_vld input.
+  const useVtMetalPath = vtSurfaceEligible && !hasCrop;
+  const useVtHwTonemap = vtSurfaceEligible && hasCrop;
+  if (useVtMetalPath || useVtHwTonemap) {
     args.push('-hwaccel_output_format', 'videotoolbox_vld');
   }
 
@@ -694,7 +699,7 @@ function resolveDecodeStage(opts: {
     args.push(...openclTonemapInitArgs());
   }
 
-  return { decodeArgs: args, decoder, useVtMetalPath };
+  return { decodeArgs: args, decoder, useVtMetalPath, useVtHwTonemap };
 }
 
 /**
@@ -978,7 +983,8 @@ export function buildFfmpegArgs(
   // needs to land for encode (qsv-native + vpp_qsv, vaapi + scale_vaapi, CPU +
   // hwdownload). `useVaapiTonemap` / `tonemapPath` / `qsvNativeAvailable` come
   // from resolveEncodePipeline above.
-  const { decodeArgs, decoder, useVtMetalPath } = resolveDecodeStage({
+  const { decodeArgs, decoder, useVtMetalPath, useVtHwTonemap } =
+    resolveDecodeStage({
     sourceVideoCodec,
     qsvNativeAvailable,
     amfFullGpuAvailable,
@@ -1077,7 +1083,8 @@ export function buildFfmpegArgs(
     // decoder (via `-hwaccel_output_format videotoolbox_vld`) to emit
     // IOSurfaces in this particular session. The encoder branches on
     // this to pick scale_vt vs the CPU tonemap chain.
-    inputSurface: useVtMetalPath ? 'videotoolbox' : decoder.outputSurface,
+    inputSurface:
+      useVtMetalPath || useVtHwTonemap ? 'videotoolbox' : decoder.outputSurface,
   };
   args.push(...encoder.buildArgs(encoderInput));
 

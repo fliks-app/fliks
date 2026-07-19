@@ -17,11 +17,9 @@ mkdir -p "$VENDORED"
 NODE_VERSION="24.2.0"
 PG_VERSION="18"
 ARCH="arm64"
-# jellyfin-ffmpeg (GPL) — same FFmpeg 8.1 base and version as the Linux/Windows
-# servers (unified). Replaces the Homebrew bottle so macOS gets the same
-# libplacebo + HW tonemap filters (tonemap_opencl/videotoolbox with the DV RPU
-# `apply_dovi` path), so Dolby Vision Profile 5 tone-maps correctly instead of
-# rendering green/purple through the stock tonemap. Pin the exact tag.
+# jellyfin-ffmpeg (GPL) — FFmpeg 8.1 base shared with the Linux/Windows servers.
+# The macarm64 build ships VideoToolbox + OpenCL: zscale, tonemap_videotoolbox,
+# and tonemap_opencl (+ apply_dovi for DV P5). No libplacebo/Vulkan on macOS.
 FFMPEG_VERSION="8.1.2-1"
 
 echo "==> Fetching vendored binaries to $VENDORED"

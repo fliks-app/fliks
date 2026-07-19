@@ -39,19 +39,18 @@ export const hevcVideotoolbox: EncoderDescriptor = {
       '-tag:v',
       'hvc1',
     ];
-    // Full-Metal HDR pipeline: the orchestrator has set the decoder to
-    // emit videotoolbox_vld surfaces (`-hwaccel_output_format`), so
-    // `scale_vt` accepts the input directly and the entire chain runs
-    // on the Apple Media Engine — no CPU bounce. Only viable when no
-    // CPU-only filter (burn-in, crop) is required; the orchestrator
-    // checks those before flipping `inputSurface` to `'videotoolbox'`.
+    // VideoToolbox surface path (orchestrator set -hwaccel_output_format).
+    // No crop: scale_vt tone-maps + scales entirely on the Media Engine.
+    // Crop: no VT crop filter exists, so tone-map on the surface via
+    // tonemap_videotoolbox, then hwdownload for the cheap CPU crop + scale.
+    // Burn-in still takes the CPU fallback below.
     if (inputSurface === 'videotoolbox') {
-      return [
-        ...common,
-        '-vf',
-        `scale_vt=w=${w}:h=-2:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709`,
-        ...trailing,
-      ];
+      const vf = input.hasCrop
+        ? `tonemap_videotoolbox=tonemap=${input.tonemapCurve ?? 'hable'}:t=bt709:m=bt709:p=bt709:range=tv,` +
+          `hwdownload,format=p010le,${filters.cpuCropPrefix}` +
+          `scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p`
+        : `scale_vt=w=${w}:h=-2:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709`;
+      return [...common, '-vf', vf, ...trailing];
     }
     // CPU tonemap fallback — works on every macOS host even when the
     // Metal fast path is inapplicable (burn-in, crop, or a future
