@@ -156,10 +156,11 @@ actor NodeManager {
         ]
 
         for link in links {
-            // Remove stale symlink if it exists.
-            if fm.fileExists(atPath: link.target.path) {
-                try fm.removeItem(at: link.target)
-            }
+            // Remove any existing entry first. removeItem (unconditional) also
+            // clears a dangling symlink — one whose target no longer exists,
+            // e.g. left by a bundle previously installed at a different path —
+            // which fileExists(atPath:) misses because it resolves the target.
+            try? fm.removeItem(at: link.target)
             try fm.createSymbolicLink(at: link.target, withDestinationURL: link.source)
         }
     }
