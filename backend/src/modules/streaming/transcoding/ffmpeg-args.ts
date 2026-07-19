@@ -66,6 +66,43 @@ function ffOutPath(...parts: string[]): string {
   return parts.join('/').replace(/\\/g, '/');
 }
 
+/** The shared fMP4/TS HLS muxer tail. Every output path (transcode single /
+ *  var_stream_map, audio-only, remux) emits the same flags; they differ only in
+ *  the segment length, the init filename, the optional `-var_stream_map`, and
+ *  the segment/index paths. The index path is the last positional (the muxer
+ *  output). */
+function hlsMuxerArgs(o: {
+  useTs: boolean;
+  hlsTime: string;
+  startSegment: number;
+  segType: string;
+  initFilename: string;
+  varStreamMap?: string;
+  segmentFilename: string;
+  indexPath: string;
+}): string[] {
+  return [
+    ...(o.useTs ? [] : ['-movflags', '+cmaf']),
+    '-f',
+    'hls',
+    '-hls_time',
+    o.hlsTime,
+    '-hls_list_size',
+    '0',
+    '-start_number',
+    String(o.startSegment),
+    '-hls_segment_type',
+    o.segType,
+    ...(o.useTs ? [] : ['-hls_fmp4_init_filename', o.initFilename]),
+    '-hls_flags',
+    'independent_segments+temp_file',
+    ...(o.varStreamMap ? ['-var_stream_map', o.varStreamMap] : []),
+    '-hls_segment_filename',
+    o.segmentFilename,
+    o.indexPath,
+  ];
+}
+
 export interface BuildFfmpegArgsOptions {
   inputPath: string;
   profile: TranscodeProfile;
@@ -842,31 +879,22 @@ export function buildFfmpegArgs(
       varParts.push(`a:${i},agroup:audio,language:${lang}`);
     }
 
+    // Cut on the fps-aware grid (== the forced-IDR cadence and the playlist
+    // EXTINF), not the integer setting. On fractional-fps sources the audio
+    // renditions would otherwise be cut on the 3.0s grid while video IDRs land
+    // on 3.003s; the per-segment drift accumulates until the tfdt anchor snaps
+    // audio a whole segment late mid-film (sudden A/V desync).
     args.push(
-      ...(useTs ? [] : ['-movflags', '+cmaf']),
-      '-f',
-      'hls',
-      // Cut on the fps-aware grid (== the forced-IDR cadence and the playlist
-      // EXTINF), not the integer setting. On fractional-fps sources the audio
-      // renditions would otherwise be cut on the 3.0s grid while video IDRs land
-      // on 3.003s; the per-segment drift accumulates until the tfdt anchor snaps
-      // audio a whole segment late mid-film (sudden A/V desync).
-      '-hls_time',
-      String(realSeg),
-      '-hls_list_size',
-      '0',
-      '-start_number',
-      String(startSegment),
-      '-hls_segment_type',
-      segType,
-      ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init_%v.mp4']),
-      '-hls_flags',
-      'independent_segments+temp_file',
-      '-var_stream_map',
-      varParts.join(' '),
-      '-hls_segment_filename',
-      ffOutPath(outputDir, '%v', `seg-%04d.${segExt}`),
-      ffOutPath(outputDir, '%v', 'index.m3u8'),
+      ...hlsMuxerArgs({
+        useTs,
+        hlsTime: String(realSeg),
+        startSegment,
+        segType,
+        initFilename: 'init_%v.mp4',
+        varStreamMap: varParts.join(' '),
+        segmentFilename: ffOutPath(outputDir, '%v', `seg-%04d.${segExt}`),
+        indexPath: ffOutPath(outputDir, '%v', 'index.m3u8'),
+      }),
     );
   } else {
     // Standard single-stream output: video + one audio track muxed.
@@ -893,23 +921,15 @@ export function buildFfmpegArgs(
     }
 
     args.push(
-      ...(useTs ? [] : ['-movflags', '+cmaf']),
-      '-f',
-      'hls',
-      '-hls_time',
-      String(segmentDuration),
-      '-hls_list_size',
-      '0',
-      '-start_number',
-      String(startSegment),
-      '-hls_segment_type',
-      segType,
-      ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init.mp4']),
-      '-hls_segment_filename',
-      ffOutPath(outputDir, `seg-%04d.${segExt}`),
-      '-hls_flags',
-      'independent_segments+temp_file',
-      ffOutPath(outputDir, 'index.m3u8'),
+      ...hlsMuxerArgs({
+        useTs,
+        hlsTime: String(segmentDuration),
+        startSegment,
+        segType,
+        initFilename: 'init.mp4',
+        segmentFilename: ffOutPath(outputDir, `seg-%04d.${segExt}`),
+        indexPath: ffOutPath(outputDir, 'index.m3u8'),
+      }),
     );
   }
 
@@ -996,23 +1016,15 @@ export function buildAudioOnlyFfmpegArgs(
   args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
 
   args.push(
-    ...(useTs ? [] : ['-movflags', '+cmaf']),
-    '-f',
-    'hls',
-    '-hls_time',
-    String(realSeg),
-    '-hls_list_size',
-    '0',
-    '-start_number',
-    String(startSegment),
-    '-hls_segment_type',
-    segType,
-    ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init.mp4']),
-    '-hls_segment_filename',
-    ffOutPath(outputDir, `seg-%04d.${segExt}`),
-    '-hls_flags',
-    'independent_segments+temp_file',
-    ffOutPath(outputDir, 'index.m3u8'),
+    ...hlsMuxerArgs({
+      useTs,
+      hlsTime: String(realSeg),
+      startSegment,
+      segType,
+      initFilename: 'init.mp4',
+      segmentFilename: ffOutPath(outputDir, `seg-%04d.${segExt}`),
+      indexPath: ffOutPath(outputDir, 'index.m3u8'),
+    }),
   );
 
   return args;
@@ -1157,25 +1169,15 @@ export function buildRemuxArgs(
   }
 
   args.push(
-    '-movflags',
-    '+cmaf',
-    '-f',
-    'hls',
-    '-hls_time',
-    String(segmentDuration),
-    '-hls_list_size',
-    '0',
-    '-start_number',
-    String(startSegment),
-    '-hls_segment_type',
-    'fmp4',
-    '-hls_fmp4_init_filename',
-    'init.mp4',
-    '-hls_segment_filename',
-    ffOutPath(outputDir, 'seg-%04d.m4s'),
-    '-hls_flags',
-    'independent_segments+temp_file',
-    ffOutPath(outputDir, 'index.m3u8'),
+    ...hlsMuxerArgs({
+      useTs: false,
+      hlsTime: String(segmentDuration),
+      startSegment,
+      segType: 'fmp4',
+      initFilename: 'init.mp4',
+      segmentFilename: ffOutPath(outputDir, 'seg-%04d.m4s'),
+      indexPath: ffOutPath(outputDir, 'index.m3u8'),
+    }),
   );
 
   return args;
