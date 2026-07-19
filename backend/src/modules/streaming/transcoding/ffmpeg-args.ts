@@ -202,6 +202,27 @@ function buildAudioOutputArgs(
   ];
 }
 
+/**
+ * Output frame size for a rung: caps the *framed* source (post-crop when an
+ * auto-crop trimmed the picture, else the raw source) to the profile via
+ * {@link profileResolution}, so `vpp_qsv` / `scale_qsv` — which ignore the `-2`
+ * auto-height token — land the exact height the master playlist's RESOLUTION
+ * already advertises. Falls back to the profile's declared max when the source
+ * dimensions are unknown.
+ */
+function buildOutputDimensions(
+  profile: TranscodeProfile,
+  crop: { width: number; height: number } | undefined,
+  sourceWidth: number,
+  sourceHeight: number,
+): { width: number; height: number } {
+  const framedWidth = crop ? crop.width : sourceWidth;
+  const framedHeight = crop ? crop.height : sourceHeight;
+  return framedWidth > 0 && framedHeight > 0
+    ? profileResolution(profile, framedWidth, framedHeight)
+    : { width: profile.maxWidth, height: profile.maxHeight };
+}
+
 /** The four `-color_*` output/input flags for a resolved colorimetry. */
 function colorTagArgs(c: SdrColorTags): string[] {
   return [
@@ -491,26 +512,8 @@ export function buildFfmpegArgs(
     args.push('-ss', String(seekSeconds));
   }
 
-  // Output dimensions cap the source aspect to the profile's `maxWidth`.
-  // `vpp_qsv` / `scale_qsv` don't honour the `-2` auto-height token, so a
-  // 2.39:1 cinemascope title (1920×804) needs its height computed up front to
-  // land at 1920×804 instead of being stretched to 1920×1080 by an explicit
-  // `h=maxHeight`. The result matches the RESOLUTION attribute the master
-  // playlist already advertises for this rung — display aspect stays stable
-  // across the session even if the player re-parses the manifest. Resolved here
-  // (ahead of the bitrate) so the HEVC Main-tier clamp below can use it.
-  // When an auto-crop trims the source frame the encoder scales the CROPPED
-  // picture, so the output size must follow the crop dimensions — otherwise a
-  // horizontal (pillarbox) crop scales back up to the uncropped width and the
-  // bitstream's RESOLUTION and codec level overshoot what the master playlist
-  // declares for this rung (the master already sizes from the crop). A
-  // letterbox crop keeps the source width, so its output width is unchanged.
-  const framedWidth = crop ? crop.width : sourceWidth;
-  const framedHeight = crop ? crop.height : sourceHeight;
-  const outDims =
-    framedWidth > 0 && framedHeight > 0
-      ? profileResolution(profile, framedWidth, framedHeight)
-      : { width: profile.maxWidth, height: profile.maxHeight };
+  // Resolved ahead of the bitrate so the HEVC Main-tier clamp below sizes to it.
+  const outDims = buildOutputDimensions(profile, crop, sourceWidth, sourceHeight);
   const w = outDims.width;
   const h = outDims.height;
 
