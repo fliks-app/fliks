@@ -51,7 +51,6 @@ import {
 } from './codec/tonemap-opencl-probe';
 import { runOpenclTonemapProbe } from './codec/opencl-tonemap-probe';
 import { runQsvOpenclTonemapProbe } from './codec/qsv-opencl-probe';
-import { runLibplaceboDvProbe } from './codec/libplacebo-dv-probe';
 import { runScaleD3d11Probe } from './codec/scale-d3d11-probe';
 import {
   generateMasterPlaylist,
@@ -191,8 +190,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // Vulkan/libplacebo Dolby Vision P5 tonemap. Vendor-agnostic, so probe on
     // any non-macOS host; a GPU-less server fails device init fast (fail-closed).
     if (this.detectedHwAccel !== 'videotoolbox') {
-      void runLibplaceboDvProbe(this.log);
-    }
+      }
 
     // Tight cleanup cadence — paired with the live-session 30 s TTL +
     // 60 s job grace, this puts ffmpeg death within ~100 s of the last

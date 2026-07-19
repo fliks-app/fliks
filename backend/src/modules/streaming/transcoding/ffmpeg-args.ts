@@ -38,7 +38,6 @@ import { resolveEncodePipeline } from './encode-pipeline';
 import { openclTonemapInitArgs } from './hw-device';
 import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';
 import { isOpenclTonemapEnabled } from './codec/opencl-tonemap-probe';
-import { isLibplaceboDvEnabled } from './codec/libplacebo-dv-probe';
 import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
 
 /**
@@ -566,7 +565,6 @@ function resolveDecodeStage(opts: {
   useVaapiTonemap: boolean;
   openclTonemap: boolean;
   tonemapPath: string;
-  useDoviTonemap: boolean;
   useDoviOpenclTonemap: boolean;
 }): {
   decodeArgs: string[];
@@ -587,7 +585,6 @@ function resolveDecodeStage(opts: {
     useVaapiTonemap,
     openclTonemap,
     tonemapPath,
-    useDoviTonemap,
     useDoviOpenclTonemap,
   } = opts;
   const args: string[] = [];
@@ -691,11 +688,8 @@ function resolveDecodeStage(opts: {
       args.splice(fhd, 0, '-init_hw_device', 'opencl=ocl@dx');
     }
   }
-  if (useDoviTonemap) {
-    args.push('-init_hw_device', 'vulkan=vk:0', '-filter_hw_device', 'vk');
-  }
-  // OpenCL device for the DV RPU tone-map (`tonemap_opencl=apply_dovi`) when
-  // libplacebo can't (no libdovi). The CPU-decoded frame hwuploads onto it.
+  // OpenCL device for the DV Profile 5 RPU tone-map (`tonemap_opencl=apply_dovi`).
+  // The CPU-decoded frame hwuploads onto it.
   if (useDoviOpenclTonemap) {
     args.push(...openclTonemapInitArgs());
   }
@@ -915,23 +909,14 @@ export function buildFfmpegArgs(
   }
   const variant: CodecVariant = videoVariant;
   const isHdrOutput = variant.hdr !== null;
-  // Dolby Vision P5 tonemaps through the RPU-aware libplacebo (Vulkan) chain,
-  // on CPU decode/encode, only when the boot probe confirmed it works (#636).
-  const useDoviTonemap =
-    !!tonemap &&
-    sourceDvProfile === 5 &&
-    (sourceDvBlSignalCompatId === 0 || sourceDvBlSignalCompatId == null) &&
-    isLibplaceboDvEnabled();
-  // DV Profile 5 without a libdovi-enabled libplacebo (the Windows / macOS
-  // builds, or Linux without the overlay): apply the RPU in the OpenCL tone-map
-  // filter (`tonemap_opencl=apply_dovi=1`) instead. The RPU is exposed as frame
-  // side-data by the software HEVC decoder, so — like the libplacebo path — this
-  // forces CPU decode, then hwupload → tonemap_opencl → hwdownload.
+  // Dolby Vision Profile 5 (IPT-PQ-C2, no HDR10 base) applies its RPU in the
+  // OpenCL tone-map filter (`tonemap_opencl=apply_dovi=1`). The RPU is exposed
+  // as frame side-data by the software HEVC decoder, so this forces CPU decode,
+  // then hwupload → tonemap_opencl → hwdownload.
   const useDoviOpenclTonemap =
     !!tonemap &&
     sourceDvProfile === 5 &&
     (sourceDvBlSignalCompatId === 0 || sourceDvBlSignalCompatId == null) &&
-    !useDoviTonemap &&
     isOpenclTonemapEnabled();
 
   // Image-based subtitle burn-in (PGS/VOBSUB) is composited via -filter_complex
@@ -952,7 +937,7 @@ export function buildFfmpegArgs(
     useVaapiTonemap,
     amfFullGpuAvailable,
   } = resolveEncodePipeline(variant, {
-    hwAccel: useDoviTonemap || useDoviOpenclTonemap ? 'none' : hwAccel,
+    hwAccel: useDoviOpenclTonemap ? 'none' : hwAccel,
     crop: !!crop,
     burnIn: !!burnIn?.filter,
     tonemap: !!tonemap,
@@ -1007,7 +992,6 @@ export function buildFfmpegArgs(
     useVaapiTonemap,
     openclTonemap,
     tonemapPath,
-    useDoviTonemap,
     useDoviOpenclTonemap,
   });
   args.push(...decodeArgs);
@@ -1076,7 +1060,6 @@ export function buildFfmpegArgs(
       tonemap,
       useVaapiTonemap,
       sourceBitDepth,
-      dovi: useDoviTonemap,
       doviOpencl: useDoviOpenclTonemap,
       tonemapCurve,
       scaleWidth: w,
