@@ -3,8 +3,8 @@
 # Build a self-contained Fliks Server.app bundle with all dependencies.
 #
 # Prerequisites:
-#   1. brew install xcodegen postgresql@18 ffmpeg
-#   2. ./Scripts/fetch-vendored.sh  (for Node.js 24 arm64)
+#   1. brew install xcodegen postgresql@18
+#   2. ./Scripts/fetch-vendored.sh  (Node.js 24 + jellyfin-ffmpeg, arm64)
 #   3. Xcode 16+ with command line tools
 #
 # Usage: ./build-app.sh [--skip-web] [--skip-xcode]
@@ -36,20 +36,21 @@ if [ ! -x "$VENDORED/node/bin/node" ]; then
     exit 1
 fi
 
-for tool in ffmpeg psql; do
-    if ! command -v $tool &>/dev/null; then
-        echo "Error: $tool not found. Run: brew install postgresql@18 ffmpeg"
-        exit 1
-    fi
-done
+if ! command -v psql &>/dev/null; then
+    echo "Error: psql not found. Run: brew install postgresql@18"
+    exit 1
+fi
+if [ ! -x "$VENDORED/ffmpeg/bin/ffmpeg" ]; then
+    echo "Error: Vendored ffmpeg not found. Run ./Scripts/fetch-vendored.sh first."
+    exit 1
+fi
 
 PG_PREFIX="$(brew --prefix postgresql@18)"
-FF_PREFIX="$(brew --prefix ffmpeg)"
 
 echo "==> Build configuration"
 echo "    Node.js:    $VENDORED/node/bin/node ($($VENDORED/node/bin/node --version))"
 echo "    PostgreSQL: $PG_PREFIX ($($PG_PREFIX/bin/postgres --version | awk '{print $NF}'))"
-echo "    FFmpeg:     $FF_PREFIX ($(ffmpeg -version 2>&1 | head -1 | awk '{print $3}'))"
+echo "    FFmpeg:     $VENDORED/ffmpeg/bin/ffmpeg ($("$VENDORED/ffmpeg/bin/ffmpeg" -version 2>&1 | head -1 | awk '{print $3}'))"
 echo ""
 
 # ── Build web apps ──
@@ -156,14 +157,10 @@ if [ -d "$RESOURCES/postgres/lib/postgresql" ]; then
     bash "$SCRIPTS_DIR/bundle-dylibs.sh" "$RESOURCES/postgres/lib/postgresql" "$RESOURCES/postgres/lib"
 fi
 
-# ── FFmpeg (from Homebrew installed, needs dylib bundling) ──
-echo "    [ffmpeg] Copying FFmpeg..."
-mkdir -p "$RESOURCES/ffmpeg/bin" "$RESOURCES/ffmpeg/lib"
-cp "$FF_PREFIX/bin/ffmpeg" "$RESOURCES/ffmpeg/bin/"
-[ -f "$FF_PREFIX/bin/ffprobe" ] && cp "$FF_PREFIX/bin/ffprobe" "$RESOURCES/ffmpeg/bin/"
-
-# Bundle Homebrew dylib dependencies for ffmpeg.
-bash "$SCRIPTS_DIR/bundle-dylibs.sh" "$RESOURCES/ffmpeg/bin" "$RESOURCES/ffmpeg/lib"
+# ── FFmpeg (vendored jellyfin-ffmpeg, statically linked — no dylib fixup) ──
+echo "    [ffmpeg] Copying jellyfin-ffmpeg..."
+mkdir -p "$RESOURCES/ffmpeg/bin"
+cp -R "$VENDORED/ffmpeg/bin/"* "$RESOURCES/ffmpeg/bin/"
 
 # ── Backend ──
 echo "    [backend] Copying NestJS backend..."
@@ -238,6 +235,16 @@ if [ -n "$stray" ]; then
     exit 1
 fi
 echo "    [verify] no bundled binary references /opt/homebrew"
+
+# 3. ffmpeg must have zscale (libzimg) + the VideoToolbox tone-map — the HDR
+#    paths (crop / burn-in / DV) depend on them.
+for filt in zscale tonemap_videotoolbox; do
+    if ! "$RESOURCES/ffmpeg/bin/ffmpeg" -hide_banner -filters 2>/dev/null | grep -qw "$filt"; then
+        echo "Error: bundled ffmpeg is missing the '$filt' filter (expected jellyfin-ffmpeg)."
+        exit 1
+    fi
+done
+echo "    [verify] ffmpeg has zscale + tonemap_videotoolbox"
 
 echo ""
 echo "==> Build complete: $APP_BUNDLE"

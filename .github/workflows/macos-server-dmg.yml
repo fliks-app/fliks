@@ -54,8 +54,9 @@ jobs:
             backend/package-lock.json
 
       # ── Homebrew dependencies ──
+      # ffmpeg is not installed here — fetch-vendored.sh downloads jellyfin-ffmpeg.
       - name: Install Homebrew dependencies
-        run: brew install postgresql@18 ffmpeg xcodegen create-dmg
+        run: brew install postgresql@18 xcodegen create-dmg
 
       # ── Fetch vendored Node.js 24 (arm64) ──
       - name: Fetch vendored binaries
