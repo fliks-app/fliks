@@ -103,6 +103,119 @@ function hlsMuxerArgs(o: {
   ];
 }
 
+export interface SdrColorTags {
+  space: string;
+  primaries: string;
+  transfer: string;
+  range: string;
+}
+
+/** The SDR output colorimetry to signal. Preserve the source's real tags for an
+ *  SDR→SDR transcode; a tone-mapped HDR→SDR output is BT.709 (the tone-map
+ *  targets it). Each untagged axis falls back to BT.709 limited — an unsigned
+ *  output VUI stalls Android Media3's cold decoder init. */
+export function resolveSdrColorTags(
+  tonemap: boolean,
+  source: {
+    space?: string;
+    primaries?: string;
+    transfer?: string;
+    range?: string;
+  },
+): SdrColorTags {
+  const tag = (v?: string): string | undefined =>
+    v && v !== 'unknown' && v !== 'reserved' ? v : undefined;
+  const rawRange = source.range?.toLowerCase();
+  return {
+    space: tonemap ? 'bt709' : (tag(source.space) ?? 'bt709'),
+    primaries: tonemap ? 'bt709' : (tag(source.primaries) ?? 'bt709'),
+    transfer: tonemap ? 'bt709' : (tag(source.transfer) ?? 'bt709'),
+    range: tonemap
+      ? 'tv'
+      : rawRange === 'pc' || rawRange === 'full' || rawRange === 'jpeg'
+        ? 'pc'
+        : 'tv',
+  };
+}
+
+export interface SegmentGrid {
+  /** Source fps (24 fallback when unknown). */
+  fps: number;
+  /** GOP = round(segmentDuration × fps) frames — one IDR per segment. */
+  gopSize: number;
+  /** Real segment length on the wire (gop/fps). The seek grid, the force-IDR
+   *  cadence, the playlist EXTINF and the fMP4 tfdt all anchor on this so they
+   *  agree on fractional-fps sources. Equals segmentDuration for integer fps. */
+  realSeg: number;
+  /** Resume point (source seconds) for a mid-file seek (`startSegment > 0`). */
+  seekSeconds: number;
+  /** `force_key_frames` expression, anchored on the run-relative seek time. */
+  forceKeyframesExpr: string;
+}
+
+/** Resolve the segment/IDR grid every downstream arg anchors on. ffmpeg
+ *  evaluates the `force_key_frames` expr's `t` relative to the first frame of
+ *  the current run (not source time), so on a seek-resume the first forced tick
+ *  only lands after `seekSeconds` of output; the GOP (`-g gopSize`) keeps cuts
+ *  on the grid through that window. */
+export function buildSegmentGrid(
+  segmentDuration: number,
+  sourceFps: number | undefined,
+  startSegment: number,
+): SegmentGrid {
+  const fps = sourceFps && sourceFps > 0 ? sourceFps : 24;
+  const gopSize = Math.max(1, Math.round(segmentDuration * fps));
+  const realSeg = realSegmentSeconds(segmentDuration, sourceFps);
+  const seekSeconds =
+    startSegment > 0
+      ? segmentIndexToSeconds(startSegment, segmentDuration, sourceFps)
+      : 0;
+  return {
+    fps,
+    gopSize,
+    realSeg,
+    seekSeconds,
+    forceKeyframesExpr: `expr:gte(t,${seekSeconds}+n_forced*${realSeg})`,
+  };
+}
+
+/** Audio output args from the stream-builder decision — emitted verbatim, no
+ *  re-derivation. Copy passes through; a transcode plan re-encodes to its codec
+ *  (EAC-3/AC-3 downmixed to the 6-channel encoder ceiling); the fallback for a
+ *  missing plan is AAC stereo. */
+function buildAudioOutputArgs(
+  profile: TranscodeProfile,
+  audioPlan: BuildFfmpegArgsOptions['audioPlan'],
+): string[] {
+  if (audioPlan?.mode === 'copy') return ['-c:a', 'copy'];
+  const codec = audioPlan?.mode === 'transcode' ? audioPlan.codec : 'aac';
+  if (codec === 'aac') {
+    return ['-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2'];
+  }
+  return [
+    '-c:a',
+    codec,
+    '-b:a',
+    `${SURROUND_TRANSCODE_BITRATE_BPS / 1000}k`,
+    '-ac',
+    '6',
+  ];
+}
+
+/** The four `-color_*` output/input flags for a resolved colorimetry. */
+function colorTagArgs(c: SdrColorTags): string[] {
+  return [
+    '-color_primaries',
+    c.primaries,
+    '-color_trc',
+    c.transfer,
+    '-colorspace',
+    c.space,
+    '-color_range',
+    c.range,
+  ];
+}
+
 export interface BuildFfmpegArgsOptions {
   inputPath: string;
   profile: TranscodeProfile;
@@ -323,52 +436,10 @@ export function buildFfmpegArgs(
   const segType = useTs ? 'mpegts' : 'fmp4';
   const segExt = useTs ? 'ts' : 'm4s';
 
-  // Audio output args derived from the stream-builder decision. No
-  // re-derivation here — we just emit what we were told. Safe fallback to
-  // AAC stereo when no plan is supplied (legacy call sites).
-  const audioArgs: string[] = (() => {
-    if (audioPlan?.mode === 'copy') return ['-c:a', 'copy'];
-    const codec = audioPlan?.mode === 'transcode' ? audioPlan.codec : 'aac';
-    if (codec === 'aac') {
-      return ['-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2'];
-    }
-    // EAC-3 / AC-3 at the surround ceiling, downmixed to 5.1 (the encoders'
-    // max): keeps surround within the device cap and stops a 7.1 source from
-    // failing to open (FFmpeg's eac3/ac3 encoders reject > 6 channels).
-    return [
-      '-c:a',
-      codec,
-      '-b:a',
-      `${SURROUND_TRANSCODE_BITRATE_BPS / 1000}k`,
-      '-ac',
-      '6',
-    ];
-  })();
+  const audioArgs = buildAudioOutputArgs(profile, audioPlan);
 
-  // GOP = segment_duration × fps so each segment starts exactly on an IDR.
-  // Fallback to 24 fps when source fps is unknown (safe for most content).
-  const fps = sourceFps && sourceFps > 0 ? sourceFps : 24;
-  const gopSize = Math.max(1, Math.round(segmentDuration * fps));
-  // Real segment length on the wire (gop/fps). The seek grid, the force-IDR
-  // cadence, the playlist EXTINF and the fMP4 tfdt all anchor on this so they
-  // agree on fractional-fps sources. Equals segmentDuration for integer fps.
-  const realSeg = realSegmentSeconds(segmentDuration, sourceFps);
-
-  // Resume point for mid-file seek (`startSegment > 0`). The HLS-fMP4 muxer
-  // restarts each run's fragment timeline at tfdt 0; the serve-time anchor
-  // (SegmentPackagingService) rebases every served segment back onto the single
-  // absolute presentation grid, so a resumed run splices seamlessly.
-  const seekSeconds =
-    startSegment > 0
-      ? segmentIndexToSeconds(startSegment, segmentDuration, sourceFps)
-      : 0;
-
-  // Force an IDR every `realSeg` seconds so the HLS muxer cuts on the same grid
-  // the playlist declares. ffmpeg evaluates the expression's `t` relative to the
-  // first frame of THIS run, not source time — so on a seek-resume the first
-  // forced tick only lands after `seekSeconds` of output. The GOP (`-g gopSize`,
-  // set by every encoder descriptor) keeps cuts on the grid through that window.
-  const forceKeyframesExpr = `expr:gte(t,${seekSeconds}+n_forced*${realSeg})`;
+  const { fps, gopSize, realSeg, seekSeconds, forceKeyframesExpr } =
+    buildSegmentGrid(segmentDuration, sourceFps, startSegment);
   // Closed-GOP, deterministic IDR placement on h264_qsv:
   //  - `-forced_idr 1` : every `force_key_frames` tick lands as a real
   //    IDR (without it, qsvenc emits some as plain I, breaking HLS
@@ -685,42 +756,18 @@ export function buildFfmpegArgs(
     args.push('-init_hw_device', 'vulkan=vk:0', '-filter_hw_device', 'vk');
   }
 
-  // SDR colorimetry to signal on the output. Preserve the source's real
-  // matrix / primaries / transfer for an SDR→SDR transcode; a tone-mapped
-  // HDR→SDR output is BT.709 (the tone-map targets it). Untagged sources fall
-  // back to BT.709. Declaring it on the input too (SDR sources only) keeps the
+  // Declaring the SDR colorimetry on the input (SDR sources only) keeps the
   // output tags a no-op override instead of a color-matrix conversion — one the
   // HW scale filters (vpp_qsv / scale_vaapi / scale_cuda) can't run on a
   // same-size pass.
-  const sdrTag = (v?: string): string | undefined =>
-    v && v !== 'unknown' && v !== 'reserved' ? v : undefined;
-  const outColorSpace = tonemap ? 'bt709' : (sdrTag(sourceColorSpace) ?? 'bt709');
-  const outColorPrimaries = tonemap
-    ? 'bt709'
-    : (sdrTag(sourceColorPrimaries) ?? 'bt709');
-  const outColorTransfer = tonemap
-    ? 'bt709'
-    : (sdrTag(sourceColorTransfer) ?? 'bt709');
-  // Range is `pc`/`tv` (or full/limited); preserve a signed full-range source,
-  // else limited (`tv`) — the near-universal SDR default and the safe fallback.
-  const rawRange = sourceColorRange?.toLowerCase();
-  const outColorRange = tonemap
-    ? 'tv'
-    : rawRange === 'pc' || rawRange === 'full' || rawRange === 'jpeg'
-      ? 'pc'
-      : 'tv';
-
+  const sdrColor = resolveSdrColorTags(tonemap, {
+    space: sourceColorSpace,
+    primaries: sourceColorPrimaries,
+    transfer: sourceColorTransfer,
+    range: sourceColorRange,
+  });
   if (!isHdrOutput && !useVtMetalPath && !tonemap) {
-    args.push(
-      '-colorspace',
-      outColorSpace,
-      '-color_primaries',
-      outColorPrimaries,
-      '-color_trc',
-      outColorTransfer,
-      '-color_range',
-      outColorRange,
-    );
+    args.push(...colorTagArgs(sdrColor));
   }
 
   args.push('-i', inputPath);
@@ -817,9 +864,8 @@ export function buildFfmpegArgs(
   }
   const videoMapSpec = imageBurnIn ? '[vout]' : '0:v:0';
 
-  // Sign the SDR output's colorimetry ({@link outColorSpace} etc.: the source's
-  // real tags for an SDR→SDR transcode, BT.709 for a tone-mapped or untagged
-  // source). Two failure modes this prevents:
+  // Sign the SDR output's colorimetry (`sdrColor`: the source's real tags, or
+  // BT.709 for a tone-mapped / untagged source). Two failure modes this prevents:
   //  1. A tone-mapped HDR→SDR encoder can carry the source BT.2020/PQ tags into
   //     the SPS — SDR pixels signalling HDR (iOS AVPlayer -12927, wrong gamut
   //     elsewhere). `tonemap` forces BT.709 here.
@@ -830,16 +876,7 @@ export function buildFfmpegArgs(
   // metadata and the extra `-color_*` flags re-trigger a CPU `auto_scale` that
   // fails (-78) with no bridge back to a videotoolbox_vld surface.
   if (!isHdrOutput && !useVtMetalPath) {
-    args.push(
-      '-color_primaries',
-      outColorPrimaries,
-      '-color_trc',
-      outColorTransfer,
-      '-colorspace',
-      outColorSpace,
-      '-color_range',
-      outColorRange,
-    );
+    args.push(...colorTagArgs(sdrColor));
   }
 
   // ── Audio mapping + HLS output ──
