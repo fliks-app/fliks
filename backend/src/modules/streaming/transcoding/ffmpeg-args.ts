@@ -1172,10 +1172,10 @@ export function buildRemuxArgs(
     '-hls_fmp4_init_filename',
     'init.mp4',
     '-hls_segment_filename',
-    path.join(outputDir, 'seg-%04d.m4s'),
+    ffOutPath(outputDir, 'seg-%04d.m4s'),
     '-hls_flags',
     'independent_segments+temp_file',
-    path.join(outputDir, 'index.m3u8'),
+    ffOutPath(outputDir, 'index.m3u8'),
   );
 
   return args;
