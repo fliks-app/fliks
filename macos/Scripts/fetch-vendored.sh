@@ -17,6 +17,12 @@ mkdir -p "$VENDORED"
 NODE_VERSION="24.2.0"
 PG_VERSION="18"
 ARCH="arm64"
+# jellyfin-ffmpeg (GPL) — same FFmpeg 8.1 base and version as the Linux/Windows
+# servers (unified). Replaces the Homebrew bottle so macOS gets the same
+# libplacebo + HW tonemap filters (tonemap_opencl/videotoolbox with the DV RPU
+# `apply_dovi` path), so Dolby Vision Profile 5 tone-maps correctly instead of
+# rendering green/purple through the stock tonemap. Pin the exact tag.
+FFMPEG_VERSION="8.1.2-1"
 
 echo "==> Fetching vendored binaries to $VENDORED"
 
@@ -77,49 +83,35 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────
-# FFmpeg — with VideoToolbox support
+# FFmpeg — jellyfin-ffmpeg (VideoToolbox + libplacebo + DV tonemap)
 # ─────────────────────────────────────────────────────────────
 if [ -x "$VENDORED/ffmpeg/bin/ffmpeg" ]; then
     echo "    [skip] FFmpeg already present"
 else
-    echo "    [fetch] FFmpeg via Homebrew..."
+    echo "    [fetch] FFmpeg (jellyfin-ffmpeg ${FFMPEG_VERSION}, ${ARCH})..."
     TMP_FF="$(mktemp -d)"
 
-    brew fetch ffmpeg 2>/dev/null
+    # portable_macarm64 / portable_mac64 tarball ships self-contained ffmpeg +
+    # ffprobe binaries (no external dylib closure).
+    FF_SLUG="$([ "$ARCH" = "arm64" ] && echo macarm64 || echo mac64)"
+    FF_URL="https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v${FFMPEG_VERSION}/jellyfin-ffmpeg_${FFMPEG_VERSION}_portable_${FF_SLUG}-gpl.tar.xz"
+    echo "    [fetch] ${FF_URL}"
+    curl -fsSL "$FF_URL" -o "$TMP_FF/ffmpeg.tar.xz"
+    tar xJf "$TMP_FF/ffmpeg.tar.xz" -C "$TMP_FF"
 
-    BOTTLE_PATH="$(find "$(brew --cache)" -name "ffmpeg--*.tar.gz" -type f 2>/dev/null | sort -t- -k3 -rV | head -1)"
-    if [ -z "$BOTTLE_PATH" ] || [ ! -f "$BOTTLE_PATH" ]; then
-        BOTTLE_PATH="$(brew --cache ffmpeg)"
-    fi
-    mkdir -p "$VENDORED/ffmpeg/bin"
-    tar xzf "$BOTTLE_PATH" -C "$TMP_FF"
-
-    FF_BIN="$(find "$TMP_FF" -name "ffmpeg" -type f | head -1)"
+    FF_BIN="$(find "$TMP_FF" -name ffmpeg -type f | head -1)"
     if [ -z "$FF_BIN" ]; then
-        echo "    [error] Could not locate ffmpeg binary in bottle"
+        echo "    [error] ffmpeg not found in $FF_URL"
         rm -rf "$TMP_FF"
         exit 1
     fi
-
-    cp "$FF_BIN" "$VENDORED/ffmpeg/bin/ffmpeg"
-    chmod +x "$VENDORED/ffmpeg/bin/ffmpeg"
-
-    # Also grab ffprobe if present.
-    FF_PROBE="$(find "$TMP_FF" -name "ffprobe" -type f | head -1)"
-    if [ -n "$FF_PROBE" ]; then
-        cp "$FF_PROBE" "$VENDORED/ffmpeg/bin/ffprobe"
-        chmod +x "$VENDORED/ffmpeg/bin/ffprobe"
-    fi
-
-    # Copy shared libraries that ffmpeg needs.
-    FF_LIB_DIR="$(dirname "$FF_BIN")/../lib"
-    if [ -d "$FF_LIB_DIR" ]; then
-        mkdir -p "$VENDORED/ffmpeg/lib"
-        cp -R "$FF_LIB_DIR/"* "$VENDORED/ffmpeg/lib/" 2>/dev/null || true
-    fi
+    # Copy the whole binary dir (ffmpeg/ffprobe + any bundled dylibs).
+    mkdir -p "$VENDORED/ffmpeg/bin"
+    cp -R "$(dirname "$FF_BIN")/"* "$VENDORED/ffmpeg/bin/"
+    chmod +x "$VENDORED/ffmpeg/bin/ffmpeg" "$VENDORED/ffmpeg/bin/ffprobe" 2>/dev/null || true
 
     rm -rf "$TMP_FF"
-    echo "    [done] FFmpeg"
+    echo "    [done] FFmpeg (jellyfin-ffmpeg gpl)"
 fi
 
 echo ""
