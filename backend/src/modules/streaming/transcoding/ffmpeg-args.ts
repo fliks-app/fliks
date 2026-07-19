@@ -149,15 +149,17 @@ export interface SegmentGrid {
   realSeg: number;
   /** Resume point (source seconds) for a mid-file seek (`startSegment > 0`). */
   seekSeconds: number;
-  /** `force_key_frames` expression, anchored on the run-relative seek time. */
+  /** `force_key_frames` expression — a forced IDR at every run-relative segment
+   *  boundary. */
   forceKeyframesExpr: string;
 }
 
 /** Resolve the segment/IDR grid every downstream arg anchors on. ffmpeg
- *  evaluates the `force_key_frames` expr's `t` relative to the first frame of
- *  the current run (not source time), so on a seek-resume the first forced tick
- *  only lands after `seekSeconds` of output; the GOP (`-g gopSize`) keeps cuts
- *  on the grid through that window. */
+ *  evaluates the `force_key_frames` expr's `t` run-relative (0-based per run)
+ *  even under `-copyts`, so the forced-IDR cadence is anchored at
+ *  `n_forced*realSeg` — a forced IDR on every segment boundary from the first
+ *  frame of the run, giving the HLS muxer a clean keyframe cut at each boundary
+ *  including the first. */
 export function buildSegmentGrid(
   segmentDuration: number,
   sourceFps: number | undefined,
@@ -175,7 +177,7 @@ export function buildSegmentGrid(
     gopSize,
     realSeg,
     seekSeconds,
-    forceKeyframesExpr: `expr:gte(t,${seekSeconds}+n_forced*${realSeg})`,
+    forceKeyframesExpr: `expr:gte(t,n_forced*${realSeg})`,
   };
 }
 
