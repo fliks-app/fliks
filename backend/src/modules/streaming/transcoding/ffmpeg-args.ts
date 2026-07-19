@@ -543,6 +543,220 @@ function buildAudioAndMuxerArgs(opts: {
   return args;
 }
 
+/**
+ * Decode stage: resolve the decoder (how the source is brought into memory —
+ * HW device init + `-hwaccel`) via the registry, then emit the matching input
+ * args and the tone-map device bridges: OpenCL for the VAAPI / NVENC / AMF
+ * chains, the Windows QSV D3D11→OpenCL zero-copy repoint, and Vulkan for the
+ * Dolby Vision libplacebo path. Returns the input args to append plus the
+ * resolved `decoder` and whether the VideoToolbox Metal fast path is active —
+ * both consumed downstream by the encoder stage.
+ */
+function resolveDecodeStage(opts: {
+  sourceVideoCodec: string | undefined;
+  qsvNativeAvailable: boolean;
+  amfFullGpuAvailable: boolean;
+  effectiveHwAccel: HwAccelType;
+  decodeHwAccel: HwAccelType;
+  sourceBitDepth: BitDepth;
+  encoderId: string;
+  tonemap: boolean;
+  hasBurnInFilter: boolean;
+  hasCrop: boolean;
+  useVaapiTonemap: boolean;
+  openclTonemap: boolean;
+  tonemapPath: string;
+  useDoviTonemap: boolean;
+}): {
+  decodeArgs: string[];
+  decoder: ReturnType<typeof decoderRegistry.resolve>;
+  useVtMetalPath: boolean;
+} {
+  const {
+    sourceVideoCodec,
+    qsvNativeAvailable,
+    amfFullGpuAvailable,
+    effectiveHwAccel,
+    decodeHwAccel,
+    sourceBitDepth,
+    encoderId,
+    tonemap,
+    hasBurnInFilter,
+    hasCrop,
+    useVaapiTonemap,
+    openclTonemap,
+    tonemapPath,
+    useDoviTonemap,
+  } = opts;
+  const args: string[] = [];
+
+  const normalisedSourceCodec = normaliseSourceCodec(sourceVideoCodec);
+  // Opt into the qsv-native decoder when the qsv crop path is in use
+  // (pre-flighted above so requestedHwAccelFor could keep us on QSV).
+  // The default qsv decoder emits VAAPI surfaces — kept as the safe
+  // baseline for every other QSV path.
+  const decoder: ReturnType<typeof decoderRegistry.resolve> =
+    qsvNativeAvailable && effectiveHwAccel === 'qsv' && normalisedSourceCodec
+      ? (findQsvNativeDecoder(normalisedSourceCodec) ??
+        decoderRegistry.resolve(
+          {
+            codec: normalisedSourceCodec,
+            bitDepth: sourceBitDepth,
+          },
+          effectiveHwAccel,
+        ))
+      : amfFullGpuAvailable &&
+          effectiveHwAccel === 'amf' &&
+          normalisedSourceCodec
+        ? // Full-GPU AMF: D3D11-native decode so scale_d3d11 + AMF stay on the
+          // device with no CPU round-trip.
+          findAmfNativeDecoder(normalisedSourceCodec)
+        : decoderRegistry.resolve(
+            {
+              codec: normalisedSourceCodec ?? 'h264',
+              bitDepth: sourceBitDepth,
+            },
+            decodeHwAccel,
+          );
+  args.push(...decoder.buildInputArgs());
+
+  // Full-Metal HDR opt-in. The h264/hevc_videotoolbox encoders can keep
+  // the pipeline on IOSurface end-to-end when the only filter step is
+  // an HDR→SDR tonemap (no burn-in, no crop): `scale_vt` accepts
+  // videotoolbox_vld buffers and emits the same surface format the
+  // encoder ingests. The default VT decoder descriptor outputs CPU
+  // buffers (every other consumer expects them), so we override its
+  // input args here when the Metal fast path is eligible. The encoder
+  // branches on `inputSurface === 'videotoolbox'` to pick the scale_vt
+  // filter; falls back to the CPU tonemap chain otherwise.
+  const useVtMetalPath =
+    decoder.hwAccel === 'videotoolbox' &&
+    (encoderId === 'h264_videotoolbox' || encoderId === 'hevc_videotoolbox') &&
+    tonemap &&
+    !hasBurnInFilter &&
+    !hasCrop;
+  if (useVtMetalPath) {
+    args.push('-hwaccel_output_format', 'videotoolbox_vld');
+  }
+
+  // OpenCL device init for the tonemap_opencl filter chain. Only needed
+  // when (a) we're tonemapping HDR→SDR AND (b) the VAAPI in-place
+  // tonemap fallback isn't active AND (c) the decoder's output sits on
+  // VAAPI surfaces — the only path that uses the opencl bridge today.
+  //
+  // Critical: do NOT override `-filter_hw_device` here. The decoder
+  // already set it to the vaapi (or qsv) device, and that's what the
+  // `hwupload=derive_device=vaapi` step in `hwCropPrefix` needs to
+  // resolve correctly. Setting `-filter_hw_device ocl` would re-route
+  // every device-less filter through opencl, and Intel iHD reports
+  // `Query format failed: Function not implemented` (ENOSYS) when
+  // hwupload tries to materialise a vaapi context from an opencl
+  // default — the visible failure for cropped HDR sessions was
+  // `Parsed_hwupload_3: Query format failed` followed by exit=218.
+  // `tonemap_opencl` doesn't need to be the default device: it picks
+  // its device from the upstream `hwmap=derive_device=opencl` frame
+  // context, and the round-trip back to qsv uses an explicit
+  // `derive_device=qsv` on the closing hwmap.
+  // `!openclTonemap`: that path inits `ocl` below — skip here to avoid a
+  // duplicate `-init_hw_device` alias when a vaapi decoder feeds an AMF/NVENC encode.
+  if (
+    tonemap &&
+    !useVaapiTonemap &&
+    decoder.outputSurface === 'vaapi' &&
+    !openclTonemap
+  ) {
+    args.push('-init_hw_device', 'opencl=ocl:0.0');
+  }
+  // NVENC/AMF OpenCL tone-map: OpenCL as the default filter device so `hwupload`
+  // lands on it, coexisting with the HW decode device (validated by the probe).
+  if (openclTonemap) {
+    args.push(...openclTonemapInitArgs());
+  }
+  // Windows QSV OpenCL tone-map (zero-copy): the frame maps D3D11→OpenCL and
+  // back to QSV, so OpenCL must be the default filter device AND derived from
+  // the same D3D11 device (`opencl=ocl@dx`) to share surfaces. ffmpeg accepts
+  // only one filter device, so repoint the decoder's `-filter_hw_device qs` to
+  // `ocl` and add the derived OpenCL device just before it.
+  const qsvOpenclTonemap =
+    !!tonemap &&
+    tonemapPath === 'opencl' &&
+    effectiveHwAccel === 'qsv' &&
+    decoder.outputSurface === 'd3d11';
+  if (qsvOpenclTonemap) {
+    const fhd = args.lastIndexOf('-filter_hw_device');
+    if (fhd !== -1) {
+      args[fhd + 1] = 'ocl';
+      args.splice(fhd, 0, '-init_hw_device', 'opencl=ocl@dx');
+    }
+  }
+  if (useDoviTonemap) {
+    args.push('-init_hw_device', 'vulkan=vk:0', '-filter_hw_device', 'vk');
+  }
+
+  return { decodeArgs: args, decoder, useVtMetalPath };
+}
+
+/**
+ * Per-encoder tuning derived from the rung bitrate and whether this is a
+ * throwaway warm-up (`early`) session: the shared preset and the QSV / libx264
+ * rate-control buffers.
+ */
+function resolveEncoderTuning(
+  early: boolean,
+  encoderPreset: string,
+  bitrateNum: number,
+): {
+  earlyPreset: string;
+  nvencPreset: string;
+  qsvRcInitOccupancy: number;
+  qsvBufsize: number;
+  libx264BufsizeMb: string;
+} {
+  // Early sessions live ~1s before Shaka jumps to the main session — visual
+  // quality on those warm-up frames is throwaway, so bias every knob towards
+  // ramp-up speed. `veryfast` everywhere keeps the H.264 profile consistent
+  // with the steady-state session (`faster` → High); the libx264 `ultrafast`
+  // preset implies `--no-cabac` which downgrades the bitstream to Constrained
+  // Baseline and produces an SPS that doesn't match the High SPS in the
+  // main session's init.mp4 — player concatenates the two and corrupts.
+  const earlyPreset = early ? 'veryfast' : encoderPreset;
+  // NVENC preset is held identical across the early and steady-state
+  // sessions, for the same reason the libx264 preset is pinned above: NVENC
+  // bakes preset-dependent knobs (num_ref_frames, level, VUI) into the SPS,
+  // and the controller can serve init.mp4 from one session while serving
+  // segments from the other. A p1/p4 split shipped an init (p1) whose SPS
+  // didn't match the p4-encoded slices — fatal under hvc1 (parameter sets
+  // live only in the init), producing macroblock corruption from seg-0.
+  // NVENC encodes 1080p at >10x realtime even at p4, so pinning the warm-up
+  // session to p4 costs no meaningful first-segment latency.
+  const nvencPreset = 'p4';
+  // QSV rate-control: tight VBV (bufsize = bitrate × 1) so the BRC has a
+  // short horizon and can't defer big I-frames. Early uses 0.5× / 1× so
+  // the encoder doesn't hold back frames waiting for the buffer to fill.
+  // Recommended by Intel media-delivery quality.rst for HLS streaming.
+  const qsvRcInitOccupancy = Math.max(
+    1,
+    early ? Math.round(bitrateNum * 0.5) : bitrateNum,
+  );
+  const qsvBufsize = bitrateNum;
+  // libx264 -bufsize is expressed in Mbits. Stock = 2x bitrate, early = 1x.
+  // parseInt() drops ffmpeg's 'k'/'M' suffix silently — `parseInt('1500k')`
+  // gives 1500, then ×2 + 'M' yields "3000M" = 3 Gbits and ffmpeg rejects
+  // it as out-of-range. Derive Mbits from bitrateNum (already parsed via
+  // parseBitrateToBps) so the multiplier sees real units.
+  const libx264BufsizeMb = `${Math.max(
+    1,
+    Math.ceil((bitrateNum * (early ? 1 : 2)) / 1_000_000),
+  )}M`;
+  return {
+    earlyPreset,
+    nvencPreset,
+    qsvRcInitOccupancy,
+    qsvBufsize,
+    libx264BufsizeMb,
+  };
+}
+
 export function buildFfmpegArgs(
   opts: BuildFfmpegArgsOptions,
   log: Logger,
@@ -747,151 +961,37 @@ export function buildFfmpegArgs(
   // reaches OpenCL via hwdownload→hwupload (a copy, no CUDA/D3D11↔OpenCL interop).
   const decodeHwAccel: HwAccelType = effectiveHwAccel;
 
-  // Early sessions live ~1s before Shaka jumps to the main session — visual
-  // quality on those warm-up frames is throwaway, so bias every knob towards
-  // ramp-up speed. `veryfast` everywhere keeps the H.264 profile consistent
-  // with the steady-state session (`faster` → High); the libx264 `ultrafast`
-  // preset implies `--no-cabac` which downgrades the bitstream to Constrained
-  // Baseline and produces an SPS that doesn't match the High SPS in the
-  // main session's init.mp4 — player concatenates the two and corrupts.
-  const earlyPreset = early ? 'veryfast' : encoderPreset;
-  // NVENC preset is held identical across the early and steady-state
-  // sessions, for the same reason the libx264 preset is pinned above: NVENC
-  // bakes preset-dependent knobs (num_ref_frames, level, VUI) into the SPS,
-  // and the controller can serve init.mp4 from one session while serving
-  // segments from the other. A p1/p4 split shipped an init (p1) whose SPS
-  // didn't match the p4-encoded slices — fatal under hvc1 (parameter sets
-  // live only in the init), producing macroblock corruption from seg-0.
-  // NVENC encodes 1080p at >10x realtime even at p4, so pinning the warm-up
-  // session to p4 costs no meaningful first-segment latency.
-  const nvencPreset = 'p4';
-  // QSV rate-control: tight VBV (bufsize = bitrate × 1) so the BRC has a
-  // short horizon and can't defer big I-frames. Early uses 0.5× / 1× so
-  // the encoder doesn't hold back frames waiting for the buffer to fill.
-  // Recommended by Intel media-delivery quality.rst for HLS streaming.
-  const qsvRcInitOccupancy = Math.max(
-    1,
-    early ? Math.round(bitrateNum * 0.5) : bitrateNum,
-  );
-  const qsvBufsize = bitrateNum;
-  // libx264 -bufsize is expressed in Mbits. Stock = 2x bitrate, early = 1x.
-  // parseInt() drops ffmpeg's 'k'/'M' suffix silently — `parseInt('1500k')`
-  // gives 1500, then ×2 + 'M' yields "3000M" = 3 Gbits and ffmpeg rejects
-  // it as out-of-range. Derive Mbits from bitrateNum (already parsed via
-  // parseBitrateToBps) so the multiplier sees real units.
-  const libx264BufsizeMb = `${Math.max(
-    1,
-    Math.ceil((bitrateNum * (early ? 1 : 2)) / 1_000_000),
-  )}M`;
+  const {
+    earlyPreset,
+    nvencPreset,
+    qsvRcInitOccupancy,
+    qsvBufsize,
+    libx264BufsizeMb,
+  } = resolveEncoderTuning(early, encoderPreset, bitrateNum);
 
-  // Resolve the decoder via the same registry pattern as the encoder.
-  // The decoder picks how the source is brought into memory (HW device
-  // init + `-hwaccel`); the encoder's `hwAccel` + `inputSurface` decide
-  // where the frame needs to land for encode (qsv-native + vpp_qsv,
-  // vaapi + scale_vaapi, CPU + hwdownload). `useVaapiTonemap` /
-  // `tonemapPath` / `qsvNativeAvailable` come from resolveEncodePipeline above.
-  const normalisedSourceCodec = normaliseSourceCodec(sourceVideoCodec);
-  // Opt into the qsv-native decoder when the qsv crop path is in use
-  // (pre-flighted above so requestedHwAccelFor could keep us on QSV).
-  // The default qsv decoder emits VAAPI surfaces — kept as the safe
-  // baseline for every other QSV path.
-  const decoder: ReturnType<typeof decoderRegistry.resolve> =
-    qsvNativeAvailable && effectiveHwAccel === 'qsv' && normalisedSourceCodec
-      ? (findQsvNativeDecoder(normalisedSourceCodec) ??
-        decoderRegistry.resolve(
-          {
-            codec: normalisedSourceCodec,
-            bitDepth: sourceBitDepth,
-          },
-          effectiveHwAccel,
-        ))
-      : amfFullGpuAvailable &&
-          effectiveHwAccel === 'amf' &&
-          normalisedSourceCodec
-        ? // Full-GPU AMF: D3D11-native decode so scale_d3d11 + AMF stay on the
-          // device with no CPU round-trip.
-          findAmfNativeDecoder(normalisedSourceCodec)
-        : decoderRegistry.resolve(
-            {
-              codec: normalisedSourceCodec ?? 'h264',
-              bitDepth: sourceBitDepth,
-            },
-            decodeHwAccel,
-          );
-  args.push(...decoder.buildInputArgs());
-
-  // Full-Metal HDR opt-in. The h264/hevc_videotoolbox encoders can keep
-  // the pipeline on IOSurface end-to-end when the only filter step is
-  // an HDR→SDR tonemap (no burn-in, no crop): `scale_vt` accepts
-  // videotoolbox_vld buffers and emits the same surface format the
-  // encoder ingests. The default VT decoder descriptor outputs CPU
-  // buffers (every other consumer expects them), so we override its
-  // input args here when the Metal fast path is eligible. The encoder
-  // branches on `inputSurface === 'videotoolbox'` to pick the scale_vt
-  // filter; falls back to the CPU tonemap chain otherwise.
-  const useVtMetalPath =
-    decoder.hwAccel === 'videotoolbox' &&
-    (encoder.id === 'h264_videotoolbox' || encoder.id === 'hevc_videotoolbox') &&
-    tonemap &&
-    !burnIn?.filter &&
-    !crop;
-  if (useVtMetalPath) {
-    args.push('-hwaccel_output_format', 'videotoolbox_vld');
-  }
-
-  // OpenCL device init for the tonemap_opencl filter chain. Only needed
-  // when (a) we're tonemapping HDR→SDR AND (b) the VAAPI in-place
-  // tonemap fallback isn't active AND (c) the decoder's output sits on
-  // VAAPI surfaces — the only path that uses the opencl bridge today.
-  //
-  // Critical: do NOT override `-filter_hw_device` here. The decoder
-  // already set it to the vaapi (or qsv) device, and that's what the
-  // `hwupload=derive_device=vaapi` step in `hwCropPrefix` needs to
-  // resolve correctly. Setting `-filter_hw_device ocl` would re-route
-  // every device-less filter through opencl, and Intel iHD reports
-  // `Query format failed: Function not implemented` (ENOSYS) when
-  // hwupload tries to materialise a vaapi context from an opencl
-  // default — the visible failure for cropped HDR sessions was
-  // `Parsed_hwupload_3: Query format failed` followed by exit=218.
-  // `tonemap_opencl` doesn't need to be the default device: it picks
-  // its device from the upstream `hwmap=derive_device=opencl` frame
-  // context, and the round-trip back to qsv uses an explicit
-  // `derive_device=qsv` on the closing hwmap.
-  // `!openclTonemap`: that path inits `ocl` below — skip here to avoid a
-  // duplicate `-init_hw_device` alias when a vaapi decoder feeds an AMF/NVENC encode.
-  if (
-    tonemap &&
-    !useVaapiTonemap &&
-    decoder.outputSurface === 'vaapi' &&
-    !openclTonemap
-  ) {
-    args.push('-init_hw_device', 'opencl=ocl:0.0');
-  }
-  // NVENC/AMF OpenCL tone-map: OpenCL as the default filter device so `hwupload`
-  // lands on it, coexisting with the HW decode device (validated by the probe).
-  if (openclTonemap) {
-    args.push(...openclTonemapInitArgs());
-  }
-  // Windows QSV OpenCL tone-map (zero-copy): the frame maps D3D11→OpenCL and
-  // back to QSV, so OpenCL must be the default filter device AND derived from
-  // the same D3D11 device (`opencl=ocl@dx`) to share surfaces. ffmpeg accepts
-  // only one filter device, so repoint the decoder's `-filter_hw_device qs` to
-  // `ocl` and add the derived OpenCL device just before it.
-  const qsvOpenclTonemap =
-    !!tonemap &&
-    tonemapPath === 'opencl' &&
-    effectiveHwAccel === 'qsv' &&
-    decoder.outputSurface === 'd3d11';
-  if (qsvOpenclTonemap) {
-    const fhd = args.lastIndexOf('-filter_hw_device');
-    if (fhd !== -1) {
-      args[fhd + 1] = 'ocl';
-      args.splice(fhd, 0, '-init_hw_device', 'opencl=ocl@dx');
-    }
-  }
-  if (useDoviTonemap) {
-    args.push('-init_hw_device', 'vulkan=vk:0', '-filter_hw_device', 'vk');
-  }
+  // Resolve the decoder + emit its input args and the tone-map device bridges.
+  // The decoder picks how the source is brought into memory (HW device init +
+  // `-hwaccel`); the encoder's `hwAccel` + `inputSurface` decide where the frame
+  // needs to land for encode (qsv-native + vpp_qsv, vaapi + scale_vaapi, CPU +
+  // hwdownload). `useVaapiTonemap` / `tonemapPath` / `qsvNativeAvailable` come
+  // from resolveEncodePipeline above.
+  const { decodeArgs, decoder, useVtMetalPath } = resolveDecodeStage({
+    sourceVideoCodec,
+    qsvNativeAvailable,
+    amfFullGpuAvailable,
+    effectiveHwAccel,
+    decodeHwAccel,
+    sourceBitDepth,
+    encoderId: encoder.id,
+    tonemap: !!tonemap,
+    hasBurnInFilter: !!burnIn?.filter,
+    hasCrop: !!crop,
+    useVaapiTonemap,
+    openclTonemap,
+    tonemapPath,
+    useDoviTonemap,
+  });
+  args.push(...decodeArgs);
 
   // Declaring the SDR colorimetry on the input (SDR sources only) keeps the
   // output tags a no-op override instead of a color-matrix conversion — one the
