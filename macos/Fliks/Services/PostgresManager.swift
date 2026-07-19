@@ -92,7 +92,12 @@ actor PostgresManager {
             arguments: [
                 "-D", dataDir.path,
                 "-l", logFile.path,
-                "-o", "-p \(port) -c dynamic_library_path=\(libDir.appendingPathComponent("postgresql").path)",
+                // Single-quote the path: pg_ctl's -o string is word-split by
+                // postgres, so a space in the bundle path (e.g. "Fliks
+                // Server.app") would otherwise be parsed as two arguments and
+                // rejected ("invalid argument"). -D and env vars are passed as
+                // whole args and don't need this.
+                "-o", "-p \(port) -c dynamic_library_path='\(libDir.appendingPathComponent("postgresql").path)'",
                 "start",
             ],
             environment: pgEnv,
