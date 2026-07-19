@@ -42,11 +42,8 @@ targets:
       path: Fliks/Fliks.entitlements
       # These MUST live here: xcodegen regenerates the .plist at `path` from
       # these properties on every `generate`, and CI runs `xcodegen generate`
-      # right before build-app.sh signs. An empty `properties: {}` silently
-      # overwrote the file with `<dict/>`, so the bundled node got signed under
-      # the hardened runtime with NO allow-jit — V8 then can't reserve its
-      # CodeRange and the backend crash-loops ("Fatal process out of memory:
-      # Failed to reserve virtual memory for CodeRange").
+      # right before build-app.sh signs. An empty `properties: {}` emits an empty
+      # `<dict/>`, which would drop the entitlements the signed node needs.
       properties:
         # Node's V8 JIT under the hardened runtime (required for notarization).
         com.apple.security.cs.allow-jit: true

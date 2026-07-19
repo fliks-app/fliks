@@ -149,13 +149,9 @@ bash "$SCRIPTS_DIR/bundle-dylibs.sh" "$RESOURCES/postgres/bin" "$RESOURCES/postg
 bash "$SCRIPTS_DIR/bundle-dylibs.sh" "$RESOURCES/postgres/lib/libpq.5.dylib" "$RESOURCES/postgres/lib"
 
 # And the extension libs. These are dlopen'd by the postgres server at runtime
-# (plpgsql for every migration, pg_trgm for search, uuid-ossp, …) and pull the
-# same Homebrew deps as the binaries — chiefly gettext's libintl. The bin/ and
-# libpq passes above don't reach them, so without this their libintl reference
-# stays an absolute /opt/homebrew path. On a clean machine that path is absent;
-# on any machine the hardened runtime rejects the Homebrew copy (different Team
-# ID). Either way `dlopen(plpgsql.dylib)` fails, the AddSocialFeature migration
-# (and every plpgsql migration) aborts, and the backend never reaches "ready".
+# (plpgsql, pg_trgm, uuid-ossp, …) and pull the same Homebrew deps as the
+# binaries — chiefly gettext's libintl. The bin/ and libpq passes above don't
+# cover lib/postgresql/, so relocate their deps into the shared bundled lib/ too.
 if [ -d "$RESOURCES/postgres/lib/postgresql" ]; then
     bash "$SCRIPTS_DIR/bundle-dylibs.sh" "$RESOURCES/postgres/lib/postgresql" "$RESOURCES/postgres/lib"
 fi
@@ -211,32 +207,27 @@ done < <(find "$RESOURCES" -type f -print0)
 sign "$APP_BUNDLE"
 echo "    [done]"
 
-# ── Verify the two failure modes that once shipped silently ──
-# Both produced a bundle that looked fine but crash-looped at runtime, so assert
-# the actual on-disk result rather than trusting the steps above.
+# ── Verify the signed bundle ──
+# Assert the actual on-disk result rather than trusting the steps above.
 echo "==> Verifying bundle..."
 
-# 1. Node must carry the JIT entitlement. A hardened-runtime node WITHOUT
-#    com.apple.security.cs.allow-jit can't reserve V8's CodeRange — every isolate
-#    init aborts ("Fatal process out of memory: Failed to reserve virtual memory
-#    for CodeRange") and the backend crash-loops. Only meaningful for a
-#    Developer ID (hardened) build; ad-hoc local builds run without the runtime.
+# 1. Node must carry the JIT entitlement: under the hardened runtime V8 needs
+#    com.apple.security.cs.allow-jit to allocate the executable memory for its
+#    code range. Only meaningful for a Developer ID (hardened) build; ad-hoc
+#    local builds run without the runtime.
 if [ "$SIGN_ID" != "-" ]; then
     if ! codesign -d --entitlements :- "$RESOURCES/node/bin/node" 2>/dev/null \
         | grep -q 'com.apple.security.cs.allow-jit'; then
-        echo "Error: bundled node is missing com.apple.security.cs.allow-jit."
-        echo "       Under the hardened runtime it would crash on launch (CodeRange OOM)."
+        echo "Error: bundled node is missing com.apple.security.cs.allow-jit (required under the hardened runtime)."
         exit 1
     fi
     echo "    [verify] node carries allow-jit"
 fi
 
-# 2. No vendored Mach-O may still reference /opt/homebrew — such a dep resolves
-#    to the build host only. On a user's machine it is absent (or rejected by
-#    library validation), so the dlopen fails. Catches the postgres extension
-#    libs (plpgsql → libintl) among others. Scoped to the dirs this script
-#    relocates (node/postgres/ffmpeg); backend/node_modules ships its own
-#    prebuilt addons and is out of scope here.
+# 2. No vendored Mach-O may reference /opt/homebrew — those paths exist only on
+#    the build host, so every dependency must be relocated into the bundle.
+#    Scoped to the dirs this script relocates (node/postgres/ffmpeg);
+#    backend/node_modules ships its own prebuilt addons and is out of scope here.
 stray="$(find "$RESOURCES/node" "$RESOURCES/postgres" "$RESOURCES/ffmpeg" \
     -type f \( -perm +111 -o -name '*.dylib' \) -print0 2>/dev/null \
     | xargs -0 -I{} sh -c 'otool -L "$1" 2>/dev/null | grep -q "/opt/homebrew" && echo "$1"' _ {} \
