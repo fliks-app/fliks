@@ -567,6 +567,7 @@ function resolveDecodeStage(opts: {
   openclTonemap: boolean;
   tonemapPath: string;
   useDoviTonemap: boolean;
+  useDoviOpenclTonemap: boolean;
 }): {
   decodeArgs: string[];
   decoder: ReturnType<typeof decoderRegistry.resolve>;
@@ -587,6 +588,7 @@ function resolveDecodeStage(opts: {
     openclTonemap,
     tonemapPath,
     useDoviTonemap,
+    useDoviOpenclTonemap,
   } = opts;
   const args: string[] = [];
 
@@ -691,6 +693,11 @@ function resolveDecodeStage(opts: {
   }
   if (useDoviTonemap) {
     args.push('-init_hw_device', 'vulkan=vk:0', '-filter_hw_device', 'vk');
+  }
+  // OpenCL device for the DV RPU tone-map (`tonemap_opencl=apply_dovi`) when
+  // libplacebo can't (no libdovi). The CPU-decoded frame hwuploads onto it.
+  if (useDoviOpenclTonemap) {
+    args.push(...openclTonemapInitArgs());
   }
 
   return { decodeArgs: args, decoder, useVtMetalPath };
@@ -915,6 +922,17 @@ export function buildFfmpegArgs(
     sourceDvProfile === 5 &&
     (sourceDvBlSignalCompatId === 0 || sourceDvBlSignalCompatId == null) &&
     isLibplaceboDvEnabled();
+  // DV Profile 5 without a libdovi-enabled libplacebo (the Windows / macOS
+  // builds, or Linux without the overlay): apply the RPU in the OpenCL tone-map
+  // filter (`tonemap_opencl=apply_dovi=1`) instead. The RPU is exposed as frame
+  // side-data by the software HEVC decoder, so — like the libplacebo path — this
+  // forces CPU decode, then hwupload → tonemap_opencl → hwdownload.
+  const useDoviOpenclTonemap =
+    !!tonemap &&
+    sourceDvProfile === 5 &&
+    (sourceDvBlSignalCompatId === 0 || sourceDvBlSignalCompatId == null) &&
+    !useDoviTonemap &&
+    isOpenclTonemapEnabled();
 
   // Image-based subtitle burn-in (PGS/VOBSUB) is composited via -filter_complex
   // below, reusing the encoder's video chain so the accelerated scale/tonemap
@@ -934,7 +952,7 @@ export function buildFfmpegArgs(
     useVaapiTonemap,
     amfFullGpuAvailable,
   } = resolveEncodePipeline(variant, {
-    hwAccel: useDoviTonemap ? 'none' : hwAccel,
+    hwAccel: useDoviTonemap || useDoviOpenclTonemap ? 'none' : hwAccel,
     crop: !!crop,
     burnIn: !!burnIn?.filter,
     tonemap: !!tonemap,
@@ -990,6 +1008,7 @@ export function buildFfmpegArgs(
     openclTonemap,
     tonemapPath,
     useDoviTonemap,
+    useDoviOpenclTonemap,
   });
   args.push(...decodeArgs);
 
@@ -1058,6 +1077,7 @@ export function buildFfmpegArgs(
       useVaapiTonemap,
       sourceBitDepth,
       dovi: useDoviTonemap,
+      doviOpencl: useDoviOpenclTonemap,
       tonemapCurve,
       scaleWidth: w,
       openclTonemap,

@@ -21,6 +21,8 @@ export interface VideoFilterContext {
   /** Dolby Vision P5: tonemap via the RPU-aware libplacebo (Vulkan) chain
    *  instead of the standard tonemap that misreads IPT-C2 (#636). */
   dovi?: boolean;
+  /** DV Profile 5 tone-map via `tonemap_opencl=apply_dovi` (no libdovi path). */
+  doviOpencl?: boolean;
   /** CPU HDR→SDR tone-map curve (`hable` default, `mobius` optional). */
   tonemapCurve?: TonemapCurve;
   /** Route the HDR→SDR tone-map through `tonemap_opencl` (GPU) instead of the
@@ -60,6 +62,7 @@ export function buildVideoFilters(
     useVaapiTonemap,
     sourceBitDepth,
     dovi,
+    doviOpencl,
     tonemapCurve,
     scaleWidth,
     openclTonemap,
@@ -97,9 +100,13 @@ export function buildVideoFilters(
   const tonemapCpu = tonemap
     ? dovi
       ? `hwupload,libplacebo=apply_dolbyvision=1:tonemapping=bt.2390:colorspace=bt709:color_primaries=bt709:color_trc=bt709:format=nv12,hwdownload,format=nv12,`
-      : openclTonemap
-        ? `format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=${curve}:desat=0:format=nv12,hwdownload,format=nv12,`
-        : `zscale=w=${scaleWidth}:h=-2:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=${curve}:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,`
+      : doviOpencl
+        ? // DV P5 RPU applied in the OpenCL tone-map (no libdovi). The RPU rides
+          // as side-data on the CPU-decoded frame through hwupload.
+          `format=p010le,hwupload,tonemap_opencl=apply_dovi=1:t=bt709:m=bt709:p=bt709:tonemap=${curve}:desat=0:format=nv12,hwdownload,format=nv12,`
+        : openclTonemap
+          ? `format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=${curve}:desat=0:format=nv12,hwdownload,format=nv12,`
+          : `zscale=w=${scaleWidth}:h=-2:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=${curve}:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,`
     : '';
   // HW-crop round-trip: hwdownload → crop → hwupload. The explicit `format=`
   // matches the source bit depth (p010le for 10-bit) so crop runs in the
