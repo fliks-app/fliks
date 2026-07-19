@@ -41,13 +41,16 @@ export const av1Amf: EncoderDescriptor = {
   },
 };
 
-/** AMF AV1 HDR10 — HDR carried on the SPS VUI `-color_*` tags. */
+/** AMF AV1 HDR10 — HDR carried on the SPS VUI `-color_*` tags. AMF writes no
+ *  mdcv/clli metadata, so `supportsHdrMetadata` is false and a source that
+ *  carries it routes to the metadata-preserving CPU encoder (matches the QSV /
+ *  VAAPI AV1 HDR descriptors). */
 export const av1AmfHdr10: EncoderDescriptor = {
   id: 'av1_amf_hdr10',
   hwAccel: 'amf',
   variant: { codec: 'av1', bitDepth: 10, hdr: 'HDR10' },
   supports: () => process.platform === 'win32',
-  supportsHdrMetadata: () => true,
+  supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => av1CodecString(target, 10),
   buildArgs(input: EncoderInput): string[] {
     const { target } = input;

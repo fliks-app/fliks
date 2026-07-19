@@ -1,6 +1,10 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
 import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
+import {
+  vaapiScaleFilter8bit,
+  vaapiScaleFilter10bit,
+} from './helpers/vaapi-filters';
 
 /** AMD / Intel-on-Linux VAAPI HEVC SDR encoder (Main 8-bit). Same path as
  *  `h264_vaapi` — used when crop forces VAAPI off the QSV fast lane, and
@@ -13,10 +17,9 @@ export const hevcVaapi: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => hevcMainCodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, filters } = input;
-    const w = target.width;
+    const { target } = input;
     const bitrate = `${target.videoBitrateBps}`;
-    const common = [
+    return [
       '-c:v',
       'hevc_vaapi',
       '-profile:v',
@@ -25,8 +28,8 @@ export const hevcVaapi: EncoderDescriptor = {
       bitrate,
       '-maxrate',
       bitrate,
-    ];
-    const trailing = [
+      '-vf',
+      vaapiScaleFilter8bit(input),
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -35,29 +38,6 @@ export const hevcVaapi: EncoderDescriptor = {
       input.forceKeyframesExpr,
       '-tag:v',
       'hvc1',
-    ];
-
-    if (filters.tonemapVaapi) {
-      return [
-        ...common,
-        '-vf',
-        `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi}`,
-        ...trailing,
-      ];
-    }
-    if (filters.tonemapOpencl) {
-      return [
-        ...common,
-        '-vf',
-        `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
-        ...trailing,
-      ];
-    }
-    return [
-      ...common,
-      '-vf',
-      `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:format=nv12`,
-      ...trailing,
     ];
   },
 };
@@ -76,8 +56,7 @@ export const hevcVaapiHdr10: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => hevcMain10CodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, filters } = input;
-    const w = target.width;
+    const { target } = input;
     const bitrate = `${target.videoBitrateBps}`;
     return [
       '-c:v',
@@ -89,7 +68,7 @@ export const hevcVaapiHdr10: EncoderDescriptor = {
       '-maxrate',
       bitrate,
       '-vf',
-      `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:format=p010le`,
+      vaapiScaleFilter10bit(input),
       '-g',
       String(target.gopSize),
       '-keyint_min',

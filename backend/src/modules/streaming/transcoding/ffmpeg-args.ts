@@ -66,6 +66,43 @@ function ffOutPath(...parts: string[]): string {
   return parts.join('/').replace(/\\/g, '/');
 }
 
+/** The shared fMP4/TS HLS muxer tail. Every output path (transcode single /
+ *  var_stream_map, audio-only, remux) emits the same flags; they differ only in
+ *  the segment length, the init filename, the optional `-var_stream_map`, and
+ *  the segment/index paths. The index path is the last positional (the muxer
+ *  output). */
+function hlsMuxerArgs(o: {
+  useTs: boolean;
+  hlsTime: string;
+  startSegment: number;
+  segType: string;
+  initFilename: string;
+  varStreamMap?: string;
+  segmentFilename: string;
+  indexPath: string;
+}): string[] {
+  return [
+    ...(o.useTs ? [] : ['-movflags', '+cmaf']),
+    '-f',
+    'hls',
+    '-hls_time',
+    o.hlsTime,
+    '-hls_list_size',
+    '0',
+    '-start_number',
+    String(o.startSegment),
+    '-hls_segment_type',
+    o.segType,
+    ...(o.useTs ? [] : ['-hls_fmp4_init_filename', o.initFilename]),
+    '-hls_flags',
+    'independent_segments+temp_file',
+    ...(o.varStreamMap ? ['-var_stream_map', o.varStreamMap] : []),
+    '-hls_segment_filename',
+    o.segmentFilename,
+    o.indexPath,
+  ];
+}
+
 export interface BuildFfmpegArgsOptions {
   inputPath: string;
   profile: TranscodeProfile;
@@ -140,6 +177,12 @@ export interface BuildFfmpegArgsOptions {
    *  which preserves the historical vaapi-when-available preference. */
   tonemapAlgo?: TonemapAlgo;
   sourceFps?: number;
+  /** Source colorimetry (ffprobe names). An SDR transcode preserves these on
+   *  input and output; undefined/`unknown` falls back to BT.709 limited. */
+  sourceColorSpace?: string;
+  sourceColorPrimaries?: string;
+  sourceColorTransfer?: string;
+  sourceColorRange?: string;
   /** HLS segment duration (seconds) this session cuts on. Sets the GOP length
    *  and the forced-IDR / seek grid. Defaults to {@link DEFAULT_SEGMENT_DURATION}
    *  when omitted. */
@@ -253,6 +296,10 @@ export function buildFfmpegArgs(
     encoderPreset = 'faster',
     qsvOptions = { lowPower: false },
     sourceFps,
+    sourceColorSpace,
+    sourceColorPrimaries,
+    sourceColorTransfer,
+    sourceColorRange,
     segmentDuration = DEFAULT_SEGMENT_DURATION,
     trustedStreamInfo = false,
     early = false,
@@ -638,6 +685,44 @@ export function buildFfmpegArgs(
     args.push('-init_hw_device', 'vulkan=vk:0', '-filter_hw_device', 'vk');
   }
 
+  // SDR colorimetry to signal on the output. Preserve the source's real
+  // matrix / primaries / transfer for an SDR→SDR transcode; a tone-mapped
+  // HDR→SDR output is BT.709 (the tone-map targets it). Untagged sources fall
+  // back to BT.709. Declaring it on the input too (SDR sources only) keeps the
+  // output tags a no-op override instead of a color-matrix conversion — one the
+  // HW scale filters (vpp_qsv / scale_vaapi / scale_cuda) can't run on a
+  // same-size pass.
+  const sdrTag = (v?: string): string | undefined =>
+    v && v !== 'unknown' && v !== 'reserved' ? v : undefined;
+  const outColorSpace = tonemap ? 'bt709' : (sdrTag(sourceColorSpace) ?? 'bt709');
+  const outColorPrimaries = tonemap
+    ? 'bt709'
+    : (sdrTag(sourceColorPrimaries) ?? 'bt709');
+  const outColorTransfer = tonemap
+    ? 'bt709'
+    : (sdrTag(sourceColorTransfer) ?? 'bt709');
+  // Range is `pc`/`tv` (or full/limited); preserve a signed full-range source,
+  // else limited (`tv`) — the near-universal SDR default and the safe fallback.
+  const rawRange = sourceColorRange?.toLowerCase();
+  const outColorRange = tonemap
+    ? 'tv'
+    : rawRange === 'pc' || rawRange === 'full' || rawRange === 'jpeg'
+      ? 'pc'
+      : 'tv';
+
+  if (!isHdrOutput && !useVtMetalPath && !tonemap) {
+    args.push(
+      '-colorspace',
+      outColorSpace,
+      '-color_primaries',
+      outColorPrimaries,
+      '-color_trc',
+      outColorTransfer,
+      '-color_range',
+      outColorRange,
+    );
+  }
+
   args.push('-i', inputPath);
 
   // Preserve source PTS end-to-end on every spawn (see
@@ -732,47 +817,28 @@ export function buildFfmpegArgs(
   }
   const videoMapSpec = imageBurnIn ? '[vout]' : '0:v:0';
 
-  // Force BT.709 limited-range SPS VUI on every SDR output.
-  //
-  // Two failure modes this prevents:
-  //
-  // 1. HDR → SDR tonemap: h264_qsv (and a few other paths) carry the
-  //    source's BT.2020/PQ tags through from AVFrame metadata into the
-  //    output SPS, producing a bitstream that signals HDR with SDR
-  //    pixels. iOS AVPlayer rejects that combination with -12927; other
-  //    players tolerate it but render with the wrong gamut / TRC.
-  //
-  // 2. Source with unsignalled colorimetry (older WEBDL H.264
-  //    masters): the source SPS leaves
-  //    color_primaries/_trc/_space/_range all `unknown`. FFmpeg
-  //    propagates the unknown tags into the output SPS. Android
-  //    Media3 + the HDR-preserving SurfaceView path can refuse to
-  //    initialise MediaCodec on cold prepare when the VUI is fully
-  //    unsigned — playback stalls in BUFFERING with no decoder
-  //    allocated. A manual seek bypasses the strict initial
-  //    validation, which is why the seek "unsticks" the player.
-  //
-  // No-op when the source already carries BT.709 tags (ffmpeg accepts
-  // the redundant overrides). HDR output paths skip this so the
-  // encoder keeps the BT.2020/PQ signalling.
-  //
-  // Also skipped on the VT Metal fast path. `scale_vt=color_matrix=
-  // bt709:color_primaries=bt709:color_transfer=bt709` already converts
-  // the IOSurface metadata, and adding the output-level `-color_*`
-  // flags re-triggers FFmpeg's negotiation to insert a CPU
-  // `auto_scale` between the decoder and scale_vt, which then fails
-  // with "Failed to find pixel format" (-78 ENOSYS) because no filter
-  // bridges CPU pixels back into a videotoolbox_vld IOSurface.
+  // Sign the SDR output's colorimetry ({@link outColorSpace} etc.: the source's
+  // real tags for an SDR→SDR transcode, BT.709 for a tone-mapped or untagged
+  // source). Two failure modes this prevents:
+  //  1. A tone-mapped HDR→SDR encoder can carry the source BT.2020/PQ tags into
+  //     the SPS — SDR pixels signalling HDR (iOS AVPlayer -12927, wrong gamut
+  //     elsewhere). `tonemap` forces BT.709 here.
+  //  2. An unsigned source (older WEBDL masters, all tags `unknown`) leaves the
+  //     output VUI unsigned, stalling Android Media3's cold MediaCodec prepare
+  //     in BUFFERING (a manual seek unsticks it).
+  // Skipped on the VT Metal fast path: `scale_vt` already sets the IOSurface
+  // metadata and the extra `-color_*` flags re-trigger a CPU `auto_scale` that
+  // fails (-78) with no bridge back to a videotoolbox_vld surface.
   if (!isHdrOutput && !useVtMetalPath) {
     args.push(
       '-color_primaries',
-      'bt709',
+      outColorPrimaries,
       '-color_trc',
-      'bt709',
+      outColorTransfer,
       '-colorspace',
-      'bt709',
+      outColorSpace,
       '-color_range',
-      'tv',
+      outColorRange,
     );
   }
 
@@ -813,31 +879,22 @@ export function buildFfmpegArgs(
       varParts.push(`a:${i},agroup:audio,language:${lang}`);
     }
 
+    // Cut on the fps-aware grid (== the forced-IDR cadence and the playlist
+    // EXTINF), not the integer setting. On fractional-fps sources the audio
+    // renditions would otherwise be cut on the 3.0s grid while video IDRs land
+    // on 3.003s; the per-segment drift accumulates until the tfdt anchor snaps
+    // audio a whole segment late mid-film (sudden A/V desync).
     args.push(
-      ...(useTs ? [] : ['-movflags', '+cmaf']),
-      '-f',
-      'hls',
-      // Cut on the fps-aware grid (== the forced-IDR cadence and the playlist
-      // EXTINF), not the integer setting. On fractional-fps sources the audio
-      // renditions would otherwise be cut on the 3.0s grid while video IDRs land
-      // on 3.003s; the per-segment drift accumulates until the tfdt anchor snaps
-      // audio a whole segment late mid-film (sudden A/V desync).
-      '-hls_time',
-      String(realSeg),
-      '-hls_list_size',
-      '0',
-      '-start_number',
-      String(startSegment),
-      '-hls_segment_type',
-      segType,
-      ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init_%v.mp4']),
-      '-hls_flags',
-      'independent_segments+temp_file',
-      '-var_stream_map',
-      varParts.join(' '),
-      '-hls_segment_filename',
-      ffOutPath(outputDir, '%v', `seg-%04d.${segExt}`),
-      ffOutPath(outputDir, '%v', 'index.m3u8'),
+      ...hlsMuxerArgs({
+        useTs,
+        hlsTime: String(realSeg),
+        startSegment,
+        segType,
+        initFilename: 'init_%v.mp4',
+        varStreamMap: varParts.join(' '),
+        segmentFilename: ffOutPath(outputDir, '%v', `seg-%04d.${segExt}`),
+        indexPath: ffOutPath(outputDir, '%v', 'index.m3u8'),
+      }),
     );
   } else {
     // Standard single-stream output: video + one audio track muxed.
@@ -864,23 +921,15 @@ export function buildFfmpegArgs(
     }
 
     args.push(
-      ...(useTs ? [] : ['-movflags', '+cmaf']),
-      '-f',
-      'hls',
-      '-hls_time',
-      String(segmentDuration),
-      '-hls_list_size',
-      '0',
-      '-start_number',
-      String(startSegment),
-      '-hls_segment_type',
-      segType,
-      ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init.mp4']),
-      '-hls_segment_filename',
-      ffOutPath(outputDir, `seg-%04d.${segExt}`),
-      '-hls_flags',
-      'independent_segments+temp_file',
-      ffOutPath(outputDir, 'index.m3u8'),
+      ...hlsMuxerArgs({
+        useTs,
+        hlsTime: String(segmentDuration),
+        startSegment,
+        segType,
+        initFilename: 'init.mp4',
+        segmentFilename: ffOutPath(outputDir, `seg-%04d.${segExt}`),
+        indexPath: ffOutPath(outputDir, 'index.m3u8'),
+      }),
     );
   }
 
@@ -967,23 +1016,15 @@ export function buildAudioOnlyFfmpegArgs(
   args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
 
   args.push(
-    ...(useTs ? [] : ['-movflags', '+cmaf']),
-    '-f',
-    'hls',
-    '-hls_time',
-    String(realSeg),
-    '-hls_list_size',
-    '0',
-    '-start_number',
-    String(startSegment),
-    '-hls_segment_type',
-    segType,
-    ...(useTs ? [] : ['-hls_fmp4_init_filename', 'init.mp4']),
-    '-hls_segment_filename',
-    ffOutPath(outputDir, `seg-%04d.${segExt}`),
-    '-hls_flags',
-    'independent_segments+temp_file',
-    ffOutPath(outputDir, 'index.m3u8'),
+    ...hlsMuxerArgs({
+      useTs,
+      hlsTime: String(realSeg),
+      startSegment,
+      segType,
+      initFilename: 'init.mp4',
+      segmentFilename: ffOutPath(outputDir, `seg-%04d.${segExt}`),
+      indexPath: ffOutPath(outputDir, 'index.m3u8'),
+    }),
   );
 
   return args;
@@ -1128,25 +1169,15 @@ export function buildRemuxArgs(
   }
 
   args.push(
-    '-movflags',
-    '+cmaf',
-    '-f',
-    'hls',
-    '-hls_time',
-    String(segmentDuration),
-    '-hls_list_size',
-    '0',
-    '-start_number',
-    String(startSegment),
-    '-hls_segment_type',
-    'fmp4',
-    '-hls_fmp4_init_filename',
-    'init.mp4',
-    '-hls_segment_filename',
-    path.join(outputDir, 'seg-%04d.m4s'),
-    '-hls_flags',
-    'independent_segments+temp_file',
-    path.join(outputDir, 'index.m3u8'),
+    ...hlsMuxerArgs({
+      useTs: false,
+      hlsTime: String(segmentDuration),
+      startSegment,
+      segType: 'fmp4',
+      initFilename: 'init.mp4',
+      segmentFilename: ffOutPath(outputDir, 'seg-%04d.m4s'),
+      indexPath: ffOutPath(outputDir, 'index.m3u8'),
+    }),
   );
 
   return args;

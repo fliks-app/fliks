@@ -1,6 +1,10 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { av1CodecString } from '../codec-strings';
 import { hdrColorArgs } from './helpers/hdr-variants';
+import {
+  vaapiScaleFilter8bit,
+  vaapiScaleFilter10bit,
+} from './helpers/vaapi-filters';
 
 /** AMD VAAPI AV1 encoder — RDNA3 (RX 7000) and Ryzen 7000/8000 APUs on
  *  Mesa 23.3+. No `-preset` knob (the VAAPI driver picks rate control
@@ -14,40 +18,23 @@ export const av1Vaapi: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => av1CodecString(target, 8),
   buildArgs(input: EncoderInput): string[] {
-    const { target, filters } = input;
-    const w = target.width;
+    const { target } = input;
     const bitrate = `${target.videoBitrateBps}`;
-    const common = ['-c:v', 'av1_vaapi', '-b:v', bitrate, '-maxrate', bitrate];
-    const trailing = [
+    return [
+      '-c:v',
+      'av1_vaapi',
+      '-b:v',
+      bitrate,
+      '-maxrate',
+      bitrate,
+      '-vf',
+      vaapiScaleFilter8bit(input),
       '-g',
       String(target.gopSize),
       '-keyint_min',
       String(target.gopSize),
       '-force_key_frames',
       input.forceKeyframesExpr,
-    ];
-
-    if (filters.tonemapVaapi) {
-      return [
-        ...common,
-        '-vf',
-        `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi}`,
-        ...trailing,
-      ];
-    }
-    if (filters.tonemapOpencl) {
-      return [
-        ...common,
-        '-vf',
-        `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
-        ...trailing,
-      ];
-    }
-    return [
-      ...common,
-      '-vf',
-      `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:format=nv12`,
-      ...trailing,
     ];
   },
 };
@@ -65,8 +52,7 @@ export const av1VaapiHdr10: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => av1CodecString(target, 10),
   buildArgs(input: EncoderInput): string[] {
-    const { target, filters } = input;
-    const w = target.width;
+    const { target } = input;
     const bitrate = `${target.videoBitrateBps}`;
     return [
       '-c:v',
@@ -76,7 +62,7 @@ export const av1VaapiHdr10: EncoderDescriptor = {
       '-maxrate',
       bitrate,
       '-vf',
-      `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:format=p010le`,
+      vaapiScaleFilter10bit(input),
       '-g',
       String(target.gopSize),
       '-keyint_min',

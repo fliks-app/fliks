@@ -53,6 +53,7 @@ export interface VideoStreamInfo {
   colorSpace?: string;
   colorTransfer?: string;
   colorPrimaries?: string;
+  colorRange?: string;
   hdrFormat?: HdrFormat;
   /** Dolby Vision profile from the stream's DOVI configuration record (e.g. 5,
    *  8), with its base-layer signal compatibility id (e.g. 8.1, 8.4), level, and
@@ -130,6 +131,7 @@ interface FfprobeStream {
   color_space?: string;
   color_transfer?: string;
   color_primaries?: string;
+  color_range?: string;
   side_data_list?: {
     side_data_type?: string;
     dv_profile?: number;
@@ -386,6 +388,7 @@ export class FfprobeService {
             colorSpace: s.color_space,
             colorTransfer: s.color_transfer,
             colorPrimaries: s.color_primaries,
+            colorRange: s.color_range,
             hdrFormat: this.deriveHdrFormat(s.color_transfer, s.color_primaries),
             dvProfile: dovi?.dv_profile,
             dvBlSignalCompatId: dovi?.dv_bl_signal_compatibility_id,

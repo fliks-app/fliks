@@ -1,5 +1,6 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { h264CodecString } from '../codec-strings';
+import { vaapiScaleFilter8bit } from './helpers/vaapi-filters';
 
 /** AMD / Intel-on-Linux VAAPI H.264 encoder. Same code path is used for
  *  both — AMD GPUs talk through Mesa's VAAPI driver, Intel on Linux
@@ -14,40 +15,23 @@ export const h264Vaapi: EncoderDescriptor = {
   supportsHdrMetadata: () => false,
   codecString: (target: EncoderTarget) => h264CodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, filters } = input;
-    const w = target.width;
+    const { target } = input;
     const bitrate = `${target.videoBitrateBps}`;
-    const common = ['-c:v', 'h264_vaapi', '-b:v', bitrate, '-maxrate', bitrate];
-    const trailing = [
+    return [
+      '-c:v',
+      'h264_vaapi',
+      '-b:v',
+      bitrate,
+      '-maxrate',
+      bitrate,
+      '-vf',
+      vaapiScaleFilter8bit(input),
       '-g',
       String(target.gopSize),
       '-keyint_min',
       String(target.gopSize),
       '-force_key_frames',
       input.forceKeyframesExpr,
-    ];
-
-    if (filters.tonemapVaapi) {
-      return [
-        ...common,
-        '-vf',
-        `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi}`,
-        ...trailing,
-      ];
-    }
-    if (filters.tonemapOpencl) {
-      return [
-        ...common,
-        '-vf',
-        `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
-        ...trailing,
-      ];
-    }
-    return [
-      ...common,
-      '-vf',
-      `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:format=nv12`,
-      ...trailing,
     ];
   },
 };
