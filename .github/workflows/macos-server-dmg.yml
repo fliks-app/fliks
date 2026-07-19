@@ -54,16 +54,32 @@ jobs:
             backend/package-lock.json
 
       # ── Homebrew dependencies ──
-      # ffmpeg comes from the homebrew-ffmpeg tap built --with-zimg: the stock
-      # brew ffmpeg has no libzimg, so it lacks the `zscale` filter the HDR→SDR
-      # CPU tonemap chain needs (crop / burn-in paths). VideoToolbox is on by
-      # default there. --with-zimg forces a source build, so this step is slow.
       - name: Install Homebrew dependencies
+        run: brew install postgresql@18 xcodegen create-dmg
+
+      # ── ffmpeg from homebrew-ffmpeg --with-zimg (cached) ──
+      # Stock brew ffmpeg has no libzimg → no `zscale`, which the HDR→SDR CPU
+      # tonemap chain (crop / burn-in paths) needs. --with-zimg is a ~30-min
+      # source build, so cache the compiled keg. Bump the key suffix to rebuild.
+      - name: Cache ffmpeg keg
+        uses: actions/cache@v4
+        with:
+          path: ~/ffmpeg-keg
+          key: ffmpeg-zimg-${{ runner.arch }}-v1
+      - name: Install ffmpeg (--with-zimg)
         run: |
-          brew install postgresql@18 xcodegen create-dmg
-          brew uninstall --ignore-dependencies --force ffmpeg 2>/dev/null || true
           brew tap homebrew-ffmpeg/ffmpeg
-          brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-zimg
+          brew uninstall --ignore-dependencies --force ffmpeg 2>/dev/null || true
+          # Runtime deps as prebuilt bottles (fast); zimg is the --with-zimg extra.
+          brew install zimg $(brew deps homebrew-ffmpeg/ffmpeg/ffmpeg)
+          if [ -d ~/ffmpeg-keg/ffmpeg ]; then
+            cp -R ~/ffmpeg-keg/ffmpeg "$(brew --cellar)/"
+            brew link --overwrite --force ffmpeg
+          else
+            brew install --build-from-source homebrew-ffmpeg/ffmpeg/ffmpeg --with-zimg
+            mkdir -p ~/ffmpeg-keg && cp -R "$(brew --cellar)/ffmpeg" ~/ffmpeg-keg/
+          fi
+          ffmpeg -hide_banner -filters | grep -qw zscale
 
       # ── Fetch vendored Node.js 24 (arm64) ──
       - name: Fetch vendored binaries
