@@ -77,6 +77,14 @@ describe('buildFfmpegArgs — CPU golden argv (characterization)', () => {
        "0",
        "-probesize",
        "5000000",
+       "-colorspace",
+       "bt709",
+       "-color_primaries",
+       "bt709",
+       "-color_trc",
+       "bt709",
+       "-color_range",
+       "tv",
        "-i",
        "/media/in.mkv",
        "-copyts",
@@ -147,6 +155,32 @@ describe('buildFfmpegArgs — CPU golden argv (characterization)', () => {
        "/cache/out/index.m3u8",
      ]
     `);
+  });
+
+  it('preserves a signed BT.601 source colorimetry on input and output', () => {
+    const args = buildFfmpegArgs(
+      opts({
+        sourceColorSpace: 'smpte170m',
+        sourceColorPrimaries: 'smpte170m',
+        sourceColorTransfer: 'smpte170m',
+      }),
+      silentLog,
+    );
+    // Declared before -i (no conversion) and signalled on the output.
+    expect(args.slice(0, args.indexOf('-i'))).toEqual(
+      expect.arrayContaining(['-colorspace', 'smpte170m']),
+    );
+    expect(args.slice(args.indexOf('-i'))).toEqual(
+      expect.arrayContaining(['-colorspace', 'smpte170m']),
+    );
+    expect(args).not.toContain('bt709');
+  });
+
+  it('falls back to BT.709 for an unsigned source', () => {
+    const args = buildFfmpegArgs(opts({}), silentLog);
+    expect(args.slice(0, args.indexOf('-i'))).toEqual(
+      expect.arrayContaining(['-colorspace', 'bt709']),
+    );
   });
 
   it('HEVC HDR10 10-bit transcode (libx265, HDR metadata preserved)', () => {
@@ -404,6 +438,14 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
        "-extra_hw_frames",
        "32",
        "-noautorotate",
+       "-colorspace",
+       "bt709",
+       "-color_primaries",
+       "bt709",
+       "-color_trc",
+       "bt709",
+       "-color_range",
+       "tv",
        "-i",
        "/media/in.mkv",
        "-copyts",
@@ -718,6 +760,14 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
        "-extra_hw_frames",
        "32",
        "-noautorotate",
+       "-colorspace",
+       "bt709",
+       "-color_primaries",
+       "bt709",
+       "-color_trc",
+       "bt709",
+       "-color_range",
+       "tv",
        "-i",
        "/media/in.mkv",
        "-copyts",
@@ -1000,6 +1050,14 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
        "-extra_hw_frames",
        "32",
        "-noautorotate",
+       "-colorspace",
+       "bt709",
+       "-color_primaries",
+       "bt709",
+       "-color_trc",
+       "bt709",
+       "-color_range",
+       "tv",
        "-i",
        "/media/in.mkv",
        "-copyts",

@@ -72,6 +72,11 @@ export class SessionContextBuilder {
       // accurate GOP so IDR frames fall on the same boundary regardless of
       // source fps. Falls back to 24 when unknown.
       sourceFps: parseSourceFps(si?.video?.[0]?.frameRate),
+      // Source colorimetry — preserved through an SDR transcode so the output
+      // signals the source's real matrix/primaries/transfer, not a forced BT.709.
+      sourceColorSpace: si?.video?.[0]?.colorSpace,
+      sourceColorPrimaries: si?.video?.[0]?.colorPrimaries,
+      sourceColorTransfer: si?.video?.[0]?.colorTransfer,
       // Admin segment-duration setting, snapshotted here and frozen onto the
       // session at spawn so the serve/seek grid never shifts under a live
       // session if the admin later changes it.

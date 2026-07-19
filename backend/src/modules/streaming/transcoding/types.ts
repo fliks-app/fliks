@@ -128,6 +128,13 @@ export interface SessionContext {
   tonemapAlgo?: TonemapAlgo;
   /** Source framerate (fps). Used to compute GOP = segmentDuration * fps. */
   sourceFps?: number;
+  /** Source colorimetry from ffprobe (`colorSpace`/`colorPrimaries`/
+   *  `colorTransfer`), threaded so an SDR transcode preserves the source's real
+   *  color signalling instead of forcing BT.709. Undefined/`unknown` on an
+   *  untagged source, where the encoder falls back to BT.709. */
+  sourceColorSpace?: string;
+  sourceColorPrimaries?: string;
+  sourceColorTransfer?: string;
   /** HLS segment duration (seconds) this session cuts on — read from the admin
    *  setting when the context is built and frozen onto the session, so the
    *  serve/seek grid stays fixed for the session's lifetime. */
