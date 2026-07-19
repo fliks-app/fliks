@@ -32,7 +32,7 @@ export interface PlaybackInfoResponse {
    *  (`'vaapi'` / `'opencl'` / `'qsv'`) on QSV/VAAPI encoders, or
    *  `'cpu'` for the CPU chain (NVENC / libx26x / VideoToolbox
    *  fallback). Null when no tone-mapping pass runs on this session. */
-  tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | 'cpu' | null;
+  tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | 'videotoolbox' | 'cpu' | null;
   /** Tone-map curve, set for the `opencl` and `cpu` paths (the LUTs ignore it). */
   tonemapCurve?: 'hable' | 'mobius' | 'reinhard';
   /** Cibles par rung (transcodage). */

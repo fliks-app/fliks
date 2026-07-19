@@ -766,12 +766,17 @@ export class StreamingController {
     const openclTonemap =
       (response.hwAccel === 'nvenc' || response.hwAccel === 'amf') &&
       isOpenclTonemapEnabled();
+    // mirrors ffmpeg-args useVtMetalPath (scale_vt HW tone-map)
+    const vtMetalTonemap =
+      response.hwAccel === 'videotoolbox' && !hasCrop && !burnInSubtitleId;
     const tonemapAlgo = response.tonemapping
       ? hwTonemap
         ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop })
         : openclTonemap
           ? 'opencl'
-          : 'cpu'
+          : vtMetalTonemap
+            ? 'videotoolbox'
+            : 'cpu'
       : null;
     // The curve is a `tonemap`/`tonemap_opencl` operator, so it only applies to
     // the opencl and CPU paths — the vpp_qsv / tonemap_vaapi LUTs ignore it.

@@ -791,6 +791,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       vaapi: 'VAAPI',
       opencl: 'OpenCL',
       qsv: 'vpp_qsv',
+      videotoolbox: 'VideoToolbox',
       cpu: 'CPU',
     };
     // The opencl and CPU paths run a tunable curve (tonemap_opencl / tonemap),
