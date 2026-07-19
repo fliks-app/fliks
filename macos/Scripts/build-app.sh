@@ -3,7 +3,8 @@
 # Build a self-contained Fliks Server.app bundle with all dependencies.
 #
 # Prerequisites:
-#   1. brew install xcodegen postgresql@18 ffmpeg
+#   1. brew install xcodegen postgresql@18
+#      brew tap homebrew-ffmpeg/ffmpeg && brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-zimg
 #   2. ./Scripts/fetch-vendored.sh  (for Node.js 24 arm64)
 #   3. Xcode 16+ with command line tools
 #
@@ -38,13 +39,13 @@ fi
 
 for tool in ffmpeg psql; do
     if ! command -v $tool &>/dev/null; then
-        echo "Error: $tool not found. Run: brew install postgresql@18 ffmpeg"
+        echo "Error: $tool not found. See the prerequisites at the top of this script."
         exit 1
     fi
 done
 
 PG_PREFIX="$(brew --prefix postgresql@18)"
-FF_PREFIX="$(brew --prefix ffmpeg)"
+FF_PREFIX="$(brew --prefix homebrew-ffmpeg/ffmpeg/ffmpeg 2>/dev/null || brew --prefix ffmpeg)"
 
 echo "==> Build configuration"
 echo "    Node.js:    $VENDORED/node/bin/node ($($VENDORED/node/bin/node --version))"
@@ -238,6 +239,14 @@ if [ -n "$stray" ]; then
     exit 1
 fi
 echo "    [verify] no bundled binary references /opt/homebrew"
+
+# 3. ffmpeg must have zscale (libzimg) — the HDR→SDR CPU tonemap chain used by
+#    the crop / burn-in paths is built on it.
+if ! "$RESOURCES/ffmpeg/bin/ffmpeg" -hide_banner -filters 2>/dev/null | grep -qw zscale; then
+    echo "Error: bundled ffmpeg lacks the zscale filter (build it --with-zimg)."
+    exit 1
+fi
+echo "    [verify] ffmpeg has zscale (libzimg)"
 
 echo ""
 echo "==> Build complete: $APP_BUNDLE"

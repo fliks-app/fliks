@@ -23,6 +23,12 @@ archives and the upstream projects linked here.
 | Node.js runtime | MIT-style | https://github.com/nodejs/node |
 | PostgreSQL client | PostgreSQL License | https://www.postgresql.org |
 
+The macOS server app bundles FFmpeg, PostgreSQL and Node.js from the table above
+rather than the Docker archive. Its FFmpeg is a `homebrew-ffmpeg` build
+`--with-zimg`, which adds **libzimg / z.lib** (WTFPL, https://github.com/sekrit-twc/zimg)
+for the `zscale` filter; the FFmpeg umbrella license is unchanged
+(GPL-2.0-or-later).
+
 Node/npm package dependencies declare their own licenses in their respective
 `package.json` and `node_modules`; this file covers the non-npm programs
 embedded in the runtime image.

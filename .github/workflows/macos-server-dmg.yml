@@ -54,8 +54,16 @@ jobs:
             backend/package-lock.json
 
       # ── Homebrew dependencies ──
+      # ffmpeg comes from the homebrew-ffmpeg tap built --with-zimg: the stock
+      # brew ffmpeg has no libzimg, so it lacks the `zscale` filter the HDR→SDR
+      # CPU tonemap chain needs (crop / burn-in paths). VideoToolbox is on by
+      # default there. --with-zimg forces a source build, so this step is slow.
       - name: Install Homebrew dependencies
-        run: brew install postgresql@18 ffmpeg xcodegen create-dmg
+        run: |
+          brew install postgresql@18 xcodegen create-dmg
+          brew uninstall --ignore-dependencies --force ffmpeg 2>/dev/null || true
+          brew tap homebrew-ffmpeg/ffmpeg
+          brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-zimg
 
       # ── Fetch vendored Node.js 24 (arm64) ──
       - name: Fetch vendored binaries
