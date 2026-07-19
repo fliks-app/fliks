@@ -125,6 +125,7 @@ interface FfprobeStream {
   display_aspect_ratio?: string;
   pix_fmt?: string;
   r_frame_rate?: string;
+  avg_frame_rate?: string;
   start_time?: string;
   bit_rate?: string;
   bits_per_raw_sample?: string;
@@ -379,7 +380,7 @@ export class FfprobeService {
             height: s.height,
             displayAspectRatio: s.display_aspect_ratio,
             pixelFormat: s.pix_fmt,
-            frameRate: this.parseFrameRate(s.r_frame_rate),
+            frameRate: this.parseFrameRate(s.r_frame_rate, s.avg_frame_rate),
             startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
             bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
             bitDepth: s.bits_per_raw_sample
@@ -525,16 +526,27 @@ export class FfprobeService {
     }
   }
 
-  private parseFrameRate(rate?: string): string | undefined {
-    if (!rate || rate === '0/0') return undefined;
-    const parts = rate.split('/');
-    const num = Number(parts[0]);
-    const den = Number(parts[1]);
-    if (!den || !num) return rate;
-    const fps = num / den;
-    return fps > 0
-      ? fps.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
-      : undefined;
+  /**
+   * Normalise a ffprobe frame-rate to a decimal fps string (e.g. `23.976`).
+   * Prefers `r_frame_rate` and falls back to `avg_frame_rate` when the former
+   * is unusable (`0/0`, which VFR/some remuxed sources report): the transcode
+   * and playlist grids derive the segment length from this fps, so a missing
+   * value would drop them onto the integer grid and drift the audio off the
+   * video IDR cadence on a fractional-fps source.
+   */
+  private parseFrameRate(rate?: string, avgRate?: string): string | undefined {
+    const normalise = (r?: string): string | undefined => {
+      if (!r || r === '0/0') return undefined;
+      const parts = r.split('/');
+      const num = Number(parts[0]);
+      const den = Number(parts[1]);
+      if (!den || !num) return r;
+      const fps = num / den;
+      return fps > 0
+        ? fps.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+        : undefined;
+    };
+    return normalise(rate) ?? normalise(avgRate);
   }
 
   /**
