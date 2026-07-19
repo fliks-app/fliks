@@ -292,10 +292,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private saveInterval: ReturnType<typeof setInterval> | null = null;
-  private controlsTimeout: ReturnType<typeof setTimeout> | null = null;
   private readonly skipIntroCue = new PausableTimeout(() => this.skipIntroVisible.set(false));
   private readonly nextEpisodeCue = new PausableTimeout(() => this.nextEpisodeVisible.set(false));
-  private seekDragging = false;
+  /** True while the user is actively dragging / scrubbing the seekbar. */
+  private readonly seekDragging = signal(false);
   private statsInterval: ReturnType<typeof setInterval> | null = null;
   private subtitleStyleEl: HTMLStyleElement | null = null;
   /** Stall watchdog: last position we saw the playhead at, and when. If the
@@ -359,8 +359,36 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly subtitlePickerOpen = signal(false);
   readonly qualityPickerOpen = signal(false);
   /** True when any panel inside <app-player-controls> (desktop dropdown or
-   *  mobile bottom sheet) is open — suspends the auto-hide timer. */
+   *  mobile bottom sheet) is open — pins the controls open. */
   private readonly controlsPanelOpen = signal(false);
+
+  /** Bumped on any interaction that should restart the hide countdown; the
+   *  auto-hide effect re-reads it to re-arm. */
+  private readonly controlsActivity = signal(0);
+  /** Reasons the controls stay pinned open (never auto-hide): playback paused
+   *  or buffering, an open picker / panel, or an active seekbar drag. Reactive
+   *  so the moment a transient pin clears the auto-hide countdown restarts. */
+  private readonly keepControlsUp = computed(
+    () =>
+      this.paused() ||
+      this.buffering() ||
+      this.seekDragging() ||
+      this.subtitlePickerOpen() ||
+      this.qualityPickerOpen() ||
+      this.controlsPanelOpen(),
+  );
+  /** Single owner of the auto-hide countdown. Arms only while the bar is
+   *  visible and unpinned; a change in the pin state or an activity bump
+   *  re-runs it and re-arms. When a transient pin (buffering, a heavy quality
+   *  switch, a drag) clears, the countdown restarts on its own — the bar can't
+   *  get stuck open behind a timer that already fired while pinned. */
+  private readonly autoHideEffect = effect(onCleanup => {
+    if (!this.controlsVisible() || this.keepControlsUp()) return;
+    this.controlsActivity();
+    const delay = this.device.isTv() ? 5000 : 3000;
+    const id = setTimeout(() => this.hideControls(), delay);
+    onCleanup(() => clearTimeout(id));
+  });
 
   // ── Skip-intro state ──
   /** Episode-level intro marker received in playback-info (null for movies / no marker). */
@@ -1429,7 +1457,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     this.spriteAbort?.abort();
     if (this.saveInterval) clearInterval(this.saveInterval);
-    if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
     this.skipIntroCue.cancel();
     this.nextEpisodeCue.cancel();
     if (this.statsInterval) clearInterval(this.statsInterval);
@@ -1646,7 +1673,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private hideControls() {
-    if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
     this.controlsVisible.set(false);
     // Blur whatever was focused inside the controls so the next remote
     // Enter/OK doesn't accidentally activate an invisible button
@@ -1668,19 +1694,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  /** Restart the auto-hide countdown by registering activity. The reactive
+   *  `autoHideEffect` owns the actual timer and re-arms off this bump and off
+   *  the live pin state ({@link keepControlsUp}). */
   private resetHideTimer() {
-    if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
-    if (this.seekDragging) return; // don't start hide timer during drag
-    // 5 s on TV: focus is visual only, give the user time to read the labels.
-    const delay = this.device.isTv() ? 5000 : 3000;
-    this.controlsTimeout = setTimeout(() => {
-      // Route through hideControls() (not a bare set(false)) so it also blurs
-      // the focused control. After an arrow-seek lands focus on the seekbar,
-      // the seekbar's keydown stops propagation — without blurring on auto-hide
-      // the next arrow never reaches the global handler, so the controls would
-      // stay hidden on the second seek.
-      if (!this.paused() && !this.isDropdownOpen() && !this.seekDragging) this.hideControls();
-    }, delay);
+    this.controlsActivity.update(n => n + 1);
   }
 
   private isDropdownOpen(): boolean {
@@ -1703,12 +1721,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    */
   onControlsPanelOpenChange(open: boolean): void {
     this.controlsPanelOpen.set(open);
-    if (open) {
-      if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
-      this.controlsVisible.set(true);
-    } else {
-      this.resetHideTimer();
-    }
+    if (open) this.controlsVisible.set(true);
+    else this.resetHideTimer();
   }
 
   // ── Player actions ──
@@ -1735,14 +1749,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onSeekDragChange(dragging: boolean) {
-    this.seekDragging = dragging;
+    this.seekDragging.set(dragging);
     if (dragging) {
-      // Cancel any pending hide
-      if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
       // Freeze the engine→state mirror while the user is dragging /
       // scrubbing the seekbar — otherwise the player's `timeUpdate`
       // stream keeps pushing the bar back to the live position under
-      // the user's finger / arrow keys.
+      // the user's finger / arrow keys. The drag itself pins the controls
+      // open via keepControlsUp.
       this.state.seekLocked.set(true);
     } else {
       this.resetHideTimer();
