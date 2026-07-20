@@ -550,7 +550,10 @@
       (click)="selectAudioTrack.emit(track.id); closeSheet()"
     >
       <svg lucideHeadphones class="h-5 w-5 text-white/50 shrink-0"></svg>
-      <span class="flex-1 text-left">{{ track.label }}</span>
+      <span class="flex-1 text-left">
+        <span class="block">{{ track.menuHead || track.label }}</span>
+        @if (track.menuSub) { <span class="block text-xs text-white/60">{{ track.menuSub }}</span> }
+      </span>
       @if (activeAudioTrackId() === track.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
     </button>
   }
