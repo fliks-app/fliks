@@ -1,23 +1,18 @@
 <div class="flex flex-col gap-6">
-  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-    <div>
-      <h1 class="text-2xl font-bold">{{ 'settings.subtitle_providers.title' | translate }}</h1>
-      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.subtitle_providers.subtitle' | translate }}</p>
-    </div>
-    <button type="button" class="btn btn-primary" (click)="openCreate()">
-      {{ 'settings.subtitle_providers.new' | translate }}
-    </button>
+  <div>
+    <h1 class="text-2xl font-bold">{{ 'settings.subtitle_providers.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'settings.subtitle_providers.subtitle' | translate }}</p>
   </div>
 
   <!-- AI subtitle translation -->
   <div class="card bg-base-100 border border-base-200">
     <div class="card-body gap-4">
-      <div class="flex items-start justify-between gap-4">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <h2 class="card-title text-lg">{{ 'settings.subtitle_providers.translation_title' | translate }}</h2>
           <p class="text-sm text-base-content/60">{{ 'settings.subtitle_providers.translation_hint' | translate }}</p>
         </div>
-        <button type="button" class="btn btn-primary btn-sm shrink-0" (click)="openCreateTranslation()">
+        <button type="button" class="btn btn-primary btn-sm shrink-0 self-start" (click)="openCreateTranslation()">
           {{ 'settings.subtitle_providers.translation_new' | translate }}
         </button>
       </div>
@@ -66,9 +61,9 @@
               @for (row of translationRows(); track row.id) {
                 <tr>
                   <td class="font-medium">
-                    {{ row.name }}
+                    <div class="whitespace-nowrap">{{ row.name }}</div>
                     @if (row.isDefault) {
-                      <span class="badge badge-primary badge-sm ms-2">{{ 'settings.subtitle_providers.translation_default' | translate }}</span>
+                      <span class="badge badge-primary badge-xs mt-1">{{ 'settings.subtitle_providers.translation_default' | translate }}</span>
                     }
                   </td>
                   <td class="text-sm">{{ translationEngineLabel(row.engine) }}</td>
@@ -98,17 +93,30 @@
     </div>
   </div>
 
-  @if (loading()) {
-    <div class="flex justify-center py-16">
-      <span class="loading loading-spinner loading-lg"></span>
-    </div>
-  } @else if (listError()) {
-    <div role="alert" class="alert alert-error">{{ listError() }}</div>
-  } @else if (rows().length === 0) {
-    <p class="text-center py-12 text-base-content/50">{{ 'settings.subtitle_providers.empty' | translate }}</p>
-  } @else {
-    <div class="overflow-x-auto rounded-lg border border-base-200">
-      <table class="table table-zebra">
+  <!-- Download providers -->
+  <div class="card bg-base-100 border border-base-200">
+    <div class="card-body gap-4">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h2 class="card-title text-lg">{{ 'settings.subtitle_providers.download_title' | translate }}</h2>
+          <p class="text-sm text-base-content/60">{{ 'settings.subtitle_providers.download_hint' | translate }}</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm shrink-0 self-start" (click)="openCreate()">
+          {{ 'settings.subtitle_providers.new' | translate }}
+        </button>
+      </div>
+
+      @if (loading()) {
+        <div class="flex justify-center py-16">
+          <span class="loading loading-spinner loading-lg"></span>
+        </div>
+      } @else if (listError()) {
+        <div role="alert" class="alert alert-error">{{ listError() }}</div>
+      } @else if (rows().length === 0) {
+        <p class="text-center py-12 text-base-content/50">{{ 'settings.subtitle_providers.empty' | translate }}</p>
+      } @else {
+        <div class="overflow-x-auto rounded-lg border border-base-200">
+          <table class="table table-zebra">
         <thead>
           <tr>
             <th>{{ 'settings.subtitle_providers.col_name' | translate }}</th>
@@ -151,7 +159,9 @@
         </tbody>
       </table>
     </div>
-  }
+      }
+    </div>
+  </div>
 </div>
 
   <dialog #editorDialog class="modal">
