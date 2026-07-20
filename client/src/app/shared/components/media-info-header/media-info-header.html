@@ -422,7 +422,7 @@
       <div class="flex items-center gap-2">
         <span class="text-base-content/50">{{ 'media_info.video' | translate }}</span>
         @if (multipleFiles()) {
-          <select class="select select-bordered select-sm w-fit" appTvSelect [ngModel]="selectedFileId()" (ngModelChange)="selectedFileIdChange.emit($event)">
+          <select class="select select-bordered select-sm w-fit pe-9" appTvSelect [ngModel]="selectedFileId()" (ngModelChange)="selectedFileIdChange.emit($event)">
             @for (f of files(); track f.id) {
               <option [ngValue]="f.id">{{ fileLabel(f) }}</option>
             }
@@ -437,11 +437,25 @@
           @if (audioTracks().length === 1) {
             <span>{{ audioTracks()[0].label }}</span>
           } @else {
-            <select class="select select-bordered select-sm w-fit" appTvSelect [ngModel]="selectedAudioIndex()" (ngModelChange)="onAudioChange($event)">
+            <app-dropdown-menu placement="bottom-end">
+              <button trigger type="button" class="select select-bordered select-sm w-fit text-left pe-9">
+                {{ selectedAudio()?.head || selectedAudio()?.label }}
+              </button>
               @for (t of audioTracks(); track t.index) {
-                <option [ngValue]="t.index">{{ t.label }}</option>
+                <button
+                  type="button"
+                  class="dropdown-item"
+                  [class.text-primary]="t.index === selectedAudioIndex()"
+                  (click)="onAudioChange(t.index)"
+                >
+                  <span class="flex-1 flex flex-col items-start gap-0 leading-tight text-left">
+                    <span>{{ t.head || t.label }}</span>
+                    @if (t.sub) { <span class="text-xs opacity-60">{{ t.sub }}</span> }
+                  </span>
+                  @if (t.index === selectedAudioIndex()) { <span class="h-2 w-2 rounded-full bg-primary shrink-0"></span> }
+                </button>
               }
-            </select>
+            </app-dropdown-menu>
           }
         </div>
       }
@@ -452,16 +466,30 @@
             <span>{{ subtitles()[0].label }}</span>
           } @else {
             <app-dropdown-menu placement="bottom-end">
-              <button trigger type="button" class="select select-bordered select-sm w-fit text-left">
-                {{ selectedSubtitle()?.label ?? ('player.off' | translate) }}
+              <button trigger type="button" class="select select-bordered select-sm w-fit text-left pe-9">
+                {{ selectedSubtitle()?.head || selectedSubtitle()?.label || ('player.off' | translate) }}
               </button>
-              <button type="button" class="dropdown-item" (click)="onSubtitleChange(null)">
-                {{ 'player.off' | translate }}
+              <button
+                type="button"
+                class="dropdown-item"
+                [class.text-primary]="!selectedSubtitleId()"
+                (click)="onSubtitleChange(null)"
+              >
+                <span class="flex-1 text-left">{{ 'player.off' | translate }}</span>
+                @if (!selectedSubtitleId()) { <span class="h-2 w-2 rounded-full bg-primary shrink-0"></span> }
               </button>
               @for (s of subtitles(); track s.id) {
-                <button type="button" class="dropdown-item !items-start flex-col gap-0" (click)="onSubtitleChange(s.id)">
-                  <span>{{ s.head || s.label }}</span>
-                  @if (s.sub) { <span class="text-xs opacity-60">{{ s.sub }}</span> }
+                <button
+                  type="button"
+                  class="dropdown-item"
+                  [class.text-primary]="s.id === selectedSubtitleId()"
+                  (click)="onSubtitleChange(s.id)"
+                >
+                  <span class="flex-1 flex flex-col items-start gap-0 leading-tight text-left">
+                    <span>{{ s.head || s.label }}</span>
+                    @if (s.sub) { <span class="text-xs opacity-60">{{ s.sub }}</span> }
+                  </span>
+                  @if (s.id === selectedSubtitleId()) { <span class="h-2 w-2 rounded-full bg-primary shrink-0"></span> }
                 </button>
               }
             </app-dropdown-menu>

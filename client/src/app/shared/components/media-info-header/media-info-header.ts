@@ -47,6 +47,7 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import {
   bucketResolutionLabel,
   formatAudioLabel,
+  formatAudioParts,
   resolutionFromQualityName,
 } from '../../../core/utils/player.utils';
 import { DropdownMenuComponent } from '../dropdown-menu';
@@ -89,6 +90,8 @@ export interface MediaInfoHeaderBadge {
 interface AudioTrack {
   index: number;
   label: string;
+  head?: string;
+  sub?: string;
   language: string;
 }
 
@@ -316,12 +319,20 @@ export class MediaInfoHeaderComponent {
     const file = this.selectedFile();
     const audio = file?.streamInfo?.audio as any[] | undefined;
     if (!audio?.length) return [];
-    return audio.map((a: any, i: number) => ({
-      index: i,
-      label: formatAudioLabel(a, this.translate, i + 1),
-      language: a.language ?? 'und',
-    }));
+    return audio.map((a: any, i: number) => {
+      const parts = formatAudioParts(a, this.translate, i + 1);
+      return {
+        index: i,
+        label: formatAudioLabel(a, this.translate, i + 1),
+        head: parts.head,
+        sub: parts.sub,
+        language: a.language ?? 'und',
+      };
+    });
   });
+  readonly selectedAudio = computed(
+    () => this.audioTracks().find((t) => t.index === this.selectedAudioIndex()) ?? null,
+  );
 
   private readonly resolveDefaultsEffect = effect(() => {
     const file = this.selectedFile();
