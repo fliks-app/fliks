@@ -60,6 +60,9 @@ export class MpvPlayer extends EventEmitter {
   private sawFirstFrame = false;
   private duration = 0;
   private cacheEnd = 0;
+  /** Demuxer format forced for the current media (`hls` for manifests, else
+   *  empty). Dropped around a sidecar `sub-add` so the VTT isn't demuxed as HLS. */
+  private forcedDemuxFormat = '';
   /** Bumped by load/stop/destroy; a load with a stale id skips its remaining
    *  IPC writes, so a stop can't be overtaken by a trailing loadfile. */
   private loadGen = 0;
@@ -326,7 +329,8 @@ export class MpvPlayer extends EventEmitter {
     // Force the HLS demuxer for manifests so mpv parses the playlist directly,
     // skipping the generic probe whose backward seek the linear HTTP stream
     // can't satisfy.
-    if (/\.m3u8(\?|$)/.test(opts.url)) fileOpts.push('demuxer-lavf-format=hls');
+    this.forcedDemuxFormat = /\.m3u8(\?|$)/.test(opts.url) ? 'hls' : '';
+    if (this.forcedDemuxFormat) fileOpts.push(`demuxer-lavf-format=${this.forcedDemuxFormat}`);
     const cmd: unknown[] = ['loadfile', opts.url, 'replace', 0];
     if (fileOpts.length) cmd.push(fileOpts.join(','));
     await this.command(cmd);
@@ -431,7 +435,20 @@ export class MpvPlayer extends EventEmitter {
    *  re-selecting the same subtitle never stacks; mpv parses the VTT once and
    *  seeks within it natively, unlike a re-read HLS rendition. */
   async subAdd(url: string, label: string, language: string): Promise<void> {
-    await this.command(['sub-add', url, 'cached', label ?? '', language ?? '']);
+    // A manifest load forces demuxer-lavf-format=hls; while it's in effect mpv
+    // applies it to this sidecar VTT too and fails to open it ("Found 'hls'
+    // (forced)" → avformat_open_input() failed). Drop the forced format for the
+    // sub-add so the VTT is probed normally, then restore it.
+    if (this.forcedDemuxFormat) {
+      await this.command(['set', 'demuxer-lavf-format', '']).catch(() => {});
+    }
+    try {
+      await this.command(['sub-add', url, 'cached', label ?? '', language ?? '']);
+    } finally {
+      if (this.forcedDemuxFormat) {
+        await this.command(['set', 'demuxer-lavf-format', this.forcedDemuxFormat]).catch(() => {});
+      }
+    }
   }
 
   async setSubtitleStyle(s: DesktopSubtitleStyle): Promise<void> {
