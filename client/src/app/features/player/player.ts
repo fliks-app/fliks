@@ -1221,6 +1221,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           const { url: nativeUrl, mimeType: nativeMimeType } = this.buildPlayUrl({
             startTime,
           });
+          // Left the view during setup: stop the engine, don't start playback.
+          if (this.destroyed) {
+            await this.engine?.destroy().catch(() => {});
+            this.engine = null;
+            return;
+          }
           await this.engine!.load(nativeUrl, startTime, nativeMimeType, headers);
         } else {
           await this.createShakaEngine();

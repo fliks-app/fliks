@@ -60,6 +60,9 @@ export class MpvPlayer extends EventEmitter {
   private sawFirstFrame = false;
   private duration = 0;
   private cacheEnd = 0;
+  /** Bumped by load/stop/destroy; a load with a stale id skips its remaining
+   *  IPC writes, so a stop can't be overtaken by a trailing loadfile. */
+  private loadGen = 0;
 
   constructor(opts: MpvPlayerOptions) {
     super();
@@ -271,6 +274,7 @@ export class MpvPlayer extends EventEmitter {
 
   async load(opts: DesktopLoadOptions): Promise<void> {
     this.sawFirstFrame = false;
+    const gen = ++this.loadGen;
     // Auth/other headers → the http-header-fields LIST property, set BEFORE
     // loadfile. Don't cram them into the comma-separated loadfile options
     // string — header values contain ',' and ':' that would break that parse.
@@ -279,6 +283,7 @@ export class MpvPlayer extends EventEmitter {
         'http-header-fields',
         Object.entries(opts.headers).map(([k, v]) => `${k}: ${v}`),
       );
+      if (gen !== this.loadGen) return;
     }
     // mpv >= 0.38 loadfile signature is <url> <flags> <index> <options>; the
     // bundled mpv is recent, so pass index 0 then the options. Append the start
@@ -287,12 +292,15 @@ export class MpvPlayer extends EventEmitter {
     const cmd: unknown[] = ['loadfile', opts.url, 'replace', 0];
     if (opts.startTime && opts.startTime > 0) cmd.push(`start=${opts.startTime}`);
     await this.command(cmd);
+    if (gen !== this.loadGen) return;
     // The persistent mpv keeps its pause state across loads; force playback so a
     // freshly opened file always autoplays. The JS side treats this engine like
     // the mobile native player (playWhenReady) and never calls play() itself.
     await this.set('pause', false);
+    if (gen !== this.loadGen) return;
     for (const s of opts.subtitles ?? []) {
       await this.command(['sub-add', s.url, 'auto', s.label ?? '', s.language ?? '']);
+      if (gen !== this.loadGen) return;
     }
   }
 
@@ -309,6 +317,7 @@ export class MpvPlayer extends EventEmitter {
   }
 
   stop(): Promise<void> {
+    this.loadGen++;
     // Reset baselines so the persistent player can't replay a stale first-frame
     // / position into the next session after a back-navigation.
     this.sawFirstFrame = false;
@@ -392,8 +401,13 @@ export class MpvPlayer extends EventEmitter {
   }
 
   async destroy(): Promise<void> {
+    this.loadGen++;
     try {
-      await this.command(['quit']);
+      // mpv may close the socket on quit without replying — cap the wait.
+      await Promise.race([
+        this.command(['quit']),
+        new Promise<void>((resolve) => setTimeout(resolve, 500)),
+      ]);
     } catch {
       /* socket may already be gone */
     }
