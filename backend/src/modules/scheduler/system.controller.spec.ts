@@ -53,6 +53,7 @@ describe('SystemController.activeStreams recency filter', () => {
       deviceType: 'desktop',
       hdrLadder: false,
       supportsHlsSubtitles: false,
+      prefersMuxedAudio: false,
       probesSegZero: true,
       videoVariant: null,
       tonemapping: false,

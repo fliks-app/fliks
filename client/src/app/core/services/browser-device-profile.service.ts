@@ -130,6 +130,10 @@ export interface DeviceProfile {
    *  whose AVPlay/webOS cue APIs are limited so they keep a DOM overlay. */
   supportsHlsSubtitles?: boolean;
 
+  /** Engine wants all audio muxed into one HLS variant (switch by track id),
+   *  not separate EXT-X-MEDIA renditions (desktop mpv). */
+  prefersMuxedAudio?: boolean;
+
   /** Engine renders bitmap (PGS/VOBSUB) subtitles itself (ExoPlayer, mpv), so
    *  they're shown natively rather than burned into the video. False engines
    *  (web/Shaka, Tizen, webOS) burn them in. */
@@ -538,6 +542,7 @@ export class BrowserDeviceProfileService {
       // overlay fed by sidecar VTT instead of the HLS renditions.
       supportsHlsSubtitles: traits.supportsHlsSubtitles,
       supportsImageSubtitles: traits.supportsImageSubtitles,
+      prefersMuxedAudio: traits.prefersMuxedAudio,
       // Only the web/Shaka path probes seg-0 on a load-then-seek; that is
       // exactly the `!isNative` engine branch (Capacitor mobile + every TV go
       // through native players that seek straight to the resume segment). The

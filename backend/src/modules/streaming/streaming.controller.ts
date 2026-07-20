@@ -882,6 +882,7 @@ export class StreamingController {
       deviceType,
       hdrLadder: useHdrLadder,
       supportsHlsSubtitles: !!deviceProfile.supportsHlsSubtitles,
+      prefersMuxedAudio: !!deviceProfile.prefersMuxedAudio,
       probesSegZero: deviceProfile.probesSegZero,
       videoVariant,
       tonemapping: response.tonemapping,

@@ -143,6 +143,7 @@ describe('StreamingController.stopLiveSession', () => {
       deviceType: 'desktop',
       hdrLadder: false,
       supportsHlsSubtitles: false,
+      prefersMuxedAudio: false,
       probesSegZero: true,
       videoVariant: null,
       tonemapping: false,

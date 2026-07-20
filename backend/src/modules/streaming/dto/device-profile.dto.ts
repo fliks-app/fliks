@@ -123,6 +123,14 @@ export class DeviceProfileDto {
   supportsHlsSubtitles?: boolean;
 
   /**
+   * Engine wants all audio muxed into one HLS variant (switch by track id),
+   * not separate EXT-X-MEDIA renditions (desktop mpv).
+   */
+  @IsBoolean()
+  @IsOptional()
+  prefersMuxedAudio?: boolean;
+
+  /**
    * Engine renders bitmap (PGS/VOBSUB) subtitles itself (ExoPlayer, mpv), so
    * they're shown natively rather than burned in. Client-side hint; the backend
    * accepts it for forward-compat (burn-in is client-initiated via

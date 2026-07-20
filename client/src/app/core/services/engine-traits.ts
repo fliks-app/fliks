@@ -45,6 +45,10 @@ export interface EngineTraits {
   probesSegZero?: boolean;
   /** Engine can play a raw progressive file as DirectPlay. */
   supportsDirectPlay?: boolean;
+  /** Engine wants all audio muxed into the single HLS variant (switched by
+   *  track id), not separate EXT-X-MEDIA renditions. Only the desktop mpv
+   *  engine sets it; its ffmpeg HLS demuxer mis-seeks separate renditions. */
+  prefersMuxedAudio?: boolean;
 }
 
 /**
@@ -87,6 +91,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: true,
     supportsDirectPlay: true,
+    prefersMuxedAudio: true,
   },
   [EngineKind.ANDROID_TV]: {
     useTsOnSingleAudio: false,
