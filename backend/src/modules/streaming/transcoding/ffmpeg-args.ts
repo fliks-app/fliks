@@ -142,23 +142,26 @@ export interface SegmentGrid {
   fps: number;
   /** GOP = round(segmentDuration × fps) frames — one IDR per segment. */
   gopSize: number;
-  /** Real segment length on the wire (gop/fps). The seek grid, the force-IDR
-   *  cadence, the playlist EXTINF and the fMP4 tfdt all anchor on this so they
-   *  agree on fractional-fps sources. Equals segmentDuration for integer fps. */
+  /** Real segment length on the wire (gop/fps). The seek grid, the playlist
+   *  EXTINF and the fMP4 tfdt anchor on this so they agree on fractional-fps
+   *  sources; the force-IDR cadence lands on the same grid, counted in `gopSize`
+   *  frames. Equals segmentDuration for integer fps. */
   realSeg: number;
   /** Resume point (source seconds) for a mid-file seek (`startSegment > 0`). */
   seekSeconds: number;
-  /** `force_key_frames` expression — a forced IDR at every run-relative segment
-   *  boundary. */
+  /** `force_key_frames` expression — a forced IDR every `gopSize` output frames
+   *  from the run's first frame, one per segment boundary. */
   forceKeyframesExpr: string;
 }
 
 /** Resolve the segment/IDR grid every downstream arg anchors on. ffmpeg
- *  evaluates the `force_key_frames` expr's `t` run-relative (0-based per run)
- *  even under `-copyts`, so the forced-IDR cadence is anchored at
- *  `n_forced*realSeg` — a forced IDR on every segment boundary from the first
- *  frame of the run, giving the HLS muxer a clean keyframe cut at each boundary
- *  including the first. */
+ *  evaluates the `force_key_frames` expr per output frame with `n` run-relative
+ *  (0-based per run) even under `-copyts`, so anchoring the cadence at
+ *  `n_forced*gopSize` forces an IDR on the run's first frame and every `gopSize`
+ *  frames after — a frame-exact cut at every segment boundary including the
+ *  first. Counting frames (not seconds) makes each segment exactly `gopSize`
+ *  frames, so the per-segment tfdt anchor sits on a uniform grid on
+ *  fractional-fps sources too. */
 export function buildSegmentGrid(
   segmentDuration: number,
   sourceFps: number | undefined,
@@ -176,7 +179,7 @@ export function buildSegmentGrid(
     gopSize,
     realSeg,
     seekSeconds,
-    forceKeyframesExpr: `expr:gte(t,n_forced*${realSeg})`,
+    forceKeyframesExpr: `expr:gte(n,n_forced*${gopSize})`,
   };
 }
 
