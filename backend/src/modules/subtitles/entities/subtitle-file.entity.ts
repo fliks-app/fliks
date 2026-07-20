@@ -119,4 +119,9 @@ export class SubtitleFile extends BaseEntity {
 
   @Column({ type: 'varchar', nullable: true })
   translationModel: string | null;
+
+  /** The provider's admin-given name at translation time — shown as the source
+   *  label. Snapshotted so it survives a later rename or removal. */
+  @Column({ type: 'varchar', nullable: true })
+  translationProviderName: string | null;
 }

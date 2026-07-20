@@ -84,6 +84,8 @@
                     <td class="text-sm">
                       @if (sub.providerType === 'embedded') {
                         <span class="badge badge-sm badge-neutral">embedded</span>
+                      } @else if (sub.providerType === 'translated') {
+                        <span [title]="sub.translationModel ?? ''">{{ translationServiceLabel(sub) }}</span>
                       } @else {
                         {{ sub.providerType }}
                       }

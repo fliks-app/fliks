@@ -680,6 +680,23 @@ export class SubtitlesModalComponent {
     this.ocrLangDialog()?.nativeElement.showModal();
   }
 
+  /** Display label for a translated sub's provider column: the admin-given
+   *  provider name (snapshotted at translation time), falling back to the engine
+   *  and then a generic "translated" for rows created before provenance existed. */
+  translationServiceLabel(sub: SubtitleFileRow): string {
+    if (sub.translationProviderName) return sub.translationProviderName;
+    switch (sub.translationEngine) {
+      case 'gemini':
+        return 'Gemini';
+      case 'openai':
+        return 'OpenAI';
+      case 'libretranslate':
+        return 'LibreTranslate';
+      default:
+        return this.translate.instant('player.subtitle_source.translated');
+    }
+  }
+
   /** Translate a text subtitle: pick the target language and provider first. */
   async translateSubtitle(sub: SubtitleFileRow) {
     let providers: AvailableTranslationProvider[] = [];

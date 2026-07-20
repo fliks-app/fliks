@@ -21,6 +21,11 @@ export interface SubtitleFileRow {
   syncOffset?: number;
   streamIndex?: number | null;
   codec?: string | null;
+  /** For TRANSLATED subs: the provider name/engine/model that produced them. */
+  translationProviderName?: string | null;
+  translationEngine?: string | null;
+  translationModel?: string | null;
+  translationProviderId?: number | null;
 }
 
 export interface SubtitleSearchResult {
