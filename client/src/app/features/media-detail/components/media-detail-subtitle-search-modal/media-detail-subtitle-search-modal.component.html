@@ -1,5 +1,5 @@
 <dialog #dialog class="modal">
-  <div class="modal-box max-w-3xl max-h-[85vh] flex flex-col">
+  <div class="modal-box max-w-5xl max-h-[85vh] flex flex-col">
     <h3 class="text-lg font-bold mb-4">{{ 'media_detail.search_subtitles' | translate }}</h3>
     <div class="flex gap-2 mb-4">
       <select
@@ -28,7 +28,7 @@
               <th class="text-center">{{ 'media_detail.col_sub_score' | translate }}</th>
               <th class="text-center">{{ 'media_detail.col_sub_flags' | translate }}</th>
               <th>{{ 'media_detail.col_sub_provider' | translate }}</th>
-              <th class="w-20"></th>
+              <th class="w-32"></th>
             </tr>
           </thead>
           <tbody>
@@ -65,11 +65,11 @@
                 <td>
                   <button
                     type="button"
-                    class="btn btn-primary btn-xs"
+                    class="btn btn-primary btn-sm"
                     (click)="download.emit(r)"
                     [disabled]="subtitleActionBusy()"
                   >
-                    DL
+                    {{ 'common.download' | translate }}
                   </button>
                 </td>
               </tr>
