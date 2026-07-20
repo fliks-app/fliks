@@ -20,6 +20,7 @@ import { SelectPickerService } from '../../core/services/select-picker.service';
 @Directive({
   selector: 'select[appTvSelect]',
   standalone: true,
+  host: { class: 'cursor-pointer transition-colors hover:bg-base-content/10' },
 })
 export class TvSelectDirective {
   private readonly host = inject<ElementRef<HTMLSelectElement>>(ElementRef);
@@ -32,6 +33,9 @@ export class TvSelectDirective {
   @HostListener('keydown.enter', ['$event'])
   @HostListener('keydown.space', ['$event'])
   protected onOpen(e: Event) {
+    // Only the primary (left) button opens the picker — a right/middle click
+    // falls through to the browser's default handling instead of hijacking it.
+    if (e instanceof MouseEvent && e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
     this.picker.show(this.host.nativeElement, this.appTvSelect());
