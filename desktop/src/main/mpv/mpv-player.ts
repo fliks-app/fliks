@@ -94,11 +94,13 @@ export class MpvPlayer extends EventEmitter {
       // mpv's playlist safety check otherwise refuses them on the fallback path.
       '--load-unsafe-playlists=yes',
       '--ytdl=no',
-      // Align buffering with the web (Shaka) engine: ~30s ahead, ~60s behind,
-      // resume after 1s (byte caps approximate mpv's byte-bounded cache).
+      // Buffer like the web (Shaka) engine (~30s fwd / ~60s back / resume 1s).
+      // cache-secs is the binding forward TIME cap — with --cache=yes it else
+      // defaults to ~unlimited and overrides readahead-secs; bytes are a ceiling.
       '--cache=yes',
+      '--cache-secs=30',
       '--demuxer-readahead-secs=30',
-      '--demuxer-max-bytes=48MiB',
+      '--demuxer-max-bytes=256MiB',
       '--demuxer-max-back-bytes=96MiB',
       '--cache-pause-wait=1',
       // A slow transcode (HDR tonemap re-encode) isn't ready when mpv opens
@@ -109,7 +111,7 @@ export class MpvPlayer extends EventEmitter {
       // reconnect_on_http_error. The `4xx,5xx` value carries a comma, so it uses
       // mpv's `%len%` escaping (7 = strlen("4xx,5xx")) to survive the key-value-
       // list parser. Mirrors native/compositor/addon.cc.
-      '--demuxer-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=%7%4xx,5xx,reconnect_delay_max=60',
+      '--demuxer-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=%7%4xx,5xx,reconnect_delay_max=5',
       `--input-ipc-server=${this.sockPath}`,
     ];
     console.log('[mpv] spawn:', this.mpvPath, args.join(' '));
@@ -117,6 +119,7 @@ export class MpvPlayer extends EventEmitter {
     this.proc.on('exit', (code) => {
       this.emit('stateChanged', { state: 'idle' });
       this.emit('exit', { code });
+      this.rejectAllPending('mpv process exited');
     });
     this.proc.stderr?.on('data', (d: Buffer) => this.emit('log', d.toString()));
 
@@ -158,7 +161,14 @@ export class MpvPlayer extends EventEmitter {
       sock.once('connect', () => {
         this.sock = sock;
         sock.on('data', (chunk: Buffer) => this.onData(chunk));
-        sock.on('error', (e) => this.emit('error', { code: -1, message: String(e) }));
+        sock.on('error', (e) => {
+          this.emit('error', { code: -1, message: String(e) });
+          this.rejectAllPending(`mpv socket error: ${e}`);
+        });
+        sock.on('close', () => {
+          this.sock = null;
+          this.rejectAllPending('mpv socket closed');
+        });
         resolve();
       });
       sock.once('error', reject);
@@ -265,8 +275,20 @@ export class MpvPlayer extends EventEmitter {
       if (!this.sock) return reject(new Error('mpv socket not connected'));
       const request_id = ++this.reqId;
       this.pending.set(request_id, { resolve, reject });
-      this.sock.write(JSON.stringify({ command, request_id }) + '\n');
+      try {
+        this.sock.write(JSON.stringify({ command, request_id }) + '\n');
+      } catch (e) {
+        this.pending.delete(request_id);
+        reject(e instanceof Error ? e : new Error(String(e)));
+      }
     });
+  }
+
+  /** Fail every in-flight command so a socket/process death can't wedge an
+   *  awaiting load/seek invoke forever. */
+  private rejectAllPending(message: string): void {
+    for (const p of this.pending.values()) p.reject(new Error(message));
+    this.pending.clear();
   }
 
   private get(prop: string): Promise<any> {
@@ -288,16 +310,14 @@ export class MpvPlayer extends EventEmitter {
     // previous file's buffered stream.
     await this.command(['stop']).catch(() => {});
     if (gen !== this.loadGen) return;
-    // Auth/other headers → the http-header-fields LIST property, set BEFORE
-    // loadfile. Don't cram them into the comma-separated loadfile options
-    // string — header values contain ',' and ':' that would break that parse.
-    if (opts.headers && Object.keys(opts.headers).length) {
-      await this.set(
-        'http-header-fields',
-        Object.entries(opts.headers).map(([k, v]) => `${k}: ${v}`),
-      );
-      if (gen !== this.loadGen) return;
-    }
+    // Always set http-header-fields (empty list when absent) so this reused
+    // singleton can't inherit a prior load's auth header over the fresh ?token=.
+    // A LIST property, not the loadfile options string (values carry ','/':' ).
+    await this.set(
+      'http-header-fields',
+      opts.headers ? Object.entries(opts.headers).map(([k, v]) => `${k}: ${v}`) : [],
+    );
+    if (gen !== this.loadGen) return;
     // mpv >= 0.38 loadfile signature is <url> <flags> <index> <options>; the
     // bundled mpv is recent, so pass index 0 then the options. Omit the options
     // string when empty — mpv otherwise parses it as the index and rejects it.
