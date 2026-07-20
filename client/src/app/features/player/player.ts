@@ -684,21 +684,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       : '';
 
     // --- Video label ---
-    // Use profile name from active variant URL (e.g. "360p") instead of raw resolution
+    // The header describes the SOURCE file (resolution + HDR + codec), matching
+    // the panel's `source → output` convention: the "→ Transcodage" line below
+    // carries the output codec/HW and the downscale target. Source dimensions
+    // keep the header stable across pinned-quality and ABR variant switches.
     const active = this.getActiveVariant();
     const urlMatch = active?.originalVideoId?.match(/\/(\d+p)\//);
-    // For a pinned quality (anything but `auto`), trust the selected rung's
-    // label — the native engine's reported variant doesn't always refresh
-    // after a switch on mobile, leaving the resolution line stale. `auto`
-    // still reads the ABR-chosen variant.
     const selectedQualityOpt = this.qualityManager
       .availableQualities()
       .find((q) => q.id === _quality);
-    const resLabel =
-      _quality !== 'auto' && selectedQualityOpt?.label
-        ? selectedQualityOpt.label
-        : (urlMatch?.[1] ??
-          this.qualityManager.resolutionLabel(playingWidth, playingHeight));
+    const resLabel = this.qualityManager.resolutionLabel(
+      src?.width,
+      src?.height,
+    );
     const hdrTag = src?.hdrFormat ? ` ${src.hdrFormat}` : '';
     const codecName = (src?.videoCodec ?? '?').toUpperCase();
     const videoLabel = `${resLabel}${hdrTag} ${codecName}`;
