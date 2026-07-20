@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -14,17 +15,14 @@ import { SubtitleFile } from './entities/subtitle-file.entity';
 import { Media } from '../media/entities/media.entity';
 import { SettingsService } from '../settings/settings.service';
 import { EventsService } from '../scheduler/events.service';
-import {
-  ResolvedTranslationSettings,
-  SubtitleTranslationSettingsCache,
-} from './subtitle-translation-settings-cache.service';
+import { SubtitleTranslationSettingsCache } from './subtitle-translation-settings-cache.service';
 import {
   TranslationRateLimitError,
   type TranslationRequest,
 } from './translation-core';
-import { translateWithGemini } from './gemini-translator';
-import { translateWithOpenAi } from './openai-translator';
-import { translateWithLibreTranslate } from './libretranslate-translator';
+import { TranslationProviderService } from './translation-provider.service';
+import { TranslationProviderFactory } from './providers/translation-provider.factory';
+import { TranslationProvider } from './entities/translation-provider.entity';
 import { parseSrt, serializeSrt } from './srt.util';
 import { cleanSubtitle } from './subtitle-cleaner';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
@@ -64,6 +62,8 @@ export class SubtitleTranslationService {
     private readonly settings: SettingsService,
     private readonly events: EventsService,
     private readonly translationSettings: SubtitleTranslationSettingsCache,
+    private readonly translationProviders: TranslationProviderService,
+    private readonly translationFactory: TranslationProviderFactory,
   ) {
     fs.mkdir(this.tmpDir, { recursive: true }).catch(() => {});
   }
@@ -76,12 +76,14 @@ export class SubtitleTranslationService {
   async translateSubtitle(
     subtitleId: number,
     targetLanguage: string,
+    providerId?: number,
   ): Promise<SubtitleFile> {
-    const config = await this.translationSettings.get();
-    if (!config.enabled) {
+    const settings = await this.translationSettings.get();
+    if (!settings.enabled) {
       throw new BadRequestException('Subtitle translation is disabled');
     }
-    this.assertEngineConfigured(config);
+    const provider = await this.resolveProvider(providerId);
+    this.translationFactory.validateConfig(provider.engine, provider.settings);
 
     const source = await this.repo.findOne({
       where: { id: subtitleId },
@@ -122,29 +124,45 @@ export class SubtitleTranslationService {
       status: SubtitleStatus.PROCESSING,
       codec: 'subrip',
       score: source.score,
+      translationProvider: { id: provider.id },
+      translationEngine: provider.engine,
+      translationModel: this.translationFactory.resolveModel(
+        provider.engine,
+        provider.settings,
+      ),
     } as any);
 
-    void this.runTranslation(placeholder.id, source, target, config).catch((err) => {
+    void this.runTranslation(
+      placeholder.id,
+      source,
+      target,
+      provider,
+      settings.maxConcurrency,
+    ).catch((err) => {
       this.log.error(`Translate run crashed for sub #${subtitleId}: ${err}`);
     });
     return placeholder;
   }
 
-  private assertEngineConfigured(config: ResolvedTranslationSettings): void {
-    if (config.engine === 'gemini' && !config.gemini.apiKey) {
-      throw new BadRequestException('Gemini API key is not set');
+  /** Resolve the provider to translate with: the requested one (must exist and
+   *  be enabled) or the configured default. */
+  private async resolveProvider(
+    providerId?: number,
+  ): Promise<TranslationProvider> {
+    if (providerId != null) {
+      const provider = await this.translationProviders.findOne(providerId);
+      if (!provider.enabled) {
+        throw new ConflictException(
+          'The selected translation provider is disabled',
+        );
+      }
+      return provider;
     }
-    if (
-      config.engine === 'openai' &&
-      (!config.openai.baseUrl || !config.openai.model)
-    ) {
-      throw new BadRequestException(
-        'An OpenAI-compatible base URL and model are required',
-      );
+    const fallback = await this.translationProviders.findDefault();
+    if (!fallback) {
+      throw new BadRequestException('No translation provider is configured');
     }
-    if (config.engine === 'libretranslate' && !config.libretranslate.url) {
-      throw new BadRequestException('The LibreTranslate URL is not set');
-    }
+    return fallback;
   }
 
   private async acquireSlot(limit: number): Promise<void> {
@@ -163,7 +181,8 @@ export class SubtitleTranslationService {
     placeholderId: number,
     source: SubtitleFile,
     target: string,
-    config: ResolvedTranslationSettings,
+    provider: TranslationProvider,
+    maxConcurrency: number,
   ): Promise<void> {
     const media = await this.mediaRepo.findOne({ where: { id: source.mediaId } });
     const base = path.join(
@@ -199,21 +218,16 @@ export class SubtitleTranslationService {
       };
       const texts = cues.map((c) => c.text);
 
-      await this.acquireSlot(config.maxConcurrency);
+      await this.acquireSlot(maxConcurrency);
       let translated: string[];
       try {
-        if (config.engine === 'openai') {
-          translated = await translateWithOpenAi(texts, req, config.openai, onProgress);
-        } else if (config.engine === 'libretranslate') {
-          translated = await translateWithLibreTranslate(
-            texts,
-            req,
-            config.libretranslate,
-            onProgress,
-          );
-        } else {
-          translated = await translateWithGemini(texts, req, config.gemini, onProgress);
-        }
+        translated = await this.translationFactory.translate(
+          provider.engine,
+          texts,
+          req,
+          provider.settings,
+          onProgress,
+        );
       } finally {
         this.releaseSlot();
       }
@@ -267,7 +281,8 @@ export class SubtitleTranslationService {
         mediaId: source.mediaId,
         title: media.title,
         language: target,
-        provider: config.engine,
+        provider: provider.name,
+        subtitleId: placeholderId,
       });
     } catch (err) {
       this.log.warn(

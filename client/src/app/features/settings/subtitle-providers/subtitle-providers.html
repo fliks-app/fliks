@@ -12,118 +12,75 @@
   <!-- AI subtitle translation -->
   <div class="card bg-base-100 border border-base-200">
     <div class="card-body gap-4">
-      <div>
-        <h2 class="card-title text-lg">{{ 'settings.subtitle_providers.translation_title' | translate }}</h2>
-        <p class="text-sm text-base-content/60">{{ 'settings.subtitle_providers.translation_hint' | translate }}</p>
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h2 class="card-title text-lg">{{ 'settings.subtitle_providers.translation_title' | translate }}</h2>
+          <p class="text-sm text-base-content/60">{{ 'settings.subtitle_providers.translation_hint' | translate }}</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm shrink-0" (click)="openCreateTranslation()">
+          {{ 'settings.subtitle_providers.translation_new' | translate }}
+        </button>
       </div>
+
       <label class="label cursor-pointer justify-start gap-3 w-fit">
         <input
           type="checkbox"
           class="toggle toggle-primary"
+          [disabled]="savingTranslationEnabled()"
           [ngModel]="translationEnabled()"
-          (ngModelChange)="translationEnabled.set($event)"
+          (ngModelChange)="saveTranslationEnabled($event)"
         />
         <span class="label-text">{{ 'settings.subtitle_providers.translation_enabled' | translate }}</span>
       </label>
 
-      <label class="form-control w-full max-w-md">
-        <span class="label-text">{{ 'settings.subtitle_providers.translation_engine' | translate }}</span>
-        <select
-          class="select select-bordered select-sm w-full"
-          [ngModel]="translationEngine()"
-          (ngModelChange)="translationEngine.set($event)"
-        >
-          <option value="gemini">{{ 'settings.subtitle_providers.translation_engine_gemini' | translate }}</option>
-          <option value="openai">{{ 'settings.subtitle_providers.translation_engine_openai' | translate }}</option>
-          <option value="libretranslate">{{ 'settings.subtitle_providers.translation_engine_libretranslate' | translate }}</option>
-        </select>
-      </label>
-
-      @if (translationEngine() === 'gemini') {
-        <label class="form-control w-full max-w-md">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_api_key' | translate }}</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full font-mono"
-            [ngModel]="geminiApiKey()"
-            (ngModelChange)="geminiApiKey.set($event)"
-          />
-        </label>
-        <label class="form-control w-full max-w-md">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_model' | translate }}</span>
-          <select
-            class="select select-bordered select-sm w-full font-mono"
-            [ngModel]="geminiModel()"
-            (ngModelChange)="geminiModel.set($event)"
-          >
-            @if (!geminiModels.includes(geminiModel())) {
-              <option [value]="geminiModel()">{{ geminiModel() }}</option>
-            }
-            @for (m of geminiModels; track m) {
-              <option [value]="m">{{ m }}</option>
-            }
-          </select>
-        </label>
-      } @else if (translationEngine() === 'openai') {
-        <label class="form-control w-full max-w-md">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_openai_base_url' | translate }}</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full font-mono"
-            placeholder="https://api.groq.com/openai/v1"
-            [ngModel]="openaiBaseUrl()"
-            (ngModelChange)="openaiBaseUrl.set($event)"
-          />
-          <span class="text-xs text-base-content/50 mt-1">{{ 'settings.subtitle_providers.translation_openai_base_url_hint' | translate }}</span>
-        </label>
-        <label class="form-control w-full max-w-md">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_api_key_optional' | translate }}</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full font-mono"
-            [ngModel]="openaiApiKey()"
-            (ngModelChange)="openaiApiKey.set($event)"
-          />
-        </label>
-        <label class="form-control w-full max-w-md">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_openai_model' | translate }}</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full font-mono"
-            placeholder="llama-3.3-70b-versatile"
-            [ngModel]="openaiModel()"
-            (ngModelChange)="openaiModel.set($event)"
-          />
-        </label>
+      @if (translationLoading()) {
+        <div class="flex justify-center py-6"><span class="loading loading-spinner"></span></div>
+      } @else if (translationRows().length === 0) {
+        <p class="text-sm text-base-content/50 py-4">{{ 'settings.subtitle_providers.translation_empty' | translate }}</p>
       } @else {
-        <label class="form-control w-full max-w-md">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_libretranslate_url' | translate }}</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full font-mono"
-            placeholder="http://libretranslate:5000"
-            [ngModel]="libreUrl()"
-            (ngModelChange)="libreUrl.set($event)"
-          />
-          <span class="text-xs text-base-content/50 mt-1">{{ 'settings.subtitle_providers.translation_libretranslate_url_hint' | translate }}</span>
-        </label>
-        <label class="form-control w-full max-w-md">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_api_key_optional' | translate }}</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full font-mono"
-            [ngModel]="libreApiKey()"
-            (ngModelChange)="libreApiKey.set($event)"
-          />
-        </label>
+        <div class="overflow-x-auto rounded-lg border border-base-200">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>{{ 'settings.subtitle_providers.col_name' | translate }}</th>
+                <th>{{ 'settings.subtitle_providers.translation_col_engine' | translate }}</th>
+                <th class="text-center">{{ 'settings.subtitle_providers.col_status' | translate }}</th>
+                <th class="text-end w-32">{{ 'settings.subtitle_providers.actions' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of translationRows(); track row.id) {
+                <tr>
+                  <td class="font-medium">
+                    {{ row.name }}
+                    @if (row.isDefault) {
+                      <span class="badge badge-primary badge-sm ms-2">{{ 'settings.subtitle_providers.translation_default' | translate }}</span>
+                    }
+                  </td>
+                  <td class="text-sm">{{ translationEngineLabel(row.engine) }}</td>
+                  <td class="text-center">
+                    @if (row.enabled) {
+                      <span class="badge badge-success badge-sm">ON</span>
+                    } @else {
+                      <span class="badge badge-ghost badge-sm">OFF</span>
+                    }
+                  </td>
+                  <td class="text-end">
+                    <div class="flex justify-end gap-1">
+                      <button type="button" class="btn btn-ghost btn-xs" (click)="openEditTranslation(row)">
+                        {{ 'common.edit' | translate }}
+                      </button>
+                      <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteTranslationProvider(row)">
+                        {{ 'common.delete' | translate }}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
       }
-
-      <div>
-        <button type="button" class="btn btn-primary" (click)="saveTranslation()" [disabled]="savingTranslation()">
-          @if (savingTranslation()) { <span class="loading loading-spinner loading-sm"></span> }
-          {{ 'common.save' | translate }}
-        </button>
-      </div>
     </div>
   </div>
 
@@ -326,5 +283,125 @@
     </div>
     <form method="dialog" class="modal-backdrop">
       <button type="button" (click)="closeStats()">close</button>
+    </form>
+  </dialog>
+
+  <dialog #translationEditorDialog class="modal">
+    <div class="modal-box max-w-xl max-h-[90vh] flex flex-col">
+      <h2 class="text-lg font-bold shrink-0">
+        @if (trEditingId() === null) {
+          {{ 'settings.subtitle_providers.translation_editor_create' | translate }}
+        } @else {
+          {{ 'settings.subtitle_providers.translation_editor_edit' | translate }}
+        }
+      </h2>
+
+      <div class="flex flex-col gap-3 py-3 overflow-y-auto">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.subtitle_providers.col_name' | translate }}</span>
+          <input type="text" class="input input-bordered input-sm w-full"
+            [ngModel]="trFormName()" (ngModelChange)="trFormName.set($event)" />
+        </label>
+
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.subtitle_providers.translation_engine' | translate }}</span>
+          <select class="select select-bordered select-sm w-full"
+            [ngModel]="trFormEngine()" (ngModelChange)="onTranslationEngineChange($event)">
+            @for (e of translationEngines; track e.value) {
+              <option [value]="e.value">{{ e.label }}</option>
+            }
+          </select>
+        </label>
+
+        @if (trFormEngine() === 'gemini') {
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.subtitle_providers.translation_api_key' | translate }}</span>
+            <input type="text" class="input input-bordered input-sm w-full font-mono"
+              [ngModel]="trFormApiKey()" (ngModelChange)="trFormApiKey.set($event)" />
+          </label>
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.subtitle_providers.translation_model' | translate }}</span>
+            <select class="select select-bordered select-sm w-full font-mono"
+              [ngModel]="trFormModel()" (ngModelChange)="trFormModel.set($event)">
+              @if (!geminiModels.includes(trFormModel())) {
+                <option [value]="trFormModel()">{{ trFormModel() }}</option>
+              }
+              @for (m of geminiModels; track m) {
+                <option [value]="m">{{ m }}</option>
+              }
+            </select>
+          </label>
+        } @else if (trFormEngine() === 'openai') {
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.subtitle_providers.translation_openai_base_url' | translate }}</span>
+            <input type="text" class="input input-bordered input-sm w-full font-mono"
+              placeholder="https://api.groq.com/openai/v1"
+              [ngModel]="trFormBaseUrl()" (ngModelChange)="trFormBaseUrl.set($event)" />
+            <span class="text-xs text-base-content/50 mt-1">{{ 'settings.subtitle_providers.translation_openai_base_url_hint' | translate }}</span>
+          </label>
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.subtitle_providers.translation_api_key_optional' | translate }}</span>
+            <input type="text" class="input input-bordered input-sm w-full font-mono"
+              [ngModel]="trFormApiKey()" (ngModelChange)="trFormApiKey.set($event)" />
+          </label>
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.subtitle_providers.translation_openai_model' | translate }}</span>
+            <input type="text" class="input input-bordered input-sm w-full font-mono"
+              placeholder="llama-3.3-70b-versatile"
+              [ngModel]="trFormModel()" (ngModelChange)="trFormModel.set($event)" />
+          </label>
+        } @else {
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.subtitle_providers.translation_libretranslate_url' | translate }}</span>
+            <input type="text" class="input input-bordered input-sm w-full font-mono"
+              placeholder="http://libretranslate:5000"
+              [ngModel]="trFormUrl()" (ngModelChange)="trFormUrl.set($event)" />
+            <span class="text-xs text-base-content/50 mt-1">{{ 'settings.subtitle_providers.translation_libretranslate_url_hint' | translate }}</span>
+          </label>
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.subtitle_providers.translation_api_key_optional' | translate }}</span>
+            <input type="text" class="input input-bordered input-sm w-full font-mono"
+              [ngModel]="trFormApiKey()" (ngModelChange)="trFormApiKey.set($event)" />
+          </label>
+        }
+
+        <div class="flex gap-6">
+          <label class="flex items-center gap-2">
+            <input type="checkbox" class="checkbox checkbox-sm"
+              [ngModel]="trFormEnabled()" (ngModelChange)="trFormEnabled.set($event)" />
+            <span class="label-text">{{ 'settings.subtitle_providers.field_enabled' | translate }}</span>
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" class="checkbox checkbox-sm"
+              [ngModel]="trFormDefault()" (ngModelChange)="trFormDefault.set($event)" />
+            <span class="label-text">{{ 'settings.subtitle_providers.translation_set_default' | translate }}</span>
+          </label>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button type="button" class="btn btn-outline btn-sm" (click)="testTranslation()" [disabled]="trTestLoading()">
+            @if (trTestLoading()) { <span class="loading loading-spinner loading-xs"></span> }
+            {{ 'settings.subtitle_providers.test' | translate }}
+          </button>
+          @if (trTestResult(); as r) {
+            <span class="text-sm" [class.text-success]="r.ok" [class.text-error]="!r.ok">{{ r.message }}</span>
+          }
+        </div>
+      </div>
+
+      <div class="modal-action shrink-0">
+        <button type="button" class="btn btn-ghost" (click)="closeTranslationEditor()" [disabled]="trSaving()">
+          {{ 'settings.subtitle_providers.cancel' | translate }}
+        </button>
+        <button type="button" class="btn btn-primary" (click)="saveTranslationProvider()" [disabled]="trSaving()">
+          @if (trSaving()) { <span class="loading loading-spinner loading-sm"></span> }
+          {{ 'settings.subtitle_providers.save' | translate }}
+        </button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button type="button" (click)="closeTranslationEditor()" [attr.aria-label]="'common.close' | translate">
+        {{ 'common.close' | translate }}
+      </button>
     </form>
   </dialog>

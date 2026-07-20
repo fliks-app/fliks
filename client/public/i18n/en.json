@@ -952,6 +952,8 @@
     "translate_processing": "Translating",
     "translation_in_progress": "Translating subtitles: {{langs}}",
     "translate_target_language": "Target language",
+    "translate_provider": "Translation provider",
+    "translate_no_providers": "No translation provider is configured. Ask an admin to add one in settings.",
     "translate_hint": "Create a new subtitle by translating this one. The translation runs in the background and keeps the original timing.",
     "translation_started": "Translation started — the subtitle will appear once ready.",
     "translation_rate_limited": "Gemini quota or rate limit reached — try again later, or check your API plan.",
@@ -1281,6 +1283,7 @@
     "no": "No",
     "save": "Save",
     "delete": "Delete",
+    "edit": "Edit",
     "refresh": "Refresh",
     "active": "Active",
     "disabled": "Disabled",
@@ -2117,7 +2120,14 @@
       "translation_openai_model": "Model",
       "translation_libretranslate_url": "Server URL",
       "translation_libretranslate_url_hint": "Point to your LibreTranslate container, e.g. http://libretranslate:5000.",
-      "translation_api_key_optional": "API key (optional)"
+      "translation_api_key_optional": "API key (optional)",
+      "translation_new": "Add provider",
+      "translation_empty": "No translation provider configured yet.",
+      "translation_col_engine": "Engine",
+      "translation_default": "Default",
+      "translation_editor_create": "New translation provider",
+      "translation_editor_edit": "Edit translation provider",
+      "translation_set_default": "Use as default"
     },
     "schedulers": {
       "title": "Scheduled tasks",

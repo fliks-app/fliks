@@ -82,11 +82,16 @@ export class SubtitlesApiService {
     );
   }
 
-  translate(mediaId: number, subtitleId: number, targetLanguage: string) {
+  translate(
+    mediaId: number,
+    subtitleId: number,
+    targetLanguage: string,
+    providerId?: number,
+  ) {
     return firstValueFrom(
       this.http.post<SubtitleFileRow | null>(
         `/api/media/${mediaId}/subtitles/${subtitleId}/translate`,
-        { targetLanguage },
+        { targetLanguage, ...(providerId != null ? { providerId } : {}) },
       ),
     );
   }

@@ -50,6 +50,10 @@ import {
   SyncOptions,
 } from '../../../core/services/api/subtitles-api.service';
 import { SubtitleActionsService } from '../../../core/services/subtitle-actions.service';
+import {
+  TranslationProvidersApiService,
+  AvailableTranslationProvider,
+} from '../../../core/services/api/translation-providers-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
   LanguageProfile,
@@ -110,6 +114,7 @@ interface SubtitleRow {
 export class SubtitlesModalComponent {
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly subActions = inject(SubtitleActionsService);
+  private readonly translationProvidersApi = inject(TranslationProvidersApiService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
@@ -276,6 +281,10 @@ export class SubtitlesModalComponent {
   ];
   private readonly ocrTargetId = signal<number | null>(null);
   readonly ocrLang = signal('en');
+  /** Enabled translation providers, loaded when the translate dialog opens; the
+   *  user picks one (default preselected). */
+  readonly translationProviders = signal<AvailableTranslationProvider[]>([]);
+  readonly selectedTranslationProviderId = signal<number | null>(null);
   /** The language dialog drives OCR (pick before converting), relabel (reassign
    *  an existing subtitle's language) and translate (pick the target language). */
   readonly langDialogMode = signal<'ocr' | 'relabel' | 'translate'>('ocr');
@@ -671,8 +680,24 @@ export class SubtitlesModalComponent {
     this.ocrLangDialog()?.nativeElement.showModal();
   }
 
-  /** Translate a text subtitle: always pick the target language first. */
-  translateSubtitle(sub: SubtitleFileRow) {
+  /** Translate a text subtitle: pick the target language and provider first. */
+  async translateSubtitle(sub: SubtitleFileRow) {
+    let providers: AvailableTranslationProvider[] = [];
+    try {
+      providers = await this.translationProvidersApi.getAvailable();
+    } catch {
+      return; // global interceptor surfaced the error
+    }
+    if (providers.length === 0) {
+      this.toast.error(
+        this.translate.instant('media_detail.translate_no_providers'),
+      );
+      return;
+    }
+    this.translationProviders.set(providers);
+    this.selectedTranslationProviderId.set(
+      (providers.find((p) => p.isDefault) ?? providers[0]).id,
+    );
     const src = (sub.language ?? '').toLowerCase();
     this.langDialogMode.set('translate');
     this.ocrTargetId.set(sub.id);
@@ -698,7 +723,11 @@ export class SubtitlesModalComponent {
     if (mode === 'ocr') {
       void this.triggerOcr(id, this.ocrLang());
     } else if (mode === 'translate') {
-      void this.triggerTranslate(id, this.ocrLang());
+      void this.triggerTranslate(
+        id,
+        this.ocrLang(),
+        this.selectedTranslationProviderId() ?? undefined,
+      );
     } else {
       void this.subActions
         .setLanguage(this.mediaId(), id, this.subtitles, this.subtitleActionBusy, this.ocrLang());
@@ -720,13 +749,18 @@ export class SubtitlesModalComponent {
     this.toast.info(this.translate.instant('media_detail.ocr_started'));
   }
 
-  private async triggerTranslate(subtitleId: number, targetLanguage: string) {
+  private async triggerTranslate(
+    subtitleId: number,
+    targetLanguage: string,
+    providerId?: number,
+  ) {
     await this.subActions.translateSubtitle(
       this.mediaId(),
       subtitleId,
       this.subtitles,
       this.subtitleActionBusy,
       targetLanguage,
+      providerId,
     );
     this.toast.info(this.translate.instant('media_detail.translation_started'));
   }

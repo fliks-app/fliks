@@ -17,6 +17,11 @@ import {
   SubtitleProviderRow,
   ProviderRateLimit,
 } from '../../../core/services/api/subtitle-providers-api.service';
+import {
+  TranslationProvidersApiService,
+  TranslationProviderRow,
+  TranslationEngine,
+} from '../../../core/services/api/translation-providers-api.service';
 
 const DEFAULT_TRANSLATION_MODEL = 'gemini-2.0-flash';
 
@@ -27,6 +32,12 @@ const GEMINI_MODELS = [
   'gemini-2.0-flash-lite',
   'gemini-1.5-flash',
   'gemini-1.5-pro',
+];
+
+const TRANSLATION_ENGINES: { value: TranslationEngine; label: string }[] = [
+  { value: 'gemini', label: 'Gemini' },
+  { value: 'openai', label: 'OpenAI-compatible' },
+  { value: 'libretranslate', label: 'LibreTranslate' },
 ];
 
 const PROVIDER_TYPES = [
@@ -46,6 +57,7 @@ const PROVIDER_TYPES = [
 })
 export class SubtitleProvidersSettingsComponent implements OnInit {
   private readonly api = inject(SubtitleProvidersApiService);
+  private readonly translationApi = inject(TranslationProvidersApiService);
   private readonly settingsApi = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
@@ -53,6 +65,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
 
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
   private readonly statsDialog = viewChild<ElementRef<HTMLDialogElement>>('statsDialog');
+  private readonly translationEditorDialog = viewChild<ElementRef<HTMLDialogElement>>('translationEditorDialog');
 
   readonly providerTypes = PROVIDER_TYPES;
   readonly rows = signal<SubtitleProviderRow[]>([]);
@@ -81,68 +94,198 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly statsData = signal<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>([]);
   readonly statsProviderName = signal('');
 
-  // Machine-translation settings — stored in the app key/value store.
+  // Machine-translation — a list of admin-configured providers plus the global
+  // on/off master switch (still an app key/value setting).
   readonly geminiModels = GEMINI_MODELS;
+  readonly translationEngines = TRANSLATION_ENGINES;
   readonly translationEnabled = signal(false);
-  readonly translationEngine = signal<'gemini' | 'openai' | 'libretranslate'>('gemini');
-  readonly geminiApiKey = signal('');
-  readonly geminiModel = signal(DEFAULT_TRANSLATION_MODEL);
-  readonly openaiBaseUrl = signal('');
-  readonly openaiApiKey = signal('');
-  readonly openaiModel = signal('');
-  readonly libreUrl = signal('');
-  readonly libreApiKey = signal('');
-  readonly savingTranslation = signal(false);
+  readonly savingTranslationEnabled = signal(false);
+  readonly translationRows = signal<TranslationProviderRow[]>([]);
+  readonly translationLoading = signal(true);
+
+  readonly trEditingId = signal<number | null>(null);
+  readonly trSaving = signal(false);
+  readonly trFormName = signal('');
+  readonly trFormEngine = signal<TranslationEngine>('gemini');
+  readonly trFormEnabled = signal(true);
+  readonly trFormDefault = signal(false);
+  readonly trFormApiKey = signal('');
+  readonly trFormModel = signal(DEFAULT_TRANSLATION_MODEL);
+  readonly trFormBaseUrl = signal('');
+  readonly trFormUrl = signal('');
+  readonly trTestLoading = signal(false);
+  readonly trTestResult = signal<{ ok: boolean; message: string } | null>(null);
 
   ngOnInit() {
     this.reloadAll();
     void this.loadTranslationSettings();
+    void this.reloadTranslationProviders();
   }
 
   private async loadTranslationSettings() {
     try {
       const all = await this.settingsApi.getAll();
       this.translationEnabled.set(all['subtitle_translation_enabled'] === 'true');
-      const engine = all['subtitle_translation_engine'];
-      this.translationEngine.set(
-        engine === 'openai' || engine === 'libretranslate' ? engine : 'gemini',
-      );
-      this.geminiApiKey.set(all['subtitle_translation_gemini_api_key'] ?? '');
-      this.geminiModel.set(
-        all['subtitle_translation_gemini_model'] || DEFAULT_TRANSLATION_MODEL,
-      );
-      this.openaiBaseUrl.set(all['subtitle_translation_openai_base_url'] ?? '');
-      this.openaiApiKey.set(all['subtitle_translation_openai_api_key'] ?? '');
-      this.openaiModel.set(all['subtitle_translation_openai_model'] ?? '');
-      this.libreUrl.set(all['subtitle_translation_libretranslate_url'] ?? '');
-      this.libreApiKey.set(all['subtitle_translation_libretranslate_api_key'] ?? '');
     } catch {
       // handled by global error interceptor
     }
   }
 
-  async saveTranslation() {
-    this.savingTranslation.set(true);
+  async reloadTranslationProviders() {
+    this.translationLoading.set(true);
     try {
-      await this.settingsApi.setBulk({
-        subtitle_translation_enabled: String(this.translationEnabled()),
-        subtitle_translation_engine: this.translationEngine(),
-        subtitle_translation_gemini_api_key: this.geminiApiKey().trim(),
-        subtitle_translation_gemini_model:
-          this.geminiModel().trim() || DEFAULT_TRANSLATION_MODEL,
-        subtitle_translation_openai_base_url: this.openaiBaseUrl().trim(),
-        subtitle_translation_openai_api_key: this.openaiApiKey().trim(),
-        subtitle_translation_openai_model: this.openaiModel().trim(),
-        subtitle_translation_libretranslate_url: this.libreUrl().trim(),
-        subtitle_translation_libretranslate_api_key: this.libreApiKey().trim(),
-      });
-      this.toast.success(
-        this.translate.instant('settings.subtitle_providers.translation_saved'),
-      );
+      this.translationRows.set(await this.translationApi.list());
     } catch {
       // handled by global error interceptor
     } finally {
-      this.savingTranslation.set(false);
+      this.translationLoading.set(false);
+    }
+  }
+
+  async saveTranslationEnabled(enabled: boolean) {
+    this.translationEnabled.set(enabled);
+    this.savingTranslationEnabled.set(true);
+    try {
+      await this.settingsApi.setBulk({
+        subtitle_translation_enabled: String(enabled),
+      });
+    } catch {
+      this.translationEnabled.set(!enabled);
+    } finally {
+      this.savingTranslationEnabled.set(false);
+    }
+  }
+
+  translationEngineLabel(engine: string): string {
+    return TRANSLATION_ENGINES.find((e) => e.value === engine)?.label ?? engine;
+  }
+
+  openCreateTranslation() {
+    this.trEditingId.set(null);
+    this.trFormName.set(this.translationEngineLabel('gemini'));
+    this.trFormEngine.set('gemini');
+    this.trFormEnabled.set(true);
+    this.trFormDefault.set(this.translationRows().length === 0);
+    this.trFormApiKey.set('');
+    this.trFormModel.set(DEFAULT_TRANSLATION_MODEL);
+    this.trFormBaseUrl.set('');
+    this.trFormUrl.set('');
+    this.trTestResult.set(null);
+    this.translationEditorDialog()?.nativeElement.showModal();
+  }
+
+  openEditTranslation(row: TranslationProviderRow) {
+    this.trEditingId.set(row.id);
+    this.trFormName.set(row.name);
+    this.trFormEngine.set(row.engine);
+    this.trFormEnabled.set(row.enabled);
+    this.trFormDefault.set(row.isDefault);
+    const s = row.settings ?? {};
+    this.trFormApiKey.set(String(s['apiKey'] ?? ''));
+    this.trFormModel.set(String(s['model'] ?? '') || DEFAULT_TRANSLATION_MODEL);
+    this.trFormBaseUrl.set(String(s['baseUrl'] ?? ''));
+    this.trFormUrl.set(String(s['url'] ?? ''));
+    this.trTestResult.set(null);
+    this.translationEditorDialog()?.nativeElement.showModal();
+  }
+
+  onTranslationEngineChange(engine: TranslationEngine) {
+    this.trFormEngine.set(engine);
+    if (this.trEditingId() === null) {
+      this.trFormName.set(this.translationEngineLabel(engine));
+    }
+  }
+
+  closeTranslationEditor() {
+    this.translationEditorDialog()?.nativeElement.close();
+  }
+
+  private buildTranslationSettings(): Record<string, unknown> {
+    const engine = this.trFormEngine();
+    if (engine === 'openai') {
+      return {
+        baseUrl: this.trFormBaseUrl().trim(),
+        apiKey: this.trFormApiKey().trim(),
+        model: this.trFormModel().trim(),
+      };
+    }
+    if (engine === 'libretranslate') {
+      return { url: this.trFormUrl().trim(), apiKey: this.trFormApiKey().trim() };
+    }
+    return {
+      apiKey: this.trFormApiKey().trim(),
+      model: this.trFormModel().trim() || DEFAULT_TRANSLATION_MODEL,
+    };
+  }
+
+  async testTranslation() {
+    this.trTestResult.set(null);
+    this.trTestLoading.set(true);
+    try {
+      const res = await this.translationApi.testConnection({
+        engine: this.trFormEngine(),
+        settings: this.buildTranslationSettings(),
+      });
+      this.trTestResult.set({
+        ok: res.ok,
+        message: res.ok
+          ? this.translate.instant('settings.subtitle_providers.test_success')
+          : res.error ||
+            this.translate.instant('settings.subtitle_providers.test_failed'),
+      });
+    } catch {
+      this.trTestResult.set({
+        ok: false,
+        message: this.translate.instant('settings.subtitle_providers.test_network_error'),
+      });
+    } finally {
+      this.trTestLoading.set(false);
+    }
+  }
+
+  async saveTranslationProvider() {
+    const name = this.trFormName().trim();
+    if (!name) return;
+    const body = {
+      name,
+      engine: this.trFormEngine(),
+      enabled: this.trFormEnabled(),
+      isDefault: this.trFormDefault(),
+      settings: this.buildTranslationSettings(),
+    };
+    this.trSaving.set(true);
+    const id = this.trEditingId();
+    try {
+      await (id == null
+        ? this.translationApi.create(body)
+        : this.translationApi.update(id, body));
+      this.closeTranslationEditor();
+      await this.reloadTranslationProviders();
+    } catch {
+      // handled by global error interceptor
+    } finally {
+      this.trSaving.set(false);
+    }
+  }
+
+  async deleteTranslationProvider(row: TranslationProviderRow) {
+    const msg = this.translate.instant(
+      'settings.subtitle_providers.confirm_delete',
+      { name: row.name },
+    );
+    if (
+      !(await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: msg,
+        variant: 'danger',
+      }))
+    )
+      return;
+    try {
+      await this.translationApi.remove(row.id);
+      await this.reloadTranslationProviders();
+    } catch {
+      // handled by global error interceptor
     }
   }
 

@@ -4,6 +4,7 @@ import { SubtitleProvider } from './entities/subtitle-provider.entity';
 import { SubtitleProviderStat } from './entities/subtitle-provider-stat.entity';
 import { SubtitleFile } from './entities/subtitle-file.entity';
 import { SubtitleBlacklist } from './entities/subtitle-blacklist.entity';
+import { TranslationProvider } from './entities/translation-provider.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { AuthModule } from '../auth/auth.module';
@@ -19,7 +20,10 @@ import { EmbeddedSubtitleService } from './embedded-subtitle.service';
 import { SubtitleOcrService } from './subtitle-ocr.service';
 import { SubtitleTranslationService } from './subtitle-translation.service';
 import { SubtitleTranslationSettingsCache } from './subtitle-translation-settings-cache.service';
+import { TranslationProviderService } from './translation-provider.service';
+import { TranslationProviderFactory } from './providers/translation-provider.factory';
 import { SubtitlesController } from './subtitles.controller';
+import { TranslationProvidersController } from './translation-providers.controller';
 import { SubtitleActivityController } from './subtitle-activity.controller';
 
 @Module({
@@ -29,6 +33,7 @@ import { SubtitleActivityController } from './subtitle-activity.controller';
       SubtitleProviderStat,
       SubtitleFile,
       SubtitleBlacklist,
+      TranslationProvider,
       Media,
       MediaFile,
     ]),
@@ -37,7 +42,11 @@ import { SubtitleActivityController } from './subtitle-activity.controller';
     NotificationsModule,
     MediaServersModule,
   ],
-  controllers: [SubtitlesController, SubtitleActivityController],
+  controllers: [
+    SubtitlesController,
+    TranslationProvidersController,
+    SubtitleActivityController,
+  ],
   providers: [
     SubtitlesService,
     SubtitleProviderService,
@@ -48,6 +57,8 @@ import { SubtitleActivityController } from './subtitle-activity.controller';
     SubtitleOcrService,
     SubtitleTranslationService,
     SubtitleTranslationSettingsCache,
+    TranslationProviderService,
+    TranslationProviderFactory,
   ],
   exports: [
     SubtitlesService,
@@ -57,6 +68,7 @@ import { SubtitleActivityController } from './subtitle-activity.controller';
     FfprobeService,
     SubtitleOcrService,
     SubtitleTranslationService,
+    TranslationProviderService,
   ],
 })
 export class SubtitlesModule {}

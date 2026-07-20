@@ -952,6 +952,8 @@
     "translate_processing": "Traduction",
     "translation_in_progress": "Traduction des sous-titres en cours : {{langs}}",
     "translate_target_language": "Langue cible",
+    "translate_provider": "Fournisseur de traduction",
+    "translate_no_providers": "Aucun fournisseur de traduction n'est configuré. Demandez à un administrateur d'en ajouter un dans les réglages.",
     "translate_hint": "Créer un nouveau sous-titre en traduisant celui-ci. La traduction s'exécute en arrière-plan et conserve le minutage d'origine.",
     "translation_started": "Traduction lancée — le sous-titre apparaîtra une fois prêt.",
     "translation_rate_limited": "Quota ou limite Gemini atteint — réessayez plus tard, ou vérifiez votre offre API.",
@@ -1281,6 +1283,7 @@
     "no": "Non",
     "save": "Enregistrer",
     "delete": "Supprimer",
+    "edit": "Modifier",
     "refresh": "Actualiser",
     "active": "Actif",
     "disabled": "Désactivé",
@@ -2117,7 +2120,14 @@
       "translation_openai_model": "Modèle",
       "translation_libretranslate_url": "URL du serveur",
       "translation_libretranslate_url_hint": "Pointez vers votre conteneur LibreTranslate, ex. http://libretranslate:5000.",
-      "translation_api_key_optional": "Clé API (optionnelle)"
+      "translation_api_key_optional": "Clé API (optionnelle)",
+      "translation_new": "Ajouter un fournisseur",
+      "translation_empty": "Aucun fournisseur de traduction configuré pour le moment.",
+      "translation_col_engine": "Moteur",
+      "translation_default": "Par défaut",
+      "translation_editor_create": "Nouveau fournisseur de traduction",
+      "translation_editor_edit": "Modifier le fournisseur de traduction",
+      "translation_set_default": "Utiliser par défaut"
     },
     "schedulers": {
       "title": "Tâches planifiées",

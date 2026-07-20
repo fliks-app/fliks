@@ -4,6 +4,7 @@ import { SubtitleProviderType, SubtitleStatus } from '../../../common/enums';
 import { Media } from '../../media/entities/media.entity';
 import { MediaFile } from '../../media/entities/media-file.entity';
 import { Episode } from '../../media/entities/episode.entity';
+import { TranslationProvider } from './translation-provider.entity';
 import { normalizeLanguageCode } from '../../../common/constants/app-languages';
 
 @Entity('subtitle_files')
@@ -102,4 +103,20 @@ export class SubtitleFile extends BaseEntity {
 
   @Column('simple-json', { default: '[]' })
   tags: string[];
+
+  /** For TRANSLATED subs: the provider that produced this file. Nulled if the
+   *  provider is later removed; the engine/model snapshot below preserves the
+   *  provenance regardless. */
+  @ManyToOne(() => TranslationProvider, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'translationProviderId' })
+  translationProvider: TranslationProvider | null;
+
+  @RelationId((sf: SubtitleFile) => sf.translationProvider)
+  translationProviderId: number | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  translationEngine: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  translationModel: string | null;
 }

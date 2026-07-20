@@ -14,6 +14,7 @@ import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
 import { SubtitleProvider } from '../../subtitles/entities/subtitle-provider.entity';
 import { SubtitleFile } from '../../subtitles/entities/subtitle-file.entity';
+import { TranslationProvider } from '../../subtitles/entities/translation-provider.entity';
 import { Library } from '../../libraries/entities/library.entity';
 import { Playlist } from '../../playlists/entities/playlist.entity';
 import { Action } from './actions.enum';
@@ -29,6 +30,7 @@ type Subjects =
       | typeof LanguageProfile
       | typeof SubtitleProvider
       | typeof SubtitleFile
+      | typeof TranslationProvider
       | typeof Library
       | typeof Playlist
     >
@@ -115,6 +117,7 @@ export class CaslAbilityFactory {
       can(Action.Manage, QualityProfile);
       can(Action.Manage, LanguageProfile);
       can(Action.Manage, SubtitleProvider);
+      can(Action.Manage, TranslationProvider);
       can(Action.Manage, Library);
     }
 
