@@ -60,6 +60,9 @@ export class MpvPlayer extends EventEmitter {
   private sawFirstFrame = false;
   private duration = 0;
   private cacheEnd = 0;
+  /** Demuxer format forced for the current media (`hls` for manifests, else
+   *  empty). Dropped around a sidecar `sub-add` so the VTT isn't demuxed as HLS. */
+  private forcedDemuxFormat = '';
   /** Bumped by load/stop/destroy; a load with a stale id skips its remaining
    *  IPC writes, so a stop can't be overtaken by a trailing loadfile. */
   private loadGen = 0;
@@ -326,7 +329,8 @@ export class MpvPlayer extends EventEmitter {
     // Force the HLS demuxer for manifests so mpv parses the playlist directly,
     // skipping the generic probe whose backward seek the linear HTTP stream
     // can't satisfy.
-    if (/\.m3u8(\?|$)/.test(opts.url)) fileOpts.push('demuxer-lavf-format=hls');
+    this.forcedDemuxFormat = /\.m3u8(\?|$)/.test(opts.url) ? 'hls' : '';
+    if (this.forcedDemuxFormat) fileOpts.push(`demuxer-lavf-format=${this.forcedDemuxFormat}`);
     const cmd: unknown[] = ['loadfile', opts.url, 'replace', 0];
     if (fileOpts.length) cmd.push(fileOpts.join(','));
     await this.command(cmd);
@@ -336,10 +340,37 @@ export class MpvPlayer extends EventEmitter {
     // the mobile native player (playWhenReady) and never calls play() itself.
     await this.set('pause', false);
     if (gen !== this.loadGen) return;
+    if (this.forcedDemuxFormat) {
+      // The manifest is force-demuxed as hls (file-local). Once it has actually
+      // opened, drop the forced format globally so a later sidecar sub-add isn't
+      // demuxed as hls (which fails to open). Clearing it before the manifest
+      // opens would race its own probe and break the load, so wait for the first
+      // frame first.
+      await this.waitFirstFrame(gen);
+      if (gen !== this.loadGen) return;
+      await this.command(['set', 'demuxer-lavf-format', '']).catch(() => {});
+    }
     for (const s of opts.subtitles ?? []) {
       await this.command(['sub-add', s.url, 'auto', s.label ?? '', s.language ?? '']);
       if (gen !== this.loadGen) return;
     }
+  }
+
+  /** Resolve once mpv has opened the media (first frame), or on error/timeout.
+   *  Lets load() sequence post-open work after the manifest demuxer is up. */
+  private waitFirstFrame(gen: number): Promise<void> {
+    if (this.sawFirstFrame || gen !== this.loadGen) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = (): void => {
+        clearTimeout(timer);
+        this.off('firstFrame', done);
+        this.off('error', done);
+        resolve();
+      };
+      const timer = setTimeout(done, 10_000);
+      this.once('firstFrame', done);
+      this.once('error', done);
+    });
   }
 
   play(): Promise<void> {
