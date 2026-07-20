@@ -56,12 +56,12 @@ export class PlayerSession {
       height: 800,
       minWidth: 800,
       minHeight: 500,
-      backgroundColor: '#1d232a', // Fliks brand; only seen if videoWin lags
+      backgroundColor: '#000000', // black so a seek-time video gap reads as loading, not a brand flash
       title: 'Fliks',
       ...(iconPath ? { icon: iconPath } : {}),
     });
     await this.frameWin.loadURL(
-      'data:text/html,<body style="margin:0;background:%231d232a"></body>',
+      'data:text/html,<body style="margin:0;background:%23000000"></body>',
     );
 
     this.videoWin = new BrowserWindow({
