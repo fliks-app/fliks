@@ -625,12 +625,13 @@ export class MediaController {
     @Param('id', ParseIntPipe) id: number,
     @Param('subtitleId', ParseIntPipe) subtitleId: number,
     @CurrentUser() user: User,
-    @Body() body: { targetLanguage: string },
+    @Body() body: { targetLanguage: string; providerId?: number },
   ) {
     await this.assertMediaAccessible(id, user);
     return this.subtitleTranslation.translateSubtitle(
       subtitleId,
       body.targetLanguage,
+      body.providerId,
     );
   }
 

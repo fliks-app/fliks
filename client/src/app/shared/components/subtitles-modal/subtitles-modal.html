@@ -504,6 +504,20 @@
         <option [value]="code">{{ code | localizeLanguage }}</option>
       }
     </select>
+    @if (langDialogMode() === 'translate' && translationProviders().length > 1) {
+      <label class="form-control w-full mt-3">
+        <span class="label-text">{{ 'media_detail.translate_provider' | translate }}</span>
+        <select
+          class="select select-bordered w-full"
+          [ngModel]="selectedTranslationProviderId()"
+          (ngModelChange)="selectedTranslationProviderId.set($event)"
+        >
+          @for (p of translationProviders(); track p.id) {
+            <option [ngValue]="p.id">{{ p.name }}</option>
+          }
+        </select>
+      </label>
+    }
     <div class="modal-action">
       <button type="button" class="btn" (click)="closeOcrLangModal()">{{ 'common.cancel' | translate }}</button>
       <button type="button" class="btn btn-primary" (click)="confirmLanguage()">

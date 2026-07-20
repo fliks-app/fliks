@@ -1,7 +1,9 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { SettingsService } from '../settings/settings.service';
+import { DEFAULT_TRANSLATION_MODEL, TranslationEngine } from '../../common/enums';
 
-export type TranslationEngine = 'gemini' | 'openai' | 'libretranslate';
+export { DEFAULT_TRANSLATION_MODEL };
+export type { TranslationEngine };
 
 /** Resolved subtitle-translation configuration read from the key/value store. */
 export interface ResolvedTranslationSettings {
@@ -12,8 +14,6 @@ export interface ResolvedTranslationSettings {
   openai: { baseUrl: string; apiKey: string; model: string };
   libretranslate: { url: string; apiKey: string };
 }
-
-export const DEFAULT_TRANSLATION_MODEL = 'gemini-2.0-flash';
 
 function parseEngine(raw: string | null): TranslationEngine {
   return raw === 'openai' || raw === 'libretranslate' ? raw : 'gemini';

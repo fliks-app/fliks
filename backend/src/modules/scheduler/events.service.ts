@@ -22,6 +22,9 @@ export type SseEvent =
       title: string;
       language: string;
       provider: string;
+      /** Set for translation results so a client can target the finished row
+       *  (e.g. add just that track) instead of a blind refetch. */
+      subtitleId?: number;
     }
   | {
       type: 'subtitle.failed';
