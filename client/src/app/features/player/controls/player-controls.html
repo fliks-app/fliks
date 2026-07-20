@@ -531,7 +531,10 @@
       (click)="selectSubtitle.emit(sub.id); closeSheet()"
     >
       <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
-      <span class="flex-1 text-left">{{ sub.label }}@if (sub.isImage) { <span class="text-warning/70 text-[10px] ml-1">{{ 'player.burned' | translate }}</span> }</span>
+      <span class="flex-1 text-left">
+        <span class="block">{{ sub.menuHead || sub.label }}@if (sub.isImage) { <span class="text-warning/70 text-[10px] ml-1">{{ 'player.burned' | translate }}</span> }</span>
+        @if (sub.menuSub) { <span class="block text-xs text-white/60">{{ sub.menuSub }}</span> }
+      </span>
       @if (activeSubtitleId() === sub.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
     </button>
   }
@@ -547,7 +550,10 @@
       (click)="selectAudioTrack.emit(track.id); closeSheet()"
     >
       <svg lucideHeadphones class="h-5 w-5 text-white/50 shrink-0"></svg>
-      <span class="flex-1 text-left">{{ track.label }}</span>
+      <span class="flex-1 text-left">
+        <span class="block">{{ track.menuHead || track.label }}</span>
+        @if (track.menuSub) { <span class="block text-xs text-white/60">{{ track.menuSub }}</span> }
+      </span>
       @if (activeAudioTrackId() === track.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
     </button>
   }

@@ -40,7 +40,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService, QueueItem } from '../../core/services/playback-queue.service';
 import { resolvePlayableFile } from '../../shared/utils/media-play.util';
-import { audioChannelsLabel, formatAudioLabel, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
+import { audioChannelsLabel, formatAudioLabel, formatAudioParts, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
 import { formatErrorDiagnostics, userMessageKeyFor } from '../../core/services/playback-engine/playback-error';
 import {
   PlayerSettingsService, normalizeLang,
@@ -417,7 +417,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly spriteMetadata = signal<SpriteMetadata | null>(null);
   readonly activeSubtitleId = signal<string | null>(null);
   readonly activeAudioTrackId = signal<string | null>(null);
-  readonly availableAudioTracks = signal<{ id: string; label: string; language: string }[]>([]);
+  readonly availableAudioTracks = signal<{ id: string; label: string; language: string; menuHead?: string; menuSub?: string }[]>([]);
   readonly availableSubtitles = signal<SubtitleOption[]>([]);
 
   /** Audio tracks from streamInfo for the Cast remote */
@@ -1644,6 +1644,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const tracks = e.tracks.map((t: any, i: number) => ({
         id: t.id,
         label: audioList[i] ? formatAudioLabel(audioList[i], this.translate, i + 1) : t.label,
+        menuHead: audioList[i] ? formatAudioParts(audioList[i], this.translate, i + 1).head : t.label,
+        menuSub: audioList[i] ? formatAudioParts(audioList[i], this.translate, i + 1).sub : '',
         language: normalizeLang(t.language),
         selected: !!t.selected,
       }));
@@ -3218,6 +3220,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           const tracks = audioList.map((a: any, i: number) => ({
             id: `si-${i}`,
             label: formatAudioLabel(a, this.translate, i + 1),
+            menuHead: formatAudioParts(a, this.translate, i + 1).head,
+            menuSub: formatAudioParts(a, this.translate, i + 1).sub,
             language: normalizeLang(a.language),
           }));
           this.availableAudioTracks.set(tracks);
@@ -3244,6 +3248,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const tracks = engineTracks.map((t, i) => ({
         id: t.id,
         label: audioList[i] ? formatAudioLabel(audioList[i], this.translate, i + 1) : t.label,
+        menuHead: audioList[i] ? formatAudioParts(audioList[i], this.translate, i + 1).head : t.label,
+        menuSub: audioList[i] ? formatAudioParts(audioList[i], this.translate, i + 1).sub : '',
         language: normalizeLang(t.language),
       }));
 

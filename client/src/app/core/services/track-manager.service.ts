@@ -5,7 +5,7 @@ import { SubtitlesApiService } from './api/subtitles-api.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { AppSettingsService } from './app-settings.service';
 import { BrowserDeviceProfileService } from './browser-device-profile.service';
-import { formatSubtitleLabel } from '../utils/player.utils';
+import { formatSubtitleLabel, formatSubtitleParts } from '../utils/player.utils';
 import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
 import type { PlaybackEngine, AudioTrack } from './playback-engine/playback-engine';
@@ -26,6 +26,9 @@ export interface SubtitleOption {
   forced?: boolean;
   /** Origin: `translated`, `ocr`, `embedded`, or a download provider name. */
   providerType?: string | null;
+  /** Player-menu two-line label: language head + details subline ("SRT • …"). */
+  menuHead?: string;
+  menuSub?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -154,9 +157,13 @@ export class TrackManagerService {
         !!this.deviceProfile.getProfile().supportsImageSubtitles;
       const subs = await this.subtitlesApi.getForMedia(mediaId);
       const tracks = buildSubtitleTracks(subs, mediaFileId, { hideBurnIn });
-      const options: SubtitleOption[] = tracks.map((t) => ({
+      const options: SubtitleOption[] = tracks.map((t) => {
+        const parts = formatSubtitleParts(t, this.translate);
+        return {
         id: t.key,
         label: formatSubtitleLabel(t, this.translate),
+        menuHead: parts.head,
+        menuSub: parts.sub,
         url:
           t.kind === 'external'
             ? streamingApi.getSubtitleUrl(mediaFileId, t.subtitleId)
@@ -169,7 +176,8 @@ export class TrackManagerService {
         subtitleDbId: t.subtitleId,
         forced: t.forced,
         providerType: t.providerType,
-      }));
+        };
+      });
       const seen = new Set(tracks.map((t) => t.key));
 
       // Also check streamInfo for embedded subs not yet in DB
@@ -181,9 +189,12 @@ export class TrackManagerService {
           if (seen.has(key)) continue;
           seen.add(key);
           if (isImageBasedSubtitleCodec(emb.codec)) continue; // Bitmap from streamInfo only (no DB ID for burn-in)
+          const embParts = formatSubtitleParts(emb, this.translate);
           options.push({
             id: key,
             label: formatSubtitleLabel(emb, this.translate),
+            menuHead: embParts.head,
+            menuSub: embParts.sub,
             url: streamingApi.getEmbeddedSubtitleUrl(mediaFileId, emb.streamIndex),
             language: emb.language,
             burnIn: false,

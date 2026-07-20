@@ -239,11 +239,11 @@ export class PlayerControlsComponent {
   readonly isDesktop = input(false);
   readonly subtitlePickerOpen = input(false);
   readonly qualityPickerOpen = input(false);
-  readonly availableSubtitles = input<{ id: string; label: string; burnIn?: boolean; isImage?: boolean }[]>([]);
+  readonly availableSubtitles = input<{ id: string; label: string; menuHead?: string; menuSub?: string; burnIn?: boolean; isImage?: boolean }[]>([]);
   readonly availableQualities = input<{ id: string; label: string; lowBandwidth?: boolean }[]>([]);
   readonly activeSubtitleId = input<string | null>(null);
   readonly activeQualityId = input('auto');
-  readonly availableAudioTracks = input<{ id: string; label: string }[]>([]);
+  readonly availableAudioTracks = input<{ id: string; label: string; menuHead?: string; menuSub?: string }[]>([]);
   readonly activeAudioTrackId = input<string | null>(null);
   readonly pipAvailable = input(true);
   readonly castAvailable = input(false);

@@ -156,6 +156,22 @@ export function formatAudioLabel(
   return tail ? `${head} (${tail})` : head;
 }
 
+/** Two-part audio label for the menu: language head + details ("EAC3 • 5.1"). */
+export function formatAudioParts(
+  audio: { language?: string; title?: string; codec?: string; channels?: number },
+  translate: TranslateService,
+  trackIndex?: number,
+): { head: string; sub: string } {
+  const norm = normalizeLangCode(audio.language);
+  const head =
+    trackIndex != null && (norm === 'und' || norm === 'xx')
+      ? translate.instant('player.audio_track_n', { index: trackIndex })
+      : localizeLanguage(audio.language, translate);
+  const codec = (audio.codec ?? '').toUpperCase().replace('TRUEHD', 'TrueHD');
+  const channels = audioChannelsLabel(audio.channels);
+  return { head, sub: [codec, channels].filter(Boolean).join(' • ') };
+}
+
 /**
  * Render a subtitle as a dropdown label. Mirrors {@link formatAudioLabel} so
  * the player and media-detail subtitle menus stay consistent.
@@ -187,6 +203,35 @@ export function formatSubtitleLabel(
   const origin = subtitleOriginLabel(sub.providerType, translate);
   if (origin) parts.push(origin);
   return `${head} (${parts.join(') (')})`;
+}
+
+/**
+ * Two-part subtitle label for the player menu: the language on top and the
+ * details ("SRT • Forced • Translated") as a subline, joined with " • ".
+ */
+export function formatSubtitleParts(
+  sub: {
+    language?: string;
+    codec?: string | null;
+    forced?: boolean | null;
+    hearingImpaired?: boolean | null;
+    relativePath?: string | null;
+    providerType?: string | null;
+  },
+  translate: TranslateService,
+  trackIndex?: number,
+): { head: string; sub: string } {
+  const norm = normalizeLangCode(sub.language);
+  const head =
+    trackIndex != null && (norm === 'und' || norm === 'xx')
+      ? translate.instant('player.subtitle_track_n', { index: trackIndex })
+      : localizeLanguage(sub.language, translate);
+  const parts: string[] = [shortSubtitleCodec(sub.codec, !!sub.relativePath)];
+  if (sub.forced) parts.push('Forced');
+  if (sub.hearingImpaired) parts.push('HI');
+  const origin = subtitleOriginLabel(sub.providerType, translate);
+  if (origin) parts.push(origin);
+  return { head, sub: parts.join(' • ') };
 }
 
 /** Short origin hint for machine-translated / OCR'd subtitles. Embedded and

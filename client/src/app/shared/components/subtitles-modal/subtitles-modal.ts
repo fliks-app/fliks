@@ -33,7 +33,7 @@ import {
   LucideZap,
 } from '@lucide/angular';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
-import { formatSubtitleLabel } from '../../../core/utils/player.utils';
+import { formatSubtitleLabel, formatSubtitleParts } from '../../../core/utils/player.utils';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 import {
   isImageBasedSubtitleCodec,
@@ -405,9 +405,12 @@ export class SubtitlesModalComponent {
     );
     return subs.map((s) => {
       const id = s.streamIndex != null ? `emb-${s.streamIndex}` : `ext-${s.id}`;
+      const parts = formatSubtitleParts(s, this.translate);
       return {
         id,
-        label: formatSubtitleLabel(s, this.translate),
+        label: parts.sub ? `${parts.head} — ${parts.sub}` : parts.head,
+        head: parts.head,
+        sub: parts.sub,
         language: s.language,
         forced: s.forced,
         image: isImageBasedSubtitleCodec(s.codec),
