@@ -340,10 +340,37 @@ export class MpvPlayer extends EventEmitter {
     // the mobile native player (playWhenReady) and never calls play() itself.
     await this.set('pause', false);
     if (gen !== this.loadGen) return;
+    if (this.forcedDemuxFormat) {
+      // The manifest is force-demuxed as hls (file-local). Once it has actually
+      // opened, drop the forced format globally so a later sidecar sub-add isn't
+      // demuxed as hls (which fails to open). Clearing it before the manifest
+      // opens would race its own probe and break the load, so wait for the first
+      // frame first.
+      await this.waitFirstFrame(gen);
+      if (gen !== this.loadGen) return;
+      await this.command(['set', 'demuxer-lavf-format', '']).catch(() => {});
+    }
     for (const s of opts.subtitles ?? []) {
       await this.command(['sub-add', s.url, 'auto', s.label ?? '', s.language ?? '']);
       if (gen !== this.loadGen) return;
     }
+  }
+
+  /** Resolve once mpv has opened the media (first frame), or on error/timeout.
+   *  Lets load() sequence post-open work after the manifest demuxer is up. */
+  private waitFirstFrame(gen: number): Promise<void> {
+    if (this.sawFirstFrame || gen !== this.loadGen) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = (): void => {
+        clearTimeout(timer);
+        this.off('firstFrame', done);
+        this.off('error', done);
+        resolve();
+      };
+      const timer = setTimeout(done, 10_000);
+      this.once('firstFrame', done);
+      this.once('error', done);
+    });
   }
 
   play(): Promise<void> {
@@ -435,20 +462,7 @@ export class MpvPlayer extends EventEmitter {
    *  re-selecting the same subtitle never stacks; mpv parses the VTT once and
    *  seeks within it natively, unlike a re-read HLS rendition. */
   async subAdd(url: string, label: string, language: string): Promise<void> {
-    // A manifest load forces demuxer-lavf-format=hls; while it's in effect mpv
-    // applies it to this sidecar VTT too and fails to open it ("Found 'hls'
-    // (forced)" → avformat_open_input() failed). Drop the forced format for the
-    // sub-add so the VTT is probed normally, then restore it.
-    if (this.forcedDemuxFormat) {
-      await this.command(['set', 'demuxer-lavf-format', '']).catch(() => {});
-    }
-    try {
-      await this.command(['sub-add', url, 'cached', label ?? '', language ?? '']);
-    } finally {
-      if (this.forcedDemuxFormat) {
-        await this.command(['set', 'demuxer-lavf-format', this.forcedDemuxFormat]).catch(() => {});
-      }
-    }
+    await this.command(['sub-add', url, 'cached', label ?? '', language ?? '']);
   }
 
   async setSubtitleStyle(s: DesktopSubtitleStyle): Promise<void> {
