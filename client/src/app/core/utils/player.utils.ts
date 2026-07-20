@@ -170,6 +170,7 @@ export function formatSubtitleLabel(
     forced?: boolean | null;
     hearingImpaired?: boolean | null;
     relativePath?: string | null;
+    providerType?: string | null;
   },
   translate: TranslateService,
   trackIndex?: number,
@@ -183,5 +184,20 @@ export function formatSubtitleLabel(
   if (sub.hearingImpaired) parts.push('HI');
   if (sub.forced) parts.push('Forced');
   parts.push(shortSubtitleCodec(sub.codec, !!sub.relativePath));
+  const origin = subtitleOriginLabel(sub.providerType, translate);
+  if (origin) parts.push(origin);
   return `${head} (${parts.join(') (')})`;
+}
+
+/** Short origin hint for machine-translated / OCR'd subtitles. Embedded and
+ *  downloaded subs get none — their codec already conveys the essentials. */
+export function subtitleOriginLabel(
+  providerType: string | null | undefined,
+  translate: TranslateService,
+): string | null {
+  if (providerType === 'translated')
+    return translate.instant('player.subtitle_source.translated');
+  if (providerType === 'ocr')
+    return translate.instant('player.subtitle_source.ocr');
+  return null;
 }

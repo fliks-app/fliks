@@ -24,6 +24,8 @@ export interface SubtitleOption {
   subtitleDbId?: number;
   /** True if this is a forced subtitle track */
   forced?: boolean;
+  /** Origin: `translated`, `ocr`, `embedded`, or a download provider name. */
+  providerType?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -166,6 +168,7 @@ export class TrackManagerService {
         burnIn: t.kind === 'embedded' && t.isImage && !rendersImageNatively,
         subtitleDbId: t.subtitleId,
         forced: t.forced,
+        providerType: t.providerType,
       }));
       const seen = new Set(tracks.map((t) => t.key));
 

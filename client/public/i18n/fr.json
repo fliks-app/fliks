@@ -65,6 +65,10 @@
     "low_bandwidth": "faible consommation",
     "audio_track_n": "Piste {{index}}",
     "subtitle_track_n": "Sous-titre {{index}}",
+    "subtitle_source": {
+      "translated": "Traduit",
+      "ocr": "OCR"
+    },
     "playback_error": "La lecture a échoué.",
     "error_aborted": "Lecture interrompue.",
     "error_network": "Erreur réseau pendant la lecture.",
@@ -1620,6 +1624,13 @@
       "title": "Profils de langue",
       "subtitle": "Définissez les langues audio acceptées et les sous-titres à télécharger automatiquement.",
       "new": "Nouveau profil",
+      "hi_label": "Malentendants",
+      "hi_mode": {
+        "prefer": "Préférer",
+        "avoid": "Éviter",
+        "require": "Exiger",
+        "forbid": "Interdire"
+      },
       "col_name": "Nom",
       "col_audio_count": "Langues audio",
       "col_subtitle_count": "Langues sous-titres",
