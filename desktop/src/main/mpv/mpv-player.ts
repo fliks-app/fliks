@@ -292,11 +292,16 @@ export class MpvPlayer extends EventEmitter {
       if (gen !== this.loadGen) return;
     }
     // mpv >= 0.38 loadfile signature is <url> <flags> <index> <options>; the
-    // bundled mpv is recent, so pass index 0 then the options. Append the start
-    // option only when set — an empty options string is otherwise parsed as the
-    // index and mpv rejects it ("invalid parameter").
+    // bundled mpv is recent, so pass index 0 then the options. Omit the options
+    // string when empty — mpv otherwise parses it as the index and rejects it.
+    const fileOpts: string[] = [];
+    if (opts.startTime && opts.startTime > 0) fileOpts.push(`start=${opts.startTime}`);
+    // Force the HLS demuxer for manifests so mpv parses the playlist directly,
+    // skipping the generic probe whose backward seek the linear HTTP stream
+    // can't satisfy.
+    if (/\.m3u8(\?|$)/.test(opts.url)) fileOpts.push('demuxer-lavf-format=hls');
     const cmd: unknown[] = ['loadfile', opts.url, 'replace', 0];
-    if (opts.startTime && opts.startTime > 0) cmd.push(`start=${opts.startTime}`);
+    if (fileOpts.length) cmd.push(fileOpts.join(','));
     await this.command(cmd);
     if (gen !== this.loadGen) return;
     // The persistent mpv keeps its pause state across loads; force playback so a
