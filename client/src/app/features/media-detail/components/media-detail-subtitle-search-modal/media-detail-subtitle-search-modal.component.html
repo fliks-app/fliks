@@ -45,7 +45,7 @@
                       [value]="r.score"
                       max="100"
                     ></progress>
-                    <span class="tabular-nums">{{ r.score }}</span>
+                    <span class="tabular-nums">{{ r.score }}%</span>
                     @if (r.forced) {
                       <span class="badge badge-xs badge-outline">F</span>
                     }
@@ -64,7 +64,7 @@
                       [value]="r.score"
                       max="100"
                     ></progress>
-                    <span class="tabular-nums text-xs w-7 text-right">{{ r.score }}</span>
+                    <span class="tabular-nums text-xs w-9 text-right">{{ r.score }}%</span>
                   </div>
                 </td>
                 <td class="text-center text-xs hidden sm:table-cell">
