@@ -1005,6 +1005,7 @@
     "col_sub_title": "Titre",
     "search": "Rechercher",
     "no_subtitle_results": "Aucun résultat trouvé.",
+    "subtitle_downloads": "{{count}} téléchargements",
     "confirm_delete_subtitle": "Supprimer ce sous-titre ?",
     "rejection": {
       "QUALITY_NOT_ALLOWED": "Qualité hors profil",

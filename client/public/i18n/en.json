@@ -1005,6 +1005,7 @@
     "col_sub_title": "Title",
     "search": "Search",
     "no_subtitle_results": "No results found.",
+    "subtitle_downloads": "{{count}} downloads",
     "confirm_delete_subtitle": "Delete this subtitle?",
     "rejection": {
       "QUALITY_NOT_ALLOWED": "Quality outside profile",

@@ -35,7 +35,19 @@
             @for (r of subSearchResults(); track r.providerFileId) {
               <tr>
                 <td class="text-sm max-w-[20rem] truncate" [title]="r.title">{{ r.title }}</td>
-                <td class="text-center tabular-nums">{{ r.score }}</td>
+                <td>
+                  <div class="flex items-center gap-2 justify-center">
+                    <progress
+                      class="progress w-14 h-1.5"
+                      [class.progress-success]="r.score >= 80"
+                      [class.progress-warning]="r.score >= 40 && r.score < 80"
+                      [class.progress-error]="r.score < 40"
+                      [value]="r.score"
+                      max="100"
+                    ></progress>
+                    <span class="tabular-nums text-xs w-7 text-right">{{ r.score }}</span>
+                  </div>
+                </td>
                 <td class="text-center text-xs">
                   @if (r.forced) {
                     <span class="badge badge-xs badge-outline mr-1">F</span>
@@ -44,7 +56,12 @@
                     <span class="badge badge-xs badge-outline">HI</span>
                   }
                 </td>
-                <td class="text-sm">{{ r.providerName }}</td>
+                <td class="text-sm">
+                  {{ r.providerName }}
+                  @if (r.downloadCount) {
+                    <span class="block text-xs text-base-content/50">{{ 'media_detail.subtitle_downloads' | translate: { count: r.downloadCount } }}</span>
+                  }
+                </td>
                 <td>
                   <button
                     type="button"
