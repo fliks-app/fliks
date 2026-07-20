@@ -183,7 +183,7 @@
             [imageUrl]="ep.stillUrl ?? m.posterUrl"
             [imageBlurred]="!ep.stillUrl && !!m.posterUrl"
             [title]="ep.title ?? ('media_detail.ep_no_title' | translate)"
-            [subtitle]="ep.airDate ?? '—'"
+            [subtitle]="(ep.airDate | localeDate) || '—'"
             [topLeftBadge]="episodeBadgeLabel(ep)"
             [status]="watchedEpisodeIds().has(ep.id) ? 'watched' : (!ep.hasFile ? 'missing' : null)"
             [progressPercent]="episodeProgress()[ep.id]"
