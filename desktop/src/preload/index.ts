@@ -2,12 +2,16 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   IPC,
   UPDATE_IPC,
+  DOWNLOAD_IPC,
+  type DesktopDownloadRequest,
+  type DesktopDownloadStatus,
   type DesktopEvent,
   type DesktopLoadOptions,
   type DesktopRect,
   type DesktopSubtitleStyle,
   type DesktopUpdateStatus,
   type FliksDesktopApi,
+  type FliksDownloaderApi,
   type FliksUpdaterApi,
 } from '../shared/contract';
 
@@ -61,3 +65,23 @@ const updater: FliksUpdaterApi = {
 };
 
 contextBridge.exposeInMainWorld('fliksUpdater', updater);
+
+// Exposes offline downloads on `window.fliksDownloader`, consumed by the Angular
+// DownloadManager/OfflineStorage services on the desktop path.
+const downloader: FliksDownloaderApi = {
+  start: (req: DesktopDownloadRequest) => ipcRenderer.invoke(DOWNLOAD_IPC.start, req),
+  cancel: (id: string) => ipcRenderer.invoke(DOWNLOAD_IPC.cancel, id),
+  remove: (id: string) => ipcRenderer.invoke(DOWNLOAD_IPC.remove, id),
+  list: () => ipcRenderer.invoke(DOWNLOAD_IPC.list),
+  getLocalUrl: (id: string) => ipcRenderer.invoke(DOWNLOAD_IPC.getLocalUrl, id),
+  saveFile: (key: string, url: string) => ipcRenderer.invoke(DOWNLOAD_IPC.saveFile, key, url),
+  fileUrl: (key: string) => ipcRenderer.invoke(DOWNLOAD_IPC.fileUrl, key),
+  deleteFile: (key: string) => ipcRenderer.invoke(DOWNLOAD_IPC.deleteFile, key),
+  onStatus: (handler: (status: DesktopDownloadStatus) => void) => {
+    const listener = (_e: unknown, status: DesktopDownloadStatus) => handler(status);
+    ipcRenderer.on(DOWNLOAD_IPC.status, listener);
+    return () => ipcRenderer.removeListener(DOWNLOAD_IPC.status, listener);
+  },
+};
+
+contextBridge.exposeInMainWorld('fliksDownloader', downloader);

@@ -11,6 +11,10 @@ import { AuthService } from './auth.service';
 import { BrowserDeviceProfileService } from './browser-device-profile.service';
 import { TranslateService } from '@ngx-translate/core';
 import { formatSubtitleLabel } from '../utils/player.utils';
+import {
+  desktopDownloaderOrNull,
+  type DesktopDownloadStatus,
+} from '../plugins/desktop-downloader.bridge';
 
 export interface DownloadEvent {
   type: 'progress' | 'ready' | 'failed' | 'complete';
@@ -35,6 +39,11 @@ export interface DownloadEvent {
 @Injectable({ providedIn: 'root' })
 export class DownloadManagerService {
   private readonly isNative = Capacitor.isNativePlatform();
+  /** Electron desktop backend: download the original file to disk, play via mpv. */
+  private readonly downloader = desktopDownloaderOrNull();
+  private get isDesktop(): boolean {
+    return !!this.downloader;
+  }
   private readonly streamingApi = inject(StreamingApiService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly mediaService = inject(MediaService);
@@ -103,6 +112,29 @@ export class DownloadManagerService {
     window.addEventListener('online', () => {
       if (this.recovered) void this.recover();
     });
+    this.downloader?.onStatus((s) => this.onDesktopStatus(s));
+  }
+
+  /** Map a desktop (Electron) download status event onto the cache task keyed
+   *  by mediaFileId. Progress drives the badge; done pre-fetches subtitles. */
+  private onDesktopStatus(s: DesktopDownloadStatus): void {
+    const mfid = Number(s.id);
+    const task = this.cache
+      .load()
+      .find((t) => t.mediaFileId === mfid && t.status !== 'ready' && t.status !== 'failed');
+    if (!task) return;
+    if (s.state === 'progress') {
+      const pct = s.total > 0 ? Math.round((s.received / s.total) * 100) : 0;
+      this.cache.updateProgress(task.id, pct);
+      this.emitEvent('progress', task.id, pct, 'downloading');
+    } else if (s.state === 'done') {
+      this.updateTaskStatus(task.id, 'ready', 100);
+      this.emitEvent('complete', task.id, 100);
+      void this.preDownloadSubtitles(task.id);
+    } else {
+      this.updateTaskStatus(task.id, 'failed', 0);
+      this.emitEvent('failed', task.id, 0);
+    }
   }
 
   // ===== PUBLIC API =====
@@ -141,6 +173,23 @@ export class DownloadManagerService {
     // hours so we can't rely on the 1h access token.
     await this.auth.ensureStreamToken();
 
+    // Desktop (Electron), original: fetch the untouched container straight to
+    // disk and play it offline via mpv (full codec coverage). No HLS session —
+    // the raw ?download=1 route streams the file with Range support.
+    if (this.isDesktop && quality === 'original') {
+      const url = this.streamingApi.getOriginalDownloadUrl(mediaFileId);
+      task.hlsUrl = url;
+      this.titles.set(taskId, { title, episode });
+      this.persistTask(task);
+      void this.downloader!.start({
+        id: String(mediaFileId),
+        url,
+        filename: episode ? `${title} - ${episode}` : title,
+      });
+      this.emitEvent('progress', taskId, 0, 'downloading');
+      return task;
+    }
+
     // Establish a live session the way playback does: the HLS segment routes
     // resolve the codec variant off the session via ?sid= and reject (410)
     // any segment request that can't resolve one. Thread the returned sid
@@ -165,7 +214,17 @@ export class DownloadManagerService {
     this.titles.set(taskId, { title, episode });
     this.persistTask(task);
 
-    if (this.isNative) {
+    if (this.isDesktop) {
+      // Desktop, transcoded rung: mirror the HLS bundle to disk and play it
+      // offline via mpv (the local master.m3u8) — like the native offline flow.
+      void this.downloader!.start({
+        id: String(mediaFileId),
+        url: hlsUrl,
+        quality,
+        filename: episode ? `${title} - ${episode}` : title,
+      });
+      this.emitEvent('progress', taskId, 0, 'downloading');
+    } else if (this.isNative) {
       const token =
         this.auth.streamToken() ?? this.auth.accessToken ?? '';
       // Pre-translated banner copy for the iOS completion/failure notification
@@ -369,6 +428,17 @@ export class DownloadManagerService {
     }
 
     for (const t of tasks) {
+      if (this.isDesktop) {
+        // Reconcile against the on-disk manifest: a file that survived is ready;
+        // an interrupted download (no file) is failed so the user can retry.
+        const hasLocal = await this.storage.has(`download-${t.mediaFileId}`);
+        if (hasLocal) {
+          if (t.status !== 'ready') this.updateTaskStatus(t.id, 'ready', 100);
+        } else if (onStartup && t.status !== 'ready') {
+          this.updateTaskStatus(t.id, 'failed', 0);
+        }
+        continue;
+      }
       if (t.status === 'ready') {
         // Native: trust localStorage — ExoPlayer's SimpleCache persists across
         // restarts and querying DownloadIndex has timing issues.

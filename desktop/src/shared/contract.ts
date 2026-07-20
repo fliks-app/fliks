@@ -129,6 +129,67 @@ export const UPDATE_IPC = {
   status: 'update:status',
 } as const;
 
+// ── Downloads (offline) ──
+// App-level, independent of the per-session player surface — modelled on the
+// updater. Media is fetched to disk and played back offline via mpv (file://).
+
+export interface DesktopDownloadRequest {
+  /** Stable id; the client uses the mediaFileId. */
+  id: string;
+  /** Source URL, including the ?token= stream JWT. A `.m3u8` URL is mirrored to
+   *  disk as a local HLS bundle; anything else is fetched as a single file. */
+  url: string;
+  /** Preferred display filename; the on-disk extension is taken from the response. */
+  filename?: string;
+  /** For an HLS download, the ladder rung to mirror (variant selection). */
+  quality?: string;
+}
+
+export interface DesktopDownloadItem {
+  id: string;
+  filename: string;
+  /** Absolute local path of the downloaded file. */
+  path: string;
+  /** Total bytes (0 until the response headers arrive). */
+  size: number;
+  received: number;
+  complete: boolean;
+}
+
+export type DesktopDownloadStatus =
+  | { id: string; state: 'progress'; received: number; total: number }
+  | { id: string; state: 'done'; item: DesktopDownloadItem }
+  | { id: string; state: 'error'; message: string };
+
+export const DOWNLOAD_IPC = {
+  start: 'download:start',
+  cancel: 'download:cancel',
+  remove: 'download:remove',
+  list: 'download:list',
+  getLocalUrl: 'download:getLocalUrl',
+  saveFile: 'download:saveFile',
+  fileUrl: 'download:fileUrl',
+  deleteFile: 'download:deleteFile',
+  /** main → renderer (discriminated by DesktopDownloadStatus.state). */
+  status: 'download:status',
+} as const;
+
+/** Exposed on `window.fliksDownloader` by the preload bridge. */
+export interface FliksDownloaderApi {
+  start(req: DesktopDownloadRequest): Promise<void>;
+  cancel(id: string): Promise<void>;
+  remove(id: string): Promise<void>;
+  list(): Promise<DesktopDownloadItem[]>;
+  /** file:// URL of a completed download, or null. */
+  getLocalUrl(id: string): Promise<string | null>;
+  /** Fetch a small sidecar file (e.g. a VTT subtitle) to disk under `key`. */
+  saveFile(key: string, url: string): Promise<boolean>;
+  /** file:// URL of a saved sidecar file, or null. */
+  fileUrl(key: string): Promise<string | null>;
+  deleteFile(key: string): Promise<void>;
+  onStatus(handler: (status: DesktopDownloadStatus) => void): () => void;
+}
+
 /** Exposed on `window.fliksUpdater` by the preload bridge. */
 export interface FliksUpdaterApi {
   getCapability(): Promise<DesktopUpdateCapability>;

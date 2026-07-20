@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { AuthService } from './auth.service';
 import { DownloadNotificationService } from './download-notification.service';
 import { DownloadCacheService } from './download-cache.service';
+import { desktopDownloaderOrNull } from '../plugins/desktop-downloader.bridge';
 
 const CACHE_NAME = 'offline-media';
 
@@ -35,6 +36,15 @@ export class OfflineStorageService {
   private readonly auth = inject(AuthService);
   private readonly notif = inject(DownloadNotificationService);
   private readonly cache = inject(DownloadCacheService);
+  /** Electron desktop offline backend: files on disk, played back via mpv. */
+  private readonly downloader = desktopDownloaderOrNull();
+  private get isDesktop(): boolean {
+    return !!this.downloader;
+  }
+
+  private mfidFromKey(key: string): string {
+    return key.replace('download-', '');
+  }
 
   /** Per (server, user) key for the Shaka offline URI map. */
   private shakaKey(): string {
@@ -42,6 +52,9 @@ export class OfflineStorageService {
   }
 
   async getLocalUrl(key: string): Promise<string | null> {
+    if (this.isDesktop) {
+      return this.downloader!.getLocalUrl(this.mfidFromKey(key));
+    }
     if (this.isNative) {
       return this.getNativeOfflineUrl(key);
     }
@@ -202,6 +215,7 @@ export class OfflineStorageService {
   }
 
   async delete(key: string): Promise<void> {
+    if (this.isDesktop) return this.downloader!.remove(this.mfidFromKey(key));
     if (this.isNative) return this.deleteNative(key);
     // Web: remove Shaka offline content
     const mfid = Number(key.replace('download-', ''));
@@ -215,6 +229,7 @@ export class OfflineStorageService {
    * playback points the native player at a non-existent file and renders nothing.
    */
   async downloadSmallFile(url: string, key: string): Promise<boolean> {
+    if (this.isDesktop) return this.downloader!.saveFile(key, url);
     try {
       // Downloads can finish hours after the 1h access token was minted, so
       // authenticate with the long-lived stream token (same token baked into
@@ -248,6 +263,7 @@ export class OfflineStorageService {
 
   /** Remove a stored VTT subtitle (counterpart to {@link downloadSmallFile}). */
   async deleteSmallFile(key: string): Promise<void> {
+    if (this.isDesktop) return this.downloader!.deleteFile(key);
     try {
       if (this.isNative) {
         const { Filesystem, Directory } = await getFs();
@@ -264,6 +280,7 @@ export class OfflineStorageService {
 
   /** Get small file content as text (for VTT). */
   async getSmallFileUrl(key: string): Promise<string | null> {
+    if (this.isDesktop) return this.downloader!.fileUrl(key);
     if (this.isNative) {
       try {
         const { Filesystem, Directory } = await getFs();
@@ -290,8 +307,9 @@ export class OfflineStorageService {
     }
   }
 
-  /** Get native file URI for a small file (for ExoPlayer — not a blob URL). */
+  /** Get native file URI for a small file (for ExoPlayer / mpv — not a blob URL). */
   async getSmallFileNativeUri(key: string): Promise<string | null> {
+    if (this.isDesktop) return this.downloader!.fileUrl(key);
     if (!this.isNative) return this.getSmallFileUrl(key);
     try {
       const { Filesystem, Directory } = await getFs();
@@ -310,6 +328,7 @@ export class OfflineStorageService {
   }
 
   async has(key: string): Promise<boolean> {
+    if (this.isDesktop) return (await this.downloader!.getLocalUrl(this.mfidFromKey(key))) !== null;
     if (this.isNative) {
       // Native offline content — resolve via the platform-specific path.
       return (await this.getNativeOfflineUrl(key)) !== null;

@@ -1063,7 +1063,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.state.playbackMode.set('direct');
         this.qualityManager.availableQualities.set([]);
 
-        if (this.isNative) {
+        if (this.isDesktopNative) {
+          // Desktop: the original container lives on disk; mpv plays it back
+          // offline (file://) with full codec coverage + embedded tracks.
+          await this.createDesktopEngine();
+          await this.engine!.load(offlineCheck!, startTime);
+          await this.loadOfflineSubtitles();
+        } else if (this.isNative) {
           // Android: ExoPlayer with CacheDataSource (offline HLS from cache)
           await this.createNativeEngine();
           (this.engine as NativeEngine).setOffline(true);
