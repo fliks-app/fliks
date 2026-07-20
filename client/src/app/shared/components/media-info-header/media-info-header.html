@@ -451,12 +451,20 @@
           @if (subtitles().length === 1) {
             <span>{{ subtitles()[0].label }}</span>
           } @else {
-            <select class="select select-bordered select-sm w-fit" appTvSelect [ngModel]="selectedSubtitleId()" (ngModelChange)="onSubtitleChange($event)">
-              <option [ngValue]="null">{{ 'player.off' | translate }}</option>
+            <app-dropdown-menu placement="bottom-end">
+              <button trigger type="button" class="select select-bordered select-sm w-fit text-left">
+                {{ selectedSubtitle()?.label ?? ('player.off' | translate) }}
+              </button>
+              <button type="button" class="dropdown-item" (click)="onSubtitleChange(null)">
+                {{ 'player.off' | translate }}
+              </button>
               @for (s of subtitles(); track s.id) {
-                <option [ngValue]="s.id">{{ s.label }}</option>
+                <button type="button" class="dropdown-item !items-start flex-col gap-0" (click)="onSubtitleChange(s.id)">
+                  <span>{{ s.head || s.label }}</span>
+                  @if (s.sub) { <span class="text-xs opacity-60">{{ s.sub }}</span> }
+                </button>
               }
-            </select>
+            </app-dropdown-menu>
           }
         </div>
       }

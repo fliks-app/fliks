@@ -67,6 +67,8 @@ export interface MediaInfoHeaderFile {
 export interface MediaInfoHeaderSubtitle {
   id: string;
   label: string;
+  head?: string;
+  sub?: string;
   language: string;
   forced?: boolean;
   /** Bitmap (PGS/VOBSUB) track. */
@@ -242,6 +244,9 @@ export class MediaInfoHeaderComponent {
   readonly durationSeconds = signal<number | null>(null);
   readonly selectedAudioIndex = signal<number | null>(null);
   readonly selectedSubtitleId = signal<string | null>(null);
+  readonly selectedSubtitle = computed(
+    () => this.subtitles().find((s) => s.id === this.selectedSubtitleId()) ?? null,
+  );
 
   // Overview clamp / expand. The mobile and desktop layouts each render an
   // `#overviewText` paragraph (both live in the DOM; CSS hides one), so we

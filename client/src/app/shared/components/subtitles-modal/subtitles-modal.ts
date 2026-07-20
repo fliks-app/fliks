@@ -409,6 +409,8 @@ export class SubtitlesModalComponent {
       return {
         id,
         label: parts.sub ? `${parts.head} — ${parts.sub}` : parts.head,
+        head: parts.head,
+        sub: parts.sub,
         language: s.language,
         forced: s.forced,
         image: isImageBasedSubtitleCodec(s.codec),
