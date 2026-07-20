@@ -274,7 +274,13 @@ export class MpvPlayer extends EventEmitter {
 
   async load(opts: DesktopLoadOptions): Promise<void> {
     this.sawFirstFrame = false;
+    this.duration = 0;
+    this.cacheEnd = 0;
     const gen = ++this.loadGen;
+    // Reset the reused player first so the new open's probe can't read atop the
+    // previous file's buffered stream.
+    await this.command(['stop']).catch(() => {});
+    if (gen !== this.loadGen) return;
     // Auth/other headers → the http-header-fields LIST property, set BEFORE
     // loadfile. Don't cram them into the comma-separated loadfile options
     // string — header values contain ',' and ':' that would break that parse.
