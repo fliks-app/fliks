@@ -19,7 +19,6 @@ import { SelectPickerService } from '../../core/services/select-picker.service';
  */
 @Directive({
   selector: 'select[appTvSelect]',
-  standalone: true,
   host: { class: 'cursor-pointer transition-colors hover:bg-base-content/10' },
 })
 export class TvSelectDirective {
