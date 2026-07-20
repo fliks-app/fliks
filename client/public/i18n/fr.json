@@ -70,6 +70,7 @@
       "ocr": "OCR"
     },
     "playback_error": "La lecture a échoué.",
+    "subtitle_load_failed": "Impossible de charger cette piste de sous-titres.",
     "error_aborted": "Lecture interrompue.",
     "error_network": "Erreur réseau pendant la lecture.",
     "error_decode": "Erreur de décodage de la vidéo.",
