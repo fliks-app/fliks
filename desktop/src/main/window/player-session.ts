@@ -56,12 +56,12 @@ export class PlayerSession {
       height: 800,
       minWidth: 800,
       minHeight: 500,
-      backgroundColor: '#1d232a', // Fliks brand; only seen if videoWin lags
+      backgroundColor: '#1d232a', // brand at startup; set black on first frame so a video gap reads as loading
       title: 'Fliks',
       ...(iconPath ? { icon: iconPath } : {}),
     });
     await this.frameWin.loadURL(
-      'data:text/html,<body style="margin:0;background:%231d232a"></body>',
+      'data:text/html,<body style="margin:0;background:transparent"></body>',
     );
 
     this.videoWin = new BrowserWindow({
@@ -197,7 +197,7 @@ export class PlayerSession {
   }
 
   private forwardEvents(mpv: PlayerBackend): void {
-    mpv.on('log', (s: string) => process.stderr.write(`[mpv] ${s}`));
+    mpv.on('log', (s: string) => process.stderr.write(`[${Date.now()}][mpv] ${s}`));
     mpv.on('exit', (e) => console.error('[mpv] process exit', JSON.stringify(e)));
     mpv.on('stateChanged', (p) => {
       const state = (p as { state?: string }).state;
@@ -213,6 +213,9 @@ export class PlayerSession {
     mpv.on('firstFrame', () => {
       console.log('[player] firstFrame');
       setPlaybackKeepAwake(true);
+      // Now that playback owns the window, paint the frame black: a video gap
+      // (decoder re-init on a seek) then reads as loading, not a brand flash.
+      if (!this.frameWin.isDestroyed()) this.frameWin.setBackgroundColor('#000000');
       this.emit({ type: 'firstFrame' });
     });
     mpv.on('error', (p) => {

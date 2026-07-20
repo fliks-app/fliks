@@ -94,6 +94,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     _mimeType?: string,
     headers?: Record<string, string>,
   ): Promise<void> {
+    if (this.dead) return;
     this.resetFirstFrame();
     await this.bridge.load({ url, startTime, headers });
     if (this._subtitleStyle) {
@@ -115,6 +116,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   // ── Playback ──
 
   async play(): Promise<void> {
+    if (this.dead) return;
     await this.bridge.play();
     this._paused = false;
   }
@@ -125,6 +127,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   }
 
   async seek(position: number): Promise<void> {
+    if (this.dead) return;
     await this.bridge.seek(position);
     this._currentTime = position;
   }

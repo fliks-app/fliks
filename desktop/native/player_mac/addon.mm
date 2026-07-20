@@ -524,7 +524,15 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   // Same on-demand-transcode reconnect policy as the Linux addon (see addon.cc):
   // retry seg-0/init 404s, in-progress 503s and transport-level open failures.
   M::set_option_string(g_state.mpv, "demuxer-lavf-o",
-      "reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=%7%4xx,5xx,reconnect_delay_max=60");
+      "reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=%7%4xx,5xx,reconnect_delay_max=5");
+  // Buffer like the web engine: ~30s forward (cache-secs binds the TIME cap),
+  // ~60s back; the byte cap is a generous ceiling so time binds first.
+  M::set_option_string(g_state.mpv, "cache", "yes");
+  M::set_option_string(g_state.mpv, "cache-secs", "30");
+  M::set_option_string(g_state.mpv, "demuxer-readahead-secs", "30");
+  M::set_option_string(g_state.mpv, "demuxer-max-bytes", "256MiB");
+  M::set_option_string(g_state.mpv, "demuxer-max-back-bytes", "96MiB");
+  M::set_option_string(g_state.mpv, "cache-pause-wait", "1");
   if (M::initialize(g_state.mpv) < 0) fprintf(stderr, "[player-mac] mpv_initialize failed\n");
   M::observe_property(g_state.mpv, 1, "time-pos", MPV_FORMAT_DOUBLE);
   M::observe_property(g_state.mpv, 2, "duration", MPV_FORMAT_DOUBLE);

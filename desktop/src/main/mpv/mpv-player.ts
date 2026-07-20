@@ -60,6 +60,9 @@ export class MpvPlayer extends EventEmitter {
   private sawFirstFrame = false;
   private duration = 0;
   private cacheEnd = 0;
+  /** Bumped by load/stop/destroy; a load with a stale id skips its remaining
+   *  IPC writes, so a stop can't be overtaken by a trailing loadfile. */
+  private loadGen = 0;
 
   constructor(opts: MpvPlayerOptions) {
     super();
@@ -91,6 +94,15 @@ export class MpvPlayer extends EventEmitter {
       // mpv's playlist safety check otherwise refuses them on the fallback path.
       '--load-unsafe-playlists=yes',
       '--ytdl=no',
+      // Buffer like the web (Shaka) engine (~30s fwd / ~60s back / resume 1s).
+      // cache-secs is the binding forward TIME cap — with --cache=yes it else
+      // defaults to ~unlimited and overrides readahead-secs; bytes are a ceiling.
+      '--cache=yes',
+      '--cache-secs=30',
+      '--demuxer-readahead-secs=30',
+      '--demuxer-max-bytes=256MiB',
+      '--demuxer-max-back-bytes=96MiB',
+      '--cache-pause-wait=1',
       // A slow transcode (HDR tonemap re-encode) isn't ready when mpv opens
       // seg-0/init for a stream, so it aborts unless told to reconnect. A
       // separate multi-audio rendition's transcode spins up late and the open
@@ -99,7 +111,7 @@ export class MpvPlayer extends EventEmitter {
       // reconnect_on_http_error. The `4xx,5xx` value carries a comma, so it uses
       // mpv's `%len%` escaping (7 = strlen("4xx,5xx")) to survive the key-value-
       // list parser. Mirrors native/compositor/addon.cc.
-      '--demuxer-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=%7%4xx,5xx,reconnect_delay_max=60',
+      '--demuxer-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=%7%4xx,5xx,reconnect_delay_max=5',
       `--input-ipc-server=${this.sockPath}`,
     ];
     console.log('[mpv] spawn:', this.mpvPath, args.join(' '));
@@ -107,6 +119,7 @@ export class MpvPlayer extends EventEmitter {
     this.proc.on('exit', (code) => {
       this.emit('stateChanged', { state: 'idle' });
       this.emit('exit', { code });
+      this.rejectAllPending('mpv process exited');
     });
     this.proc.stderr?.on('data', (d: Buffer) => this.emit('log', d.toString()));
 
@@ -148,7 +161,14 @@ export class MpvPlayer extends EventEmitter {
       sock.once('connect', () => {
         this.sock = sock;
         sock.on('data', (chunk: Buffer) => this.onData(chunk));
-        sock.on('error', (e) => this.emit('error', { code: -1, message: String(e) }));
+        sock.on('error', (e) => {
+          this.emit('error', { code: -1, message: String(e) });
+          this.rejectAllPending(`mpv socket error: ${e}`);
+        });
+        sock.on('close', () => {
+          this.sock = null;
+          this.rejectAllPending('mpv socket closed');
+        });
         resolve();
       });
       sock.once('error', reject);
@@ -255,8 +275,20 @@ export class MpvPlayer extends EventEmitter {
       if (!this.sock) return reject(new Error('mpv socket not connected'));
       const request_id = ++this.reqId;
       this.pending.set(request_id, { resolve, reject });
-      this.sock.write(JSON.stringify({ command, request_id }) + '\n');
+      try {
+        this.sock.write(JSON.stringify({ command, request_id }) + '\n');
+      } catch (e) {
+        this.pending.delete(request_id);
+        reject(e instanceof Error ? e : new Error(String(e)));
+      }
     });
+  }
+
+  /** Fail every in-flight command so a socket/process death can't wedge an
+   *  awaiting load/seek invoke forever. */
+  private rejectAllPending(message: string): void {
+    for (const p of this.pending.values()) p.reject(new Error(message));
+    this.pending.clear();
   }
 
   private get(prop: string): Promise<any> {
@@ -271,28 +303,42 @@ export class MpvPlayer extends EventEmitter {
 
   async load(opts: DesktopLoadOptions): Promise<void> {
     this.sawFirstFrame = false;
-    // Auth/other headers → the http-header-fields LIST property, set BEFORE
-    // loadfile. Don't cram them into the comma-separated loadfile options
-    // string — header values contain ',' and ':' that would break that parse.
-    if (opts.headers && Object.keys(opts.headers).length) {
-      await this.set(
-        'http-header-fields',
-        Object.entries(opts.headers).map(([k, v]) => `${k}: ${v}`),
-      );
-    }
+    this.duration = 0;
+    this.cacheEnd = 0;
+    const gen = ++this.loadGen;
+    // Reset the reused player first so the new open's probe can't read atop the
+    // previous file's buffered stream.
+    await this.command(['stop']).catch(() => {});
+    if (gen !== this.loadGen) return;
+    // Always set http-header-fields (empty list when absent) so this reused
+    // singleton can't inherit a prior load's auth header over the fresh ?token=.
+    // A LIST property, not the loadfile options string (values carry ','/':' ).
+    await this.set(
+      'http-header-fields',
+      opts.headers ? Object.entries(opts.headers).map(([k, v]) => `${k}: ${v}`) : [],
+    );
+    if (gen !== this.loadGen) return;
     // mpv >= 0.38 loadfile signature is <url> <flags> <index> <options>; the
-    // bundled mpv is recent, so pass index 0 then the options. Append the start
-    // option only when set — an empty options string is otherwise parsed as the
-    // index and mpv rejects it ("invalid parameter").
+    // bundled mpv is recent, so pass index 0 then the options. Omit the options
+    // string when empty — mpv otherwise parses it as the index and rejects it.
+    const fileOpts: string[] = [];
+    if (opts.startTime && opts.startTime > 0) fileOpts.push(`start=${opts.startTime}`);
+    // Force the HLS demuxer for manifests so mpv parses the playlist directly,
+    // skipping the generic probe whose backward seek the linear HTTP stream
+    // can't satisfy.
+    if (/\.m3u8(\?|$)/.test(opts.url)) fileOpts.push('demuxer-lavf-format=hls');
     const cmd: unknown[] = ['loadfile', opts.url, 'replace', 0];
-    if (opts.startTime && opts.startTime > 0) cmd.push(`start=${opts.startTime}`);
+    if (fileOpts.length) cmd.push(fileOpts.join(','));
     await this.command(cmd);
+    if (gen !== this.loadGen) return;
     // The persistent mpv keeps its pause state across loads; force playback so a
     // freshly opened file always autoplays. The JS side treats this engine like
     // the mobile native player (playWhenReady) and never calls play() itself.
     await this.set('pause', false);
+    if (gen !== this.loadGen) return;
     for (const s of opts.subtitles ?? []) {
       await this.command(['sub-add', s.url, 'auto', s.label ?? '', s.language ?? '']);
+      if (gen !== this.loadGen) return;
     }
   }
 
@@ -309,6 +355,7 @@ export class MpvPlayer extends EventEmitter {
   }
 
   stop(): Promise<void> {
+    this.loadGen++;
     // Reset baselines so the persistent player can't replay a stale first-frame
     // / position into the next session after a back-navigation.
     this.sawFirstFrame = false;
@@ -392,8 +439,13 @@ export class MpvPlayer extends EventEmitter {
   }
 
   async destroy(): Promise<void> {
+    this.loadGen++;
     try {
-      await this.command(['quit']);
+      // mpv may close the socket on quit without replying — cap the wait.
+      await Promise.race([
+        this.command(['quit']),
+        new Promise<void>((resolve) => setTimeout(resolve, 500)),
+      ]);
     } catch {
       /* socket may already be gone */
     }
