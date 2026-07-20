@@ -197,7 +197,7 @@ export class PlayerSession {
   }
 
   private forwardEvents(mpv: PlayerBackend): void {
-    mpv.on('log', (s: string) => process.stderr.write(`[mpv] ${s}`));
+    mpv.on('log', (s: string) => process.stderr.write(`[${Date.now()}][mpv] ${s}`));
     mpv.on('exit', (e) => console.error('[mpv] process exit', JSON.stringify(e)));
     mpv.on('stateChanged', (p) => {
       const state = (p as { state?: string }).state;
