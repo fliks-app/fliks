@@ -125,6 +125,7 @@ export class SubtitleTranslationService {
       codec: 'subrip',
       score: source.score,
       translationProvider: { id: provider.id },
+      translationProviderName: provider.name,
       translationEngine: provider.engine,
       translationModel: this.translationFactory.resolveModel(
         provider.engine,

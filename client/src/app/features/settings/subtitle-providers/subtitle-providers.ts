@@ -100,6 +100,8 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly translationEngines = TRANSLATION_ENGINES;
   readonly translationEnabled = signal(false);
   readonly savingTranslationEnabled = signal(false);
+  readonly translationMaxConcurrency = signal(1);
+  readonly savingConcurrency = signal(false);
   readonly translationRows = signal<TranslationProviderRow[]>([]);
   readonly translationLoading = signal(true);
 
@@ -126,8 +128,24 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     try {
       const all = await this.settingsApi.getAll();
       this.translationEnabled.set(all['subtitle_translation_enabled'] === 'true');
+      this.translationMaxConcurrency.set(
+        Math.max(1, Math.floor(Number(all['subtitle_translation_max_concurrency'] ?? '1')) || 1),
+      );
     } catch {
       // handled by global error interceptor
+    }
+  }
+
+  async saveTranslationConcurrency(value: number) {
+    const n = Math.max(1, Math.floor(Number(value) || 1));
+    this.translationMaxConcurrency.set(n);
+    this.savingConcurrency.set(true);
+    try {
+      await this.settingsApi.setBulk({
+        subtitle_translation_max_concurrency: String(n),
+      });
+    } finally {
+      this.savingConcurrency.set(false);
     }
   }
 

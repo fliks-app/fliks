@@ -3395,7 +3395,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       });
       try { this.engine.setTextVisibility(true); } catch {}
     } catch (e) {
+      // Surface the failure instead of silently moving the checkmark to a track
+      // that never loaded — leave the prior selection and the picker in place so
+      // the user can pick another.
       console.error('[Player] Failed to load subtitle:', e);
+      this.toast.error(this.translate.instant('player.subtitle_load_failed'));
+      return;
     }
 
     this.activeSubtitleId.set(sub.id);

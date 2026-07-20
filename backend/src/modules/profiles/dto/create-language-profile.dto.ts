@@ -4,8 +4,12 @@ import {
   IsArray,
   ValidateNested,
   IsOptional,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import type { HearingImpairedMode } from '../entities/language-profile.entity';
+
+const HI_MODES: HearingImpairedMode[] = ['prefer', 'avoid', 'require', 'forbid'];
 
 export class AudioLanguageItemDto {
   @IsString()
@@ -27,6 +31,10 @@ export class SubtitleLanguageItemDto {
 
   @IsBoolean()
   hi: boolean;
+
+  @IsIn(HI_MODES)
+  @IsOptional()
+  hearingImpaired?: HearingImpairedMode;
 }
 
 export class CreateLanguageProfileDto {

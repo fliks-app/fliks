@@ -84,6 +84,8 @@
                     <td class="text-sm">
                       @if (sub.providerType === 'embedded') {
                         <span class="badge badge-sm badge-neutral">embedded</span>
+                      } @else if (sub.providerType === 'translated') {
+                        <span [title]="sub.translationModel ?? ''">{{ translationServiceLabel(sub) }}</span>
                       } @else {
                         {{ sub.providerType }}
                       }
@@ -499,25 +501,27 @@
       <h3 class="text-lg font-bold">{{ 'media_detail.ocr_language_title' | translate }}</h3>
       <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.ocr_language_hint' | translate }}</p>
     }
-    <select class="select select-bordered w-full" [ngModel]="ocrLang()" (ngModelChange)="ocrLang.set($event)">
-      @for (code of langDialogCodes(); track code) {
-        <option [value]="code">{{ code | localizeLanguage }}</option>
+    <div class="mt-2 space-y-4">
+      <select class="select select-bordered w-full" [ngModel]="ocrLang()" (ngModelChange)="ocrLang.set($event)">
+        @for (code of langDialogCodes(); track code) {
+          <option [value]="code">{{ code | localizeLanguage }}</option>
+        }
+      </select>
+      @if (langDialogMode() === 'translate' && translationProviders().length > 1) {
+        <label class="form-control w-full">
+          <span class="label-text mb-1">{{ 'media_detail.translate_provider' | translate }}</span>
+          <select
+            class="select select-bordered w-full"
+            [ngModel]="selectedTranslationProviderId()"
+            (ngModelChange)="selectedTranslationProviderId.set($event)"
+          >
+            @for (p of translationProviders(); track p.id) {
+              <option [ngValue]="p.id">{{ p.name }}</option>
+            }
+          </select>
+        </label>
       }
-    </select>
-    @if (langDialogMode() === 'translate' && translationProviders().length > 1) {
-      <label class="form-control w-full mt-3">
-        <span class="label-text">{{ 'media_detail.translate_provider' | translate }}</span>
-        <select
-          class="select select-bordered w-full"
-          [ngModel]="selectedTranslationProviderId()"
-          (ngModelChange)="selectedTranslationProviderId.set($event)"
-        >
-          @for (p of translationProviders(); track p.id) {
-            <option [ngValue]="p.id">{{ p.name }}</option>
-          }
-        </select>
-      </label>
-    }
+    </div>
     <div class="modal-action">
       <button type="button" class="btn" (click)="closeOcrLangModal()">{{ 'common.cancel' | translate }}</button>
       <button type="button" class="btn btn-primary" (click)="confirmLanguage()">

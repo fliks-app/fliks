@@ -119,13 +119,16 @@
                       Forced
                     </label>
                     <label class="flex items-center gap-1 text-xs">
-                      <input
-                        type="checkbox"
-                        class="checkbox checkbox-xs"
-                        [checked]="isSubHi(l.isoCode)"
-                        (change)="toggleSubHi(l.isoCode, $event)"
-                      />
-                      HI
+                      <span>{{ 'settings.language_profiles.hi_label' | translate }}</span>
+                      <select
+                        class="select select-bordered select-xs"
+                        [ngModel]="subHiMode(l.isoCode)"
+                        (ngModelChange)="setSubHiMode(l.isoCode, $event)"
+                      >
+                        @for (m of hiModes; track m) {
+                          <option [value]="m">{{ 'settings.language_profiles.hi_mode.' + m | translate }}</option>
+                        }
+                      </select>
                     </label>
                   }
                 </div>

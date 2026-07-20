@@ -65,7 +65,12 @@
     "low_bandwidth": "low bandwidth",
     "audio_track_n": "Track {{index}}",
     "subtitle_track_n": "Subtitle {{index}}",
+    "subtitle_source": {
+      "translated": "Translated",
+      "ocr": "OCR"
+    },
     "playback_error": "Playback failed.",
+    "subtitle_load_failed": "Couldn't load that subtitle track.",
     "error_aborted": "Playback interrupted.",
     "error_network": "Network error during playback.",
     "error_decode": "Video decoding error.",
@@ -1000,6 +1005,7 @@
     "col_sub_title": "Title",
     "search": "Search",
     "no_subtitle_results": "No results found.",
+    "subtitle_downloads": "{{count}} downloads",
     "confirm_delete_subtitle": "Delete this subtitle?",
     "rejection": {
       "QUALITY_NOT_ALLOWED": "Quality outside profile",
@@ -1284,6 +1290,7 @@
     "save": "Save",
     "delete": "Delete",
     "edit": "Edit",
+    "download": "Download",
     "refresh": "Refresh",
     "active": "Active",
     "disabled": "Disabled",
@@ -1620,6 +1627,13 @@
       "title": "Language profiles",
       "subtitle": "Define the accepted audio languages and the subtitles to download automatically.",
       "new": "New profile",
+      "hi_label": "Hearing-impaired",
+      "hi_mode": {
+        "prefer": "Prefer",
+        "avoid": "Avoid",
+        "require": "Require",
+        "forbid": "Forbid"
+      },
       "col_name": "Name",
       "col_audio_count": "Audio languages",
       "col_subtitle_count": "Subtitle languages",
@@ -2122,6 +2136,7 @@
       "translation_libretranslate_url_hint": "Point to your LibreTranslate container, e.g. http://libretranslate:5000.",
       "translation_api_key_optional": "API key (optional)",
       "translation_new": "Add provider",
+      "translation_concurrency": "Max parallel",
       "translation_empty": "No translation provider configured yet.",
       "translation_col_engine": "Engine",
       "translation_default": "Default",

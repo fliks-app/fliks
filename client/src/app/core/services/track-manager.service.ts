@@ -24,6 +24,8 @@ export interface SubtitleOption {
   subtitleDbId?: number;
   /** True if this is a forced subtitle track */
   forced?: boolean;
+  /** Origin: `translated`, `ocr`, `embedded`, or a download provider name. */
+  providerType?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -166,6 +168,7 @@ export class TrackManagerService {
         burnIn: t.kind === 'embedded' && t.isImage && !rendersImageNatively,
         subtitleDbId: t.subtitleId,
         forced: t.forced,
+        providerType: t.providerType,
       }));
       const seen = new Set(tracks.map((t) => t.key));
 
@@ -262,8 +265,15 @@ export class TrackManagerService {
       return;
     }
 
+    // Prefer a real (downloaded / embedded) track over a machine-generated one
+    // (translated / OCR) for the same language, so auto-select doesn't silently
+    // land on a machine translation when a native sub exists.
+    const isMachine = (s: SubtitleOption) =>
+      s.providerType === 'translated' || s.providerType === 'ocr';
     const findMatch = () =>
-      subs.find((s) => s.language === prefLang && !s.forced)
+      subs.find((s) => s.language === prefLang && !s.forced && !isMachine(s))
+      ?? subs.find((s) => s.language === prefLang && !s.forced)
+      ?? subs.find((s) => s.language === prefLang && !isMachine(s))
       ?? subs.find((s) => s.language === prefLang);
 
     if (settings.subtitleMode === 'always') {

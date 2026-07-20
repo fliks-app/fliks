@@ -1,5 +1,5 @@
 <dialog #dialog class="modal">
-  <div class="modal-box max-w-3xl max-h-[85vh] flex flex-col">
+  <div class="modal-box max-w-5xl max-h-[85vh] flex flex-col">
     <h3 class="text-lg font-bold mb-4">{{ 'media_detail.search_subtitles' | translate }}</h3>
     <div class="flex gap-2 mb-4">
       <select
@@ -25,18 +25,49 @@
           <thead>
             <tr>
               <th>{{ 'media_detail.col_sub_title' | translate }}</th>
-              <th class="text-center">{{ 'media_detail.col_sub_score' | translate }}</th>
-              <th class="text-center">{{ 'media_detail.col_sub_flags' | translate }}</th>
+              <th class="text-center hidden sm:table-cell">{{ 'media_detail.col_sub_score' | translate }}</th>
+              <th class="text-center hidden sm:table-cell">{{ 'media_detail.col_sub_flags' | translate }}</th>
               <th>{{ 'media_detail.col_sub_provider' | translate }}</th>
-              <th class="w-20"></th>
+              <th class="w-32"></th>
             </tr>
           </thead>
           <tbody>
             @for (r of subSearchResults(); track r.providerFileId) {
               <tr>
-                <td class="text-sm max-w-[20rem] truncate" [title]="r.title">{{ r.title }}</td>
-                <td class="text-center tabular-nums">{{ r.score }}</td>
-                <td class="text-center text-xs">
+                <td class="text-sm">
+                  <div class="max-w-[13rem] sm:max-w-[20rem] truncate" [title]="r.title">{{ r.title }}</div>
+                  <div class="sm:hidden mt-1 flex items-center gap-2 text-xs">
+                    <progress
+                      class="progress w-14 h-1.5"
+                      [class.progress-success]="r.score >= 80"
+                      [class.progress-warning]="r.score >= 40 && r.score < 80"
+                      [class.progress-error]="r.score < 40"
+                      [value]="r.score"
+                      max="100"
+                    ></progress>
+                    <span class="tabular-nums">{{ r.score }}%</span>
+                    @if (r.forced) {
+                      <span class="badge badge-xs badge-outline">F</span>
+                    }
+                    @if (r.hearingImpaired) {
+                      <span class="badge badge-xs badge-outline">HI</span>
+                    }
+                  </div>
+                </td>
+                <td class="hidden sm:table-cell">
+                  <div class="flex items-center gap-2 justify-center">
+                    <progress
+                      class="progress w-14 h-1.5"
+                      [class.progress-success]="r.score >= 80"
+                      [class.progress-warning]="r.score >= 40 && r.score < 80"
+                      [class.progress-error]="r.score < 40"
+                      [value]="r.score"
+                      max="100"
+                    ></progress>
+                    <span class="tabular-nums text-xs w-9 text-right">{{ r.score }}%</span>
+                  </div>
+                </td>
+                <td class="text-center text-xs hidden sm:table-cell">
                   @if (r.forced) {
                     <span class="badge badge-xs badge-outline mr-1">F</span>
                   }
@@ -44,15 +75,20 @@
                     <span class="badge badge-xs badge-outline">HI</span>
                   }
                 </td>
-                <td class="text-sm">{{ r.providerName }}</td>
+                <td class="text-sm">
+                  {{ r.providerName }}
+                  @if (r.downloadCount) {
+                    <span class="block text-xs text-base-content/50 whitespace-nowrap">{{ 'media_detail.subtitle_downloads' | translate: { count: r.downloadCount } }}</span>
+                  }
+                </td>
                 <td>
                   <button
                     type="button"
-                    class="btn btn-primary btn-xs"
+                    class="btn btn-primary btn-sm"
                     (click)="download.emit(r)"
                     [disabled]="subtitleActionBusy()"
                   >
-                    DL
+                    {{ 'common.download' | translate }}
                   </button>
                 </td>
               </tr>

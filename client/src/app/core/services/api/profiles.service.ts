@@ -37,11 +37,14 @@ export interface AudioLanguageItem {
   name: string;
 }
 
+export type HearingImpairedMode = 'prefer' | 'avoid' | 'require' | 'forbid';
+
 export interface SubtitleLanguageItem {
   isoCode: string;
   name: string;
   forced: boolean;
   hi: boolean;
+  hearingImpaired?: HearingImpairedMode;
 }
 
 export interface LanguageProfile {

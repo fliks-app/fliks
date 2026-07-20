@@ -10,6 +10,7 @@ export interface SubtitleRowLike {
   hearingImpaired?: boolean | null;
   relativePath?: string | null;
   streamIndex?: number | null;
+  providerType?: string | null;
 }
 
 export interface SubtitleTrack {
@@ -23,6 +24,9 @@ export interface SubtitleTrack {
   relativePath: string | null;
   streamIndex: number | null;
   kind: 'external' | 'embedded';
+  /** Origin of the sub — `translated`, `ocr`, `embedded`, or a download
+   *  provider name. Surfaced as an origin hint in the track label. */
+  providerType: string | null;
   /** Bitmap track (PGS/VOBSUB…) that can't be served as text — burn-in only. */
   isImage: boolean;
 }
@@ -70,6 +74,7 @@ export function buildSubtitleTracks(
       relativePath: sub.relativePath ?? null,
       streamIndex: sub.streamIndex ?? null,
       kind,
+      providerType: sub.providerType ?? null,
       isImage,
     });
   }
