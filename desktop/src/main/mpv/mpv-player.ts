@@ -94,6 +94,13 @@ export class MpvPlayer extends EventEmitter {
       // mpv's playlist safety check otherwise refuses them on the fallback path.
       '--load-unsafe-playlists=yes',
       '--ytdl=no',
+      // Align buffering with the web (Shaka) engine: ~30s ahead, ~60s behind,
+      // resume after 1s (byte caps approximate mpv's byte-bounded cache).
+      '--cache=yes',
+      '--demuxer-readahead-secs=30',
+      '--demuxer-max-bytes=48MiB',
+      '--demuxer-max-back-bytes=96MiB',
+      '--cache-pause-wait=1',
       // A slow transcode (HDR tonemap re-encode) isn't ready when mpv opens
       // seg-0/init for a stream, so it aborts unless told to reconnect. A
       // separate multi-audio rendition's transcode spins up late and the open
