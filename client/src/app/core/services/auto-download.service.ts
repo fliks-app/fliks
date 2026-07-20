@@ -2,6 +2,7 @@ import { Injectable, effect, inject } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { AuthService } from './auth.service';
 import { TvService } from './tv.service';
+import { desktopDownloaderOrNull } from '../plugins/desktop-downloader.bridge';
 import { AppResumeService } from './app-resume.service';
 import { DownloadManagerService } from './download-manager.service';
 import { DownloadCacheService, DownloadTask } from './download-cache.service';
@@ -25,15 +26,17 @@ interface AutoTarget {
 
 /**
  * Syncs offline downloads with the user's autoDownload playlists (native mobile
- * only — never on TV or web). Downloads not-yet-watched items that aren't on
- * device and removes auto-managed downloads once watched; manual downloads are
- * never touched.
+ * and the Electron desktop — never on TV or web). Downloads not-yet-watched
+ * items that aren't on device and removes auto-managed downloads once watched;
+ * manual downloads are never touched.
  */
 @Injectable({ providedIn: 'root' })
 export class AutoDownloadService {
-  /** True only on native mobile (iOS/Android). Also gates the settings toggle. */
+  /** True on native mobile (iOS/Android) and the Electron desktop, where an
+   *  offline backend exists. Also gates the settings toggle. */
   readonly enabled =
-    Capacitor.isNativePlatform() && !inject(TvService).isTv();
+    (Capacitor.isNativePlatform() || !!desktopDownloaderOrNull()) &&
+    !inject(TvService).isTv();
   private readonly auth = inject(AuthService);
   private readonly appResume = inject(AppResumeService);
   private readonly downloads = inject(DownloadManagerService);

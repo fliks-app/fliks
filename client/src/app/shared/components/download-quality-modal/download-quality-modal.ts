@@ -15,6 +15,7 @@ import {
   DownloadQuality,
 } from '../../../core/services/api/streaming-api.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { desktopDownloaderOrNull } from '../../../core/plugins/desktop-downloader.bridge';
 import { LucideDownload, LucideX } from '@lucide/angular';
 
 @Component({
@@ -86,6 +87,9 @@ export class DownloadQualityModalComponent {
   /** Original-file download is a browser save-to-disk — hidden on native,
    *  which uses the ExoPlayer/AVAsset offline pipeline instead. */
   readonly isNative = Capacitor.isNativePlatform();
+  /** Desktop (Electron) offers the same quality rungs; the original-file option
+   *  routes through the shell's download-to-disk path rather than a browser save. */
+  readonly isDesktop = !!desktopDownloaderOrNull();
 
   @ViewChild('dialog') dialogRef!: ElementRef<HTMLDialogElement>;
 
@@ -121,6 +125,12 @@ export class DownloadQualityModalComponent {
    *  Mint a long-lived stream token first: the file can be several GB and a
    *  1h access token would expire on a resumed range request mid-download. */
   async downloadOriginal() {
+    // Desktop: route the original through the Electron download-to-disk path
+    // (the browser <a> save doesn't reliably attach in the Electron shell).
+    if (this.isDesktop) {
+      this.selectQuality('original');
+      return;
+    }
     await this.auth.ensureStreamToken();
     const url = this.streamingApi.getOriginalDownloadUrl(this.mediaFileId);
     const a = document.createElement('a');

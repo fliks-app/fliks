@@ -1063,7 +1063,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.state.playbackMode.set('direct');
         this.qualityManager.availableQualities.set([]);
 
-        if (this.isNative) {
+        if (this.isDesktopNative) {
+          // Desktop: the original container lives on disk; mpv plays it back
+          // offline (file://) with full codec coverage + embedded tracks.
+          await this.createDesktopEngine();
+          await this.engine!.load(offlineCheck!, startTime);
+          await this.loadOfflineSubtitles();
+        } else if (this.isNative) {
           // Android: ExoPlayer with CacheDataSource (offline HLS from cache)
           await this.createNativeEngine();
           (this.engine as NativeEngine).setOffline(true);
@@ -1623,9 +1629,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine.on('audioTracksChanged', (e) => {
       // Cross-reference engine tracks with streamInfo.audio so the dropdown
       // label matches what the media-detail header shows. Engine emits tracks
-      // in streamInfo order.
-      const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
-      const audioList = (file?.streamInfo as any)?.audio ?? [];
+      // in streamInfo order. Offline there's no media loaded, so fall back to
+      // the audio metadata captured on the download task at download time.
+      let audioList: { language?: string }[];
+      if (this.isOfflinePlayback) {
+        const task = this.dlCache
+          .load()
+          .find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
+        audioList = task?.audioStreams ?? [];
+      } else {
+        const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
+        audioList = (file?.streamInfo as any)?.audio ?? [];
+      }
       const tracks = e.tracks.map((t: any, i: number) => ({
         id: t.id,
         label: audioList[i] ? formatAudioLabel(audioList[i], this.translate, i + 1) : t.label,

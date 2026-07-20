@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { registerAppSchemePrivileged, registerAppProtocol, APP_URL } from './protocol';
 import { installCorsBypass } from './cors';
 import { setupUpdater } from './updater';
+import { registerDownloadIpc } from './download';
 import { setPlaybackKeepAwake, keepAwakeForState } from './power';
 import { IPC, type DesktopEvent, type DesktopSubtitleStyle } from '../shared/contract';
 import { mpvSubtitleProps } from './mpv/subtitle-style';
@@ -274,6 +275,10 @@ app.whenReady().then(async () => {
   // detect-only on .deb/dev). Registered on every platform path so the renderer
   // can always query capability + listen for status.
   setupUpdater();
+
+  // Offline downloads (renderer→main fetch-to-disk). Registered on every
+  // platform path so the desktop download UI works regardless of playback backend.
+  registerDownloadIpc();
 
   const dir = webDir();
   const haveApp = fs.existsSync(path.join(dir, 'index.html'));
