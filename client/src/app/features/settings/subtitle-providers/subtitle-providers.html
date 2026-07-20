@@ -22,16 +22,30 @@
         </button>
       </div>
 
-      <label class="label cursor-pointer justify-start gap-3 w-fit">
-        <input
-          type="checkbox"
-          class="toggle toggle-primary"
-          [disabled]="savingTranslationEnabled()"
-          [ngModel]="translationEnabled()"
-          (ngModelChange)="saveTranslationEnabled($event)"
-        />
-        <span class="label-text">{{ 'settings.subtitle_providers.translation_enabled' | translate }}</span>
-      </label>
+      <div class="flex flex-wrap items-end gap-6">
+        <label class="label cursor-pointer justify-start gap-3 w-fit">
+          <input
+            type="checkbox"
+            class="toggle toggle-primary"
+            [disabled]="savingTranslationEnabled()"
+            [ngModel]="translationEnabled()"
+            (ngModelChange)="saveTranslationEnabled($event)"
+          />
+          <span class="label-text">{{ 'settings.subtitle_providers.translation_enabled' | translate }}</span>
+        </label>
+
+        <label class="form-control w-32">
+          <span class="label-text">{{ 'settings.subtitle_providers.translation_concurrency' | translate }}</span>
+          <input
+            type="number"
+            min="1"
+            class="input input-bordered input-sm w-full"
+            [disabled]="savingConcurrency()"
+            [ngModel]="translationMaxConcurrency()"
+            (ngModelChange)="saveTranslationConcurrency($event)"
+          />
+        </label>
+      </div>
 
       @if (translationLoading()) {
         <div class="flex justify-center py-6"><span class="loading loading-spinner"></span></div>

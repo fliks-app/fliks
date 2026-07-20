@@ -2135,6 +2135,7 @@
       "translation_libretranslate_url_hint": "Point to your LibreTranslate container, e.g. http://libretranslate:5000.",
       "translation_api_key_optional": "API key (optional)",
       "translation_new": "Add provider",
+      "translation_concurrency": "Max parallel",
       "translation_empty": "No translation provider configured yet.",
       "translation_col_engine": "Engine",
       "translation_default": "Default",
