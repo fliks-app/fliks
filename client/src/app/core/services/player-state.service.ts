@@ -101,7 +101,14 @@ export class PlayerStateService {
 
     engine.on('stateChanged', (e) => {
       this.paused.set(e.state === 'paused' || e.state === 'idle');
-      this.buffering.set(e.state === 'buffering' || (this.recovering && e.state === 'error'));
+      const buffering = e.state === 'buffering' || (this.recovering && e.state === 'error');
+      // Anchor the playhead reference as buffering begins so the timeUpdate clear
+      // below fires on real forward progress, not the position jump a seek into
+      // the stall produces — otherwise the spinner clears before playback resumes.
+      if (buffering && !this.buffering()) {
+        this.lastBufferingPos = this.engine?.currentTime ?? this.lastBufferingPos;
+      }
+      this.buffering.set(buffering);
       // Only a generic fallback: the `error` event (below) fires alongside
       // this and already set the detailed PlaybackError, so don't clobber it.
       if (e.state === 'error' && !this.recovering && !this.error()) {
