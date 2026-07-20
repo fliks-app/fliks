@@ -904,7 +904,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       crop: cropLine,
       tonemapping,
       videoTranscodeReasons,
-      droppedFrames: engineStats?.droppedFrames ?? 0,
+      // Engine stats can read NaN before a quality switch settles; show 0.
+      droppedFrames: Number.isFinite(engineStats?.droppedFrames)
+        ? engineStats!.droppedFrames
+        : 0,
       audioLabel,
       audioStreamBitrate,
       audioDetailLine,
