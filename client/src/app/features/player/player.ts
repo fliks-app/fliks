@@ -309,6 +309,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ceiling) with a frozen-but-healthy playhead; widen the window right after.
   private lastSeekAt = 0;
   private readonly seekStallGraceMs = 32_000;
+  // Desktop mpv far-seek → reload thresholds: forward slack above mpv's cache
+  // end, and the backward window still served from its back-cache. A seek
+  // outside this band reloads at the offset instead of seeking in place.
+  private readonly desktopSeekCacheSlackS = 1;
+  private readonly desktopSeekBackWindowS = 15;
 
   // ── Template-facing signal aliases (delegate to services) ──
   readonly loading = this.state.loading;
@@ -1784,7 +1789,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.seekLocked.set(true);
       this.state.currentTime.set(t);
       this.lastSeekAt = Date.now();
-      void this.awaitSeekUnlock(t);
+      if (this.desktopFarSeekNeedsReload(t)) void this.seekByReload(t);
+      else void this.awaitSeekUnlock(t);
     }
     // Suppress auto-skip for 2s after a manual seek so the user can step back
     // into the intro on purpose without being kicked forward again.
@@ -1829,6 +1835,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // the playback-error state surfaces via `state.error`.
       return;
     }
+    await this.pollSeekConverge(target, gen);
+  }
+
+  /** Poll the engine's reported position until it lands within 2s of the seek
+   *  target, then release the seekbar lock. Gen-guarded so a newer seek wins. */
+  private async pollSeekConverge(target: number, gen: number): Promise<void> {
     if (gen !== this.seekGeneration) return;
     const startedAt = Date.now();
     while (Date.now() - startedAt < 30000) {
@@ -1838,6 +1850,57 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await new Promise<void>((r) => setTimeout(r, 100));
     }
     if (gen === this.seekGeneration) this.state.seekLocked.set(false);
+  }
+
+  /** Desktop mpv multi-audio transcode only: true when `target` falls outside
+   *  mpv's demuxer cache, where an in-place seek would force its ffmpeg HLS
+   *  demuxer to re-seek across the separate video/audio child playlists. Those
+   *  reload at the offset (see {@link seekByReload}); everything else — Shaka,
+   *  DirectPlay, remux, single-audio — keeps the instant in-place seek. */
+  private desktopFarSeekNeedsReload(target: number): boolean {
+    if (
+      !this.isDesktopNative ||
+      !(this.engine instanceof DesktopEngine) ||
+      this.playbackMode() !== 'transcode' ||
+      this.availableAudioTracks().length <= 1
+    ) {
+      return false;
+    }
+    const pos = this.engine.currentTime;
+    const bufferedEnd = this.engine.buffered;
+    return (
+      target > bufferedEnd + this.desktopSeekCacheSlackS ||
+      target < pos - this.desktopSeekBackWindowS
+    );
+  }
+
+  /** Far-seek path: reload the stream anchored at `target` (a fresh session
+   *  prewarmed at the offset) rather than seeking in place, then release the
+   *  seekbar lock once the playhead converges. Serialised against any other
+   *  reload via {@link reloadingStream}. */
+  private async seekByReload(target: number): Promise<void> {
+    const gen = ++this.seekGeneration;
+    if (this.reloadingStream) {
+      void this.awaitSeekUnlock(target);
+      return;
+    }
+    this.reloadingStream = true;
+    this.state.loading.set(true);
+    this.engine?.resetRecoveryGuard();
+    try {
+      await this.refreshSidAndReload(target, {
+        preservePause: true,
+        unmute: false,
+      });
+      this.resetStallWatchdog();
+      this.state.loading.set(false);
+      await this.pollSeekConverge(target, gen);
+    } catch (e) {
+      console.error('[Player] far-seek reload failed:', e);
+      this.state.loading.set(false);
+    } finally {
+      this.reloadingStream = false;
+    }
   }
 
   // ── Skip-intro UX ──
