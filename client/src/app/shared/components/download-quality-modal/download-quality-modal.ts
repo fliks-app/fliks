@@ -87,8 +87,8 @@ export class DownloadQualityModalComponent {
   /** Original-file download is a browser save-to-disk — hidden on native,
    *  which uses the ExoPlayer/AVAsset offline pipeline instead. */
   readonly isNative = Capacitor.isNativePlatform();
-  /** Desktop (Electron) downloads the original file to disk via the shell, so
-   *  the transcoded quality rungs don't apply — only the original is offered. */
+  /** Desktop (Electron) offers the same quality rungs; the original-file option
+   *  routes through the shell's download-to-disk path rather than a browser save. */
   readonly isDesktop = !!desktopDownloaderOrNull();
 
   @ViewChild('dialog') dialogRef!: ElementRef<HTMLDialogElement>;

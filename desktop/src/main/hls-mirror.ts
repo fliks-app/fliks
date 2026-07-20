@@ -14,9 +14,10 @@ function readableOf(res: Electron.IncomingMessage): Readable {
   return res as unknown as Readable;
 }
 
-function fetchText(url: string): Promise<string> {
+function fetchText(url: string, onRequest?: (abort: () => void) => void): Promise<string> {
   return new Promise((resolve, reject) => {
     const req = net.request({ url });
+    onRequest?.(() => req.abort());
     req.on('response', (res) => {
       const body = readableOf(res);
       if ((res.statusCode ?? 0) >= 400) {
@@ -34,9 +35,14 @@ function fetchText(url: string): Promise<string> {
   });
 }
 
-function fetchToFile(url: string, dest: string): Promise<void> {
+function fetchToFile(
+  url: string,
+  dest: string,
+  onRequest?: (abort: () => void) => void,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = net.request({ url });
+    onRequest?.(() => req.abort());
     req.on('response', (res) => {
       const body = readableOf(res);
       if ((res.statusCode ?? 0) >= 400) {
@@ -46,7 +52,11 @@ function fetchToFile(url: string, dest: string): Promise<void> {
       }
       const out = createWriteStream(dest);
       out.on('error', reject);
-      body.on('error', reject);
+      // pipe() doesn't close the dest when the SOURCE errors — destroy it here.
+      body.on('error', (e) => {
+        out.destroy();
+        reject(e);
+      });
       body.pipe(out);
       out.on('finish', () => resolve());
     });
@@ -66,10 +76,12 @@ interface MirrorOpts {
   destDir: string;
   onProgress: (received: number, total: number) => void;
   cancelled: () => boolean;
+  /** Receives an abort handle for each in-flight fetch so a cancel is immediate. */
+  onRequest?: (abort: () => void) => void;
 }
 
 export async function mirrorHls(opts: MirrorOpts): Promise<string> {
-  const { masterUrl, quality, destDir, onProgress, cancelled } = opts;
+  const { masterUrl, quality, destDir, onProgress, cancelled, onRequest } = opts;
   const origin = new URL(masterUrl).origin;
   const token = new URL(masterUrl).searchParams.get('token') ?? '';
 
@@ -87,7 +99,7 @@ export async function mirrorHls(opts: MirrorOpts): Promise<string> {
   };
 
   await fsp.mkdir(destDir, { recursive: true });
-  const masterText = await fetchText(masterUrl);
+  const masterText = await fetchText(masterUrl, onRequest);
   const mlines = masterText.split(/\r?\n/);
 
   // Pick one variant: the rung whose URI matches the requested quality, else
@@ -136,7 +148,7 @@ export async function mirrorHls(opts: MirrorOpts): Promise<string> {
   // the progress denominator — is known before pulling segments.
   const parsed = [];
   for (const c of children) {
-    const text = await fetchText(c.url);
+    const text = await fetchText(c.url, onRequest);
     const init = /#EXT-X-MAP:URI="([^"]+)"/.exec(text)?.[1];
     const segs = text
       .split(/\r?\n/)
@@ -155,12 +167,12 @@ export async function mirrorHls(opts: MirrorOpts): Promise<string> {
     let initName: string | undefined;
     if (p.init) {
       initName = basename(p.init);
-      await fetchToFile(resolveFrom(p.child.url, p.init), path.join(cdir, initName));
+      await fetchToFile(resolveFrom(p.child.url, p.init), path.join(cdir, initName), onRequest);
       onProgress(++received, total);
     }
     for (const seg of p.segs) {
       if (cancelled()) throw new Error('cancelled');
-      await fetchToFile(resolveFrom(p.child.url, seg), path.join(cdir, basename(seg)));
+      await fetchToFile(resolveFrom(p.child.url, seg), path.join(cdir, basename(seg)), onRequest);
       onProgress(++received, total);
     }
 

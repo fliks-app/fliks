@@ -168,6 +168,17 @@ export class DownloadManagerService {
       media: { id: meta?.mediaId ?? 0, title, posterUrl: meta?.posterUrl ?? null, type: meta?.type ?? '' },
     };
 
+    // Desktop keeps a single offline copy per file (the disk key + status
+    // events are keyed by mediaFileId), so a new download replaces any prior
+    // one for the same file instead of colliding with it.
+    if (this.isDesktop) {
+      for (const prev of this.cache
+        .load()
+        .filter((t) => t.mediaFileId === mediaFileId)) {
+        await this.deleteDownload(prev);
+      }
+    }
+
     // Hydrate a fresh long-lived stream JWT before we bake the URL +
     // header into the native download daemon — downloads can run for
     // hours so we can't rely on the 1h access token.

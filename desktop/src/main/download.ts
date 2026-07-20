@@ -30,15 +30,18 @@ function filesDir(): string {
 function manifestPath(): string {
   return path.join(baseDir(), 'manifest.json');
 }
-/** Collapse anything that isn't a safe filename char so ids/keys with slashes
- *  or query junk can't escape the downloads dir. */
+/** Collapse anything that isn't a safe filename char to a single flat segment,
+ *  so an id/key can never resolve outside the downloads dir. `.` is excluded
+ *  from the allowed set too — otherwise `.`/`..` would pass through and
+ *  `path.join(baseDir(), '..')` would escape to userData. */
 function safe(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  return name.replace(/[^a-zA-Z0-9_-]/g, '_') || '_';
 }
 
 let manifest: Manifest | null = null;
-const active = new Map<string, Electron.ClientRequest>();
-const hlsActive = new Map<string, { cancelled: boolean }>();
+/** id → abort: tears down the in-flight single-file request + its write stream. */
+const active = new Map<string, () => void>();
+const hlsActive = new Map<string, { cancelled: boolean; abort?: () => void }>();
 
 async function loadManifest(): Promise<Manifest> {
   if (manifest) return manifest;
@@ -51,7 +54,10 @@ async function loadManifest(): Promise<Manifest> {
 }
 async function saveManifest(): Promise<void> {
   await fsp.mkdir(baseDir(), { recursive: true });
-  await fsp.writeFile(manifestPath(), JSON.stringify(manifest ?? {}));
+  // Write-then-rename so a concurrent finish can't observe a truncated file.
+  const tmp = `${manifestPath()}.tmp`;
+  await fsp.writeFile(tmp, JSON.stringify(manifest ?? {}));
+  await fsp.rename(tmp, manifestPath());
 }
 
 function broadcast(status: DesktopDownloadStatus): void {
@@ -105,7 +111,18 @@ async function start(req: DesktopDownloadRequest): Promise<void> {
 
   const tmpPath = path.join(baseDir(), `${safe(req.id)}.part`);
   const request = net.request({ url: req.url, method: 'GET' });
-  active.set(req.id, request);
+  let out: ReturnType<typeof createWriteStream> | null = null;
+  // Cancel = abort the request AND destroy the write stream (aborting the net
+  // request doesn't necessarily surface as a body 'error'), then drop the .part.
+  active.set(req.id, () => {
+    try {
+      request.abort();
+    } catch {
+      /* already ended */
+    }
+    out?.destroy();
+    cleanup(tmpPath);
+  });
 
   request.on('response', (res) => {
     // Electron's net IncomingMessage is a Readable at runtime; its types omit
@@ -121,31 +138,32 @@ async function start(req: DesktopDownloadRequest): Promise<void> {
     const total = Number((Array.isArray(headers['content-length']) ? headers['content-length'][0] : headers['content-length']) ?? 0);
     const ext = resolveExt(headers);
     const finalPath = path.join(baseDir(), `${safe(req.id)}${ext}`);
-    const out = createWriteStream(tmpPath);
+    const w = createWriteStream(tmpPath);
+    out = w;
     let received = 0;
     let lastEmit = 0;
 
     const fail = (message: string): void => {
       active.delete(req.id);
-      out.destroy();
+      w.destroy();
       cleanup(tmpPath);
       broadcast({ id: req.id, state: 'error', message });
     };
-    out.on('error', (e) => fail(e.message));
+    w.on('error', (e) => fail(e.message));
 
     body.on('data', (chunk: Buffer) => {
       received += chunk.length;
-      if (!out.write(chunk)) body.pause();
+      if (!w.write(chunk)) body.pause();
       const now = Date.now();
       if (now - lastEmit >= PROGRESS_MIN_INTERVAL_MS) {
         lastEmit = now;
         broadcast({ id: req.id, state: 'progress', received, total });
       }
     });
-    out.on('drain', () => body.resume());
+    w.on('drain', () => body.resume());
     body.on('error', (e: Error) => fail(e.message));
     body.on('end', () => {
-      out.end(async () => {
+      w.end(async () => {
         try {
           await fsp.rename(tmpPath, finalPath);
           const item: DesktopDownloadItem = {
@@ -179,7 +197,7 @@ async function start(req: DesktopDownloadRequest): Promise<void> {
 async function startHls(req: DesktopDownloadRequest): Promise<void> {
   const destDir = path.join(baseDir(), safe(req.id));
   await fsp.rm(destDir, { recursive: true, force: true }).catch(() => {});
-  const control = { cancelled: false };
+  const control: { cancelled: boolean; abort?: () => void } = { cancelled: false };
   hlsActive.set(req.id, control);
   let lastEmit = 0;
   try {
@@ -188,6 +206,9 @@ async function startHls(req: DesktopDownloadRequest): Promise<void> {
       quality: req.quality,
       destDir,
       cancelled: () => control.cancelled,
+      onRequest: (abort) => {
+        control.abort = abort;
+      },
       onProgress: (received, total) => {
         const now = Date.now();
         if (now - lastEmit >= PROGRESS_MIN_INTERVAL_MS || received === total) {
@@ -219,12 +240,17 @@ async function startHls(req: DesktopDownloadRequest): Promise<void> {
 
 async function cancel(id: string): Promise<void> {
   const hls = hlsActive.get(id);
-  if (hls) hls.cancelled = true;
-  const request = active.get(id);
-  if (request) {
-    active.delete(id);
-    request.abort();
+  if (hls) {
+    hls.cancelled = true;
+    try {
+      hls.abort?.();
+    } catch {
+      /* request already ended */
+    }
   }
+  const abort = active.get(id);
+  active.delete(id);
+  abort?.();
   cleanup(path.join(baseDir(), `${safe(id)}.part`));
 }
 
@@ -264,7 +290,11 @@ async function saveFile(key: string, url: string): Promise<boolean> {
       }
       const out = createWriteStream(dest);
       out.on('error', () => resolve(false));
-      body.on('error', () => resolve(false));
+      // pipe() doesn't close the dest when the SOURCE errors — destroy it here.
+      body.on('error', () => {
+        out.destroy();
+        resolve(false);
+      });
       body.pipe(out);
       out.on('finish', () => resolve(true));
     });
