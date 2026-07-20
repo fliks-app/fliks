@@ -14,12 +14,11 @@
   --radius-box: 0.5rem;
 }
 
-/* Thinner focus outline on form fields. Suppress daisyUI's border on focus —
-   the focus ring (outline) is the only visual cue we want, the extra white
-   border doubled up with the ring looks noisy. */
+/* Form fields defer to the global primary box-shadow focus ring below. Drop
+   daisyUI's own focus outline (it draws a second, tighter ring inside the
+   box-shadow one) and its border-on-focus so the field shows a single ring. */
 .select:focus, .input:focus, .textarea:focus {
-  outline-width: 1px;
-  outline-offset: 0px;
+  outline: none;
   border-color: transparent;
 }
 
