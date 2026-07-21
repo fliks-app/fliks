@@ -105,18 +105,44 @@ export function parseAudioIndex(trackId: string): number {
   return parseInt(trackId.replace(/^(si-|shaka-|audio-)/, ''), 10);
 }
 
-/** Map a raw FFmpeg/ffprobe subtitle codec name to a short, user-friendly
- *  tag (PGS, SRT, ASS, VTT). Falls back to "SRT" for external files
- *  (typical) and "EMB" for embedded streams without a codec hint. */
-function shortSubtitleCodec(codec: string | null | undefined, hasFile: boolean): string {
-  const c = (codec ?? '').toLowerCase();
-  if (c === 'hdmv_pgs_subtitle' || c === 'dvd_subtitle' || c === 'dvb_subtitle') return 'PGS';
-  if (c === 'subrip') return 'SRT';
-  if (c === 'ass' || c === 'ssa') return 'ASS';
-  if (c === 'webvtt') return 'VTT';
-  if (c === 'mov_text') return 'TX3G';
+/** Canonical codec name for a subtitle sidecar, inferred from its file
+ *  extension. External subs (downloaded, disk-scanned) carry no ffprobe
+ *  codec, so the extension is the authoritative format hint. */
+function subtitleCodecFromPath(relativePath: string): string {
+  const ext = relativePath.slice(relativePath.lastIndexOf('.') + 1).toLowerCase();
+  switch (ext) {
+    case 'srt': return 'subrip';
+    case 'vtt': return 'webvtt';
+    case 'ass': return 'ass';
+    case 'ssa': return 'ssa';
+    case 'sup': return 'hdmv_pgs_subtitle';
+    case 'sub': return 'dvd_subtitle';
+    case 'smi':
+    case 'sami': return 'sami';
+    default: return '';
+  }
+}
+
+/** Map a subtitle codec (an ffprobe name, or one inferred from the sidecar
+ *  extension) to a short user-facing tag (SRT, ASS, VTT, PGS, …). Returns
+ *  an empty string when the format can't be determined, so the caller shows
+ *  no tag rather than a misleading default. */
+function shortSubtitleCodec(codec: string | null | undefined, relativePath: string | null | undefined): string {
+  let c = (codec ?? '').toLowerCase();
+  if (!c && relativePath) c = subtitleCodecFromPath(relativePath);
+  switch (c) {
+    case 'hdmv_pgs_subtitle':
+    case 'dvd_subtitle':
+    case 'dvb_subtitle': return 'PGS';
+    case 'subrip': return 'SRT';
+    case 'ass':
+    case 'ssa': return 'ASS';
+    case 'webvtt': return 'VTT';
+    case 'sami': return 'SAMI';
+    case 'mov_text': return 'TX3G';
+  }
   if (c) return c.toUpperCase();
-  return hasFile ? 'SRT' : 'EMB';
+  return '';
 }
 
 /** Channel count to a recognizable layout label (5.1, 7.1, 2.0, …). */
@@ -199,10 +225,11 @@ export function formatSubtitleLabel(
   const parts: string[] = [];
   if (sub.hearingImpaired) parts.push('HI');
   if (sub.forced) parts.push('Forced');
-  parts.push(shortSubtitleCodec(sub.codec, !!sub.relativePath));
+  const codec = shortSubtitleCodec(sub.codec, sub.relativePath);
+  if (codec) parts.push(codec);
   const origin = subtitleOriginLabel(sub.providerType, translate);
   if (origin) parts.push(origin);
-  return `${head} (${parts.join(') (')})`;
+  return parts.length ? `${head} (${parts.join(') (')})` : head;
 }
 
 /**
@@ -226,7 +253,9 @@ export function formatSubtitleParts(
     trackIndex != null && (norm === 'und' || norm === 'xx')
       ? translate.instant('player.subtitle_track_n', { index: trackIndex })
       : localizeLanguage(sub.language, translate);
-  const parts: string[] = [shortSubtitleCodec(sub.codec, !!sub.relativePath)];
+  const parts: string[] = [];
+  const codec = shortSubtitleCodec(sub.codec, sub.relativePath);
+  if (codec) parts.push(codec);
   if (sub.forced) parts.push('Forced');
   if (sub.hearingImpaired) parts.push('HI');
   const origin = subtitleOriginLabel(sub.providerType, translate);
