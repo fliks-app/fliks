@@ -6,7 +6,6 @@
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import net from 'node:net';
-import { EventEmitter } from 'node:events';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -17,25 +16,51 @@ import type {
   DesktopSubtitleStyle,
   DesktopSubtitleTrack,
 } from '../../shared/contract';
+import { MPV_STREAM_OPTIONS } from '../../shared/mpv-stream-options';
 import { mpvSubtitleProps } from './subtitle-style';
-import { isImageBasedSubtitleCodec } from './tracks';
+import { mapTrackList, type MpvTrack } from './tracks';
+import { TypedEmitter } from './typed-emitter';
+import type { PlayerBackend, PlayerBackendEvents } from './player-backend';
 
 const CONNECT_RETRY_MS = 30;
 const CONNECT_TIMEOUT_MS = 5000;
+/** Cap on a single IPC command's round-trip. A live-but-wedged mpv would else
+ *  hang an awaiting load/seek forever (only a socket/process death rejects). */
+const COMMAND_TIMEOUT_MS = 30_000;
+/** How long `load()` waits for the first frame before sequencing post-open work. */
+const FIRST_FRAME_TIMEOUT_MS = 10_000;
+/** Grace for mpv to reply to `quit` before the socket/process are torn down. */
+const QUIT_GRACE_MS = 500;
+/** Ring size for buffered error/fatal log lines attached to an error event. */
+const MAX_ERROR_LOG_LINES = 12;
+/** Playhead-to-duration gap (s) above which an `eof-reached` is read as a
+ *  mid-stream failure (ffmpeg surfaces a dead HLS segment as EOF, not an error)
+ *  rather than a genuine end, and routed to `error` instead of `ended`. */
+const PREMATURE_EOF_GAP_S = 10;
 
-interface MpvTrack {
-  id: number;
-  type: string;
-  codec?: string;
-  lang?: string;
-  title?: string;
-  selected?: boolean;
-  forced?: boolean;
+/** Monotonic per-process counter for the IPC socket/pipe name, so two players
+ *  created within the same millisecond can't collide on the path. */
+let instanceSeq = 0;
+
+/** A message line from mpv's JSON IPC — either a command reply (`request_id`) or
+ *  an event (`event`). Every field is optional; only the discriminant is read. */
+interface MpvIpcMessage {
+  request_id?: number;
+  error?: string;
+  data?: unknown;
+  event?: string;
+  name?: string;
+  reason?: string;
+  file_error?: string;
+  level?: string;
+  prefix?: string;
+  text?: string;
 }
 
 interface Pending {
   resolve: (value: unknown) => void;
   reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
 }
 
 export interface MpvPlayerOptions {
@@ -46,7 +71,7 @@ export interface MpvPlayerOptions {
   env?: NodeJS.ProcessEnv;
 }
 
-export class MpvPlayer extends EventEmitter {
+export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements PlayerBackend {
   private readonly mpvPath: string;
   private readonly baseArgs: string[];
   private readonly env: NodeJS.ProcessEnv;
@@ -59,12 +84,18 @@ export class MpvPlayer extends EventEmitter {
   private buf = '';
   private sawFirstFrame = false;
   /** One-shot per load: `--keep-open=yes` makes mpv pause on the last frame and
-   *  set `eof-reached` instead of firing an `end-file`(eof) event, so the
-   *  natural end is detected from that property. Guards against mpv re-sending
-   *  the property-change so `ended` (which drives auto-advance) emits once. */
+   *  set `eof-reached` instead of firing an `end-file`(eof) event, so the stream
+   *  end is detected from that property. Guards against mpv re-sending the
+   *  property-change so the end-vs-failure decision runs once. */
   private sawEof = false;
   private duration = 0;
   private cacheEnd = 0;
+  /** Last `time-pos` seen; compared against `duration` when `eof-reached` fires
+   *  to tell a genuine end from a mid-stream failure. */
+  private lastPosition = 0;
+  /** Set before an intentional shutdown (destroy / failed start) so the process
+   *  `exit` handler can tell a clean quit from an unexpected crash. */
+  private shuttingDown = false;
   /** Demuxer format forced for the current media (`hls` for manifests, else
    *  empty). Dropped around a sidecar `sub-add` so the VTT isn't demuxed as HLS. */
   private forcedDemuxFormat = '';
@@ -85,7 +116,7 @@ export class MpvPlayer extends EventEmitter {
     // mpv's --input-ipc-server is a unix socket on POSIX but a NAMED PIPE on
     // Windows; Node's net only accepts the \\.\pipe\ namespace there (a /tmp
     // path is rejected), so build the path per-platform.
-    const stamp = `fliks-mpv-${process.pid}-${this.reqId}-${Math.floor(performance.now())}`;
+    const stamp = `fliks-mpv-${process.pid}-${instanceSeq++}-${Math.floor(performance.now())}`;
     this.sockPath =
       process.platform === 'win32'
         ? `\\\\.\\pipe\\${stamp}`
@@ -107,43 +138,46 @@ export class MpvPlayer extends EventEmitter {
       // mpv's playlist safety check otherwise refuses them on the fallback path.
       '--load-unsafe-playlists=yes',
       '--ytdl=no',
-      // Buffer like the web (Shaka) engine (~30s fwd / ~60s back / resume 1s).
-      // cache-secs is the binding forward TIME cap — with --cache=yes it else
-      // defaults to ~unlimited and overrides readahead-secs; bytes are a ceiling.
-      '--cache=yes',
-      '--cache-secs=30',
-      '--demuxer-readahead-secs=30',
-      '--demuxer-max-bytes=256MiB',
-      '--demuxer-max-back-bytes=96MiB',
-      '--cache-pause-wait=1',
-      // A slow transcode (HDR tonemap re-encode) isn't ready when mpv opens
-      // seg-0/init for a stream, so it aborts unless told to reconnect. A
-      // separate multi-audio rendition's transcode spins up late and the open
-      // can fail at the TRANSPORT layer (reset / refused / TLS) rather than with
-      // a 4xx/5xx status, so reconnect_on_network_error is needed alongside
-      // reconnect_on_http_error. The `4xx,5xx` value carries a comma, so it uses
-      // mpv's `%len%` escaping (7 = strlen("4xx,5xx")) to survive the key-value-
-      // list parser. Mirrors native/compositor/addon.cc.
-      '--demuxer-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=%7%4xx,5xx,reconnect_delay_max=5',
+      // Buffering / reconnect tuning shared with the libmpv addons (see module).
+      ...MPV_STREAM_OPTIONS.map(([name, value]) => `--${name}=${value}`),
       `--input-ipc-server=${this.sockPath}`,
     ];
     console.log('[mpv] spawn:', this.mpvPath, args.join(' '));
     this.proc = spawn(this.mpvPath, args, { stdio: ['ignore', 'pipe', 'pipe'], env: this.env });
-    this.proc.on('exit', (code) => {
-      this.emit('stateChanged', { state: 'idle' });
-      this.emit('exit', { code });
+    this.proc.on('exit', (code, signal) => {
+      this.emit('exit', { code, signal });
       this.rejectAllPending('mpv process exited');
+      if (this.shuttingDown) {
+        this.emit('stateChanged', { state: 'idle' });
+      } else {
+        // Under --idle/--keep-open the process is persistent, so an exit we
+        // didn't ask for is a crash (segfault / OOM-kill). Surface it as an
+        // error with the buffered cause, not a benign idle.
+        this.emit('error', {
+          code: code ?? -1,
+          message: `mpv exited unexpectedly (code ${code ?? 'null'}${signal ? `, signal ${signal}` : ''})`,
+          detail: this.errorLog.join(' | ') || undefined,
+        });
+      }
     });
     this.proc.stderr?.on('data', (d: Buffer) => this.emit('log', d.toString()));
 
-    await this.connect();
-    await this.setupObservers();
-    // Surface mpv's own log over IPC (ffmpeg HTTP/TLS/decode failures) —
-    // `--no-terminal` suppresses stderr, so this is how we see why a load
-    // failed. Defaults to warn; FLIKS_MPV_LOGLEVEL=v exposes ffmpeg's per-open
-    // 'Will reconnect' / HTTP-status lines for diagnosing segment failures.
-    const logLevel = process.env.FLIKS_MPV_LOGLEVEL || 'warn';
-    await this.command(['request_log_messages', logLevel]).catch(() => {});
+    try {
+      await this.connect();
+      await this.setupObservers();
+      // Surface mpv's own log over IPC (ffmpeg HTTP/TLS/decode failures) —
+      // `--no-terminal` suppresses stderr, so this is how we see why a load
+      // failed. Defaults to verbose (matches the libmpv addons + docs), exposing
+      // ffmpeg's per-open 'Will reconnect' / HTTP-status lines for diagnosing
+      // segment failures; FLIKS_MPV_LOGLEVEL overrides it.
+      const logLevel = process.env.FLIKS_MPV_LOGLEVEL || 'v';
+      await this.command(['request_log_messages', logLevel]).catch(() => {});
+    } catch (e) {
+      // A failed connect/observe leaves the child alive; tear it down so it
+      // can't orphan an embedded window.
+      this.teardown();
+      throw e;
+    }
     return this;
   }
 
@@ -172,10 +206,17 @@ export class MpvPlayer extends EventEmitter {
     return new Promise((resolve, reject) => {
       const sock = net.createConnection(this.sockPath);
       sock.once('connect', () => {
+        // Drop the connect-phase rejecter so the live socket carries only the
+        // permanent error handler installed below.
+        sock.removeListener('error', reject);
         this.sock = sock;
         sock.on('data', (chunk: Buffer) => this.onData(chunk));
         sock.on('error', (e) => {
-          this.emit('error', { code: -1, message: String(e) });
+          this.emit('error', {
+            code: -1,
+            message: String(e),
+            detail: this.errorLog.join(' | ') || undefined,
+          });
           this.rejectAllPending(`mpv socket error: ${e}`);
         });
         sock.on('close', () => {
@@ -195,7 +236,7 @@ export class MpvPlayer extends EventEmitter {
       const line = this.buf.slice(0, nl).trim();
       this.buf = this.buf.slice(nl + 1);
       if (!line) continue;
-      let msg: any;
+      let msg: MpvIpcMessage;
       try {
         msg = JSON.parse(line);
       } catch {
@@ -204,6 +245,7 @@ export class MpvPlayer extends EventEmitter {
       if (msg.request_id != null && this.pending.has(msg.request_id)) {
         const p = this.pending.get(msg.request_id)!;
         this.pending.delete(msg.request_id);
+        clearTimeout(p.timer);
         if (msg.error && msg.error !== 'success') p.reject(new Error(msg.error));
         else p.resolve(msg.data);
       } else if (msg.event) {
@@ -212,16 +254,16 @@ export class MpvPlayer extends EventEmitter {
     }
   }
 
-  private onEvent(msg: any): void {
+  private onEvent(msg: MpvIpcMessage): void {
     switch (msg.event) {
       case 'property-change':
-        this.onProperty(msg.name, msg.data);
+        this.onProperty(msg.name ?? '', msg.data);
         break;
       case 'log-message': {
         const line = `${msg.prefix ? `${msg.prefix}: ` : ''}${msg.text ?? ''}`.trim();
         if (msg.level === 'error' || msg.level === 'fatal') {
           this.errorLog.push(line);
-          if (this.errorLog.length > 12) this.errorLog.shift();
+          if (this.errorLog.length > MAX_ERROR_LOG_LINES) this.errorLog.shift();
         }
         this.emit('log', `[${msg.level}] ${line}`);
         break;
@@ -246,30 +288,52 @@ export class MpvPlayer extends EventEmitter {
     }
   }
 
-  private onProperty(name: string, data: any): void {
+  private onProperty(name: string, data: unknown): void {
     switch (name) {
       case 'time-pos':
+        this.lastPosition = typeof data === 'number' ? data : 0;
         this.emit('timeUpdate', {
-          position: data ?? 0,
+          position: this.lastPosition,
           duration: this.duration,
           buffered: this.cacheEnd,
         } satisfies DesktopPositionInfo);
         break;
       case 'duration':
-        this.duration = data ?? 0;
+        this.duration = typeof data === 'number' ? data : 0;
         break;
       case 'demuxer-cache-time':
         // mpv reports null for this between HLS segments; keep the last value
         // instead of zeroing it, otherwise the seekbar's buffered zone (drawn
         // `@if (bufferedEnd())`) collapses to 0 and flickers on every gap.
-        if (data != null) this.cacheEnd = data;
+        if (typeof data === 'number') this.cacheEnd = data;
         break;
       case 'eof-reached':
-        // With `--keep-open=yes` this is how a natural end surfaces (no
-        // `end-file`(eof)); map it to the `ended` state that drives auto-advance.
+        // mpv sets `eof-reached` at a genuine end (surfaced here since
+        // `--keep-open=yes` suppresses `end-file`(eof)) but ALSO when playback
+        // can't continue: ffmpeg's HLS demuxer reports a segment that failed
+        // past its reconnect budget as EOF, not an error. Discriminate by the
+        // playhead — a real end sits at the duration; a premature stop is short
+        // by more than a segment (or, with an unknown duration, coincides with
+        // buffered errors) — and route the premature case to `error` (with the
+        // buffered cause) so it recovers or shows why, not silently advances.
+        // mpv clears the flag on a backward seek, so reset the one-shot then.
         if (data === true && !this.sawEof) {
           this.sawEof = true;
-          this.emit('stateChanged', { state: 'ended' });
+          const premature =
+            this.duration > 0
+              ? this.duration - this.lastPosition > PREMATURE_EOF_GAP_S
+              : this.errorLog.length > 0;
+          if (premature) {
+            this.emit('error', {
+              code: -1,
+              message: 'playback stopped before end of stream',
+              detail: this.errorLog.join(' | ') || undefined,
+            });
+          } else {
+            this.emit('stateChanged', { state: 'ended' });
+          }
+        } else if (data === false) {
+          this.sawEof = false;
         }
         break;
       case 'pause':
@@ -279,7 +343,7 @@ export class MpvPlayer extends EventEmitter {
         if (data) this.emit('stateChanged', { state: 'buffering' });
         break;
       case 'track-list':
-        this.emit('tracksChanged', this.mapTracks(data ?? []));
+        this.emit('tracksChanged', mapTrackList((data as MpvTrack[]) ?? []));
         break;
       default:
         break;
@@ -302,15 +366,21 @@ export class MpvPlayer extends EventEmitter {
 
   // ── Command transport ──────────────────────────────────────────────────
 
-  private command(command: unknown[]): Promise<any> {
-    return new Promise((resolve, reject) => {
+  private command<T = unknown>(command: unknown[]): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
       if (!this.sock) return reject(new Error('mpv socket not connected'));
       const request_id = ++this.reqId;
-      this.pending.set(request_id, { resolve, reject });
+      const timer = setTimeout(() => {
+        if (this.pending.delete(request_id)) {
+          reject(new Error(`mpv command timed out: ${JSON.stringify(command)}`));
+        }
+      }, COMMAND_TIMEOUT_MS);
+      this.pending.set(request_id, { resolve: resolve as (value: unknown) => void, reject, timer });
       try {
         this.sock.write(JSON.stringify({ command, request_id }) + '\n');
       } catch (e) {
         this.pending.delete(request_id);
+        clearTimeout(timer);
         reject(e instanceof Error ? e : new Error(String(e)));
       }
     });
@@ -319,12 +389,15 @@ export class MpvPlayer extends EventEmitter {
   /** Fail every in-flight command so a socket/process death can't wedge an
    *  awaiting load/seek invoke forever. */
   private rejectAllPending(message: string): void {
-    for (const p of this.pending.values()) p.reject(new Error(message));
+    for (const p of this.pending.values()) {
+      clearTimeout(p.timer);
+      p.reject(new Error(message));
+    }
     this.pending.clear();
   }
 
-  private get(prop: string): Promise<any> {
-    return this.command(['get_property', prop]);
+  private get<T = unknown>(prop: string): Promise<T> {
+    return this.command<T>(['get_property', prop]);
   }
 
   private set(prop: string, value: unknown): Promise<void> {
@@ -338,6 +411,7 @@ export class MpvPlayer extends EventEmitter {
     this.sawEof = false;
     this.duration = 0;
     this.cacheEnd = 0;
+    this.lastPosition = 0;
     this.errorLog = [];
     const gen = ++this.loadGen;
     // Reset the reused player first so the new open's probe can't read atop the
@@ -382,8 +456,12 @@ export class MpvPlayer extends EventEmitter {
       await this.command(['set', 'demuxer-lavf-format', '']).catch(() => {});
     }
     for (const s of opts.subtitles ?? []) {
-      await this.command(['sub-add', s.url, 'auto', s.label ?? '', s.language ?? '']);
       if (gen !== this.loadGen) return;
+      // Best-effort: this runs after the video is playing, so an unreachable
+      // sidecar subtitle must not reject the load.
+      await this.command(['sub-add', s.url, 'auto', s.label ?? '', s.language ?? '']).catch((e) =>
+        this.emit('log', `[warn] sub-add failed ${s.url}: ${e}`),
+      );
     }
   }
 
@@ -398,7 +476,7 @@ export class MpvPlayer extends EventEmitter {
         this.off('error', done);
         resolve();
       };
-      const timer = setTimeout(done, 10_000);
+      const timer = setTimeout(done, FIRST_FRAME_TIMEOUT_MS);
       this.once('firstFrame', done);
       this.once('error', done);
     });
@@ -424,6 +502,7 @@ export class MpvPlayer extends EventEmitter {
     this.sawEof = false;
     this.duration = 0;
     this.cacheEnd = 0;
+    this.lastPosition = 0;
     return this.command(['stop']).then(() => undefined);
   }
 
@@ -440,41 +519,14 @@ export class MpvPlayer extends EventEmitter {
   }
 
   async getPosition(): Promise<DesktopPositionInfo> {
-    return {
-      position: (await this.get('time-pos').catch(() => 0)) ?? 0,
-      duration: (await this.get('duration').catch(() => 0)) ?? 0,
-      buffered: (await this.get('demuxer-cache-time').catch(() => 0)) ?? 0,
-    };
-  }
-
-  private mapTracks(list: MpvTrack[]): {
-    audioTracks: DesktopAudioTrack[];
-    subtitleTracks: DesktopSubtitleTrack[];
-  } {
-    const audioTracks: DesktopAudioTrack[] = [];
-    const subtitleTracks: DesktopSubtitleTrack[] = [];
-    for (const t of list) {
-      if (t.type === 'audio')
-        audioTracks.push({
-          id: String(t.id),
-          language: t.lang ?? '',
-          label: t.title ?? '',
-          selected: !!t.selected,
-        });
-      else if (t.type === 'sub' && !isImageBasedSubtitleCodec(t.codec))
-        subtitleTracks.push({
-          id: String(t.id),
-          language: t.lang ?? '',
-          label: t.title ?? '',
-          forced: !!t.forced,
-          selected: !!t.selected,
-        });
-    }
-    return { audioTracks, subtitleTracks };
+    // The observed properties are the single source of truth (buffered keeps its
+    // last non-null value across HLS gaps); re-reading them live would race that
+    // and report buffered:0 mid-gap.
+    return { position: this.lastPosition, duration: this.duration, buffered: this.cacheEnd };
   }
 
   async getAudioTracks(): Promise<DesktopAudioTrack[]> {
-    return this.mapTracks((await this.get('track-list')) ?? []).audioTracks;
+    return mapTrackList((await this.get<MpvTrack[]>('track-list')) ?? []).audioTracks;
   }
 
   selectAudioTrack(id: string): Promise<void> {
@@ -482,7 +534,7 @@ export class MpvPlayer extends EventEmitter {
   }
 
   async getSubtitleTracks(): Promise<DesktopSubtitleTrack[]> {
-    return this.mapTracks((await this.get('track-list')) ?? []).subtitleTracks;
+    return mapTrackList((await this.get<MpvTrack[]>('track-list')) ?? []).subtitleTracks;
   }
 
   selectSubtitleTrack(id: string | null): Promise<void> {
@@ -501,23 +553,32 @@ export class MpvPlayer extends EventEmitter {
     for (const [name, value] of mpvSubtitleProps(s)) await this.set(name, value);
   }
 
-  async destroy(): Promise<void> {
-    this.loadGen++;
-    try {
-      // mpv may close the socket on quit without replying — cap the wait.
-      await Promise.race([
-        this.command(['quit']),
-        new Promise<void>((resolve) => setTimeout(resolve, 500)),
-      ]);
-    } catch {
-      /* socket may already be gone */
-    }
+  /** Tear down the socket + process + IPC path. Idempotent; also marks the exit
+   *  as intentional so the `exit` handler reports idle, not a crash. */
+  private teardown(): void {
+    this.shuttingDown = true;
     this.sock?.destroy();
+    this.sock = null;
     this.proc?.kill('SIGTERM');
     try {
       if (fs.existsSync(this.sockPath)) fs.unlinkSync(this.sockPath);
     } catch {
-      /* best effort */
+      /* best effort; a Windows named pipe is never a filesystem entry */
     }
+  }
+
+  async destroy(): Promise<void> {
+    this.loadGen++;
+    this.shuttingDown = true;
+    try {
+      // mpv may close the socket on quit without replying — cap the wait.
+      await Promise.race([
+        this.command(['quit']),
+        new Promise<void>((resolve) => setTimeout(resolve, QUIT_GRACE_MS)),
+      ]);
+    } catch {
+      /* socket may already be gone */
+    }
+    this.teardown();
   }
 }

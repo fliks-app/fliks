@@ -200,9 +200,8 @@ export class PlayerSession {
     mpv.on('log', (s: string) => process.stderr.write(`[${Date.now()}][mpv] ${s}`));
     mpv.on('exit', (e) => console.error('[mpv] process exit', JSON.stringify(e)));
     mpv.on('stateChanged', (p) => {
-      const state = (p as { state?: string }).state;
-      console.log('[player] state:', state);
-      setPlaybackKeepAwake(keepAwakeForState(state));
+      console.log('[player] state:', p.state);
+      setPlaybackKeepAwake(keepAwakeForState(p.state));
       this.emit({ type: 'stateChanged', payload: p });
     });
     mpv.on('timeUpdate', (p) => this.emit({ type: 'timeUpdate', payload: p }));
