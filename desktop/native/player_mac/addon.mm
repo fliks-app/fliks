@@ -35,6 +35,7 @@
 #include <dlfcn.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -56,6 +57,10 @@ int (*request_log_messages)(mpv_handle*, const char*) = nullptr;
 void (*mpv_free)(void*) = nullptr;
 int (*initialize)(mpv_handle*) = nullptr;
 int (*command)(mpv_handle*, const char**) = nullptr;
+// Async command dispatch: control-plane calls (pause/seek/track select/…) must
+// NOT block the Electron main thread on the mpv core lock, or a busy core (HLS
+// network stall, seek, decoder reconfig) head-of-line-blocks the NEXT UI command.
+int (*command_async)(mpv_handle*, uint64_t, const char**) = nullptr;
 mpv_event* (*wait_event)(mpv_handle*, double) = nullptr;
 void (*destroy)(mpv_handle*) = nullptr;
 const char* (*error_string)(int) = nullptr;
@@ -88,6 +93,7 @@ bool Load() {
   SYM(mpv_free, "mpv_free")
   SYM(initialize, "mpv_initialize")
   SYM(command, "mpv_command")
+  SYM(command_async, "mpv_command_async")
   SYM(wait_event, "mpv_wait_event")
   SYM(destroy, "mpv_terminate_destroy")
   SYM(error_string, "mpv_error_string")
@@ -117,6 +123,7 @@ struct State {
   CGLContextObj cgl = nullptr;  // the layer's GL context, captured for teardown
   std::mutex renderMutex;       // guards rc_render vs rc_free
   std::atomic<bool> run{false};
+  std::atomic<bool> paused{true};  // drives the event thread's position heartbeat
   std::atomic<bool> dirty{true};  // force a redraw (resize / first paint)
   // Whether the layer actually got a half-float (RGBA16F) backing. EDR/PQ/HLG
   // tagging is meaningless on an 8-bit unorm FBO (can't carry values >1.0), so
@@ -420,63 +427,97 @@ void ReconfigureColorForCurrentVideo() {
 }
 
 // ── mpv event loop → JS (lifted from addon.cc EventThreadMain) ───────────────
+//
+// The seekbar position is emitted from HERE (the mpv event thread), never from
+// the JS main thread: libmpv's control calls and property reads are synchronous
+// and take the mpv core lock, so polling `time-pos`/`demuxer-cache-time` on the
+// Electron main thread would park it inside libmpv whenever the core is busy —
+// delaying the next pause/seek. Reading them on this thread keeps the main
+// thread free for the control plane. `wait_event`'s 0.1s timeout doubles as the
+// heartbeat that advances the bar while playing (throttled below to ~4 Hz).
 void EventThreadMain(State* s) {
-  char buf[64];
+  using clock = std::chrono::steady_clock;
+  auto lastEmit = clock::now() - std::chrono::seconds(1);  // allow an immediate first emit
+  const auto kEmitInterval = std::chrono::milliseconds(250);
+
+  auto emitPosition = [&](bool force) {
+    if (!s->run.load(std::memory_order_acquire)) return;
+    const auto now = clock::now();
+    if (!force && now - lastEmit < kEmitInterval) return;
+    lastEmit = now;
+    char* tp = M::get_property_string(s->mpv, "time-pos");
+    char* cache = M::get_property_string(s->mpv, "demuxer-cache-time");
+    const double pos = tp ? atof(tp) : 0.0;
+    const double buf = cache ? atof(cache) : 0.0;
+    if (tp) M::mpv_free(tp);
+    if (cache) M::mpv_free(cache);
+    char pb[32], db[32], bb[32];
+    snprintf(pb, sizeof(pb), "%.3f", pos);
+    snprintf(db, sizeof(db), "%.3f", s->duration);
+    snprintf(bb, sizeof(bb), "%.3f", buf);
+    Emit(std::string("{\"type\":\"timeUpdate\",\"position\":") + pb +
+         ",\"duration\":" + db + ",\"buffered\":" + bb + "}");
+  };
+
   while (s->run.load(std::memory_order_acquire)) {
     mpv_event* ev = M::wait_event(s->mpv, 0.1);
-    if (!ev || ev->event_id == MPV_EVENT_NONE) continue;
-    switch (ev->event_id) {
-      case MPV_EVENT_PROPERTY_CHANGE: {
-        auto* p = static_cast<mpv_event_property*>(ev->data);
-        if (!p) break;
-        if (std::strcmp(p->name, "track-list") == 0) {
-          Emit("{\"type\":\"tracksChanged\"}");
+    if (ev && ev->event_id != MPV_EVENT_NONE) {
+      switch (ev->event_id) {
+        case MPV_EVENT_PROPERTY_CHANGE: {
+          auto* p = static_cast<mpv_event_property*>(ev->data);
+          if (!p) break;
+          if (std::strcmp(p->name, "track-list") == 0) {
+            Emit("{\"type\":\"tracksChanged\"}");
+            break;
+          }
+          if (std::strcmp(p->name, "video-params") == 0) {
+            ReconfigureColorForCurrentVideo();
+            break;
+          }
+          if (!p->data) break;
+          if (std::strcmp(p->name, "duration") == 0 && p->format == MPV_FORMAT_DOUBLE) {
+            s->duration = *static_cast<double*>(p->data);
+          } else if (std::strcmp(p->name, "pause") == 0 && p->format == MPV_FORMAT_FLAG) {
+            const int paused = *static_cast<int*>(p->data);
+            s->paused.store(paused != 0);
+            Emit(std::string("{\"type\":\"stateChanged\",\"state\":\"") +
+                 (paused ? "paused" : "playing") + "\"}");
+          } else if (std::strcmp(p->name, "paused-for-cache") == 0 && p->format == MPV_FORMAT_FLAG) {
+            if (*static_cast<int*>(p->data))
+              Emit("{\"type\":\"stateChanged\",\"state\":\"buffering\"}");
+          }
           break;
         }
-        if (std::strcmp(p->name, "video-params") == 0) {
-          ReconfigureColorForCurrentVideo();
+        case MPV_EVENT_LOG_MESSAGE: {
+          auto* m = static_cast<mpv_event_log_message*>(ev->data);
+          if (m) fprintf(stderr, "[mpv] %s: %s", m->prefix, m->text);
           break;
         }
-        if (!p->data) break;
-        if (std::strcmp(p->name, "time-pos") == 0 && p->format == MPV_FORMAT_DOUBLE) {
-          double t = *static_cast<double*>(p->data);
-          char db[32], pb[32];
-          snprintf(db, sizeof(db), "%.3f", s->duration);
-          snprintf(pb, sizeof(pb), "%.3f", t);
-          Emit(std::string("{\"type\":\"timeUpdate\",\"position\":") + pb +
-               ",\"duration\":" + db + "}");
-        } else if (std::strcmp(p->name, "duration") == 0 && p->format == MPV_FORMAT_DOUBLE) {
-          s->duration = *static_cast<double*>(p->data);
-        } else if (std::strcmp(p->name, "pause") == 0 && p->format == MPV_FORMAT_FLAG) {
-          int paused = *static_cast<int*>(p->data);
-          Emit(std::string("{\"type\":\"stateChanged\",\"state\":\"") +
-               (paused ? "paused" : "playing") + "\"}");
-        } else if (std::strcmp(p->name, "paused-for-cache") == 0 && p->format == MPV_FORMAT_FLAG) {
-          if (*static_cast<int*>(p->data))
-            Emit("{\"type\":\"stateChanged\",\"state\":\"buffering\"}");
+        case MPV_EVENT_PLAYBACK_RESTART:
+          emitPosition(true);  // push the fresh position right after a seek / first frame
+          Emit("{\"type\":\"firstFrame\"}");
+          break;
+        case MPV_EVENT_END_FILE: {
+          s->paused.store(true);  // playback stopped (stop/eof/error) → halt the heartbeat
+          auto* e = static_cast<mpv_event_end_file*>(ev->data);
+          if (e && e->reason == MPV_END_FILE_REASON_EOF)
+            Emit("{\"type\":\"stateChanged\",\"state\":\"ended\"}");
+          else if (e && e->reason == MPV_END_FILE_REASON_ERROR)
+            Emit("{\"type\":\"error\",\"message\":\"end-file error\"}");
+          break;
         }
-        break;
+        case MPV_EVENT_COMMAND_REPLY:
+        case MPV_EVENT_SET_PROPERTY_REPLY:
+          // Async control-plane acks. Only surface failures; success is silent.
+          if (ev->error < 0)
+            fprintf(stderr, "[player-mac] async command failed: %s\n", M::error_string(ev->error));
+          break;
+        default:
+          break;
       }
-      case MPV_EVENT_LOG_MESSAGE: {
-        auto* m = static_cast<mpv_event_log_message*>(ev->data);
-        if (m) fprintf(stderr, "[mpv] %s: %s", m->prefix, m->text);
-        break;
-      }
-      case MPV_EVENT_PLAYBACK_RESTART:
-        Emit("{\"type\":\"firstFrame\"}");
-        break;
-      case MPV_EVENT_END_FILE: {
-        auto* e = static_cast<mpv_event_end_file*>(ev->data);
-        if (e && e->reason == MPV_END_FILE_REASON_EOF)
-          Emit("{\"type\":\"stateChanged\",\"state\":\"ended\"}");
-        else if (e && e->reason == MPV_END_FILE_REASON_ERROR)
-          Emit("{\"type\":\"error\",\"message\":\"end-file error\"}");
-        break;
-      }
-      default:
-        break;
     }
-    (void)buf;
+    // Heartbeat the seekbar while playing (throttled inside emitPosition).
+    if (!s->paused.load()) emitPosition(false);
   }
 }
 
@@ -525,7 +566,9 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   // (MPV_STREAM_OPTIONS in src/shared/mpv-stream-options.ts) — one source of
   // truth shared with the Linux + Windows backends.
   if (M::initialize(g_state.mpv) < 0) fprintf(stderr, "[player-mac] mpv_initialize failed\n");
-  M::observe_property(g_state.mpv, 1, "time-pos", MPV_FORMAT_DOUBLE);
+  // time-pos is read on demand by the event thread's position heartbeat (see
+  // EventThreadMain), so it is deliberately NOT observed — observing it would
+  // wake the loop on every frame for no gain.
   M::observe_property(g_state.mpv, 2, "duration", MPV_FORMAT_DOUBLE);
   M::observe_property(g_state.mpv, 3, "pause", MPV_FORMAT_FLAG);
   M::observe_property(g_state.mpv, 4, "track-list", MPV_FORMAT_NONE);
@@ -637,6 +680,9 @@ Napi::Value Load(const Napi::CallbackInfo& info) {
     M::command(g_state.mpv, cmd);
   }
   M::set_property_string(g_state.mpv, "pause", "no");
+  // mpv autoplays on load but may not emit a pause change, so mark playing here
+  // directly — the event thread's position heartbeat gates on this flag.
+  g_state.paused.store(false);
   if (o.Has("subtitles") && o.Get("subtitles").IsArray()) {
     Napi::Array subs = o.Get("subtitles").As<Napi::Array>();
     for (uint32_t i = 0; i < subs.Length(); i++) {
@@ -650,6 +696,10 @@ Napi::Value Load(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+// Fire an mpv command WITHOUT blocking the calling (Electron main) thread: mpv
+// copies the argv during the call and applies the command on its own thread, so
+// a busy core can't stall the next UI command. The reply (id 0) is ignored on
+// the event thread (COMMAND_REPLY), which only logs failures.
 Napi::Value Command(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!g_state.mpv || info.Length() < 1 || !info[0].IsArray()) return env.Undefined();
@@ -659,7 +709,7 @@ Napi::Value Command(const Napi::CallbackInfo& info) {
   std::vector<const char*> argv;
   for (auto& p : parts) argv.push_back(p.c_str());
   argv.push_back(nullptr);
-  M::command(g_state.mpv, argv.data());
+  M::command_async(g_state.mpv, 0, argv.data());
   return env.Undefined();
 }
 
@@ -674,14 +724,16 @@ Napi::Value GetProperty(const Napi::CallbackInfo& info) {
   return r;
 }
 
+// Set a property via the async `set` command (equivalent to set_property_string
+// but non-blocking) for the same reason Command is async: pause/volume/track
+// selection must never block the Electron main thread on the mpv core lock.
 Napi::Value SetProperty(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!g_state.mpv || info.Length() < 2) return env.Undefined();
   std::string name = info[0].As<Napi::String>().Utf8Value();
   std::string val = info[1].ToString().Utf8Value();
-  int rc = M::set_property_string(g_state.mpv, name.c_str(), val.c_str());
-  if (rc < 0)
-    fprintf(stderr, "[player-mac] set_property %s=%s failed (%d)\n", name.c_str(), val.c_str(), rc);
+  const char* argv[] = {"set", name.c_str(), val.c_str(), nullptr};
+  M::command_async(g_state.mpv, 0, argv);
   return env.Undefined();
 }
 
