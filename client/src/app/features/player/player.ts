@@ -2113,9 +2113,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Auto-advance when a stream reaches its natural end and the context allows
    *  it. {@link PlayerStateService.ended} latches on the engine 'ended' event
-   *  and is cleared by the reload's state reset, so this fires once per item. */
+   *  and is cleared by the reload's state reset, so this fires once per item.
+   *  Never advances while an error card is up: a mid-stream failure must not be
+   *  mistaken for a natural end and skip the item. */
   private readonly autoAdvanceEffect = effect(() => {
     if (!this.state.ended()) return;
+    if (this.state.error()) return;
     if (!this.autoplayEnabled()) return;
     if (!this.upNext()) return;
     void this.advance();
