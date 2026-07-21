@@ -23,6 +23,14 @@ function resolveBundledMpv(): string | undefined {
   return fs.existsSync(bundled) ? bundled : undefined;
 }
 
+// A `transparent` window drops macOS out of the WindowServer's opaque fast path
+// and alpha-composites the whole UI every frame, so the app feels sluggish
+// app-wide (not just the player). The UI overlay defaults to OPAQUE (fast); set
+// FLIKS_OPAQUE_UI=0 to restore the transparent overlay that lets the mpv video
+// show through during playback. An opaque overlay hides the video behind it.
+const OPAQUE_UI =
+  process.env.FLIKS_OPAQUE_UI !== '0' && process.env.FLIKS_OPAQUE_UI !== 'false';
+
 export interface PlayerSessionOptions {
   rendererUrl: string;
   preloadPath: string;
@@ -87,8 +95,8 @@ export class PlayerSession {
     this.uiWin = new BrowserWindow({
       ...this.frameWin.getContentBounds(),
       frame: false,
-      transparent: true,
-      backgroundColor: '#00000000',
+      transparent: !OPAQUE_UI,
+      backgroundColor: OPAQUE_UI ? '#000000' : '#00000000',
       hasShadow: false,
       // Electron warns that resizing a transparent window can break its
       // transparency on some platforms; the overlay is re-fitted via setBounds
