@@ -96,5 +96,22 @@ describe('playback-error', () => {
       const err: PlaybackError = { userMessage: 'x', source: 'media', code: 3 };
       expect(formatErrorDiagnostics(err, {})).toContain('code: 3 (MEDIA_ERR_DECODE)');
     });
+
+    it('renders the engine, endpoint, title, device and app version', () => {
+      const err: PlaybackError = { userMessage: 'x', source: 'engine', code: -1, message: 'loading failed' };
+      const out = formatErrorDiagnostics(err, {
+        engine: 'desktop-mpv',
+        url: '/api/stream/3?token=abc&sid=xyz',
+        title: 'Some Series — S1:E2 - An Episode',
+        device: 'desktop/electron · UA',
+        appVersion: '1.15.2',
+      });
+      expect(out).toContain('engine: desktop-mpv');
+      expect(out).toContain('url: /api/stream/3?token=abc&sid=xyz');
+      expect(out).toContain('title: Some Series — S1:E2 - An Episode');
+      expect(out).toContain('device: desktop/electron · UA');
+      expect(out).toContain('appVersion: 1.15.2');
+      expect(out).toContain('message: loading failed');
+    });
   });
 });

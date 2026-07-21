@@ -59,12 +59,12 @@
         <svg lucideCircleAlert class="h-12 w-12 mx-auto mb-4 text-error"></svg>
         <p class="text-lg font-medium">{{ 'player.error' | translate }}</p>
         <p class="text-sm text-white/60 mt-1">{{ err.userMessage }}</p>
-        @if (err.code != null || err.data?.length || err.variant) {
+        @if (err.code != null || err.data?.length || err.variant || err.message) {
           <details class="mt-3 text-left">
             <summary class="cursor-pointer select-none text-xs text-white/50">
               {{ 'player.error_details' | translate }}
             </summary>
-            <pre class="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-black/40 p-2 text-[11px] leading-snug text-white/70">{{ errorDiagnostics() }}</pre>
+            <pre class="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded bg-black/40 p-2 text-[11px] leading-snug text-white/70">{{ errorDiagnostics() }}</pre>
           </details>
           <div class="mt-4 flex items-center justify-center gap-2">
             <button class="btn btn-ghost btn-sm" (click)="copyErrorDiagnostics()">

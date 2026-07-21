@@ -143,7 +143,16 @@ export function errorSignature(err: PlaybackError): string {
  *  report, not translated UI copy. */
 export function formatErrorDiagnostics(
   err: PlaybackError,
-  ctx: { currentTime?: number; mode?: string; hwAccel?: string },
+  ctx: {
+    currentTime?: number;
+    mode?: string;
+    hwAccel?: string;
+    engine?: string;
+    url?: string;
+    title?: string;
+    device?: string;
+    appVersion?: string;
+  },
 ): string {
   const codeName =
     err.source === 'media'
@@ -152,7 +161,11 @@ export function formatErrorDiagnostics(
   const catName =
     err.category != null ? SHAKA_CATEGORY_NAMES[err.category] : undefined;
   const lines: string[] = [];
+  if (ctx.title) lines.push(`title: ${ctx.title}`);
+  if (ctx.device) lines.push(`device: ${ctx.device}`);
+  if (ctx.appVersion) lines.push(`appVersion: ${ctx.appVersion}`);
   lines.push(`source: ${err.source}`);
+  if (ctx.engine) lines.push(`engine: ${ctx.engine}`);
   if (err.code != null) lines.push(`code: ${err.code}${codeName ? ` (${codeName})` : ''}`);
   if (err.category != null) lines.push(`category: ${err.category}${catName ? ` (${catName})` : ''}`);
   if (err.severity != null) lines.push(`severity: ${err.severity}${err.severity === 2 ? ' (CRITICAL)' : err.severity === 1 ? ' (RECOVERABLE)' : ''}`);
@@ -160,6 +173,7 @@ export function formatErrorDiagnostics(
   if (ctx.mode) lines.push(`playMethod: ${ctx.mode}`);
   if (ctx.hwAccel) lines.push(`hwAccel: ${ctx.hwAccel}`);
   if (ctx.currentTime != null) lines.push(`position: ${ctx.currentTime.toFixed(1)}s`);
+  if (ctx.url) lines.push(`url: ${ctx.url}`);
   if (err.message) lines.push(`message: ${err.message}`);
   if (err.data && err.data.length) {
     let dump: string;

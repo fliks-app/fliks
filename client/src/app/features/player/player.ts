@@ -42,6 +42,7 @@ import { PlaybackQueueService, QueueItem } from '../../core/services/playback-qu
 import { resolvePlayableFile } from '../../shared/utils/media-play.util';
 import { audioChannelsLabel, formatAudioLabel, formatAudioParts, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
 import { formatErrorDiagnostics, userMessageKeyFor } from '../../core/services/playback-engine/playback-error';
+import { environment } from '../../../environments/environment';
 import {
   PlayerSettingsService, normalizeLang,
   SUBTITLE_SIZE_MAP, SUBTITLE_COLOR_MAP, SUBTITLE_SHADOW_MAP, SUBTITLE_BG_MAP,
@@ -600,6 +601,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   });
   private playbackInfo: PlaybackInfoResponse | null = null;
 
+  /** Last URL handed to the engine's load(), surfaced (token-redacted) in the
+   *  error diagnostics so a failed open shows which endpoint/format was tried. */
+  private lastStreamUrl = '';
+
   /** Live-session id to bind the next stream request to. While casting
    *  the receiver's session id wins (its segments come from a separate
    *  ffmpeg job under the cast device profile); otherwise the local
@@ -1062,6 +1067,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (this.isOfflinePlayback) {
         this.state.playbackMode.set('direct');
         this.qualityManager.availableQualities.set([]);
+        this.lastStreamUrl = offlineCheck ?? '';
 
         if (this.isDesktopNative) {
           // Desktop: the original container lives on disk; mpv plays it back
@@ -2672,22 +2678,26 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   } = {}): { url: string; mimeType?: string } {
     const mode = this.playbackMode();
     const sid = opts.sid ?? this.playbackInfo?.sessionId;
+    let built: { url: string; mimeType?: string };
     if (mode === 'direct') {
-      return {
+      built = {
         url: this.streamingApi.getStreamUrl(this.mediaFileId, sid),
         mimeType: 'video/mp4',
       };
+    } else {
+      const savedQualityId = this.activeQualityId();
+      const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
+      built = {
+        url: this.streamingApi.getHlsUrl(
+          this.mediaFileId,
+          startQuality,
+          opts.startTime,
+          sid,
+        ),
+      };
     }
-    const savedQualityId = this.activeQualityId();
-    const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
-    return {
-      url: this.streamingApi.getHlsUrl(
-        this.mediaFileId,
-        startQuality,
-        opts.startTime,
-        sid,
-      ),
-    };
+    this.lastStreamUrl = built.url;
+    return built;
   }
 
   /**
@@ -2840,11 +2850,52 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   errorDiagnostics(): string {
     const err = this.state.error();
     if (!err) return '';
-    return formatErrorDiagnostics(err, {
+    const dump = formatErrorDiagnostics(err, {
       currentTime: this.state.currentTime(),
       mode: this.state.playbackMode(),
       hwAccel: this.state.hwAccel(),
+      engine: this.engineLabel(),
+      url: this.lastStreamUrl,
+      title: this.diagnosticsTitle(),
+      device: this.diagnosticsDevice(),
+      appVersion: environment.version,
     });
+    return this.redactSecrets(dump);
+  }
+
+  /** Concrete playback engine behind the current session — `source: engine`
+   *  alone can't tell desktop mpv from mobile native from a TV player. */
+  private engineLabel(): string {
+    if (this.isDesktopNative) return 'desktop-mpv';
+    if (this.isTizenEngine()) return 'tizen-avplay';
+    if (this.isWebOs) return 'webos';
+    if (this.isNativeEngine()) return 'native';
+    return 'shaka';
+  }
+
+  /** `Film` or `Series — S1:E2 - Episode` for the diagnostics header. */
+  private diagnosticsTitle(): string {
+    const title = this.mediaTitle();
+    const episode = this.episodeTitle();
+    return episode ? `${title} — ${episode}` : title;
+  }
+
+  /** Form factor + shell/platform + user agent, so a pasted report says which
+   *  build and OS hit the error. */
+  private diagnosticsDevice(): string {
+    const platform = this.device.desktopPlatform() ?? this.device.tvPlatform();
+    const label = platform
+      ? `${this.device.formFactor()}/${platform}`
+      : this.device.formFactor();
+    return `${label} · ${navigator.userAgent}`;
+  }
+
+  /** Strip auth secrets before the diagnostics block is shown or copied: the
+   *  stream URL carries a `?token=<JWT>` and requests use a Bearer header. */
+  private redactSecrets(dump: string): string {
+    return dump
+      .replace(/([?&]token=)[^&\s]+/gi, '$1<redacted>')
+      .replace(/(Bearer\s+)[\w.-]+/gi, '$1<redacted>');
   }
 
   async copyErrorDiagnostics(): Promise<void> {
