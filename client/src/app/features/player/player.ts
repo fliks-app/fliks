@@ -165,8 +165,16 @@ class PausableTimeout {
     .player-container.native-player > .player-video {
       display: none !important;
     }
+    /* Hide the cursor with a transparent image, not cursor:none: on macOS the
+       latter maps to NSCursor hide, whose hide/unhide stack only rebalances when
+       the pointer crosses the window edge, so the OS cursor stays hidden when the
+       controls re-show. An image cursor is applied via NSCursor set, so reverting
+       to the default is balanced. */
     .player-container.hide-cursor {
-      cursor: none;
+      cursor:
+        url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=')
+          0 0,
+        none;
     }
     .player-video {
       position: absolute;
@@ -1776,11 +1784,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // tap, so reading it can issue two same-direction commands. On the web
     // <video> the getter is exact (paused flips synchronously); the native
     // engine mirrors its bridge state, which the coalesce window covers.
+    // Reflect the target in the UI immediately instead of waiting for the
+    // engine's `stateChanged` round-trip (on the desktop mpv backend that loop
+    // — IPC → mpv property-observe → IPC back — can lag ~1s). The engine event
+    // reasserts the real state, and a rejected command reverts to it.
     if (this.engine.paused) {
-      this.engine.play().catch(() => {});
+      this.state.paused.set(false);
+      this.engine.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
       this.resetHideTimer();
     } else {
-      this.engine.pause().catch(() => {});
+      this.state.paused.set(true);
+      this.engine.pause().catch(() => this.state.paused.set(this.engine?.paused ?? true));
     }
   }
 
