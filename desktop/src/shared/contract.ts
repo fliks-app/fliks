@@ -67,7 +67,7 @@ export type DesktopEvent =
       payload: { audioTracks: DesktopAudioTrack[]; subtitleTracks: DesktopSubtitleTrack[] };
     }
   | { type: 'firstFrame' }
-  | { type: 'error'; payload: { code: number; message: string } };
+  | { type: 'error'; payload: { code: number; message: string; detail?: string } };
 
 /** renderer → main invoke channels. */
 export const IPC = {

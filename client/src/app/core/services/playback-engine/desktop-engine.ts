@@ -358,7 +358,14 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
         // session-expired recovery before surfacing a fatal error.
         if (this.maybeEmitSessionExpired()) return;
         this._state = 'error';
-        this.emit('error', event.payload);
+        const { code, message, detail } = event.payload;
+        // mpv's generic message ("loading failed") plus the concrete cause it
+        // logged (TLS verify, HTTP status, unsupported codec) so the error card
+        // shows why, not just that.
+        this.emit('error', {
+          code,
+          message: detail ? `${message} — ${detail}` : message,
+        });
         break;
       }
       default:

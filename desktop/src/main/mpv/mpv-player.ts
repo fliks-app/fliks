@@ -58,6 +58,11 @@ export class MpvPlayer extends EventEmitter {
   private readonly pending = new Map<number, Pending>();
   private buf = '';
   private sawFirstFrame = false;
+  /** One-shot per load: `--keep-open=yes` makes mpv pause on the last frame and
+   *  set `eof-reached` instead of firing an `end-file`(eof) event, so the
+   *  natural end is detected from that property. Guards against mpv re-sending
+   *  the property-change so `ended` (which drives auto-advance) emits once. */
+  private sawEof = false;
   private duration = 0;
   private cacheEnd = 0;
   /** Demuxer format forced for the current media (`hls` for manifests, else
@@ -66,6 +71,11 @@ export class MpvPlayer extends EventEmitter {
   /** Bumped by load/stop/destroy; a load with a stale id skips its remaining
    *  IPC writes, so a stop can't be overtaken by a trailing loadfile. */
   private loadGen = 0;
+  /** error/fatal mpv log lines seen since the current load began. mpv's
+   *  `end-file` error carries only the generic `MPV_ERROR_*` string ("loading
+   *  failed"); the real cause (TLS verify, HTTP status, unsupported codec) is in
+   *  these log lines, so we buffer them and attach them to the error event. */
+  private errorLog: string[] = [];
 
   constructor(opts: MpvPlayerOptions) {
     super();
@@ -207,9 +217,15 @@ export class MpvPlayer extends EventEmitter {
       case 'property-change':
         this.onProperty(msg.name, msg.data);
         break;
-      case 'log-message':
-        this.emit('log', `[${msg.level}] ${msg.prefix}: ${msg.text}`);
+      case 'log-message': {
+        const line = `${msg.prefix ? `${msg.prefix}: ` : ''}${msg.text ?? ''}`.trim();
+        if (msg.level === 'error' || msg.level === 'fatal') {
+          this.errorLog.push(line);
+          if (this.errorLog.length > 12) this.errorLog.shift();
+        }
+        this.emit('log', `[${msg.level}] ${line}`);
         break;
+      }
       case 'playback-restart':
         if (!this.sawFirstFrame) {
           this.sawFirstFrame = true;
@@ -219,7 +235,11 @@ export class MpvPlayer extends EventEmitter {
       case 'end-file':
         if (msg.reason === 'eof') this.emit('stateChanged', { state: 'ended' });
         else if (msg.reason === 'error')
-          this.emit('error', { code: -1, message: msg.file_error ?? 'end-file error' });
+          this.emit('error', {
+            code: -1,
+            message: msg.file_error ?? 'end-file error',
+            detail: this.errorLog.join(' | ') || undefined,
+          });
         break;
       default:
         break;
@@ -244,6 +264,14 @@ export class MpvPlayer extends EventEmitter {
         // `@if (bufferedEnd())`) collapses to 0 and flickers on every gap.
         if (data != null) this.cacheEnd = data;
         break;
+      case 'eof-reached':
+        // With `--keep-open=yes` this is how a natural end surfaces (no
+        // `end-file`(eof)); map it to the `ended` state that drives auto-advance.
+        if (data === true && !this.sawEof) {
+          this.sawEof = true;
+          this.emit('stateChanged', { state: 'ended' });
+        }
+        break;
       case 'pause':
         this.emit('stateChanged', { state: data ? 'paused' : 'playing' });
         break;
@@ -265,6 +293,7 @@ export class MpvPlayer extends EventEmitter {
       'demuxer-cache-time',
       'pause',
       'paused-for-cache',
+      'eof-reached',
       'track-list',
     ]) {
       await this.command(['observe_property', ++this.observeId, prop]);
@@ -306,8 +335,10 @@ export class MpvPlayer extends EventEmitter {
 
   async load(opts: DesktopLoadOptions): Promise<void> {
     this.sawFirstFrame = false;
+    this.sawEof = false;
     this.duration = 0;
     this.cacheEnd = 0;
+    this.errorLog = [];
     const gen = ++this.loadGen;
     // Reset the reused player first so the new open's probe can't read atop the
     // previous file's buffered stream.
@@ -390,6 +421,7 @@ export class MpvPlayer extends EventEmitter {
     // Reset baselines so the persistent player can't replay a stale first-frame
     // / position into the next session after a back-navigation.
     this.sawFirstFrame = false;
+    this.sawEof = false;
     this.duration = 0;
     this.cacheEnd = 0;
     return this.command(['stop']).then(() => undefined);
