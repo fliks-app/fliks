@@ -122,6 +122,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   }
 
   async pause(): Promise<void> {
+    if (this.dead) return;
     await this.bridge.pause();
     this._paused = true;
   }
