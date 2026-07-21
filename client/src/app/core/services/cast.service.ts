@@ -93,6 +93,19 @@ interface NativeCastPlugin {
 const NativeCast = registerPlugin<NativeCastPlugin>('NativeCast');
 const CAST_APP_ID = environment.castAppId;
 
+/** Collapse a rapid seek burst (scrubbing / repeated ±10 taps) into a leading
+ *  dispatch plus one trailing dispatch, so the Cast receiver's Shaka isn't hit
+ *  with a storm of raw SEEK commands — that thrashes its independent audio and
+ *  video buffers into settling at different targets, which reads as A/V desync. */
+const CAST_SEEK_COALESCE_MS = 220;
+/** After dispatching a seek, the receiver keeps echoing the OLD position for a
+ *  beat; ignore those echoes until it reaches the target or this window elapses,
+ *  so the seekbar pins at the target instead of bouncing back (and so successive
+ *  ±10 taps accumulate off the pinned target, not the lagging receiver time). */
+const CAST_SEEK_SETTLE_MS = 2500;
+/** How close a receiver time must be to the target to count as "arrived". */
+const CAST_SEEK_CONVERGE_TOL = 1.5;
+
 @Injectable({ providedIn: 'root' })
 export class CastService implements OnDestroy {
   readonly isAvailable = signal(false);
@@ -108,6 +121,12 @@ export class CastService implements OnDestroy {
   readonly mediaTitle = signal('');
   /** Base pour sous-titres / URLs Cast ; renseignée dans reloadCastStream via cast-info. */
   readonly castStreamBaseUrl = signal('');
+
+  // ── Seek coalescing (see CAST_SEEK_* above) ──
+  private seekCoalesceTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingSeekTarget: number | null = null;
+  private lastDispatchedSeekTarget: number | null = null;
+  private seekSettleUntil = 0;
 
   /** Fires when the receiver hits a fatal playback error that a fresh
    *  stream (new sid) can recover — a live session GC'd mid-cast 410s the
@@ -142,7 +161,9 @@ export class CastService implements OnDestroy {
     this.castStreamBaseUrl.set(url.replace(/\/+$/, ''));
   }
 
-  ngOnDestroy() {}
+  ngOnDestroy() {
+    this.clearSeekCoalescing();
+  }
 
   // ---------------------------------------------------------------------------
   // Initialization
@@ -167,7 +188,7 @@ export class CastService implements OnDestroy {
       });
 
       window.addEventListener('castMediaUpdate', ((e: CustomEvent) => {
-        this.currentTime.set(e.detail?.currentTime ?? 0);
+        this.mirrorReceiverTime(e.detail?.currentTime ?? 0);
         this.duration.set(e.detail?.duration ?? 0);
         this.isPaused.set(e.detail?.isPaused ?? true);
         this.buffering.set(e.detail?.buffering ?? false);
@@ -222,7 +243,7 @@ export class CastService implements OnDestroy {
       );
       this.remotePlayerController.addEventListener(
         cast.framework.RemotePlayerEventType.CURRENT_TIME_CHANGED,
-        () => this.currentTime.set(this.remotePlayer.currentTime ?? 0),
+        () => this.mirrorReceiverTime(this.remotePlayer.currentTime ?? 0),
       );
       this.remotePlayerController.addEventListener(
         cast.framework.RemotePlayerEventType.IS_PAUSED_CHANGED,
@@ -452,10 +473,59 @@ export class CastService implements OnDestroy {
   }
 
   seek(time: number) {
+    // Pin the bar at the target and mark the seek in-flight BEFORE dispatching,
+    // so a burst reads the pinned target (accumulating ±10 taps correctly) and
+    // stale receiver echoes can't bounce it back (see mirrorReceiverTime).
+    this.pendingSeekTarget = time;
+    this.currentTime.set(time);
+    this.seekSettleUntil = Date.now() + CAST_SEEK_SETTLE_MS;
+    // Leading edge: dispatch immediately when idle so a single seek stays snappy.
+    if (this.seekCoalesceTimer == null) this.dispatchSeek(time);
+    // Trailing edge: (re)arm; once the burst stops, send the final settled target
+    // (skipped when it equals the leading dispatch, i.e. a lone seek).
+    if (this.seekCoalesceTimer != null) clearTimeout(this.seekCoalesceTimer);
+    this.seekCoalesceTimer = setTimeout(() => {
+      this.seekCoalesceTimer = null;
+      if (
+        this.pendingSeekTarget != null &&
+        this.pendingSeekTarget !== this.lastDispatchedSeekTarget
+      ) {
+        this.dispatchSeek(this.pendingSeekTarget);
+      }
+    }, CAST_SEEK_COALESCE_MS);
+  }
+
+  private dispatchSeek(time: number) {
+    this.lastDispatchedSeekTarget = time;
+    this.seekSettleUntil = Date.now() + CAST_SEEK_SETTLE_MS;
     if (this.isNative) { NativeCast.seek({ time }); return; }
     if (!this.remotePlayer) return;
     this.remotePlayer.currentTime = time;
     this.remotePlayerController?.seek();
+  }
+
+  /** Mirror a receiver position echo into `currentTime`, unless a coalesced seek
+   *  is still settling and this echo is the receiver's pre-seek position — hold
+   *  the pinned target until it arrives (within tolerance) or the settle window
+   *  elapses, so the bar doesn't bounce back and can't wedge on a new load. */
+  private mirrorReceiverTime(t: number) {
+    if (this.seekSettleUntil > 0) {
+      const target = this.pendingSeekTarget;
+      const arrived = target != null && Math.abs(t - target) <= CAST_SEEK_CONVERGE_TOL;
+      if (arrived || Date.now() > this.seekSettleUntil) this.seekSettleUntil = 0;
+      else return;
+    }
+    this.currentTime.set(t);
+  }
+
+  private clearSeekCoalescing() {
+    if (this.seekCoalesceTimer != null) {
+      clearTimeout(this.seekCoalesceTimer);
+      this.seekCoalesceTimer = null;
+    }
+    this.pendingSeekTarget = null;
+    this.lastDispatchedSeekTarget = null;
+    this.seekSettleUntil = 0;
   }
 
   stop() {
@@ -469,6 +539,7 @@ export class CastService implements OnDestroy {
     this.isConnected.set(false);
     this.session = null;
     this.castStreamBaseUrl.set('');
+    this.clearSeekCoalescing();
   }
 
   setActiveSubtitle(trackId: number) {
