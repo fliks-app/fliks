@@ -11,6 +11,8 @@ import { registerDownloadIpc } from './download';
 import { setPlaybackKeepAwake, keepAwakeForState } from './power';
 import { IPC, type DesktopEvent, type DesktopSubtitleStyle } from '../shared/contract';
 import { mpvSubtitleProps } from './mpv/subtitle-style';
+import { parseTracks } from './mpv/tracks';
+import { MPV_STREAM_OPTIONS } from '../shared/mpv-stream-options';
 
 // Name the app before `ready` so Linux derives the WM class (and thus the
 // GNOME/Ubuntu top-bar + dock identity) from "Fliks" rather than "Electron".
@@ -148,33 +150,6 @@ function computeDeviceName(): string {
     /* fall through to hostname */
   }
   return os.hostname().replace(/\.local$/, '');
-}
-
-function parseTracks(json: string | null): {
-  audioTracks: unknown[];
-  subtitleTracks: unknown[];
-} {
-  let list: any[] = [];
-  try {
-    list = JSON.parse(json ?? '[]') ?? [];
-  } catch {
-    /* not ready */
-  }
-  const audioTracks: unknown[] = [];
-  const subtitleTracks: unknown[] = [];
-  for (const t of list) {
-    if (t.type === 'audio')
-      audioTracks.push({ id: String(t.id), language: t.lang ?? '', label: t.title ?? '', selected: !!t.selected });
-    else if (t.type === 'sub')
-      subtitleTracks.push({
-        id: String(t.id),
-        language: t.lang ?? '',
-        label: t.title ?? '',
-        forced: !!t.forced,
-        selected: !!t.selected,
-      });
-  }
-  return { audioTracks, subtitleTracks };
 }
 
 const KEYMAP: Record<string, string> = {
@@ -338,6 +313,10 @@ app.whenReady().then(async () => {
   uiWin.webContents.on('console-message', (_e, _l, m) => console.log('[renderer]', m));
 
   addon.start({ width: WIDTH, height: HEIGHT, title: 'Fliks', icon: compositorIcon() });
+  // Apply the shared streaming/reconnect tuning (all runtime-mutable, set before
+  // the first load) so buffering + resume behaviour matches the other backends
+  // from one source of truth.
+  for (const [name, value] of MPV_STREAM_OPTIONS) addon.setProperty(name, value);
 
   // Periodic position emit. The addon's `time-pos` observe doesn't push while
   // playback advances, so poll mpv on a timer and forward a `timeUpdate` — this
@@ -396,7 +375,7 @@ app.whenReady().then(async () => {
         send({ type: 'stateChanged', payload: { state: raw.state } });
         break;
       case 'tracksChanged':
-        send({ type: 'tracksChanged', payload: parseTracks(addon.getProperty('track-list')) as any });
+        send({ type: 'tracksChanged', payload: parseTracks(addon.getProperty('track-list')) });
         break;
       case 'firstFrame':
         // mpv autoplays on load (addon forces pause=no) but may not emit a

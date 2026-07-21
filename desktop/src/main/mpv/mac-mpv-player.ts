@@ -7,19 +7,21 @@
 // a near-copy of the Linux IPC handlers + event reshaping in `main/index.ts`.
 
 import { app, BrowserWindow } from 'electron';
-import { EventEmitter } from 'node:events';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import type { PlayerBackend } from './player-backend';
+import type { PlayerBackend, PlayerBackendEvents } from './player-backend';
 import type {
   DesktopAudioTrack,
   DesktopLoadOptions,
+  DesktopPlayerState,
   DesktopPositionInfo,
   DesktopSubtitleStyle,
   DesktopSubtitleTrack,
 } from '../../shared/contract';
+import { MPV_STREAM_OPTIONS } from '../../shared/mpv-stream-options';
 import { mpvSubtitleProps } from './subtitle-style';
 import { parseTracks } from './tracks';
+import { TypedEmitter } from './typed-emitter';
 
 // Cadence of the periodic position emit while playing. As on Linux, the addon's
 // `time-pos` observe doesn't push while playback advances, so the seekbar + the
@@ -43,7 +45,7 @@ const num = (v: string | null): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-export class MacMpvPlayer extends EventEmitter implements PlayerBackend {
+export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements PlayerBackend {
   private readonly addon: MacAddon;
   private readonly wid: string;
   private sawFirstFrame = false;
@@ -73,12 +75,22 @@ export class MacMpvPlayer extends EventEmitter implements PlayerBackend {
     // Register the event callback BEFORE start so no early event is missed.
     this.addon.onEvent((json) => this.onAddonEvent(json));
     this.addon.start({ wid: this.wid });
+    // Apply the shared streaming/reconnect tuning (all runtime-mutable, set
+    // before the first load) so buffering + resume behaviour matches the other
+    // backends from one source of truth.
+    for (const [name, value] of MPV_STREAM_OPTIONS) this.addon.setProperty(name, value);
     return this;
   }
 
   // ── addon events → PlayerBackend events (mirrors index.ts addon.onEvent) ────
   private onAddonEvent(json: string): void {
-    let raw: { type?: string; state?: string; position?: number; duration?: number; message?: string };
+    let raw: {
+      type?: string;
+      state?: DesktopPlayerState;
+      position?: number;
+      duration?: number;
+      message?: string;
+    };
     try {
       raw = JSON.parse(json);
     } catch {
@@ -92,13 +104,16 @@ export class MacMpvPlayer extends EventEmitter implements PlayerBackend {
           buffered: num(this.addon.getProperty('demuxer-cache-time')),
         } satisfies DesktopPositionInfo);
         break;
-      case 'stateChanged':
+      case 'stateChanged': {
+        const state = raw.state;
+        if (!state) break;
         // Only an actively-playing session drives the poll; pausing / ending /
         // buffering / idle stops it so a torn-down player can't keep emitting.
-        if (raw.state === 'playing') this.startPositionTimer();
+        if (state === 'playing') this.startPositionTimer();
         else this.stopPositionTimer();
-        this.emit('stateChanged', { state: raw.state });
+        this.emit('stateChanged', { state });
         break;
+      }
       case 'tracksChanged':
         this.emit('tracksChanged', parseTracks(this.addon.getProperty('track-list')));
         break;

@@ -497,26 +497,9 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
     M::set_option_string(g_state.mpv, "load-unsafe-playlists", "yes");
     // The app drives subtitle selection; don't let mpv auto-pick a track.
     M::set_option_string(g_state.mpv, "sid", "no");
-    // The backend produces transcode segments on demand: it answers 404 (seg-0/
-    // init on a resume, before the early companion writes them) or 503 (the
-    // resume segment while ffmpeg is still encoding it), and a late multi-audio
-    // rendition transcode can fail the open at the TRANSPORT layer (reset /
-    // refused / TLS) rather than with a 4xx/5xx status. mpv's ffmpeg HLS demuxer
-    // aborts on the first error; make its child segment/init opens reconnect on
-    // BOTH network errors and 4xx/5xx with backoff so a transient miss doesn't
-    // kill the load or skip the resume segment. The `4xx,5xx` value carries a
-    // comma, so it uses mpv's `%len%` escaping (7 = strlen("4xx,5xx")) to
-    // survive the key-value-list parser.
-    M::set_option_string(g_state.mpv, "demuxer-lavf-o",
-        "reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=%7%4xx,5xx,reconnect_delay_max=5");
-    // Buffer like the web engine: ~30s forward (cache-secs binds the TIME cap),
-    // ~60s back; the byte cap is a generous ceiling so time binds first.
-    M::set_option_string(g_state.mpv, "cache", "yes");
-    M::set_option_string(g_state.mpv, "cache-secs", "30");
-    M::set_option_string(g_state.mpv, "demuxer-readahead-secs", "30");
-    M::set_option_string(g_state.mpv, "demuxer-max-bytes", "256MiB");
-    M::set_option_string(g_state.mpv, "demuxer-max-back-bytes", "96MiB");
-    M::set_option_string(g_state.mpv, "cache-pause-wait", "1");
+    // Streaming/buffering/reconnect tuning is applied from TS after start
+    // (MPV_STREAM_OPTIONS in src/shared/mpv-stream-options.ts) — one source of
+    // truth shared with the Windows subprocess + macOS backends.
     if (M::initialize(g_state.mpv) < 0) fprintf(stderr, "[compositor] mpv_initialize failed\n");
     M::observe_property(g_state.mpv, 1, "time-pos", MPV_FORMAT_DOUBLE);
     M::observe_property(g_state.mpv, 2, "duration", MPV_FORMAT_DOUBLE);
