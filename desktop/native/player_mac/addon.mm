@@ -478,13 +478,13 @@ void EventThreadMain(State* s) {
     if (!s->run.load(std::memory_order_acquire)) return;
     const auto now = clock::now();
     if (!force && now - lastEmit < kEmitInterval) return;
+    lastEmit = now;  // throttle the read ATTEMPT too, so a null gap can't spin the loop
     char* tp = M::get_property_string(s->mpv, "time-pos");
     // No current position: a load/seek gap where mpv has torn down the old
     // timeline but not yet decoded the new one (e.g. a quality-change reload).
     // Emitting here would push position:0 and collapse the seekbar — hold the
     // last value instead; PLAYBACK_RESTART re-emits the resumed position.
     if (!tp) return;
-    lastEmit = now;
     char* cache = M::get_property_string(s->mpv, "demuxer-cache-time");
     const double pos = atof(tp);
     const double buf = cache ? atof(cache) : 0.0;
@@ -570,8 +570,11 @@ void EventThreadMain(State* s) {
           break;
       }
     }
-    // Heartbeat the seekbar while playing (throttled inside emitPosition).
-    if (!s->paused.load()) emitPosition(false);
+    // Heartbeat the seekbar while playing (throttled inside emitPosition). Gated
+    // on g_seeking too — it is set synchronously in SeekTo, closing the window
+    // before the async pause=yes lands where a stale OLD time-pos would leak and
+    // drag the bar back off the seek target.
+    if (!s->paused.load() && !g_seeking.load()) emitPosition(false);
     // Seek-freeze watchdog: force-restore if a seek stays frozen too long.
     if (g_seeking.load()) {
       if (seekFreezeSince == clock::time_point{}) seekFreezeSince = clock::now();
@@ -822,6 +825,11 @@ Napi::Value SeekTo(const Napi::CallbackInfo& info) {
     g_seekWasPaused.store(pv && std::strcmp(pv, "yes") == 0);
     if (pv) M::mpv_free(pv);
   }
+  // Drive the seek spinner: freezing via pause=yes means mpv never raises
+  // paused-for-cache, so without this explicit buffering state nothing would
+  // show a loading indicator during the seek. It is cleared when the pause
+  // restore surfaces as playing/paused on the completing PLAYBACK_RESTART.
+  Emit("{\"type\":\"stateChanged\",\"state\":\"buffering\"}");
   const char* pause_cmd[] = {"set", "pause", "yes", nullptr};
   M::command_async(g_state.mpv, 0, pause_cmd);
   const char* seek_cmd[] = {"seek", pos.c_str(), "absolute+exact", nullptr};
