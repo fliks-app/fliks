@@ -20,14 +20,8 @@ import type {
 } from '../../shared/contract';
 import { MPV_STREAM_OPTIONS } from '../../shared/mpv-stream-options';
 import { mpvSubtitleProps } from './subtitle-style';
-import { parseTracks } from './tracks';
+import { mapTrackList, parseTracks, type MpvTrack } from './tracks';
 import { TypedEmitter } from './typed-emitter';
-
-// Cadence of the periodic position emit while playing. As on Linux, the addon's
-// `time-pos` observe doesn't push while playback advances, so the seekbar + the
-// renderer's 10s resume-save heartbeat stay frozen unless the main process polls
-// and emits the position itself. ~250ms (4Hz) keeps the bar smooth.
-const POSITION_POLL_MS = 250;
 
 type MacAddon = {
   start(o: { wid: string; scale?: number }): void;
@@ -36,20 +30,22 @@ type MacAddon = {
   command(args: string[]): void;
   getProperty(name: string): string | null;
   setProperty(name: string, value: string): void;
+  /** Freeze-gated absolute seek (pauses output until the target frame lands). */
+  seekTo(position: string): void;
   resize(): void;
   stop(): void;
-};
-
-const num = (v: string | null): number => {
-  const n = v == null ? NaN : parseFloat(v);
-  return Number.isFinite(n) ? n : 0;
 };
 
 export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements PlayerBackend {
   private readonly addon: MacAddon;
   private readonly wid: string;
   private sawFirstFrame = false;
-  private positionTimer: ReturnType<typeof setInterval> | null = null;
+  // Last position/duration/buffered pushed by the addon's event-thread heartbeat.
+  // getPosition() returns these cached values instead of a blocking main-thread
+  // property read (which would take the mpv core lock and stall the next command).
+  private lastPosition = 0;
+  private lastDuration = 0;
+  private lastBuffered = 0;
 
   constructor(videoWin: BrowserWindow) {
     super();
@@ -89,7 +85,9 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
       state?: DesktopPlayerState;
       position?: number;
       duration?: number;
+      buffered?: number;
       message?: string;
+      tracks?: MpvTrack[];
     };
     try {
       raw = JSON.parse(json);
@@ -97,61 +95,44 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
       return;
     }
     switch (raw.type) {
-      case 'timeUpdate':
-        this.emit('timeUpdate', {
+      case 'timeUpdate': {
+        // Position is pushed from the addon's mpv event thread (off the Electron
+        // main thread) and already carries the buffered head — just forward it.
+        const info: DesktopPositionInfo = {
           position: raw.position ?? 0,
           duration: raw.duration ?? 0,
-          buffered: num(this.addon.getProperty('demuxer-cache-time')),
-        } satisfies DesktopPositionInfo);
+          buffered: raw.buffered ?? 0,
+        };
+        this.lastPosition = info.position;
+        this.lastDuration = info.duration;
+        this.lastBuffered = info.buffered;
+        this.emit('timeUpdate', info);
         break;
+      }
       case 'stateChanged': {
         const state = raw.state;
         if (!state) break;
-        // Only an actively-playing session drives the poll; pausing / ending /
-        // buffering / idle stops it so a torn-down player can't keep emitting.
-        if (state === 'playing') this.startPositionTimer();
-        else this.stopPositionTimer();
         this.emit('stateChanged', { state });
         break;
       }
       case 'tracksChanged':
-        this.emit('tracksChanged', parseTracks(this.addon.getProperty('track-list')));
+        // The addon carries the committed track-list in the event (parity with
+        // the Windows backend); map it directly. Re-reading via getProperty here
+        // could observe a transient track state and churn the audio selection.
+        this.emit('tracksChanged', mapTrackList(raw.tracks ?? []));
         break;
       case 'firstFrame':
-        // mpv autoplays on load (addon forces pause=no) but may not emit a pause
-        // change, so arm the timer on the first frame too. Guard the event so a
-        // seek's playback-restart doesn't re-fire firstFrame into the renderer.
+        // Guard the event so a seek's playback-restart doesn't re-fire firstFrame
+        // into the renderer.
         if (!this.sawFirstFrame) {
           this.sawFirstFrame = true;
           this.emit('firstFrame');
         }
-        this.startPositionTimer();
         break;
       case 'error':
-        this.stopPositionTimer();
         this.emit('error', { code: -1, message: raw.message ?? 'error' });
         break;
     }
-  }
-
-  private emitPosition(): void {
-    this.emit('timeUpdate', {
-      position: num(this.addon.getProperty('time-pos')),
-      duration: num(this.addon.getProperty('duration')),
-      buffered: num(this.addon.getProperty('demuxer-cache-time')),
-    } satisfies DesktopPositionInfo);
-  }
-
-  private startPositionTimer(): void {
-    if (this.positionTimer) return; // idempotent — never stack intervals
-    this.emitPosition(); // emit immediately so the bar doesn't wait a full tick
-    this.positionTimer = setInterval(() => this.emitPosition(), POSITION_POLL_MS);
-  }
-
-  private stopPositionTimer(): void {
-    if (!this.positionTimer) return;
-    clearInterval(this.positionTimer);
-    this.positionTimer = null;
   }
 
   // ── PlayerBackend surface (mirrors index.ts ipc handlers) ───────────────────
@@ -169,12 +150,17 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
   }
 
   async seek(position: number): Promise<void> {
-    this.addon.command(['seek', String(position), 'absolute']);
+    // Freeze-gated in the addon: output pauses the instant the seek is issued so
+    // the old position can't keep playing while the demuxer repositions, and
+    // resumes when the target frame lands (mpv PLAYBACK_RESTART).
+    this.addon.seekTo(String(position));
   }
 
   async stop(): Promise<void> {
     this.sawFirstFrame = false;
-    this.stopPositionTimer();
+    this.lastPosition = 0;
+    this.lastDuration = 0;
+    this.lastBuffered = 0;
     this.addon.command(['stop']);
   }
 
@@ -191,10 +177,12 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
   }
 
   async getPosition(): Promise<DesktopPositionInfo> {
+    // The event-thread heartbeat is the single source of truth; return its last
+    // pushed values rather than a blocking main-thread read (mirrors MpvPlayer).
     return {
-      position: num(this.addon.getProperty('time-pos')),
-      duration: num(this.addon.getProperty('duration')),
-      buffered: num(this.addon.getProperty('demuxer-cache-time')),
+      position: this.lastPosition,
+      duration: this.lastDuration,
+      buffered: this.lastBuffered,
     };
   }
 
@@ -231,7 +219,6 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
   }
 
   async destroy(): Promise<void> {
-    this.stopPositionTimer();
     this.addon.stop();
   }
 }

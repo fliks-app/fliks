@@ -1206,6 +1206,25 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
           this.applyNativeSubtitleStyle();
 
+          // Desktop mpv: pass the preferred audio language so mpv auto-selects the
+          // right rendition on load AND keeps it across seeks/reloads, instead of
+          // reverting to the manifest's default track (which may be a different
+          // language). Same source as the Shaka path's preferredAudioLanguage.
+          if (this.isDesktopNative) {
+            const audioCfg = this.playerSettings.get();
+            let preferredAudioLang: string | undefined;
+            if (audioCfg.rememberAudioSelections && this.mediaId) {
+              preferredAudioLang =
+                this.playerSettings.getRememberedAudioTrack(this.mediaId)?.split(':')[0] ?? undefined;
+            }
+            if (!preferredAudioLang && !audioCfg.useDefaultAudioStream) {
+              preferredAudioLang = audioCfg.preferredAudioLanguage || undefined;
+            }
+            if (preferredAudioLang) {
+              this.engine!.configure({ preferredAudioLanguage: preferredAudioLang });
+            }
+          }
+
           // Capacitor native players preload sidecar subs into the MediaItem for
           // direct play; HLS modes and the desktop mpv engine handle subs themselves.
           if (this.engine instanceof NativeEngine) {

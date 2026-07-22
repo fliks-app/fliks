@@ -57,6 +57,9 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
    *  player expects (mpv ids are bare ints; the player keys off the prefix). */
   private _mpvAudioIds: string[] = [];
   private _fullscreen = false;
+  /** Preferred audio language (from configure()); passed to mpv as `alang` at
+   *  load so it auto-picks the matching rendition on every reconfig. */
+  private _preferredAudioLanguage?: string;
 
   private _subtitleStyle: {
     fontScale: number;
@@ -96,7 +99,16 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   ): Promise<void> {
     if (this.dead) return;
     this.resetFirstFrame();
-    await this.bridge.load({ url, startTime, headers });
+    // Fresh media → fresh tracks; drop the prior list/id map so a same-count
+    // track emission for the new stream isn't swallowed as a no-op downstream.
+    this._audioTracks = [];
+    this._mpvAudioIds = [];
+    await this.bridge.load({
+      url,
+      startTime,
+      headers,
+      audioLanguage: this._preferredAudioLanguage,
+    });
     if (this._subtitleStyle) {
       await this.bridge.setSubtitleStyle(this._subtitleStyle);
     }
@@ -122,6 +134,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   }
 
   async pause(): Promise<void> {
+    if (this.dead) return;
     await this.bridge.pause();
     this._paused = true;
   }
@@ -292,8 +305,13 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   selectVariantTrack(_track: any, _clearBuffer?: boolean): void {
     /* mpv-driven ABR */
   }
-  configure(_config: any): void {
-    /* mpv-driven ABR */
+  configure(config: any): void {
+    // ABR is mpv-driven; the only knob we honour is the preferred audio language,
+    // threaded to mpv as `alang` on the next load so it auto-selects the right
+    // rendition on every reconfig (mirrors the Shaka engine's preferredAudioLanguage).
+    if (config && typeof config.preferredAudioLanguage === 'string') {
+      this._preferredAudioLanguage = config.preferredAudioLanguage || undefined;
+    }
   }
 
   // ── Event bridge ──
