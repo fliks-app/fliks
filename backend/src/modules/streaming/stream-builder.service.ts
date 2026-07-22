@@ -25,6 +25,7 @@ import {
   type RungBitrateContext,
 } from './transcoding/quality-ladder';
 import { resolveEncodePipeline } from './transcoding/encode-pipeline';
+import { parseSourceFps } from './transcoding/constants';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
 import {
   bucketResolutionHeight,
@@ -652,7 +653,7 @@ export class StreamBuilderService {
       outputCodec,
       sourceWidth: source.width ?? 0,
       sourceHeight: source.height ?? 0,
-      sourceFrameRate: parseFloat(source.frameRate ?? '') || 24,
+      sourceFrameRate: parseSourceFps(source.frameRate) ?? 24,
       sourceVideoBitrateBps: source.videoBitRate,
       sourceVideoCodec: source.videoCodec,
     };
