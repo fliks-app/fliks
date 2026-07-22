@@ -281,6 +281,12 @@ enum ContentColorClass { CC_SDR_709, CC_SDR_P3, CC_HDR_PQ, CC_HLG };
 // Last class applied, so a display change (EDR headroom differs per screen) can
 // re-evaluate the config without waiting for the next video-params event.
 std::atomic<int> g_lastColorClass{CC_SDR_709};
+// Last class the event thread dispatched a reconfig for (-1 = none yet / reset on
+// load). Guards against re-dispatching an UNCHANGED classification: mpv re-reports
+// video-params extremely often (per frame on some streams), and each dispatch runs
+// synchronous mpv + CALayer work on the AppKit main thread — a flood there stalls
+// the cursor, ipcMain handlers, and video presentation (A/V drift).
+std::atomic<int> g_lastReconfigClass{-1};
 
 void UpdateLayerGeometry() {
   if (!g_layer || !g_view) return;
@@ -418,6 +424,11 @@ void ReconfigureColorForCurrentVideo() {
   }
 
   const int clsInt = static_cast<int>(cls);
+  // Reconfigure only when the classification actually changes. mpv fires
+  // video-params many times per second even for a static SDR stream; without
+  // this guard each fire posts a main-queue block doing synchronous mpv
+  // set_property + CALayer work, saturating the AppKit main thread.
+  if (clsInt == g_lastReconfigClass.exchange(clsInt)) return;
   // Log the raw mpv enum strings the classification keyed off: the vendored
   // libmpv's exact video-params values must be confirmed on device (see #605), and
   // these are the only place they surface.
@@ -470,7 +481,10 @@ void EventThreadMain(State* s) {
             Emit("{\"type\":\"tracksChanged\"}");
             break;
           }
-          if (std::strcmp(p->name, "video-params") == 0) {
+          if (std::strcmp(p->name, "video-params/gamma") == 0 ||
+              std::strcmp(p->name, "video-params/primaries") == 0) {
+            // Typed leaf observe → fires only on a real color change; re-read both
+            // leaves and reclassify (cheap, now rare).
             ReconfigureColorForCurrentVideo();
             break;
           }
@@ -494,6 +508,10 @@ void EventThreadMain(State* s) {
           break;
         }
         case MPV_EVENT_PLAYBACK_RESTART:
+          // Guarantee the color config is applied once per load/seek even if the
+          // typed video-params leaf observe misses its initial change (the
+          // g_lastReconfigClass guard makes this a no-op when unchanged).
+          ReconfigureColorForCurrentVideo();
           emitPosition(true);  // push the fresh position right after a seek / first frame
           Emit("{\"type\":\"firstFrame\"}");
           break;
@@ -573,9 +591,15 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   M::observe_property(g_state.mpv, 3, "pause", MPV_FORMAT_FLAG);
   M::observe_property(g_state.mpv, 4, "track-list", MPV_FORMAT_NONE);
   M::observe_property(g_state.mpv, 5, "paused-for-cache", MPV_FORMAT_FLAG);
-  // Fires on video-reconfig once decode produces color params — drives the
-  // content-adaptive colorspace/EDR reconfiguration.
-  M::observe_property(g_state.mpv, 6, "video-params", MPV_FORMAT_NONE);
+  // Drive the content-adaptive colorspace/EDR reconfiguration off the two color
+  // leaves we actually classify on, observed as TYPED strings. The aggregate
+  // `video-params` belongs to mpv's per-frame TICK group, so observing it with
+  // MPV_FORMAT_NONE delivers a change pulse on EVERY displayed frame (no value
+  // comparison) — thousands per session — flooding the event thread and (via the
+  // main-queue reconfig) the AppKit thread. A typed leaf observe makes mpv compare
+  // the value itself and wake us only on a genuine gamma/primaries change.
+  M::observe_property(g_state.mpv, 6, "video-params/gamma", MPV_FORMAT_STRING);
+  M::observe_property(g_state.mpv, 7, "video-params/primaries", MPV_FORMAT_STRING);
   M::request_log_messages(g_state.mpv,
       getenv("FLIKS_MPV_LOGLEVEL") ? getenv("FLIKS_MPV_LOGLEVEL") : "v");
   fprintf(stderr, "[player-mac] mpv ready (hwdec=videotoolbox)\n");
@@ -683,6 +707,9 @@ Napi::Value Load(const Napi::CallbackInfo& info) {
   // mpv autoplays on load but may not emit a pause change, so mark playing here
   // directly — the event thread's position heartbeat gates on this flag.
   g_state.paused.store(false);
+  // Force the next video-params event to re-apply the color config once for the
+  // new stream (its class may match the previous file's).
+  g_lastReconfigClass.store(-1);
   if (o.Has("subtitles") && o.Get("subtitles").IsArray()) {
     Napi::Array subs = o.Get("subtitles").As<Napi::Array>();
     for (uint32_t i = 0; i < subs.Length(); i++) {
