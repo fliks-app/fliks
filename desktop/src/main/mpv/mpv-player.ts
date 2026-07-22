@@ -431,6 +431,9 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     // string when empty — mpv otherwise parses it as the index and rejects it.
     const fileOpts: string[] = [];
     if (opts.startTime && opts.startTime > 0) fileOpts.push(`start=${opts.startTime}`);
+    // Preferred audio language → mpv keeps the matching rendition across reloads/
+    // reconfigs instead of reverting to the manifest default (which may differ).
+    if (opts.audioLanguage) fileOpts.push(`alang=${opts.audioLanguage}`);
     // Force the HLS demuxer for manifests so mpv parses the playlist directly,
     // skipping the generic probe whose backward seek the linear HTTP stream
     // can't satisfy.

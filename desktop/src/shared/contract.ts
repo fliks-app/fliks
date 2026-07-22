@@ -23,6 +23,12 @@ export interface DesktopLoadOptions {
   startTime?: number;
   headers?: Record<string, string>;
   subtitles?: { url: string; language: string; label: string; forced?: boolean }[];
+  /** Preferred audio language (mpv `alang`). Applied as a file-local loadfile
+   *  option so mpv auto-selects the matching audio rendition on the initial load
+   *  AND on every mid-file reconfig — without a client round-trip. Neutralises
+   *  the "mpv reverts to the manifest default language on reconfig" churn. Only
+   *  the macOS in-process backend consumes it; the Windows subprocess ignores it. */
+  audioLanguage?: string;
 }
 
 export interface DesktopSubtitleStyle {

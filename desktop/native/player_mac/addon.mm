@@ -744,6 +744,13 @@ Napi::Value Load(const Napi::CallbackInfo& info) {
     }
     if (!fields.empty()) opts.push_back("http-header-fields=" + fields);
   }
+  // Preferred audio language → mpv auto-selects the matching rendition on this
+  // load and re-applies it on every reconfig, so it never reverts to the
+  // manifest's default track (which may be a different language).
+  if (o.Has("audioLanguage") && o.Get("audioLanguage").IsString()) {
+    std::string lang = o.Get("audioLanguage").As<Napi::String>().Utf8Value();
+    if (!lang.empty()) opts.push_back("alang=" + lang);
+  }
   std::string optstr;
   for (size_t i = 0; i < opts.size(); i++) {
     if (i) optstr += ",";
