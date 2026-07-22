@@ -20,7 +20,7 @@ import type {
 } from '../../shared/contract';
 import { MPV_STREAM_OPTIONS } from '../../shared/mpv-stream-options';
 import { mpvSubtitleProps } from './subtitle-style';
-import { parseTracks } from './tracks';
+import { mapTrackList, parseTracks, type MpvTrack } from './tracks';
 import { TypedEmitter } from './typed-emitter';
 
 type MacAddon = {
@@ -87,6 +87,7 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
       duration?: number;
       buffered?: number;
       message?: string;
+      tracks?: MpvTrack[];
     };
     try {
       raw = JSON.parse(json);
@@ -115,7 +116,10 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
         break;
       }
       case 'tracksChanged':
-        this.emit('tracksChanged', parseTracks(this.addon.getProperty('track-list')));
+        // The addon carries the committed track-list in the event (parity with
+        // the Windows backend); map it directly. Re-reading via getProperty here
+        // could observe a transient track state and churn the audio selection.
+        this.emit('tracksChanged', mapTrackList(raw.tracks ?? []));
         break;
       case 'firstFrame':
         // Guard the event so a seek's playback-restart doesn't re-fire firstFrame

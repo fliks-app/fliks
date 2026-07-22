@@ -506,7 +506,14 @@ void EventThreadMain(State* s) {
           auto* p = static_cast<mpv_event_property*>(ev->data);
           if (!p) break;
           if (std::strcmp(p->name, "track-list") == 0) {
-            Emit("{\"type\":\"tracksChanged\"}");
+            // Carry the committed track-list value in the event (read here on the
+            // event thread, at the moment of the change) — parity with the Windows
+            // backend. Letting the client re-read the property later can observe a
+            // transient deselect/reselect state, which churns the audio track
+            // selection and lets the wrong default language stick.
+            char* tl = M::get_property_string(s->mpv, "track-list");
+            Emit(std::string("{\"type\":\"tracksChanged\",\"tracks\":") + (tl ? tl : "[]") + "}");
+            if (tl) M::mpv_free(tl);
             break;
           }
           if (std::strcmp(p->name, "video-params/gamma") == 0 ||
