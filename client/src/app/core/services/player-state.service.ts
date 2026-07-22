@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, effect, inject, signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import type { PlaybackEngine } from './playback-engine/playback-engine';
 import {
@@ -7,6 +7,9 @@ import {
   userMessageKeyFor,
   type PlaybackError,
 } from './playback-engine/playback-error';
+
+/** localStorage key for the persisted output level (a bare 0..1 number). */
+const VOLUME_KEY = 'player.volume';
 
 /**
  * Shared playback state signals that any UI component can read.
@@ -27,7 +30,13 @@ export class PlayerStateService {
   readonly paused = signal(true);
   readonly currentTime = signal(0);
   readonly duration = signal(0);
-  readonly volume = signal(1);
+  /** Raw output level (0..1), independent of {@link muted}. Mirrors the engine
+   *  and is restored from localStorage on startup. Kept even while muted so
+   *  unmuting recovers the exact level. */
+  readonly volume = signal(this.loadVolume());
+  /** Mute flag, mirrored from the engine. Intentionally NOT persisted — a new
+   *  session starts unmuted so the player never opens on an unexplained silence. */
+  readonly muted = signal(false);
   readonly playbackRate = signal(1);
   readonly buffering = signal(false);
   readonly bufferedEnd = signal(0);
@@ -70,6 +79,28 @@ export class PlayerStateService {
    *  always reflected. Registered once by PlayerComponent. */
   private dolbyVisionProbe: (() => boolean) | null = null;
 
+  constructor() {
+    // Persist the level (not the mute flag) whenever it changes, so it carries
+    // across reloads and navigations.
+    effect(() => {
+      const v = this.volume();
+      try {
+        localStorage.setItem(VOLUME_KEY, String(v));
+      } catch { /* storage unavailable (private mode) — volume stays session-only */ }
+    });
+  }
+
+  private loadVolume(): number {
+    try {
+      const raw = localStorage.getItem(VOLUME_KEY);
+      if (raw != null) {
+        const v = parseFloat(raw);
+        if (isFinite(v)) return Math.min(1, Math.max(0, v));
+      }
+    } catch { /* ignore */ }
+    return 1;
+  }
+
   setRecovering(value: boolean): void {
     this.recovering = value;
     if (value) this.error.set(null);
@@ -98,6 +129,18 @@ export class PlayerStateService {
   /** Bind a playback engine's events to our signals. Call this when the engine changes. */
   bindEngine(engine: PlaybackEngine): void {
     this.engine = engine;
+
+    engine.on('volumechange', (e) => {
+      this.volume.set(e.volume);
+      this.muted.set(e.muted);
+    });
+
+    // Push the current level/mute onto the freshly-created engine so a new
+    // <video> (or mpv instance) plays at the value the slider already shows,
+    // instead of its own default — otherwise a re-created engine desyncs the
+    // audio from the UI until the user next touches the slider.
+    engine.volume = this.volume();
+    engine.muted = this.muted();
 
     engine.on('stateChanged', (e) => {
       this.paused.set(e.state === 'paused' || e.state === 'idle');

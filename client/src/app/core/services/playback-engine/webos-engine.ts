@@ -143,6 +143,9 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
       this.emit('stateChanged', { state: 'ended' });
       this.emit('ended', undefined);
     });
+    add('volumechange', () => {
+      this.emit('volumechange', { volume: v.volume, muted: v.muted });
+    });
     add('error', () => {
       if (this.loadingPhase) return; // recovered via the load() fallback
       const err = v.error;

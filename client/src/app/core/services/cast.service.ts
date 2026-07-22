@@ -88,6 +88,10 @@ interface NativeCastPlugin {
   disconnect(): Promise<void>;
   setActiveSubtitle(opts: { trackId: number }): Promise<void>;
   setActiveAudioLanguage(opts: { language: string; name: string }): Promise<{ success: boolean }>;
+  /** Set the Cast device output level (0..1) / mute. Drives the receiver
+   *  volume, not the phone's — the OS volume keys already do the latter. */
+  setVolume(opts: { level: number }): Promise<void>;
+  setMuted(opts: { muted: boolean }): Promise<void>;
 }
 
 const NativeCast = registerPlugin<NativeCastPlugin>('NativeCast');
@@ -115,6 +119,10 @@ export class CastService implements OnDestroy {
   readonly currentTime = signal(0);
   readonly duration = signal(0);
   readonly isPaused = signal(true);
+  /** Receiver (Cast device) output level 0..1 and mute flag, mirrored from the
+   *  RemotePlayer (web) / native plugin poll. Drives the cast volume slider. */
+  readonly volume = signal(1);
+  readonly muted = signal(false);
   /** Receiver is loading/buffering (not yet playing) — drives the
    *  indeterminate seekbar sweep in the cast overlay. */
   readonly buffering = signal(false);
@@ -192,6 +200,10 @@ export class CastService implements OnDestroy {
         this.duration.set(e.detail?.duration ?? 0);
         this.isPaused.set(e.detail?.isPaused ?? true);
         this.buffering.set(e.detail?.buffering ?? false);
+        // Volume fields are optional — older native builds omit them; skip
+        // the mirror rather than snapping the slider to a default.
+        if (e.detail?.volume != null) this.volume.set(e.detail.volume);
+        if (e.detail?.muted != null) this.muted.set(e.detail.muted);
       }) as EventListener);
 
       // The plugin maps the receiver's IDLE/ERROR state to this event —
@@ -261,6 +273,14 @@ export class CastService implements OnDestroy {
               chrome.cast.media.PlayerState.BUFFERING,
           ),
       );
+      this.remotePlayerController.addEventListener(
+        cast.framework.RemotePlayerEventType.VOLUME_LEVEL_CHANGED,
+        () => this.volume.set(this.remotePlayer.volumeLevel ?? 1),
+      );
+      this.remotePlayerController.addEventListener(
+        cast.framework.RemotePlayerEventType.IS_MUTED_CHANGED,
+        () => this.muted.set(this.remotePlayer.isMuted ?? false),
+      );
       this.isAvailable.set(true);
     } catch {
       this.isAvailable.set(false);
@@ -275,6 +295,10 @@ export class CastService implements OnDestroy {
     this.session = connected
       ? cast.framework.CastContext.getInstance().getCurrentSession()
       : null;
+    if (connected && this.remotePlayer) {
+      this.volume.set(this.remotePlayer.volumeLevel ?? 1);
+      this.muted.set(this.remotePlayer.isMuted ?? false);
+    }
     if (this.session) {
       this.attachReceiverMessageListener(this.session);
     } else {
@@ -470,6 +494,40 @@ export class CastService implements OnDestroy {
     if (!this.remotePlayerController) return;
     this.isPaused.set(!this.isPaused());
     this.remotePlayerController.playOrPause();
+  }
+
+  /** Set the receiver output level (0..1). Dragging the slider up lifts a mute,
+   *  mirroring the local player. Signals are set optimistically so the slider
+   *  is responsive; the receiver echo (web event / native poll) confirms. */
+  setVolume(level: number) {
+    const v = Math.min(1, Math.max(0, level));
+    this.volume.set(v);
+    if (v > 0 && this.muted()) this.setMuted(false);
+    if (this.isNative) { NativeCast.setVolume({ level: v }).catch(() => {}); return; }
+    if (!this.remotePlayer || !this.remotePlayerController) return;
+    this.remotePlayer.volumeLevel = v;
+    this.remotePlayerController.setVolumeLevel();
+  }
+
+  setMuted(muted: boolean) {
+    this.muted.set(muted);
+    if (this.isNative) { NativeCast.setMuted({ muted }).catch(() => {}); return; }
+    if (!this.remotePlayer || !this.remotePlayerController) return;
+    // muteOrUnmute() toggles receiver-side, so only fire it when the receiver's
+    // current state differs from the target — avoids a double-toggle no-op.
+    if ((this.remotePlayer.isMuted ?? false) !== muted) {
+      this.remotePlayerController.muteOrUnmute();
+    }
+  }
+
+  toggleMute() {
+    // Toggle audible/silent (mirrors the local player): when already silent —
+    // muted or level at 0 — restore sound and bump a zero level to full so the
+    // button never sticks on mute.
+    const silent = this.muted() || this.volume() === 0;
+    if (!silent) { this.setMuted(true); return; }
+    this.setMuted(false);
+    if (this.volume() === 0) this.setVolume(1);
   }
 
   seek(time: number) {

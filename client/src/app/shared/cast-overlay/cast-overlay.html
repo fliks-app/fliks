@@ -73,6 +73,27 @@
             </button>
           </div>
 
+          <!-- Volume -->
+          <div class="flex items-center justify-center gap-2">
+            <button class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'player.volume' | translate" (click)="cast.toggleMute()">
+              @if (cast.muted() || cast.volume() === 0) {
+                <svg lucideVolumeX class="h-5 w-5"></svg>
+              } @else {
+                <svg lucideVolume2 class="h-5 w-5"></svg>
+              }
+            </button>
+            <input
+              type="range"
+              class="range range-xs flex-1 max-w-56"
+              [attr.aria-label]="'player.volume' | translate"
+              [min]="0"
+              [max]="1"
+              [step]="0.05"
+              [value]="cast.muted() ? 0 : cast.volume()"
+              (input)="cast.setVolume(+$any($event.target).value)"
+            />
+          </div>
+
           <!-- Pickers -->
           <div class="flex items-center justify-center gap-3 lg:gap-2 flex-wrap">
             @if (cp.availableSubtitles().length) {

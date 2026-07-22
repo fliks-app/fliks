@@ -162,6 +162,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   set volume(v: number) {
     this._volume = v;
     this.bridge.setVolume(Math.round(v * 100)).catch(() => {});
+    this.emit('volumechange', { volume: this._volume, muted: this._muted });
   }
   get muted(): boolean {
     return this._muted;
@@ -169,6 +170,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   set muted(m: boolean) {
     this._muted = m;
     this.bridge.setMuted(m).catch(() => {});
+    this.emit('volumechange', { volume: this._volume, muted: this._muted });
   }
 
   // ── Audio tracks ──

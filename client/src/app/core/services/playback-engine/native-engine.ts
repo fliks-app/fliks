@@ -222,9 +222,15 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   // ShakaEngine, but they don't reach the native player — the host OS
   // is the source of truth for output level.
   get volume(): number { return this._volume; }
-  set volume(v: number) { this._volume = v; }
+  set volume(v: number) {
+    this._volume = v;
+    this.emit('volumechange', { volume: this._volume, muted: this._muted });
+  }
   get muted(): boolean { return this._muted; }
-  set muted(m: boolean) { this._muted = m; }
+  set muted(m: boolean) {
+    this._muted = m;
+    this.emit('volumechange', { volume: this._volume, muted: this._muted });
+  }
 
   // ── Audio tracks ──
 
