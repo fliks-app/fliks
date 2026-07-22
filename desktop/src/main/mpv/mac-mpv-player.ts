@@ -30,6 +30,8 @@ type MacAddon = {
   command(args: string[]): void;
   getProperty(name: string): string | null;
   setProperty(name: string, value: string): void;
+  /** Freeze-gated absolute seek (pauses output until the target frame lands). */
+  seekTo(position: string): void;
   resize(): void;
   stop(): void;
 };
@@ -144,7 +146,10 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
   }
 
   async seek(position: number): Promise<void> {
-    this.addon.command(['seek', String(position), 'absolute']);
+    // Freeze-gated in the addon: output pauses the instant the seek is issued so
+    // the old position can't keep playing while the demuxer repositions, and
+    // resumes when the target frame lands (mpv PLAYBACK_RESTART).
+    this.addon.seekTo(String(position));
   }
 
   async stop(): Promise<void> {
