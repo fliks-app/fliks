@@ -451,6 +451,11 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       this.emit('ended', undefined as any);
     });
 
+    // Output level / mute — the single mirror back to the UI slider.
+    this.addVideoListener('volumechange', () => {
+      this.emit('volumechange', { volume: video.volume, muted: video.muted });
+    });
+
     // Video element errors
     this.addVideoListener('error', () => {
       const e = video.error;

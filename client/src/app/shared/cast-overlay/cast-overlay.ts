@@ -4,6 +4,7 @@ import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { SeekbarComponent } from '../components/seekbar/seekbar';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
+import { TranslateModule } from '@ngx-translate/core';
 import {
   LucideCaptions,
   LucideCast,
@@ -15,6 +16,8 @@ import {
   LucideRotateCw,
   LucideSettings,
   LucideSquare,
+  LucideVolume2,
+  LucideVolumeX,
   LucideX,
 } from '@lucide/angular';
 
@@ -23,9 +26,10 @@ import {
   imports: [
     LucideCaptions, LucideCast, LucideCheck,
     LucideHeadphones, LucidePause, LucidePlay, LucideRotateCcw, LucideRotateCw,
-    LucideSettings, LucideSquare, LucideX,
+    LucideSettings, LucideSquare, LucideVolume2, LucideVolumeX, LucideX,
     SeekbarComponent,
     DropdownMenuComponent,
+    TranslateModule,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './cast-overlay.html',

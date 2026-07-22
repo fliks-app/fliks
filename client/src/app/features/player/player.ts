@@ -334,6 +334,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly currentTime = this.state.currentTime;
   readonly duration = this.state.duration;
   readonly volume = this.state.volume;
+  readonly muted = this.state.muted;
   readonly buffering = this.state.buffering;
   readonly bufferedEnd = this.state.bufferedEnd;
   readonly playbackMode = this.state.playbackMode;
@@ -1486,7 +1487,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const video = this.videoEl()?.nativeElement;
     if (video) {
       video.removeEventListener('seeked', this.onSeeked);
-      video.removeEventListener('volumechange', this.onVideoVolumeChange);
     }
     this.spriteAbort?.abort();
     if (this.saveInterval) clearInterval(this.saveInterval);
@@ -1528,8 +1528,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.videoStarted.set(true);
     });
     this.wireSessionExpiredRecovery(engine);
-    // Volume sync for template
-    video.addEventListener('volumechange', this.onVideoVolumeChange);
   }
 
   private async createWebOsEngine(): Promise<void> {
@@ -1547,7 +1545,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.videoStarted.set(true);
     });
     this.wireSessionExpiredRecovery(engine);
-    video.addEventListener('volumechange', this.onVideoVolumeChange);
   }
 
   private async createTizenEngine(): Promise<void> {
@@ -2526,13 +2523,25 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   onVolumeChange(vol: number) {
     if (!this.engine) return;
+    // Dragging the slider sets the level and lifts a mute — the state signals
+    // update via the engine's `volumechange` event, keeping the display in
+    // lockstep with the real output on every engine.
     this.engine.volume = vol;
-    this.engine.muted = vol === 0;
+    if (vol > 0 && this.engine.muted) this.engine.muted = false;
   }
 
   onToggleMute() {
     if (!this.engine) return;
-    this.engine.muted = !this.engine.muted;
+    // Toggle audible/silent, not the raw mute flag: when already silent —
+    // either muted or the level dragged to 0 — a click restores sound, bumping
+    // a zero level back to full so the button never appears stuck on mute.
+    const silent = this.engine.muted || this.engine.volume === 0;
+    if (silent) {
+      this.engine.muted = false;
+      if (this.engine.volume === 0) this.engine.volume = 1;
+    } else {
+      this.engine.muted = true;
+    }
   }
 
   onToggleFullscreen() {
@@ -3488,10 +3497,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private onSeeked = () => {
     this.resetStallWatchdog();
     this.savePosition();
-  };
-  private onVideoVolumeChange = () => {
-    const v = this.videoEl()?.nativeElement;
-    if (v) this.state.volume.set(v.muted ? 0 : v.volume);
   };
   private spriteAbort?: AbortController;
 

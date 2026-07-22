@@ -63,6 +63,12 @@ export type EngineEventMap = {
     variant?: string;
   };
   audioTracksChanged: { tracks: AudioTrack[] };
+  /** Output level or mute state changed on the engine. Every engine emits this
+   *  as the single source of truth for the UI volume slider — the video-element
+   *  engines (Shaka/webOS) bridge the DOM `volumechange`, the rest emit it from
+   *  their volume/muted setters. `volume` is the raw level (0..1), independent
+   *  of `muted`, so a mute never loses the retained level. */
+  volumechange: { volume: number; muted: boolean };
   ended: void;
   /** Fires when the first video frame is presented to the screen.
    *  Distinct from `stateChanged: 'playing'` which fires on play() (the

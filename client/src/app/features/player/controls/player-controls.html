@@ -37,11 +37,11 @@
         [min]="0"
         [max]="1"
         [step]="0.05"
-        [value]="volume()"
+        [value]="displayVolume()"
         (input)="onVolumeChange($event)"
       />
       <button type="button" class="btn btn-ghost btn-md btn-circle text-white" [attr.aria-label]="'player.volume' | translate" (click)="toggleMute.emit()">
-        @if (volume() === 0) {
+        @if (muted() || volume() === 0) {
           <!-- lucide:volume-x -->
           <svg lucideVolumeX class="h-6 w-6"></svg>
         } @else {

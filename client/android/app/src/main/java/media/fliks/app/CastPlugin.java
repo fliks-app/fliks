@@ -164,10 +164,12 @@ public class CastPlugin extends Plugin {
         );
     }
 
-    private void notifyJSTime(double time, double duration, boolean paused, boolean buffering) {
+    private void notifyJSTime(double time, double duration, boolean paused, boolean buffering,
+                             double volume, boolean muted) {
         String js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { "
             + "currentTime: " + time + ", duration: " + duration + ", isPaused: " + paused
-            + ", buffering: " + buffering + " } }));";
+            + ", buffering: " + buffering + ", volume: " + volume + ", muted: " + muted
+            + " } }));";
         getBridge().getWebView().post(() ->
             getBridge().getWebView().evaluateJavascript(js, null)
         );
@@ -484,6 +486,37 @@ public class CastPlugin extends Plugin {
     }
 
     @PluginMethod()
+    public void setVolume(PluginCall call) {
+        runOnMainThread(() -> {
+            double level = call.getDouble("level", 1.0);
+            level = Math.max(0.0, Math.min(1.0, level));
+            if (castSession != null && castSession.isConnected()) {
+                try {
+                    castSession.setVolume(level);
+                } catch (Exception e) {
+                    Log.w(TAG, "setVolume failed", e);
+                }
+            }
+            call.resolve();
+        });
+    }
+
+    @PluginMethod()
+    public void setMuted(PluginCall call) {
+        runOnMainThread(() -> {
+            boolean muted = call.getBoolean("muted", false);
+            if (castSession != null && castSession.isConnected()) {
+                try {
+                    castSession.setMute(muted);
+                } catch (Exception e) {
+                    Log.w(TAG, "setMute failed", e);
+                }
+            }
+            call.resolve();
+        });
+    }
+
+    @PluginMethod()
     public void disconnect(PluginCall call) {
         runOnMainThread(() -> {
             if (sessionManager != null) {
@@ -645,7 +678,12 @@ public class CastPlugin extends Plugin {
                         boolean buffering = state == MediaStatus.PLAYER_STATE_BUFFERING
                             || state == MediaStatus.PLAYER_STATE_LOADING;
                         if (time > 0) lastGoodPosition = time;
-                        notifyJSTime(time, duration, paused, buffering);
+                        // Device (receiver) volume isn't part of MediaStatus — read it
+                        // off the session each tick so external changes (TV remote, cast
+                        // dialog) mirror back into the sender slider within a poll.
+                        double volume = castSession.getVolume();
+                        boolean muted = castSession.isMute();
+                        notifyJSTime(time, duration, paused, buffering, volume, muted);
                     }
                     pollHandler.postDelayed(this, 1000);
                 } catch (Exception e) {

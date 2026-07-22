@@ -209,6 +209,10 @@ export class PlayerControlsComponent {
   readonly duration = input(0);
   readonly bufferedEnd = input(0);
   readonly volume = input(1);
+  readonly muted = input(false);
+  /** Effective slider position: drops to 0 while muted, so the thumb reflects
+   *  what's actually audible; the retained level returns on unmute. */
+  readonly displayVolume = computed(() => (this.muted() ? 0 : this.volume()));
   readonly playbackRate = input(1);
   readonly mediaTitle = input('');
   /** Clearlogo shown in place of the title text in the top-left overlay. */

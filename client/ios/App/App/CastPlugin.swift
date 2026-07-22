@@ -18,6 +18,8 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "disconnect", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setActiveSubtitle", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setVolume", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setMuted", returnType: CAPPluginReturnPromise),
     ]
 
     private var sessionManager: GCKSessionManager?
@@ -240,6 +242,22 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         }
     }
 
+    @objc func setVolume(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            let level = Float(call.getDouble("level") ?? 1.0)
+            self?.currentSession?.setDeviceVolume(max(0, min(1, level)))
+            call.resolve()
+        }
+    }
+
+    @objc func setMuted(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            let muted = call.getBool("muted") ?? false
+            self?.currentSession?.setDeviceMuted(muted)
+            call.resolve()
+        }
+    }
+
     @objc func setActiveSubtitle(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [weak self] in
             let trackId = call.getInt("trackId") ?? 0
@@ -333,8 +351,12 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         let time = client.approximateStreamPosition()
         let duration = status.mediaInformation?.streamDuration ?? 0
         let paused = status.playerState == .paused
+        // Device (receiver) volume lives on the session, not media status —
+        // read it each tick so external changes mirror back into the slider.
+        let volume = currentSession?.currentDeviceVolume ?? 1
+        let muted = currentSession?.currentDeviceMuted ?? false
 
-        emitMediaUpdate(time: time, duration: duration, paused: paused)
+        emitMediaUpdate(time: time, duration: duration, paused: paused, volume: volume, muted: muted)
     }
 
     // MARK: - Helpers
@@ -357,8 +379,8 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         }
     }
 
-    private func emitMediaUpdate(time: TimeInterval, duration: TimeInterval, paused: Bool) {
-        let js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { currentTime: \(time), duration: \(duration), isPaused: \(paused) } }));"
+    private func emitMediaUpdate(time: TimeInterval, duration: TimeInterval, paused: Bool, volume: Float, muted: Bool) {
+        let js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { currentTime: \(time), duration: \(duration), isPaused: \(paused), volume: \(volume), muted: \(muted) } }));"
         DispatchQueue.main.async { [weak self] in
             self?.bridge?.webView?.evaluateJavaScript(js)
         }

@@ -457,11 +457,13 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   set volume(v: number) {
     this._volume = v;
     /* AVPlay uses system volume; no per-stream knob. */
+    this.emit('volumechange', { volume: this._volume, muted: this._muted });
   }
   get muted(): boolean { return this._muted; }
   set muted(m: boolean) {
     this._muted = m;
     /* No web-level mute API on AVPlay; rely on TV remote / system. */
+    this.emit('volumechange', { volume: this._volume, muted: this._muted });
   }
 
   // ── Audio tracks ────────────────────────────────────────────────────

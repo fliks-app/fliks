@@ -22,6 +22,8 @@ import {
   LucideRotateCw,
   LucideSettings,
   LucideSquare,
+  LucideVolume2,
+  LucideVolumeX,
 } from '@lucide/angular';
 
 export interface CastSubtitleOption {
@@ -49,7 +51,7 @@ export interface CastQualityOption {
   imports: [
     LucideCaptions, LucideCast, LucideCheck, LucideChevronLeft,
     LucideHeadphones, LucidePause, LucidePlay, LucideRotateCcw, LucideRotateCw,
-    LucideSettings, LucideSquare,
+    LucideSettings, LucideSquare, LucideVolume2, LucideVolumeX,
     TranslateModule,
     DropdownMenuComponent,
   ],
