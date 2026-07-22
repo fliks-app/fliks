@@ -23,6 +23,14 @@
   border-color: transparent;
 }
 
+/* daisyUI draws the dropdown chevron ~16px from the trailing edge but only
+   reserves 1.75rem of end padding, so the value text crowds the arrow. Give
+   every select a touch more trailing room (logical property keeps it RTL-safe).
+   The chevron position is size-independent, so one value fits every modifier. */
+.select {
+  padding-inline-end: 2.25rem;
+}
+
 /* daisyUI ships `.tab` flat by default, which makes the global focus ring
    (a box-shadow that traces border-radius) render as a square notched
    into the otherwise rounded UI. Give every tab the same radius as the
