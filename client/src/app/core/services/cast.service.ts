@@ -387,6 +387,10 @@ export class CastService implements OnDestroy {
   }
 
   async loadMedia(info: CastMediaInfo) {
+    // Drop any armed/settling seek from a prior stream so a trailing dispatch
+    // can't fire onto the freshly loaded session (quality change, recovery,
+    // sessionLost reload) at a stale target.
+    this.clearSeekCoalescing();
     // Forwarded to the receiver. Fields here MUST stay JSON-serialisable
     // and free of secrets — `customData` is logged in plain text by the
     // CAF debug overlay.
@@ -531,14 +535,24 @@ export class CastService implements OnDestroy {
   }
 
   seek(time: number) {
+    const dur = this.duration();
+    const target = dur > 0 ? Math.max(0, Math.min(time, dur)) : Math.max(0, time);
+    // Whether a prior seek is still in flight — captured BEFORE the window is
+    // refreshed below (mirrorReceiverTime zeroes it once the receiver arrives).
+    const settling = this.seekSettleUntil > Date.now();
     // Pin the bar at the target and mark the seek in-flight BEFORE dispatching,
     // so a burst reads the pinned target (accumulating ±10 taps correctly) and
     // stale receiver echoes can't bounce it back (see mirrorReceiverTime).
-    this.pendingSeekTarget = time;
-    this.currentTime.set(time);
+    this.pendingSeekTarget = target;
+    this.currentTime.set(target);
     this.seekSettleUntil = Date.now() + CAST_SEEK_SETTLE_MS;
-    // Leading edge: dispatch immediately when idle so a single seek stays snappy.
-    if (this.seekCoalesceTimer == null) this.dispatchSeek(time);
+    // Leading edge only while idle: a lone tap dispatches immediately and stays
+    // snappy. Once a seek is in flight, every further tap folds into the single
+    // trailing dispatch instead of firing its own raw seek, so the receiver runs
+    // ONE buffer-flush cycle for the final target. Raw back-to-back seeks
+    // interrupt the receiver's independent audio and video refills mid-append,
+    // leaving the two buffers settled at different targets (A/V desync).
+    if (!settling) this.dispatchSeek(target);
     // Trailing edge: (re)arm; once the burst stops, send the final settled target
     // (skipped when it equals the leading dispatch, i.e. a lone seek).
     if (this.seekCoalesceTimer != null) clearTimeout(this.seekCoalesceTimer);
