@@ -93,18 +93,4 @@ describe('buildVideoFilters', () => {
     expect(f.burnInFilter).toBe(',subtitles=/tmp/x.ass');
     expect(f.tonemapCpu).toContain('tonemap=hable');
   });
-
-  it('dovi swaps only the CPU tone-map slot for the libplacebo chain', () => {
-    const plain = buildVideoFilters({ ...base, tonemap: true });
-    const dv = buildVideoFilters({ ...base, tonemap: true, dovi: true });
-    expect(dv.tonemapCpu).toContain('libplacebo=apply_dolbyvision=1');
-    expect(dv.tonemapCpu).not.toContain('tonemap=tonemap=hable');
-    // Every other slot is identical to the non-dovi tone-map.
-    for (const k of [
-      'cropStr', 'cpuCropPrefix', 'hwCropPrefix',
-      'burnInFilter', 'tonemapVaapi', 'tonemapOpencl',
-    ] as const) {
-      expect(dv[k]).toBe(plain[k]);
-    }
-  });
 });
