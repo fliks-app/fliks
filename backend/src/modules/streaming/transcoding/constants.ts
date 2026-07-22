@@ -35,24 +35,44 @@ export const EARLY_PROBE_SEGMENTS = 2;
  *  session against the segments already cut on its old grid. */
 export const DEFAULT_SEGMENT_DURATION = 3;
 
-/** Real length of one transcoded segment = a pinned GOP of
- *  `round(segmentDuration · fps)` frames = `gop / fps` seconds. Equals
- *  `segmentDuration` for integer / unknown fps; differs only for fractional
- *  rates (24000/1001 → 3.003s at a 3s setting). */
+/** Real length of one transcoded segment: a pinned GOP of
+ *  `round(segmentDuration · fps)` frames (`gop / fps` seconds), snapped to the
+ *  millisecond. Equals `segmentDuration` for integer / unknown fps; a
+ *  fractional rate yields the true whole-ms GOP length (24000/1001 → 3.003s).
+ *
+ *  The ms snap is load-bearing. `fps` arrives rounded to 3 decimals
+ *  (`parseFrameRate` stores 24000/1001 as "23.976"), so raw `gop / fps` sits a
+ *  sub-ms sliver ABOVE the true GOP (72/23.976 = 3.0030030… vs the true
+ *  72·1001/24000 = 3.003). This value is `-hls_time`: FFmpeg's HLS muxer cuts
+ *  on the first keyframe once the threshold has elapsed, so a threshold above
+ *  one GOP skips the per-segment forced IDR and packs two GOPs into the run's
+ *  first segment. Snapping to the ms the real frame rate lands on keeps
+ *  `-hls_time` at/below one GOP, so the muxer cuts on every IDR. */
 export function realSegmentSeconds(
   segmentDuration: number,
   fps?: number,
 ): number {
   if (!fps || fps <= 0) return segmentDuration;
-  return Math.max(1, Math.round(segmentDuration * fps)) / fps;
+  const gopSeconds = Math.max(1, Math.round(segmentDuration * fps)) / fps;
+  return Math.round(gopSeconds * 1000) / 1000;
 }
 
-/** Parse a ffprobe `frameRate` string to fps, or `undefined` when unknown.
- *  Single rule for the transcode/playlist callers that feed
- *  {@link realSegmentSeconds} — a divergent parse would declare a different
- *  segment length for one surface and reintroduce fractional-fps A/V drift. */
+/** Parse a ffprobe `frameRate` to fps, or `undefined` when unknown. Accepts a
+ *  decimal ("23.976") or a rational ("24000/1001"): ffprobe reports
+ *  `r_frame_rate` as a rational, and a bare `parseFloat("24000/1001")` yields
+ *  24000, which would blow up the GOP and segment grid. Single rule for the
+ *  transcode/playlist callers that feed {@link realSegmentSeconds} — a divergent
+ *  parse would declare a different segment length for one surface and
+ *  reintroduce fractional-fps A/V drift. */
 export function parseSourceFps(frameRate: string | undefined): number | undefined {
-  return parseFloat(frameRate ?? '') || undefined;
+  if (!frameRate) return undefined;
+  const slash = frameRate.indexOf('/');
+  if (slash !== -1) {
+    const num = Number(frameRate.slice(0, slash));
+    const den = Number(frameRate.slice(slash + 1));
+    return num > 0 && den > 0 ? num / den : undefined;
+  }
+  return parseFloat(frameRate) || undefined;
 }
 
 /** Presentation time (seconds) → containing FFmpeg segment number, on the
