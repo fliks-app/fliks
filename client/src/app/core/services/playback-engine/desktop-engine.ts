@@ -142,7 +142,12 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   async seek(position: number): Promise<void> {
     if (this.dead) return;
     await this.bridge.seek(position);
-    this._currentTime = position;
+    // Do NOT optimistically set _currentTime = position. Doing so makes the
+    // player's pollSeekConverge see instant convergence and drop seekLocked
+    // within ms — before the seek actually lands — which both lets the bar fall
+    // back to the old position and defeats the seek spinner. The real position
+    // arrives via timeUpdate (the addon force-pushes it on PLAYBACK_RESTART), so
+    // seekLocked stays up for the true duration of the seek.
   }
 
   // ── State ──

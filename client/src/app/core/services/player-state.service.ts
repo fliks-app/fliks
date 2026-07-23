@@ -39,6 +39,11 @@ export class PlayerStateService {
   readonly muted = signal(false);
   readonly playbackRate = signal(1);
   readonly buffering = signal(false);
+  /** Loading spinner for an in-process-backend (macOS/Linux) in-place seek,
+   *  where mpv raises no paused-for-cache: the player sets it (short-delayed, so
+   *  fast seeks show nothing) while seekLocked is held for the real duration of
+   *  the seek, and clears it when the seek converges. */
+  readonly seekBuffering = signal(false);
   readonly bufferedEnd = signal(0);
   /** Latched when the engine reaches the natural end of the stream; cleared by
    *  {@link reset} on the next load. The player watches it to auto-advance the
@@ -234,6 +239,7 @@ export class PlayerStateService {
     this.currentTime.set(0);
     this.duration.set(0);
     this.buffering.set(false);
+    this.seekBuffering.set(false);
     this.bufferedEnd.set(0);
     this.ended.set(false);
     this.seekLocked.set(false);
