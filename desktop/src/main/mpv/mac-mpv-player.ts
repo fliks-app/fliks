@@ -36,8 +36,34 @@ type MacAddon = {
   getProperty(name: string): string | null;
   setProperty(name: string, value: string): void;
   resize(): void;
+  setBottomCornerRadius(wid: string, radius: number): void;
   stop(): void;
 };
+
+/** Resolve + require the native addon (singleton across the process). The .node
+ *  addon and the dlopen'd libmpv are asarUnpack'd, so in a packaged app they
+ *  live under app.asar.unpacked. */
+let macAddon: MacAddon | null = null;
+function loadMacAddon(): MacAddon {
+  if (macAddon) return macAddon;
+  const base = app.isPackaged
+    ? app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked')
+    : app.getAppPath();
+  if (!process.env.FLIKS_MPV_PATH) {
+    process.env.FLIKS_MPV_PATH = path.join(base, 'native', 'vendor', 'libmpv.dylib');
+  }
+  macAddon = createRequire(__filename)(
+    path.join(base, 'native', 'build', 'Release', 'fliks_player_mac.node'),
+  ) as MacAddon;
+  return macAddon;
+}
+
+/** Clip a window's content view to a square-top / rounded-bottom shape. Call on
+ *  create and on every resize with the window's current bounds. */
+export function roundWindowBottomCorners(win: BrowserWindow, radius: number): void {
+  const wid = win.getNativeWindowHandle().readBigUInt64LE(0).toString();
+  loadMacAddon().setBottomCornerRadius(wid, radius);
+}
 
 export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements PlayerBackend {
   private readonly addon: MacAddon;
@@ -57,19 +83,7 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
     // macOS getNativeWindowHandle() yields a pointer-sized (64-bit) NSView*; the
     // addon parses it back from a decimal string (a JS number can't hold it).
     this.wid = videoWin.getNativeWindowHandle().readBigUInt64LE(0).toString();
-
-    // The .node addon and the dlopen'd libmpv are asarUnpack'd, so in a packaged
-    // app they live under app.asar.unpacked. Mirror index.ts's Linux resolution.
-    const base = app.isPackaged
-      ? app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked')
-      : app.getAppPath();
-    if (!process.env.FLIKS_MPV_PATH) {
-      process.env.FLIKS_MPV_PATH = path.join(base, 'native', 'vendor', 'libmpv.dylib');
-    }
-    const req = createRequire(__filename);
-    this.addon = req(
-      path.join(base, 'native', 'build', 'Release', 'fliks_player_mac.node'),
-    ) as MacAddon;
+    this.addon = loadMacAddon();
   }
 
   async start(): Promise<this> {

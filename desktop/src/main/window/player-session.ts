@@ -2,7 +2,7 @@ import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { MpvPlayer } from '../mpv/mpv-player';
-import { MacMpvPlayer } from '../mpv/mac-mpv-player';
+import { MacMpvPlayer, roundWindowBottomCorners } from '../mpv/mac-mpv-player';
 import type { PlayerBackend } from '../mpv/player-backend';
 import { createEmbedBackend } from './backends';
 import { setPlaybackKeepAwake, keepAwakeForState } from '../power';
@@ -27,6 +27,27 @@ export interface PlayerSessionOptions {
   rendererUrl: string;
   preloadPath: string;
   iconPath?: string;
+}
+
+/** Window corner radius matching each OS's native window rounding, so the
+ *  overlays' clipped bottom aligns with frameWin's rounded bottom: macOS ~10pt,
+ *  Windows 11 DWM ~8px. */
+const OVERLAY_CORNER_RADIUS = 10;
+const WIN_OVERLAY_CORNER_RADIUS = 8;
+
+/** Windows: a square-top / rounded-bottom window region as a horizontal-slice
+ *  staircase (setShape/SetWindowRgn has no anti-aliasing, so the curve is
+ *  stepped — imperceptible at this radius). Coordinates are the window's own. */
+function roundedBottomShape(width: number, height: number): Electron.Rectangle[] {
+  const r = Math.max(0, Math.min(WIN_OVERLAY_CORNER_RADIUS, Math.floor(Math.min(width, height) / 2)));
+  if (r === 0) return [];
+  const rects: Electron.Rectangle[] = [{ x: 0, y: 0, width, height: height - r }];
+  for (let i = 0; i < r; i++) {
+    const o = i + 0.5; // sample mid-row for a smoother step
+    const inset = Math.round(r - Math.sqrt(r * r - o * o));
+    rects.push({ x: inset, y: height - r + i, width: width - 2 * inset, height: 1 });
+  }
+  return rects;
 }
 
 /**
@@ -73,6 +94,7 @@ export class PlayerSession {
       transparent: true,
       backgroundColor: '#00000000',
       hasShadow: false,
+      roundedCorners: false,
       resizable: false,
       skipTaskbar: true,
       // Owned by frameWin: stays above it (over its content area) and hides /
@@ -90,6 +112,7 @@ export class PlayerSession {
       transparent: true,
       backgroundColor: '#00000000',
       hasShadow: false,
+      roundedCorners: false,
       // Electron warns that resizing a transparent window can break its
       // transparency on some platforms; the overlay is re-fitted via setBounds
       // in sync(), so keep the user from resizing it directly.
@@ -142,6 +165,18 @@ export class PlayerSession {
       const u = { ...b };
       if (process.platform === 'win32' && this.frameWin.isFullScreen()) u.height -= 1;
       this.uiWin.setBounds(u);
+      // frameWin rounds its bottom natively (macOS) / via DWM (Win11); clip the
+      // square overlays to match so the video + UI don't overhang it. Re-applied
+      // here so the shape tracks every resize. Skip in fullscreen (edge-to-edge).
+      const fs = this.frameWin.isFullScreen();
+      if (process.platform === 'darwin') {
+        const r = fs ? 0 : OVERLAY_CORNER_RADIUS;
+        roundWindowBottomCorners(this.videoWin, r);
+        roundWindowBottomCorners(this.uiWin, r);
+      } else if (process.platform === 'win32') {
+        this.videoWin.setShape(fs ? [] : roundedBottomShape(b.width, b.height));
+        this.uiWin.setShape(fs ? [] : roundedBottomShape(u.width, u.height));
+      }
     };
     // All these window events take a `() => void` listener; cast to one literal
     // so the overload resolves (a union of event names matches none).
