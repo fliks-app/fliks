@@ -143,7 +143,12 @@ export class PlayerStateService {
     engine.muted = this.muted();
 
     engine.on('stateChanged', (e) => {
-      this.paused.set(e.state === 'paused' || e.state === 'idle');
+      // Only definitive transport states move the paused flag; 'buffering' (and
+      // 'error') are loading/overlay states — leaving paused alone here stops a
+      // transient buffering (e.g. mpv core-idle racing the pause property) from
+      // flipping the play/pause button.
+      if (e.state === 'playing') this.paused.set(false);
+      else if (e.state === 'paused' || e.state === 'idle') this.paused.set(true);
       const buffering = e.state === 'buffering' || (this.recovering && e.state === 'error');
       // Anchor the playhead reference as buffering begins so the timeUpdate clear
       // below fires on real forward progress, not the position jump a seek into

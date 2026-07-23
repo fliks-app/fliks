@@ -332,7 +332,11 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
       case 'stateChanged': {
         const state = event.payload.state;
         this._state = state;
-        this._paused = state === 'paused' || state === 'idle';
+        // Only definitive transport states move the paused flag; 'buffering'
+        // (and 'error') are loading/overlay states and must leave play/pause
+        // alone, or a transient buffering flips the play/pause button.
+        if (state === 'playing') this._paused = false;
+        else if (state === 'paused' || state === 'idle') this._paused = true;
         this.emit('stateChanged', { state });
         if (state === 'ended') this.emit('ended', undefined);
         break;
