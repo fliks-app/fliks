@@ -1,0 +1,34 @@
+name: FliksTV
+
+options:
+  deploymentTarget:
+    tvOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  FliksTV:
+    type: application
+    platform: tvOS
+    sources:
+      - Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: media.fliks.tv
+        INFOPLIST_KEY_CFBundleDisplayName: Fliks
+        GENERATE_INFOPLIST_FILE: "YES"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 85ZC7Y8WQ2
+
+schemes:
+  FliksTV:
+    build:
+      targets:
+        FliksTV: all
+    run:
+      config: Debug
