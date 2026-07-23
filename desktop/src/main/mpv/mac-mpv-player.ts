@@ -23,6 +23,11 @@ import { mpvSubtitleProps } from './subtitle-style';
 import { mapTrackList, parseTracks, type MpvTrack } from './tracks';
 import { TypedEmitter } from './typed-emitter';
 
+// Cap on load()'s first-frame wait. A file that never opens (dead stream, bad
+// URL) must not hang the load promise; the timeout resolves it so the caller
+// proceeds. Matches the Windows backend's FIRST_FRAME_TIMEOUT_MS.
+const FIRST_FRAME_TIMEOUT_MS = 15_000;
+
 type MacAddon = {
   start(o: { wid: string; scale?: number }): void;
   onEvent(cb: (json: string) => void): void;
@@ -46,7 +51,6 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
   private lastBuffered = 0;
   /** Resolver for the in-flight load()'s first-frame wait; see load(). */
   private firstFrameResolve: (() => void) | null = null;
-  private readonly firstFrameTimeoutMs = 15_000;
 
   constructor(videoWin: BrowserWindow) {
     super();
@@ -159,7 +163,7 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
         if (this.firstFrameResolve === done) this.firstFrameResolve = null;
         resolve();
       };
-      const timer = setTimeout(done, this.firstFrameTimeoutMs);
+      const timer = setTimeout(done, FIRST_FRAME_TIMEOUT_MS);
       this.firstFrameResolve = done;
     });
   }
@@ -173,10 +177,11 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
   }
 
   async seek(position: number): Promise<void> {
-    // Plain in-place seek (same as the Windows backend). No pause-freeze: pausing
-    // during the seek suppresses mpv's paused-for-cache, which is what drives the
-    // loading spinner, and adds resume latency. mpv's own buffering + the client
-    // position-advance latch handle the spinner exactly as on Windows.
+    // Plain in-place absolute seek, same as the Windows backend. A far seek in a
+    // multi-audio transcode reloads instead, via the shared seekByReload path one
+    // level up; this backend only performs the ordinary in-place case. The loading
+    // spinner is driven by mpv core-idle in the addon, so no seek-time pause is
+    // needed.
     this.addon.command(['seek', String(position), 'absolute']);
   }
 

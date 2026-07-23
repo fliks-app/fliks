@@ -1,6 +1,6 @@
 import { Injectable, effect, inject, signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
-import type { PlaybackEngine } from './playback-engine/playback-engine';
+import { pausedFlagForState, type PlaybackEngine } from './playback-engine/playback-engine';
 import {
   isNetworkOrAbort,
   isUndecodableError,
@@ -143,12 +143,8 @@ export class PlayerStateService {
     engine.muted = this.muted();
 
     engine.on('stateChanged', (e) => {
-      // Only definitive transport states move the paused flag; 'buffering' (and
-      // 'error') are loading/overlay states — leaving paused alone here stops a
-      // transient buffering (e.g. mpv core-idle racing the pause property) from
-      // flipping the play/pause button.
-      if (e.state === 'playing') this.paused.set(false);
-      else if (e.state === 'paused' || e.state === 'idle') this.paused.set(true);
+      const paused = pausedFlagForState(e.state);
+      if (paused !== undefined) this.paused.set(paused);
       const buffering = e.state === 'buffering' || (this.recovering && e.state === 'error');
       // Anchor the playhead reference as buffering begins so the timeUpdate clear
       // below fires on real forward progress, not the position jump a seek into
