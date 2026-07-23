@@ -65,6 +65,8 @@
     "low_bandwidth": "low bandwidth",
     "audio_track_n": "Track {{index}}",
     "subtitle_track_n": "Subtitle {{index}}",
+    "subtitle_forced": "Forced",
+    "subtitle_hearing_impaired": "Hearing-impaired",
     "subtitle_source": {
       "translated": "Translated",
       "ocr": "OCR"

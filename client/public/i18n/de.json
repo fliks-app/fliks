@@ -65,6 +65,8 @@
     "low_bandwidth": "geringer Verbrauch",
     "audio_track_n": "Spur {{index}}",
     "subtitle_track_n": "Untertitel {{index}}",
+    "subtitle_forced": "Erzwungen",
+    "subtitle_hearing_impaired": "Hörgeschädigt",
     "playback_error": "Wiedergabe fehlgeschlagen.",
     "error_aborted": "Wiedergabe abgebrochen.",
     "error_network": "Netzwerkfehler während der Wiedergabe.",

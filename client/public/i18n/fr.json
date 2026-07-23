@@ -65,6 +65,8 @@
     "low_bandwidth": "faible consommation",
     "audio_track_n": "Piste {{index}}",
     "subtitle_track_n": "Sous-titre {{index}}",
+    "subtitle_forced": "Forcé",
+    "subtitle_hearing_impaired": "Malentendants",
     "subtitle_source": {
       "translated": "Traduit",
       "ocr": "OCR"

@@ -202,8 +202,8 @@ export function formatAudioParts(
  * Render a subtitle as a dropdown label. Mirrors {@link formatAudioLabel} so
  * the player and media-detail subtitle menus stay consistent.
  *
- * Format: `"<lang> (HI) (Forced) (CODEC)"` with the parenthesised parts
- * omitted when the corresponding flag is absent.
+ * Format: `"<lang> (hearing-impaired) (forced) (CODEC)"`, every parenthesised
+ * part localised and omitted when the corresponding flag is absent.
  */
 export function formatSubtitleLabel(
   sub: {
@@ -223,8 +223,8 @@ export function formatSubtitleLabel(
       ? translate.instant('player.subtitle_track_n', { index: trackIndex })
       : localizeLanguage(sub.language, translate);
   const parts: string[] = [];
-  if (sub.hearingImpaired) parts.push('HI');
-  if (sub.forced) parts.push('Forced');
+  if (sub.hearingImpaired) parts.push(translate.instant('player.subtitle_hearing_impaired'));
+  if (sub.forced) parts.push(translate.instant('player.subtitle_forced'));
   const codec = shortSubtitleCodec(sub.codec, sub.relativePath);
   if (codec) parts.push(codec);
   const origin = subtitleOriginLabel(sub.providerType, translate);
@@ -234,7 +234,8 @@ export function formatSubtitleLabel(
 
 /**
  * Two-part subtitle label for the player menu: the language on top and the
- * details ("SRT • Forced • Translated") as a subline, joined with " • ".
+ * details ("SRT • forced • translated") as a subline, joined with " • ".
+ * Every flag label is localised.
  */
 export function formatSubtitleParts(
   sub: {
@@ -256,8 +257,8 @@ export function formatSubtitleParts(
   const parts: string[] = [];
   const codec = shortSubtitleCodec(sub.codec, sub.relativePath);
   if (codec) parts.push(codec);
-  if (sub.forced) parts.push('Forced');
-  if (sub.hearingImpaired) parts.push('HI');
+  if (sub.forced) parts.push(translate.instant('player.subtitle_forced'));
+  if (sub.hearingImpaired) parts.push(translate.instant('player.subtitle_hearing_impaired'));
   const origin = subtitleOriginLabel(sub.providerType, translate);
   if (origin) parts.push(origin);
   return { head, sub: parts.join(' • ') };
