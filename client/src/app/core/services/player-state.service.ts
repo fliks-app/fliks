@@ -39,12 +39,6 @@ export class PlayerStateService {
   readonly muted = signal(false);
   readonly playbackRate = signal(1);
   readonly buffering = signal(false);
-  /** Loading spinner for the desktop in-place seek FREEZE window — the gap
-   *  between issuing a seek and the target frame decoding, during which the
-   *  mpv backend holds a still frame and raises no paused-for-cache. Driven by
-   *  the player's seek path (short-delayed so fast/cached seeks show nothing);
-   *  paused-for-cache/`buffering` takes over for the post-resume cache refill. */
-  readonly seekBuffering = signal(false);
   readonly bufferedEnd = signal(0);
   /** Latched when the engine reaches the natural end of the stream; cleared by
    *  {@link reset} on the next load. The player watches it to auto-advance the
@@ -240,7 +234,6 @@ export class PlayerStateService {
     this.currentTime.set(0);
     this.duration.set(0);
     this.buffering.set(false);
-    this.seekBuffering.set(false);
     this.bufferedEnd.set(0);
     this.ended.set(false);
     this.seekLocked.set(false);

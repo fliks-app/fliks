@@ -288,15 +288,6 @@ std::atomic<int> g_lastColorClass{CC_SDR_709};
 // the cursor, ipcMain handlers, and video presentation (A/V drift).
 std::atomic<int> g_lastReconfigClass{-1};
 
-// Seek freeze. A bare `seek` preserves the pause state, so on a far/uncached
-// target mpv keeps presenting cached OLD frames while the demuxer repositions —
-// the picture appears to keep playing under the spinner. SeekTo() freezes output
-// (pause=yes) the instant a seek is issued; the pre-seek pause value is restored
-// on the completing PLAYBACK_RESTART (mpv's "seek finished" signal), or on
-// END_FILE / a watchdog so a dead seek can never leave the picture stuck.
-std::atomic<bool> g_seeking{false};
-std::atomic<bool> g_seekWasPaused{false};
-
 void UpdateLayerGeometry() {
   if (!g_layer || !g_view) return;
   NSWindow* win = g_view.window;
@@ -446,16 +437,6 @@ void ReconfigureColorForCurrentVideo() {
   dispatch_async(dispatch_get_main_queue(), ^{ ApplyLayerColorConfig(clsInt); });
 }
 
-// End a seek freeze: restore the pre-seek pause state. Idempotent (the exchange
-// guarantees a single restore) so it is safe to call from PLAYBACK_RESTART and
-// the watchdog. Runs on the event thread.
-void EndSeekFreeze() {
-  if (!g_seeking.exchange(false)) return;
-  if (!g_state.mpv) return;
-  const char* restore[] = {"set", "pause", g_seekWasPaused.load() ? "yes" : "no", nullptr};
-  M::command_async(g_state.mpv, 0, restore);
-}
-
 // ── mpv event loop → JS (lifted from addon.cc EventThreadMain) ───────────────
 //
 // The seekbar position is emitted from HERE (the mpv event thread), never from
@@ -469,10 +450,6 @@ void EventThreadMain(State* s) {
   using clock = std::chrono::steady_clock;
   auto lastEmit = clock::now() - std::chrono::seconds(1);  // allow an immediate first emit
   const auto kEmitInterval = std::chrono::milliseconds(250);
-  // Backstop against a seek whose PLAYBACK_RESTART never arrives (a dead segment
-  // that also doesn't raise END_FILE): don't leave the picture frozen forever.
-  clock::time_point seekFreezeSince{};
-  const auto kSeekFreezeMax = std::chrono::seconds(30);
 
   auto emitPosition = [&](bool force) {
     if (!s->run.load(std::memory_order_acquire)) return;
@@ -529,11 +506,6 @@ void EventThreadMain(State* s) {
           } else if (std::strcmp(p->name, "pause") == 0 && p->format == MPV_FORMAT_FLAG) {
             const int paused = *static_cast<int*>(p->data);
             s->paused.store(paused != 0);
-            // During a seek freeze the pause DOWN (pause=yes) is internal — don't
-            // surface it or the client's play/pause icon would flicker. The
-            // restore afterwards emits the real state (harmless: buffering is
-            // driven by paused-for-cache, not by this).
-            if (g_seeking.load()) break;
             Emit(std::string("{\"type\":\"stateChanged\",\"state\":\"") +
                  (paused ? "paused" : "playing") + "\"}");
           } else if (std::strcmp(p->name, "paused-for-cache") == 0 && p->format == MPV_FORMAT_FLAG) {
@@ -548,9 +520,6 @@ void EventThreadMain(State* s) {
           break;
         }
         case MPV_EVENT_PLAYBACK_RESTART:
-          // The seek's target frame is decoded and presented — restore the
-          // pre-seek pause state, ending the freeze.
-          EndSeekFreeze();
           // Guarantee the color config is applied once per load/seek even if the
           // typed video-params leaf observe misses its initial change (the
           // g_lastReconfigClass guard makes this a no-op when unchanged).
@@ -559,7 +528,6 @@ void EventThreadMain(State* s) {
           Emit("{\"type\":\"firstFrame\"}");
           break;
         case MPV_EVENT_END_FILE: {
-          g_seeking.store(false);  // seek can't complete on a dead file — drop the freeze
           s->paused.store(true);  // playback stopped (stop/eof/error) → halt the heartbeat
           auto* e = static_cast<mpv_event_end_file*>(ev->data);
           if (e && e->reason == MPV_END_FILE_REASON_EOF)
@@ -578,18 +546,8 @@ void EventThreadMain(State* s) {
           break;
       }
     }
-    // Heartbeat the seekbar while playing (throttled inside emitPosition). Gated
-    // on g_seeking too — it is set synchronously in SeekTo, closing the window
-    // before the async pause=yes lands where a stale OLD time-pos would leak and
-    // drag the bar back off the seek target.
-    if (!s->paused.load() && !g_seeking.load()) emitPosition(false);
-    // Seek-freeze watchdog: force-restore if a seek stays frozen too long.
-    if (g_seeking.load()) {
-      if (seekFreezeSince == clock::time_point{}) seekFreezeSince = clock::now();
-      else if (clock::now() - seekFreezeSince > kSeekFreezeMax) EndSeekFreeze();
-    } else {
-      seekFreezeSince = clock::time_point{};
-    }
+    // Heartbeat the seekbar while playing (throttled inside emitPosition).
+    if (!s->paused.load()) emitPosition(false);
   }
 }
 
@@ -771,8 +729,6 @@ Napi::Value Load(const Napi::CallbackInfo& info) {
   // Force the next video-params event to re-apply the color config once for the
   // new stream (its class may match the previous file's).
   g_lastReconfigClass.store(-1);
-  // A fresh load ends any in-flight seek freeze bookkeeping.
-  g_seeking.store(false);
   if (o.Has("subtitles") && o.Get("subtitles").IsArray()) {
     Napi::Array subs = o.Get("subtitles").As<Napi::Array>();
     for (uint32_t i = 0; i < subs.Length(); i++) {
@@ -824,32 +780,6 @@ Napi::Value SetProperty(const Napi::CallbackInfo& info) {
   std::string val = info[1].ToString().Utf8Value();
   const char* argv[] = {"set", name.c_str(), val.c_str(), nullptr};
   M::command_async(g_state.mpv, 0, argv);
-  return env.Undefined();
-}
-
-// seekTo(position) — freeze-gated absolute seek. Freezes output (pause) the
-// instant the seek is issued so the old position can't keep playing while the
-// demuxer repositions to a far/uncached target; EndSeekFreeze restores the
-// pre-seek pause state on the completing PLAYBACK_RESTART. See g_seeking.
-Napi::Value SeekTo(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  if (!g_state.mpv || info.Length() < 1) return env.Undefined();
-  std::string pos = info[0].ToString().Utf8Value();
-  // Capture the pre-seek pause state ONCE — a rapid second seek within the same
-  // freeze must not record the freeze itself as the state to restore.
-  if (!g_seeking.exchange(true)) {
-    char* pv = M::get_property_string(g_state.mpv, "pause");
-    g_seekWasPaused.store(pv && std::strcmp(pv, "yes") == 0);
-    if (pv) M::mpv_free(pv);
-  }
-  // No synthetic buffering state here. The freeze just holds the last frame; the
-  // loading spinner is driven client-side for the freeze window (seekBuffering,
-  // tied to seekLocked), and mpv's own paused-for-cache drives it for the cache
-  // refill after playback resumes — identical to the Windows backend.
-  const char* pause_cmd[] = {"set", "pause", "yes", nullptr};
-  M::command_async(g_state.mpv, 0, pause_cmd);
-  const char* seek_cmd[] = {"seek", pos.c_str(), "absolute+exact", nullptr};
-  M::command_async(g_state.mpv, 0, seek_cmd);
   return env.Undefined();
 }
 
@@ -920,7 +850,6 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("command", Napi::Function::New(env, Command));
   exports.Set("getProperty", Napi::Function::New(env, GetProperty));
   exports.Set("setProperty", Napi::Function::New(env, SetProperty));
-  exports.Set("seekTo", Napi::Function::New(env, SeekTo));
   exports.Set("resize", Napi::Function::New(env, Resize));
   exports.Set("stop", Napi::Function::New(env, Stop));
   return exports;
