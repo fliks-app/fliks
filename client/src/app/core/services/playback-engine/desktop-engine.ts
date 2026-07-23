@@ -3,7 +3,7 @@ import {
   type PlaybackEngine,
   type AudioTrack,
   type EngineStats,
-  type PlaybackState,
+  pausedFlagForState,
 } from './playback-engine';
 import {
   NATIVE_SUBTITLE_SIZE_SCALE,
@@ -37,7 +37,6 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   private _playbackRate = 1;
   private _volume = 1;
   private _muted = false;
-  private _state: PlaybackState = 'idle';
   private _audioTracks: AudioTrack[] = [];
 
   /** Set in destroy() so a leaked late event (the mpv player is a persistent
@@ -120,7 +119,6 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
 
   async unload(): Promise<void> {
     await this.bridge.stop();
-    this._state = 'idle';
     this._currentTime = 0;
     this._duration = 0;
   }
@@ -142,7 +140,12 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   async seek(position: number): Promise<void> {
     if (this.dead) return;
     await this.bridge.seek(position);
-    this._currentTime = position;
+    // Do NOT optimistically set _currentTime = position. Doing so makes the
+    // player's pollSeekConverge see instant convergence and drop seekLocked
+    // within ms — before the seek actually lands — which both lets the bar fall
+    // back to the old position and defeats the seek spinner. The real position
+    // arrives via timeUpdate (the addon force-pushes it on PLAYBACK_RESTART), so
+    // seekLocked stays up for the true duration of the seek.
   }
 
   // ── State ──
@@ -326,8 +329,8 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     switch (event.type) {
       case 'stateChanged': {
         const state = event.payload.state;
-        this._state = state;
-        this._paused = state === 'paused' || state === 'idle';
+        const paused = pausedFlagForState(state);
+        if (paused !== undefined) this._paused = paused;
         this.emit('stateChanged', { state });
         if (state === 'ended') this.emit('ended', undefined);
         break;
@@ -368,7 +371,6 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
         // paused signal would stay stuck on its default. Assert the playing
         // state once frames start flowing so the controls show pause, not play.
         this._paused = false;
-        this._state = 'playing';
         this.emit('stateChanged', { state: 'playing' });
         break;
       }
@@ -377,7 +379,6 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
         // native heuristic — first error after a frame played → try one
         // session-expired recovery before surfacing a fatal error.
         if (this.maybeEmitSessionExpired()) return;
-        this._state = 'error';
         const { code, message, detail } = event.payload;
         // mpv's generic message ("loading failed") plus the concrete cause it
         // logged (TLS verify, HTTP status, unsupported codec) so the error card

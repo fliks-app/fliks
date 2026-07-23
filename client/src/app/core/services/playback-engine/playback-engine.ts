@@ -29,6 +29,20 @@ export interface SubtitleTrack {
 
 export type PlaybackState = 'idle' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';
 
+/**
+ * The paused flag implied by a transport state, or `undefined` when the state
+ * shouldn't move it. Only the definitive states ('playing' vs 'paused'/'idle')
+ * decide paused; 'buffering' and 'error' are loading/overlay states, so a
+ * transient buffering (e.g. mpv core-idle racing the pause property) leaves the
+ * flag — and the play/pause button — alone. Shared by every consumer that
+ * mirrors engine state so the rule lives in one place.
+ */
+export function pausedFlagForState(state: PlaybackState): boolean | undefined {
+  if (state === 'playing') return false;
+  if (state === 'paused' || state === 'idle') return true;
+  return undefined;
+}
+
 export interface EngineStats {
   droppedFrames: number;
   streamBandwidth?: number;

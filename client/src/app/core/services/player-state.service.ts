@@ -1,6 +1,6 @@
 import { Injectable, effect, inject, signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
-import type { PlaybackEngine } from './playback-engine/playback-engine';
+import { pausedFlagForState, type PlaybackEngine } from './playback-engine/playback-engine';
 import {
   isNetworkOrAbort,
   isUndecodableError,
@@ -143,7 +143,8 @@ export class PlayerStateService {
     engine.muted = this.muted();
 
     engine.on('stateChanged', (e) => {
-      this.paused.set(e.state === 'paused' || e.state === 'idle');
+      const paused = pausedFlagForState(e.state);
+      if (paused !== undefined) this.paused.set(paused);
       const buffering = e.state === 'buffering' || (this.recovering && e.state === 'error');
       // Anchor the playhead reference as buffering begins so the timeUpdate clear
       // below fires on real forward progress, not the position jump a seek into
