@@ -810,6 +810,57 @@ Napi::Value Resize(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+// Path for `r` with only the two corners on one Y-edge rounded. bottomIsMinY
+// selects which edge is "bottom" in the layer's geometry (a non-flipped AppKit
+// view has its bottom at minY; a flipped Chromium view at maxY).
+static CGPathRef CreateBottomRoundedPath(CGRect r, CGFloat radius, BOOL bottomIsMinY) {
+  CGFloat x0 = CGRectGetMinX(r), x1 = CGRectGetMaxX(r);
+  CGFloat y0 = CGRectGetMinY(r), y1 = CGRectGetMaxY(r);
+  CGFloat rad = MIN(radius, MIN(r.size.width, r.size.height) / 2.0);
+  CGMutablePathRef p = CGPathCreateMutable();
+  CGFloat sq = bottomIsMinY ? y1 : y0;  // square edge
+  CGFloat rd = bottomIsMinY ? y0 : y1;  // rounded edge
+  CGFloat dir = bottomIsMinY ? 1.0 : -1.0;
+  CGPathMoveToPoint(p, NULL, x0, sq);
+  CGPathAddLineToPoint(p, NULL, x1, sq);
+  CGPathAddLineToPoint(p, NULL, x1, rd + rad * dir);
+  CGPathAddArcToPoint(p, NULL, x1, rd, x1 - rad, rd, rad);
+  CGPathAddLineToPoint(p, NULL, x0 + rad, rd);
+  CGPathAddArcToPoint(p, NULL, x0, rd, x0, rd + rad * dir, rad);
+  CGPathCloseSubpath(p);
+  return p;
+}
+
+// setBottomCornerRadius(wid, radius) — clip any window's content view to a
+// square-top / rounded-bottom shape via a CAShapeLayer mask (works for the web
+// content AND the CAOpenGLLayer, which ignores an ancestor's cornerRadius). The
+// caller re-invokes on resize with the new bounds. N-API runs on the AppKit
+// main thread, so layer mutation here is safe.
+Napi::Value SetBottomCornerRadius(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 2) return env.Undefined();
+  std::string widStr = info[0].ToString().Utf8Value();
+  double radius = info[1].As<Napi::Number>().DoubleValue();
+  uintptr_t ptr = static_cast<uintptr_t>(strtoull(widStr.c_str(), nullptr, 10));
+  NSView* view = (__bridge NSView*)reinterpret_cast<void*>(ptr);
+  if (!view) return env.Undefined();
+  view.wantsLayer = YES;
+  CALayer* layer = view.layer;
+  if (!layer) return env.Undefined();
+  CGPathRef path = CreateBottomRoundedPath(view.bounds, radius, !view.isFlipped);
+  CAShapeLayer* mask = [layer.mask isKindOfClass:[CAShapeLayer class]]
+                           ? (CAShapeLayer*)layer.mask
+                           : [CAShapeLayer layer];
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];  // no implicit animation on resize
+  mask.frame = view.bounds;
+  mask.path = path;
+  layer.mask = mask;
+  [CATransaction commit];
+  CGPathRelease(path);
+  return env.Undefined();
+}
+
 Napi::Value Stop(const Napi::CallbackInfo& info) {
   // run.store(false) MUST stay first: a still-queued ApplyLayerColorConfig block
   // (posted from the event thread) is only safe because it early-returns on
@@ -870,6 +921,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("getProperty", Napi::Function::New(env, GetProperty));
   exports.Set("setProperty", Napi::Function::New(env, SetProperty));
   exports.Set("resize", Napi::Function::New(env, Resize));
+  exports.Set("setBottomCornerRadius", Napi::Function::New(env, SetBottomCornerRadius));
   exports.Set("stop", Napi::Function::New(env, Stop));
   return exports;
 }
