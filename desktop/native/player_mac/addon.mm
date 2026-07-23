@@ -124,6 +124,7 @@ struct State {
   std::mutex renderMutex;       // guards rc_render vs rc_free
   std::atomic<bool> run{false};
   std::atomic<bool> paused{true};  // drives the event thread's position heartbeat
+  std::atomic<bool> coreIdle{false};  // mpv not rendering frames (seek/buffer/idle)
   std::atomic<bool> dirty{true};  // force a redraw (resize / first paint)
   // Whether the layer actually got a half-float (RGBA16F) backing. EDR/PQ/HLG
   // tagging is meaningless on an 8-bit unorm FBO (can't carry values >1.0), so
@@ -437,6 +438,20 @@ void ReconfigureColorForCurrentVideo() {
   dispatch_async(dispatch_get_main_queue(), ^{ ApplyLayerColorConfig(clsInt); });
 }
 
+// Emit the UI playback state from the cached pause + core-idle flags. core-idle
+// (mpv not rendering frames) distinguishes "buffering/loading" from "playing"
+// while NOT user-paused — it is the authoritative signal for the loading spinner
+// and, unlike paused-for-cache, it also covers an in-place seek's fetch/decode.
+// Clears to "playing" the instant frames flow again (real resume).
+void EmitPlaybackState(State* s) {
+  if (s->paused.load())
+    Emit("{\"type\":\"stateChanged\",\"state\":\"paused\"}");
+  else if (s->coreIdle.load())
+    Emit("{\"type\":\"stateChanged\",\"state\":\"buffering\"}");
+  else
+    Emit("{\"type\":\"stateChanged\",\"state\":\"playing\"}");
+}
+
 // ── mpv event loop → JS (lifted from addon.cc EventThreadMain) ───────────────
 //
 // The seekbar position is emitted from HERE (the mpv event thread), never from
@@ -504,13 +519,11 @@ void EventThreadMain(State* s) {
           if (std::strcmp(p->name, "duration") == 0 && p->format == MPV_FORMAT_DOUBLE) {
             s->duration = *static_cast<double*>(p->data);
           } else if (std::strcmp(p->name, "pause") == 0 && p->format == MPV_FORMAT_FLAG) {
-            const int paused = *static_cast<int*>(p->data);
-            s->paused.store(paused != 0);
-            Emit(std::string("{\"type\":\"stateChanged\",\"state\":\"") +
-                 (paused ? "paused" : "playing") + "\"}");
-          } else if (std::strcmp(p->name, "paused-for-cache") == 0 && p->format == MPV_FORMAT_FLAG) {
-            if (*static_cast<int*>(p->data))
-              Emit("{\"type\":\"stateChanged\",\"state\":\"buffering\"}");
+            s->paused.store(*static_cast<int*>(p->data) != 0);
+            EmitPlaybackState(s);
+          } else if (std::strcmp(p->name, "core-idle") == 0 && p->format == MPV_FORMAT_FLAG) {
+            s->coreIdle.store(*static_cast<int*>(p->data) != 0);
+            EmitPlaybackState(s);
           }
           break;
         }
@@ -602,7 +615,7 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   M::observe_property(g_state.mpv, 2, "duration", MPV_FORMAT_DOUBLE);
   M::observe_property(g_state.mpv, 3, "pause", MPV_FORMAT_FLAG);
   M::observe_property(g_state.mpv, 4, "track-list", MPV_FORMAT_NONE);
-  M::observe_property(g_state.mpv, 5, "paused-for-cache", MPV_FORMAT_FLAG);
+  M::observe_property(g_state.mpv, 5, "core-idle", MPV_FORMAT_FLAG);
   // Drive the content-adaptive colorspace/EDR reconfiguration off the two color
   // leaves we actually classify on, observed as TYPED strings. The aggregate
   // `video-params` belongs to mpv's per-frame TICK group, so observing it with

@@ -336,7 +336,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly volume = this.state.volume;
   readonly muted = this.state.muted;
   readonly buffering = this.state.buffering;
-  readonly seekBuffering = this.state.seekBuffering;
   readonly bufferedEnd = this.state.bufferedEnd;
   readonly playbackMode = this.state.playbackMode;
   readonly hwAccel = this.state.hwAccel;
@@ -1881,39 +1880,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  position rather than the (now stale) target. */
   private async awaitSeekUnlock(target: number): Promise<void> {
     const gen = ++this.seekGeneration;
-    // In-process backends (macOS/Linux) do a plain in-place seek and raise no
-    // paused-for-cache, so mpv gives no buffering signal during the fetch+decode.
-    // Drive the loading spinner from the held seekLock instead, short-delayed so
-    // a fast/cached seek (converges first) shows nothing. Windows keeps its own
-    // paused-for-cache spinner, so it's excluded here.
-    const inProcessSeek =
-      this.isDesktopNative && !/windows/i.test(navigator.userAgent);
-    let spinnerTimer: ReturnType<typeof setTimeout> | null = null;
-    if (inProcessSeek) {
-      spinnerTimer = setTimeout(() => {
-        if (gen === this.seekGeneration && this.state.seekLocked()) {
-          this.state.seekBuffering.set(true);
-        }
-      }, 150);
-    }
-    const clearSeekSpinner = () => {
-      if (spinnerTimer) {
-        clearTimeout(spinnerTimer);
-        spinnerTimer = null;
-      }
-      if (gen === this.seekGeneration) this.state.seekBuffering.set(false);
-    };
     try {
       await this.engine?.seek(target);
     } catch {
       // Engine rejected the seek (network error, codec stall, …).
       // Leave the lock on — the bar stays at the user's target and
       // the playback-error state surfaces via `state.error`.
-      clearSeekSpinner();
       return;
     }
     await this.pollSeekConverge(target, gen);
-    clearSeekSpinner();
   }
 
   /** Poll the engine's reported position until it lands within 2s of the seek
