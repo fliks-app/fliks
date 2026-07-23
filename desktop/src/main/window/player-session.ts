@@ -207,6 +207,10 @@ export class PlayerSession {
     });
     this.frameWin.on('closed', () => this.destroy());
 
+    // Shape + position the overlays BEFORE awaiting the (slow) Angular load, so
+    // the corners are rounded from the first painted frame instead of showing
+    // square for the ~0.5s the app takes to load.
+    sync();
     await this.uiWin.loadURL(rendererUrl);
     sync();
 
