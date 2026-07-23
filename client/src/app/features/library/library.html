@@ -453,7 +453,7 @@
            in-progress in this library so we don't render an empty row. -->
       @if (suggestionsContinue().length) {
         <app-horizontal-scroller [title]="'home.continue_watching' | translate">
-          @for (item of suggestionsContinue(); track item.id) {
+          @for (item of suggestionsContinue(); track item.mediaId + '-' + (item.episodeId ?? '')) {
             <app-media-card
               [aspect]="'landscape'"
               [imageUrl]="item.fanartUrl ?? item.posterUrl"

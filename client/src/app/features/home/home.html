@@ -37,9 +37,9 @@
       @case ('continue-watching') {
         @if (continueWatching().length) {
           <app-horizontal-scroller [title]="'home.continue_watching' | translate">
-            @for (item of continueWatching(); track item.id) {
+            @for (item of continueWatching(); track item.mediaId + '-' + (item.episodeId ?? '')) {
               <app-media-card [aspect]="'landscape'"
-                [attr.data-home-focus]="'cw:' + item.id"
+                [attr.data-home-focus]="'cw:' + item.mediaId + '-' + (item.episodeId ?? '')"
                 [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
                 [title]="item.mediaTitle"
                 [subtitle]="item.episodeLabel ?? undefined"
