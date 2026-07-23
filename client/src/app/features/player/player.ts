@@ -1915,12 +1915,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       !this.isDesktopNative ||
       !(this.engine instanceof DesktopEngine) ||
       this.playbackMode() !== 'transcode' ||
-      this.availableAudioTracks().length <= 1 ||
-      // The far-seek reload is a WINDOWS-subprocess (--wid) workaround: an
-      // in-place seek across the multi-audio HLS child playlists misbehaves
-      // there. The in-process libmpv backends (macOS/Linux) seek in place
-      // correctly, so they take the instant SeekTo path — Windows only.
-      !/windows/i.test(navigator.userAgent)
+      this.availableAudioTracks().length <= 1
     ) {
       return false;
     }
