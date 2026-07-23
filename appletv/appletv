@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Dev CLI: edit here on the PC, build/run remotely on the Mac (SSH host "mac").
+#   ./appletv run     build + launch on the tvOS Simulator, pull a screenshot
+#   ./appletv device  build signed + install/launch on the paired Apple TV
+#   ./appletv build   build for the Simulator only
+#   ./appletv sync    rsync the project to the Mac
+#   ./appletv logs    stream Simulator logs
+#   ./appletv open    open the project in Xcode on the Mac (for VNC/debug)
+set -euo pipefail
+
+MAC="${MAC_HOST:-mac}"
+REMOTE="${REMOTE_DIR:-fliks-appletv-build}"
+LOCAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+sync() {
+  rsync -az --delete \
+    --exclude '.git' --exclude '.build' --exclude 'DerivedData' \
+    --exclude 'FliksTV.xcodeproj' --exclude 'last-shot.png' \
+    "$LOCAL_DIR/" "$MAC:$REMOTE/"
+}
+
+remote() { ssh "$MAC" "bash \"\$HOME/$REMOTE/scripts/remote-build.sh\" $*"; }
+
+pull_shot() {
+  scp -q "$MAC:$REMOTE/last-shot.png" "$LOCAL_DIR/last-shot.png" 2>/dev/null \
+    && echo "→ screenshot: $LOCAL_DIR/last-shot.png" || true
+}
+
+case "${1:-}" in
+  sync)   sync ;;
+  build)  sync; remote build-sim ;;
+  run)    sync; remote run-sim; pull_shot ;;
+  device) sync; remote run-device ;;
+  logs)   remote logs ;;
+  open)   sync; remote open ;;
+  *) sed -n '2,8p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac
