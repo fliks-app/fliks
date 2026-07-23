@@ -60,7 +60,7 @@ type Placement = 'bottom-end' | 'bottom-start' | 'top-end' | 'top-start';
         </div>
         <div
           tabindex="0"
-          class="dropdown-content bg-base-200 rounded-box shadow-xl min-w-60 p-1 z-[101] overflow-hidden whitespace-nowrap"
+          class="dropdown-content bg-base-200 rounded-box shadow-xl min-w-60 max-h-[70vh] p-1 z-[101] overflow-y-auto overflow-x-hidden whitespace-nowrap"
         >
           <ng-container *ngTemplateOutlet="itemsTpl"></ng-container>
         </div>
