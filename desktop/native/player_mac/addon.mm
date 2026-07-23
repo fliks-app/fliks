@@ -541,7 +541,10 @@ void EventThreadMain(State* s) {
           Emit("{\"type\":\"firstFrame\"}");
           break;
         case MPV_EVENT_END_FILE: {
-          s->paused.store(true);  // playback stopped (stop/eof/error) → halt the heartbeat
+          // Do NOT touch s->paused here: it must mirror ONLY mpv's pause property
+          // (the pause observe), or a reload's old-file END_FILE leaves paused=true
+          // and the next core-idle→playing emits "paused", flipping the button. The
+          // heartbeat halts on its own via the core-idle gate (idle at EOF/stop).
           auto* e = static_cast<mpv_event_end_file*>(ev->data);
           if (e && e->reason == MPV_END_FILE_REASON_EOF)
             Emit("{\"type\":\"stateChanged\",\"state\":\"ended\"}");
@@ -559,8 +562,11 @@ void EventThreadMain(State* s) {
           break;
       }
     }
-    // Heartbeat the seekbar while playing (throttled inside emitPosition).
-    if (!s->paused.load()) emitPosition(false);
+    // Heartbeat the seekbar only while actually rendering frames. Gate on
+    // core-idle (false = playing) rather than pause: it also covers seek/buffer/
+    // EOF, so the position never advances while frozen, and it keeps s->paused
+    // strictly the pause property (used for the play/pause UI state).
+    if (!s->coreIdle.load()) emitPosition(false);
   }
 }
 
