@@ -44,6 +44,9 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
   private lastPosition = 0;
   private lastDuration = 0;
   private lastBuffered = 0;
+  /** Resolver for the in-flight load()'s first-frame wait; see load(). */
+  private firstFrameResolve: (() => void) | null = null;
+  private readonly firstFrameTimeoutMs = 15_000;
 
   constructor(videoWin: BrowserWindow) {
     super();
@@ -120,14 +123,16 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
         this.emit('tracksChanged', mapTrackList(raw.tracks ?? []));
         break;
       case 'firstFrame':
-        // Guard the event so a seek's playback-restart doesn't re-fire firstFrame
-        // into the renderer.
+        // Unblock a pending load() (the new file has opened) and guard the event
+        // so a seek's playback-restart doesn't re-fire firstFrame into the renderer.
+        this.firstFrameResolve?.();
         if (!this.sawFirstFrame) {
           this.sawFirstFrame = true;
           this.emit('firstFrame');
         }
         break;
       case 'error':
+        this.firstFrameResolve?.(); // don't hang a load() that failed to open
         this.emit('error', { code: -1, message: raw.message ?? 'error' });
         break;
     }
@@ -135,8 +140,28 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
 
   // ── PlayerBackend surface (mirrors index.ts ipc handlers) ───────────────────
   async load(opts: DesktopLoadOptions): Promise<void> {
+    // Resolve any superseded in-flight load wait, then wait for the NEW file to
+    // actually open (first decoded frame) before resolving — mirroring the
+    // Windows backend. addon.load() only QUEUES loadfile, so returning early
+    // would let a caller's post-load sub-add / track-select run while no file is
+    // open (mpv rejects it → the sidecar subtitle is lost on a reload seek). The
+    // timeout + the error path keep an aborted load from hanging.
+    this.firstFrameResolve?.();
     this.sawFirstFrame = false;
     this.addon.load(opts);
+    await this.waitFirstFrame();
+  }
+
+  private waitFirstFrame(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        if (this.firstFrameResolve === done) this.firstFrameResolve = null;
+        resolve();
+      };
+      const timer = setTimeout(done, this.firstFrameTimeoutMs);
+      this.firstFrameResolve = done;
+    });
   }
 
   async play(): Promise<void> {
@@ -156,6 +181,7 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
   }
 
   async stop(): Promise<void> {
+    this.firstFrameResolve?.(); // a stop cancels any pending load's first-frame wait
     this.sawFirstFrame = false;
     this.lastPosition = 0;
     this.lastDuration = 0;
@@ -218,6 +244,7 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
   }
 
   async destroy(): Promise<void> {
+    this.firstFrameResolve?.(); // don't leave a pending load() hanging on teardown
     this.addon.stop();
   }
 }
