@@ -65,6 +65,8 @@
     "low_bandwidth": "bajo consumo",
     "audio_track_n": "Pista {{index}}",
     "subtitle_track_n": "Subtítulo {{index}}",
+    "subtitle_forced": "Forzado",
+    "subtitle_hearing_impaired": "Sordos",
     "playback_error": "La reproducción ha fallado.",
     "error_aborted": "Reproducción interrumpida.",
     "error_network": "Error de red durante la reproducción.",

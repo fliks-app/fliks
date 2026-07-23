@@ -65,6 +65,8 @@
     "low_bandwidth": "baixo consumo",
     "audio_track_n": "Faixa {{index}}",
     "subtitle_track_n": "Legenda {{index}}",
+    "subtitle_forced": "Forçado",
+    "subtitle_hearing_impaired": "Surdos",
     "playback_error": "A reprodução falhou.",
     "error_aborted": "Reprodução interrompida.",
     "error_network": "Erro de rede durante a reprodução.",
