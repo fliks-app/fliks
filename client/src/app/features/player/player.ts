@@ -336,6 +336,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly volume = this.state.volume;
   readonly muted = this.state.muted;
   readonly buffering = this.state.buffering;
+  readonly seekBuffering = this.state.seekBuffering;
   readonly bufferedEnd = this.state.bufferedEnd;
   readonly playbackMode = this.state.playbackMode;
   readonly hwAccel = this.state.hwAccel;
@@ -1880,15 +1881,37 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  position rather than the (now stale) target. */
   private async awaitSeekUnlock(target: number): Promise<void> {
     const gen = ++this.seekGeneration;
+    // Desktop in-place seek: the mpv freeze holds a still frame while it
+    // fetches+decodes the target (no paused-for-cache during that window), so
+    // show the seek spinner if the seek hasn't landed within a short grace. A
+    // fast/cached seek converges first and shows nothing (Windows parity); the
+    // post-resume cache refill is then covered by paused-for-cache -> buffering().
+    let spinnerTimer: ReturnType<typeof setTimeout> | null = null;
+    if (this.isDesktopNative) {
+      spinnerTimer = setTimeout(() => {
+        if (gen === this.seekGeneration && this.state.seekLocked()) {
+          this.state.seekBuffering.set(true);
+        }
+      }, 200);
+    }
+    const clearSeekSpinner = () => {
+      if (spinnerTimer) {
+        clearTimeout(spinnerTimer);
+        spinnerTimer = null;
+      }
+      if (gen === this.seekGeneration) this.state.seekBuffering.set(false);
+    };
     try {
       await this.engine?.seek(target);
     } catch {
       // Engine rejected the seek (network error, codec stall, …).
       // Leave the lock on — the bar stays at the user's target and
       // the playback-error state surfaces via `state.error`.
+      clearSeekSpinner();
       return;
     }
     await this.pollSeekConverge(target, gen);
+    clearSeekSpinner();
   }
 
   /** Poll the engine's reported position until it lands within 2s of the seek
@@ -1915,7 +1938,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       !this.isDesktopNative ||
       !(this.engine instanceof DesktopEngine) ||
       this.playbackMode() !== 'transcode' ||
-      this.availableAudioTracks().length <= 1
+      this.availableAudioTracks().length <= 1 ||
+      // The far-seek reload is a WINDOWS-subprocess (--wid) workaround: an
+      // in-place seek across the multi-audio HLS child playlists misbehaves
+      // there. The in-process libmpv backends (macOS/Linux) seek in place
+      // correctly, so they take the instant SeekTo path — Windows only.
+      !/windows/i.test(navigator.userAgent)
     ) {
       return false;
     }

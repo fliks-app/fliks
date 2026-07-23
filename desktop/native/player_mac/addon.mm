@@ -296,11 +296,6 @@ std::atomic<int> g_lastReconfigClass{-1};
 // END_FILE / a watchdog so a dead seek can never leave the picture stuck.
 std::atomic<bool> g_seeking{false};
 std::atomic<bool> g_seekWasPaused{false};
-// After a playing-seek completes we suppress the one restore-driven "playing"
-// state so the client's seek spinner is NOT cleared at PLAYBACK_RESTART (target
-// frame merely DECODED) — it clears instead when the playhead actually advances
-// (or a paused-for-cache resolves), matching the Windows backend's spinner.
-std::atomic<bool> g_suppressPlayingAfterSeek{false};
 
 void UpdateLayerGeometry() {
   if (!g_layer || !g_view) return;
@@ -453,17 +448,11 @@ void ReconfigureColorForCurrentVideo() {
 
 // End a seek freeze: restore the pre-seek pause state. Idempotent (the exchange
 // guarantees a single restore) so it is safe to call from PLAYBACK_RESTART and
-// the watchdog. Runs on the event thread. `completed` = the seek actually landed
-// (PLAYBACK_RESTART) vs the watchdog giving up.
-void EndSeekFreeze(bool completed) {
+// the watchdog. Runs on the event thread.
+void EndSeekFreeze() {
   if (!g_seeking.exchange(false)) return;
   if (!g_state.mpv) return;
-  const bool wasPaused = g_seekWasPaused.load();
-  // On a completed PLAYING seek, suppress the restore's "playing" so the spinner
-  // stays until the playhead advances (real resume). On the watchdog give-up
-  // path, let it through so a stuck spinner can't linger.
-  if (!wasPaused && completed) g_suppressPlayingAfterSeek.store(true);
-  const char* restore[] = {"set", "pause", wasPaused ? "yes" : "no", nullptr};
+  const char* restore[] = {"set", "pause", g_seekWasPaused.load() ? "yes" : "no", nullptr};
   M::command_async(g_state.mpv, 0, restore);
 }
 
@@ -540,14 +529,11 @@ void EventThreadMain(State* s) {
           } else if (std::strcmp(p->name, "pause") == 0 && p->format == MPV_FORMAT_FLAG) {
             const int paused = *static_cast<int*>(p->data);
             s->paused.store(paused != 0);
-            // During a seek freeze the pause toggles are internal (freeze +
-            // restore) — don't surface them or the client's play/pause icon
-            // would flicker.
+            // During a seek freeze the pause DOWN (pause=yes) is internal — don't
+            // surface it or the client's play/pause icon would flicker. The
+            // restore afterwards emits the real state (harmless: buffering is
+            // driven by paused-for-cache, not by this).
             if (g_seeking.load()) break;
-            // The seek restored playback to PLAYING: swallow this one "playing"
-            // so the client's seek spinner isn't cleared before the playhead
-            // actually advances (real resume) — see g_suppressPlayingAfterSeek.
-            if (!paused && g_suppressPlayingAfterSeek.exchange(false)) break;
             Emit(std::string("{\"type\":\"stateChanged\",\"state\":\"") +
                  (paused ? "paused" : "playing") + "\"}");
           } else if (std::strcmp(p->name, "paused-for-cache") == 0 && p->format == MPV_FORMAT_FLAG) {
@@ -564,7 +550,7 @@ void EventThreadMain(State* s) {
         case MPV_EVENT_PLAYBACK_RESTART:
           // The seek's target frame is decoded and presented — restore the
           // pre-seek pause state, ending the freeze.
-          EndSeekFreeze(/*completed=*/true);
+          EndSeekFreeze();
           // Guarantee the color config is applied once per load/seek even if the
           // typed video-params leaf observe misses its initial change (the
           // g_lastReconfigClass guard makes this a no-op when unchanged).
@@ -600,7 +586,7 @@ void EventThreadMain(State* s) {
     // Seek-freeze watchdog: force-restore if a seek stays frozen too long.
     if (g_seeking.load()) {
       if (seekFreezeSince == clock::time_point{}) seekFreezeSince = clock::now();
-      else if (clock::now() - seekFreezeSince > kSeekFreezeMax) EndSeekFreeze(/*completed=*/false);
+      else if (clock::now() - seekFreezeSince > kSeekFreezeMax) EndSeekFreeze();
     } else {
       seekFreezeSince = clock::time_point{};
     }
@@ -787,7 +773,6 @@ Napi::Value Load(const Napi::CallbackInfo& info) {
   g_lastReconfigClass.store(-1);
   // A fresh load ends any in-flight seek freeze bookkeeping.
   g_seeking.store(false);
-  g_suppressPlayingAfterSeek.store(false);
   if (o.Has("subtitles") && o.Get("subtitles").IsArray()) {
     Napi::Array subs = o.Get("subtitles").As<Napi::Array>();
     for (uint32_t i = 0; i < subs.Length(); i++) {
@@ -857,13 +842,10 @@ Napi::Value SeekTo(const Napi::CallbackInfo& info) {
     g_seekWasPaused.store(pv && std::strcmp(pv, "yes") == 0);
     if (pv) M::mpv_free(pv);
   }
-  // Drive the seek spinner ONLY for a playing seek. Freezing via pause=yes means
-  // mpv never raises paused-for-cache, so this explicit buffering state is the
-  // loading indicator; it is cleared when the playhead actually advances after
-  // resume (see g_suppressPlayingAfterSeek), matching the Windows spinner. A
-  // paused seek shows no spinner (as on Windows) — the target frame simply
-  // appears once decoded.
-  if (!g_seekWasPaused.load()) Emit("{\"type\":\"stateChanged\",\"state\":\"buffering\"}");
+  // No synthetic buffering state here. The freeze just holds the last frame; the
+  // loading spinner is driven client-side for the freeze window (seekBuffering,
+  // tied to seekLocked), and mpv's own paused-for-cache drives it for the cache
+  // refill after playback resumes — identical to the Windows backend.
   const char* pause_cmd[] = {"set", "pause", "yes", nullptr};
   M::command_async(g_state.mpv, 0, pause_cmd);
   const char* seek_cmd[] = {"seek", pos.c_str(), "absolute+exact", nullptr};
