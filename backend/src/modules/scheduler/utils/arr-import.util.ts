@@ -201,6 +201,10 @@ export async function subtitlePathsBesideEpisode(
   return out;
 }
 
+/** Imported sidecars are files the user already owns — scored like disk
+ *  sidecars and embedded tracks so the upgrade pass never replaces them. */
+const IMPORTED_SUBTITLE_SCORE = 100;
+
 export interface UpsertImportedSubtitleParams {
   mediaId: number;
   mediaFileId: number;
@@ -267,6 +271,7 @@ export async function upsertImportedSubtitleFile(
         tags,
         relativePath: relativePath ?? existing.relativePath,
         status: SubtitleStatus.DOWNLOADED,
+        score: IMPORTED_SUBTITLE_SCORE,
         ...(wasEmbedded ? { streamIndex: null, codec: null } : {}),
       });
       return 1;
@@ -285,6 +290,7 @@ export async function upsertImportedSubtitleFile(
       hearingImpaired,
       providerType,
       status: SubtitleStatus.DOWNLOADED,
+      score: IMPORTED_SUBTITLE_SCORE,
       relativePath,
       tags,
     }),

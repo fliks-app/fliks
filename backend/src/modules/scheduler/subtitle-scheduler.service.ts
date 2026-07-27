@@ -325,6 +325,12 @@ export class SubtitleSchedulerService {
     );
 
     for (const sub of lowScoreSubs) {
+      // The profile is the contract: a language it doesn't ask for is never
+      // searched, downloaded, nor allowed to replace a file on disk.
+      const langItem = sub.media?.languageProfile?.subtitleLanguages?.find(
+        (l) => l.isoCode === sub.language,
+      );
+      if (!langItem) continue;
       if (sub.mediaFile?.id != null && missingByFileId.get(sub.mediaFile.id)) {
         this.log.debug?.(
           `SubtitleUpgrade: skipping sub #${sub.id} ("${sub.media?.title}", ${sub.language}) — file still has missing required languages, deferring to next missing-search pass`,
@@ -336,9 +342,6 @@ export class SubtitleSchedulerService {
         const videoReleaseName = fileRel
           ? path.basename(fileRel, path.extname(fileRel))
           : undefined;
-        const langItem = sub.media?.languageProfile?.subtitleLanguages?.find(
-          (l) => l.isoCode === sub.language,
-        );
         const results = await this.subtitlesService.searchSubtitles({
           imdbId: sub.media?.imdbId ?? undefined,
           tmdbId: sub.media?.tmdbId,
@@ -350,9 +353,7 @@ export class SubtitleSchedulerService {
           videoReleaseName,
           moviehash: sub.mediaFile?.osdbHash ?? undefined,
           moviebytesize: sub.mediaFile?.osdbBytesize ?? undefined,
-          hearingImpairedMode: langItem
-            ? resolveHearingImpairedMode(langItem)
-            : 'avoid',
+          hearingImpairedMode: resolveHearingImpairedMode(langItem),
         });
 
         // Invariant: a hash-matched sub is the perfect time sync — refuse
