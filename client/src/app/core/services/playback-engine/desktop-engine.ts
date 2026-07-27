@@ -299,19 +299,22 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   }
 
   // ── Quality ──
-  // mpv handles ABR over the HLS master internally; the backend ladder already
-  // bounds the rungs, so variant pinning is a no-op here (kept for the
+  // mpv selects one HLS variant when it opens the master playlist and never
+  // switches mid-playback — there is no in-engine ABR to drive. The rung is
+  // pinned server-side via `startQuality` before load (player.ts
+  // resolveStartQuality), so variant pinning here is a no-op (kept for the
   // PlaybackEngine contract).
   getVariantTracks(): any[] {
     return [];
   }
   selectVariantTrack(_track: any, _clearBuffer?: boolean): void {
-    /* mpv-driven ABR */
+    /* no-op: mpv already opened its single pinned variant */
   }
   configure(config: any): void {
-    // ABR is mpv-driven; the only knob we honour is the preferred audio language,
-    // threaded to mpv as `alang` on the next load so it auto-selects the right
-    // rendition on every reconfig (mirrors the Shaka engine's preferredAudioLanguage).
+    // No ABR knob to honour (see above); the only one is the preferred audio
+    // language, threaded to mpv as `alang` on the next load so it auto-selects
+    // the right rendition on every reconfig (mirrors the Shaka engine's
+    // preferredAudioLanguage).
     if (config && typeof config.preferredAudioLanguage === 'string') {
       this._preferredAudioLanguage = config.preferredAudioLanguage || undefined;
     }

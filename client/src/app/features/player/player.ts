@@ -1006,8 +1006,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // (instead of waiting for master.m3u8), overlapping encoder init with
       // the ~100–300ms gap before the player fetches the playlist.
       const deviceProfile = this.deviceProfileService.getProfile();
-      const savedQualityId = this.activeQualityId();
-      const prewarmQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
+      const prewarmQuality = this.resolveStartQuality();
       const prewarmStartAt = resumeTime;
       const playbackInfoPromise = this.isOfflinePlayback
         ? null
@@ -2304,9 +2303,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Re-negotiate the stream for the new file (DirectPlay vs the ladder).
       await this.authService.ensureStreamToken();
       const deviceProfile = this.deviceProfileService.getProfile();
-      const activeQuality = this.activeQualityId();
-      const requestedQuality =
-        activeQuality && activeQuality !== 'auto' ? activeQuality : undefined;
+      const requestedQuality = this.resolveStartQuality();
       this.playbackInfo = await this.streamingApi.getPlaybackInfo(
         this.mediaFileId,
         deviceProfile,
@@ -2714,6 +2711,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /**
+   * Resolve the `startQuality` wire value: the explicit rung id, or — only
+   * in 'auto' — the top rung when the active engine has no client-side ABR,
+   * so a no-ABR engine (desktop mpv) still gets pinned to a single variant
+   * instead of the full backend ladder. Single source for every
+   * playback-info / stream-url call site.
+   */
+  private resolveStartQuality(): string | undefined {
+    const active = this.activeQualityId();
+    if (active !== 'auto') return active;
+    const supportsAbr = this.deviceProfileService.getProfile().supportsAbr ?? true;
+    return supportsAbr ? undefined : this.qualityManager.topRungId();
+  }
+
+  /**
    * Compose the engine's stream URL for the current `playbackMode`.
    * Returns `{ url, mimeType }` — direct play needs the explicit
    * `video/mp4` content type for native + Tizen engines, HLS lets the
@@ -2734,8 +2745,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         mimeType: 'video/mp4',
       };
     } else {
-      const savedQualityId = this.activeQualityId();
-      const startQuality = savedQualityId !== 'auto' ? savedQualityId : undefined;
+      const startQuality = this.resolveStartQuality();
       built = {
         url: this.streamingApi.getHlsUrl(
           this.mediaFileId,
@@ -2763,70 +2773,74 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     opts: { preservePause: boolean; unmute: boolean },
   ): Promise<void> {
     if (!this.engine || !this.mediaFileId) return;
-    // Drop the prior sid before minting a new one, and await it: a stall
-    // recovery still has a live prior session, and the backend would otherwise
-    // treat the re-mint as a concurrent sibling and split it onto a cold job.
-    const prevSid = this.playbackInfo?.sessionId;
-    if (prevSid) {
-      await this.streamingApi
-        .stopSessions(this.mediaFileId, prevSid)
-        .catch(() => {});
-    }
-    if (opts.unmute) this.engine.muted = false;
-    const wasPaused = opts.preservePause ? this.paused() : false;
-    const deviceProfile = this.deviceProfileService.getProfile();
-    // Pass the active rung as startQuality so the backend prewarms ffmpeg at
-    // the resume position — main session at -ss pos plus the bounded early
-    // session that absorbs Shaka's seg-0 VOD probe. Mirrors the initial load.
-    const activeQuality = this.activeQualityId();
-    const prewarmQuality = activeQuality !== 'auto' ? activeQuality : undefined;
-    this.playbackInfo = await this.streamingApi.getPlaybackInfo(
-      this.mediaFileId,
-      deviceProfile,
-      this.activeBurnInId ?? undefined,
-      this.activeAudioStreamIndex ?? undefined,
-      prewarmQuality,
-      pos > 0 ? Math.floor(pos) : undefined,
-    );
-    // Refresh the near-expiry stream token before rebuilding the play URL:
-    // it's baked into every segment URL and can't be swapped once the engine
-    // loads, so a token that lapsed mid-film would 401 every segment.
-    await this.authService.ensureStreamToken();
-    const { url, mimeType } = this.buildPlayUrl({
-      sid: this.playbackInfo.sessionId,
-    });
-    await this.engine.load(url, pos > 0 ? pos : undefined, mimeType);
-    this.qualityManager.applyQualityPreferenceAfterLoad(
-      this.engine,
-      this.playbackMode(),
-    );
-    // Shaka/webOS and the desktop mpv engine drop sidecar text tracks on a fresh
-    // load(), so a recovery reload silently loses the user's subtitle. Re-add +
-    // re-select the active soft subtitle. The Capacitor native players restore
-    // their own pick inside load(); burn-in is re-baked server-side via the
-    // activeBurnInId passed to playback-info above.
-    if (!this.isNativeEngine() || this.isDesktopNative) {
-      const activeId = this.activeSubtitleId();
-      const sub = activeId
-        ? this.availableSubtitles().find((s) => s.id === activeId)
-        : null;
-      if (sub && !sub.burnIn && sub.url) {
-        try {
-          const track = await this.engine.addTextTrack(
-            sub.url,
-            sub.language,
-            sub.label,
-            sub.forced,
-            this.subtitleOrdinal(sub),
-          );
-          this.engine.selectTextTrack(track);
-          this.engine.setTextVisibility(true);
-        } catch (e) {
-          console.error('[Player] re-apply subtitle after reload failed:', e);
+    this.state.buffering.set(true);
+    try {
+      // Drop the prior sid before minting a new one, and await it: a stall
+      // recovery still has a live prior session, and the backend would otherwise
+      // treat the re-mint as a concurrent sibling and split it onto a cold job.
+      const prevSid = this.playbackInfo?.sessionId;
+      if (prevSid) {
+        await this.streamingApi
+          .stopSessions(this.mediaFileId, prevSid)
+          .catch(() => {});
+      }
+      if (opts.unmute) this.engine.muted = false;
+      const wasPaused = opts.preservePause ? this.paused() : false;
+      const deviceProfile = this.deviceProfileService.getProfile();
+      // Pass the active rung as startQuality so the backend prewarms ffmpeg at
+      // the resume position — main session at -ss pos plus the bounded early
+      // session that absorbs Shaka's seg-0 VOD probe. Mirrors the initial load.
+      const prewarmQuality = this.resolveStartQuality();
+      this.playbackInfo = await this.streamingApi.getPlaybackInfo(
+        this.mediaFileId,
+        deviceProfile,
+        this.activeBurnInId ?? undefined,
+        this.activeAudioStreamIndex ?? undefined,
+        prewarmQuality,
+        pos > 0 ? Math.floor(pos) : undefined,
+      );
+      // Refresh the near-expiry stream token before rebuilding the play URL:
+      // it's baked into every segment URL and can't be swapped once the engine
+      // loads, so a token that lapsed mid-film would 401 every segment.
+      await this.authService.ensureStreamToken();
+      const { url, mimeType } = this.buildPlayUrl({
+        sid: this.playbackInfo.sessionId,
+      });
+      await this.engine.load(url, pos > 0 ? pos : undefined, mimeType);
+      this.qualityManager.applyQualityPreferenceAfterLoad(
+        this.engine,
+        this.playbackMode(),
+      );
+      // Shaka/webOS and the desktop mpv engine drop sidecar text tracks on a fresh
+      // load(), so a recovery reload silently loses the user's subtitle. Re-add +
+      // re-select the active soft subtitle. The Capacitor native players restore
+      // their own pick inside load(); burn-in is re-baked server-side via the
+      // activeBurnInId passed to playback-info above.
+      if (!this.isNativeEngine() || this.isDesktopNative) {
+        const activeId = this.activeSubtitleId();
+        const sub = activeId
+          ? this.availableSubtitles().find((s) => s.id === activeId)
+          : null;
+        if (sub && !sub.burnIn && sub.url) {
+          try {
+            const track = await this.engine.addTextTrack(
+              sub.url,
+              sub.language,
+              sub.label,
+              sub.forced,
+              this.subtitleOrdinal(sub),
+            );
+            this.engine.selectTextTrack(track);
+            this.engine.setTextVisibility(true);
+          } catch (e) {
+            console.error('[Player] re-apply subtitle after reload failed:', e);
+          }
         }
       }
+      this.restorePlayState(wasPaused);
+    } finally {
+      this.state.buffering.set(false);
     }
-    this.restorePlayState(wasPaused);
   }
 
   /**
@@ -3835,73 +3849,82 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private async doReloadStream() {
     if (!this.engine) return;
-    const currentPos = this.engine.currentTime;
-    // Capture the user's play/pause intent before tearing the stream down — a
-    // quality / audio / subtitle switch must not resume a paused player.
-    const wasPaused = this.paused();
+    this.state.buffering.set(true);
+    try {
+      // A locked seekbar holds a target the engine hasn't converged on yet, so
+      // anchor the reload there rather than at the engine's pre-seek position —
+      // otherwise a switch made mid-seek restarts the stream where the user
+      // just left, and the bar keeps showing the target it will never reach.
+      const currentPos = this.state.seekLocked()
+        ? this.currentTime()
+        : this.engine.currentTime;
+      // Capture the user's play/pause intent before tearing the stream down — a
+      // quality / audio / subtitle switch must not resume a paused player.
+      const wasPaused = this.paused();
 
-    // Remember active subtitle so we can restore it after reload
-    const activeSub = this.activeSubtitleId()
-      ? this.availableSubtitles().find(s => s.id === this.activeSubtitleId())
-      : null;
+      // Remember active subtitle so we can restore it after reload
+      const activeSub = this.activeSubtitleId()
+        ? this.availableSubtitles().find(s => s.id === this.activeSubtitleId())
+        : null;
 
-    // Native: stop the player before reload to avoid freeze
-    if (this.isNativeEngine()) {
-      await NativePlayer.stop().catch(() => {});
-    }
+      // Native: stop the player before reload to avoid freeze
+      if (this.isNativeEngine()) {
+        await NativePlayer.stop().catch(() => {});
+      }
 
-    // Stop only this device's session — multi-device viewers on the
-    // same file with a different profile should stay alive.
-    await this.streamingApi
-      .stopSessions(this.mediaFileId, this.playbackInfo?.sessionId)
-      .catch(() => {});
+      // Stop only this device's session — multi-device viewers on the
+      // same file with a different profile should stay alive.
+      await this.streamingApi
+        .stopSessions(this.mediaFileId, this.playbackInfo?.sessionId)
+        .catch(() => {});
 
-    const deviceProfile = this.deviceProfileService.getProfile();
-    // Pass the requested rung so the backend re-decides DirectPlay vs the
-    // transcode ladder: a rung below source forces the ladder, 'auto' lets the
-    // server apply its autoQualityMode.
-    const activeQuality = this.activeQualityId();
-    const requestedQuality =
-      activeQuality && activeQuality !== 'auto' ? activeQuality : undefined;
-    this.playbackInfo = await this.streamingApi.getPlaybackInfo(
-      this.mediaFileId,
-      deviceProfile,
-      this.activeBurnInId ?? undefined,
-      this.activeAudioStreamIndex,
-      requestedQuality,
-    );
-    const pi = this.playbackInfo;
-    this.introMarker.set(pi.markers?.intro ?? null);
+      const deviceProfile = this.deviceProfileService.getProfile();
+      // Pass the requested rung so the backend re-decides DirectPlay vs the
+      // transcode ladder: a rung below source forces the ladder, 'auto' lets the
+      // server apply its autoQualityMode.
+      const requestedQuality = this.resolveStartQuality();
+      this.playbackInfo = await this.streamingApi.getPlaybackInfo(
+        this.mediaFileId,
+        deviceProfile,
+        this.activeBurnInId ?? undefined,
+        this.activeAudioStreamIndex,
+        requestedQuality,
+      );
+      const pi = this.playbackInfo;
+      this.introMarker.set(pi.markers?.intro ?? null);
 
-    if (pi.playMethod === 'DirectPlay') {
-      this.state.playbackMode.set('direct');
-    } else if (pi.playMethod === 'DirectStream') {
-      this.state.playbackMode.set('remux');
-    } else {
-      this.state.playbackMode.set('transcode');
-    }
-    this.state.hwAccel.set(pi.hwAccel);
-    this.qualityManager.buildQualityOptions(pi);
+      if (pi.playMethod === 'DirectPlay') {
+        this.state.playbackMode.set('direct');
+      } else if (pi.playMethod === 'DirectStream') {
+        this.state.playbackMode.set('remux');
+      } else {
+        this.state.playbackMode.set('transcode');
+      }
+      this.state.hwAccel.set(pi.hwAccel);
+      this.qualityManager.buildQualityOptions(pi);
 
-    const mode = this.playbackMode();
-    // Refresh the near-expiry stream token before rebuilding the play URL:
-    // it's baked into every segment URL and can't be swapped once the engine
-    // loads, so a token that lapsed mid-film would 401 every segment.
-    await this.authService.ensureStreamToken();
-    const { url, mimeType } = this.buildPlayUrl({ startTime: currentPos });
-    await this.engine.load(url, currentPos, mimeType);
-    this.reloadReachedPlayback = true;
+      const mode = this.playbackMode();
+      // Refresh the near-expiry stream token before rebuilding the play URL:
+      // it's baked into every segment URL and can't be swapped once the engine
+      // loads, so a token that lapsed mid-film would 401 every segment.
+      await this.authService.ensureStreamToken();
+      const { url, mimeType } = this.buildPlayUrl({ startTime: currentPos });
+      await this.engine.load(url, currentPos, mimeType);
+      this.reloadReachedPlayback = true;
 
-    this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
-    this.restorePlayState(wasPaused);
+      this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
+      this.restorePlayState(wasPaused);
 
-    // Restore active subtitle (non burn-in) after Shaka reload
-    if (activeSub && !activeSub.burnIn && activeSub.url) {
-      try {
-        const track = await this.engine.addTextTrack(activeSub.url, activeSub.language, activeSub.label, activeSub.forced);
-        this.engine.selectTextTrack(track);
-        this.engine.setTextVisibility(true);
-      } catch {}
+      // Restore active subtitle (non burn-in) after Shaka reload
+      if (activeSub && !activeSub.burnIn && activeSub.url) {
+        try {
+          const track = await this.engine.addTextTrack(activeSub.url, activeSub.language, activeSub.label, activeSub.forced);
+          this.engine.selectTextTrack(track);
+          this.engine.setTextVisibility(true);
+        } catch {}
+      }
+    } finally {
+      this.state.buffering.set(false);
     }
   }
 

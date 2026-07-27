@@ -45,16 +45,22 @@ export interface EngineTraits {
   probesSegZero?: boolean;
   /** Engine can play a raw progressive file as DirectPlay. */
   supportsDirectPlay?: boolean;
+  /** Engine has its own client-side ABR (bitrate-adaptive variant switching
+   *  mid-playback). Client-only — never sent to the backend, so it's a plain
+   *  required boolean rather than the wire-optional pattern above. */
+  supportsAbr: boolean;
 }
 
 /**
- * Single source of truth for the four engine traits, one row per `EngineKind`.
+ * Single source of truth for the four wire engine traits plus `supportsAbr`,
+ * one row per `EngineKind`.
  *
- * The CAST row sets only `probesSegZero` so the other three serialise as
- * `undefined` (absent from the payload), matching the hand-rolled Cast
- * profile. The TV-platform rows are always reached with `isNative === true`:
- * the only UA markers that set a non-null `tvPlatform` also match the
- * `isNative` regex, so no `isNative === false` TV row is reachable today.
+ * The CAST row sets `supportsAbr` (a local-only decision, never on the wire)
+ * plus `probesSegZero`, leaving the other three `undefined` (absent from the
+ * payload), matching the hand-rolled Cast profile. The TV-platform rows are
+ * always reached with `isNative === true`: the only UA markers that set a
+ * non-null `tvPlatform` also match the `isNative` regex, so no
+ * `isNative === false` TV row is reachable today.
  */
 export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
   [EngineKind.WEB]: {
@@ -63,6 +69,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     probesSegZero: true,
     supportsDirectPlay: true,
+    supportsAbr: true,
   },
   [EngineKind.NATIVE]: {
     useTsOnSingleAudio: false,
@@ -70,6 +77,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
+    supportsAbr: true,
   },
   // Embedded mpv: renders behind the UI like NATIVE, but its ffmpeg HLS
   // demuxer fetches seg-0 on load then seeks (like Shaka), so it needs the
@@ -81,12 +89,18 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
   // VTT, and mpv's ffmpeg HLS demuxer re-reads that segment on every seek
   // without clearing the prior cue set, so cues accumulate/stack. `sub-add`
   // parses the VTT once and seeks within it natively (like the browser).
+  //
+  // `supportsAbr: false` — mpv picks one HLS variant when it opens the master
+  // playlist (`--hls-bitrate=max`) and never re-evaluates it mid-playback, so
+  // the backend must be told a single rung via `startQuality` instead of the
+  // full ladder.
   [EngineKind.DESKTOP]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: false,
     supportsImageSubtitles: true,
     probesSegZero: true,
     supportsDirectPlay: true,
+    supportsAbr: false,
   },
   [EngineKind.ANDROID_TV]: {
     useTsOnSingleAudio: false,
@@ -94,6 +108,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
+    supportsAbr: true,
   },
   [EngineKind.TIZEN]: {
     useTsOnSingleAudio: true,
@@ -101,6 +116,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: false,
+    supportsAbr: true,
   },
   [EngineKind.WEBOS]: {
     useTsOnSingleAudio: false,
@@ -108,9 +124,11 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: true,
+    supportsAbr: true,
   },
   [EngineKind.CAST]: {
     probesSegZero: true,
+    supportsAbr: true,
   },
 };
 

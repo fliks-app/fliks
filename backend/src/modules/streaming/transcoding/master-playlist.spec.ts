@@ -95,6 +95,38 @@ describe('generateMasterPlaylist — audio rendition CHANNELS', () => {
   });
 });
 
+describe('generateMasterPlaylist — supportsAbr collapses the ladder', () => {
+  const base = {
+    mediaFileId: 1,
+    sourceWidth: 1920,
+    sourceHeight: 1080,
+    tokenParam: '',
+  };
+
+  it('no onlyQuality + supportsAbr:false collapses to the single top-fitting rung', () => {
+    const m = generateMasterPlaylist({ ...base, supportsAbr: false });
+    expect(streamInfLines(m)).toHaveLength(1);
+    expect(m).toContain('/1080p/');
+  });
+
+  it('no onlyQuality + supportsAbr:true (or unset) keeps the full ladder unchanged', () => {
+    const withFlag = generateMasterPlaylist({ ...base, supportsAbr: true });
+    const withoutFlag = generateMasterPlaylist(base);
+    expect(streamInfLines(withFlag).length).toBeGreaterThan(1);
+    expect(withFlag).toEqual(withoutFlag);
+  });
+
+  it('an explicit onlyQuality still wins over supportsAbr:false', () => {
+    const m = generateMasterPlaylist({
+      ...base,
+      supportsAbr: false,
+      onlyQuality: '720p',
+    });
+    expect(streamInfLines(m)).toHaveLength(1);
+    expect(m).toContain('/720p/');
+  });
+});
+
 describe('generateMasterPlaylist — audio bitrate in BANDWIDTH', () => {
   const maxAvgBandwidth = (m: string): number =>
     Math.max(

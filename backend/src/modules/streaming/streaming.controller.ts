@@ -883,6 +883,7 @@ export class StreamingController {
       hdrLadder: useHdrLadder,
       supportsHlsSubtitles: !!deviceProfile.supportsHlsSubtitles,
       probesSegZero: deviceProfile.probesSegZero,
+      supportsAbr: deviceProfile.supportsAbr,
       videoVariant,
       tonemapping: response.tonemapping,
       transcodeReasons: response.transcodeReasons,
@@ -1083,6 +1084,10 @@ export class StreamingController {
       deviceParam === 'mobile' || deviceParam === 'desktop'
         ? deviceParam
         : (live?.deviceType ?? 'desktop');
+    // Client-side ABR capability, frozen on the session at playback-info. No
+    // live session (legacy URL / stale sid) defaults to true — the existing
+    // full-ladder behaviour.
+    const supportsAbr = live?.supportsAbr ?? true;
     // Persist the master.m3u8 decisions back on the session so segment
     // requests stay coherent (especially for the URL-override device
     // and the audio layout that callers downstream gate on).
@@ -1144,6 +1149,7 @@ export class StreamingController {
       onlyQuality,
       defaultAudioIndex: pickedIdx ?? 0,
       deviceType,
+      supportsAbr,
       outputAudioCodec: masterAudioCodec,
       // Real output audio bitrate so the BANDWIDTH sum reflects the 640k
       // AC-3/E-AC-3 path, not the profile nominal; copy renditions fall back.

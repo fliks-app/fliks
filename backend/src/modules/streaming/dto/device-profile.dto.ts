@@ -201,4 +201,17 @@ export class DeviceProfileDto {
   @IsBoolean()
   @IsOptional()
   useTsOnSingleAudio?: boolean;
+
+  /**
+   * Client can switch HLS variants at runtime (real ABR). `false` means the
+   * client picks one variant when it opens the master and never switches
+   * again (e.g. embedded mpv), so the backend must hand it a single-variant
+   * master instead of the full ladder — otherwise its HLS demuxer touches
+   * every variant playlist at open and each touch (a different `quality`)
+   * kills + respawns ffmpeg for the last one touched. Unset is treated as
+   * `true` for backward compatibility.
+   */
+  @IsBoolean()
+  @IsOptional()
+  supportsAbr?: boolean;
 }

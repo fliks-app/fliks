@@ -148,6 +148,12 @@ export interface DeviceProfile {
    *  False for Tizen AVPlay (HLS-only): the backend then never returns
    *  DirectPlay and falls back to DirectStream (remux to HLS). Unset = true. */
   supportsDirectPlay?: boolean;
+
+  /** Client can switch HLS variants at runtime (real ABR). `false` (e.g.
+   *  embedded mpv, which picks one variant when it opens the master and
+   *  never switches again) tells the backend to collapse the master to a
+   *  single variant instead of the full ladder. Unset = true. */
+  supportsAbr?: boolean;
 }
 
 /** True when `localStorage['fliks.useTs']` is set to a truthy value.
@@ -275,8 +281,8 @@ export class BrowserDeviceProfileService {
     // Q-series TVs.
     const isTv = this.device.isTv();
     const tvPlatform = this.device.tvPlatform();
-    // The four engine-behavioural flags below come from one declarative
-    // row keyed on the engine kind (platform + native split). Adding a
+    // The engine-behavioural flags below come from one declarative row
+    // keyed on the engine kind (platform + native split). Adding a
     // platform is a single row in `engine-traits.ts`.
     const traits =
       ENGINE_TRAITS[
@@ -548,6 +554,10 @@ export class BrowserDeviceProfileService {
       // falls back to DirectStream (remux to HLS, codec-copy). Every other
       // engine (Shaka, ExoPlayer/AVPlayer, webOS <video>) plays raw files.
       supportsDirectPlay: traits.supportsDirectPlay,
+      // `false` only for the desktop mpv engine (see engine-traits.ts): the
+      // backend then collapses the master to a single variant instead of
+      // handing a no-ABR client the full ladder.
+      supportsAbr: traits.supportsAbr,
     };
   }
 

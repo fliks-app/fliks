@@ -144,6 +144,7 @@ describe('StreamingController.stopLiveSession', () => {
       hdrLadder: false,
       supportsHlsSubtitles: false,
       probesSegZero: true,
+      supportsAbr: true,
       videoVariant: null,
       tonemapping: false,
       transcodeReasons: [],

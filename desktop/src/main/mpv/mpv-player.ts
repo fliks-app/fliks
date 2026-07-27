@@ -83,6 +83,12 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
   private readonly pending = new Map<number, Pending>();
   private buf = '';
   private sawFirstFrame = false;
+  /** `playback-restart` seen for the current load — one of the two signals
+   *  {@link maybeEmitFirstFrame} waits on before emitting `firstFrame`. */
+  private sawPlaybackRestart = false;
+  /** mpv's `vo-configured` property last reported true for the current load —
+   *  the other signal {@link maybeEmitFirstFrame} waits on. */
+  private sawVoConfigured = false;
   /** One-shot per load: `--keep-open=yes` makes mpv pause on the last frame and
    *  set `eof-reached` instead of firing an `end-file`(eof) event, so the stream
    *  end is detected from that property. Guards against mpv re-sending the
@@ -285,10 +291,8 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
         // or belongs to the segment/seek that just succeeded.
         this.errorLog = [];
         this.sawTransportError = false;
-        if (!this.sawFirstFrame) {
-          this.sawFirstFrame = true;
-          this.emit('firstFrame');
-        }
+        this.sawPlaybackRestart = true;
+        this.maybeEmitFirstFrame();
         break;
       case 'end-file':
         if (msg.reason === 'eof') this.emit('stateChanged', { state: 'ended' });
@@ -303,12 +307,19 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
   private onProperty(name: string, data: unknown): void {
     switch (name) {
       case 'time-pos':
-        this.lastPosition = typeof data === 'number' ? data : 0;
+        // mpv sends null when idle/stopped — that means "no position", not
+        // "position zero", so leave lastPosition and the UI seekbar untouched.
+        if (typeof data !== 'number') break;
+        this.lastPosition = data;
         this.emit('timeUpdate', {
           position: this.lastPosition,
           duration: this.duration,
           buffered: this.cacheEnd,
         } satisfies DesktopPositionInfo);
+        break;
+      case 'vo-configured':
+        this.sawVoConfigured = !!data;
+        this.maybeEmitFirstFrame();
         break;
       case 'duration':
         this.duration = typeof data === 'number' ? data : 0;
@@ -358,6 +369,16 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     }
   }
 
+  /** Emits `firstFrame` once for the current load, once mpv has both resumed
+   *  playback and configured a video output — either alone can fire before a
+   *  frame is actually on screen (e.g. an HLS variant reopen resumes playback
+   *  before the new VO configures). */
+  private maybeEmitFirstFrame(): void {
+    if (this.sawFirstFrame || !this.sawPlaybackRestart || !this.sawVoConfigured) return;
+    this.sawFirstFrame = true;
+    this.emit('firstFrame');
+  }
+
   /** Builds the shared `error` event payload from the buffered mpv log —
    *  the single place the three error-emitting sites read `errorLog` and
    *  `sawTransportError`, so the transport classification can't drift between
@@ -381,6 +402,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
       'paused-for-cache',
       'eof-reached',
       'track-list',
+      'vo-configured',
     ]) {
       await this.command(['observe_property', ++this.observeId, prop]);
     }
@@ -430,6 +452,8 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
 
   async load(opts: DesktopLoadOptions): Promise<void> {
     this.sawFirstFrame = false;
+    this.sawPlaybackRestart = false;
+    this.sawVoConfigured = false;
     this.sawEof = false;
     this.duration = 0;
     this.cacheEnd = 0;
@@ -508,8 +532,17 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     return this.set('pause', true);
   }
 
-  seek(position: number): Promise<void> {
-    return this.command(['seek', position, 'absolute']).then(() => undefined);
+  async seek(position: number): Promise<void> {
+    // A load/stop that starts while this seek's IPC round-trip is in flight
+    // bumps loadGen — drop the stale seek instead of surfacing its failure
+    // (or racing the new load) once the round-trip settles.
+    const gen = this.loadGen;
+    try {
+      await this.command(['seek', position, 'absolute']);
+    } catch (e) {
+      if (gen !== this.loadGen) return;
+      throw e;
+    }
   }
 
   stop(): Promise<void> {
@@ -517,6 +550,8 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     // Reset baselines so the persistent player can't replay a stale first-frame
     // / position into the next session after a back-navigation.
     this.sawFirstFrame = false;
+    this.sawPlaybackRestart = false;
+    this.sawVoConfigured = false;
     this.sawEof = false;
     this.duration = 0;
     this.cacheEnd = 0;
