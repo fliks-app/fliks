@@ -22,7 +22,6 @@ export interface DesktopLoadOptions {
   url: string;
   startTime?: number;
   headers?: Record<string, string>;
-  subtitles?: { url: string; language: string; label: string; forced?: boolean }[];
   /** Preferred audio language (mpv `alang`). Applied as a file-local loadfile
    *  option so mpv auto-selects the matching audio rendition on the initial load
    *  AND on every mid-file reconfig — without a client round-trip. Neutralises
@@ -74,7 +73,15 @@ export type DesktopEvent =
       payload: { audioTracks: DesktopAudioTrack[]; subtitleTracks: DesktopSubtitleTrack[] };
     }
   | { type: 'firstFrame' }
-  | { type: 'error'; payload: { code: number; message: string; detail?: string } };
+  | {
+      type: 'error';
+      /** `code` follows MediaError semantics where applicable: 2
+       *  (MEDIA_ERR_NETWORK) marks a transport-level failure (mpv's own
+       *  TLS/libcurl signature — see `MpvPlayer.errorPayload`), so the client
+       *  classifies it as network/abort instead of blaming the decode path
+       *  (e.g. Dolby Vision). Any other value carries no MediaError meaning. */
+      payload: { code: number; message: string; detail?: string };
+    };
 
 /** renderer → main invoke channels. */
 export const IPC = {

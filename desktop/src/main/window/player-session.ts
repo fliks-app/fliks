@@ -6,6 +6,7 @@ import { MacMpvPlayer, roundWindowBottomCorners } from '../mpv/mac-mpv-player';
 import type { PlayerBackend } from '../mpv/player-backend';
 import { createEmbedBackend } from './backends';
 import { setPlaybackKeepAwake, keepAwakeForState } from '../power';
+import { appendLog } from '../log-file';
 import { IPC, type DesktopEvent, type DesktopRect } from '../../shared/contract';
 
 /**
@@ -236,7 +237,12 @@ export class PlayerSession {
   }
 
   private forwardEvents(mpv: PlayerBackend): void {
-    mpv.on('log', (s: string) => process.stderr.write(`[${Date.now()}][mpv] ${s}`));
+    mpv.on('log', (s: string) => {
+      process.stderr.write(`[${Date.now()}][mpv] ${s}`);
+      // Only the failure levels reach the file: mpv's default `v` level logs
+      // every segment URL, and this write is synchronous on the main thread.
+      if (/^\[(error|fatal|warn)\]/.test(s)) appendLog(`[mpv] ${s.trimEnd()}`);
+    });
     mpv.on('exit', (e) => console.error('[mpv] process exit', JSON.stringify(e)));
     mpv.on('stateChanged', (p) => {
       console.log('[player] state:', p.state);

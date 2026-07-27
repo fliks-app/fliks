@@ -1,5 +1,6 @@
 import { session } from 'electron';
 import { APP_SCHEME } from './protocol';
+import { appendLog, redactQuery } from './log-file';
 
 const APP_ORIGIN = `${APP_SCHEME}://app`;
 
@@ -13,7 +14,8 @@ const APP_ORIGIN = `${APP_SCHEME}://app`;
  * No backend change required.
  */
 export function installCorsBypass(): void {
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+  const { webRequest } = session.defaultSession;
+  webRequest.onHeadersReceived((details, callback) => {
     const headers = details.responseHeaders ?? {};
     // Drop any existing (case-variant) CORS headers before setting ours.
     for (const key of Object.keys(headers)) {
@@ -25,5 +27,20 @@ export function installCorsBypass(): void {
     headers['Access-Control-Allow-Origin'] = [APP_ORIGIN];
     headers['Access-Control-Allow-Credentials'] = ['true'];
     callback({ responseHeaders: headers });
+  });
+
+  // A renderer network failure only ever surfaces as a bare `status 0` — this
+  // is the one place the underlying ERR_* (reset / TLS / network-changed) is
+  // available at all.
+  webRequest.onErrorOccurred((details) => {
+    appendLog(`[net] ${details.method} ${redactQuery(details.url)} ${details.error}`);
+  });
+
+  // Ranks the CORS-preflight hypothesis for a failed /api/ call: an OPTIONS
+  // that never resolves, or resolves without the right headers, precedes it.
+  webRequest.onCompleted((details) => {
+    if (details.method === 'OPTIONS' && details.url.includes('/api/')) {
+      appendLog(`[net] OPTIONS ${redactQuery(details.url)} -> ${details.statusCode}`);
+    }
   });
 }
