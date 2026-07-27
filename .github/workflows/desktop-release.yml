@@ -15,6 +15,9 @@
 #      desktop/web so electron-builder ships it at resources/web.
 #   + a vendored self-contained libmpv into desktop/native/vendor per OS.
 #
+# Release checklist: the Windows mpv pin (MPV_WINBUILD_TAG below) needs a
+# periodic bump — it does not move on its own, unlike the old newest-asset scrape.
+#
 # The native compositor addon (SDL2 + GLES/EGL) is LINUX-ONLY by design — it is
 # the OSR self-compositor needed under Mutter/X11. macOS and Windows embed mpv
 # natively instead (--wid into a child NSView/HWND, see desktop/src/main/window/
@@ -166,30 +169,28 @@ jobs:
             || { echo "::error::libmpv exports av_* — not self-contained, will clash with Electron's libffmpeg"; exit 1; }
           echo "vendored libmpv OK: $(du -h "$f" | cut -f1)"
 
-      # Windows embeds mpv via --wid by spawning a vendored mpv.exe. Download a
-      # static x64 build (zhongfly/mpv-winbuild — maintained) into native/vendor,
-      # which electron-builder ships via the native/vendor/** glob. UNTESTED on
-      # real Windows hardware — playback verification needs a Windows box.
+      # Windows embeds mpv via --wid by spawning a vendored mpv.exe, downloaded
+      # from a pinned zhongfly/mpv-winbuild release (MPV_WINBUILD_TAG below) so
+      # the Windows media/TLS stack only changes when that pin is bumped, not on
+      # every build. Bumping is a one-line edit; confirm the target release has
+      # an x86_64 asset first — some are aarch64-only.
       - name: Vendor mpv (Windows)
         if: runner.os == 'Windows'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MPV_WINBUILD_TAG: "2026-07-27-48e6c35c0e"
         run: |
           set -euo pipefail
           dest=desktop/native/vendor
           mkdir -p "$dest"
-          # zhongfly/mpv-winbuild sometimes cuts an arch-specific (e.g.
-          # aarch64-only) release, which `releases/latest` then points at,
-          # leaving no x86_64 asset. Scan the recent releases and take the
-          # newest x86_64 build instead. The `|| true` keeps `set -e` from
-          # firing on a grep-no-match / head SIGPIPE; the explicit guard below
-          # reports the failure clearly. The API call is authenticated to avoid
-          # the unauthenticated shared-runner-IP rate limit.
+          # The `|| true` keeps `set -e` from firing on a grep-no-match / head
+          # SIGPIPE; the explicit guard below reports the failure clearly. The
+          # API call is authenticated to avoid the unauthenticated shared-runner-IP rate limit.
           url=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/zhongfly/mpv-winbuild/releases?per_page=20" \
+            "https://api.github.com/repos/zhongfly/mpv-winbuild/releases/tags/$MPV_WINBUILD_TAG" \
             | grep -oE 'https://[^"]+mpv-x86_64-[0-9][^"]*\.7z' | head -1) || true
-          test -n "$url" || { echo "::error::no mpv-x86_64 .7z asset in the last 20 releases"; exit 1; }
+          test -n "$url" || { echo "::error::no mpv-x86_64 .7z asset on release $MPV_WINBUILD_TAG"; exit 1; }
           echo "Downloading mpv: $url"
           curl -fsSL -o "$RUNNER_TEMP/mpv.7z" "$url"
           7z x -y -o"$dest" "$RUNNER_TEMP/mpv.7z" >/dev/null
