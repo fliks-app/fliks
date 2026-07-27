@@ -27,25 +27,38 @@ function formatFrameRate(fps: number): string {
   return Number.isInteger(fps) ? String(fps) : fps.toFixed(3);
 }
 
-/** Apply the `onlyQuality` URL pin to a ladder. Used identically by
- *  the SDR and HDR branches: when the player has a saved quality
- *  preference (or an explicit dropdown pick), the master playlist
- *  emits a single-variant ladder so ExoPlayer's HLS source can't
- *  pre-load other variants — each unfocused variant playlist or
- *  init.mp4 fetch triggers a ffmpeg kill+respawn on the backend
- *  when the requested quality doesn't match the active session.
+/** The single profile a collapsed ladder falls back to: the highest rung
+ *  that fits the source resolution (no upscale), delegated to
+ *  {@link profileFitsSource} (bucket on both axes) so anamorphic or scope
+ *  crops (e.g. 1918×872) keep their 1080p top rung. */
+function topFittingProfile(
+  ladder: TranscodeProfile[],
+  sourceWidth: number,
+  sourceHeight: number,
+): TranscodeProfile {
+  return (
+    ladder.find((p) => profileFitsSource(p, sourceWidth, sourceHeight)) ??
+    ladder[0]
+  );
+}
+
+/** Collapse the ladder to a single variant when the client can't be trusted
+ *  to stay on one rung: an explicit `onlyQuality` URL pin (saved preference
+ *  / dropdown pick), or — with no pin — a device profile that declared
+ *  `supportsAbr: false` (the client picks one HLS variant when it opens the
+ *  master and never switches again, e.g. embedded mpv). A full ladder
+ *  handed to either makes the player's HLS demuxer touch every variant
+ *  playlist/init segment at open; each touch carries a different `quality`,
+ *  and since there's no per-rung session key, each fetch kills + respawns
+ *  ffmpeg for the last-touched rung — a self-sustaining restart storm. Used
+ *  identically by the SDR and HDR branches.
  *
- *  - `remux` / `original` collapse to the single top profile that fits
- *    the source resolution (no upscale), in both the SDR and HDR
- *    ladders — one variant so AVPlayer / ExoPlayer have no other rung
- *    to ABR-switch to and stay locked at the source quality. Fitting is
- *    delegated to {@link profileFitsSource} (bucket on both axes) so
- *    anamorphic or scope crops (e.g. 1918×872) keep their 1080p top
- *    rung — a strict `maxWidth <= sourceWidth` check sat one or two
- *    pixels short and dropped the user back to 720p.
+ *  - `remux` / `original`, or no pin with `supportsAbr: false`, collapse to
+ *    {@link topFittingProfile} in both the SDR and HDR ladders.
  *  - When `hdrSuffix` is true, an input `1080p` is matched against
  *    `1080p-hdr` (HDR ladder rungs carry the suffix); already
  *    `*-hdr` inputs pass through unchanged.
+ *  - An explicit `onlyQuality` always wins over `supportsAbr`.
  *  - Falls back to the full ladder when the pin doesn't match any
  *    rung (legacy URLs / typos). */
 function applyQualityPin(
@@ -54,13 +67,15 @@ function applyQualityPin(
   sourceWidth: number,
   sourceHeight: number,
   hdrSuffix = false,
+  supportsAbr = true,
 ): TranscodeProfile[] {
-  if (!onlyQuality) return ladder;
+  if (!onlyQuality) {
+    return supportsAbr
+      ? ladder
+      : [topFittingProfile(ladder, sourceWidth, sourceHeight)];
+  }
   if (onlyQuality === 'remux' || onlyQuality === 'original') {
-    const top =
-      ladder.find((p) => profileFitsSource(p, sourceWidth, sourceHeight)) ??
-      ladder[0];
-    return [top];
+    return [topFittingProfile(ladder, sourceWidth, sourceHeight)];
   }
   const wanted =
     hdrSuffix && !onlyQuality.endsWith('-hdr')
@@ -125,6 +140,11 @@ export interface MasterPlaylistOptions {
   /** Source video bitrate + codec; caps each rung's declared BANDWIDTH. */
   sourceVideoBitrateBps?: number;
   sourceVideoCodec?: string;
+  /** Client can switch HLS variants at runtime (real ABR). `false` collapses
+   *  the ladder to {@link topFittingProfile} when there's no explicit
+   *  `onlyQuality` pin — see {@link applyQualityPin}. Missing/undefined
+   *  defaults to `true` (existing full-ladder behaviour). */
+  supportsAbr?: boolean;
 }
 
 /** Generate the HLS master playlist listing available qualities. */
@@ -150,6 +170,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     subtitleRenditions,
     sourceVideoBitrateBps,
     sourceVideoCodec,
+    supportsAbr = true,
   } = opts;
   // The "multi-audio" flag is really an "EXT-X-MEDIA layout" toggle —
   // the caller decided whether to split audio into renditions. Single-
@@ -245,6 +266,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
         sourceWidth,
         sourceHeight,
         /* hdrSuffix */ true,
+        supportsAbr,
       );
       emitVariantLadder(lines, {
         profiles: hdrLadder,
@@ -304,7 +326,14 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
   // master exposes a single variant — AVPlayer / ExoPlayer have no
   // other rung to ABR-switch to and playback stays locked at the
   // chosen quality.
-  profiles = applyQualityPin(profiles, onlyQuality, sourceWidth, sourceHeight);
+  profiles = applyQualityPin(
+    profiles,
+    onlyQuality,
+    sourceWidth,
+    sourceHeight,
+    /* hdrSuffix */ false,
+    supportsAbr,
+  );
 
   emitVariantLadder(lines, {
     profiles,

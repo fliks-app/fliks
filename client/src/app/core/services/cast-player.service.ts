@@ -173,9 +173,10 @@ export class CastPlayerService {
       // back later without re-doing the plumbing.
       useTs: false,
       // The Cast receiver runs Shaka, which fetches seg-0 on a load-then-seek,
-      // so keep the backend's seg-0 early-start companion for resumes. The CAST
-      // row sets only `probesSegZero`, leaving useTsOnSingleAudio /
-      // supportsHlsSubtitles / supportsDirectPlay undefined on the wire.
+      // so keep the backend's seg-0 early-start companion for resumes, and it
+      // has real ABR (Shaka), so supportsAbr rides through as true. The CAST
+      // row leaves useTsOnSingleAudio / supportsHlsSubtitles /
+      // supportsDirectPlay undefined on the wire.
       ...ENGINE_TRAITS[EngineKind.CAST],
     };
   }

@@ -93,6 +93,10 @@ export interface LiveSession {
    *  the resume segment and never request seg-0 — false skips the companion.
    *  Sourced from the device profile. */
   probesSegZero: boolean;
+  /** Client can switch HLS variants at runtime (real ABR). `false` (e.g.
+   *  embedded mpv) collapses the master to a single variant instead of the
+   *  full ladder. Sourced from the device profile. */
+  supportsAbr: boolean;
   videoVariant: CodecVariant | null;
   tonemapping: boolean;
   transcodeReasons: TranscodeReason[];
@@ -147,6 +151,7 @@ export interface CreateLiveSessionInput {
   hdrLadder?: boolean;
   supportsHlsSubtitles?: boolean;
   probesSegZero?: boolean;
+  supportsAbr?: boolean;
   videoVariant?: CodecVariant | null;
   tonemapping?: boolean;
   transcodeReasons?: TranscodeReason[];
@@ -261,6 +266,9 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       // keep the companion (a wasted seg-0 probe is harmless; a missing one
       // makes a seg-0-probing engine restart from scratch).
       probesSegZero: input.probesSegZero ?? true,
+      // Default true: an older client that doesn't send the field keeps
+      // today's full-ladder behaviour, same as a fresh capability flag.
+      supportsAbr: input.supportsAbr ?? true,
       videoVariant: input.videoVariant ?? null,
       tonemapping: input.tonemapping ?? false,
       transcodeReasons: input.transcodeReasons ?? [],

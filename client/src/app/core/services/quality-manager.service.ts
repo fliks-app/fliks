@@ -51,6 +51,16 @@ export function findBestVariantForHeight(tracks: any[], targetHeight: number): a
   return tracks.reduce((a: any, b: any) => ((a.height ?? 0) <= (b.height ?? 0) ? a : b));
 }
 
+/**
+ * Id of the highest-resolution rung in a quality list, excluding 'auto'.
+ * Undefined for an empty (or auto-only) list.
+ */
+export function highestRungId(options: QualityOption[]): string | undefined {
+  const rungs = options.filter((q) => q.id !== 'auto');
+  if (!rungs.length) return undefined;
+  return rungs.reduce((a, b) => (b.height > a.height ? b : a)).id;
+}
+
 @Injectable({ providedIn: 'root' })
 export class QualityManagerService {
   private readonly translate = inject(TranslateService);
@@ -108,6 +118,15 @@ export class QualityManagerService {
       visible = all.filter((q) => !q.lowBandwidth);
     }
     this.availableQualities.set(visible);
+  }
+
+  /** Id of the highest rung currently offered (excluding 'auto') — pins a
+   *  no-ABR engine (desktop mpv) to a single variant in 'auto' instead of
+   *  handing it the full backend ladder. The list is already device- and
+   *  source-aware (and eco-filtered by {@link buildQualityOptions}), so no
+   *  extra filtering here. */
+  topRungId(): string | undefined {
+    return highestRungId(this.availableQualities());
   }
 
   /** Default quality id for the current visible list: `auto` when present,

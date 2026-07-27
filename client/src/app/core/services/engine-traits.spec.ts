@@ -10,6 +10,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     probesSegZero: true,
     supportsDirectPlay: true,
+    supportsAbr: true,
   },
   [EngineKind.NATIVE]: {
     useTsOnSingleAudio: false,
@@ -17,6 +18,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
+    supportsAbr: true,
   },
   [EngineKind.DESKTOP]: {
     useTsOnSingleAudio: false,
@@ -24,6 +26,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: true,
     supportsDirectPlay: true,
+    supportsAbr: false,
   },
   [EngineKind.ANDROID_TV]: {
     useTsOnSingleAudio: false,
@@ -31,6 +34,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
+    supportsAbr: true,
   },
   [EngineKind.TIZEN]: {
     useTsOnSingleAudio: true,
@@ -38,6 +42,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: false,
+    supportsAbr: true,
   },
   [EngineKind.WEBOS]: {
     useTsOnSingleAudio: false,
@@ -45,9 +50,11 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: true,
+    supportsAbr: true,
   },
   [EngineKind.CAST]: {
     probesSegZero: true,
+    supportsAbr: true,
   },
 };
 
