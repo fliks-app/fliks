@@ -41,7 +41,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService, QueueItem } from '../../core/services/playback-queue.service';
 import { resolvePlayableFile } from '../../shared/utils/media-play.util';
 import { audioChannelsLabel, formatAudioLabel, formatAudioParts, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
-import { formatErrorDiagnostics, userMessageKeyFor } from '../../core/services/playback-engine/playback-error';
+import { classifyPlaybackError, formatErrorDiagnostics, userMessageKeyFor } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import {
   PlayerSettingsService, normalizeLang,
@@ -1411,27 +1411,26 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } catch (e: any) {
       console.error('[Player] Init error:', e?.code, e?.category, e?.data, e);
       const msg = e?.message ?? String(e);
-      // Shaka-shaped init errors carry code/category — map to a category
-      // message and keep the raw fields for the diagnostics block.
-      const isShaka = e?.category != null;
-      this.state.setError(
-        this.translate.instant(
-          userMessageKeyFor({
-            source: isShaka ? 'shaka' : 'engine',
-            code: e?.code,
-            category: e?.category,
-            dolbyVision: this.isDolbyVisionPassthrough(),
-          }),
-        ),
-        {
-          source: isShaka ? 'shaka' : 'engine',
-          code: e?.code,
+      // Classify the caught error (HttpErrorResponse = a failed playback-info
+      // request, an object with a Shaka category, or an engine failure) so a
+      // transport fault is never mislabelled as an mpv/engine error.
+      const { source, code } = classifyPlaybackError(e);
+      const userMessage = this.translate.instant(
+        userMessageKeyFor({
+          source,
+          code,
           category: e?.category,
-          severity: e?.severity,
-          data: e?.data,
-          message: msg,
-        },
+          dolbyVision: this.isDolbyVisionPassthrough(),
+        }),
       );
+      this.state.setError(userMessage, {
+        source,
+        code,
+        category: e?.category,
+        severity: e?.severity,
+        data: e?.data,
+        message: msg,
+      });
       // TV / Tizen engine path: the AVPlay <object> + the hidden <video>
       // both stay parked on top of the error overlay if the engine dies
       // during load(). Force the player UI back into a visible-DOM state
@@ -1454,7 +1453,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // by the always-mounted <app-toast-container>, so it survives even
       // when the player-container itself isn't laying out correctly.
       try {
-        this.toast.error(msg.slice(0, 240));
+        this.toast.error(userMessage);
       } catch {
         /* toast service may not be ready during early init — ignore */
       }
@@ -2254,6 +2253,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Surface the loading backdrop (set to the new episode's still below)
       // over the outgoing frame and rewind the playhead UI to the start.
       this.state.reset();
+      // Drop the outgoing episode's negotiated info so a failure before the
+      // new getPlaybackInfo resolves reports no playMethod/hwAccel rather
+      // than the previous episode's stale values.
+      this.playbackInfo = null;
 
       // Native engines must be stopped before a fresh load to avoid a freeze;
       // release the outgoing file's session (other devices on it stay alive).
@@ -2356,21 +2359,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.controlsVisible.set(true);
     } catch (e: any) {
       // Map to a translated line (Shaka-shaped errors keep their category
-      // message) and keep the raw engine/exception text in the diagnostics
-      // `message` field only — the card body never shows an untranslated string.
-      const isShaka = e?.category != null;
+      // message, a failed playback-info request its transport status) and
+      // keep the raw engine/exception text in the diagnostics `message`
+      // field only — the card body never shows an untranslated string.
+      const { source, code } = classifyPlaybackError(e);
       this.state.setError(
         this.translate.instant(
           userMessageKeyFor({
-            source: isShaka ? 'shaka' : 'engine',
-            code: e?.code,
+            source,
+            code,
             category: e?.category,
             dolbyVision: this.isDolbyVisionPassthrough(),
           }),
         ),
         {
-          source: isShaka ? 'shaka' : 'engine',
-          code: e?.code,
+          source,
+          code,
           category: e?.category,
           data: e?.data,
           message: e?.message ?? String(e),
@@ -2895,10 +2899,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   errorDiagnostics(): string {
     const err = this.state.error();
     if (!err) return '';
+    // playbackMode/hwAccel are only meaningful once a negotiation has
+    // actually resolved — otherwise they still hold the previous title's
+    // values (state.reset() doesn't clear them) and would misreport a
+    // pre-negotiation failure as a negotiated DirectPlay.
     const dump = formatErrorDiagnostics(err, {
       currentTime: this.state.currentTime(),
-      mode: this.state.playbackMode(),
-      hwAccel: this.state.hwAccel(),
+      mode: this.playbackInfo ? this.state.playbackMode() : undefined,
+      hwAccel: this.playbackInfo ? this.state.hwAccel() : undefined,
       engine: this.engineLabel(),
       url: this.lastStreamUrl,
       title: this.diagnosticsTitle(),
@@ -3052,9 +3060,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // still veiled) or a stale overlay with no way out.
       this.state.setRecovering(false);
       if (!this.state.error()) {
-        this.state.setError(this.translate.instant('player.playback_error'), {
-          source: 'session',
-        });
+        this.state.setError(
+          this.translate.instant(userMessageKeyFor({ source: 'session' })),
+          { source: 'session' },
+        );
       }
       return;
     }
@@ -3089,12 +3098,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // then immediately re-fails keeps counting toward the cap.
       this.recoverConfirmPending = true;
       this.recoverConfirmAt = Date.now();
-    } catch {
+    } catch (e) {
       if (this.recoverAttempts >= this.maxRecoverAttempts) {
         this.state.setRecovering(false);
-        this.state.setError(this.translate.instant('player.playback_error'), {
-          source: 'session',
-        });
+        const { source, code } = classifyPlaybackError(e);
+        this.state.setError(
+          this.translate.instant(userMessageKeyFor({ source, code })),
+          { source, code, message: (e as any)?.message ?? String(e) },
+        );
       } else {
         // Hold the recovering veil up across the backoff so the user sees a
         // reconnect, not a flash of the fatal overlay between attempts.
@@ -3121,12 +3132,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         preservePause: false,
         unmute: true,
       });
-    } catch {
+    } catch (e) {
       // No retry path after a Cast disconnect — surface a terminal error
       // instead of leaving the local player silently dead.
-      this.state.setError(this.translate.instant('player.playback_error'), {
-        source: 'session',
-      });
+      const { source, code } = classifyPlaybackError(e);
+      this.state.setError(
+        this.translate.instant(userMessageKeyFor({ source, code })),
+        { source, code, message: (e as any)?.message ?? String(e) },
+      );
     }
   }
 
@@ -3209,6 +3222,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
     void this.router.navigateByUrl(target, { replaceUrl: true });
+  }
+
+  /** Retry a cold-open failure (playback never started). */
+  onRetry() {
+    // ponytail: route bounce instead of extracting initPlayback(); extract it if the flicker shows.
+    this.state.error.set(null);
+    const target = this.router.url;
+    void this.router
+      .navigateByUrl('/', { skipLocationChange: true })
+      .then(() => this.router.navigateByUrl(target, { replaceUrl: true }));
   }
 
   onOpenMedia() {
@@ -3784,26 +3807,25 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     try {
       await this.doReloadStream();
     } catch (e) {
-      // Only the mobile ExoPlayer/AVPlayer engine is torn down before
-      // re-negotiating (NativePlayer.stop()), so a transient failure there
-      // (playback-info / engine.load) leaves a dead surface with the stall
-      // watchdog quiesced — surface a terminal card so the user has a way out.
-      // Every other engine keeps its previous source playing from buffer and
-      // self-heals via the 410 -> sessionExpired recovery (Shaka/webOS, and the
-      // desktop-mpv / Tizen surfaces, whose Capacitor stop is a no-op), and a
-      // throw after load() means video is already playing — none should card.
+      // Mobile Capacitor tears its surface down before re-negotiating, and
+      // desktop mpv's negotiation failure otherwise never reaches the user —
+      // both need a terminal card. Tizen/Shaka/webOS keep their previous
+      // source playing from buffer and self-heal via the 410 -> sessionExpired
+      // recovery, and a throw after load() means video is already playing —
+      // none of those three should card.
       console.error('[Player] reloadStream failed:', e);
       if (
         this.isNativeEngine() &&
-        !this.isDesktopNative &&
         !this.isTizenEngine() &&
         !this.reloadReachedPlayback &&
         !this.destroyed &&
         !this.state.error()
       ) {
-        this.state.setError(this.translate.instant('player.playback_error'), {
-          source: 'session',
-        });
+        const { source, code } = classifyPlaybackError(e);
+        this.state.setError(
+          this.translate.instant(userMessageKeyFor({ source, code })),
+          { source, code, message: (e as any)?.message ?? String(e) },
+        );
       }
       throw e;
     } finally {
