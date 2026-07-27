@@ -23,7 +23,6 @@ export interface DesktopLoadOptions {
   url: string;
   startTime?: number;
   headers?: Record<string, string>;
-  subtitles?: { url: string; language: string; label: string; forced?: boolean }[];
   /** Preferred audio language (mpv `alang`) so the player keeps the chosen
    *  language across seeks/reloads instead of reverting to the manifest default. */
   audioLanguage?: string;

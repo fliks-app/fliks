@@ -102,11 +102,20 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
   /** Bumped by load/stop/destroy; a load with a stale id skips its remaining
    *  IPC writes, so a stop can't be overtaken by a trailing loadfile. */
   private loadGen = 0;
-  /** error/fatal mpv log lines seen since the current load began. mpv's
-   *  `end-file` error carries only the generic `MPV_ERROR_*` string ("loading
-   *  failed"); the real cause (TLS verify, HTTP status, unsupported codec) is in
-   *  these log lines, so we buffer them and attach them to the error event. */
+  /** error/fatal mpv log lines seen since the current playback attempt began.
+   *  Cleared on `load()`, on `stop()`, and on every successful `playback-restart`
+   *  so a resolved failure (a recovered 404, a failed sidecar sub-add) can't be
+   *  attached to a later, unrelated error. mpv's `end-file` error carries only
+   *  the generic `MPV_ERROR_*` string ("loading failed"); the real cause (TLS
+   *  verify, HTTP status, unsupported codec) is in these log lines, so we
+   *  buffer them and attach them to the error event. */
   private errorLog: string[] = [];
+  /** Set when a buffered error/fatal log line is mpv's own libcurl/TLS failure
+   *  signature — log prefix exactly `curl`/`tls`, or a "Failed to open"
+   *  message. Reset alongside `errorLog`. Deliberately strict: a bare `stream`
+   *  prefix or any other line must not set this, or a genuine decode failure
+   *  (e.g. Dolby Vision) would misreport as a transport fault. */
+  private sawTransportError = false;
 
   constructor(opts: MpvPlayerOptions) {
     super();
@@ -143,7 +152,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
       `--input-ipc-server=${this.sockPath}`,
     ];
     console.log('[mpv] spawn:', this.mpvPath, args.join(' '));
-    this.proc = spawn(this.mpvPath, args, { stdio: ['ignore', 'pipe', 'pipe'], env: this.env });
+    this.proc = spawn(this.mpvPath, args, { stdio: ['ignore', 'ignore', 'pipe'], env: this.env });
     this.proc.on('exit', (code, signal) => {
       this.emit('exit', { code, signal });
       this.rejectAllPending('mpv process exited');
@@ -212,11 +221,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
         this.sock = sock;
         sock.on('data', (chunk: Buffer) => this.onData(chunk));
         sock.on('error', (e) => {
-          this.emit('error', {
-            code: -1,
-            message: String(e),
-            detail: this.errorLog.join(' | ') || undefined,
-          });
+          this.emit('error', this.errorPayload(String(e)));
           this.rejectAllPending(`mpv socket error: ${e}`);
         });
         sock.on('close', () => {
@@ -264,11 +269,22 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
         if (msg.level === 'error' || msg.level === 'fatal') {
           this.errorLog.push(line);
           if (this.errorLog.length > MAX_ERROR_LOG_LINES) this.errorLog.shift();
+          if (
+            msg.prefix === 'curl' ||
+            msg.prefix === 'tls' ||
+            (msg.text ?? '').includes('Failed to open')
+          ) {
+            this.sawTransportError = true;
+          }
         }
         this.emit('log', `[${msg.level}] ${line}`);
         break;
       }
       case 'playback-restart':
+        // A frame is playing again: whatever errorLog held was either resolved
+        // or belongs to the segment/seek that just succeeded.
+        this.errorLog = [];
+        this.sawTransportError = false;
         if (!this.sawFirstFrame) {
           this.sawFirstFrame = true;
           this.emit('firstFrame');
@@ -277,11 +293,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
       case 'end-file':
         if (msg.reason === 'eof') this.emit('stateChanged', { state: 'ended' });
         else if (msg.reason === 'error')
-          this.emit('error', {
-            code: -1,
-            message: msg.file_error ?? 'end-file error',
-            detail: this.errorLog.join(' | ') || undefined,
-          });
+          this.emit('error', this.errorPayload(msg.file_error ?? 'end-file error'));
         break;
       default:
         break;
@@ -324,11 +336,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
               ? this.duration - this.lastPosition > PREMATURE_EOF_GAP_S
               : this.errorLog.length > 0;
           if (premature) {
-            this.emit('error', {
-              code: -1,
-              message: 'playback stopped before end of stream',
-              detail: this.errorLog.join(' | ') || undefined,
-            });
+            this.emit('error', this.errorPayload('playback stopped before end of stream'));
           } else {
             this.emit('stateChanged', { state: 'ended' });
           }
@@ -348,6 +356,20 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
       default:
         break;
     }
+  }
+
+  /** Builds the shared `error` event payload from the buffered mpv log —
+   *  the single place the three error-emitting sites read `errorLog` and
+   *  `sawTransportError`, so the transport classification can't drift between
+   *  them. `code` follows MediaError semantics: 2 (MEDIA_ERR_NETWORK) when
+   *  this attempt's buffered log matched mpv's own TLS/libcurl signature,
+   *  else -1 (no MediaError equivalent — decode/format/unknown). */
+  private errorPayload(message: string): { code: number; message: string; detail?: string } {
+    return {
+      code: this.sawTransportError ? 2 : -1,
+      message,
+      detail: this.errorLog.join(' | ') || undefined,
+    };
   }
 
   private async setupObservers(): Promise<void> {
@@ -413,6 +435,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     this.cacheEnd = 0;
     this.lastPosition = 0;
     this.errorLog = [];
+    this.sawTransportError = false;
     const gen = ++this.loadGen;
     // Reset the reused player first so the new open's probe can't read atop the
     // previous file's buffered stream.
@@ -458,14 +481,6 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
       if (gen !== this.loadGen) return;
       await this.command(['set', 'demuxer-lavf-format', '']).catch(() => {});
     }
-    for (const s of opts.subtitles ?? []) {
-      if (gen !== this.loadGen) return;
-      // Best-effort: this runs after the video is playing, so an unreachable
-      // sidecar subtitle must not reject the load.
-      await this.command(['sub-add', s.url, 'auto', s.label ?? '', s.language ?? '']).catch((e) =>
-        this.emit('log', `[warn] sub-add failed ${s.url}: ${e}`),
-      );
-    }
   }
 
   /** Resolve once mpv has opened the media (first frame), or on error/timeout.
@@ -506,6 +521,8 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     this.duration = 0;
     this.cacheEnd = 0;
     this.lastPosition = 0;
+    this.errorLog = [];
+    this.sawTransportError = false;
     return this.command(['stop']).then(() => undefined);
   }
 

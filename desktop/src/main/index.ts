@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { registerAppSchemePrivileged, registerAppProtocol, APP_URL } from './protocol';
 import { installCorsBypass } from './cors';
+import { appendLog, redactQuery } from './log-file';
 import { setupUpdater } from './updater';
 import { registerDownloadIpc } from './download';
 import { setPlaybackKeepAwake, keepAwakeForState } from './power';
@@ -36,7 +37,10 @@ process.on('unhandledRejection', (e) => console.error('[main:unhandledRejection]
 // trust — Chromium would otherwise refuse the HTTPS connection. Accept cert
 // errors: the app only ever loads its own fliks:// UI and talks to the server
 // the user explicitly configured (same trust model as the mobile apps).
-app.on('certificate-error', (event, _wc, _url, _error, _cert, callback) => {
+app.on('certificate-error', (event, _wc, url, error, _cert, callback) => {
+  // Logged before the accept: if this fires for the media host, a "TLS
+  // failure" report has nothing to do with mpv's own verification at all.
+  appendLog(`[tls] ${redactQuery(url)} ${error}`);
   event.preventDefault();
   callback(true);
 });
