@@ -66,15 +66,18 @@
             </summary>
             <pre class="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded bg-black/40 p-2 text-[11px] leading-snug text-white/70">{{ errorDiagnostics() }}</pre>
           </details>
-          <div class="mt-4 flex items-center justify-center gap-2">
+        }
+        <div class="mt-4 flex items-center justify-center gap-2">
+          @if (!videoStarted()) {
+            <button class="btn btn-ghost btn-sm" (click)="onRetry()">{{ 'common.retry' | translate }}</button>
+          }
+          @if (err.code != null || err.data?.length || err.variant || err.message) {
             <button class="btn btn-ghost btn-sm" (click)="copyErrorDiagnostics()">
               {{ (errorCopied() ? 'player.copied' : 'player.copy_diagnostics') | translate }}
             </button>
-            <button class="btn btn-ghost btn-sm" (click)="onBack()">{{ 'player.back' | translate }}</button>
-          </div>
-        } @else {
-          <button class="btn btn-ghost btn-sm mt-4" (click)="onBack()">{{ 'player.back' | translate }}</button>
-        }
+          }
+          <button class="btn btn-ghost btn-sm" (click)="onBack()">{{ 'player.back' | translate }}</button>
+        </div>
       </div>
     </div>
   }

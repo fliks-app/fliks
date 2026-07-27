@@ -1,3 +1,5 @@
+import { HttpErrorResponse } from '@angular/common/http';
+
 /**
  * Structured playback error surfaced on the player's error card.
  *
@@ -70,6 +72,21 @@ const MEDIA_ERROR_NAMES: Record<number, string> = {
   4: 'MEDIA_ERR_SRC_NOT_SUPPORTED',
 };
 
+/** Classify a caught init/reload error into the `{source, code}` pair the
+ *  error card keys off. An `HttpErrorResponse` (a failed playback-info /
+ *  session request) reports its transport status; an object carrying a
+ *  Shaka `category` is a Shaka error; anything else is an engine (mpv /
+ *  native) failure. One place for the guess, so an HTTP transport fault is
+ *  never mislabelled as an engine failure. */
+export function classifyPlaybackError(
+  e: unknown,
+): { source: PlaybackError['source']; code?: number } {
+  if (e instanceof HttpErrorResponse) return { source: 'session', code: e.status };
+  const obj = e as { category?: number; code?: number } | null | undefined;
+  if (obj?.category != null) return { source: 'shaka', code: obj.code };
+  return { source: 'engine', code: obj?.code };
+}
+
 /** i18n key for the human line, mapped from the error class. Falls back to
  *  the generic `player.playback_error`. */
 export function userMessageKeyFor(err: {
@@ -101,6 +118,9 @@ export function userMessageKeyFor(err: {
     if (err.code === 3016) return 'player.error_decode';
     if (err.code === 4032) return 'player.error_unsupported';
   }
+  // A playback-info/session request that failed transport-side (status 0 —
+  // no response reached the browser) reads the same as a media network error.
+  if (err.source === 'session' && err.code === 0) return 'player.error_network';
   return 'player.playback_error';
 }
 
@@ -114,6 +134,8 @@ export function isNetworkOrAbort(err: {
 }): boolean {
   if (err.source === 'media') return err.code === 1 || err.code === 2;
   if (err.source === 'shaka') return err.category === 1;
+  // A session request that never got a response (status 0) is the same class.
+  if (err.source === 'session') return err.code === 0;
   return false;
 }
 
