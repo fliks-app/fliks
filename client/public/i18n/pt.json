@@ -416,6 +416,8 @@
     "sub_remember_hint": "As seleções de legendas serão guardadas para cada vídeo e reaplicadas se o vídeo for novamente reproduzido.",
     "sub_hide_image": "Ocultar as legendas de imagem",
     "sub_hide_image_hint": "As legendas de imagem (PGS, VOBSUB…) não podem ser apresentadas como texto. Quando ativado, são ocultadas do seletor e do leitor (neste dispositivo).",
+    "sub_show_format": "Mostrar o formato do ficheiro",
+    "sub_show_format_hint": "Adiciona o formato (SRT, VTT, ASS…) aos seletores de legendas, ao lado do idioma e dos indicadores.",
     "sub_clear_saved": "Limpar as seleções de faixa guardadas",
     "sub_appearance_title": "Aparência das legendas",
     "sub_appearance_hint": "Estas definições não se aplicam às legendas gráficas (PGS, DVD, etc.) nem às legendas que têm os seus próprios estilos incorporados (ASS/SSA).",

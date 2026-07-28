@@ -32,6 +32,12 @@
       [hint]="'playback_settings.sub_hide_image_hint' | translate"
     />
 
+    <app-toggle-field
+      [(value)]="showSubtitleFormat"
+      [label]="'playback_settings.sub_show_format' | translate"
+      [hint]="'playback_settings.sub_show_format_hint' | translate"
+    />
+
     <button class="btn btn-ghost btn-sm text-error gap-2 self-start" (click)="clearSubtitleSelections()">
       <svg lucideTrash2 class="h-4 w-4"></svg>
       {{ 'playback_settings.sub_clear_saved' | translate }}

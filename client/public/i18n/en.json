@@ -421,6 +421,8 @@
     "sub_remember_hint": "Subtitle selections will be saved for each video and reapplied if the video is played again.",
     "sub_hide_image": "Hide image subtitles",
     "sub_hide_image_hint": "Image subtitles (PGS, VOBSUB…) cannot be displayed as text. When enabled, they are hidden from the selector and the player (on this device).",
+    "sub_show_format": "Show the file format",
+    "sub_show_format_hint": "Adds the format (SRT, VTT, ASS…) to the subtitle pickers, next to the language and the flags.",
     "sub_clear_saved": "Clear saved track selections",
     "sub_appearance_title": "Subtitle appearance",
     "sub_appearance_hint": "These settings will not apply to graphical subtitles (PGS, DVD etc.) or to subtitles that have their own embedded styles (ASS/SSA).",

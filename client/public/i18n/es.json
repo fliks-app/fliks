@@ -416,6 +416,8 @@
     "sub_remember_hint": "Las selecciones de subtítulos se guardarán para cada vídeo y se volverán a aplicar si el vídeo se reproduce de nuevo.",
     "sub_hide_image": "Ocultar los subtítulos de imagen",
     "sub_hide_image_hint": "Los subtítulos de imagen (PGS, VOBSUB…) no pueden mostrarse como texto. Cuando está activado, se ocultan del selector y del reproductor (en este dispositivo).",
+    "sub_show_format": "Mostrar el formato del archivo",
+    "sub_show_format_hint": "Añade el formato (SRT, VTT, ASS…) a los selectores de subtítulos, junto al idioma y los indicadores.",
     "sub_clear_saved": "Vaciar las selecciones de pista guardadas",
     "sub_appearance_title": "Apariencia de los subtítulos",
     "sub_appearance_hint": "Estos ajustes no se aplicarán a los subtítulos gráficos (PGS, DVD, etc.) ni a los subtítulos que tienen sus propios estilos incorporados (ASS/SSA).",

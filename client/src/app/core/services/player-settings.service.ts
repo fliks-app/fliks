@@ -22,6 +22,9 @@ export interface PlayerSettings {
   rememberSubtitleSelections: boolean;
   // Hide image-based (PGS/VOBSUB) subtitles from the pickers and native player
   hideImageSubtitles: boolean;
+  /** Show the file format (SRT, VTT, ASS…) in the subtitle pickers. Off by
+   *  default: the language and the flags are what most viewers pick on. */
+  showSubtitleFormat: boolean;
   // Subtitle appearance
   subtitleSize: string;
   subtitleColor: string;
@@ -51,6 +54,7 @@ const DEFAULTS: PlayerSettings = {
   subtitleMode: 'intelligent',
   rememberSubtitleSelections: true,
   hideImageSubtitles: true,
+  showSubtitleFormat: false,
   subtitleSize: 'normal',
   subtitleColor: 'white',
   subtitleShadow: 'drop',

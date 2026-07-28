@@ -11,6 +11,7 @@ import { AuthService } from './auth.service';
 import { BrowserDeviceProfileService } from './browser-device-profile.service';
 import { TranslateService } from '@ngx-translate/core';
 import { formatSubtitleLabel } from '../utils/player.utils';
+import { AppSettingsService } from './app-settings.service';
 import {
   desktopDownloaderOrNull,
   type DesktopDownloadStatus,
@@ -53,6 +54,7 @@ export class DownloadManagerService {
   private readonly auth = inject(AuthService);
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
   private readonly translate = inject(TranslateService);
+  private readonly appSettings = inject(AppSettingsService);
 
   private readonly titles = new Map<number, { title: string; episode?: string }>();
   private eventSeq = 0;
@@ -372,8 +374,10 @@ export class DownloadManagerService {
           key,
           language: sub.language,
           // Same normalized label as online playback (localized language name +
-          // HI/Forced/codec) instead of the raw language code.
-          label: formatSubtitleLabel(sub, this.translate),
+          // HI/Forced) instead of the raw language code.
+          label: formatSubtitleLabel(sub, this.translate, undefined, {
+            showFormat: this.appSettings.showSubtitleFormat(),
+          }),
           forced: sub.forced,
         });
       }

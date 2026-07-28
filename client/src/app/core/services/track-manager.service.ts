@@ -155,13 +155,14 @@ export class TrackManagerService {
       // them natively; others burn them into the video server-side.
       const rendersImageNatively =
         !!this.deviceProfile.getProfile().supportsImageSubtitles;
+      const labelOpts = { showFormat: this.appSettings.showSubtitleFormat() };
       const subs = await this.subtitlesApi.getForMedia(mediaId);
       const tracks = buildSubtitleTracks(subs, mediaFileId, { hideBurnIn });
       const options: SubtitleOption[] = tracks.map((t) => {
-        const parts = formatSubtitleParts(t, this.translate);
+        const parts = formatSubtitleParts(t, this.translate, undefined, labelOpts);
         return {
         id: t.key,
-        label: formatSubtitleLabel(t, this.translate),
+        label: formatSubtitleLabel(t, this.translate, undefined, labelOpts),
         menuHead: parts.head,
         menuSub: parts.sub,
         url:
@@ -189,10 +190,10 @@ export class TrackManagerService {
           if (seen.has(key)) continue;
           seen.add(key);
           if (isImageBasedSubtitleCodec(emb.codec)) continue; // Bitmap from streamInfo only (no DB ID for burn-in)
-          const embParts = formatSubtitleParts(emb, this.translate);
+          const embParts = formatSubtitleParts(emb, this.translate, undefined, labelOpts);
           options.push({
             id: key,
-            label: formatSubtitleLabel(emb, this.translate),
+            label: formatSubtitleLabel(emb, this.translate, undefined, labelOpts),
             menuHead: embParts.head,
             menuSub: embParts.sub,
             url: streamingApi.getEmbeddedSubtitleUrl(mediaFileId, emb.streamIndex),
