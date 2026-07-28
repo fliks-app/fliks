@@ -1,8 +1,12 @@
 import { episodeScope } from './subtitle-activity.controller';
 import { SubtitleFile } from './entities/subtitle-file.entity';
 
-const episode = (episodeNumber: number, seasonNumber: number, title: string) =>
-  ({ episodeNumber, title, season: { seasonNumber } }) as never;
+const episode = (
+  episodeNumber: number,
+  seasonNumber: number,
+  title: string,
+  id = episodeNumber * 100,
+) => ({ id, episodeNumber, title, season: { seasonNumber } }) as never;
 
 const subtitleFile = (over: Partial<SubtitleFile>): SubtitleFile =>
   ({ episode: null, ...over }) as SubtitleFile;
@@ -11,7 +15,12 @@ describe('episodeScope', () => {
   it('reads the subtitle row own episode link', () => {
     expect(
       episodeScope(subtitleFile({ episode: episode(3, 1, 'Pilot') })),
-    ).toEqual({ seasonNumber: 1, episodeNumber: 3, episodeTitle: 'Pilot' });
+    ).toEqual({
+      episodeId: 300,
+      seasonNumber: 1,
+      episodeNumber: 3,
+      episodeTitle: 'Pilot',
+    });
   });
 
   it('falls back to the media file link when the row carries none', () => {
@@ -21,7 +30,12 @@ describe('episodeScope', () => {
           mediaFile: { episode: episode(7, 2, 'Later') } as never,
         }),
       ),
-    ).toEqual({ seasonNumber: 2, episodeNumber: 7, episodeTitle: 'Later' });
+    ).toEqual({
+      episodeId: 700,
+      seasonNumber: 2,
+      episodeNumber: 7,
+      episodeTitle: 'Later',
+    });
   });
 
   it('prefers the row own link over the media file one', () => {
@@ -37,6 +51,7 @@ describe('episodeScope', () => {
 
   it('yields nulls for a movie subtitle', () => {
     expect(episodeScope(subtitleFile({ mediaFile: {} as never }))).toEqual({
+      episodeId: null,
       seasonNumber: null,
       episodeNumber: null,
       episodeTitle: null,

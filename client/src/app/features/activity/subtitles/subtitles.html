@@ -56,7 +56,14 @@
               >{{ entry.mediaTitle }}</a>
               @if (episodeLabel(entry)) {
                 <p class="text-xs font-normal text-base-content/60 truncate" [title]="episodeLabel(entry)">
-                  {{ episodeLabel(entry) }}
+                  @if (entry.episodeId != null) {
+                    <a
+                      [routerLink]="['/series', entry.mediaId, 'episode', entry.episodeId]"
+                      class="link link-hover"
+                    >{{ episodeLabel(entry) }}</a>
+                  } @else {
+                    {{ episodeLabel(entry) }}
+                  }
                 </p>
               }
             </td>

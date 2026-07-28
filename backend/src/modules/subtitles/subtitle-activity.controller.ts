@@ -32,6 +32,7 @@ import { Action } from '../auth/casl/actions.enum';
 export function episodeScope(sf: SubtitleFile) {
   const episode = sf.episode ?? sf.mediaFile?.episode ?? null;
   return {
+    episodeId: episode?.id ?? null,
     seasonNumber: episode?.season?.seasonNumber ?? null,
     episodeNumber: episode?.episodeNumber ?? null,
     episodeTitle: episode?.title ?? null,
@@ -162,6 +163,7 @@ export class SubtitleActivityController {
       ),
       recent: recent.map((sf) => ({
         id: sf.id,
+        mediaId: sf.mediaId,
         mediaTitle: sf.media?.title ?? '?',
         ...episodeScope(sf),
         language: sf.language,
