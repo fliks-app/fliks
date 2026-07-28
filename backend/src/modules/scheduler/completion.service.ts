@@ -37,7 +37,10 @@ import {
 } from './utils/stalled-progress.util';
 import { CleanupProfile } from '../cleanup-profiles/entities/cleanup-profile.entity';
 import { Library } from '../libraries/entities/library.entity';
-import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
+import {
+  TorrentHistoryMatcher,
+  normaliseTorrentName,
+} from '../media/torrent-history-matcher.service';
 import { TorrentAutoMatcher } from '../media/torrent-auto-matcher.service';
 import { buildGrabHistoryRow } from '../media/grab-history.util';
 import {
@@ -161,15 +164,19 @@ export class CompletionService {
       relations: ['media'],
     });
     const rowByHash = new Map<string, DownloadHistory>();
-    const activeHistory = allHistory.filter(
-      (h) =>
-        h.status === 'grabbed' ||
-        h.status === 'failed' ||
-        h.status === 'warning',
-    );
     for (const h of allHistory) {
-      if (h.torrentHash) rowByHash.set(h.torrentHash.toLowerCase(), h);
+      if (!h.torrentHash) continue;
+      const key = h.torrentHash.toLowerCase();
+      const kept = rowByHash.get(key);
+      // Several rows can carry one hash; the linked one is authoritative.
+      if (!kept || (!kept.mediaId && h.mediaId)) rowByHash.set(key, h);
     }
+
+    const linkedTitles = new Set(
+      allHistory
+        .filter((h) => h.mediaId && h.sourceTitle)
+        .map((h) => normaliseTorrentName(h.sourceTitle)),
+    );
 
     const candidates = allTorrents.filter((t) => {
       if (!t.hash) return false;
@@ -197,11 +204,7 @@ export class CompletionService {
     for (const torrent of candidates) {
       const existingRow = rowByHash.get(torrent.hash!.toLowerCase());
 
-      // Belt-and-braces: name-fallback against currently-active rows.
-      // Only skip if that match actually has a media reference — a
-      // \`mediaId IS NULL\` ghost row would otherwise prevent the heal.
-      const fallback = this.historyMatcher.findMatch(torrent, activeHistory);
-      if (fallback?.history.mediaId) {
+      if (linkedTitles.has(normaliseTorrentName(torrent.name))) {
         skippedByNameFallback++;
         continue;
       }
