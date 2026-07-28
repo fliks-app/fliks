@@ -770,9 +770,9 @@
     "no_local_credits": "Nessun credito locale per questa persona"
   },
   "media_info": {
-    "video": "Video",
-    "audio": "Audio",
-    "subtitles": "Sottotitoli",
+    "video": "Video:",
+    "audio": "Audio:",
+    "subtitles": "Sottotitoli:",
     "directors": "Registi",
     "watched": "Visto",
     "ends_at": "Termina alle {{time}}",

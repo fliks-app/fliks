@@ -775,9 +775,9 @@
     "no_local_credits": "No local credits for this person"
   },
   "media_info": {
-    "video": "Video",
-    "audio": "Audio",
-    "subtitles": "Subtitles",
+    "video": "Video:",
+    "audio": "Audio:",
+    "subtitles": "Subtitles:",
     "directors": "Directors",
     "watched": "Watched",
     "ends_at": "Ends at {{time}}",
