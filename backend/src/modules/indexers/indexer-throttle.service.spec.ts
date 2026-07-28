@@ -18,13 +18,29 @@ describe('IndexerThrottle cooldown gate', () => {
     expect(t.cooldownRemainingMs(1)).toBeLessThanOrEqual(30_000);
   });
 
-  it('extends the window on consecutive failures', () => {
+  it('escalates once the open window has elapsed', () => {
+    jest.useFakeTimers();
+    try {
+      const t = new IndexerThrottle();
+      t.notifyFailure(indexer());
+      jest.advanceTimersByTime(30_000);
+      t.notifyFailure(indexer());
+      // Second failure after the 30s window escalates to 2min.
+      expect(t.cooldownRemainingMs(1)).toBeGreaterThan(30_000);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('does not escalate on failures inside the open window', () => {
     const t = new IndexerThrottle();
     t.notifyFailure(indexer());
     const afterOne = t.cooldownRemainingMs(1);
+    // A network-wide outage fails every queued request; escalating on each
+    // would burn the whole ladder to the 6h cap within seconds.
     t.notifyFailure(indexer());
-    // Second failure escalates 30s -> 2min.
-    expect(t.cooldownRemainingMs(1)).toBeGreaterThan(afterOne);
+    t.notifyFailure(indexer());
+    expect(t.cooldownRemainingMs(1)).toBeLessThanOrEqual(afterOne);
   });
 
   it('clears the cooldown on confirmed success', () => {

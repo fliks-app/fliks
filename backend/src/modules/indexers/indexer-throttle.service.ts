@@ -18,7 +18,8 @@ import { Indexer } from './entities/indexer.entity';
  *      subsequent calls block until the window elapses; this overrides
  *      `requestDelay` upward, never downward.
  *   4. Progressive cooldown on consecutive failures — 30s → 2min →
- *      15min → 1h → 6h. Resets on success.
+ *      15min → 1h → 6h, at most one step per elapsed window. Resets on
+ *      success.
  */
 @Injectable()
 export class IndexerThrottle {
@@ -82,9 +83,13 @@ export class IndexerThrottle {
     );
   }
 
-  /** Caller signals a transport-level failure (network error, 5xx,
-   *  429 even after Retry-After). Drives progressive cooldown. */
+  /** Caller signals a transport-level failure (network error, 5xx, 429 even
+   *  after Retry-After). Escalates one step per elapsed window: failures
+   *  arriving inside an open cooldown belong to the outage that opened it, so
+   *  the ladder tracks how long an indexer has been broken rather than how
+   *  many requests hit it. */
   notifyFailure(indexer: Indexer): void {
+    if (this.cooldownRemainingMs(indexer.id) > 0) return;
     const n = (this.failureCount.get(indexer.id) ?? 0) + 1;
     this.failureCount.set(indexer.id, n);
     const cooldownMs = backoffFor(n);
