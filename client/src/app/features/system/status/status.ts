@@ -14,7 +14,7 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 
 interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; body?: Record<string, unknown>; }
 interface ServiceStatus { name: string; ok: boolean; message?: string; }
-interface HealthReport { version: string; uptimeSeconds: number; database: ServiceStatus; indexers: { enabled: number; total: number }; downloadClients: ServiceStatus[]; }
+interface HealthReport { version: string; uptimeSeconds: number; database: ServiceStatus; indexers: { enabled: number; total: number }; downloadClients: ServiceStatus[]; restartSupervisor: string | null; }
 
 @Component({
   selector: 'app-system-status',
@@ -36,6 +36,7 @@ export class SystemStatusComponent implements OnInit {
   readonly loading = signal(true);
   readonly triggering = signal<string | null>(null);
   readonly clearing = signal(false);
+  readonly restarting = signal(false);
 
   readonly commandItems: (
     | { type: 'single'; name: string; label: string }
@@ -143,6 +144,36 @@ export class SystemStatusComponent implements OnInit {
       await this.loadCommands();
     } finally {
       this.clearing.set(false);
+    }
+  }
+
+  async restart() {
+    const confirmed = await this.confirmation.confirm({
+      title: this.translate.instant('system.restart_server'),
+      message: this.translate.instant('system.restart_confirm'),
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    this.restarting.set(true);
+    try {
+      await firstValueFrom(this.http.post('/api/system/restart', {}));
+    } catch {
+      this.restarting.set(false);
+      return;
+    }
+    await this.waitForServer();
+    location.reload();
+  }
+
+  private async waitForServer() {
+    for (let attempt = 0; attempt < 60; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      try {
+        await firstValueFrom(this.http.get('/api/system/health'));
+        return;
+      } catch {
+        // Still down — keep polling.
+      }
     }
   }
 
