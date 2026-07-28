@@ -172,7 +172,22 @@
           </div>
         }
       } @else {
-      @if (actionsSubIsTranslatable()) {
+      @if (actionsSubHasTextCues()) {
+        <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => viewSubtitle(s))">
+          <svg lucideEye class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+          {{ 'media_detail.action_view_subtitle' | translate }}
+        </button>
+        @if (canDownload()) {
+          <a
+            class="dropdown-item text-white"
+            [href]="subtitleDownloadUrl(actionsSub())"
+            [attr.download]="subtitleDownloadName(actionsSub())"
+            (click)="closeSubActions()"
+          >
+            <svg lucideDownload class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
+            {{ 'media_detail.action_download_subtitle' | translate }}
+          </a>
+        }
         <button type="button" class="dropdown-item text-white" (click)="runSubAction(s => translateSubtitle(s))">
           <svg lucideLanguages class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>
           {{ 'media_detail.translate' | translate }}
@@ -533,3 +548,7 @@
     <button type="button" tabindex="-1" (click)="closeOcrLangModal()">close</button>
   </form>
 </dialog>
+
+<!-- Cue list for the "view" action. Sibling of the modals above so it opens on
+     the top layer rather than inside another <dialog>. -->
+<app-subtitle-viewer-modal #subtitleViewer />
