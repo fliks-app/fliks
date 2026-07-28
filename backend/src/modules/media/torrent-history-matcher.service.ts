@@ -17,6 +17,37 @@ export interface HistoryMatch {
   matchedBy: MatchedBy;
 }
 
+const LIVE_STATUSES = new Set(['grabbed', 'importing']);
+
+/**
+ * Several rows legitimately describe one torrent: re-grabbing a release already
+ * in the client adds a row but no torrent, since qBittorrent deduplicates by
+ * hash. Ranking them is therefore mandatory — without it the winner is whatever
+ * order the database happened to return, and callers disagree on which row
+ * speaks for the torrent.
+ */
+function authorityRank(h: DownloadHistory): number {
+  return (h.mediaId ? 2 : 0) + (LIVE_STATUSES.has(h.status) ? 1 : 0);
+}
+
+/** Whether `candidate` speaks for the torrent over `current`: a media link
+ *  first, then a live status over a terminal one, then the most recent row. */
+export function outranksForTorrent(
+  candidate: DownloadHistory,
+  current: DownloadHistory,
+): boolean {
+  const delta = authorityRank(candidate) - authorityRank(current);
+  return delta > 0 || (delta === 0 && candidate.id > current.id);
+}
+
+function pickAuthoritative(rows: DownloadHistory[]): DownloadHistory | null {
+  let best: DownloadHistory | null = null;
+  for (const h of rows) {
+    if (!best || outranksForTorrent(h, best)) best = h;
+  }
+  return best;
+}
+
 /**
  * Single source of truth for the "which DownloadHistory does this qBittorrent
  * torrent belong to" lookup. Three call sites used to inline three slightly
@@ -29,9 +60,13 @@ export interface HistoryMatch {
  *
  * Rules, in order:
  *  1. `history.torrentHash === torrent.hash` — definitive.
- *  2. Exactly one history with normalised `sourceTitle === torrent.name`.
+ *  2. Histories whose normalised `sourceTitle` equals the normalised
+ *     `torrent.name` — the same release.
  *  3. Exactly one history whose normalised `sourceTitle` is a prefix of the
  *     normalised `torrent.name` (or vice-versa). Multiple candidates abort.
+ *
+ * (1) and (2) can each yield several rows, which {@link outranksForTorrent}
+ * ranks. (3) cannot: distinct releases overlap by prefix, so it still aborts.
  *
  * Both name comparisons use {@link normaliseTorrentName}, which decodes HTML
  * entities, collapses whitespace and strips noise tokens — qBittorrent
@@ -59,25 +94,23 @@ export class TorrentHistoryMatcher {
     const name = normaliseTorrentName(torrent.name);
 
     if (hash) {
-      const byHash = histories.find(
-        (h) => h.torrentHash && h.torrentHash.toLowerCase() === hash,
+      const byHash = pickAuthoritative(
+        histories.filter(
+          (h) => h.torrentHash && h.torrentHash.toLowerCase() === hash,
+        ),
       );
       if (byHash) return { history: byHash, matchedBy: 'hash' };
     }
 
-    const exact = histories.filter(
-      (h) => normaliseTorrentName(h.sourceTitle ?? '') === name,
+    // Rows sharing a normalised sourceTitle describe the same release, so rank
+    // them like a shared hash. Prefix overlap below stays a refusal: distinct
+    // releases can overlap there, and picking one would cross-match them.
+    const byName = pickAuthoritative(
+      histories.filter(
+        (h) => normaliseTorrentName(h.sourceTitle ?? '') === name,
+      ),
     );
-    if (exact.length === 1) {
-      return { history: exact[0], matchedBy: 'exact-name' };
-    }
-    if (exact.length > 1) {
-      // Ambiguous exact match — refuse rather than guess.
-      this.log.warn(
-        `TorrentHistoryMatcher: ${exact.length} histories share normalised sourceTitle="${name}" — refusing to cross-match`,
-      );
-      return null;
-    }
+    if (byName) return { history: byName, matchedBy: 'exact-name' };
 
     const prefix = histories.filter((h) => {
       if (!h.sourceTitle) return false;

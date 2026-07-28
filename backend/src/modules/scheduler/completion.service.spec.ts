@@ -159,6 +159,25 @@ describe('CompletionService.reconcileOrphanHistory', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('re-arms an importing row whose torrent went back to downloading', async () => {
+    const row = history({ id: 21, status: 'importing', updatedAt: new Date() });
+    const live = { ...torrent('h1'), progress: 0.1 } as QbittorrentTorrent;
+    const { update, done } = run([live], [], [row]);
+    await done;
+    expect(update).toHaveBeenCalledWith([21], {
+      status: 'grabbed',
+      statusMessage: null,
+    });
+  });
+
+  it('leaves an importing row alone while its torrent is complete', async () => {
+    const row = history({ id: 21, status: 'importing', updatedAt: new Date() });
+    const done0 = { ...torrent('h1'), progress: 1 } as QbittorrentTorrent;
+    const { update, done } = run([done0], [], [row]);
+    await done;
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('emits queue.updated on a change, and stays silent when nothing moved', async () => {
     const gone = history({ id: 7, status: 'grabbed', updatedAt: HOUR_AGO });
     const flip = run([], [gone]);
