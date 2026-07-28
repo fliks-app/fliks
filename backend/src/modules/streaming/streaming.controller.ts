@@ -1225,8 +1225,7 @@ export class StreamingController {
     res.send(withTimestampMap(vtt, startTimeSeconds));
   }
 
-  /** Download an embedded subtitle stream. Only the extracted WebVTT exists for
-   *  these — there is no sidecar file to hand back. */
+  /** Embedded stream: only the extracted WebVTT exists, no sidecar file. */
   @Get(':mediaFileId/subtitles/embedded/:streamIndex/download')
   async embeddedSubtitleDownload(
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
@@ -1250,8 +1249,8 @@ export class StreamingController {
       resolved.relativePath,
       path.extname(resolved.relativePath),
     );
-    // `attachment()` emits both `filename` and `filename*`, so a client that
-    // reads only the plain parameter still gets the name.
+    // attachment() emits both `filename` and `filename*` — a client reading
+    // only the plain one still gets a name.
     res.attachment(`${base}.track-${streamIndex}.vtt`);
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.send(withTimestampMap(Buffer.concat(chunks), startTimeSeconds));

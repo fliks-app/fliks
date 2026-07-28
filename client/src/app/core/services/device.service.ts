@@ -61,6 +61,14 @@ export class DeviceService {
   readonly isTouch = computed(() => this.input() === 'touch');
   readonly isDpad = computed(() => this.input() === 'dpad');
 
+  /** A download link reaches a real file only in a browser or the Electron
+   *  shell. The Capacitor WebViews have no download handler (Android needs
+   *  `setDownloadListener`, iOS a `WKDownloadDelegate`) and a TV has nowhere to
+   *  put one, so the link would silently do nothing there. */
+  readonly canSaveFiles = computed(
+    () => !this.isTv() && (this.isDesktopNative() || !Capacitor.isNativePlatform()),
+  );
+
   constructor() {
     this.applyOverrideFromUrl();
     const detected = this.detect();

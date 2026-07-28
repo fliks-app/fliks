@@ -43,6 +43,7 @@ import {
 } from '../../../core/utils/subtitle-codecs';
 import { SUBTITLE_LANGUAGE_CODES } from '../../../core/constants/subtitle-languages';
 import { AppSettingsService } from '../../../core/services/app-settings.service';
+import { DeviceService } from '../../../core/services/device.service';
 import { SubtitleFilenamePipe } from '../../pipes/subtitle-filename.pipe';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { SubtitleViewerModalComponent } from '../subtitle-viewer-modal/subtitle-viewer-modal';
@@ -129,6 +130,7 @@ export class SubtitlesModalComponent {
   private readonly sse = inject(SseService);
   private readonly appSettings = inject(AppSettingsService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly device = inject(DeviceService);
 
   constructor() {
     // Header subtitle chips honour the hide-burn-in app setting; load it once.
@@ -192,11 +194,10 @@ export class SubtitlesModalComponent {
   private readonly viewer =
     viewChild<SubtitleViewerModalComponent>('subtitleViewer');
 
-  /** Name the anchor asks for. The server sends `Content-Disposition` too, but
-   *  that header can be dropped in transit (a proxy, an opaque response), and
-   *  the browser then falls back to the URL's last segment — a file called
-   *  "download". The attribute is the same-origin belt to that braces; a remote
-   *  server still relies on the header, which the attribute cannot override. */
+  protected readonly canDownload = this.device.canSaveFiles;
+
+  /** Name for the anchor's `download`, so a same-origin save keeps it even if
+   *  `Content-Disposition` is lost in transit. */
   protected subtitleDownloadName(sub: SubtitleFileRow | null): string {
     if (!sub) return '';
     if (sub.relativePath) {
@@ -205,8 +206,7 @@ export class SubtitlesModalComponent {
     return `track-${sub.streamIndex}.${sub.language || 'und'}.vtt`;
   }
 
-  /** Attachment URL for the open row: the stored file for a sidecar subtitle,
-   *  the extracted WebVTT for an embedded track — the only form it has. */
+  /** Sidecar → the stored file; embedded → the extracted WebVTT. */
   protected subtitleDownloadUrl(sub: SubtitleFileRow | null): string {
     if (!sub) return '';
     return sub.relativePath
@@ -217,8 +217,7 @@ export class SubtitlesModalComponent {
         );
   }
 
-  /** Open the cue list. Reads the playback WebVTT, so an embedded track is
-   *  extracted on demand exactly as it would be for playback. */
+  /** Reads the playback WebVTT, so an embedded track is extracted on demand. */
   protected viewSubtitle(sub: SubtitleFileRow): void {
     const url = sub.relativePath
       ? this.streamingApi.getSubtitleUrl(sub.mediaFileId, sub.id)

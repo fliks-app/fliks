@@ -327,16 +327,14 @@ export class StreamingApiService {
     );
   }
 
-  /** External subtitle as stored on disk, served as an attachment so the
-   *  original format is kept — the playback URL above is a VTT conversion. */
+  /** The stored file, original format kept — the URL above is a VTT conversion. */
   getSubtitleDownloadUrl(mediaFileId: number, subtitleId: number): string {
     return this.streamUrl(
       `/api/stream/${mediaFileId}/subtitles/${subtitleId}/download`,
     );
   }
 
-  /** Embedded subtitle as an attachment: the extracted WebVTT, the only form
-   *  that exists for a stream inside the container. */
+  /** The extracted WebVTT, the only form a stream in the container has. */
   getEmbeddedSubtitleDownloadUrl(
     mediaFileId: number,
     streamIndex: number,

@@ -83,12 +83,8 @@ export class SubtitleStreamService {
     private readonly eventsService: EventsService,
   ) {}
 
-  /**
-   * Locate an external subtitle on disk, enforcing the library ACL of the
-   * subtitle's OWN media so a foreign subtitle id can't be read regardless of
-   * the mediaFileId in the request path (IDOR), and resolving symlinks so no
-   * stored path escapes the media folder.
-   */
+  /** ACL is checked on the subtitle's OWN media, so a foreign id can't be read
+   *  via another mediaFileId (IDOR); realpath blocks symlink escapes. */
   private async resolveSubtitleOnDisk(
     subtitleId: number,
     user?: User,
@@ -128,11 +124,8 @@ export class SubtitleStreamService {
     return { sub, realSubPath };
   }
 
-  /**
-   * Absolute path and download filename of an external subtitle, for serving
-   * the stored file as-is. The name comes from the file on disk so the original
-   * extension is preserved — the VTT the player consumes is a conversion.
-   */
+  /** The stored file, named after the copy on disk so its original extension
+   *  survives — the player's VTT is a conversion. */
   async getSubtitleFileForDownload(
     subtitleId: number,
     user?: User,

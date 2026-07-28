@@ -13,12 +13,8 @@ import { ModalHeaderComponent } from '../modal-header';
 import { VttCue, parseVtt } from '../../../core/services/playback-engine/subtitle-overlay.util';
 import { formatTime } from '../../../core/utils/player.utils';
 
-/**
- * Read-only view of a subtitle's cues, opened from the subtitle actions menu.
- * Fetches the same WebVTT the player consumes and reuses the engine's cue
- * parser, so what is listed here is what would be rendered on screen —
- * including its sanitisation of inline tags down to `<b> <i> <u> <br>`.
- */
+/** Read-only cue list. Reads the player's own WebVTT through the engine's
+ *  parser, so it shows what would be rendered, tag sanitisation included. */
 @Component({
   selector: 'app-subtitle-viewer-modal',
   imports: [TranslateModule, ModalHeaderComponent],
