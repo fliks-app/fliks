@@ -7,18 +7,7 @@
     @for (u of users(); track u.id) {
       <li class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200">
         <a [routerLink]="['/profile', u.id]" class="flex items-center gap-3 flex-1 min-w-0">
-          <div class="avatar avatar-placeholder shrink-0">
-            <div
-              class="w-10 h-10 rounded-full text-white text-sm font-semibold"
-              [style.background-color]="'hsl(' + avatar(u.username).hue + ' 55% 45%)'"
-            >
-              @if (u.avatar) {
-                <img [src]="u.avatar | resolveUrl" [alt]="u.username" />
-              } @else {
-                <span>{{ avatar(u.username).initials }}</span>
-              }
-            </div>
-          </div>
+          <app-user-avatar [username]="u.username" [avatar]="u.avatar" />
           <span class="flex-1 min-w-0 truncate font-medium">{{ u.username }}</span>
           @if (u.followsYou) {
             <span class="badge badge-sm badge-ghost">{{ 'social.follows_you' | translate }}</span>

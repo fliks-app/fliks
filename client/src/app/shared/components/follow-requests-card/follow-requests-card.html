@@ -13,18 +13,7 @@
           @for (u of requests(); track u.id) {
             <li class="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
               <a [routerLink]="['/profile', u.id]" class="flex items-center gap-3 flex-1 min-w-0">
-                <div class="avatar avatar-placeholder shrink-0">
-                  <div
-                    class="w-9 h-9 rounded-full text-white text-sm font-semibold"
-                    [style.background-color]="'hsl(' + avatar(u.username).hue + ' 55% 45%)'"
-                  >
-                    @if (u.avatar) {
-                      <img [src]="u.avatar | resolveUrl" [alt]="u.username" />
-                    } @else {
-                      <span>{{ avatar(u.username).initials }}</span>
-                    }
-                  </div>
-                </div>
+                <app-user-avatar [username]="u.username" [avatar]="u.avatar" size="w-9 h-9 text-sm" />
                 <span class="flex-1 min-w-0 truncate text-sm font-medium">{{ u.username }}</span>
               </a>
               <button

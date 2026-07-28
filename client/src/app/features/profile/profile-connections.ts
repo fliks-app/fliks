@@ -12,9 +12,8 @@ import { TranslateModule } from '@ngx-translate/core';
 import { LucideUserPlus, LucideUserCheck, LucideClock } from '@lucide/angular';
 import { SocialApiService, SocialUser } from '../../core/services/api/social-api.service';
 import { AuthService } from '../../core/services/auth.service';
-import { initialsAvatar } from '../../core/utils/initials-avatar';
-import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ProfileContextService } from './profile-context.service';
+import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
 
 type ConnectionsMode = 'followers' | 'following';
 
@@ -22,7 +21,7 @@ type ConnectionsMode = 'followers' | 'following';
  *  its own follow/unfollow control. */
 @Component({
   selector: 'app-profile-connections',
-  imports: [RouterLink, TranslateModule, LucideUserPlus, LucideUserCheck, LucideClock, ResolveUrlPipe],
+  imports: [UserAvatarComponent, RouterLink, TranslateModule, LucideUserPlus, LucideUserCheck, LucideClock],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile-connections.html',
 })
@@ -51,10 +50,6 @@ export class ProfileConnectionsComponent {
       const mode = this.mode();
       if (Number.isFinite(id) && id > 0) void this.load(id, mode);
     });
-  }
-
-  avatar(name: string) {
-    return initialsAvatar(name);
   }
 
   private async load(id: number, mode: ConnectionsMode): Promise<void> {

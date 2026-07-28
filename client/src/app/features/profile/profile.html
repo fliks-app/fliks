@@ -6,46 +6,37 @@
   <!-- Header: identity on top, actions wrap below on mobile / sit right on sm+ -->
   <div class="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
     <div class="flex items-center gap-4 min-w-0">
-      <div class="avatar avatar-placeholder shrink-0">
-        @if (p.isSelf) {
-          <button
-            type="button"
-            class="group relative w-16 h-16 sm:w-20 sm:h-20 rounded-full text-2xl sm:text-3xl font-semibold text-white overflow-hidden"
-            [style.background-color]="'hsl(' + avatar().hue + ' 55% 45%)'"
-            (click)="avatarInput.click()"
-            [attr.aria-label]="'social.avatar_change' | translate"
+      @if (p.isSelf) {
+        <button
+          type="button"
+          class="group"
+          (click)="avatarInput.click()"
+          [attr.aria-label]="'social.avatar_change' | translate"
+        >
+          <app-user-avatar
+            [username]="p.username"
+            [avatar]="p.avatar"
+            size="w-16 h-16 sm:w-20 sm:h-20 text-2xl sm:text-3xl"
           >
-            @if (p.avatar) {
-              <img [src]="p.avatar | resolveUrl" [alt]="p.username" />
-            } @else {
-              <span>{{ avatar().initials }}</span>
-            }
-            <span
-              class="absolute inset-0 hidden group-hover:flex items-center justify-center bg-black/50"
-            >
+            <span class="absolute inset-0 hidden group-hover:flex items-center justify-center bg-black/50">
               <svg lucideCamera class="h-6 w-6"></svg>
             </span>
-          </button>
-          <input
-            #avatarInput
-            type="file"
-            accept="image/*"
-            class="hidden"
-            (change)="onAvatarPicked($event)"
-          />
-        } @else {
-          <div
-            class="w-16 h-16 sm:w-20 sm:h-20 rounded-full text-2xl sm:text-3xl font-semibold text-white"
-            [style.background-color]="'hsl(' + avatar().hue + ' 55% 45%)'"
-          >
-            @if (p.avatar) {
-              <img [src]="p.avatar | resolveUrl" [alt]="p.username" />
-            } @else {
-              <span>{{ avatar().initials }}</span>
-            }
-          </div>
-        }
-      </div>
+          </app-user-avatar>
+        </button>
+        <input
+          #avatarInput
+          type="file"
+          accept="image/*"
+          class="hidden"
+          (change)="onAvatarPicked($event)"
+        />
+      } @else {
+        <app-user-avatar
+          [username]="p.username"
+          [avatar]="p.avatar"
+          size="w-16 h-16 sm:w-20 sm:h-20 text-2xl sm:text-3xl"
+        />
+      }
       <div class="min-w-0 flex-1">
         <h1 class="text-xl sm:text-2xl font-bold truncate">{{ p.username }}</h1>
         <div class="flex gap-4 text-sm text-base-content/60 mt-1">
