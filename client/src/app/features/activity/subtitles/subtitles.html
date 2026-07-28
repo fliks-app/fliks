@@ -49,11 +49,16 @@
         @for (entry of subHistory(); track entry.id) {
           <tr>
             <td class="text-sm whitespace-nowrap">{{ entry.createdAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}</td>
-            <td class="font-medium max-w-[14rem] truncate" [title]="entry.mediaTitle">
+            <td class="font-medium max-w-[14rem]" [title]="entry.mediaTitle">
               <a
                 [routerLink]="['/' + (entry.mediaType === 'series' ? 'series' : 'movies'), entry.mediaId]"
-                class="link link-hover"
+                class="link link-hover block truncate"
               >{{ entry.mediaTitle }}</a>
+              @if (episodeLabel(entry)) {
+                <p class="text-xs font-normal text-base-content/60 truncate" [title]="episodeLabel(entry)">
+                  {{ episodeLabel(entry) }}
+                </p>
+              }
             </td>
             <td class="text-sm font-mono">{{ entry.language }}</td>
             <td class="text-sm">{{ entry.providerType }}</td>
