@@ -775,9 +775,9 @@
     "no_local_credits": "Aucun crédit local pour cette personne"
   },
   "media_info": {
-    "video": "Vidéo",
-    "audio": "Audio",
-    "subtitles": "Sous-titres",
+    "video": "Vidéo :",
+    "audio": "Audio :",
+    "subtitles": "Sous-titres :",
     "directors": "Réalisateurs",
     "watched": "Lu",
     "ends_at": "Se termine à {{time}}",
