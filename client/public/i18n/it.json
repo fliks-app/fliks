@@ -552,7 +552,10 @@
     "use_quick_connect": "Connessione rapida",
     "other_user": "Inserisci un altro utente",
     "change_server": "Cambia server",
-    "load_error": "Impossibile caricare l'elenco degli utenti."
+    "load_error": "Impossibile caricare l'elenco degli utenti.",
+    "session_open": "Già connesso su questo dispositivo",
+    "session_expired": "Questa sessione è scaduta: accedi di nuovo.",
+    "offline_hint": "Server non raggiungibile: vengono mostrati solo gli account salvati su questo dispositivo."
   },
   "quick_connect": {
     "starting": "Preparazione della richiesta…",
@@ -588,7 +591,8 @@
       "minutes": "{{n}} min fa",
       "hours": "{{n}} h fa",
       "days": "{{n}} g fa"
-    }
+    },
+    "session_open": "Connesso su questo dispositivo"
   },
   "search": {
     "title": "Ricerca",

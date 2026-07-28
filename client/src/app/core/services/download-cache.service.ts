@@ -62,6 +62,12 @@ export class DownloadCacheService {
     });
   }
 
+  /** No signed-in account means no scope to write into: a write between two
+   *  sessions would land in a `::0` bucket nobody reads. */
+  private canPersist(): boolean {
+    return untracked(() => !!this.auth.user());
+  }
+
   /** localStorage-key suffix isolating downloads to the current (server, user).
    *  Read untracked so it is safe to call from anywhere (including effects that
    *  also write localTaskIds) without creating a mutual-invalidation loop. */
@@ -89,6 +95,7 @@ export class DownloadCacheService {
   }
 
   private persistLocalIds() {
+    if (!this.canPersist()) return;
     // untracked: markLocal/removeLocal run inside effects that also write
     // localTaskIds — a tracked read here would create a mutual-invalidation loop.
     localStorage.setItem(this.localIdsKey(), JSON.stringify([...untracked(() => this.localTaskIds())]));
@@ -134,6 +141,7 @@ export class DownloadCacheService {
 
   /** Persist task list for offline recovery */
   save(tasks: DownloadTask[]) {
+    if (!this.canPersist()) return;
     try {
       localStorage.setItem(this.storageKey(), JSON.stringify(tasks));
     } catch {

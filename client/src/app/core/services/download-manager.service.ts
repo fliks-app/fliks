@@ -100,19 +100,21 @@ export class DownloadManagerService {
     }
   });
 
-  private recovered = false;
+  /** Session epoch already recovered, or -1. The task list is scoped to the
+   *  (server, user) pair that owns it, so each session recovers once. */
+  private recoveredEpoch = -1;
 
-  /** Recover cached tasks once auth is ready. */
   private readonly authEffect = effect(() => {
-    if (this.auth.isAuthenticated() && !this.recovered) {
-      this.recovered = true;
+    const epoch = this.auth.sessionEpoch();
+    if (this.auth.isAuthenticated() && epoch !== this.recoveredEpoch) {
+      this.recoveredEpoch = epoch;
       void this.recover(true);
     }
   });
 
   constructor() {
     window.addEventListener('online', () => {
-      if (this.recovered) void this.recover();
+      if (this.recoveredEpoch >= 0) void this.recover();
     });
     this.downloader?.onStatus((s) => this.onDesktopStatus(s));
   }

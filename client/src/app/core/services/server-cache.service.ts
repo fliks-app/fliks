@@ -14,23 +14,16 @@ import { CachingReuseStrategy } from './route-reuse.strategy';
  * - Storage settings → "Vider le cache" — user-initiated reset.
  *
  * Explicitly preserved: downloaded media (file IDs are server-scoped but
- * the user opted into them), the auth token (until logout), UI prefs
- * (sidebar pinned, player settings, etc.).
+ * the user opted into them), the stored sessions (credentials, not view data —
+ * AuthService owns their lifecycle), UI prefs (sidebar pinned, player
+ * settings, etc.).
  */
 @Injectable({ providedIn: 'root' })
 export class ServerCacheService {
   private readonly reuseStrategy = inject(CachingReuseStrategy);
 
   async clearAll(): Promise<void> {
-    await Promise.all([
-      clearRequestCache(),
-      this.clearCachedUser(),
-      this.clearRouteReuse(),
-    ]);
-  }
-
-  private async clearCachedUser(): Promise<void> {
-    try { localStorage.removeItem('fliks.cachedUser'); } catch { /* ignore */ }
+    await Promise.all([clearRequestCache(), this.clearRouteReuse()]);
   }
 
   private async clearRouteReuse(): Promise<void> {

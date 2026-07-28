@@ -96,7 +96,11 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
     try {
       const res = await this.auth.pairingStatus(this.pairingId, this.deviceId);
       if (res.status === 'approved' && res.accessToken) {
-        await this.auth.loginWithToken(res.accessToken, res.refreshToken);
+        await this.auth.loginWithToken(
+          res.accessToken,
+          res.refreshToken,
+          res.refreshTokenExpiresAt,
+        );
         await this.router.navigate(['/'], { replaceUrl: true });
         return;
       }

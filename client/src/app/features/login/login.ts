@@ -62,8 +62,8 @@ export class LoginComponent {
     }
   }
 
-  async changeServer() {
-    await this.serverConfig.clear();
+  /** Keep the stored server URL and sessions: /setup is a picker, not a reset. */
+  changeServer() {
     void this.router.navigate(['/setup']);
   }
 

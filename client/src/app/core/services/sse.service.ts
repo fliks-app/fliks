@@ -1,4 +1,4 @@
-import { Injectable, signal, inject, OnDestroy } from '@angular/core';
+import { Injectable, signal, inject, effect, untracked, OnDestroy } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from './toast.service';
 import { ServerConfigService } from './server-config.service';
@@ -38,15 +38,36 @@ export class SseService implements OnDestroy {
   readonly connectionId = signal<string | null>(null);
   private eventSource: EventSource | null = null;
   private retryDelay = 5000;
+  private retryHandle: ReturnType<typeof setTimeout> | null = null;
+  private readonly onOnline = () => this.connect();
+
+  constructor() {
+    // The stream is authenticated as one account: detach on a session change
+    // and let the layout re-open it for the next one.
+    effect(() => {
+      this.auth.sessionEpoch();
+      untracked(() => this.close());
+    });
+  }
 
   /** Force reconnect (e.g. after app resume from background) */
   reconnect() {
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
-    }
-    this.retryDelay = 5000;
+    this.close();
     this.connect();
+  }
+
+  /** Detach: the source, its pending retry and the offline one-shot would all
+   *  otherwise re-open the stream against the previous session. */
+  close() {
+    if (this.retryHandle) {
+      clearTimeout(this.retryHandle);
+      this.retryHandle = null;
+    }
+    window.removeEventListener('online', this.onOnline);
+    this.eventSource?.close();
+    this.eventSource = null;
+    this.connectionId.set(null);
+    this.retryDelay = 5000;
   }
 
   connect() {
@@ -93,11 +114,11 @@ export class SseService implements OnDestroy {
       this.connectionId.set(null);
       if (!navigator.onLine) {
         // Offline — wait for online event instead of polling
-        window.addEventListener('online', () => this.connect(), { once: true });
+        window.addEventListener('online', this.onOnline, { once: true });
         return;
       }
       // Exponential backoff: 5s → 10s → 20s → 30s max
-      setTimeout(() => this.connect(), this.retryDelay);
+      this.retryHandle = setTimeout(() => this.connect(), this.retryDelay);
       this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
     };
   }
@@ -244,6 +265,6 @@ export class SseService implements OnDestroy {
   }
 
   ngOnDestroy() {
-    this.eventSource?.close();
+    this.close();
   }
 }
