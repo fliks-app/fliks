@@ -29,8 +29,6 @@ import { SearchStateService } from '../../core/services/search-state.service';
 import { SocialApiService } from '../../core/services/api/social-api.service';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
-import { initialsAvatar } from '../../core/utils/initials-avatar';
-import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { MediaType } from '../../core/enums/media-type.enum';
@@ -42,10 +40,11 @@ import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { LucideSearch, LucideX, LucideSettings } from '@lucide/angular';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
+import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
 
 @Component({
   selector: 'app-search',
-  imports: [FormsModule, TranslateModule, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ResolveUrlPipe, ModalHeaderComponent],
+  imports: [UserAvatarComponent, FormsModule, TranslateModule, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './search.html',
 })
@@ -335,10 +334,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     // engaged filter (browse) instead of dropping to unfiltered discovery rows.
     if (this.filterDebounce) clearTimeout(this.filterDebounce);
     void this.applyFiltersNow();
-  }
-
-  avatar(name: string) {
-    return initialsAvatar(name);
   }
 
   openProfile(userId: number) {

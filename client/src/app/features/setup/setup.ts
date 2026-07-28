@@ -5,7 +5,6 @@ import {
   inject,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -22,13 +21,14 @@ export class SetupComponent {
   private readonly serverConfig = inject(ServerConfigService);
   private readonly auth = inject(AuthService);
   private readonly http = inject(HttpClient);
-  private readonly router = inject(Router);
   private readonly translate = inject(TranslateService);
 
   readonly url = signal(this.serverConfig.serverUrl() || 'http://');
   readonly testing = signal(false);
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
   readonly knownServers = this.serverConfig.knownServers;
+  /** The app restarts on a server switch, so this only has to hold until then. */
+  readonly switching = signal(false);
   /** URL of the entry whose ⋯ menu is open, or null. */
   readonly openMenuFor = signal<string | null>(null);
 
@@ -58,22 +58,28 @@ export class SetupComponent {
   async save() {
     const result = this.testResult();
     if (!result?.ok) return;
-    await this.serverConfig.save(this.url().trim());
-    // Drop the previous server's credentials so playback-info and every
-    // streaming URL re-mint against the server just picked.
-    await this.auth.resetForServerSwitch();
-    void this.router.navigate(['/select-user']);
+    await this.switchTo(this.url().trim());
   }
 
-  /** One-tap "use this server" — already known, skip the test step. */
+  /** One-tap "use this server" — already known, skip the test step. Its stored
+   *  session, if any, is resumed on the way in. */
   async useKnown(server: KnownServer) {
-    await this.serverConfig.save(server.url);
-    // Worst case for stale credentials: this path can skip login() entirely
-    // when a session is still hydrated, so wipe the old server's tokens here.
-    await this.auth.resetForServerSwitch();
-    void this.router.navigate(['/select-user'], {
-      queryParams: server.lastUsername ? { username: server.lastUsername } : undefined,
-    });
+    await this.switchTo(server.url);
+  }
+
+  private async switchTo(url: string) {
+    if (this.switching()) return;
+    this.switching.set(true);
+    try {
+      await this.auth.switchToServer(url);
+    } finally {
+      this.switching.set(false);
+    }
+  }
+
+  /** Servers this device can sign into without a password. */
+  hasSession(server: KnownServer): boolean {
+    return this.auth.serversWithSession().has(server.url);
   }
 
   toggleMenu(url: string, event: Event) {

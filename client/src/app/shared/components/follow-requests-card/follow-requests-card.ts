@@ -13,8 +13,7 @@ import { LucideCheck, LucideX } from '@lucide/angular';
 import { SocialApiService, SocialUser } from '../../../core/services/api/social-api.service';
 import { SseService } from '../../../core/services/sse.service';
 import { TvService } from '../../../core/services/tv.service';
-import { initialsAvatar } from '../../../core/utils/initials-avatar';
-import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
+import { UserAvatarComponent } from '../user-avatar/user-avatar';
 
 /**
  * Home widget listing incoming follow requests to accept/reject, styled like
@@ -23,7 +22,7 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
  */
 @Component({
   selector: 'app-follow-requests-card',
-  imports: [RouterLink, TranslateModule, LucideCheck, LucideX, ResolveUrlPipe],
+  imports: [UserAvatarComponent, RouterLink, TranslateModule, LucideCheck, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './follow-requests-card.html',
 })
@@ -47,10 +46,6 @@ export class FollowRequestsCardComponent implements OnInit {
 
   ngOnInit(): void {
     if (!this.tv.isTv()) void this.load();
-  }
-
-  avatar(name: string) {
-    return initialsAvatar(name);
   }
 
   private async load(): Promise<void> {

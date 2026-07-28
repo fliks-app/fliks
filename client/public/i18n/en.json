@@ -557,7 +557,10 @@
     "use_quick_connect": "Quick Connect",
     "other_user": "Enter another user",
     "change_server": "Switch server",
-    "load_error": "Unable to load the user list."
+    "load_error": "Unable to load the user list.",
+    "session_open": "Already signed in on this device",
+    "session_expired": "That session has expired — please sign in again.",
+    "offline_hint": "Server unreachable — showing the accounts saved on this device."
   },
   "quick_connect": {
     "starting": "Preparing the request…",
@@ -593,7 +596,8 @@
       "minutes": "{{n}} min ago",
       "hours": "{{n}} h ago",
       "days": "{{n}} d ago"
-    }
+    },
+    "session_open": "Signed in on this device"
   },
   "search": {
     "title": "Search",

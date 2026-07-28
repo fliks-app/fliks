@@ -1,6 +1,10 @@
-import { Injectable, signal, computed, inject } from '@angular/core';
-import { Capacitor } from '@capacitor/core';
-import { Preferences } from '@capacitor/preferences';
+import { Injectable, signal, computed } from '@angular/core';
+import { IS_STANDALONE_BUNDLE } from '../utils/standalone-bundle';
+import {
+  readPreference,
+  removePreference,
+  writePreference,
+} from '../utils/preference-storage';
 
 const STORAGE_KEY = 'fliks_server_url';
 const KNOWN_SERVERS_KEY = 'fliks_known_servers';
@@ -26,21 +30,9 @@ export class ServerConfigService {
   readonly knownServers = this._knownServers.asReadonly();
   readonly isConfigured = computed(() => this._serverUrl().length > 0);
   /** "Native" = the app runs standalone, with no backend host serving its
-   * shell — true for Capacitor (iOS/Android), Smart TV (Tizen/webOS), the
-   * Electron desktop client and any other bundle loaded from a non-HTTP
-   * origin. The bundle is responsible for resolving every `/api/...` request
-   * against a server URL the user picked at setup. Web builds (served by the
-   * backend) keep relative URLs and have `isNative = false`.
-   * Plain boolean so the dozens of existing `if (serverConfig.isNative)`
-   * call sites stay non-reactive; computed from the UA at construction
-   * time rather than via `DeviceService.isTv()` to avoid a circular
-   * init-order dependency. */
-  readonly isNative = (() => {
-    if (Capacitor.isNativePlatform()) return true;
-    if (typeof navigator === 'undefined') return false;
-    const ua = navigator.userAgent;
-    return /AndroidTV\/\d|\bTizen\b|SMART-TV|Web0S|webOS|BRAVIA|SHIELD|AFT[A-Z0-9]+|GoogleTV|\bElectron\//i.test(ua);
-  })();
+   * shell. See {@link IS_STANDALONE_BUNDLE}. Plain boolean so the dozens of
+   * existing `if (serverConfig.isNative)` call sites stay non-reactive. */
+  readonly isNative = IS_STANDALONE_BUNDLE;
   /** @deprecated Same as `isNative` since Smart TV got folded in.
    *  Kept as a signal alias for call sites still using it. */
   readonly requiresServerUrl = computed(() => this.isNative);
@@ -50,12 +42,12 @@ export class ServerConfigService {
   }
 
   private async loadActiveUrl(): Promise<void> {
-    const value = await this.readPreference(STORAGE_KEY);
+    const value = await readPreference(STORAGE_KEY);
     if (value) this._serverUrl.set(value);
   }
 
   private async loadKnownServers(): Promise<void> {
-    const raw = await this.readPreference(KNOWN_SERVERS_KEY);
+    const raw = await readPreference(KNOWN_SERVERS_KEY);
     if (!raw) return;
     try {
       const parsed = JSON.parse(raw) as KnownServer[];
@@ -71,7 +63,7 @@ export class ServerConfigService {
       ? await this.resolveCanonicalUrl(cleaned)
       : cleaned;
     this._serverUrl.set(canonical);
-    await this.writePreference(STORAGE_KEY, canonical);
+    await writePreference(STORAGE_KEY, canonical);
   }
 
   /**
@@ -97,7 +89,7 @@ export class ServerConfigService {
 
   async clear(): Promise<void> {
     this._serverUrl.set('');
-    await this.removePreference(STORAGE_KEY);
+    await removePreference(STORAGE_KEY);
   }
 
   /** Append the URL to the known list, or bump its `lastUsedAt` if already present. */
@@ -152,45 +144,7 @@ export class ServerConfigService {
     return this._serverUrl() + path;
   }
 
-  // ── Storage helpers — Preferences on native, localStorage on web ──
-
-  private async readPreference(key: string): Promise<string | null> {
-    if (this.isNative) {
-      try {
-        const { value } = await Preferences.get({ key });
-        if (value !== null) return value;
-      } catch {
-        /* fall through to localStorage */
-      }
-    }
-    return localStorage.getItem(key);
-  }
-
-  private async writePreference(key: string, value: string): Promise<void> {
-    if (this.isNative) {
-      try {
-        await Preferences.set({ key, value });
-        return;
-      } catch {
-        /* fall through to localStorage */
-      }
-    }
-    localStorage.setItem(key, value);
-  }
-
-  private async removePreference(key: string): Promise<void> {
-    if (this.isNative) {
-      try {
-        await Preferences.remove({ key });
-        return;
-      } catch {
-        /* fall through to localStorage */
-      }
-    }
-    localStorage.removeItem(key);
-  }
-
   private async persistKnownServers(): Promise<void> {
-    await this.writePreference(KNOWN_SERVERS_KEY, JSON.stringify(this._knownServers()));
+    await writePreference(KNOWN_SERVERS_KEY, JSON.stringify(this._knownServers()));
   }
 }

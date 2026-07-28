@@ -1,4 +1,8 @@
-<div class="min-h-screen flex items-start justify-center bg-base-200 px-4 py-10" (click)="closeSheet()">
+<div
+  appDefaultFocus="[data-select-user-focus]"
+  class="min-h-screen flex items-start justify-center bg-base-200 px-4 py-10"
+  (click)="closeSheet()"
+>
   <div class="w-full max-w-3xl flex flex-col gap-8">
     <div class="text-center">
       <h1 class="text-3xl font-bold">{{ 'select_user.title' | translate }}</h1>
@@ -8,26 +12,33 @@
       <div class="flex justify-center py-10">
         <span class="loading loading-spinner loading-lg"></span>
       </div>
-    } @else if (error()) {
-      <div role="alert" class="alert alert-error">{{ error() | translate }}</div>
     } @else {
+      @if (unreachable()) {
+        <p class="text-center text-sm text-warning">
+          {{ (users().length ? 'select_user.offline_hint' : 'select_user.load_error') | translate }}
+        </p>
+      }
       <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
         @for (user of users(); track user.id) {
-          @let init = initials(user.username);
           <button
             type="button"
             class="flex flex-col items-center gap-2 p-2 rounded-lg hover:bg-base-100 focus-visible:bg-base-100 transition-colors"
+            [attr.data-select-user-focus]="hasSession(user) ? '' : null"
+            [attr.aria-busy]="resuming() === user.id"
             (click)="selectUser(user); $event.stopPropagation()"
           >
-            <div class="avatar avatar-placeholder">
-              <div class="w-24 h-24 rounded-full text-2xl font-semibold text-white" [style.background-color]="'hsl(' + init.hue + ' 55% 45%)'">
-                @if (user.avatar) {
-                  <img [src]="user.avatar | resolveUrl" [alt]="user.username" />
-                } @else {
-                  <span>{{ init.initials }}</span>
-                }
-              </div>
-            </div>
+            <app-user-avatar
+              [username]="user.username"
+              [avatar]="user.avatar"
+              [checked]="hasSession(user)"
+              size="w-24 h-24 text-2xl"
+            >
+              @if (resuming() === user.id) {
+                <span class="absolute inset-0 flex items-center justify-center bg-black/50">
+                  <span class="loading loading-spinner loading-md text-white"></span>
+                </span>
+              }
+            </app-user-avatar>
             <span class="text-sm font-medium truncate w-full text-center">{{ user.username }}</span>
           </button>
         }
@@ -47,27 +58,22 @@
     </div>
   </div>
 
-  @if (openSheetFor() !== null) {
+  @if (selectedUser(); as selected) {
     <div class="fixed inset-0 z-40 bg-black/50 flex items-end sm:items-center justify-center p-4" (click)="closeSheet()">
       <div data-tv-modal class="card bg-base-100 w-full max-w-sm shadow-xl" (click)="$event.stopPropagation()">
         <div class="card-body gap-2">
-          @let selected = users().length ? users() : [];
-          @for (u of selected; track u.id) {
-            @if (u.id === openSheetFor()) {
-              <div class="text-center font-semibold mb-2">{{ u.username }}</div>
-              <button #passwordBtn type="button" class="btn btn-primary justify-start gap-3" (click)="goToPasswordLogin(u)">
-                <svg lucideKeyRound class="h-5 w-5"></svg>
-                {{ 'select_user.use_password' | translate }}
-              </button>
-              <button type="button" class="btn btn-outline justify-start gap-3" (click)="goToQuickConnect(u)">
-                <svg lucideMonitorSmartphone class="h-5 w-5"></svg>
-                {{ 'select_user.use_quick_connect' | translate }}
-              </button>
-              <button type="button" class="btn btn-ghost btn-sm" (click)="closeSheet()">
-                {{ 'common.cancel' | translate }}
-              </button>
-            }
-          }
+          <div class="text-center font-semibold mb-2">{{ selected.username }}</div>
+          <button #passwordBtn type="button" class="btn btn-primary justify-start gap-3" (click)="goToPasswordLogin(selected)">
+            <svg lucideKeyRound class="h-5 w-5"></svg>
+            {{ 'select_user.use_password' | translate }}
+          </button>
+          <button type="button" class="btn btn-outline justify-start gap-3" (click)="goToQuickConnect(selected)">
+            <svg lucideMonitorSmartphone class="h-5 w-5"></svg>
+            {{ 'select_user.use_quick_connect' | translate }}
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm" (click)="closeSheet()">
+            {{ 'common.cancel' | translate }}
+          </button>
         </div>
       </div>
     </div>

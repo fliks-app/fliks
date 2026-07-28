@@ -2,14 +2,13 @@ import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { ServerConfigService } from '../services/server-config.service';
 
-export const serverConfigGuard: CanActivateFn = async () => {
+export const serverConfigGuard: CanActivateFn = () => {
   const config = inject(ServerConfigService);
   const router = inject(Router);
 
-  if (!config.isNative) return true;
-
-  await config.load();
-  if (config.isConfigured()) return true;
+  // The stored URL is loaded before bootstrap (app.config.ts), so this is a
+  // plain check — no await, no chance of running against an empty base.
+  if (!config.isNative || config.isConfigured()) return true;
 
   return router.createUrlTree(['/setup']);
 };

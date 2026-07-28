@@ -65,11 +65,7 @@
       <div class="flex flex-col gap-1 max-w-xl">
         @for (u of state.peopleResults(); track u.id) {
           <button type="button" class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left cursor-pointer" (click)="openProfile(u.id)">
-            <div class="avatar avatar-placeholder shrink-0">
-              <div class="w-10 h-10 rounded-full text-white text-sm font-semibold" [style.background-color]="'hsl(' + avatar(u.username).hue + ' 55% 45%)'">
-                @if (u.avatar) { <img [src]="u.avatar | resolveUrl" [alt]="u.username" /> } @else { <span>{{ avatar(u.username).initials }}</span> }
-              </div>
-            </div>
+            <app-user-avatar [username]="u.username" [avatar]="u.avatar" />
             <span class="flex-1 min-w-0 truncate font-medium">{{ u.username }}</span>
             @if (u.isFollowing) {
               <span class="badge badge-sm badge-ghost">{{ 'social.following' | translate }}</span>

@@ -557,7 +557,10 @@
     "use_quick_connect": "Connexion rapide",
     "other_user": "Saisir un autre utilisateur",
     "change_server": "Changer de serveur",
-    "load_error": "Impossible de charger la liste des utilisateurs."
+    "load_error": "Impossible de charger la liste des utilisateurs.",
+    "session_open": "Déjà connecté sur cet appareil",
+    "session_expired": "Cette session a expiré — reconnecte-toi.",
+    "offline_hint": "Serveur injoignable — seuls les comptes enregistrés sur cet appareil sont affichés."
   },
   "quick_connect": {
     "starting": "Préparation de la demande…",
@@ -593,7 +596,8 @@
       "minutes": "il y a {{n}} min",
       "hours": "il y a {{n}} h",
       "days": "il y a {{n}} j"
-    }
+    },
+    "session_open": "Connecté sur cet appareil"
   },
   "search": {
     "title": "Recherche",

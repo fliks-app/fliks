@@ -20,7 +20,6 @@ import { AuthService } from '../../core/services/auth.service';
 import { LibraryPrefsService } from '../../core/services/library-prefs.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { CountsApiService } from '../../core/services/api/counts-api.service';
-import { ServerCacheService } from '../../core/services/server-cache.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService } from '../../core/services/sse.service';
 import { CastService } from '../../core/services/cast.service';
@@ -92,7 +91,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly libraryPrefs = inject(LibraryPrefsService);
   private readonly countsApi = inject(CountsApiService);
   readonly serverConfig = inject(ServerConfigService);
-  private readonly serverCache = inject(ServerCacheService);
   private readonly sse = inject(SseService);
   private readonly downloadManager = inject(DownloadManagerService);
   // Instantiate eagerly from the shell so it records the page the user was on
@@ -360,14 +358,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   toggleCastOverlay() {
     this.castPlayer.expanded.update(v => !v);
-  }
-
-  async switchUser() {
-    // Wipe cached server data so the next login does not inherit the previous
-    // user's home rows / library views. Auth state survives — the user keeps
-    // the current session until they actually log in as someone else.
-    await this.serverCache.clearAll();
-    this.router.navigate(['/login'], { queryParams: { switch: true } });
   }
 
   onToggleCastConnection() {

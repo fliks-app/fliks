@@ -1,0 +1,23 @@
+<div class="avatar avatar-placeholder relative shrink-0">
+  <div
+    class="relative overflow-hidden rounded-full font-semibold text-white"
+    [class]="size()"
+    [style.background-color]="'hsl(' + fallback().hue + ' 55% 45%)'"
+  >
+    @if (src() && !failed()) {
+      <img [src]="src()" [alt]="username()" (error)="failed.set(true)" />
+    } @else {
+      <span>{{ fallback().initials }}</span>
+    }
+    <ng-content />
+  </div>
+  @if (checked()) {
+    <span
+      role="img"
+      class="absolute bottom-0 right-0 flex h-1/4 w-1/4 min-h-4 min-w-4 items-center justify-center rounded-full border-2 border-base-200 bg-success text-success-content"
+      [attr.aria-label]="'select_user.session_open' | translate"
+    >
+      <svg lucideCheck class="h-2/3 w-2/3"></svg>
+    </span>
+  }
+</div>

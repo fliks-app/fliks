@@ -1,0 +1,63 @@
+<app-dropdown-menu placement="bottom-end">
+  <button
+    trigger
+    type="button"
+    class="btn btn-ghost btn-circle"
+    [attr.aria-label]="'nav.user_menu' | translate"
+  >
+    @if (auth.user(); as user) {
+      <app-user-avatar
+        [username]="user.username"
+        [avatar]="user.avatar"
+        size="w-7 h-7 md:w-9 md:h-9 text-xs border border-primary/40"
+      />
+    } @else {
+      <svg lucideUser class="h-5 w-5 md:h-6 md:w-6"></svg>
+    }
+  </button>
+  @if (auth.user(); as user) {
+    <div class="border-b border-white/10 pb-1 mb-1">
+      <a
+        [routerLink]="tv.isTv() ? ['/account'] : ['/profile', user.id]"
+        class="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-white/5"
+      >
+        <app-user-avatar [username]="user.username" [avatar]="user.avatar" size="w-8 h-8 text-sm" />
+        <div class="min-w-0 flex-1">
+          <p class="font-semibold truncate text-white">{{ user.username }}</p>
+        </div>
+      </a>
+    </div>
+  }
+  <a routerLink="/account" class="dropdown-item text-white">
+    <svg lucideUser class="h-5 w-5 shrink-0 opacity-80"></svg>
+    <span class="flex-1">{{ 'nav.account_settings' | translate }}</span>
+  </a>
+  <a routerLink="/app-settings" class="dropdown-item text-white">
+    <svg lucideSettings class="h-5 w-5 shrink-0 opacity-80"></svg>
+    <span class="flex-1">{{ 'nav.app_settings' | translate }}</span>
+  </a>
+  @if (auth.canAccessSettings()) {
+    <a routerLink="/admin" class="dropdown-item text-white">
+      <svg lucideShield class="h-5 w-5 shrink-0 opacity-80"></svg>
+      <span class="flex-1">{{ 'nav.administration' | translate }}</span>
+    </a>
+  }
+  <a routerLink="/pending-requests" class="dropdown-item text-white">
+    <svg lucideMonitorSmartphone class="h-5 w-5 shrink-0 opacity-80"></svg>
+    <span class="flex-1">{{ 'pending_requests.menu_entry' | translate }}</span>
+  </a>
+  <button type="button" (click)="switchUser()" class="dropdown-item text-white">
+    <svg lucideRepeat class="h-5 w-5 shrink-0 opacity-80"></svg>
+    <span class="flex-1">{{ 'nav.switch_user' | translate }}</span>
+  </button>
+  @if (canChangeServer) {
+    <button type="button" (click)="changeServer()" class="dropdown-item text-white">
+      <svg lucideServer class="h-5 w-5 shrink-0 opacity-80"></svg>
+      <span class="flex-1">{{ 'nav.change_server' | translate }}</span>
+    </button>
+  }
+  <button type="button" (click)="logout()" class="dropdown-item text-error">
+    <svg lucideLogOut class="h-5 w-5 shrink-0"></svg>
+    <span class="flex-1">{{ 'nav.logout' | translate }}</span>
+  </button>
+</app-dropdown-menu>

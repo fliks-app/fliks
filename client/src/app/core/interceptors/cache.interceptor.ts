@@ -65,6 +65,10 @@ interface CacheEntry {
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
+/** Bumped by every wipe. Entries are keyed by path alone, so a response in
+ *  flight for the previous account must not land in the new one's cache. */
+let cacheGeneration = 0;
+
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
@@ -88,6 +92,7 @@ function openDb(): Promise<IDBDatabase> {
  * stuck IDB doesn't gate a login spinner.
  */
 export function clearRequestCache(): Promise<void> {
+  cacheGeneration++;
   const closeExisting = dbPromise
     ? dbPromise
         .then((db) => {
@@ -136,7 +141,8 @@ async function getCached(url: string): Promise<CacheEntry | null> {
   } catch { return null; }
 }
 
-async function putCache(url: string, body: any): Promise<void> {
+async function putCache(url: string, body: any, generation: number): Promise<void> {
+  if (generation !== cacheGeneration) return;
   try {
     const db = await openDb();
     const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -184,6 +190,7 @@ export const CACHE_BYPASS_HEADER = 'X-Cache-Bypass';
 
 export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
   const url = req.urlWithParams;
+  const generation = cacheGeneration;
 
   // Mutations → invalidate cache.
   if (req.method !== 'GET') {
@@ -200,7 +207,7 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
     return next(cleanReq).pipe(
       tap((event) => {
         if (event instanceof HttpResponse && event.status === 200) {
-          void putCache(url, event.body);
+          void putCache(url, event.body, generation);
         }
       }),
     );
@@ -222,7 +229,7 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
       next(req).pipe(
         tap((event) => {
           if (event instanceof HttpResponse && event.status === 200) {
-            void putCache(url, event.body);
+            void putCache(url, event.body, generation);
           }
         }),
       ).subscribe({

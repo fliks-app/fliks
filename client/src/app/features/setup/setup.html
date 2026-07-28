@@ -16,10 +16,14 @@
               <button
                 type="button"
                 class="flex-1 min-w-0 text-left"
+                [attr.aria-busy]="switching()"
                 (click)="useKnown(server)"
               >
-                <div class="font-medium truncate">
-                  {{ server.name ?? server.url }}
+                <div class="font-medium truncate flex items-center gap-1.5">
+                  <span class="truncate">{{ server.name ?? server.url }}</span>
+                  @if (hasSession(server)) {
+                    <span class="badge badge-success badge-xs shrink-0" [attr.aria-label]="'server_history.session_open' | translate"></span>
+                  }
                 </div>
                 <div class="text-xs text-base-content/60 truncate">
                   @if (server.lastUsername) {

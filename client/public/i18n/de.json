@@ -552,7 +552,10 @@
     "use_quick_connect": "Schnellverbindung",
     "other_user": "Anderen Benutzer eingeben",
     "change_server": "Server wechseln",
-    "load_error": "Die Benutzerliste konnte nicht geladen werden."
+    "load_error": "Die Benutzerliste konnte nicht geladen werden.",
+    "session_open": "Auf diesem Gerät bereits angemeldet",
+    "session_expired": "Diese Sitzung ist abgelaufen – bitte erneut anmelden.",
+    "offline_hint": "Server nicht erreichbar – es werden nur die auf diesem Gerät gespeicherten Konten angezeigt."
   },
   "quick_connect": {
     "starting": "Anfrage wird vorbereitet…",
@@ -588,7 +591,8 @@
       "minutes": "vor {{n}} Min.",
       "hours": "vor {{n}} Std.",
       "days": "vor {{n}} T."
-    }
+    },
+    "session_open": "Auf diesem Gerät angemeldet"
   },
   "search": {
     "title": "Suche",

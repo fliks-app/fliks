@@ -1,7 +1,9 @@
 import {
   ApplicationConfig,
+  inject,
   isDevMode,
   LOCALE_ID,
+  provideAppInitializer,
   provideBrowserGlobalErrorListeners,
   provideZonelessChangeDetection,
 } from '@angular/core';
@@ -31,12 +33,28 @@ import { credentialsInterceptor } from './core/interceptors/credentials.intercep
 import { errorInterceptor } from './core/interceptors/error.interceptor';
 import { cacheInterceptor } from './core/interceptors/cache.interceptor';
 import { CachingReuseStrategy } from './core/services/route-reuse.strategy';
+import { AuthService } from './core/services/auth.service';
+import { ServerConfigService } from './core/services/server-config.service';
+import { SessionStoreService } from './core/services/session-store.service';
 import { translateBrowserLoaderFactory } from './utils/translate-loader';
+
+/** Read the persisted server URL, sessions and credentials before bootstrap:
+ *  guards, interceptors and the first /auth/me all depend on them. Resolves
+ *  even on a storage failure, or the app would never leave its splash screen. */
+export function loadPersistedState(): Promise<unknown> {
+  const serverConfig = inject(ServerConfigService);
+  const sessions = inject(SessionStoreService);
+  const auth = inject(AuthService);
+  return Promise.all([serverConfig.load(), sessions.load()])
+    .then(() => void auth.loadPersistedSession())
+    .catch(() => undefined);
+}
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideZonelessChangeDetection(),
+    provideAppInitializer(loadPersistedState),
     { provide: LOCALE_ID, useFactory: resolveInitialLocale },
     provideRouter(
       routes,

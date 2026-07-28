@@ -2,11 +2,10 @@ import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
-import { ServerCacheService } from '../../core/services/server-cache.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { TvService } from '../../core/services/tv.service';
 import { DropdownMenuComponent } from './dropdown-menu';
-import { Capacitor } from '@capacitor/core';
+import { UserAvatarComponent } from './user-avatar/user-avatar';
 import {
   LucideUser,
   LucideSettings,
@@ -16,132 +15,41 @@ import {
   LucideServer,
   LucideMonitorSmartphone,
 } from '@lucide/angular';
-import { initialsAvatar } from '../../core/utils/initials-avatar';
-import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 @Component({
   selector: 'app-user-menu',
   imports: [
     RouterLink, TranslateModule,
-    DropdownMenuComponent,
+    DropdownMenuComponent, UserAvatarComponent,
     LucideUser, LucideSettings, LucideShield, LucideRepeat, LucideLogOut,
     LucideServer, LucideMonitorSmartphone,
-    ResolveUrlPipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <app-dropdown-menu placement="bottom-end">
-      <button
-        trigger
-        type="button"
-        class="btn btn-ghost btn-circle"
-        [attr.aria-label]="'nav.user_menu' | translate"
-      >
-        @if (auth.user(); as user) {
-          <div class="avatar avatar-placeholder">
-            <div
-              class="w-7 h-7 md:w-9 md:h-9 rounded-full border border-primary/40 text-white text-xs font-semibold"
-              [style.background-color]="'hsl(' + avatar(user.username).hue + ' 55% 45%)'"
-            >
-              @if (user.avatar) {
-                <img [src]="user.avatar | resolveUrl" [alt]="user.username" />
-              } @else {
-                <span>{{ avatar(user.username).initials }}</span>
-              }
-            </div>
-          </div>
-        } @else {
-          <svg lucideUser class="h-5 w-5 md:h-6 md:w-6"></svg>
-        }
-      </button>
-      @if (auth.user(); as user) {
-        <div class="border-b border-white/10 pb-1 mb-1">
-          <a
-            [routerLink]="tv.isTv() ? ['/account'] : ['/profile', user.id]"
-            class="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-white/5"
-          >
-            <div class="avatar avatar-placeholder shrink-0">
-              <div
-                class="w-8 h-8 rounded-full text-white text-sm font-semibold"
-                [style.background-color]="'hsl(' + avatar(user.username).hue + ' 55% 45%)'"
-              >
-                @if (user.avatar) {
-                  <img [src]="user.avatar | resolveUrl" [alt]="user.username" />
-                } @else {
-                  <span>{{ avatar(user.username).initials }}</span>
-                }
-              </div>
-            </div>
-            <div class="min-w-0 flex-1">
-              <p class="font-semibold truncate text-white">{{ user.username }}</p>
-            </div>
-          </a>
-        </div>
-      }
-      <a routerLink="/account" class="dropdown-item text-white">
-        <svg lucideUser class="h-5 w-5 shrink-0 opacity-80"></svg>
-        <span class="flex-1">{{ 'nav.account_settings' | translate }}</span>
-      </a>
-      <a routerLink="/app-settings" class="dropdown-item text-white">
-        <svg lucideSettings class="h-5 w-5 shrink-0 opacity-80"></svg>
-        <span class="flex-1">{{ 'nav.app_settings' | translate }}</span>
-      </a>
-      @if (auth.canAccessSettings()) {
-        <a routerLink="/admin" class="dropdown-item text-white">
-          <svg lucideShield class="h-5 w-5 shrink-0 opacity-80"></svg>
-          <span class="flex-1">{{ 'nav.administration' | translate }}</span>
-        </a>
-      }
-      <a routerLink="/pending-requests" class="dropdown-item text-white">
-        <svg lucideMonitorSmartphone class="h-5 w-5 shrink-0 opacity-80"></svg>
-        <span class="flex-1">{{ 'pending_requests.menu_entry' | translate }}</span>
-      </a>
-      <button type="button" (click)="switchUser()" class="dropdown-item text-white">
-        <svg lucideRepeat class="h-5 w-5 shrink-0 opacity-80"></svg>
-        <span class="flex-1">{{ 'nav.switch_user' | translate }}</span>
-      </button>
-      @if (canChangeServer) {
-        <button type="button" (click)="changeServer()" class="dropdown-item text-white">
-          <svg lucideServer class="h-5 w-5 shrink-0 opacity-80"></svg>
-          <span class="flex-1">{{ 'nav.change_server' | translate }}</span>
-        </button>
-      }
-      <button type="button" (click)="logout()" class="dropdown-item text-error">
-        <svg lucideLogOut class="h-5 w-5 shrink-0"></svg>
-        <span class="flex-1">{{ 'nav.logout' | translate }}</span>
-      </button>
-    </app-dropdown-menu>
-  `,
+  templateUrl: './user-menu.html',
 })
 export class UserMenuComponent {
   readonly auth = inject(AuthService);
   readonly tv = inject(TvService);
   private readonly router = inject(Router);
   private readonly serverConfig = inject(ServerConfigService);
-  private readonly serverCache = inject(ServerCacheService);
-  protected readonly isNative = this.serverConfig.isNative;
-  /** Show the "change server" entry on every standalone bundle — both
-   *  Capacitor mobile and Smart TV (both now reported by `isNative`).
-   *  Web is served by the backend so the origin is fixed; the entry
-   *  would be a dead-end there. */
-  protected readonly canChangeServer = this.isNative;
+  /** Only a standalone bundle can point elsewhere: web is served by the very
+   *  backend it talks to. */
+  protected readonly canChangeServer = this.serverConfig.isNative;
 
-  protected avatar(name: string) {
-    return initialsAvatar(name);
-  }
-
+  /** Leaves the account signed in on this device: the picker offers it back in
+   *  one tap. `replaceUrl` so hardware back can't land on the shell we left. */
   protected async switchUser() {
-    await this.serverCache.clearAll();
-    this.router.navigate(['/login'], { queryParams: { switch: true } });
+    await this.auth.beginUserSwitch();
+    void this.router.navigate(['/select-user'], { replaceUrl: true });
   }
 
-  protected async changeServer() {
-    await this.serverCache.clearAll();
-    await this.serverConfig.clear();
-    this.router.navigate(['/setup']);
+  /** Sessions — this one included — are kept: /setup resumes whichever server
+   *  the user picks. */
+  protected changeServer() {
+    void this.router.navigate(['/setup']);
   }
 
   protected logout() {
-    this.auth.logout();
+    void this.auth.logout();
   }
 }

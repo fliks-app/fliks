@@ -552,7 +552,10 @@
     "use_quick_connect": "Ligação rápida",
     "other_user": "Introduzir outro utilizador",
     "change_server": "Mudar de servidor",
-    "load_error": "Não foi possível carregar a lista de utilizadores."
+    "load_error": "Não foi possível carregar a lista de utilizadores.",
+    "session_open": "Já ligado neste dispositivo",
+    "session_expired": "Esta sessão expirou — inicia sessão novamente.",
+    "offline_hint": "Servidor inacessível — apenas as contas guardadas neste dispositivo são mostradas."
   },
   "quick_connect": {
     "starting": "A preparar o pedido…",
@@ -588,7 +591,8 @@
       "minutes": "há {{n}} min",
       "hours": "há {{n}} h",
       "days": "há {{n}} d"
-    }
+    },
+    "session_open": "Ligado neste dispositivo"
   },
   "search": {
     "title": "Pesquisa",

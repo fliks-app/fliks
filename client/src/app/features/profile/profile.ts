@@ -30,10 +30,9 @@ import { AuthService } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { NavbarService } from '../../core/services/navbar.service';
-import { initialsAvatar } from '../../core/utils/initials-avatar';
-import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ProfileContextService } from './profile-context.service';
 import { AvatarEditorComponent } from './avatar-editor/avatar-editor';
+import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
 
 /**
  * Profile shell: renders the shared header (avatar, counts, follow control) and
@@ -44,7 +43,7 @@ import { AvatarEditorComponent } from './avatar-editor/avatar-editor';
  */
 @Component({
   selector: 'app-profile',
-  imports: [
+  imports: [UserAvatarComponent, 
     RouterLink,
     RouterLinkActive,
     RouterOutlet,
@@ -55,7 +54,6 @@ import { AvatarEditorComponent } from './avatar-editor/avatar-editor';
     LucideSettings,
     LucideCamera,
     AvatarEditorComponent,
-    ResolveUrlPipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile.html',
@@ -81,7 +79,6 @@ export class ProfileComponent {
   readonly profile = this.ctx.profile;
   readonly busy = signal(false);
 
-  readonly avatar = computed(() => initialsAvatar(this.profile()?.username ?? ''));
 
   constructor() {
     effect(() => {
