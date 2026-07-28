@@ -2,6 +2,7 @@ import {
   Controller,
   Delete,
   Get,
+  Logger,
   Post,
   Body,
   Param,
@@ -129,6 +130,15 @@ export interface HealthReport {
   database: ServiceStatus;
   indexers: { enabled: number; total: number };
   downloadClients: ServiceStatus[];
+  restartSupervisor: string | null;
+}
+
+function detectRestartSupervisor(): string | null {
+  if (process.env.FLIKS_SUPERVISED) return 'supervisor';
+  if (process.env.pm_id) return 'pm2';
+  if (process.env.INVOCATION_ID) return 'systemd';
+  if (fs.existsSync('/.dockerenv')) return 'docker';
+  return null;
 }
 
 export interface DiskSpaceEntry {
@@ -179,6 +189,8 @@ function deriveAudioOutput(
 @Controller('system')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
 export class SystemController {
+  private readonly logger = new Logger(SystemController.name);
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(Indexer)
@@ -223,7 +235,23 @@ export class SystemController {
       database: dbStatus,
       indexers,
       downloadClients: clients,
+      restartSupervisor: detectRestartSupervisor(),
     };
+  }
+
+  @Post('restart')
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+  restart(): { ok: true; supervisor: string } {
+    const supervisor = detectRestartSupervisor();
+    if (!supervisor) {
+      throw new BadRequestException('No process supervisor detected');
+    }
+    this.logger.warn(`Restart requested (supervisor: ${supervisor})`);
+    // In a container PID 1 must exit, else the `npm run` wrapper outlives us.
+    const target = supervisor === 'docker' ? 1 : process.pid;
+    process.exitCode = 1;
+    setTimeout(() => process.kill(target, 'SIGTERM'), 300);
+    return { ok: true, supervisor };
   }
 
   @Get('update')

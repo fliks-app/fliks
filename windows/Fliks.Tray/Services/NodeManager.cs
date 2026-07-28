@@ -25,6 +25,7 @@ internal sealed record BackendEnvironment(ushort Port, ushort DbPort)
             ["DB_PASSWORD"] = "fliks",
             ["DB_NAME"] = "fliks",
             ["SERVE_STATIC_PATH"] = AppPaths.ClientDir,
+            ["FLIKS_SUPERVISED"] = "1",
             ["FLIKS_CONF_DIR"] = AppPaths.ConfDir,
             ["FLIKS_TRANSCODE_DIR"] = AppPaths.TranscodeDir,
             ["PATH"] = path,

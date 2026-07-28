@@ -20,7 +20,9 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       // open fires several parallel metadata calls at once.
       const softMetadataGet =
         req.method === 'GET' && req.url.includes('/api/metadata') && err.status === 500;
-      if (!showToast || softMetadataGet || req.url.includes('/i18n/')) {
+      // Health is polled while the server restarts, so a failed probe is expected.
+      const healthProbe = req.url.includes('/api/system/health');
+      if (!showToast || softMetadataGet || healthProbe || req.url.includes('/i18n/')) {
         return throwError(() => err);
       }
       const message = extractMessage(err, translate);
