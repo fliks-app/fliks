@@ -19,6 +19,8 @@ import {
   LucideChevronRight,
   LucideClock,
   LucideCode,
+  LucideDownload,
+  LucideEye,
   LucideFileText,
   LucideImage,
   LucideLanguages,
@@ -42,6 +44,8 @@ import {
 import { SUBTITLE_LANGUAGE_CODES } from '../../../core/constants/subtitle-languages';
 import { AppSettingsService } from '../../../core/services/app-settings.service';
 import { SubtitleFilenamePipe } from '../../pipes/subtitle-filename.pipe';
+import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
+import { SubtitleViewerModalComponent } from '../subtitle-viewer-modal/subtitle-viewer-modal';
 import {
   MediaStream,
   SubtitleFileRow,
@@ -88,6 +92,7 @@ interface SubtitleRow {
     PaginationComponent,
     MediaDetailSubtitleSearchModalComponent,
     PopoverMenuComponent,
+    SubtitleViewerModalComponent,
     LucideArrowRightLeft,
     LucideBadgeCheck,
     LucideBan,
@@ -95,6 +100,8 @@ interface SubtitleRow {
     LucideChevronRight,
     LucideClock,
     LucideCode,
+    LucideDownload,
+    LucideEye,
     LucideFileText,
     LucideImage,
     LucideLanguages,
@@ -121,6 +128,7 @@ export class SubtitlesModalComponent {
   private readonly profilesApi = inject(ProfilesService);
   private readonly sse = inject(SseService);
   private readonly appSettings = inject(AppSettingsService);
+  private readonly streamingApi = inject(StreamingApiService);
 
   constructor() {
     // Header subtitle chips honour the hide-burn-in app setting; load it once.
@@ -172,13 +180,42 @@ export class SubtitlesModalComponent {
   readonly actionsSubIsEmbedded = computed(
     () => this.actionsSub()?.providerType === 'embedded',
   );
-  /** The open row is a text subtitle that can be machine-translated: on-disk
-   *  text files and embedded text tracks (extracted first), never image tracks. */
-  readonly actionsSubIsTranslatable = computed(() => {
+  /** The open row resolves to text cues: a sidecar file or an embedded text
+   *  track (extracted on demand), never an image track. Gates every action that
+   *  needs the cues themselves — translate, view, download. */
+  readonly actionsSubHasTextCues = computed(() => {
     const sub = this.actionsSub();
     if (!sub || isImageBasedSubtitleCodec(sub.codec)) return false;
     return !!sub.relativePath || sub.streamIndex != null;
   });
+
+  private readonly viewer =
+    viewChild<SubtitleViewerModalComponent>('subtitleViewer');
+
+  /** Attachment URL for the open row: the stored file for a sidecar subtitle,
+   *  the extracted WebVTT for an embedded track — the only form it has. The
+   *  server names the download, so the anchor needs no `download` attribute. */
+  protected subtitleDownloadUrl(sub: SubtitleFileRow | null): string {
+    if (!sub) return '';
+    return sub.relativePath
+      ? this.streamingApi.getSubtitleDownloadUrl(sub.mediaFileId, sub.id)
+      : this.streamingApi.getEmbeddedSubtitleDownloadUrl(
+          sub.mediaFileId,
+          sub.streamIndex!,
+        );
+  }
+
+  /** Open the cue list. Reads the playback WebVTT, so an embedded track is
+   *  extracted on demand exactly as it would be for playback. */
+  protected viewSubtitle(sub: SubtitleFileRow): void {
+    const url = sub.relativePath
+      ? this.streamingApi.getSubtitleUrl(sub.mediaFileId, sub.id)
+      : this.streamingApi.getEmbeddedSubtitleUrl(
+          sub.mediaFileId,
+          sub.streamIndex!,
+        );
+    void this.viewer()?.open(formatSubtitleLabel(sub, this.translate), url);
+  }
 
   /** Every present subtitle row has at least one action or an informational
    *  note (external → full menu, image track → OCR/burn-in note, embedded text

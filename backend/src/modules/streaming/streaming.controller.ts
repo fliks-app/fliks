@@ -97,6 +97,19 @@ export function withTimestampMap(
   return text.replace(/^(WEBVTT[^\n]*)\n/, `$1\n${map}\n`);
 }
 
+/** Force a browser save-as with a UTF-8 filename, whatever the character set. */
+function sendAsAttachment(
+  res: Response,
+  filename: string,
+  contentType?: string,
+): void {
+  if (contentType) res.setHeader('Content-Type', `${contentType}; charset=utf-8`);
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+  );
+}
+
 /** Accepted HLS segment / init filenames (fMP4 init, fMP4 or TS segment). */
 const SEGMENT_NAME_RE = /^(init(_\d+)?\.mp4|seg-\d{3,4}\.(m4s|ts))$/;
 
@@ -1225,6 +1238,51 @@ export class StreamingController {
     res.send(withTimestampMap(vtt, startTimeSeconds));
   }
 
+  /** Download an embedded subtitle stream. Only the extracted WebVTT exists for
+   *  these — there is no sidecar file to hand back. */
+  @Get(':mediaFileId/subtitles/embedded/:streamIndex/download')
+  async embeddedSubtitleDownload(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Param('streamIndex', ParseIntPipe) streamIndex: number,
+    @CurrentUser() user: User | undefined,
+    @Res() res: Response,
+  ) {
+    const resolved = await this.streamingService.resolveFile(mediaFileId, user);
+    const startTimeSeconds =
+      resolved.mediaFile.streamInfo?.video?.[0]?.startTimeSeconds ?? 0;
+    const stream = await this.subtitleStreamService.extractEmbeddedSubtitle(
+      mediaFileId,
+      streamIndex,
+      user,
+    );
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    const base = path.basename(
+      resolved.relativePath,
+      path.extname(resolved.relativePath),
+    );
+    sendAsAttachment(res, `${base}.track-${streamIndex}.vtt`, 'text/vtt');
+    res.send(withTimestampMap(Buffer.concat(chunks), startTimeSeconds));
+  }
+
+  /** Download an external subtitle as stored on disk, original format kept. */
+  @Get(':mediaFileId/subtitles/:subtitleId/download')
+  async subtitleDownload(
+    @Param('subtitleId', ParseIntPipe) subtitleId: number,
+    @CurrentUser() user: User | undefined,
+    @Res() res: Response,
+  ) {
+    const { path: filePath, filename } =
+      await this.subtitleStreamService.getSubtitleFileForDownload(
+        subtitleId,
+        user,
+      );
+    sendAsAttachment(res, filename);
+    res.sendFile(filePath);
+  }
+
   /** Serve an external subtitle as WebVTT. */
   @Get(':mediaFileId/subtitles/:subtitleId')
   async subtitle(
@@ -2145,11 +2203,7 @@ export class StreamingController {
     // the source container's own name. Only embedded streams travel inside the
     // container — sidecar subtitle files live next to it and aren't included.
     if (firstQueryString(req.query, 'download')) {
-      const filename = path.basename(resolved.relativePath);
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
-      );
+      sendAsAttachment(res, path.basename(resolved.relativePath));
     }
 
     if (!range) {

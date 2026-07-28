@@ -13,7 +13,7 @@ import {
  * fixed positioned div on top of the hardware video surface.
  */
 
-interface VttCue {
+export interface VttCue {
   start: number;
   end: number;
   text: string;
@@ -161,7 +161,7 @@ export class SubtitleOverlay {
   }
 }
 
-function parseVtt(raw: string): VttCue[] {
+export function parseVtt(raw: string): VttCue[] {
   const cues: VttCue[] = [];
   const blocks = raw.replace(/\r\n/g, '\n').split('\n\n');
   for (const block of blocks) {

@@ -84,18 +84,19 @@ export class SubtitleStreamService {
   ) {}
 
   /**
-   * Get an external subtitle file converted to WebVTT.
+   * Locate an external subtitle on disk, enforcing the library ACL of the
+   * subtitle's OWN media so a foreign subtitle id can't be read regardless of
+   * the mediaFileId in the request path (IDOR), and resolving symlinks so no
+   * stored path escapes the media folder.
    */
-  async getSubtitleAsVtt(
+  private async resolveSubtitleOnDisk(
     subtitleId: number,
     user?: User,
-  ): Promise<{ vtt: string; startTimeSeconds: number }> {
+  ): Promise<{ sub: SubtitleFile; realSubPath: string }> {
     const sub = await this.subtitleFileRepo.findOne({
       where: { id: subtitleId },
       relations: ['media', 'media.library', 'mediaFile'],
     });
-    // Library ACL on the subtitle's OWN media, so a foreign subtitle id can't
-    // be read regardless of the mediaFileId in the request path (IDOR).
     await this.streamingService.assertLibraryAccess(
       sub?.media?.libraryId ?? null,
       user,
@@ -114,7 +115,6 @@ export class SubtitleStreamService {
       throw new NotFoundException(`Subtitle file not found on disk`);
     }
 
-    // Validate the subtitle path resolves to a real location (no traversal via symlinks)
     let realSubPath: string;
     try {
       realSubPath = await fs.realpath(absolute);
@@ -125,6 +125,33 @@ export class SubtitleStreamService {
       );
       throw new NotFoundException(`Subtitle file not found on disk`);
     }
+    return { sub, realSubPath };
+  }
+
+  /**
+   * Absolute path and download filename of an external subtitle, for serving
+   * the stored file as-is. The name comes from the file on disk so the original
+   * extension is preserved — the VTT the player consumes is a conversion.
+   */
+  async getSubtitleFileForDownload(
+    subtitleId: number,
+    user?: User,
+  ): Promise<{ path: string; filename: string }> {
+    const { realSubPath } = await this.resolveSubtitleOnDisk(subtitleId, user);
+    return { path: realSubPath, filename: path.basename(realSubPath) };
+  }
+
+  /**
+   * Get an external subtitle file converted to WebVTT.
+   */
+  async getSubtitleAsVtt(
+    subtitleId: number,
+    user?: User,
+  ): Promise<{ vtt: string; startTimeSeconds: number }> {
+    const { sub, realSubPath } = await this.resolveSubtitleOnDisk(
+      subtitleId,
+      user,
+    );
 
     const content = await fs.readFile(realSubPath, 'utf-8');
     const ext = path.extname(realSubPath).toLowerCase();

@@ -297,40 +297,53 @@ export class StreamingApiService {
     return params.length ? `${base}?${params.join('&')}` : base;
   }
 
+  /** Absolute-when-native, token-carrying URL for a `/api/stream` path. */
+  private streamUrl(path: string): string {
+    const base = this.serverConfig.isNative
+      ? this.serverConfig.resolveUrl(path)
+      : path;
+    return this.withTokenAndSid(base);
+  }
+
   /** Build authenticated subtitle URL */
   getSubtitleUrl(mediaFileId: number, subtitleId: number): string {
-    const base = this.serverConfig.isNative
-      ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/subtitles/${subtitleId}`)
-      : `/api/stream/${mediaFileId}/subtitles/${subtitleId}`;
-    const token = this.playbackToken;
-    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+    return this.streamUrl(`/api/stream/${mediaFileId}/subtitles/${subtitleId}`);
   }
 
   /** Build authenticated thumbnail sprite image URL */
   getThumbnailSpriteUrl(mediaFileId: number): string {
-    const base = this.serverConfig.isNative
-      ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/thumbnails/sprite.jpg`)
-      : `/api/stream/${mediaFileId}/thumbnails/sprite.jpg`;
-    const token = this.playbackToken;
-    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+    return this.streamUrl(`/api/stream/${mediaFileId}/thumbnails/sprite.jpg`);
   }
 
   /** Build authenticated thumbnail sprite metadata URL */
   getThumbnailMetadataUrl(mediaFileId: number): string {
-    const base = this.serverConfig.isNative
-      ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/thumbnails/sprite.json`)
-      : `/api/stream/${mediaFileId}/thumbnails/sprite.json`;
-    const token = this.playbackToken;
-    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+    return this.streamUrl(`/api/stream/${mediaFileId}/thumbnails/sprite.json`);
   }
 
   /** Build authenticated embedded subtitle URL */
   getEmbeddedSubtitleUrl(mediaFileId: number, streamIndex: number): string {
-    const base = this.serverConfig.isNative
-      ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/subtitles/embedded/${streamIndex}`)
-      : `/api/stream/${mediaFileId}/subtitles/embedded/${streamIndex}`;
-    const token = this.playbackToken;
-    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+    return this.streamUrl(
+      `/api/stream/${mediaFileId}/subtitles/embedded/${streamIndex}`,
+    );
+  }
+
+  /** External subtitle as stored on disk, served as an attachment so the
+   *  original format is kept — the playback URL above is a VTT conversion. */
+  getSubtitleDownloadUrl(mediaFileId: number, subtitleId: number): string {
+    return this.streamUrl(
+      `/api/stream/${mediaFileId}/subtitles/${subtitleId}/download`,
+    );
+  }
+
+  /** Embedded subtitle as an attachment: the extracted WebVTT, the only form
+   *  that exists for a stream inside the container. */
+  getEmbeddedSubtitleDownloadUrl(
+    mediaFileId: number,
+    streamIndex: number,
+  ): string {
+    return this.streamUrl(
+      `/api/stream/${mediaFileId}/subtitles/embedded/${streamIndex}/download`,
+    );
   }
 
   /** URLs absolues pour pistes Cast : base issue de cast-info (reloadCastStream). */
