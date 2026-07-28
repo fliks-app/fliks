@@ -442,18 +442,12 @@
                 {{ selectedAudio()?.head || selectedAudio()?.label }}
               </button>
               @for (t of audioTracks(); track t.index) {
-                <button
-                  type="button"
-                  class="dropdown-item"
-                  [class.text-primary]="t.index === selectedAudioIndex()"
+                <app-dropdown-option
+                  [head]="t.head || t.label"
+                  [sub]="t.sub"
+                  [selected]="t.index === selectedAudioIndex()"
                   (click)="onAudioChange(t.index)"
-                >
-                  <span class="flex-1 flex flex-col items-start gap-0 leading-tight text-left">
-                    <span>{{ t.head || t.label }}</span>
-                    @if (t.sub) { <span class="text-xs opacity-60">{{ t.sub }}</span> }
-                  </span>
-                  @if (t.index === selectedAudioIndex()) { <span class="h-2 w-2 rounded-full bg-primary shrink-0"></span> }
-                </button>
+                />
               }
             </app-dropdown-menu>
           }
@@ -469,28 +463,18 @@
               <button trigger type="button" class="select select-bordered select-sm w-fit text-left cursor-pointer transition-colors hover:bg-base-content/10">
                 {{ selectedSubtitle()?.head || selectedSubtitle()?.label || ('player.off' | translate) }}
               </button>
-              <button
-                type="button"
-                class="dropdown-item"
-                [class.text-primary]="!selectedSubtitleId()"
+              <app-dropdown-option
+                [head]="'player.off' | translate"
+                [selected]="!selectedSubtitleId()"
                 (click)="onSubtitleChange(null)"
-              >
-                <span class="flex-1 text-left">{{ 'player.off' | translate }}</span>
-                @if (!selectedSubtitleId()) { <span class="h-2 w-2 rounded-full bg-primary shrink-0"></span> }
-              </button>
+              />
               @for (s of subtitles(); track s.id) {
-                <button
-                  type="button"
-                  class="dropdown-item"
-                  [class.text-primary]="s.id === selectedSubtitleId()"
+                <app-dropdown-option
+                  [head]="s.head || s.label"
+                  [sub]="s.sub"
+                  [selected]="s.id === selectedSubtitleId()"
                   (click)="onSubtitleChange(s.id)"
-                >
-                  <span class="flex-1 flex flex-col items-start gap-0 leading-tight text-left">
-                    <span>{{ s.head || s.label }}</span>
-                    @if (s.sub) { <span class="text-xs opacity-60">{{ s.sub }}</span> }
-                  </span>
-                  @if (s.id === selectedSubtitleId()) { <span class="h-2 w-2 rounded-full bg-primary shrink-0"></span> }
-                </button>
+                />
               }
             </app-dropdown-menu>
           }

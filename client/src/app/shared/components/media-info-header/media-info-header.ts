@@ -51,6 +51,7 @@ import {
   resolutionFromQualityName,
 } from '../../../core/utils/player.utils';
 import { DropdownMenuComponent } from '../dropdown-menu';
+import { DropdownOptionComponent } from '../dropdown-option/dropdown-option';
 import { ProgressBadgeComponent } from '../progress-badge/progress-badge.component';
 import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
 import { TvRowDirective } from '../../directives/tv-row.directive';
@@ -100,7 +101,7 @@ interface AudioTrack {
   imports: [
     MobileFanartHeroComponent,
     ResolveUrlPipe,
-    DropdownMenuComponent,
+    DropdownMenuComponent, DropdownOptionComponent,
     ProgressBadgeComponent,
     ImgFadeInDirective,
     TvRowDirective,

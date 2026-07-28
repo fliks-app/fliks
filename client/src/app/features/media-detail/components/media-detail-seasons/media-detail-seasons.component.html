@@ -141,18 +141,23 @@
         }
       }
     </app-dropdown-menu>
-    <select
-      appTvSelect
-      class="select select-bordered w-fit shrink-0"
-      [ngModel]="activeSeasonId()"
-      (ngModelChange)="selectSeason.emit($event)"
-    >
+    <app-dropdown-menu placement="bottom-start">
+      <button trigger type="button" class="select select-bordered w-fit shrink-0 text-left cursor-pointer transition-colors hover:bg-base-content/10">
+        @if (selSeason) {
+          {{ 'media_detail.season_number' | translate:{ number: selSeason.seasonNumber } }}
+        } @else {
+          {{ 'media_detail.season' | translate }}
+        }
+      </button>
       @for (season of displaySeasons(); track season.id) {
-        <option [ngValue]="season.id">
-          {{ 'media_detail.season' | translate }} {{ season.seasonNumber }} ({{ tabEpisodeCount(season) }})
-        </option>
+        <app-dropdown-option
+          [head]="'media_detail.season_number' | translate:{ number: season.seasonNumber }"
+          [sub]="(tabEpisodeCount(season) <= 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: tabEpisodeCount(season) }"
+          [selected]="season.id === activeSeasonId()"
+          (click)="selectSeason.emit(season.id)"
+        />
       }
-    </select>
+    </app-dropdown-menu>
     @if (selSeason && isSeasonTabVisible(selSeason) && !episodesHasFileOnly()) {
       @if (!selSeason.monitored) {
         <span class="badge badge-ghost shrink-0">{{ 'media_detail.unmonitored' | translate }}</span>

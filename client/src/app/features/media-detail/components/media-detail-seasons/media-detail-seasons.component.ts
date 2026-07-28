@@ -7,7 +7,6 @@ import {
   output,
 } from '@angular/core';
 import { UpperCasePipe } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import {
   LucideCheck,
@@ -26,7 +25,7 @@ import {
 import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
 import { MediaCardComponent } from '../../../../shared/components/media-card/media-card';
 import { DropdownMenuComponent } from '../../../../shared/components/dropdown-menu';
-import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
+import { DropdownOptionComponent } from '../../../../shared/components/dropdown-option/dropdown-option';
 import { TvRowDirective } from '../../../../shared/directives/tv-row.directive';
 import {
   Episode,
@@ -50,7 +49,7 @@ import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, FormsModule, UpperCasePipe, LocaleDatePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, TvSelectDirective, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
+  imports: [TranslateModule, UpperCasePipe, LocaleDatePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
