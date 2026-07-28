@@ -11,6 +11,7 @@ import { TranslateModule } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { SubtitlesApiService, SubtitleStats } from '../../core/services/api/subtitles-api.service';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
+import { episodeLabel } from '../../shared/utils/episode-label';
 
 interface DiskSpaceEntry {
   path: string;
@@ -35,6 +36,8 @@ interface StatsReport {
 export class DashboardComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly subtitlesApi = inject(SubtitlesApiService);
+
+  readonly episodeLabel = episodeLabel;
 
   readonly stats = signal<StatsReport | null>(null);
   readonly subStats = signal<SubtitleStats | null>(null);

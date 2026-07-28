@@ -24,6 +24,20 @@ import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
 
+/**
+ * Season / episode scope of a subtitle row. `SubtitleFile.episode` is only set
+ * when the caller passed an episode id, so the media file's own link — the one
+ * the import establishes — is the fallback.
+ */
+export function episodeScope(sf: SubtitleFile) {
+  const episode = sf.episode ?? sf.mediaFile?.episode ?? null;
+  return {
+    seasonNumber: episode?.season?.seasonNumber ?? null,
+    episodeNumber: episode?.episodeNumber ?? null,
+    episodeTitle: episode?.title ?? null,
+  };
+}
+
 @Controller('subtitles')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
 export class SubtitleActivityController {
@@ -55,6 +69,11 @@ export class SubtitleActivityController {
     const qb = this.subtitleFileRepo
       .createQueryBuilder('sf')
       .leftJoinAndSelect('sf.media', 'media')
+      .leftJoinAndSelect('sf.episode', 'episode')
+      .leftJoinAndSelect('episode.season', 'season')
+      .leftJoinAndSelect('sf.mediaFile', 'mediaFile')
+      .leftJoinAndSelect('mediaFile.episode', 'fileEpisode')
+      .leftJoinAndSelect('fileEpisode.season', 'fileSeason')
       .orderBy('sf.createdAt', 'DESC');
 
     if (excludeEmbedded === 'true') {
@@ -78,6 +97,7 @@ export class SubtitleActivityController {
         mediaId: sf.mediaId,
         mediaTitle: sf.media?.title ?? '?',
         mediaType: sf.media?.type ?? null,
+        ...episodeScope(sf),
         language: sf.language,
         providerType: sf.providerType,
         score: sf.score,
@@ -119,7 +139,14 @@ export class SubtitleActivityController {
         .getRawMany(),
       this.subtitleFileRepo.find({
         where: notEmbedded,
-        relations: ['media'],
+        relations: [
+          'media',
+          'episode',
+          'episode.season',
+          'mediaFile',
+          'mediaFile.episode',
+          'mediaFile.episode.season',
+        ],
         order: { createdAt: 'DESC' },
         take: 10,
       }),
@@ -136,6 +163,7 @@ export class SubtitleActivityController {
       recent: recent.map((sf) => ({
         id: sf.id,
         mediaTitle: sf.media?.title ?? '?',
+        ...episodeScope(sf),
         language: sf.language,
         providerType: sf.providerType,
         score: sf.score,

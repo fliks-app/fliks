@@ -15,6 +15,7 @@ import {
 } from '../../../core/services/api/subtitles-api.service';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
+import { episodeLabel } from '../../../shared/utils/episode-label';
 
 @Component({
   selector: 'app-activity-subtitles',
@@ -25,6 +26,8 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 export class ActivitySubtitlesComponent implements OnInit {
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly translate = inject(TranslateService);
+
+  readonly episodeLabel = episodeLabel;
 
   readonly subHistory = signal<SubtitleHistoryEntry[]>([]);
   readonly subHistoryTotal = signal(0);

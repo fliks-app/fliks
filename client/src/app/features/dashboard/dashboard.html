@@ -145,7 +145,14 @@
               <tbody>
                 @for (r of sub.recent; track r.id) {
                   <tr>
-                    <td class="font-medium max-w-[12rem] truncate">{{ r.mediaTitle }}</td>
+                    <td class="font-medium max-w-[12rem]" [title]="r.mediaTitle">
+                      <span class="block truncate">{{ r.mediaTitle }}</span>
+                      @if (episodeLabel(r)) {
+                        <span class="block text-xs font-normal text-base-content/60 truncate" [title]="episodeLabel(r)">
+                          {{ episodeLabel(r) }}
+                        </span>
+                      }
+                    </td>
                     <td class="font-mono text-sm">{{ r.language }}</td>
                     <td class="text-sm">{{ r.providerType }}</td>
                     <td class="text-center tabular-nums">{{ r.score }}</td>
