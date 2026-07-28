@@ -1337,18 +1337,8 @@ export class CompletionService {
   // Seed ratio cleanup — remove torrents that have met their seed ratio target
   // ---------------------------------------------------------------------------
 
+  @Cron(CronExpression.EVERY_5_MINUTES)
   async cleanSeededTorrents(): Promise<void> {
-    // Only care about completed imports that still have a torrent hash
-    const completed = await this.historyRepo.find({
-      where: { status: 'completed' },
-    });
-    const withHash = completed.filter((h) => h.torrentHash);
-    if (!withHash.length) return;
-
-    // Load all indexers into a map for quick lookup
-    const indexers = await this.indexerRepo.find();
-    const indexerMap = new Map(indexers.map((ix) => [ix.id, ix]));
-
     // Fetch torrents from all enabled qBittorrent clients
     const clients = await this.clientRepo.find({ where: { enabled: true } });
     const qbitClients = clients.filter((c) => this.qbittorrent.supports(c));
@@ -1371,6 +1361,22 @@ export class CompletionService {
     const torrentMap = new Map(
       allTorrents.map((e) => [e.torrent.hash.toLowerCase(), e]),
     );
+
+    // Scoped to the hashes the client still holds: history grows forever while
+    // the client's contents don't, and a row whose torrent is already gone has
+    // nothing left to clean up.
+    const withHash = await this.historyRepo
+      .createQueryBuilder('h')
+      .where('h.status = :status', { status: 'completed' })
+      .andWhere('LOWER(h."torrentHash") IN (:...hashes)', {
+        hashes: [...torrentMap.keys()],
+      })
+      .getMany();
+    if (!withHash.length) return;
+
+    const indexers = await this.indexerRepo.find();
+    const indexerMap = new Map(indexers.map((ix) => [ix.id, ix]));
+
     const nowSec = Math.floor(Date.now() / 1000);
     let deleted = 0;
 

@@ -121,7 +121,7 @@ export class SchedulerService implements OnModuleInit {
     },
     {
       name: 'CleanSeeded',
-      cron: CronExpression.EVERY_MINUTE,
+      cron: CronExpression.EVERY_5_MINUTES,
       triggerable: true,
     },
     {

@@ -171,3 +171,71 @@ describe('CompletionService.reconcileOrphanHistory', () => {
     expect(noop.emit).not.toHaveBeenCalled();
   });
 });
+
+describe('CompletionService.cleanSeededTorrents', () => {
+  const DAY_SEC = 86400;
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  /** Same bare-prototype approach as above, wiring only the collaborators
+   *  `cleanSeededTorrents` reads. */
+  function run(
+    seeded: Partial<QbittorrentTorrent>,
+    settings: Record<string, unknown>,
+  ) {
+    const deleteTorrent = jest.fn().mockResolvedValue(undefined);
+    const service = Object.create(CompletionService.prototype) as CompletionService;
+    const qb = {
+      where: () => qb,
+      andWhere: () => qb,
+      // Uppercase hash on purpose: rows written from an indexer-supplied hash
+      // must still resolve against qBit's lowercase one.
+      getMany: async () => [
+        history({
+          id: 3,
+          status: 'completed',
+          torrentHash: 'H1',
+          indexerId: 5,
+        }),
+      ],
+    };
+    const wired = service as unknown as Record<string, unknown>;
+    wired.clientRepo = { find: async () => [{ id: 1 }] };
+    wired.qbittorrent = {
+      supports: () => true,
+      getTorrents: async () => [
+        { hash: 'h1', name: 'pack', ratio: 0, completion_on: nowSec, ...seeded },
+      ],
+      deleteTorrent,
+    };
+    wired.historyRepo = { createQueryBuilder: () => qb };
+    wired.indexerRepo = { find: async () => [{ id: 5, settings }] };
+    wired.log = { log: jest.fn(), error: jest.fn() };
+    wired.events = { emit: jest.fn() };
+    return { deleteTorrent, done: service.cleanSeededTorrents() };
+  }
+
+  it('removes a torrent past its retention even when the ratio target is unmet', async () => {
+    const { deleteTorrent, done } = run(
+      { ratio: 0.1, completion_on: nowSec - 26 * DAY_SEC },
+      { seedRatio: 1, maxRetentionDays: 2 },
+    );
+    await done;
+    // Third arg = delete the payload files, not just the torrent entry.
+    expect(deleteTorrent).toHaveBeenCalledWith({ id: 1 }, 'h1', true);
+  });
+
+  it('keeps a torrent that meets neither retention nor ratio', async () => {
+    const { deleteTorrent, done } = run(
+      { ratio: 0.1, completion_on: nowSec - DAY_SEC },
+      { seedRatio: 1, maxRetentionDays: 2 },
+    );
+    await done;
+    expect(deleteTorrent).not.toHaveBeenCalled();
+  });
+
+  it('still removes on the ratio target when no retention is configured', async () => {
+    const { deleteTorrent, done } = run({ ratio: 1.5 }, { seedRatio: 1 });
+    await done;
+    expect(deleteTorrent).toHaveBeenCalledWith({ id: 1 }, 'h1', true);
+  });
+});
