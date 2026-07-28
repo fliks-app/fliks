@@ -9,6 +9,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
 
     var window: UIWindow?
 
+    // Supported interface orientations for the whole window. Defaults to free
+    // rotation; OrientationPlugin narrows it to landscape while the video player
+    // is open (see OrientationPlugin.swift) and widens it back on exit.
+    var orientationLock: UIInterfaceOrientationMask = .allButUpsideDown
+
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        return orientationLock
+    }
+
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Configure audio session for background playback and PiP
         do {

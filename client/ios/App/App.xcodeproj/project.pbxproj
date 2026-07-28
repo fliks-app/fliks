@@ -19,6 +19,7 @@
 		F1000001AAAA000000000002 /* HdrPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000012 /* HdrPlugin.swift */; };
 		F1000001AAAA000000000003 /* NativePlayerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000013 /* NativePlayerPlugin.swift */; };
 		F1000001AAAA000000000004 /* ImmersivePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000014 /* ImmersivePlugin.swift */; };
+		F1000001AAAA00000000000A /* OrientationPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA00000000001A /* OrientationPlugin.swift */; };
 		F1000001AAAA000000000005 /* PipPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000015 /* PipPlugin.swift */; };
 		F1000001AAAA000000000006 /* CastPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000016 /* CastPlugin.swift */; };
 		F1000001AAAA000000000007 /* AudioCapabilitiesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */; };
@@ -42,6 +43,7 @@
 		F1000001AAAA000000000012 /* HdrPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HdrPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000013 /* NativePlayerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePlayerPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000014 /* ImmersivePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImmersivePlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA00000000001A /* OrientationPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000015 /* PipPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000016 /* CastPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCapabilitiesPlugin.swift; sourceTree = "<group>"; };
@@ -97,6 +99,7 @@
 				F1000001AAAA000000000012 /* HdrPlugin.swift */,
 				F1000001AAAA000000000013 /* NativePlayerPlugin.swift */,
 				F1000001AAAA000000000014 /* ImmersivePlugin.swift */,
+				F1000001AAAA00000000001A /* OrientationPlugin.swift */,
 				F1000001AAAA000000000015 /* PipPlugin.swift */,
 				F1000001AAAA000000000016 /* CastPlugin.swift */,
 				F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */,
@@ -255,6 +258,7 @@
 				F1000001AAAA000000000002 /* HdrPlugin.swift in Sources */,
 				F1000001AAAA000000000003 /* NativePlayerPlugin.swift in Sources */,
 				F1000001AAAA000000000004 /* ImmersivePlugin.swift in Sources */,
+				F1000001AAAA00000000000A /* OrientationPlugin.swift in Sources */,
 				F1000001AAAA000000000005 /* PipPlugin.swift in Sources */,
 				F1000001AAAA000000000006 /* CastPlugin.swift in Sources */,
 				F1000001AAAA000000000007 /* AudioCapabilitiesPlugin.swift in Sources */,

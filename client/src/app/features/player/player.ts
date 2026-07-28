@@ -76,6 +76,12 @@ interface PipPlugin {
 }
 const Pip = registerPlugin<PipPlugin>('Pip');
 
+interface OrientationPlugin {
+  lock(): Promise<void>;
+  unlock(): Promise<void>;
+}
+const Orientation = registerPlugin<OrientationPlugin>('Orientation');
+
 import { LucideCircleAlert, LucideInfo, LucideX } from '@lucide/angular';
 import { PlayerControlsComponent } from './controls/player-controls';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
@@ -367,6 +373,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly controlsVisible = signal(true);
   readonly inPipMode = signal(false);
   readonly pipAvailable = signal(true);
+  readonly canLockOrientation = Capacitor.getPlatform() === 'ios';
+  readonly orientationLocked = signal(false);
   private readonly isLandscape = signal(screen.orientation?.type?.startsWith('landscape') ?? false);
   readonly statsVisible = signal(false);
   readonly fillScreen = signal(false);
@@ -1518,6 +1526,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     window.removeEventListener('app:playerBack', this.onPlayerBackEvent);
     if (this.isNative) {
       screen.orientation?.removeEventListener('change', this.onOrientationChange);
+      if (Capacitor.getPlatform() === 'ios') Orientation.unlock().catch(() => {});
       Immersive.exit().catch(() => {});
       document.body.classList.remove('immersive');
       Pip.setAutoEnter({ enabled: false }).catch(() => {});
@@ -2611,6 +2620,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } else {
       video.requestPictureInPicture();
     }
+  }
+
+  onToggleOrientationLock() {
+    const locked = !this.orientationLocked();
+    this.orientationLocked.set(locked);
+    (locked ? Orientation.lock() : Orientation.unlock()).catch(() => {});
   }
 
   async onToggleCast() {

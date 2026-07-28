@@ -39,6 +39,8 @@ import {
   LucideCast,
   LucideHeadphones,
   LucideLeaf,
+  LucideLock,
+  LucideLockOpen,
   LucideVolume2,
   LucideVolumeX,
 } from '@lucide/angular';
@@ -58,6 +60,8 @@ import {
     LucideCast,
     LucideHeadphones,
     LucideLeaf,
+    LucideLock,
+    LucideLockOpen,
     LucideVolume2,
     LucideVolumeX,
     LucideSettings,
@@ -250,6 +254,8 @@ export class PlayerControlsComponent {
   readonly availableAudioTracks = input<{ id: string; label: string; menuHead?: string; menuSub?: string }[]>([]);
   readonly activeAudioTrackId = input<string | null>(null);
   readonly pipAvailable = input(true);
+  readonly canLockOrientation = input(false);
+  readonly orientationLocked = input(false);
   readonly castAvailable = input(false);
   readonly castConnected = input(false);
   readonly castConnecting = input(false);
@@ -278,6 +284,7 @@ export class PlayerControlsComponent {
   readonly toggleMute = output<void>();
   readonly toggleFullscreen = output<void>();
   readonly togglePip = output<void>();
+  readonly toggleOrientationLock = output<void>();
   readonly toggleSubtitlePicker = output<void>();
   readonly toggleStats = output<void>();
   readonly toggleQualityPicker = output<void>();
