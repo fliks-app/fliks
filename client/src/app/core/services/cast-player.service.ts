@@ -754,7 +754,9 @@ export class CastPlayerService {
       { hideBurnIn: this.appSettings.hideBurnInSubtitles() },
     ).map((t) => ({
       id: t.key,
-      label: formatSubtitleLabel(t, this.translate),
+      label: formatSubtitleLabel(t, this.translate, undefined, {
+        showFormat: this.appSettings.showSubtitleFormat(),
+      }),
       language: t.language,
       burnIn: t.kind === 'embedded' && t.isImage,
       subtitleDbId: t.subtitleId,

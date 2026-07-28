@@ -198,6 +198,12 @@ export function formatAudioParts(
   return { head, sub: [codec, channels].filter(Boolean).join(' • ') };
 }
 
+/** Whether the pickers spell out the file format. Off unless the viewer asked
+ *  for it in the subtitle settings. */
+export interface SubtitleLabelOptions {
+  showFormat?: boolean;
+}
+
 /**
  * Render a subtitle as a dropdown label. Mirrors {@link formatAudioLabel} so
  * the player and media-detail subtitle menus stay consistent.
@@ -216,6 +222,7 @@ export function formatSubtitleLabel(
   },
   translate: TranslateService,
   trackIndex?: number,
+  opts?: SubtitleLabelOptions,
 ): string {
   const norm = normalizeLangCode(sub.language);
   const head =
@@ -225,7 +232,7 @@ export function formatSubtitleLabel(
   const parts: string[] = [];
   if (sub.hearingImpaired) parts.push(translate.instant('player.subtitle_hearing_impaired'));
   if (sub.forced) parts.push(translate.instant('player.subtitle_forced'));
-  const codec = shortSubtitleCodec(sub.codec, sub.relativePath);
+  const codec = opts?.showFormat ? shortSubtitleCodec(sub.codec, sub.relativePath) : '';
   if (codec) parts.push(codec);
   const origin = subtitleOriginLabel(sub.providerType, translate);
   if (origin) parts.push(origin);
@@ -248,6 +255,7 @@ export function formatSubtitleParts(
   },
   translate: TranslateService,
   trackIndex?: number,
+  opts?: SubtitleLabelOptions,
 ): { head: string; sub: string } {
   const norm = normalizeLangCode(sub.language);
   const head =
@@ -255,7 +263,7 @@ export function formatSubtitleParts(
       ? translate.instant('player.subtitle_track_n', { index: trackIndex })
       : localizeLanguage(sub.language, translate);
   const parts: string[] = [];
-  const codec = shortSubtitleCodec(sub.codec, sub.relativePath);
+  const codec = opts?.showFormat ? shortSubtitleCodec(sub.codec, sub.relativePath) : '';
   if (codec) parts.push(codec);
   if (sub.forced) parts.push(translate.instant('player.subtitle_forced'));
   if (sub.hearingImpaired) parts.push(translate.instant('player.subtitle_hearing_impaired'));

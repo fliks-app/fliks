@@ -403,9 +403,10 @@ export class SubtitlesModalComponent {
         s.status !== 'failed' &&
         !(hideBurnIn && isImageBasedSubtitleCodec(s.codec)),
     );
+    const labelOpts = { showFormat: this.appSettings.showSubtitleFormat() };
     return subs.map((s) => {
       const id = s.streamIndex != null ? `emb-${s.streamIndex}` : `ext-${s.id}`;
-      const parts = formatSubtitleParts(s, this.translate);
+      const parts = formatSubtitleParts(s, this.translate, undefined, labelOpts);
       return {
         id,
         label: parts.sub ? `${parts.head} — ${parts.sub}` : parts.head,

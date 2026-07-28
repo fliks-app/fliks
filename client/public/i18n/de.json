@@ -416,6 +416,8 @@
     "sub_remember_hint": "Die Untertitelauswahl wird für jedes Video gespeichert und erneut angewendet, wenn das Video wieder abgespielt wird.",
     "sub_hide_image": "Bild-Untertitel ausblenden",
     "sub_hide_image_hint": "Bild-Untertitel (PGS, VOBSUB…) können nicht als Text angezeigt werden. Wenn aktiviert, werden sie im Auswahlmenü und im Player ausgeblendet (auf diesem Gerät).",
+    "sub_show_format": "Dateiformat anzeigen",
+    "sub_show_format_hint": "Ergänzt die Untertitelauswahl um das Format (SRT, VTT, ASS…), neben Sprache und Kennzeichen.",
     "sub_clear_saved": "Gespeicherte Spurauswahl löschen",
     "sub_appearance_title": "Darstellung der Untertitel",
     "sub_appearance_hint": "Diese Einstellungen gelten nicht für grafische Untertitel (PGS, DVD usw.) oder für Untertitel mit eigenen eingebetteten Stilen (ASS/SSA).",

@@ -37,4 +37,9 @@ export class AppSettingsService {
   readonly hideBurnInSubtitles = computed(
     () => this.playerSettings.settings().hideImageSubtitles,
   );
+
+  /** Show the subtitle file format (SRT, VTT, ASS…) in the pickers. */
+  readonly showSubtitleFormat = computed(
+    () => this.playerSettings.settings().showSubtitleFormat,
+  );
 }
