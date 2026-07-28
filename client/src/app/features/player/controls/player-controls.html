@@ -50,6 +50,15 @@
         }
       </button>
     }
+    @if (canLockOrientation()) {
+      <button type="button" class="btn btn-ghost btn-circle text-white btn-md" [attr.aria-label]="(orientationLocked() ? 'player.orientation_unlock' : 'player.orientation_lock') | translate" [attr.aria-pressed]="orientationLocked()" (click)="toggleOrientationLock.emit()">
+        @if (orientationLocked()) {
+          <svg lucideLock [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+        } @else {
+          <svg lucideLockOpen [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+        }
+      </button>
+    }
     <!-- lucide:picture-in-picture-2 — hidden on TV (no PiP on Android TV) and when permission is revoked -->
     @if (!isTv() && pipAvailable()) {
       <button type="button" class="btn btn-ghost btn-circle text-white btn-md" [attr.aria-label]="'player.pip' | translate" (click)="togglePip.emit()">

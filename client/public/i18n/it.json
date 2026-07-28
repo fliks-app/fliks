@@ -51,6 +51,8 @@
     "stats": "Statistiche",
     "fullscreen": "Schermo intero",
     "pip": "Picture-in-Picture",
+    "orientation_lock": "Blocca orientamento",
+    "orientation_unlock": "Sblocca orientamento",
     "back": "Indietro",
     "continue_watching": "Continua a guardare",
     "no_continue": "Nessuna riproduzione in corso.",

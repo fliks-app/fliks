@@ -12,11 +12,20 @@ class FlksViewController: CAPBridgeViewController {
         #endif
     }
 
+    // CAPBridgeViewController answers this from a static Info.plist list, so the
+    // OrientationPlugin's dynamic mask would be ignored. Read the mask here — the
+    // view-controller level is the orientation authority iOS re-queries on
+    // setNeedsUpdateOfSupportedInterfaceOrientations.
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        return (UIApplication.shared.delegate as? AppDelegate)?.orientationLock ?? .allButUpsideDown
+    }
+
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(NativePlayerPlugin())
         bridge?.registerPluginInstance(HdrPlugin())
         bridge?.registerPluginInstance(AudioCapabilitiesPlugin())
         bridge?.registerPluginInstance(ImmersivePlugin())
+        bridge?.registerPluginInstance(OrientationPlugin())
         bridge?.registerPluginInstance(PipPlugin())
         bridge?.registerPluginInstance(CastPlugin())
         bridge?.registerPluginInstance(DownloadPlugin())
