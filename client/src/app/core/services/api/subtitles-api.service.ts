@@ -200,6 +200,7 @@ export interface SubtitleHistoryEntry {
   mediaId: number;
   mediaTitle: string;
   mediaType: MediaType | null;
+  episodeId: number | null;
   seasonNumber: number | null;
   episodeNumber: number | null;
   episodeTitle: string | null;
@@ -226,7 +227,9 @@ export interface SubtitleStats {
   byProvider: Record<string, number>;
   recent: {
     id: number;
+    mediaId: number;
     mediaTitle: string;
+    episodeId: number | null;
     seasonNumber: number | null;
     episodeNumber: number | null;
     episodeTitle: string | null;
