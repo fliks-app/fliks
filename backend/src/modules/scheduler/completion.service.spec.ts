@@ -172,6 +172,69 @@ describe('CompletionService.reconcileOrphanHistory', () => {
   });
 });
 
+describe('CompletionService.autoMatchOrphanTorrents', () => {
+  function run(rows: DownloadHistory[], name: string, hash: string) {
+    const tryMatch = jest.fn().mockResolvedValue(null);
+    const service = Object.create(CompletionService.prototype) as CompletionService;
+    const wired = service as unknown as Record<string, unknown>;
+    wired.historyRepo = { find: async () => rows, save: jest.fn(), create: jest.fn() };
+    wired.autoMatcher = { tryMatch };
+    wired.unidentifiedHashes = new Set<string>();
+    wired.log = { log: jest.fn(), warn: jest.fn(), debug: jest.fn() };
+    return {
+      tryMatch,
+      done: (
+        service as unknown as {
+          autoMatchOrphanTorrents: (t: unknown[]) => Promise<void>;
+        }
+      ).autoMatchOrphanTorrents([{ hash, name, _clientId: 1, _client: {} }]),
+    };
+  }
+
+  it('trusts the linked row when a ghost row shares its hash', async () => {
+    const { tryMatch, done } = run(
+      [
+        history({ id: 1, status: 'grabbed', torrentHash: 'h1' }),
+        history({ id: 2, status: 'completed', torrentHash: 'h1', mediaId: 42 }),
+        // Ghost last on purpose: insertion order must not decide the verdict.
+        history({ id: 3, status: 'grabbed', torrentHash: 'h1' }),
+      ],
+      'Some.Release.1080p',
+      'h1',
+    );
+    await done;
+    expect(tryMatch).not.toHaveBeenCalled();
+  });
+
+  it('skips a torrent whose title is already bound to a media', async () => {
+    const { tryMatch, done } = run(
+      [
+        history({
+          id: 5,
+          status: 'completed',
+          torrentHash: null as unknown as string,
+          sourceTitle: 'Some_Release_1080p',
+          mediaId: 42,
+        }),
+      ],
+      'Some.Release.1080p',
+      'h9',
+    );
+    await done;
+    expect(tryMatch).not.toHaveBeenCalled();
+  });
+
+  it('still tries to identify a torrent nothing accounts for', async () => {
+    const { tryMatch, done } = run(
+      [history({ id: 5, status: 'completed', torrentHash: 'other', mediaId: 42 })],
+      'Unknown.Release.1080p',
+      'h9',
+    );
+    await done;
+    expect(tryMatch).toHaveBeenCalledWith('Unknown.Release.1080p');
+  });
+});
+
 describe('CompletionService.cleanSeededTorrents', () => {
   const DAY_SEC = 86400;
   const nowSec = Math.floor(Date.now() / 1000);
