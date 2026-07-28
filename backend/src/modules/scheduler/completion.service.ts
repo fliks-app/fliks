@@ -1,4 +1,10 @@
-import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  forwardRef,
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, LessThan, Repository } from 'typeorm';
@@ -40,6 +46,7 @@ import { Library } from '../libraries/entities/library.entity';
 import {
   TorrentHistoryMatcher,
   normaliseTorrentName,
+  outranksForTorrent,
 } from '../media/torrent-history-matcher.service';
 import { TorrentAutoMatcher } from '../media/torrent-auto-matcher.service';
 import { buildGrabHistoryRow } from '../media/grab-history.util';
@@ -72,7 +79,7 @@ const ORPHAN_GRACE_MS = 5 * 60_000;
 const ORPHAN_STATUS_MESSAGE = 'Torrent no longer present in download client';
 
 @Injectable()
-export class CompletionService {
+export class CompletionService implements OnModuleInit {
   private readonly log = new Logger(CompletionService.name);
 
   /** Torrent hashes the auto-matcher could not resolve on the previous tick.
@@ -122,6 +129,24 @@ export class CompletionService {
   ) {}
 
   /**
+   * `importing` is written before the copy starts, so a process that dies
+   * mid-import leaves the row claiming an import that no longer exists — and
+   * the import loop skips `importing` rows to avoid re-entering a copy still in
+   * flight. Nothing is in flight right after boot, so re-arm them all.
+   */
+  async onModuleInit(): Promise<void> {
+    const stranded = await this.historyRepo.update(
+      { status: 'importing' },
+      { status: 'grabbed' },
+    );
+    if (stranded.affected) {
+      this.log.warn(
+        `Import: re-armed ${stranded.affected} row(s) left importing by a previous run`,
+      );
+    }
+  }
+
+  /**
    * Whether series imports trigger automatic intro / outro marker
    * detection. Default on — most users want skip-intro working right
    * after a series finishes downloading.
@@ -130,7 +155,9 @@ export class CompletionService {
    * (an unset key reads as enabled) to preserve behaviour on existing installs.
    */
   private async autoDetectMarkersOnImport(): Promise<boolean> {
-    return (await this.settings.get('markers_auto_detect_on_import')) !== 'false';
+    return (
+      (await this.settings.get('markers_auto_detect_on_import')) !== 'false'
+    );
   }
 
   /**
@@ -168,8 +195,7 @@ export class CompletionService {
       if (!h.torrentHash) continue;
       const key = h.torrentHash.toLowerCase();
       const kept = rowByHash.get(key);
-      // Several rows can carry one hash; the linked one is authoritative.
-      if (!kept || (!kept.mediaId && h.mediaId)) rowByHash.set(key, h);
+      if (!kept || outranksForTorrent(h, kept)) rowByHash.set(key, h);
     }
 
     const linkedTitles = new Set(
@@ -229,8 +255,7 @@ export class CompletionService {
       }
 
       const quality = parseReleaseQuality(torrent.name).quality.name;
-      const seasonId =
-        match.season?.id ?? match.episode?.season?.id ?? null;
+      const seasonId = match.season?.id ?? match.episode?.season?.id ?? null;
       const episodeId = match.episode?.id ?? null;
 
       let row: DownloadHistory;
@@ -241,8 +266,7 @@ export class CompletionService {
         // are left intact — this is restoration, not a new grab.
         existingRow.media = match.media;
         existingRow.episode = match.episode ?? null;
-        existingRow.season =
-          match.season ?? match.episode?.season ?? null;
+        existingRow.season = match.season ?? match.episode?.season ?? null;
         existingRow.quality = quality;
         row = await this.historyRepo.save(existingRow);
         rebound++;
@@ -305,7 +329,11 @@ export class CompletionService {
         const { ok, torrents } = await this.qbittorrent.getTorrentsResult(c);
         return {
           ok,
-          torrents: torrents.map((t) => ({ ...t, _clientId: c.id, _client: c })),
+          torrents: torrents.map((t) => ({
+            ...t,
+            _clientId: c.id,
+            _client: c,
+          })),
         };
       }),
     );
@@ -438,25 +466,6 @@ export class CompletionService {
   }
 
   /**
-   * Reconcile grabbed/importing/failed rows against the live torrent list.
-   * Caller must pass a complete list (every client responded), since every
-   * direction keys off a torrent's presence:
-   *
-   *  - A `grabbed` or `importing` row whose torrent has been gone for at least
-   *    {@link ORPHAN_GRACE_MS} flips to `failed` — this is what reconciles a
-   *    torrent the user removed from the client by hand. The grace is measured
-   *    off `updatedAt`, which every status / hash heal write bumps, so a row
-   *    whose torrent just arrived has a fresh timestamp and won't be flipped.
-   *  - A `failed` row carrying the {@link ORPHAN_STATUS_MESSAGE} stamp whose
-   *    torrent is matched again returns to `grabbed`, so the activity queue
-   *    never shows "no longer present" beside a torrent the client still
-   *    reports. A torrent that failed for any other reason keeps its status.
-   *
-   * The media link is preserved in every direction. A `queue.updated` event is
-   * emitted on any change so the sidebar badge refreshes live rather than
-   * staying stale until the next navigation.
-   */
-  /**
    * Push a `download.progress` SSE for every in-flight torrent to that media's
    * request audience. Reuses the same hash-first matcher as the queue endpoint;
    * resolves the season/episode scope so a series renders per-season progress.
@@ -498,6 +507,27 @@ export class CompletionService {
     }
   }
 
+  /**
+   * Reconcile grabbed/importing/failed rows against the live torrent list.
+   * Caller must pass a complete list (every client responded), since every
+   * direction keys off a torrent's presence:
+   *
+   *  - A `grabbed` or `importing` row whose torrent has been gone for at least
+   *    {@link ORPHAN_GRACE_MS} flips to `failed` — this is what reconciles a
+   *    torrent the user removed from the client by hand. The grace is measured
+   *    off `updatedAt`, which every status / hash heal write bumps, so a row
+   *    whose torrent just arrived has a fresh timestamp and won't be flipped.
+   *  - A `failed` row carrying the {@link ORPHAN_STATUS_MESSAGE} stamp whose
+   *    torrent is matched again returns to `grabbed`, so the activity queue
+   *    never shows "no longer present" beside a torrent the client still
+   *    reports. A torrent that failed for any other reason keeps its status.
+   *  - An `importing` row whose torrent is no longer complete returns to
+   *    `grabbed`: no import can be in flight for it.
+   *
+   * The media link is preserved in every direction. A `queue.updated` event is
+   * emitted on any change so the sidebar badge refreshes live rather than
+   * staying stale until the next navigation.
+   */
   private async reconcileOrphanHistory(
     allTorrents: ReadonlyArray<QbittorrentTorrent>,
     grabbed: DownloadHistory[],
@@ -507,13 +537,34 @@ export class CompletionService {
     // Match torrents against both sets so a live torrent keeps either kind of
     // row off the orphan list.
     const candidates = [...grabbed, ...importing];
-    const matchedHistoryIds = new Set<number>();
+    const torrentByHistoryId = new Map<number, QbittorrentTorrent>();
     for (const t of allTorrents) {
       const m = this.historyMatcher.findMatch(t, candidates);
-      if (m) matchedHistoryIds.add(m.history.id);
+      if (m) torrentByHistoryId.set(m.history.id, t);
     }
+    const matchedHistoryIds = new Set(torrentByHistoryId.keys());
 
     let changed = false;
+
+    // An import only ever starts on a complete torrent, so an `importing` row
+    // whose torrent is no longer complete cannot have one in flight: the
+    // process died mid-copy, or the payload vanished and the client restarted
+    // the download. Re-arm it — `importing` is otherwise a dead end, excluded
+    // from the import candidates and only ever reclaimed by the orphan sweep.
+    const restarted = importing.filter((h) => {
+      const t = torrentByHistoryId.get(h.id);
+      return t != null && t.progress < 1;
+    });
+    if (restarted.length) {
+      await this.historyRepo.update(
+        restarted.map((h) => h.id),
+        { status: 'grabbed', statusMessage: null as unknown as string },
+      );
+      changed = true;
+      this.log.warn(
+        `Import: ${restarted.length} importing entries whose torrent is no longer complete — re-armed as grabbed`,
+      );
+    }
 
     const revived = grabbed.filter(
       (h) =>
@@ -659,9 +710,13 @@ export class CompletionService {
       relations: ['library'],
     });
     if (!media) {
-      this.log.warn(
-        `Import[${history.sourceTitle}]: media id=${history.mediaId} not found in DB`,
-      );
+      const statusMessage = `Import failed: media id=${history.mediaId} not found`;
+      this.log.warn(`Import[${history.sourceTitle}]: ${statusMessage}`);
+      await this.historyRepo.update(history.id, {
+        status: 'failed',
+        statusMessage,
+      });
+      this.events.emit({ type: 'queue.updated' });
       return;
     }
     this.log.log(
@@ -677,9 +732,13 @@ export class CompletionService {
     if (!rootPath) {
       const fallback = libraries.find((l) => !!l.path);
       if (!fallback) {
-        this.log.warn(
-          `Import[${history.sourceTitle}]: no library path configured, skipping`,
-        );
+        const statusMessage = 'Import failed: no library path configured';
+        this.log.warn(`Import[${history.sourceTitle}]: ${statusMessage}`);
+        await this.historyRepo.update(history.id, {
+          status: 'failed',
+          statusMessage,
+        });
+        this.events.emit({ type: 'queue.updated' });
         return;
       }
       resolvedLib = fallback;
@@ -910,6 +969,17 @@ export class CompletionService {
       }
 
       importedFiles.push({ savedFile, episodeId, seasonId, destPath });
+    }
+
+    if (!importedFiles.length) {
+      const statusMessage = `Import failed: no file could be placed under the library root for "${torrent.name}"`;
+      this.log.error(`Import[${history.sourceTitle}]: ${statusMessage}`);
+      await this.historyRepo.update(history.id, {
+        status: 'failed',
+        statusMessage,
+      });
+      this.events.emit({ type: 'queue.updated' });
+      return;
     }
 
     // Reconcile the history row with what was actually imported. Its

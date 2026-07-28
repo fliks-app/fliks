@@ -354,6 +354,7 @@ export class AutoGrabPipelineService {
         args.qbitClient,
         args.pick.downloadUrl,
         args.mediaType,
+        true,
       );
       await this.historyRepo.save(
         this.historyRepo.create(

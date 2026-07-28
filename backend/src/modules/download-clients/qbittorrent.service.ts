@@ -440,6 +440,10 @@ export class QbittorrentService {
     client: DownloadClient,
     torrentUrl: string,
     mediaType?: 'movie' | 'series',
+    /** Throw when the client already holds this hash instead of recording a
+     *  grab against a torrent we did not add. Off for user-driven grabs, where
+     *  re-adding a release on purpose is legitimate. */
+    rejectIfAlreadyPresent = false,
   ): Promise<string> {
     torrentUrl = this.sanitizeUrl(torrentUrl);
     const s = client.settings;
@@ -602,6 +606,18 @@ export class QbittorrentService {
           `qBittorrent: could not recover hash for newly-added torrent — Activities row will rely on name match until next tick`,
         );
       }
+    }
+
+    // qBittorrent deduplicates by hash: the add above created nothing when the
+    // torrent was already there, so refusing after the fact costs nothing.
+    if (
+      rejectIfAlreadyPresent &&
+      infoHash &&
+      beforeHashes.has(infoHash.toLowerCase())
+    ) {
+      throw new BadRequestException(
+        `Torrent ${infoHash} is already in the download client`,
+      );
     }
 
     return infoHash ?? '';
