@@ -783,6 +783,8 @@
     "cast": "Elenco",
     "crew": "Equipa técnica",
     "episodes": "Episódios",
+    "episode_count_one": "{{count}} episódio",
+    "episode_count_other": "{{count}} episódios",
     "back": "Voltar à lista",
     "request_media": "Pedir",
     "request_season": "Pedir esta temporada",

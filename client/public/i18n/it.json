@@ -783,6 +783,8 @@
     "cast": "Cast",
     "crew": "Troupe tecnica",
     "episodes": "Episodi",
+    "episode_count_one": "{{count}} episodio",
+    "episode_count_other": "{{count}} episodi",
     "back": "Torna all'elenco",
     "request_media": "Richiedi",
     "request_season": "Richiedi questa stagione",

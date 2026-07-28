@@ -783,6 +783,8 @@
     "cast": "Besetzung",
     "crew": "Technisches Team",
     "episodes": "Folgen",
+    "episode_count_one": "{{count}} Episode",
+    "episode_count_other": "{{count}} Episoden",
     "back": "Zurück zur Liste",
     "request_media": "Anfragen",
     "request_season": "Diese Staffel anfragen",
