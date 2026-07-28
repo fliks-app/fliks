@@ -72,6 +72,11 @@ const ORPHAN_STATUS_MESSAGE = 'Torrent no longer present in download client';
 export class CompletionService {
   private readonly log = new Logger(CompletionService.name);
 
+  /** Torrent hashes the auto-matcher could not resolve on the previous tick.
+   *  Rebuilt wholesale each run, so it stays bounded by the client's current
+   *  torrent count and drops a hash as soon as the torrent leaves the client. */
+  private unidentifiedHashes = new Set<string>();
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(Media)
@@ -177,9 +182,10 @@ export class CompletionService {
       this.log.debug?.(
         `Auto-match: ${allTorrents.length} qBit torrents, all already linked — nothing to do`,
       );
+      this.unidentifiedHashes = new Set();
       return;
     }
-    this.log.log(
+    this.log.debug?.(
       `Auto-match: scanning ${candidates.length}/${allTorrents.length} torrent(s) without a media link`,
     );
 
@@ -187,6 +193,7 @@ export class CompletionService {
     let rebound = 0;
     let skippedByNameFallback = 0;
     let unidentified = 0;
+    const stillUnidentified = new Set<string>();
     for (const torrent of candidates) {
       const existingRow = rowByHash.get(torrent.hash!.toLowerCase());
 
@@ -210,9 +217,11 @@ export class CompletionService {
       }
       if (!match) {
         unidentified++;
-        this.log.log(
-          `Auto-match: "${torrent.name}" — no media in library matches the parsed title (ambiguous or unknown)`,
-        );
+        const hash = torrent.hash!.toLowerCase();
+        stillUnidentified.add(hash);
+        const message = `Auto-match: "${torrent.name}" — no media in library matches the parsed title (ambiguous or unknown)`;
+        if (this.unidentifiedHashes.has(hash)) this.log.debug?.(message);
+        else this.log.log(message);
         continue;
       }
 
@@ -265,9 +274,10 @@ export class CompletionService {
         `Auto-match: ${verb} torrent "${torrent.name}" → ${match.media.title}${epLabel} (history #${row.id})`,
       );
     }
-    this.log.log(
-      `Auto-match: done — ${bound} created, ${rebound} healed, ${skippedByNameFallback} matched by name (will heal hash), ${unidentified} unidentified`,
-    );
+    this.unidentifiedHashes = stillUnidentified;
+    const summary = `Auto-match: done — ${bound} created, ${rebound} healed, ${skippedByNameFallback} matched by name (will heal hash), ${unidentified} unidentified`;
+    if (bound || rebound) this.log.log(summary);
+    else this.log.debug?.(summary);
   }
 
   @Cron(CronExpression.EVERY_MINUTE)
