@@ -450,7 +450,7 @@
                 >
                   <span class="flex-1 flex flex-col items-start gap-0 leading-tight text-left">
                     <span>{{ t.head || t.label }}</span>
-                    @if (t.sub) { <span class="text-xs opacity-60">{{ t.sub }}</span> }
+                    @if (t.sub) { <span class="text-xs md:text-sm opacity-60">{{ t.sub }}</span> }
                   </span>
                   @if (t.index === selectedAudioIndex()) { <span class="h-2 w-2 rounded-full bg-primary shrink-0"></span> }
                 </button>
@@ -487,7 +487,7 @@
                 >
                   <span class="flex-1 flex flex-col items-start gap-0 leading-tight text-left">
                     <span>{{ s.head || s.label }}</span>
-                    @if (s.sub) { <span class="text-xs opacity-60">{{ s.sub }}</span> }
+                    @if (s.sub) { <span class="text-xs md:text-sm opacity-60">{{ s.sub }}</span> }
                   </span>
                   @if (s.id === selectedSubtitleId()) { <span class="h-2 w-2 rounded-full bg-primary shrink-0"></span> }
                 </button>

@@ -154,7 +154,7 @@
         >
           <span class="flex-1 flex flex-col items-start gap-0 leading-tight text-left">
             <span>{{ 'media_detail.season' | translate }} {{ season.seasonNumber }}</span>
-            <span class="text-xs opacity-60">
+            <span class="text-xs md:text-sm opacity-60">
               {{ (tabEpisodeCount(season) <= 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: tabEpisodeCount(season) } }}
             </span>
           </span>
