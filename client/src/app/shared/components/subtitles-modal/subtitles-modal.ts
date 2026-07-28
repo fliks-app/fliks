@@ -192,9 +192,21 @@ export class SubtitlesModalComponent {
   private readonly viewer =
     viewChild<SubtitleViewerModalComponent>('subtitleViewer');
 
+  /** Name the anchor asks for. The server sends `Content-Disposition` too, but
+   *  that header can be dropped in transit (a proxy, an opaque response), and
+   *  the browser then falls back to the URL's last segment — a file called
+   *  "download". The attribute is the same-origin belt to that braces; a remote
+   *  server still relies on the header, which the attribute cannot override. */
+  protected subtitleDownloadName(sub: SubtitleFileRow | null): string {
+    if (!sub) return '';
+    if (sub.relativePath) {
+      return sub.relativePath.replace(/\\/g, '/').split('/').pop() ?? '';
+    }
+    return `track-${sub.streamIndex}.${sub.language || 'und'}.vtt`;
+  }
+
   /** Attachment URL for the open row: the stored file for a sidecar subtitle,
-   *  the extracted WebVTT for an embedded track — the only form it has. The
-   *  server names the download, so the anchor needs no `download` attribute. */
+   *  the extracted WebVTT for an embedded track — the only form it has. */
   protected subtitleDownloadUrl(sub: SubtitleFileRow | null): string {
     if (!sub) return '';
     return sub.relativePath

@@ -180,6 +180,7 @@
         <a
           class="dropdown-item text-white"
           [href]="subtitleDownloadUrl(actionsSub())"
+          [attr.download]="subtitleDownloadName(actionsSub())"
           (click)="closeSubActions()"
         >
           <svg lucideDownload class="h-4 w-4 shrink-0 opacity-70" aria-hidden="true"></svg>

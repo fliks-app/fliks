@@ -97,19 +97,6 @@ export function withTimestampMap(
   return text.replace(/^(WEBVTT[^\n]*)\n/, `$1\n${map}\n`);
 }
 
-/** Force a browser save-as with a UTF-8 filename, whatever the character set. */
-function sendAsAttachment(
-  res: Response,
-  filename: string,
-  contentType?: string,
-): void {
-  if (contentType) res.setHeader('Content-Type', `${contentType}; charset=utf-8`);
-  res.setHeader(
-    'Content-Disposition',
-    `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
-  );
-}
-
 /** Accepted HLS segment / init filenames (fMP4 init, fMP4 or TS segment). */
 const SEGMENT_NAME_RE = /^(init(_\d+)?\.mp4|seg-\d{3,4}\.(m4s|ts))$/;
 
@@ -1263,7 +1250,10 @@ export class StreamingController {
       resolved.relativePath,
       path.extname(resolved.relativePath),
     );
-    sendAsAttachment(res, `${base}.track-${streamIndex}.vtt`, 'text/vtt');
+    // `attachment()` emits both `filename` and `filename*`, so a client that
+    // reads only the plain parameter still gets the name.
+    res.attachment(`${base}.track-${streamIndex}.vtt`);
+    res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.send(withTimestampMap(Buffer.concat(chunks), startTimeSeconds));
   }
 
@@ -1279,7 +1269,7 @@ export class StreamingController {
         subtitleId,
         user,
       );
-    sendAsAttachment(res, filename);
+    res.attachment(filename);
     res.sendFile(filePath);
   }
 
@@ -2203,7 +2193,7 @@ export class StreamingController {
     // the source container's own name. Only embedded streams travel inside the
     // container — sidecar subtitle files live next to it and aren't included.
     if (firstQueryString(req.query, 'download')) {
-      sendAsAttachment(res, path.basename(resolved.relativePath));
+      res.attachment(path.basename(resolved.relativePath));
     }
 
     if (!range) {
