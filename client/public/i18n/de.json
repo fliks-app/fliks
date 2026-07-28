@@ -896,6 +896,7 @@
     "mark_series_unwatched": "Serie als nicht gesehen markieren",
     "seasons_section": "Staffeln & Folgen",
     "season": "Staffel",
+    "season_number": "Staffel {{number}}",
     "more_from_season": "Mehr aus Staffel {{season}}",
     "other_seasons_of": "Andere Staffeln von {{title}}",
     "col_ep": "F.",

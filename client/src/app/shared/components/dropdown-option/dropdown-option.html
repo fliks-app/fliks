@@ -1,0 +1,11 @@
+<button type="button" class="dropdown-item" [class.text-primary]="selected()">
+  <span class="flex-1 flex flex-col items-start gap-0 leading-tight text-left">
+    <span>{{ head() }}</span>
+    @if (sub()) {
+      <span class="text-xs md:text-sm opacity-60">{{ sub() }}</span>
+    }
+  </span>
+  @if (selected()) {
+    <span class="h-2 w-2 rounded-full bg-primary shrink-0"></span>
+  }
+</button>

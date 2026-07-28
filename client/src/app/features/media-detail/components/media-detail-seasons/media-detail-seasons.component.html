@@ -143,23 +143,19 @@
     </app-dropdown-menu>
     <app-dropdown-menu placement="bottom-start">
       <button trigger type="button" class="select select-bordered w-fit shrink-0 text-left cursor-pointer transition-colors hover:bg-base-content/10">
-        {{ 'media_detail.season' | translate }} {{ selSeason?.seasonNumber }}
+        @if (selSeason) {
+          {{ 'media_detail.season_number' | translate:{ number: selSeason.seasonNumber } }}
+        } @else {
+          {{ 'media_detail.season' | translate }}
+        }
       </button>
       @for (season of displaySeasons(); track season.id) {
-        <button
-          type="button"
-          class="dropdown-item"
-          [class.text-primary]="season.id === activeSeasonId()"
+        <app-dropdown-option
+          [head]="'media_detail.season_number' | translate:{ number: season.seasonNumber }"
+          [sub]="(tabEpisodeCount(season) <= 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: tabEpisodeCount(season) }"
+          [selected]="season.id === activeSeasonId()"
           (click)="selectSeason.emit(season.id)"
-        >
-          <span class="flex-1 flex flex-col items-start gap-0 leading-tight text-left">
-            <span>{{ 'media_detail.season' | translate }} {{ season.seasonNumber }}</span>
-            <span class="text-xs md:text-sm opacity-60">
-              {{ (tabEpisodeCount(season) <= 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: tabEpisodeCount(season) } }}
-            </span>
-          </span>
-          @if (season.id === activeSeasonId()) { <span class="h-2 w-2 rounded-full bg-primary shrink-0"></span> }
-        </button>
+        />
       }
     </app-dropdown-menu>
     @if (selSeason && isSeasonTabVisible(selSeason) && !episodesHasFileOnly()) {

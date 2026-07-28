@@ -901,6 +901,7 @@
     "mark_series_unwatched": "Marquer la série comme non vue",
     "seasons_section": "Saisons & épisodes",
     "season": "Saison",
+    "season_number": "Saison {{number}}",
     "more_from_season": "Plus de saison {{season}}",
     "other_seasons_of": "Autres saisons de {{title}}",
     "col_ep": "Ep.",
