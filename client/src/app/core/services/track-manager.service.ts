@@ -158,11 +158,11 @@ export class TrackManagerService {
       const labelOpts = { showFormat: this.appSettings.showSubtitleFormat() };
       const subs = await this.subtitlesApi.getForMedia(mediaId);
       const tracks = buildSubtitleTracks(subs, mediaFileId, { hideBurnIn });
-      const options: SubtitleOption[] = tracks.map((t) => {
-        const parts = formatSubtitleParts(t, this.translate, undefined, labelOpts);
+      const options: SubtitleOption[] = tracks.map((t, i) => {
+        const parts = formatSubtitleParts(t, this.translate, i + 1, labelOpts);
         return {
         id: t.key,
-        label: formatSubtitleLabel(t, this.translate, undefined, labelOpts),
+        label: formatSubtitleLabel(t, this.translate, i + 1, labelOpts),
         menuHead: parts.head,
         menuSub: parts.sub,
         url:
@@ -190,10 +190,13 @@ export class TrackManagerService {
           if (seen.has(key)) continue;
           seen.add(key);
           if (isImageBasedSubtitleCodec(emb.codec)) continue; // Bitmap from streamInfo only (no DB ID for burn-in)
-          const embParts = formatSubtitleParts(emb, this.translate, undefined, labelOpts);
+          // Numbering continues the list, so a track keeps the position the
+          // menu shows it at.
+          const trackNumber = options.length + 1;
+          const embParts = formatSubtitleParts(emb, this.translate, trackNumber, labelOpts);
           options.push({
             id: key,
-            label: formatSubtitleLabel(emb, this.translate, undefined, labelOpts),
+            label: formatSubtitleLabel(emb, this.translate, trackNumber, labelOpts),
             menuHead: embParts.head,
             menuSub: embParts.sub,
             url: streamingApi.getEmbeddedSubtitleUrl(mediaFileId, emb.streamIndex),

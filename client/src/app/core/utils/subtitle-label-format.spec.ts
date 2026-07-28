@@ -31,6 +31,26 @@ describe('subtitle label file format', () => {
     );
   });
 
+  it('numbers a track the file left untagged', () => {
+    const untagged = { codec: 'subrip' };
+    expect(formatSubtitleLabel(untagged, translate, 3)).toContain(
+      'player.subtitle_track_n',
+    );
+    expect(formatSubtitleParts(untagged, translate, 3).head).toContain(
+      'player.subtitle_track_n',
+    );
+  });
+
+  it('keeps the language name when the track has one', () => {
+    expect(formatSubtitleParts(srt, translate, 3).head).not.toContain(
+      'player.subtitle_track_n',
+    );
+  });
+
+  it('falls back to the bare code when no number is supplied', () => {
+    expect(formatSubtitleParts({ codec: 'subrip' }, translate).head).toBe('und');
+  });
+
   it('derives the format from the file extension when the codec is absent', () => {
     const byPath = { language: 'eng', relativePath: 'Show.S01E01.en.vtt' };
     expect(

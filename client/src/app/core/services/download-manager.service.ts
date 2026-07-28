@@ -375,7 +375,7 @@ export class DownloadManagerService {
           language: sub.language,
           // Same normalized label as online playback (localized language name +
           // HI/Forced) instead of the raw language code.
-          label: formatSubtitleLabel(sub, this.translate, undefined, {
+          label: formatSubtitleLabel(sub, this.translate, offlineSubs.length + 1, {
             showFormat: this.appSettings.showSubtitleFormat(),
           }),
           forced: sub.forced,

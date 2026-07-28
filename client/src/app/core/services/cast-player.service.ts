@@ -752,9 +752,9 @@ export class CastPlayerService {
       subsResult,
       opts.mediaFileId,
       { hideBurnIn: this.appSettings.hideBurnInSubtitles() },
-    ).map((t) => ({
+    ).map((t, i) => ({
       id: t.key,
-      label: formatSubtitleLabel(t, this.translate, undefined, {
+      label: formatSubtitleLabel(t, this.translate, i + 1, {
         showFormat: this.appSettings.showSubtitleFormat(),
       }),
       language: t.language,
