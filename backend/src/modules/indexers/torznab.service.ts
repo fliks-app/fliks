@@ -178,7 +178,7 @@ export class TorznabService {
       }
     }
     if (skipped.length) {
-      this.log.warn(
+      this.log.debug?.(
         `skipping ${skipped.length} indexer(s) in cooldown: ${skipped.join(', ')}`,
       );
     }
