@@ -213,6 +213,59 @@ export class SubtitlesService {
     return this.downloadSubtitle(mediaId, mediaFileId, episodeId, best);
   }
 
+  /**
+   * Write a sidecar next to the video and return its media-relative path.
+   * Never overwrites: an existing name gets a -1, -2… suffix.
+   */
+  private async writeSidecar(
+    mediaId: number,
+    absolutePath: string,
+    langSuffix: string,
+    ext: string,
+    buffer: Buffer,
+  ): Promise<string> {
+    const parsed = path.parse(absolutePath);
+    let subtitlePath = path.join(parsed.dir, `${parsed.name}.${langSuffix}${ext}`);
+
+    let counter = 0;
+    while (
+      await fs.access(subtitlePath).then(
+        () => true,
+        () => false,
+      )
+    ) {
+      counter++;
+      subtitlePath = path.join(
+        parsed.dir,
+        `${parsed.name}.${langSuffix}-${counter}${ext}`,
+      );
+    }
+
+    await fs.mkdir(parsed.dir, { recursive: true });
+    await fs.writeFile(subtitlePath, buffer);
+    this.logger.log(`Subtitle saved: ${subtitlePath}`);
+
+    const media = await this.mediaRepo.findOne({
+      where: { id: mediaId },
+      relations: ['library'],
+    });
+    if (!media?.path) {
+      throw new BadRequestException(
+        'Assign a root folder to this media before adding subtitles',
+      );
+    }
+    const relativePath = relativePathUnderMediaRoot(media.path, subtitlePath);
+    if (!relativePath) {
+      this.logger.error(
+        `Subtitle save path invalid: mediaId=${mediaId} media.path=${media.path} subtitlePath=${subtitlePath}`,
+      );
+      throw new BadRequestException(
+        'Subtitle file would be outside the media folder; check root folder configuration',
+      );
+    }
+    return relativePath;
+  }
+
   async downloadSubtitle(
     mediaId: number,
     mediaFileId: number,
@@ -277,27 +330,6 @@ export class SubtitlesService {
         ? `${lang}.hi`
         : lang;
 
-    const parsed = path.parse(absolutePath);
-    let subtitlePath = path.join(
-      parsed.dir,
-      `${parsed.name}.${langSuffix}.srt`,
-    );
-
-    // Avoid overwriting existing subtitle files — append -1, -2, etc.
-    let counter = 0;
-    while (
-      await fs.access(subtitlePath).then(
-        () => true,
-        () => false,
-      )
-    ) {
-      counter++;
-      subtitlePath = path.join(
-        parsed.dir,
-        `${parsed.name}.${langSuffix}-${counter}.srt`,
-      );
-    }
-
     // Clean subtitle content (remove ads, optionally HI tags)
     buffer = cleanSubtitle(buffer, {
       removeAds: true,
@@ -305,28 +337,13 @@ export class SubtitlesService {
       customExclusions,
     });
 
-    await fs.mkdir(parsed.dir, { recursive: true });
-    await fs.writeFile(subtitlePath, buffer);
-    this.logger.log(`Subtitle saved: ${subtitlePath}`);
-
-    const media = await this.mediaRepo.findOne({
-      where: { id: mediaId },
-      relations: ['library'],
-    });
-    if (!media?.path) {
-      throw new BadRequestException(
-        'Assign a root folder to this media before downloading subtitles',
-      );
-    }
-    const relativePath = relativePathUnderMediaRoot(media.path, subtitlePath);
-    if (!relativePath) {
-      this.logger.error(
-        `Subtitle save path invalid: mediaId=${mediaId} media.path=${media.path} subtitlePath=${subtitlePath}`,
-      );
-      throw new BadRequestException(
-        'Subtitle file would be outside the media folder; check root folder configuration',
-      );
-    }
+    const relativePath = await this.writeSidecar(
+      mediaId,
+      absolutePath,
+      langSuffix,
+      '.srt',
+      buffer,
+    );
 
     // repo.save() (not create+save) — TypeORM resolves partial relation
     // objects { id: X } to FK columns on save, but create() drops them.
@@ -344,6 +361,78 @@ export class SubtitlesService {
       score: searchResult.score,
       hashMatched: !!searchResult.hashMatched,
       synced: false,
+    } as any);
+  }
+
+  /**
+   * Store a subtitle the user picked on their device as a sidecar.
+   * Forced/HI flags come from the uploaded filename; the language is explicit
+   * because a filename often carries none.
+   */
+  async uploadSubtitle(
+    mediaId: number,
+    mediaFileId: number,
+    episodeId: number | undefined,
+    file: { originalname: string; buffer: Buffer },
+    language: string,
+  ): Promise<SubtitleFile> {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!SubtitlesService.SUBTITLE_EXTS.has(ext)) {
+      throw new BadRequestException(`Unsupported subtitle format: ${ext}`);
+    }
+
+    const text = file.buffer.toString('utf-8');
+    if (!/-->|^Dialogue:/m.test(text)) {
+      throw new BadRequestException('File holds no subtitle cues');
+    }
+
+    const absolutePath = await this.resolveMediaFilePath(mediaId, mediaFileId);
+    const lang = normalizeLanguageCode(language);
+    const flags = this.parseSubtitleFilename(file.originalname);
+
+    const removeHiTags =
+      (await this.settingsService.get('subtitle_remove_hi_tags')) === 'true';
+    // The cleaner speaks SRT only; other formats are stored as uploaded
+    const isSrt = ext === '.srt';
+    const hearingImpaired = !!flags?.hearingImpaired && !(isSrt && removeHiTags);
+    const langSuffix = flags?.forced
+      ? `${lang}.forced`
+      : hearingImpaired
+        ? `${lang}.hi`
+        : lang;
+
+    const buffer = isSrt
+      ? cleanSubtitle(file.buffer, {
+          removeAds: true,
+          removeHiTags,
+          customExclusions: (
+            (await this.settingsService.get('subtitle_custom_exclusions')) ?? ''
+          )
+            .split('\n')
+            .filter((l) => l.trim()),
+        })
+      : file.buffer;
+
+    const relativePath = await this.writeSidecar(
+      mediaId,
+      absolutePath,
+      langSuffix,
+      ext,
+      buffer,
+    );
+
+    return this.repo.save({
+      media: { id: mediaId },
+      mediaFile: { id: mediaFileId },
+      episode: episodeId ? { id: episodeId } : null,
+      language: lang,
+      forced: !!flags?.forced,
+      hearingImpaired,
+      providerType: SubtitleProviderType.DISK,
+      relativePath,
+      status: SubtitleStatus.DOWNLOADED,
+      score: 100,
+      synced: true,
     } as any);
   }
 

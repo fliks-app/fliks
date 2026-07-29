@@ -69,6 +69,11 @@ export class DeviceService {
     () => !this.isTv() && (this.isDesktopNative() || !Capacitor.isNativePlatform()),
   );
 
+  /** Running inside the Capacitor Android WebView. */
+  readonly isAndroidNative = computed(
+    () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android',
+  );
+
   constructor() {
     this.applyOverrideFromUrl();
     const detected = this.detect();

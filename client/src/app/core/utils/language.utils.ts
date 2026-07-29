@@ -57,6 +57,23 @@ export function normalizeLangCode(
 }
 
 /**
+ * Best-effort language of a subtitle filename: `Movie.2020.fre.forced.srt` → `fr`.
+ * Read right to left so a trailing language token wins over anything in the
+ * title, and skip the extension and the leading video name.
+ */
+export function guessLanguageFromFilename(
+  name: string,
+  known: readonly string[],
+): string | null {
+  const tokens = name.split('.').slice(1, -1).reverse();
+  for (const token of tokens) {
+    const code = normalizeLangCode(token);
+    if (known.includes(code)) return code;
+  }
+  return null;
+}
+
+/**
  * Resolve a language code to its translated display name (e.g. `fra` → `Français`).
  * Falls back to the normalised code when the translation key is missing or
  * the code is unknown — matches ffprobe's `und` placeholder so we don't

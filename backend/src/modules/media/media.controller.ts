@@ -9,10 +9,14 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   ParseIntPipe,
   NotFoundException,
+  BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { MediaService } from './media.service';
 import { MovieDownloadService } from './movie-download.service';
@@ -672,6 +676,35 @@ export class MediaController {
       body.mediaFileId,
       body.episodeId,
       body.searchResult,
+    );
+  }
+
+  /** Store a subtitle the user picked on their device, as a sidecar file. */
+  @Post(':id/subtitles/upload')
+  @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
+  async uploadSubtitle(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+    @UploadedFile() file: Express.Multer.File,
+    @Body()
+    body: { mediaFileId: string; episodeId?: string; language: string },
+  ) {
+    await this.assertMediaAccessible(id, user);
+    if (!file) throw new BadRequestException('No file uploaded');
+    const mediaFileId = Number(body.mediaFileId);
+    if (!Number.isInteger(mediaFileId)) {
+      throw new BadRequestException('mediaFileId is required');
+    }
+    const episodeId = body.episodeId ? Number(body.episodeId) : undefined;
+    return this.subtitlesService.uploadSubtitle(
+      id,
+      mediaFileId,
+      episodeId,
+      file,
+      body.language,
     );
   }
 

@@ -125,6 +125,22 @@ export class SubtitlesApiService {
     );
   }
 
+  /** Upload a subtitle file picked on the device. */
+  upload(
+    mediaId: number,
+    file: File,
+    body: { mediaFileId: number; episodeId?: number; language: string },
+  ) {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    form.append('mediaFileId', String(body.mediaFileId));
+    form.append('language', body.language);
+    if (body.episodeId != null) form.append('episodeId', String(body.episodeId));
+    return firstValueFrom(
+      this.http.post<SubtitleFileRow>(`/api/media/${mediaId}/subtitles/upload`, form),
+    );
+  }
+
   delete(mediaId: number, subtitleId: number) {
     return firstValueFrom(this.http.delete<void>(`/api/media/${mediaId}/subtitles/${subtitleId}`));
   }

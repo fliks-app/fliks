@@ -30,13 +30,17 @@ import {
   LucideSmile,
   LucideThermometer,
   LucideTrash2,
+  LucideUpload,
   LucideVolume2,
   LucideWandSparkles,
   LucideZap,
 } from '@lucide/angular';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
 import { formatSubtitleLabel, formatSubtitleParts } from '../../../core/utils/player.utils';
-import { localizeLanguage } from '../../../core/utils/language.utils';
+import {
+  guessLanguageFromFilename,
+  localizeLanguage,
+} from '../../../core/utils/language.utils';
 import {
   isImageBasedSubtitleCodec,
   isOcrSupportedSubtitleCodec,
@@ -112,6 +116,7 @@ interface SubtitleRow {
     LucideSmile,
     LucideThermometer,
     LucideTrash2,
+    LucideUpload,
     LucideVolume2,
     LucideWandSparkles,
     LucideZap,
@@ -334,15 +339,31 @@ export class SubtitlesModalComponent {
   readonly translationProviders = signal<AvailableTranslationProvider[]>([]);
   readonly selectedTranslationProviderId = signal<number | null>(null);
   /** The language dialog drives OCR (pick before converting), relabel (reassign
-   *  an existing subtitle's language) and translate (pick the target language). */
-  readonly langDialogMode = signal<'ocr' | 'relabel' | 'translate'>('ocr');
+   *  an existing subtitle's language), translate (pick the target language) and
+   *  upload (tag the file the user just picked). */
+  readonly langDialogMode = signal<'ocr' | 'relabel' | 'translate' | 'upload'>('ocr');
   /** Codes offered in the language dialog: the full subtitle set for translation
-   *  targets, the OCR-capable subset otherwise. */
+   *  targets and uploads, the OCR-capable subset otherwise. */
   readonly langDialogCodes = computed<readonly string[]>(() =>
-    this.langDialogMode() === 'translate'
+    this.langDialogMode() === 'translate' || this.langDialogMode() === 'upload'
       ? SUBTITLE_LANGUAGE_CODES
       : this.ocrLangCodes,
   );
+
+  /** A file picker reaches the OS on every platform but a TV, which has no
+   *  local storage to browse. Both Capacitor WebViews handle <input type=file>
+   *  natively, unlike downloads. */
+  readonly canPickFiles = computed(() => !this.device.isTv());
+  /** Android's picker filters by MIME and its table maps none of the subtitle
+   *  extensions, so anything narrower than a wildcard greys out every file. */
+  readonly uploadAccept = computed(() =>
+    this.device.isAndroidNative() ? '*/*' : '.srt,.ass,.ssa,.vtt,.sub,text/plain',
+  );
+  private readonly uploadInput =
+    viewChild<ElementRef<HTMLInputElement>>('uploadInput');
+  /** File chosen in the picker, held until the language dialog is confirmed. */
+  private readonly pendingUpload = signal<File | null>(null);
+  readonly pendingUploadName = computed(() => this.pendingUpload()?.name ?? '');
 
   /** Open the subtitles modal. Called from parent via viewChild. */
   show(): void {
@@ -784,9 +805,50 @@ export class SubtitlesModalComponent {
     this.ocrLangDialog()?.nativeElement.showModal();
   }
 
+  /** Open the OS file picker. */
+  pickSubtitleFile() {
+    const input = this.uploadInput()?.nativeElement;
+    if (!input) return;
+    input.value = ''; // re-picking the same file must still fire (change)
+    input.click();
+  }
+
+  /** A file was picked: guess its language from the name, then let the user confirm. */
+  onSubtitleFilePicked(event: Event) {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    this.pendingUpload.set(file);
+    this.langDialogMode.set('upload');
+    this.ocrLang.set(
+      guessLanguageFromFilename(file.name, SUBTITLE_LANGUAGE_CODES) ?? 'en',
+    );
+    this.ocrLangDialog()?.nativeElement.showModal();
+  }
+
+  private async uploadPendingSubtitle() {
+    const file = this.pendingUpload();
+    const fileId = this.selectedFileId();
+    this.pendingUpload.set(null);
+    if (!file || !fileId) return;
+    await this.subActions.upload(
+      this.mediaId(),
+      fileId,
+      file,
+      this.ocrLang(),
+      this.subtitles,
+      this.subtitleActionBusy,
+      this.episodeId(),
+    );
+    this.toast.success(this.translate.instant('media_detail.upload_subtitle_success'));
+  }
+
   confirmLanguage() {
     const id = this.ocrTargetId();
     this.ocrLangDialog()?.nativeElement.close();
+    if (this.langDialogMode() === 'upload') {
+      void this.uploadPendingSubtitle();
+      return;
+    }
     if (id == null) return;
     const mode = this.langDialogMode();
     if (mode === 'ocr') {
@@ -804,6 +866,7 @@ export class SubtitlesModalComponent {
   }
 
   closeOcrLangModal() {
+    this.pendingUpload.set(null);
     this.ocrLangDialog()?.nativeElement.close();
   }
 

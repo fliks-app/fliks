@@ -138,4 +138,18 @@ export class SubtitleActionsService {
       busy.set(false);
     }
   }
+
+  async upload(
+    mediaId: number, mediaFileId: number, file: File, language: string,
+    subtitles: WritableSignal<SubtitleFileRow[]>, busy: WritableSignal<boolean>,
+    episodeId?: number,
+  ) {
+    busy.set(true);
+    try {
+      await this.subtitlesApi.upload(mediaId, file, { mediaFileId, episodeId, language });
+      subtitles.set(await this.subtitlesApi.getForMedia(mediaId));
+    } finally {
+      busy.set(false);
+    }
+  }
 }
