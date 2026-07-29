@@ -124,18 +124,12 @@ describe('AMF encoders', () => {
   });
 
   describe('closed-GOP flags', () => {
-    it('forces IDR + drops B-frames on h264/hevc', () => {
-      for (const enc of [h264Amf, hevcAmf, hevcAmfHdr10]) {
-        const args = enc.buildArgs(makeInput({ tonemap: enc !== h264Amf }));
+    it('forces IDR + drops B-frames on every AMF encoder', () => {
+      for (const enc of [h264Amf, hevcAmf, hevcAmfHdr10, av1Amf, av1AmfHdr10]) {
+        const args = enc.buildArgs(makeInput({ tonemap: enc === hevcAmfHdr10 }));
         expect(flag(args, '-forced_idr')).toBe('1');
         expect(flag(args, '-bf')).toBe('0');
       }
-    });
-
-    it('omits -forced_idr on av1_amf (unsupported option)', () => {
-      const args = av1Amf.buildArgs(makeInput({}));
-      expect(args).not.toContain('-forced_idr');
-      expect(flag(args, '-bf')).toBe('0');
     });
   });
 
