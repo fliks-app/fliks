@@ -839,6 +839,7 @@ export class SubtitlesService {
 
     let content = await fs.readFile(abs, 'utf-8');
     const sizeBefore = content.length;
+    let convertedToSrt = false;
 
     switch (action) {
       case 'removeHiTags': {
@@ -880,9 +881,14 @@ export class SubtitlesService {
           Number(params?.toFps ?? 25),
         );
         break;
-      case 'convertToSrt':
-        content = postProcess.assToSrt(content);
+      case 'convertToSrt': {
+        const converted = postProcess.assToSrt(content);
+        // assToSrt is a no-op on anything without Dialogue: lines — don't
+        // relabel a file whose content never changed
+        convertedToSrt = converted !== content;
+        content = converted;
         break;
+      }
       default:
         throw new BadRequestException(
           `Unknown post-processing action: ${action}`,
@@ -892,6 +898,14 @@ export class SubtitlesService {
     await fs.writeFile(abs, content, 'utf-8');
     if (action === 'removeHiTags' && sub.hearingImpaired) {
       await this.dropHiTag(sub, abs);
+    }
+    if (convertedToSrt) {
+      const renamed = await this.renameSubtitleFile(
+        sub,
+        abs,
+        `${path.parse(abs).name}.srt`,
+      );
+      if (renamed) sub.codec = 'subrip';
     }
     sub.locked = true;
     await this.repo.save(sub);
@@ -910,8 +924,24 @@ export class SubtitlesService {
       sub.hearingImpaired = false;
       return;
     }
+    if (await this.renameSubtitleFile(sub, abs, newName)) {
+      sub.hearingImpaired = false;
+    }
+  }
 
+  /**
+   * Rename a sidecar and keep relativePath in sync. Returns the new absolute
+   * path, or null when the rename was refused — the caller then leaves the
+   * matching metadata alone so the row keeps describing the file on disk.
+   */
+  private async renameSubtitleFile(
+    sub: SubtitleFile,
+    abs: string,
+    newName: string,
+  ): Promise<string | null> {
     const target = path.join(path.dirname(abs), newName);
+    if (target === abs) return abs;
+
     // rename() overwrites silently, so refuse when a sibling already holds the name
     const taken = await fs.access(target).then(
       () => true,
@@ -919,24 +949,24 @@ export class SubtitlesService {
     );
     if (taken) {
       this.logger.warn(
-        `Kept the HI tag on sub #${sub.id}: "${newName}" already exists`,
+        `Sub #${sub.id}: kept "${path.basename(abs)}", "${newName}" already exists`,
       );
-      return;
+      return null;
     }
     try {
       await fs.rename(abs, target);
     } catch (err) {
       this.logger.warn(
-        `Could not drop the HI tag on sub #${sub.id}: ${(err as Error).message}`,
+        `Sub #${sub.id}: rename to "${newName}" failed: ${(err as Error).message}`,
       );
-      return;
+      return null;
     }
 
-    sub.hearingImpaired = false;
     if (sub.relativePath) {
       sub.relativePath = path
         .join(path.dirname(sub.relativePath), newName)
         .replace(/\\/g, '/');
     }
+    return target;
   }
 }

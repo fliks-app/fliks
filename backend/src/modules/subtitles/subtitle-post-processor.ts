@@ -218,7 +218,8 @@ export function assToSrt(content: string): string {
     index++;
   }
 
-  return srtBlocks.join('\n\n') + '\n';
+  // No usable dialogue: keep the original rather than blank the file
+  return srtBlocks.length ? srtBlocks.join('\n\n') + '\n' : content;
 }
 
 function assTimeToSrt(assTime: string): string {
