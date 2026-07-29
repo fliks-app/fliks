@@ -741,9 +741,11 @@ body.tablet [data-touch-only] {
    component) because Shaka builds these elements outside Angular's view
    encapsulation and they don't carry our `_ngcontent-*` attribute.
    ============================================================================ */
+/* The top inset is the user's top margin: Shaka places top-positioned cues
+   (`line:0%`) against this box's top edge, so insetting it clamps them. */
 .player-container > .shaka-text-container {
   position: absolute;
-  inset: 0;
+  inset: var(--cue-top-margin, 0vh) 0 0 0;
   pointer-events: none;
   transition: transform 200ms ease;
   transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh)));

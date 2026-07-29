@@ -125,6 +125,12 @@ export class PlayerSettingsService {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }
 
+  /** Save a single field (or a few) without rebuilding the whole object —
+   *  used by the in-player panels that change one setting per tap. */
+  patch(partial: Partial<PlayerSettings>) {
+    this.save({ ...this.settings(), ...partial });
+  }
+
   get(): PlayerSettings {
     return this.settings();
   }

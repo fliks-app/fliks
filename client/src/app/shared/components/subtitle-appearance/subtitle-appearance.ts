@@ -37,28 +37,28 @@ import {
       <label class="form-control w-full max-w-xs">
         <div class="label"><span class="label-text font-medium">{{ 'playback_settings.sub_size' | translate }}</span></div>
         <select class="select select-bordered w-full" [ngModel]="size()" (ngModelChange)="sizeChange.emit($event)">
-          @for (s of sizeOptions; track s.value) { <option [value]="s.value">{{ s.label }}</option> }
+          @for (s of sizeOptions; track s.value) { <option [value]="s.value">{{ s.labelKey | translate }}</option> }
         </select>
       </label>
 
       <label class="form-control w-full max-w-xs">
         <div class="label"><span class="label-text font-medium">{{ 'playback_settings.sub_color' | translate }}</span></div>
         <select class="select select-bordered w-full" [ngModel]="color()" (ngModelChange)="colorChange.emit($event)">
-          @for (c of colorOptions; track c.value) { <option [value]="c.value">{{ c.label }}</option> }
+          @for (c of colorOptions; track c.value) { <option [value]="c.value">{{ c.labelKey | translate }}</option> }
         </select>
       </label>
 
       <label class="form-control w-full max-w-xs">
         <div class="label"><span class="label-text font-medium">{{ 'playback_settings.sub_shadow' | translate }}</span></div>
         <select class="select select-bordered w-full" [ngModel]="shadow()" (ngModelChange)="shadowChange.emit($event)">
-          @for (s of shadowOptions; track s.value) { <option [value]="s.value">{{ s.label }}</option> }
+          @for (s of shadowOptions; track s.value) { <option [value]="s.value">{{ s.labelKey | translate }}</option> }
         </select>
       </label>
 
       <label class="form-control w-full max-w-xs">
         <div class="label"><span class="label-text font-medium">{{ 'playback_settings.sub_bg' | translate }}</span></div>
         <select class="select select-bordered w-full" [ngModel]="background()" (ngModelChange)="backgroundChange.emit($event)">
-          @for (b of bgOptions; track b.value) { <option [value]="b.value">{{ b.label }}</option> }
+          @for (b of bgOptions; track b.value) { <option [value]="b.value">{{ b.labelKey | translate }}</option> }
         </select>
       </label>
     </div>
