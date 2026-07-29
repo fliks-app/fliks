@@ -101,6 +101,7 @@ export const IPC = {
   selectSubtitleTrack: 'player:selectSubtitleTrack',
   subAdd: 'player:subAdd',
   setSubtitleStyle: 'player:setSubtitleStyle',
+  setFillScreen: 'player:setFillScreen',
   resize: 'player:resize',
   destroy: 'player:destroy',
   /** Host OS identity (name + version), resolved natively. */
@@ -236,6 +237,8 @@ export interface FliksDesktopApi {
    *  reuses an already-loaded track for the same URL instead of duplicating. */
   subAdd(url: string, label: string, language: string): Promise<void>;
   setSubtitleStyle(style: DesktopSubtitleStyle): Promise<void>;
+  /** Crop the video to fill the window (mpv `panscan`) instead of letterboxing. */
+  setFillScreen(fill: boolean): Promise<void>;
   resize(rect: DesktopRect): Promise<void>;
   destroy(): Promise<void>;
   /** Native host OS identity (e.g. { systemName: "macOS 26" }). */

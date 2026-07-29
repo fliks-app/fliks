@@ -101,6 +101,13 @@ export interface NativePlayerPlugin {
     bottomMarginPercent: number;
   }): Promise<void>;
 
+  // ── Display ──
+
+  /** Crop the video to fill the surface (`true`) or letterbox it (`false`).
+   *  The engines render outside the <video> element, so the CSS object-fit
+   *  binding the browser path uses can't reach them. */
+  setFillScreen(options: { fill: boolean }): Promise<void>;
+
   // ── Brightness ──
 
   /** Set screen brightness. -1 = restore system default, 1.0 = max. */

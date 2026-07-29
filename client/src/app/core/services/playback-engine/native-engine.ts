@@ -123,6 +123,9 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     if (this._subtitleStyle) {
       await NativePlayer.setSubtitleStyle(this._subtitleStyle);
     }
+    if (this._fillScreen) {
+      await NativePlayer.setFillScreen({ fill: true }).catch(() => {});
+    }
 
     // A new MediaItem resurfaces fresh text tracks: drop the stale resolved
     // id and let the desired selection (kept across a silent reload —
@@ -159,6 +162,15 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     if (this._initialized) {
       NativePlayer.setSubtitleStyle(this._subtitleStyle).catch(() => {});
     }
+  }
+
+  private _fillScreen = false;
+
+  /** Crop the video to fill the surface instead of letterboxing it. Re-applied
+   *  after load() so a surface rebuilt by an error retry keeps the mode. */
+  setFillScreen(fill: boolean): void {
+    this._fillScreen = fill;
+    NativePlayer.setFillScreen({ fill }).catch(() => {});
   }
 
   private _preloadedSubtitles: { url: string; language: string; label: string }[] = [];

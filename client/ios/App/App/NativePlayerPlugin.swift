@@ -36,6 +36,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "getSubtitleTracks", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "selectSubtitleTrack", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setSubtitleStyle", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setFillScreen", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setBrightness", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMaxResolution", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPosition", returnType: CAPPluginReturnPromise),
@@ -597,6 +598,19 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     // MARK: - Brightness
+
+    // MARK: - Display
+
+    /// Crop-to-fill vs letterbox. `resizeAspectFill` is the AVPlayerLayer
+    /// equivalent of `object-fit: cover` — the layer clips the overflow itself.
+    @objc func setFillScreen(_ call: CAPPluginCall) {
+        let fill = call.getBool("fill") ?? false
+
+        DispatchQueue.main.async { [weak self] in
+            self?.playerLayer?.videoGravity = fill ? .resizeAspectFill : .resizeAspect
+            call.resolve()
+        }
+    }
 
     @objc func setBrightness(_ call: CAPPluginCall) {
         let brightness = call.getFloat("brightness") ?? -1

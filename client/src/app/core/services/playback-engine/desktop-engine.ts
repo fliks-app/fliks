@@ -67,6 +67,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     edgeType: string;
     bottomMarginPercent: number;
   } | null = null;
+  private _fillScreen = false;
 
   // ── Lifecycle ──
 
@@ -110,6 +111,9 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     });
     if (this._subtitleStyle) {
       await this.bridge.setSubtitleStyle(this._subtitleStyle);
+    }
+    if (this._fillScreen) {
+      await this.bridge.setFillScreen(true).catch(() => {});
     }
     // Fresh media → fresh track ids; let the desired selection re-apply once
     // mpv reports the new track list (tracksChanged).
@@ -290,6 +294,12 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     if (this._initialized) {
       this.bridge.setSubtitleStyle(this._subtitleStyle).catch(() => {});
     }
+  }
+
+  /** Match NativeEngine.setFillScreen: crop-to-fill instead of letterbox. */
+  setFillScreen(fill: boolean): void {
+    this._fillScreen = fill;
+    this.bridge.setFillScreen(fill).catch(() => {});
   }
 
   // ── Stats ──

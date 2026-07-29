@@ -608,6 +608,10 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     for (const [name, value] of mpvSubtitleProps(s)) await this.set(name, value);
   }
 
+  async setFillScreen(fill: boolean): Promise<void> {
+    await this.set('panscan', fill ? '1.0' : '0.0');
+  }
+
   /** Tear down the socket + process + IPC path. Idempotent; also marks the exit
    *  as intentional so the `exit` handler reports idle, not a crash. */
   private teardown(): void {

@@ -51,5 +51,9 @@ export interface PlayerBackend extends TypedEmitter<PlayerBackendEvents> {
   selectSubtitleTrack(id: string | null): Promise<void>;
   subAdd(url: string, label: string, language: string): Promise<void>;
   setSubtitleStyle(style: DesktopSubtitleStyle): Promise<void>;
+  /** Crop the video to fill the window instead of letterboxing it. Implemented
+   *  with mpv `panscan` (0 = letterbox, 1 = crop the overflowing axis fully),
+   *  which keeps the aspect ratio — unlike `keepaspect=no`, which stretches. */
+  setFillScreen(fill: boolean): Promise<void>;
   destroy(): Promise<void>;
 }

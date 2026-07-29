@@ -157,8 +157,21 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     if (!this.avObject) return;
     try {
       webapis.avplay.setDisplayRect(0, 0, 1920, 1080);
-      webapis.avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX');
+      // CROPPED_FULL keeps the aspect ratio and crops the overflowing axis (the
+      // object-fit: cover equivalent); FULL_SCREEN would stretch the picture.
+      webapis.avplay.setDisplayMethod(this._fillScreen
+        ? 'PLAYER_DISPLAY_MODE_CROPPED_FULL'
+        : 'PLAYER_DISPLAY_MODE_LETTER_BOX');
     } catch { /* invalid in NONE — re-applied post-prepare */ }
+  }
+
+  private _fillScreen = false;
+
+  /** Crop the video to fill the screen instead of letterboxing it. Stored so
+   *  the post-prepare / orientation re-applies keep the mode. */
+  setFillScreen(fill: boolean): void {
+    this._fillScreen = fill;
+    this.applyDisplayRect();
   }
 
   // ── Loading ─────────────────────────────────────────────────────────

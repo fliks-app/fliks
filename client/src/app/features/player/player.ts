@@ -587,6 +587,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   });
 
+  /** Mirror the fill-screen toggle onto engines that paint outside the <video>
+      element (ExoPlayer / AVPlayer) — the object-fit binding in the template
+      only reaches the browser path. Duck-typed like the subtitle style. */
+  private readonly fillScreenEffect = effect(() => {
+    const fill = this.fillScreen();
+    const engine = this.engine as NativeEngine | null;
+    if (engine && typeof engine.setFillScreen === 'function') {
+      engine.setFillScreen(fill);
+    }
+  });
+
   /** Push appearance to the active renderer whenever the settings change, so the
       in-player subtitle appearance panel lands on the cue without a reload.
       Untracked: the appliers also read controlsVisible(), whose margin bump the

@@ -468,6 +468,9 @@ app.whenReady().then(async () => {
   ipcMain.handle(IPC.subAdd, (_e, url: string, label: string, language: string) =>
     addon.command(['sub-add', url, 'cached', label ?? '', language ?? '']),
   );
+  ipcMain.handle(IPC.setFillScreen, (_e, fill: boolean) =>
+    addon.setProperty('panscan', fill ? '1.0' : '0.0'),
+  );
   ipcMain.handle(IPC.setFullscreen, (_e, enabled: boolean) => addon.setFullscreen(enabled));
   ipcMain.handle(IPC.setSubtitleStyle, (_e, s: DesktopSubtitleStyle) => {
     if (!s) return;

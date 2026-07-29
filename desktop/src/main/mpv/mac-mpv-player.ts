@@ -262,6 +262,10 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
     for (const [name, value] of mpvSubtitleProps(style)) this.addon.setProperty(name, value);
   }
 
+  async setFillScreen(fill: boolean): Promise<void> {
+    this.addon.setProperty('panscan', fill ? '1.0' : '0.0');
+  }
+
   async destroy(): Promise<void> {
     this.firstFrameResolve?.(); // don't leave a pending load() hanging on teardown
     this.addon.stop();

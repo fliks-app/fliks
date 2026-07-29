@@ -88,6 +88,8 @@ export interface FliksDesktopApi {
    *  reuses an already-loaded track for the same URL instead of duplicating. */
   subAdd(url: string, label: string, language: string): Promise<void>;
   setSubtitleStyle(style: DesktopSubtitleStyle): Promise<void>;
+  /** Crop the video to fill the window (mpv `panscan`) instead of letterboxing. */
+  setFillScreen(fill: boolean): Promise<void>;
   resize(rect: DesktopRect): Promise<void>;
   setFullscreen(enabled: boolean): Promise<void>;
   destroy(): Promise<void>;

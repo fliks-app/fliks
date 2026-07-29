@@ -39,6 +39,7 @@ export function registerPlayerIpc(session: PlayerSession): void {
   ipcMain.handle(IPC.setSubtitleStyle, (_e, style: DesktopSubtitleStyle) =>
     session.player.setSubtitleStyle(style),
   );
+  ipcMain.handle(IPC.setFillScreen, (_e, fill: boolean) => session.player.setFillScreen(fill));
   ipcMain.handle(IPC.setFullscreen, (_e, enabled: boolean) => session.setFullscreen(enabled));
   ipcMain.handle(IPC.resize, (_e, rect: DesktopRect) => session.resize(rect));
   ipcMain.handle(IPC.destroy, () => session.destroy());
