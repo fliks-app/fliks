@@ -22,30 +22,30 @@ export const SUBTITLE_MODE_OPTIONS = [
 ];
 
 export const SIZE_OPTIONS = [
-  { value: 'small', label: 'Petit' },
-  { value: 'normal', label: 'Normal' },
-  { value: 'large', label: 'Grand' },
-  { value: 'xlarge', label: 'Très grand' },
+  { value: 'small', labelKey: 'playback_settings.sub_size_small' },
+  { value: 'normal', labelKey: 'playback_settings.sub_size_normal' },
+  { value: 'large', labelKey: 'playback_settings.sub_size_large' },
+  { value: 'xlarge', labelKey: 'playback_settings.sub_size_xlarge' },
 ];
 
 export const COLOR_OPTIONS = [
-  { value: 'white', label: 'Blanc' },
-  { value: 'yellow', label: 'Jaune' },
-  { value: 'green', label: 'Vert' },
-  { value: 'cyan', label: 'Cyan' },
+  { value: 'white', labelKey: 'playback_settings.sub_color_white' },
+  { value: 'yellow', labelKey: 'playback_settings.sub_color_yellow' },
+  { value: 'green', labelKey: 'playback_settings.sub_color_green' },
+  { value: 'cyan', labelKey: 'playback_settings.sub_color_cyan' },
 ];
 
 export const SHADOW_OPTIONS = [
-  { value: 'none', label: 'Aucune' },
-  { value: 'drop', label: 'Ombre portée' },
-  { value: 'outline', label: 'Contour' },
-  { value: 'raised', label: 'Relief' },
+  { value: 'none', labelKey: 'playback_settings.sub_shadow_none' },
+  { value: 'drop', labelKey: 'playback_settings.sub_shadow_drop' },
+  { value: 'outline', labelKey: 'playback_settings.sub_shadow_outline' },
+  { value: 'raised', labelKey: 'playback_settings.sub_shadow_raised' },
 ];
 
 export const BG_OPTIONS = [
-  { value: 'transparent', label: 'Transparent' },
-  { value: 'semi', label: 'Noir semi-transparent' },
-  { value: 'black', label: 'Noir' },
+  { value: 'transparent', labelKey: 'playback_settings.sub_bg_transparent' },
+  { value: 'semi', labelKey: 'playback_settings.sub_bg_semi' },
+  { value: 'black', labelKey: 'playback_settings.sub_bg_black' },
 ];
 
 export const BOTTOM_MARGIN_OPTIONS = [0, 5, 10, 15, 20];

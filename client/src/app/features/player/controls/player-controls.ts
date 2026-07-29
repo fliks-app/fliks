@@ -15,7 +15,18 @@ import {
 } from '@angular/core';
 import { DeviceService } from '../../../core/services/device.service';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
-import { PlayerSettingsService } from '../../../core/services/player-settings.service';
+import {
+  PlayerSettings,
+  PlayerSettingsService,
+} from '../../../core/services/player-settings.service';
+import {
+  SIZE_OPTIONS,
+  COLOR_OPTIONS,
+  SHADOW_OPTIONS,
+  BG_OPTIONS,
+  BOTTOM_MARGIN_OPTIONS,
+  TOP_MARGIN_OPTIONS,
+} from '../../playback-settings/playback-options';
 import { QueueItem } from '../../../core/services/playback-queue.service';
 import { NgTemplateOutlet } from '@angular/common';
 import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
@@ -42,6 +53,32 @@ import {
   LucideVolume2,
   LucideVolumeX,
 } from '@lucide/angular';
+
+/** Panels of the subtitles menu: the track list, the appearance summary, then
+ *  one leaf list per appearance field. */
+type SubtitlePanel =
+  | 'tracks'
+  | 'appearance'
+  | 'size'
+  | 'color'
+  | 'shadow'
+  | 'bg'
+  | 'position-bottom'
+  | 'position-top';
+
+/** `labelKey` is translated; `label` carries values that aren't text (margin %). */
+interface AppearanceOption {
+  value: string | number;
+  labelKey?: string;
+  label?: string;
+}
+
+interface AppearanceRow {
+  panel: SubtitlePanel;
+  field: keyof PlayerSettings;
+  labelKey: string;
+  options: AppearanceOption[];
+}
 
 @Component({
   selector: 'app-player-controls',
@@ -312,6 +349,58 @@ export class PlayerControlsComponent {
   /** Settings dropdown panel navigation */
   readonly settingsPanel = signal<'main' | 'quality' | 'queue'>('main');
 
+  /** Subtitles menu panel navigation — track list, appearance, one leaf per field. */
+  readonly subtitlesPanel = signal<SubtitlePanel>('tracks');
+
+  /** One row per appearance field, rendered by a single generic leaf list. */
+  protected readonly appearanceRows: AppearanceRow[] = [
+    { panel: 'size', field: 'subtitleSize', labelKey: 'playback_settings.sub_size', options: SIZE_OPTIONS },
+    { panel: 'color', field: 'subtitleColor', labelKey: 'playback_settings.sub_color', options: COLOR_OPTIONS },
+    { panel: 'shadow', field: 'subtitleShadow', labelKey: 'playback_settings.sub_shadow', options: SHADOW_OPTIONS },
+    { panel: 'bg', field: 'subtitleBackground', labelKey: 'playback_settings.sub_bg', options: BG_OPTIONS },
+    {
+      panel: 'position-top',
+      field: 'subtitleTopMargin',
+      labelKey: 'player.subtitle_position_top',
+      options: TOP_MARGIN_OPTIONS.map((v) => ({ value: v, label: `${v}%` })),
+    },
+    {
+      panel: 'position-bottom',
+      field: 'subtitleBottomMargin',
+      labelKey: 'player.subtitle_position_bottom',
+      options: BOTTOM_MARGIN_OPTIONS.map((v) => ({ value: v, label: `${v}%` })),
+    },
+  ];
+
+  /** The leaf row being edited, or undefined on the track/appearance panels. */
+  readonly activeAppearanceRow = computed(() =>
+    this.appearanceRows.find((r) => r.panel === this.subtitlesPanel()),
+  );
+
+  /** The option currently in effect for a row — drives both the summary value
+   *  and the check mark in the leaf list. */
+  currentOption(row: AppearanceRow): AppearanceOption | undefined {
+    const value = String(this.playerSettings.settings()[row.field]);
+    return row.options.find((o) => String(o.value) === value);
+  }
+
+  setAppearance(row: AppearanceRow, value: string | number) {
+    this.playerSettings.patch({ [row.field]: value } as Partial<PlayerSettings>);
+  }
+
+  /** Navigate the subtitles menu. Focus is pulled into the new panel because
+   *  the switch destroys the row the user was standing on (D-pad / keyboard). */
+  openSubtitlesPanel(panel: SubtitlePanel) {
+    this.subtitlesPanel.set(panel);
+    if (this.openDropdown()) this.focusFirstDropdownItem();
+  }
+
+  /** Same as {@link openSubtitlesPanel} for the settings menu. */
+  openSettingsPanel(panel: 'main' | 'quality' | 'queue') {
+    this.settingsPanel.set(panel);
+    if (this.openDropdown()) this.focusFirstDropdownItem();
+  }
+
   /**
    * Which click-driven dropdown is open, or null. Replaces DaisyUI's
    * focus-within trigger so dropdowns no longer pop open just by D-pad
@@ -364,11 +453,13 @@ export class PlayerControlsComponent {
 
   openSheet(sheet: 'subtitles' | 'audio' | 'speed' | 'settings') {
     if (sheet === 'settings') this.settingsPanel.set('main');
+    if (sheet === 'subtitles') this.subtitlesPanel.set('tracks');
     this.activeSheet.set(sheet);
   }
 
   closeSheet() {
     this.activeSheet.set(null);
+    this.subtitlesPanel.set('tracks');
   }
 
   /**
@@ -407,6 +498,7 @@ export class PlayerControlsComponent {
   toggleDropdown(name: 'subtitles' | 'audio' | 'speed' | 'settings', event?: Event) {
     event?.stopPropagation();
     if (name === 'settings') this.settingsPanel.set('main');
+    if (name === 'subtitles') this.subtitlesPanel.set('tracks');
     const next = this.openDropdown() === name ? null : name;
     this.openDropdown.set(next);
     if (next) {
@@ -427,6 +519,7 @@ export class PlayerControlsComponent {
     event?.stopPropagation();
     this.openDropdown.set(null);
     this.settingsPanel.set('main');
+    this.subtitlesPanel.set('tracks');
   }
 
   private focusFirstDropdownItem() {

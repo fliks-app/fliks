@@ -579,6 +579,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   });
 
+  /** Push appearance to the active renderer whenever the settings change, so the
+      in-player subtitle appearance panel lands on the cue without a reload.
+      Untracked: the appliers also read controlsVisible(), whose margin bump the
+      effect above already owns — tracking it here would re-style on every toggle. */
+  private readonly subtitleAppearanceEffect = effect(() => {
+    this.playerSettings.settings();
+    untracked(() => {
+      this.applySubtitleStyle();
+      if ((this.isNativeEngine() || this.isWebOs) && this.engine) {
+        this.applyNativeSubtitleStyle();
+      }
+    });
+  });
+
   // Media info
   private mediaFileId = 0;
   private mediaId = 0;
@@ -4060,6 +4074,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       container.style.setProperty('--cue-bg', bg);
       container.style.setProperty('--cue-shadow', shadow);
       container.style.setProperty('--cue-bottom-margin', `${s.subtitleBottomMargin}vh`);
+      container.style.setProperty('--cue-top-margin', `${s.subtitleTopMargin}vh`);
     }
     const video = this.videoEl()?.nativeElement;
     if (video) {

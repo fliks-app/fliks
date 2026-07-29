@@ -225,7 +225,7 @@
           <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.subtitles' | translate" (click)="toggleDropdown('subtitles', $event)">
             <svg lucideCaptions class="h-6 w-6"></svg>
           </button>
-          <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
+          <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[50vh] overflow-y-auto mb-2">
             <ng-container [ngTemplateOutlet]="subtitlesMenu"></ng-container>
           </div>
         </div>
@@ -236,7 +236,7 @@
             <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.audio' | translate" (click)="toggleDropdown('audio', $event)">
               <svg lucideHeadphones class="h-6 w-6"></svg>
             </button>
-            <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[75vh] overflow-y-auto mb-2">
+            <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[50vh] overflow-y-auto mb-2">
               <ng-container [ngTemplateOutlet]="audioMenu"></ng-container>
             </div>
           </div>
@@ -244,7 +244,7 @@
         <!-- Speed dropdown -->
         <div class="dropdown dropdown-top dropdown-end" [class.dropdown-open]="openDropdown() === 'speed'">
           <button type="button" class="btn btn-ghost btn-md text-white/80" (click)="toggleDropdown('speed', $event)">{{ playbackRate() }}x</button>
-          <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-48 max-h-[75vh] overflow-y-auto mb-2">
+          <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-48 max-h-[50vh] overflow-y-auto mb-2">
             <ng-container [ngTemplateOutlet]="speedMenu"></ng-container>
           </div>
         </div>
@@ -253,7 +253,7 @@
           <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.settings' | translate" (click)="toggleDropdown('settings', $event)">
             <svg lucideSettings class="h-6 w-6"></svg>
           </button>
-          <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl min-w-64 max-h-[75vh] overflow-hidden mb-2">
+          <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl min-w-64 max-h-[50vh] overflow-hidden mb-2">
             <ng-container [ngTemplateOutlet]="settingsMenu"></ng-container>
           </div>
         </div>
@@ -334,7 +334,7 @@
     @if (settingsPanel() === 'main') {
       <div class="text-center text-white/60 text-xs font-medium mb-3">{{ 'player.settings' | translate }}</div>
       @if (availableQualities().length > 1) {
-        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="settingsPanel.set('quality')">
+        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="openSettingsPanel('quality')">
           <span class="flex-1 text-left">{{ 'player.quality' | translate }}</span>
           <span class="flex items-center gap-1 text-white/40 text-xs">
             {{ activeQualityLabel() }}
@@ -344,7 +344,7 @@
         </button>
       }
       @if (queueItems().length > 1) {
-        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="settingsPanel.set('queue')">
+        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="openSettingsPanel('queue')">
           <span class="flex-1 text-left">{{ 'player.queue' | translate }}</span>
           <span class="text-white/40 text-xs">{{ queueIndex() + 1 }} / {{ queueItems().length }}</span>
           <svg lucideChevronRight class="h-4 w-4 text-white/30 shrink-0"></svg>
@@ -364,7 +364,7 @@
         <span class="flex-1 text-left">{{ 'player.open_media' | translate }}</span>
       </button>
     } @else if (settingsPanel() === 'quality') {
-      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10 mb-1" (click)="settingsPanel.set('main')">
+      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10 mb-1" (click)="openSettingsPanel('main')">
         <svg lucideArrowLeft class="h-4 w-4 text-white/50 shrink-0"></svg>
         <span class="font-medium">{{ 'player.quality' | translate }}</span>
       </button>
@@ -381,7 +381,7 @@
         </button>
       }
     } @else if (settingsPanel() === 'queue') {
-      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10 mb-1" (click)="settingsPanel.set('main')">
+      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10 mb-1" (click)="openSettingsPanel('main')">
         <svg lucideArrowLeft class="h-4 w-4 text-white/50 shrink-0"></svg>
         <span class="font-medium">{{ 'player.queue' | translate }}</span>
       </button>
@@ -411,7 +411,7 @@
       <div class="py-2 px-1">
         <!-- Quality row → opens sub-panel -->
         @if (availableQualities().length > 1) {
-          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="settingsPanel.set('quality')">
+          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="openSettingsPanel('quality')">
             <span class="flex-1 text-left">{{ 'player.quality' | translate }}</span>
             <span class="flex items-center gap-1 text-white/50 text-xs">
               {{ activeQualityLabel() }}
@@ -422,7 +422,7 @@
         }
         <!-- Queue row → opens sub-panel -->
         @if (queueItems().length > 1) {
-          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="settingsPanel.set('queue')">
+          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="openSettingsPanel('queue')">
             <span class="flex-1 text-left">{{ 'player.queue' | translate }}</span>
             <span class="text-white/50 text-xs">{{ queueIndex() + 1 }} / {{ queueItems().length }}</span>
             <svg lucideChevronRight class="h-4 w-4 text-white/40 shrink-0"></svg>
@@ -448,7 +448,7 @@
     } @else if (settingsPanel() === 'quality') {
       <div class="py-2 px-1">
         <!-- Back header -->
-        <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 mb-1" (click)="settingsPanel.set('main')">
+        <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 mb-1" (click)="openSettingsPanel('main')">
           <svg lucideArrowLeft class="h-4 w-4 text-white/60 shrink-0"></svg>
           <span class="font-medium">{{ 'player.quality' | translate }}</span>
         </button>
@@ -472,12 +472,12 @@
     } @else if (settingsPanel() === 'queue') {
       <div class="py-2 px-1">
         <!-- Back header -->
-        <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 mb-1" (click)="settingsPanel.set('main')">
+        <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 mb-1" (click)="openSettingsPanel('main')">
           <svg lucideArrowLeft class="h-4 w-4 text-white/60 shrink-0"></svg>
           <span class="font-medium">{{ 'player.queue' | translate }}</span>
         </button>
         <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
-        <div class="max-h-[60vh] overflow-y-auto">
+        <div class="max-h-[38vh] overflow-y-auto">
           @for (q of queueItems(); track $index; let i = $index) {
             <button
               class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
@@ -512,31 +512,75 @@
        (activeSheet is already null) so it's safe in both modes.
      -->
 <ng-template #subtitlesMenu>
-  <div class="text-center text-white/60 text-xs font-medium mb-3">{{ 'player.subtitles' | translate }}</div>
-  <button
-    type="button"
-    class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
-    [disabled]="!activeSubtitleId()"
-    (click)="selectSubtitle.emit(null); closeSheet()"
-  >
-    <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
-    <span class="flex-1 text-left">{{ 'player.off' | translate }}</span>
-    @if (!activeSubtitleId()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
-  </button>
-  @for (sub of availableSubtitles(); track sub.id) {
+  @if (subtitlesPanel() === 'tracks') {
+    <div class="relative mb-3">
+      <div class="text-center text-white/60 text-xs font-medium">{{ 'player.subtitles' | translate }}</div>
+      <!-- Appearance is a local-render setting: while casting the receiver style
+           is fixed at LOAD time, so the entry point would be a dead end. -->
+      @if (!castConnected()) {
+        <button
+          type="button"
+          class="absolute -top-1.5 right-1 btn btn-ghost btn-xs btn-circle text-white/60 hover:text-white"
+          [attr.aria-label]="'player.appearance' | translate"
+          (click)="openSubtitlesPanel('appearance')"
+        >
+          <svg lucideSettings class="h-4 w-4"></svg>
+        </button>
+      }
+    </div>
     <button
       type="button"
       class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
-      [disabled]="activeSubtitleId() === sub.id"
-      (click)="selectSubtitle.emit(sub.id); closeSheet()"
+      [disabled]="!activeSubtitleId()"
+      (click)="selectSubtitle.emit(null); closeSheet()"
     >
       <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
-      <span class="flex-1 text-left">
-        <span class="block">{{ sub.menuHead || sub.label }}@if (sub.isImage) { <span class="text-warning/70 text-[10px] ml-1">{{ 'player.burned' | translate }}</span> }</span>
-        @if (sub.menuSub) { <span class="block text-xs text-white/60">{{ sub.menuSub }}</span> }
-      </span>
-      @if (activeSubtitleId() === sub.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+      <span class="flex-1 text-left">{{ 'player.off' | translate }}</span>
+      @if (!activeSubtitleId()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
     </button>
+    @for (sub of availableSubtitles(); track sub.id) {
+      <button
+        type="button"
+        class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
+        [disabled]="activeSubtitleId() === sub.id"
+        (click)="selectSubtitle.emit(sub.id); closeSheet()"
+      >
+        <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
+        <span class="flex-1 text-left">
+          <span class="block">{{ sub.menuHead || sub.label }}@if (sub.isImage) { <span class="text-warning/70 text-[10px] ml-1">{{ 'player.burned' | translate }}</span> }</span>
+          @if (sub.menuSub) { <span class="block text-xs text-white/60">{{ sub.menuSub }}</span> }
+        </span>
+        @if (activeSubtitleId() === sub.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+      </button>
+    }
+  } @else if (subtitlesPanel() === 'appearance') {
+    <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 mb-1" (click)="openSubtitlesPanel('tracks')">
+      <svg lucideArrowLeft class="h-4 w-4 text-white/60 shrink-0"></svg>
+      <span class="font-medium">{{ 'player.appearance' | translate }}</span>
+    </button>
+    <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
+    @for (row of appearanceRows; track row.panel) {
+      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10" (click)="openSubtitlesPanel(row.panel)">
+        <span class="flex-1 text-left">{{ row.labelKey | translate }}</span>
+        @if (currentOption(row); as current) {
+          <span class="text-white/50 text-xs">{{ current.labelKey ? (current.labelKey | translate) : current.label }}</span>
+        }
+        <svg lucideChevronRight class="h-4 w-4 text-white/40 shrink-0"></svg>
+      </button>
+    }
+  } @else if (activeAppearanceRow(); as row) {
+    <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 mb-1" (click)="openSubtitlesPanel('appearance')">
+      <svg lucideArrowLeft class="h-4 w-4 text-white/60 shrink-0"></svg>
+      <span class="font-medium">{{ row.labelKey | translate }}</span>
+    </button>
+    <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
+    <!-- No closeSheet() here: the user tweaks several values in a row. -->
+    @for (opt of row.options; track opt.value) {
+      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10" (click)="setAppearance(row, opt.value)">
+        <span class="flex-1 text-left">{{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}</span>
+        @if (currentOption(row) === opt) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+      </button>
+    }
   }
 </ng-template>
 
