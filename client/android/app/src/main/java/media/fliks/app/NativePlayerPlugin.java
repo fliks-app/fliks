@@ -662,6 +662,24 @@ public class NativePlayerPlugin extends Plugin {
         }
     }
 
+    // ── Display ──
+
+    @PluginMethod()
+    public void setFillScreen(PluginCall call) {
+        boolean fill = call.getBoolean("fill", false);
+        mainHandler.post(() -> {
+            // ZOOM crops the overflowing axis while keeping the aspect ratio
+            // (what object-fit: cover does on the browser path); FILL would
+            // stretch. The wrapper clips the overflow — clipChildren default.
+            if (aspectFrame != null) {
+                aspectFrame.setResizeMode(fill
+                        ? AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        : AspectRatioFrameLayout.RESIZE_MODE_FIT);
+            }
+            call.resolve();
+        });
+    }
+
     // ── Brightness ──
 
     @PluginMethod()
