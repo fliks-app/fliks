@@ -2,7 +2,7 @@ import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { av1CodecString } from '../codec-strings';
 import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
 import { amfScaleFilter8bit, amfScaleFilter10bit } from './helpers/amf-filters';
-import { AV1_AMF_GOP_ARGS } from './helpers/amf-gop';
+import { AMF_GOP_ARGS } from './helpers/amf-gop';
 
 /** AMD AMF AV1 encoder — RDNA3 (RX 7000) and later. Older GPUs lack the
  *  AV1 encode unit; the runtime fallback catches the spawn error and drops
@@ -32,7 +32,7 @@ export const av1Amf: EncoderDescriptor = {
       bitrate,
       '-vf',
       amfScaleFilter8bit(input),
-      ...AV1_AMF_GOP_ARGS,
+      ...AMF_GOP_ARGS,
       '-g',
       String(target.gopSize),
       '-force_key_frames',
@@ -72,7 +72,7 @@ export const av1AmfHdr10: EncoderDescriptor = {
       bitrate,
       '-vf',
       amfScaleFilter10bit(input),
-      ...AV1_AMF_GOP_ARGS,
+      ...AMF_GOP_ARGS,
       '-g',
       String(target.gopSize),
       '-force_key_frames',
