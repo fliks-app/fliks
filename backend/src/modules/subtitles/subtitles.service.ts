@@ -260,10 +260,20 @@ export class SubtitlesService {
       );
     }
 
+    const removeHiTags =
+      (await this.settingsService.get('subtitle_remove_hi_tags')) === 'true';
+    const customExclusions = (
+      (await this.settingsService.get('subtitle_custom_exclusions')) ?? ''
+    )
+      .split('\n')
+      .filter((l) => l.trim());
+
     const lang = normalizeLanguageCode(searchResult.language);
+    // The HI cues are stripped below, so the file no longer warrants the tag
+    const hearingImpaired = searchResult.hearingImpaired && !removeHiTags;
     const langSuffix = searchResult.forced
       ? `${lang}.forced`
-      : searchResult.hearingImpaired
+      : hearingImpaired
         ? `${lang}.hi`
         : lang;
 
@@ -289,13 +299,6 @@ export class SubtitlesService {
     }
 
     // Clean subtitle content (remove ads, optionally HI tags)
-    const removeHiTags =
-      (await this.settingsService.get('subtitle_remove_hi_tags')) === 'true';
-    const customExclusions = (
-      (await this.settingsService.get('subtitle_custom_exclusions')) ?? ''
-    )
-      .split('\n')
-      .filter((l) => l.trim());
     buffer = cleanSubtitle(buffer, {
       removeAds: true,
       removeHiTags,
@@ -333,7 +336,7 @@ export class SubtitlesService {
       episode: episodeId ? { id: episodeId } : null,
       language: lang,
       forced: searchResult.forced,
-      hearingImpaired: searchResult.hearingImpaired,
+      hearingImpaired,
       providerType: provider.type,
       providerFileId: searchResult.providerFileId,
       relativePath,
@@ -519,6 +522,8 @@ export class SubtitlesService {
     language: string;
     forced: boolean;
     hearingImpaired: boolean;
+    /** Index of the HI token in the dot-separated name, for renaming */
+    hiPart: number | null;
   } | null {
     const ext = path.extname(filename).toLowerCase();
     if (!SubtitlesService.SUBTITLE_EXTS.has(ext)) return null;
@@ -529,6 +534,7 @@ export class SubtitlesService {
     let language = 'und';
     let forced = false;
     let hearingImpaired = false;
+    let hiPart: number | null = null;
 
     // Parse right-to-left (skip the leftmost parts = video name)
     for (let i = parts.length - 1; i >= 1; i--) {
@@ -541,6 +547,7 @@ export class SubtitlesService {
           language = 'hi';
         } else {
           hearingImpaired = true;
+          hiPart = i;
         }
       } else if (SubtitlesService.SKIP_FLAGS.has(token)) {
         // ignore 'default'
@@ -552,7 +559,20 @@ export class SubtitlesService {
       }
     }
 
-    return { language, forced, hearingImpaired };
+    return { language, forced, hearingImpaired, hiPart };
+  }
+
+  /**
+   * Drop the `.hi`/`.cc`/`.sdh` token from a subtitle filename.
+   * Without it a library rescan re-derives the flag from the name.
+   */
+  private stripHiFromFilename(filename: string): string | null {
+    const parsed = this.parseSubtitleFilename(filename);
+    if (!parsed || parsed.hiPart === null) return null;
+    const ext = path.extname(filename);
+    const parts = filename.slice(0, -ext.length).split('.');
+    parts.splice(parsed.hiPart, 1);
+    return parts.join('.') + ext;
   }
 
   /** Known ISO 639-1 codes from APP_LANGUAGES. */
@@ -870,6 +890,9 @@ export class SubtitlesService {
     }
 
     await fs.writeFile(abs, content, 'utf-8');
+    if (action === 'removeHiTags' && sub.hearingImpaired) {
+      await this.dropHiTag(sub, abs);
+    }
     sub.locked = true;
     await this.repo.save(sub);
     // Log a sample of the first timestamp to verify the change
@@ -878,5 +901,42 @@ export class SubtitlesService {
       `PostProcess #${subtitleId}: ${action} done (${sizeBefore} → ${content.length} chars, first timestamp: ${sampleMatch?.[0] ?? 'none'})`,
     );
     return sub;
+  }
+
+  /** Rename the file and clear the flag once the HI cues are gone. */
+  private async dropHiTag(sub: SubtitleFile, abs: string): Promise<void> {
+    const newName = this.stripHiFromFilename(path.basename(abs));
+    if (!newName) {
+      sub.hearingImpaired = false;
+      return;
+    }
+
+    const target = path.join(path.dirname(abs), newName);
+    // rename() overwrites silently, so refuse when a sibling already holds the name
+    const taken = await fs.access(target).then(
+      () => true,
+      () => false,
+    );
+    if (taken) {
+      this.logger.warn(
+        `Kept the HI tag on sub #${sub.id}: "${newName}" already exists`,
+      );
+      return;
+    }
+    try {
+      await fs.rename(abs, target);
+    } catch (err) {
+      this.logger.warn(
+        `Could not drop the HI tag on sub #${sub.id}: ${(err as Error).message}`,
+      );
+      return;
+    }
+
+    sub.hearingImpaired = false;
+    if (sub.relativePath) {
+      sub.relativePath = path
+        .join(path.dirname(sub.relativePath), newName)
+        .replace(/\\/g, '/');
+    }
   }
 }

@@ -169,19 +169,22 @@ export class SubtitleOcrService {
         this.releaseOcrSlot();
       }
 
+      const removeHiTags =
+        (await this.settings.get('subtitle_remove_hi_tags')) === 'true';
       const cleaned = cleanSubtitle(Buffer.from(srt, 'utf-8'), {
         removeAds: true,
-        removeHiTags:
-          (await this.settings.get('subtitle_remove_hi_tags')) === 'true',
+        removeHiTags,
         customExclusions: ((await this.settings.get('subtitle_custom_exclusions')) ?? '')
           .split('\n')
           .filter((l) => l.trim()),
       });
 
       const parsed = path.parse(videoPath);
+      // The HI cues are stripped, so the output no longer warrants the tag
+      const hearingImpaired = source.hearingImpaired && !removeHiTags;
       const langSuffix = source.forced
         ? `${source.language}.forced`
-        : source.hearingImpaired
+        : hearingImpaired
           ? `${source.language}.hi`
           : source.language;
       let outPath = path.join(parsed.dir, `${parsed.name}.${langSuffix}.ocr.srt`);
@@ -200,6 +203,7 @@ export class SubtitleOcrService {
 
       await this.repo.update(placeholderId, {
         relativePath,
+        hearingImpaired,
         status: SubtitleStatus.DOWNLOADED,
       });
       this.log.log(
