@@ -25,6 +25,25 @@
                 {{ 'media_detail.search_missing_subtitles' | translate }}
               </button>
             }
+            @if (canPickFiles()) {
+              <input
+                #uploadInput
+                type="file"
+                class="hidden"
+                [accept]="uploadAccept()"
+                (change)="onSubtitleFilePicked($event)"
+              />
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm shrink-0"
+                [disabled]="searchDisabled() || subtitleActionBusy()"
+                [attr.title]="searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null"
+                (click)="pickSubtitleFile()"
+              >
+                <svg lucideUpload class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
+                {{ 'media_detail.upload_subtitle' | translate }}
+              </button>
+            }
             <button
               type="button"
               class="btn btn-primary btn-sm shrink-0"
@@ -512,6 +531,10 @@
     } @else if (langDialogMode() === 'translate') {
       <h3 class="text-lg font-bold">{{ 'media_detail.translate_target_language' | translate }}</h3>
       <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.translate_hint' | translate }}</p>
+    } @else if (langDialogMode() === 'upload') {
+      <h3 class="text-lg font-bold">{{ 'media_detail.upload_subtitle' | translate }}</h3>
+      <p class="py-2 text-sm text-base-content/70 break-all">{{ pendingUploadName() }}</p>
+      <p class="text-sm text-base-content/70">{{ 'media_detail.upload_subtitle_hint' | translate }}</p>
     } @else {
       <h3 class="text-lg font-bold">{{ 'media_detail.ocr_language_title' | translate }}</h3>
       <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.ocr_language_hint' | translate }}</p>
@@ -540,7 +563,7 @@
     <div class="modal-action">
       <button type="button" class="btn" (click)="closeOcrLangModal()">{{ 'common.cancel' | translate }}</button>
       <button type="button" class="btn btn-primary" (click)="confirmLanguage()">
-        {{ (langDialogMode() === 'relabel' ? 'common.save' : langDialogMode() === 'translate' ? 'media_detail.translate' : 'media_detail.action_ocr_extract') | translate }}
+        {{ (langDialogMode() === 'relabel' ? 'common.save' : langDialogMode() === 'translate' ? 'media_detail.translate' : langDialogMode() === 'upload' ? 'media_detail.upload_subtitle' : 'media_detail.action_ocr_extract') | translate }}
       </button>
     </div>
   </div>
