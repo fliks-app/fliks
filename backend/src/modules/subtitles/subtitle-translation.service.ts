@@ -237,10 +237,11 @@ export class SubtitleTranslationService {
         timing: c.timing,
         text: translated[i] ?? c.text,
       }));
+      const removeHiTags =
+        (await this.settings.get('subtitle_remove_hi_tags')) === 'true';
       const cleaned = cleanSubtitle(Buffer.from(serializeSrt(outCues), 'utf-8'), {
         removeAds: true,
-        removeHiTags:
-          (await this.settings.get('subtitle_remove_hi_tags')) === 'true',
+        removeHiTags,
         customExclusions: (
           (await this.settings.get('subtitle_custom_exclusions')) ?? ''
         )
@@ -249,9 +250,11 @@ export class SubtitleTranslationService {
       });
 
       const parsed = path.parse(videoPath);
+      // The HI cues are stripped, so the output no longer warrants the tag
+      const hearingImpaired = source.hearingImpaired && !removeHiTags;
       const langSuffix = source.forced
         ? `${target}.forced`
-        : source.hearingImpaired
+        : hearingImpaired
           ? `${target}.hi`
           : target;
       let outPath = path.join(parsed.dir, `${parsed.name}.${langSuffix}.srt`);
@@ -272,6 +275,7 @@ export class SubtitleTranslationService {
 
       await this.repo.update(placeholderId, {
         relativePath,
+        hearingImpaired,
         status: SubtitleStatus.DOWNLOADED,
       });
       this.log.log(
