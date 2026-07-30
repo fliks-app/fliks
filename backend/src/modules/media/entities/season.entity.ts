@@ -40,6 +40,14 @@ export class Season extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   posterUrl: string | null;
 
+  /** Season synopsis. Null on providers that don't carry one (TVDB). */
+  @Column({ type: 'text', nullable: true })
+  overview: string | null;
+
+  /** First air date. Varchar, not date: TVDB reports a bare year here. */
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  airDate: string | null;
+
   @OneToMany(() => Episode, (episode) => episode.season, { cascade: true })
   episodes: Episode[];
 }
