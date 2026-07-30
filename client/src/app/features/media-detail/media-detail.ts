@@ -2,7 +2,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
-  Injector,
   OnDestroy,
   OnInit,
   computed,
@@ -727,7 +726,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   });
 
   private readonly scrollMemory = inject(ScrollMemoryService);
-  private readonly injector = inject(Injector);
 
   /** Own memory per media and per episode, so back from an episode lands where
    *  it left rather than on the other page's offset. */
@@ -811,9 +809,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // playback-state calls below must not gate first paint.
       this.loading.set(false);
       // Router scroll restoration is 'top' app-wide, so returning here needs the
-      // offset put back by hand — and only now, with the episode list rendered
-      // and the page at its real height.
-      this.scrollMemory.restore(this.scrollKey(), this.injector);
+      // offset put back by hand. Sticky, not a single shot: cast, crew and the
+      // hero artwork land after this point, so a one-off scrollTo gets clamped
+      // by a document that hasn't reached its full height yet.
+      this.scrollMemory.restoreSticky(this.scrollKey());
       this.draftQualityProfileId.set(m.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(m.languageProfile?.id ?? null);
       this.selectedLibraryId.set(m.libraryId ?? null);
