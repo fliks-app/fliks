@@ -228,7 +228,7 @@
         </div>
 
         @if (selSeason.overview) {
-          <p class="text-sm text-base-content/80 line-clamp-4">{{ selSeason.overview }}</p>
+          <p class="text-sm text-base-content/80">{{ selSeason.overview }}</p>
         }
       </div>
     }
@@ -282,7 +282,7 @@
               </div>
 
               @if (ep.overview) {
-                <p class="col-span-2 sm:col-span-1 sm:col-start-2 text-sm sm:text-base text-base-content/70 line-clamp-2">{{ ep.overview }}</p>
+                <p class="col-span-2 sm:col-span-1 sm:col-start-2 text-sm sm:text-base text-base-content/70">{{ ep.overview }}</p>
               } @else {
                 <p class="col-span-2 sm:col-span-1 sm:col-start-2 text-sm sm:text-base text-base-content/35 italic">{{ 'media_detail.ep_no_overview' | translate }}</p>
               }
