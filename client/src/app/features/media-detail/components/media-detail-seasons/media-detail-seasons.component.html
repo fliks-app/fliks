@@ -281,11 +281,29 @@
                 </span>
               </div>
 
-              @if (ep.overview) {
-                <p class="col-span-2 sm:col-span-1 sm:col-start-2 text-sm sm:text-base text-base-content/70">{{ ep.overview }}</p>
-              } @else {
-                <p class="col-span-2 sm:col-span-1 sm:col-start-2 text-sm sm:text-base text-base-content/35 italic">{{ 'media_detail.ep_no_overview' | translate }}</p>
-              }
+              <!-- One grid child, so the toggle rides in the synopsis cell rather
+                   than claiming a third row the image doesn't span. -->
+              <div class="col-span-2 sm:col-span-1 sm:col-start-2">
+                @if (ep.overview) {
+                  <p
+                    #epOverview
+                    [attr.data-ep-id]="ep.id"
+                    class="text-sm sm:text-base text-base-content/70"
+                    [class.line-clamp-3]="!expandedOverviews().has(ep.id)"
+                  >{{ ep.overview }}</p>
+                  @if (clampedOverviews().has(ep.id) || expandedOverviews().has(ep.id)) {
+                    <button
+                      type="button"
+                      class="link link-primary no-underline hover:underline text-sm mt-0.5 cursor-pointer"
+                      (click)="toggleEpisodeOverview(ep.id)"
+                    >
+                      {{ (expandedOverviews().has(ep.id) ? 'common.show_less' : 'common.show_more') | translate }}
+                    </button>
+                  }
+                } @else {
+                  <p class="text-sm sm:text-base text-base-content/35 italic">{{ 'media_detail.ep_no_overview' | translate }}</p>
+                }
+              </div>
           </li>
         }
       </ul>
