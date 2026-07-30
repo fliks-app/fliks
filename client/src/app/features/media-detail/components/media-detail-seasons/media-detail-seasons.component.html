@@ -4,7 +4,7 @@
 <section class="space-y-4">
   @if (!hideControls()) {
   <div appTvRow class="flex items-center gap-2 flex-wrap">
-    <app-dropdown-menu placement="bottom-start">
+    <app-dropdown-menu placement="bottom-start" class="order-last ms-auto">
       <button trigger type="button" class="btn btn-ghost btn-circle shrink-0">
         <svg lucideEllipsisVertical class="h-5 w-5"></svg>
       </button>
@@ -142,7 +142,7 @@
       }
     </app-dropdown-menu>
     <app-dropdown-menu placement="bottom-start">
-      <button trigger type="button" class="select select-bordered w-fit shrink-0 text-left cursor-pointer transition-colors hover:bg-base-content/10">
+      <button trigger type="button" class="select select-bordered w-fit shrink-0 text-left text-lg font-bold cursor-pointer transition-colors hover:bg-base-content/10">
         @if (selSeason) {
           {{ 'media_detail.season_number' | translate:{ number: selSeason.seasonNumber } }}
         } @else {
@@ -177,8 +177,10 @@
   }
 
   @if (selSeason && isSeasonTabVisible(selSeason)) {
-    @if (showSeasonInfo()) {
-      <div class="space-y-2">
+    <!-- Pulled up out of the section's space-y-4 so it groups with the season
+         picker above rather than reading as a caption of the episode row. -->
+    @if (!hideControls()) {
+      <div class="space-y-2 -mt-2">
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/60">
           @if (selSeason.airDate) {
             <span>
@@ -198,6 +200,23 @@
             <span>{{ 'media_detail.season_watched_count' | translate:{ count: seasonWatchedCount(selSeason) } }}</span>
           }
         </div>
+
+        @if (seasonWatchedCount(selSeason) > 0) {
+          <div class="flex items-center gap-3">
+            <progress
+              class="progress progress-primary h-1 w-full max-w-xs"
+              [value]="seasonProgressPercent(selSeason)"
+              max="100"
+            ></progress>
+            @if (seasonResumeEpisode(selSeason); as next) {
+              <button type="button" class="btn btn-primary btn-xs shrink-0" (click)="playEpisode(next)">
+                <svg lucidePlay class="h-3 w-3 shrink-0" aria-hidden="true"></svg>
+                {{ 'media_detail.season_resume' | translate:{ episode: next.episodeNumber } }}
+              </button>
+            }
+          </div>
+        }
+
         @if (selSeason.overview) {
           <p class="text-sm text-base-content/80 line-clamp-4">{{ selSeason.overview }}</p>
         }
@@ -208,12 +227,11 @@
         {{ 'media_detail.episodes_filter_empty' | translate }}
       </p>
     } @else if (filteredEpisodes().length > 0) {
-      <app-horizontal-scroller [title]="sectionTitle() ?? ('media_detail.episodes' | translate)">
+      <app-horizontal-scroller [title]="sectionTitle() ?? ''">
         @for (ep of filteredEpisodes(); track ep.id) {
           <app-media-card [aspect]="'landscape'"
             [id]="'episode-' + ep.id"
-            [imageUrl]="ep.stillUrl ?? m.posterUrl"
-            [imageBlurred]="!ep.stillUrl && !!m.posterUrl"
+            [imageUrl]="ep.stillUrl ?? null"
             [title]="ep.title ?? ('media_detail.ep_no_title' | translate)"
             [subtitle]="(ep.airDate | localeDate) || '—'"
             [topLeftBadge]="episodeBadgeLabel(ep)"

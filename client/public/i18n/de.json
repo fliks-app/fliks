@@ -810,6 +810,7 @@
     "episode_count_one": "{{count}} Episode",
     "episode_count_other": "{{count}} Episoden",
     "season_watched_count": "{{count}} gesehen",
+    "season_resume": "E{{episode}} fortsetzen",
     "back": "Zurück zur Liste",
     "request_media": "Anfragen",
     "request_season": "Diese Staffel anfragen",
