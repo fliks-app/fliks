@@ -801,7 +801,8 @@
     "watched": "Visto",
     "ends_at": "Termina a las {{time}}",
     "remaining": "restantes",
-    "genres": "Géneros"
+    "genres": "Géneros",
+    "details": "Detalles"
   },
   "media_detail": {
     "cast": "Reparto",

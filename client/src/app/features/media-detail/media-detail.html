@@ -235,6 +235,10 @@
           />
         }
 
+        @if (m.type === 'series') {
+          <app-media-info-extra [media]="m" [directors]="directors()" />
+        }
+
         @if (m.type === 'series' && m.seasons?.length) {
           <app-media-detail-seasons
             [media]="m"
@@ -266,10 +270,6 @@
             (toggleSeasonLike)="toggleSeasonLike($event)"
             (recommendSeason)="recommendSeason($event)"
           />
-        }
-
-        @if (m.type === 'series') {
-          <app-media-info-extra [media]="m" [directors]="directors()" />
         }
 
         @if (m.type === 'series' && cast().length) {

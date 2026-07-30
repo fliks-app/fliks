@@ -12,7 +12,7 @@ import { CurrencyPipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { LucidePlay } from '@lucide/angular';
+import { LucideChevronDown, LucidePlay } from '@lucide/angular';
 import { Media } from '../../../core/services/api/media.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
@@ -26,7 +26,7 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
  */
 @Component({
   selector: 'app-media-info-extra',
-  imports: [LocaleDatePipe, CurrencyPipe, TranslateModule, LucidePlay],
+  imports: [LocaleDatePipe, CurrencyPipe, TranslateModule, LucideChevronDown, LucidePlay],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-info-extra.html',
 })

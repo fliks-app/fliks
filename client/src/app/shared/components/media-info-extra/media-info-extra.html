@@ -6,72 +6,86 @@
       <p class="italic text-base-content/70 text-lg">{{ tagline() }}</p>
     }
 
-    <dl class="grid grid-cols-2 gap-x-6 gap-y-3">
-      @if (originalTitle()) {
-        <div>
-          <dt class="text-base-content/50 text-sm">{{ 'discover.preview_original_title' | translate }}</dt>
-          <dd class="font-medium text-base">{{ originalTitle() }}</dd>
-        </div>
-      }
-      @if (media().status) {
-        <div>
-          <dt class="text-base-content/50 text-sm">{{ 'discover.preview_status' | translate }}</dt>
-          <dd class="font-medium text-base">{{ statusLabel() }}</dd>
-        </div>
-      }
-      @if (media().releaseDate) {
-        <div>
-          <dt class="text-base-content/50 text-sm">{{ 'discover.preview_release_date' | translate }}</dt>
-          <dd class="font-medium text-base">{{ media().releaseDate | localeDate:{ dateStyle: 'long' } }}</dd>
-        </div>
-      }
-      @if (originalLanguage() && originalLanguage() !== 'und') {
-        <div>
-          <dt class="text-base-content/50 text-sm">{{ 'discover.preview_original_language' | translate }}</dt>
-          <dd class="font-medium text-base">{{ originalLanguage() }}</dd>
-        </div>
-      }
-      @if (productionCountries()) {
-        <div>
-          <dt class="text-base-content/50 text-sm">{{ 'discover.preview_countries' | translate }}</dt>
-          <dd class="font-medium text-base">{{ productionCountries() }}</dd>
-        </div>
-      }
-      @if (productionCompanies()) {
-        <div>
-          <dt class="text-base-content/50 text-sm">{{ 'discover.preview_studios' | translate }}</dt>
-          <dd class="font-medium text-base">{{ productionCompanies() }}</dd>
-        </div>
-      }
-      @if (directorsLabel()) {
-        <div>
-          <dt class="text-base-content/50 text-sm">{{ 'media_info.directors' | translate }}</dt>
-          <dd class="font-medium text-base">{{ directorsLabel() }}</dd>
-        </div>
-      }
-      @if (genres().length) {
-        <div>
-          <dt class="text-base-content/50 text-sm">{{ 'media_info.genres' | translate }}</dt>
-          <dd class="font-medium text-base flex flex-wrap gap-x-1">
-            @for (genre of genres(); track genre; let last = $last) {
-              <span><button type="button" class="hover:underline rounded text-left" (click)="navigateToGenre(genre)">{{ genre }}</button>@if (!last){,}</span>
-            }
-          </dd>
-        </div>
-      }
-      @if (budget()) {
-        <div>
-          <dt class="text-base-content/50 text-sm">{{ 'discover.preview_budget' | translate }}</dt>
-          <dd class="font-medium text-base">{{ budget() | currency:'USD':'symbol':'1.0-0' }}</dd>
-        </div>
-      }
-      @if (revenue()) {
-        <div>
-          <dt class="text-base-content/50 text-sm">{{ 'discover.preview_revenue' | translate }}</dt>
-          <dd class="font-medium text-base">{{ revenue() | currency:'USD':'symbol':'1.0-0' }}</dd>
-        </div>
-      }
-    </dl>
+    <!-- Status and genres stay out of the fold: the status changes how the
+         episode list reads, and a genre is navigation, not a reference fact. -->
+    @if (media().status || genres().length) {
+      <div class="flex flex-wrap items-center gap-2">
+        @if (media().status) {
+          <span class="badge badge-outline">{{ statusLabel() }}</span>
+        }
+        @for (genre of genres(); track genre) {
+          <button
+            type="button"
+            class="badge badge-outline badge-primary hover:bg-primary/15"
+            (click)="navigateToGenre(genre)"
+          >{{ genre }}</button>
+        }
+      </div>
+    }
+
+    <details class="group">
+      <summary
+        class="flex items-center gap-2 cursor-pointer font-semibold list-none [&::-webkit-details-marker]:hidden"
+      >
+        {{ 'media_info.details' | translate }}
+        <svg
+          lucideChevronDown
+          class="h-4 w-4 opacity-60 transition-transform group-open:rotate-180"
+          aria-hidden="true"
+        ></svg>
+      </summary>
+
+      <dl class="grid grid-cols-2 gap-x-6 gap-y-3 mt-3">
+        @if (originalTitle()) {
+          <div>
+            <dt class="text-base-content/50 text-sm">{{ 'discover.preview_original_title' | translate }}</dt>
+            <dd class="font-medium text-base">{{ originalTitle() }}</dd>
+          </div>
+        }
+        @if (media().releaseDate) {
+          <div>
+            <dt class="text-base-content/50 text-sm">{{ 'discover.preview_release_date' | translate }}</dt>
+            <dd class="font-medium text-base">{{ media().releaseDate | localeDate:{ dateStyle: 'long' } }}</dd>
+          </div>
+        }
+        @if (originalLanguage() && originalLanguage() !== 'und') {
+          <div>
+            <dt class="text-base-content/50 text-sm">{{ 'discover.preview_original_language' | translate }}</dt>
+            <dd class="font-medium text-base">{{ originalLanguage() }}</dd>
+          </div>
+        }
+        @if (productionCountries()) {
+          <div>
+            <dt class="text-base-content/50 text-sm">{{ 'discover.preview_countries' | translate }}</dt>
+            <dd class="font-medium text-base">{{ productionCountries() }}</dd>
+          </div>
+        }
+        @if (productionCompanies()) {
+          <div>
+            <dt class="text-base-content/50 text-sm">{{ 'discover.preview_studios' | translate }}</dt>
+            <dd class="font-medium text-base">{{ productionCompanies() }}</dd>
+          </div>
+        }
+        @if (directorsLabel()) {
+          <div>
+            <dt class="text-base-content/50 text-sm">{{ 'media_info.directors' | translate }}</dt>
+            <dd class="font-medium text-base">{{ directorsLabel() }}</dd>
+          </div>
+        }
+        @if (budget()) {
+          <div>
+            <dt class="text-base-content/50 text-sm">{{ 'discover.preview_budget' | translate }}</dt>
+            <dd class="font-medium text-base">{{ budget() | currency:'USD':'symbol':'1.0-0' }}</dd>
+          </div>
+        }
+        @if (revenue()) {
+          <div>
+            <dt class="text-base-content/50 text-sm">{{ 'discover.preview_revenue' | translate }}</dt>
+            <dd class="font-medium text-base">{{ revenue() | currency:'USD':'symbol':'1.0-0' }}</dd>
+          </div>
+        }
+      </dl>
+    </details>
 
     @if (trailerKey()) {
       <button type="button" class="btn btn-outline gap-2 mt-2" (click)="openTrailer()">
