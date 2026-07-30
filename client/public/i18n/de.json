@@ -801,7 +801,8 @@
     "watched": "Gesehen",
     "ends_at": "Endet um {{time}}",
     "remaining": "verbleibend",
-    "genres": "Genres"
+    "genres": "Genres",
+    "details": "Details"
   },
   "media_detail": {
     "cast": "Besetzung",

@@ -801,7 +801,8 @@
     "watched": "Visto",
     "ends_at": "Termina alle {{time}}",
     "remaining": "rimanenti",
-    "genres": "Generi"
+    "genres": "Generi",
+    "details": "Dettagli"
   },
   "media_detail": {
     "cast": "Cast",

@@ -806,7 +806,8 @@
     "watched": "Lu",
     "ends_at": "Se termine à {{time}}",
     "remaining": "restantes",
-    "genres": "Genres"
+    "genres": "Genres",
+    "details": "Détails"
   },
   "media_detail": {
     "cast": "Casting",

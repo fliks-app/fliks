@@ -806,7 +806,8 @@
     "watched": "Watched",
     "ends_at": "Ends at {{time}}",
     "remaining": "remaining",
-    "genres": "Genres"
+    "genres": "Genres",
+    "details": "Details"
   },
   "media_detail": {
     "cast": "Cast",

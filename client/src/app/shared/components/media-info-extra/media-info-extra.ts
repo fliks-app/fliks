@@ -9,10 +9,9 @@ import {
   viewChild,
 } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
-import { Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { LucidePlay } from '@lucide/angular';
+import { LucideChevronDown, LucidePlay } from '@lucide/angular';
 import { Media } from '../../../core/services/api/media.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
@@ -26,13 +25,12 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
  */
 @Component({
   selector: 'app-media-info-extra',
-  imports: [LocaleDatePipe, CurrencyPipe, TranslateModule, LucidePlay],
+  imports: [LocaleDatePipe, CurrencyPipe, TranslateModule, LucideChevronDown, LucidePlay],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-info-extra.html',
 })
 export class MediaInfoExtraComponent {
   private readonly translate = inject(TranslateService);
-  private readonly router = inject(Router);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly trailerDialog =
     viewChild<ElementRef<HTMLDialogElement>>('trailerDialog');
@@ -85,14 +83,6 @@ export class MediaInfoExtraComponent {
 
   /** Translated status label (`media_detail.info_status_<value>`), or the
    *  raw enum value if no translation exists. */
-  readonly statusLabel = computed(() => {
-    const s = this.media().status;
-    if (!s) return '';
-    const key = `media_detail.info_status_${s}`;
-    const t = this.translate.instant(key);
-    return typeof t === 'string' && t !== key ? t : s;
-  });
-
   /** Original title as returned by the provider; shown whenever present. */
   readonly originalTitle = computed(() => this.media().originalTitle ?? '');
 
@@ -114,14 +104,6 @@ export class MediaInfoExtraComponent {
 
   readonly revenue = computed(() => this.media().metadata?.revenue ?? null);
 
-  readonly genres = computed(() => this.media().genres ?? []);
-
-  navigateToGenre(genre: string) {
-    const libraryName = this.media().library?.name;
-    if (!libraryName) return;
-    void this.router.navigate(['/libraries', libraryName], { queryParams: { genre } });
-  }
-
   /** True when at least one row has content — keeps the parent template
    *  from rendering an empty wrapper / divider. */
   readonly hasAnyContent = computed(() => {
@@ -129,7 +111,6 @@ export class MediaInfoExtraComponent {
     return !!(
       this.tmdbScore() != null ||
       this.originalTitle() ||
-      m.status ||
       m.releaseDate ||
       this.originalLanguage() !== 'und' ||
       this.productionCountries() ||
@@ -137,7 +118,6 @@ export class MediaInfoExtraComponent {
       this.tagline() ||
       this.budget() ||
       this.revenue() ||
-      this.genres().length > 0 ||
       this.directorsLabel() ||
       this.trailerKey()
     );

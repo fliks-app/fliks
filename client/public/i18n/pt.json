@@ -801,7 +801,8 @@
     "watched": "Visto",
     "ends_at": "Termina às {{time}}",
     "remaining": "restantes",
-    "genres": "Géneros"
+    "genres": "Géneros",
+    "details": "Detalhes"
   },
   "media_detail": {
     "cast": "Elenco",
