@@ -816,6 +816,8 @@
     "episode_count_other": "{{count}} episodes",
     "season_watched_count": "{{count}} watched",
     "season_resume": "Resume E{{episode}}",
+    "episode_view_grid": "Card view",
+    "episode_view_list": "List view",
     "back": "Back to list",
     "request_media": "Request",
     "request_season": "Request this season",
