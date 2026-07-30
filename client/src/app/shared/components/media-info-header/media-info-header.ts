@@ -306,7 +306,11 @@ export class MediaInfoHeaderComponent {
 
   private readonly loadPlaybackEffect = effect(() => {
     const mediaId = this.mediaId();
-    const episodeId = this.episodeId();
+    // A series page has no episode context of its own, but it does know which
+    // episode its resume button targets. Without this fallback it asked for the
+    // media-level row (episode IS NULL) and showed that position against an
+    // episode-specific label.
+    const episodeId = this.episodeId() ?? this.resumeEpisodeId();
     if (!mediaId) return;
 
     // Watched state: for a series without an episode context, derive from the
