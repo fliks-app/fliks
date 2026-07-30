@@ -71,18 +71,18 @@
       <div class="absolute top-1.5 right-1.5 z-10">
         @switch (badge()) {
           @case ('library') {
-            <div class="w-6 h-6 rounded-full bg-success flex items-center justify-center shadow">
-              <svg lucideCheck class="h-3.5 w-3.5 text-success-content"></svg>
+            <div class="w-5 h-5 rounded-full bg-success flex items-center justify-center shadow">
+              <svg lucideCheck class="h-3 w-3 text-success-content"></svg>
             </div>
           }
           @case ('pending') {
-            <div class="w-6 h-6 rounded-full bg-info flex items-center justify-center shadow">
-              <svg lucideClock class="h-3.5 w-3.5 text-info-content"></svg>
+            <div class="w-5 h-5 rounded-full bg-info flex items-center justify-center shadow">
+              <svg lucideClock class="h-3 w-3 text-info-content"></svg>
             </div>
           }
           @case ('declined') {
-            <div class="w-6 h-6 rounded-full bg-error flex items-center justify-center shadow">
-              <svg lucideX class="h-3.5 w-3.5 text-error-content"></svg>
+            <div class="w-5 h-5 rounded-full bg-error flex items-center justify-center shadow">
+              <svg lucideX class="h-3 w-3 text-error-content"></svg>
             </div>
           }
         }
@@ -90,7 +90,7 @@
     } @else if (interactiveWatched()) {
       <button
         type="button"
-        class="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full flex items-center justify-center shadow transition-colors cursor-pointer"
+        class="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center shadow transition-colors cursor-pointer"
         [class.bg-success]="status() === 'watched'"
         [class.hover:bg-success/90]="status() === 'watched'"
         [class.bg-black/50]="status() !== 'watched'"
@@ -100,15 +100,15 @@
       >
         <svg
           lucideCheck
-          class="h-3.5 w-3.5"
+          class="h-3 w-3"
           [class.text-success-content]="status() === 'watched'"
           [class.text-white/80]="status() !== 'watched'"
         ></svg>
       </button>
     } @else if (_resolvedStatus() === 'watched') {
       <div class="absolute top-1.5 right-1.5 z-10">
-        <div class="w-6 h-6 rounded-full bg-success flex items-center justify-center shadow">
-          <svg lucideCheck class="h-3.5 w-3.5 text-success-content"></svg>
+        <div class="w-5 h-5 rounded-full bg-success flex items-center justify-center shadow">
+          <svg lucideCheck class="h-3 w-3 text-success-content"></svg>
         </div>
       </div>
     }
