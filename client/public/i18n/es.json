@@ -1569,6 +1569,7 @@
       "col_name": "Nombre",
       "col_priority": "Prioridad",
       "col_enabled": "Activo",
+      "col_status": "Estado",
       "actions": "Acciones",
       "edit": "Modificar",
       "delete": "Eliminar",

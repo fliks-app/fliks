@@ -44,34 +44,35 @@
             <th>{{ 'settings.indexers.col_name' | translate }}</th>
             <th>{{ 'settings.indexers.col_priority' | translate }}</th>
             <th>{{ 'settings.indexers.col_enabled' | translate }}</th>
+            <th>{{ 'settings.indexers.col_status' | translate }}</th>
             <th class="text-end w-40">{{ 'settings.indexers.actions' | translate }}</th>
           </tr>
         </thead>
         <tbody>
           @for (ix of rows(); track ix.id) {
             <tr>
-              <td class="font-medium">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span>{{ ix.name }}</span>
-                  @if (isCooledDown(ix)) {
-                    <button
-                      type="button"
-                      class="badge badge-warning badge-sm gap-1"
-                      (click)="openCooldown(ix)"
-                      [attr.title]="'settings.indexers.cooldown_badge_title' | translate"
-                    >
-                      <svg lucideSnowflake class="h-3 w-3" aria-hidden="true"></svg>
-                      {{ cooldownRemaining(ix) }}
-                    </button>
-                  }
-                </div>
-              </td>
+              <td class="font-medium">{{ ix.name }}</td>
               <td class="tabular-nums">{{ ix.priority }}</td>
               <td>
                 @if (ix.enabled) {
                   <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
                 } @else {
                   <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
+                }
+              </td>
+              <td>
+                @if (isCooledDown(ix)) {
+                  <button
+                    type="button"
+                    class="badge badge-warning badge-sm gap-1 tabular-nums"
+                    (click)="openCooldown(ix)"
+                    [attr.title]="'settings.indexers.cooldown_badge_title' | translate"
+                  >
+                    <svg lucideSnowflake class="h-3 w-3" aria-hidden="true"></svg>
+                    {{ cooldownRemaining(ix) }}
+                  </button>
+                } @else {
+                  <span class="text-base-content/30">—</span>
                 }
               </td>
               <td class="text-end">
