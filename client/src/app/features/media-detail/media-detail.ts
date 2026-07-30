@@ -1,13 +1,14 @@
 import {
-  Component,
   ChangeDetectionStrategy,
+  Component,
   ElementRef,
-  signal,
-  inject,
+  Injector,
+  OnDestroy,
+  OnInit,
   computed,
   effect,
-  OnInit,
-  OnDestroy,
+  inject,
+  signal,
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -76,6 +77,7 @@ import { MediaType } from '../../core/enums/media-type.enum';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { ImgFadeInDirective } from '../../shared/directives/img-fade-in.directive';
+import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 
 const LS_EPISODES_HAS_FILE_ONLY = 'fliks.mediaDetail.episodesHasFileOnly';
 
@@ -724,7 +726,18 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return filesForEpisode(m.files, c.episode.id);
   });
 
+  private readonly scrollMemory = inject(ScrollMemoryService);
+  private readonly injector = inject(Injector);
+
+  /** Own memory per media and per episode, so back from an episode lands where
+   *  it left rather than on the other page's offset. */
+  private scrollKey(): string {
+    const ep = this.route.snapshot.paramMap.get('episodeId');
+    return ep ? `episode-${ep}` : `media-${this.route.snapshot.paramMap.get('id')}`;
+  }
+
   ngOnDestroy() {
+    this.scrollMemory.deactivate();
     this.navbarService.leaveHeroPage();
     this.backgroundService.clear();
   }
@@ -734,6 +747,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.navbarService.enterHeroPage('');
     const kind = this.route.snapshot.data['kind'] as MediaType;
     this.expectedKind.set(kind);
+    this.scrollMemory.activate(this.scrollKey());
     const idParam = this.route.snapshot.paramMap.get('id');
     const id = idParam ? Number(idParam) : NaN;
     if (!Number.isFinite(id) || id < 1) {
@@ -796,6 +810,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // Paint from the cache-served media immediately; the uncacheable
       // playback-state calls below must not gate first paint.
       this.loading.set(false);
+      // Router scroll restoration is 'top' app-wide, so returning here needs the
+      // offset put back by hand — and only now, with the episode list rendered
+      // and the page at its real height.
+      this.scrollMemory.restore(this.scrollKey(), this.injector);
       this.draftQualityProfileId.set(m.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(m.languageProfile?.id ?? null);
       this.selectedLibraryId.set(m.libraryId ?? null);
