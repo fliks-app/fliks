@@ -16,7 +16,7 @@
       <p class="text-base-content/70 mt-0.5">{{ episodeLabel() }}</p>
     }
 
-    <!-- Metadata: rating, date, runtime, library badge -->
+    <!-- Metadata: rating, then date · runtime · status, then library badge -->
     <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-2 text-base-content/60">
       @if (rating()) {
         <span class="flex items-center gap-0.5 text-warning font-semibold">
@@ -24,20 +24,15 @@
           {{ rating()! | number:'1.1-1' }}
         </span>
       }
-      @if (dateLabel()) { <span>{{ dateLabel() }}</span> }
-      @if (runtime()) { <span>{{ runtime() }}min</span> }
+      @if (metaLine()) { <span>{{ metaLine() }}</span> }
       @if (libraryName()) {
         <span class="badge badge-primary badge-outline">{{ libraryName() }}</span>
       }
     </div>
 
-    <!-- Status and genres: the status frames how the episode list reads, and a
-         genre is navigation. Both stay out of the folded details panel. -->
-    @if (statusLabel() || genres().length) {
+    <!-- Genres are navigation, so they stay out of the folded details panel. -->
+    @if (genres().length) {
       <div class="flex flex-wrap items-center gap-2 mt-2">
-        @if (statusLabel()) {
-          <span class="badge badge-outline">{{ statusLabel() }}</span>
-        }
         @for (genre of genres(); track genre) {
           <button
             type="button"
@@ -241,7 +236,7 @@
         <p class="text-base-content/70 mt-1 text-lg">{{ episodeLabel() }}</p>
       }
 
-      <!-- Metadata row: rating, date, runtime, end time, library badge -->
+      <!-- Metadata row: rating, date · runtime · status, end time, library badge -->
       <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-base-content/60">
         @if (!monitored()) { <span class="hidden lg:inline-flex badge badge-ghost">{{ 'media_detail.unmonitored' | translate }}</span> }
         @if (rating()) {
@@ -250,8 +245,7 @@
             {{ rating()! | number:'1.1-1' }}
           </span>
         }
-        @if (dateLabel()) { <span>{{ dateLabel() }}</span> }
-        @if (runtime()) { <span>{{ runtime() }}min</span> }
+        @if (metaLine()) { <span>{{ metaLine() }}</span> }
         @if (endTimeLabel() && selectedFileId()) {
           <span>{{ 'media_info.ends_at' | translate:{ time: endTimeLabel() } }}</span>
         }
@@ -260,13 +254,9 @@
         }
       </div>
 
-      <!-- Status and genres: the status frames how the episode list reads, and a
-           genre is navigation. Both stay out of the folded details panel. -->
-      @if (statusLabel() || genres().length) {
+      <!-- Genres are navigation, so they stay out of the folded details panel. -->
+      @if (genres().length) {
         <div class="flex flex-wrap items-center gap-2 mt-2">
-          @if (statusLabel()) {
-            <span class="badge badge-outline">{{ statusLabel() }}</span>
-          }
           @for (genre of genres(); track genre) {
             <button
               type="button"

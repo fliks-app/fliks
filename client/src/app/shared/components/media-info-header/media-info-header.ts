@@ -144,6 +144,21 @@ export class MediaInfoHeaderComponent {
   readonly resumeMediaFileId = input<number | undefined>(undefined);
   readonly status = input<string | null>(null);
 
+  /**
+   * `2021 · 42min · Terminé`. Joined rather than separated in the template so
+   * the dot only lands between values the provider actually gave.
+   */
+  readonly metaLine = computed(() => {
+    const parts: string[] = [];
+    const date = this.dateLabel();
+    if (date) parts.push(date);
+    const runtime = this.runtime();
+    if (runtime) parts.push(`${runtime}min`);
+    const status = this.statusLabel();
+    if (status) parts.push(status);
+    return parts.join(' · ');
+  });
+
   /** Translated release status, falling back to the raw provider value. */
   readonly statusLabel = computed(() => {
     const value = this.status();
