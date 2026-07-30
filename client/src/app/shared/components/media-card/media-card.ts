@@ -65,6 +65,12 @@ export class MediaCardComponent {
 
   // Layout
   readonly aspect = input<MediaCardAspect>('portrait');
+  /**
+   * Width classes for a landscape card, replacing the scroller-sized default.
+   * Portrait callers already size the host themselves; landscape ones can't,
+   * because the width lives on an inner element.
+   */
+  readonly widthClass = input<string | null>(null);
 
   // Image (override media.posterUrl)
   readonly imageUrl = input<string | null>(null);

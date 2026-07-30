@@ -239,50 +239,53 @@
     } @else if (filteredEpisodes().length > 0 && showEpisodeList()) {
       <ul class="divide-y divide-base-200 border-t border-base-200">
         @for (ep of filteredEpisodes(); track ep.id) {
-          <li class="flex gap-4 py-3">
-            <!-- The tile is app-media-card with its caption dropped: the episode
-                 badge, missing cross, progress, hover play and watched toggle all
-                 come from the one implementation instead of a lookalike. -->
-            <app-media-card [aspect]="'landscape'"
-              [id]="'episode-row-' + ep.id"
-              [imageUrl]="ep.stillUrl ?? null"
-              [title]="ep.title ?? ('media_detail.ep_no_title' | translate)"
-              [subtitle]="episodeCardSubtitle((ep.airDate | localeDate), ep.runtime)"
-              [topLeftBadge]="episodeBadgeLabel(ep)"
-              [status]="watchedEpisodeIds().has(ep.id) ? 'watched' : (!ep.hasFile ? 'missing' : null)"
-              [progressPercent]="episodeProgress()[ep.id]"
-              [link]="episodeRoute(ep)"
-              [playlistMediaId]="m.id"
-              [playlistEpisodeId]="ep.id"
-              [replaceUrl]="hideControls()"
-              [playable]="ep.hasFile"
-              [interactiveWatched]="ep.hasFile"
-              [clickIntent]="ep.hasFile ? 'play' : 'open'"
-              [hideCaption]="true"
-              [dimmed]="!ep.monitored"
-              (clicked)="ep.hasFile && playEpisode(ep)"
-              (played)="playEpisode(ep)"
-              (watchedToggled)="toggleEpisodeWatched.emit({ episode: ep, watched: $event })"
-            />
+          <!-- Two columns, and only the synopsis's span changes with the
+               breakpoint: full width under the image on a phone, beside it from
+               sm. A grid keeps that to one copy of the text. -->
+          <li class="grid grid-cols-[auto_1fr] gap-x-3 sm:gap-x-4 gap-y-1.5 py-3">
+              <!-- The tile is app-media-card with its caption dropped: the episode
+                   badge, missing cross, progress, hover play and watched toggle all
+                   come from the one implementation instead of a lookalike. -->
+              <app-media-card [aspect]="'landscape'"
+                class="sm:row-span-2"
+                widthClass="shrink-0 w-32 sm:w-48 lg:w-56"
+                [id]="'episode-row-' + ep.id"
+                [imageUrl]="ep.stillUrl ?? null"
+                [title]="ep.title ?? ('media_detail.ep_no_title' | translate)"
+                [subtitle]="episodeCardSubtitle((ep.airDate | localeDate), ep.runtime)"
+                [topLeftBadge]="episodeBadgeLabel(ep)"
+                [status]="watchedEpisodeIds().has(ep.id) ? 'watched' : (!ep.hasFile ? 'missing' : null)"
+                [progressPercent]="episodeProgress()[ep.id]"
+                [link]="episodeRoute(ep)"
+                [playlistMediaId]="m.id"
+                [playlistEpisodeId]="ep.id"
+                [replaceUrl]="hideControls()"
+                [playable]="ep.hasFile"
+                [interactiveWatched]="ep.hasFile"
+                [clickIntent]="ep.hasFile ? 'play' : 'open'"
+                [hideCaption]="true"
+                [dimmed]="!ep.monitored"
+                (clicked)="ep.hasFile && playEpisode(ep)"
+                (played)="playEpisode(ep)"
+                (watchedToggled)="toggleEpisodeWatched.emit({ episode: ep, watched: $event })"
+              />
 
-            <div class="min-w-0 flex-1 flex flex-col gap-1">
-              <div class="flex flex-wrap items-baseline gap-x-2">
+              <div class="min-w-0 flex flex-col gap-0.5 sm:gap-1">
                 <a
                   [routerLink]="episodeRoute(ep)"
                   [replaceUrl]="hideControls()"
-                  class="text-lg font-medium hover:underline"
+                  class="text-base sm:text-lg font-medium hover:underline line-clamp-2"
                 >{{ ep.title ?? ('media_detail.ep_no_title' | translate) }}</a>
                 <span class="text-sm text-base-content/50 tabular-nums">
                   {{ episodeCardSubtitle((ep.airDate | localeDate), ep.runtime) }}
                 </span>
               </div>
-              @if (ep.overview) {
-                <p class="text-base text-base-content/70 line-clamp-2">{{ ep.overview }}</p>
-              } @else {
-                <p class="text-base text-base-content/35 italic">{{ 'media_detail.ep_no_overview' | translate }}</p>
-              }
-            </div>
 
+              @if (ep.overview) {
+                <p class="col-span-2 sm:col-span-1 sm:col-start-2 text-sm sm:text-base text-base-content/70 line-clamp-2">{{ ep.overview }}</p>
+              } @else {
+                <p class="col-span-2 sm:col-span-1 sm:col-start-2 text-sm sm:text-base text-base-content/35 italic">{{ 'media_detail.ep_no_overview' | translate }}</p>
+              }
           </li>
         }
       </ul>
