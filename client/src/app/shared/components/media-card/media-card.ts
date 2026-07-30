@@ -65,6 +65,12 @@ export class MediaCardComponent {
 
   // Layout
   readonly aspect = input<MediaCardAspect>('portrait');
+  /**
+   * Width classes for a landscape card, replacing the scroller-sized default.
+   * Portrait callers already size the host themselves; landscape ones can't,
+   * because the width lives on an inner element.
+   */
+  readonly widthClass = input<string | null>(null);
 
   // Image (override media.posterUrl)
   readonly imageUrl = input<string | null>(null);
@@ -99,6 +105,9 @@ export class MediaCardComponent {
   readonly barPercent = input(100);
   /** Hide the colored status bar entirely. */
   readonly hideStatusBar = input(false);
+  /** Drop the title / subtitle block, for callers that render the caption
+   *  themselves beside the tile rather than under it. */
+  readonly hideCaption = input(false);
 
   // State
   readonly dimmed = input(false);

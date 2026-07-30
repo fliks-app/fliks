@@ -144,6 +144,21 @@ export class MediaInfoHeaderComponent {
   readonly resumeMediaFileId = input<number | undefined>(undefined);
   readonly status = input<string | null>(null);
 
+  /**
+   * `2021 · 42min · Terminé`. Joined rather than separated in the template so
+   * the dot only lands between values the provider actually gave.
+   */
+  readonly metaLine = computed(() => {
+    const parts: string[] = [];
+    const date = this.dateLabel();
+    if (date) parts.push(date);
+    const runtime = this.runtime();
+    if (runtime) parts.push(`${runtime}min`);
+    const status = this.statusLabel();
+    if (status) parts.push(status);
+    return parts.join(' · ');
+  });
+
   /** Translated release status, falling back to the raw provider value. */
   readonly statusLabel = computed(() => {
     const value = this.status();
@@ -291,7 +306,11 @@ export class MediaInfoHeaderComponent {
 
   private readonly loadPlaybackEffect = effect(() => {
     const mediaId = this.mediaId();
-    const episodeId = this.episodeId();
+    // A series page has no episode context of its own, but it does know which
+    // episode its resume button targets. Without this fallback it asked for the
+    // media-level row (episode IS NULL) and showed that position against an
+    // episode-specific label.
+    const episodeId = this.episodeId() ?? this.resumeEpisodeId();
     if (!mediaId) return;
 
     // Watched state: for a series without an episode context, derive from the
