@@ -31,6 +31,23 @@
       }
     </div>
 
+    <!-- Status and genres: the status frames how the episode list reads, and a
+         genre is navigation. Both stay out of the folded details panel. -->
+    @if (statusLabel() || genres().length) {
+      <div class="flex flex-wrap items-center gap-2 mt-2">
+        @if (statusLabel()) {
+          <span class="badge badge-outline">{{ statusLabel() }}</span>
+        }
+        @for (genre of genres(); track genre) {
+          <button
+            type="button"
+            class="badge badge-outline badge-primary hover:bg-primary/15"
+            (click)="navigateToGenre(genre)"
+          >{{ genre }}</button>
+        }
+      </div>
+    }
+
     <ng-container *ngTemplateOutlet="streamInfoBlock"></ng-container>
 
     <!-- Tags (library badge moved up; genres moved to media-info-extra). -->
@@ -242,6 +259,23 @@
           <span class="badge badge-primary badge-outline">{{ libraryName() }}</span>
         }
       </div>
+
+      <!-- Status and genres: the status frames how the episode list reads, and a
+           genre is navigation. Both stay out of the folded details panel. -->
+      @if (statusLabel() || genres().length) {
+        <div class="flex flex-wrap items-center gap-2 mt-2">
+          @if (statusLabel()) {
+            <span class="badge badge-outline">{{ statusLabel() }}</span>
+          }
+          @for (genre of genres(); track genre) {
+            <button
+              type="button"
+              class="badge badge-outline badge-primary hover:bg-primary/15"
+              (click)="navigateToGenre(genre)"
+            >{{ genre }}</button>
+          }
+        </div>
+      }
 
       <ng-container *ngTemplateOutlet="streamInfoBlock"></ng-container>
 

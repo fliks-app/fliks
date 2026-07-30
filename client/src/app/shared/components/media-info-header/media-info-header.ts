@@ -11,7 +11,7 @@ import {
   viewChildren,
 } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import {
@@ -118,6 +118,7 @@ interface AudioTrack {
 })
 export class MediaInfoHeaderComponent {
   private readonly translate = inject(TranslateService);
+  private readonly router = inject(Router);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly trackManager = inject(TrackManagerService);
   readonly navbar = inject(NavbarService);
@@ -142,6 +143,15 @@ export class MediaInfoHeaderComponent {
   readonly resumeEpisodeId = input<number | undefined>(undefined);
   readonly resumeMediaFileId = input<number | undefined>(undefined);
   readonly status = input<string | null>(null);
+
+  /** Translated release status, falling back to the raw provider value. */
+  readonly statusLabel = computed(() => {
+    const value = this.status();
+    if (!value) return '';
+    const key = `media_detail.info_status_${value}`;
+    const t = this.translate.instant(key);
+    return typeof t === 'string' && t !== key ? t : value;
+  });
   readonly monitored = input(true);
   readonly libraryName = input<string | null>(null);
   readonly qualityProfileName = input<string | null>(null);
@@ -531,5 +541,12 @@ export class MediaInfoHeaderComponent {
     return `${(bytes / 1_073_741_824).toFixed(2)} GB`;
   }
 
+
+
+  navigateToGenre(genre: string) {
+    const library = this.libraryName();
+    if (!library) return;
+    void this.router.navigate(['/libraries', library], { queryParams: { genre } });
+  }
 
 }
