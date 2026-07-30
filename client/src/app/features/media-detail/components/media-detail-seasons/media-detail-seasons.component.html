@@ -151,6 +151,7 @@
       </button>
       @for (season of displaySeasons(); track season.id) {
         <app-dropdown-option
+          [imageUrl]="season.posterUrl ?? m.posterUrl"
           [head]="'media_detail.season_number' | translate:{ number: season.seasonNumber }"
           [sub]="(tabEpisodeCount(season) <= 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: tabEpisodeCount(season) }"
           [selected]="season.id === activeSeasonId()"
@@ -176,6 +177,32 @@
   }
 
   @if (selSeason && isSeasonTabVisible(selSeason)) {
+    @if (showSeasonInfo()) {
+      <div class="space-y-2">
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/60">
+          @if (selSeason.airDate) {
+            <span>
+              @if (seasonAirDateIsYearOnly(selSeason)) {
+                {{ selSeason.airDate }}
+              } @else {
+                {{ selSeason.airDate | localeDate:{ dateStyle: 'long' } }}
+              }
+            </span>
+            <span aria-hidden="true">·</span>
+          }
+          <span>
+            {{ (tabEpisodeCount(selSeason) <= 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: tabEpisodeCount(selSeason) } }}
+          </span>
+          @if (seasonWatchedCount(selSeason) > 0) {
+            <span aria-hidden="true">·</span>
+            <span>{{ 'media_detail.season_watched_count' | translate:{ count: seasonWatchedCount(selSeason) } }}</span>
+          }
+        </div>
+        @if (selSeason.overview) {
+          <p class="text-sm text-base-content/80 line-clamp-4">{{ selSeason.overview }}</p>
+        }
+      </div>
+    }
     @if (filteredEpisodes().length === 0 && episodesHasFileOnly() && selSeason.episodes.length > 0) {
       <p class="text-sm text-base-content/50 py-8 text-center">
         {{ 'media_detail.episodes_filter_empty' | translate }}

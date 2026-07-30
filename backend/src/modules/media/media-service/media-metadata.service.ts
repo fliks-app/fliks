@@ -300,6 +300,18 @@ export class MediaMetadataService {
       (dbSeason.episodes ?? []).map((e) => [e.episodeNumber, e]),
     );
 
+    const seasonUpdates: Partial<Season> = {};
+    if (sd.overview && sd.overview !== dbSeason.overview) {
+      seasonUpdates.overview = sd.overview;
+    }
+    if (sd.airDate && sd.airDate.slice(0, 10) !== dbSeason.airDate) {
+      seasonUpdates.airDate = sd.airDate.slice(0, 10);
+    }
+    if (Object.keys(seasonUpdates).length) {
+      await this.seasonRepo.update(dbSeason.id, seasonUpdates);
+      Object.assign(dbSeason, seasonUpdates);
+    }
+
     // 1. Partition into INSERTs and UPDATEs in a single pass.
     type UpdateJob = {
       id: number;

@@ -1,4 +1,13 @@
 <button type="button" class="dropdown-item" [class.text-primary]="selected()">
+  @if (imageUrl()) {
+    <img
+      [src]="imageUrl()! | resolveUrl:'thumb'"
+      class="w-8 h-12 shrink-0 rounded object-cover bg-base-content/10"
+      alt=""
+      loading="lazy"
+      decoding="async"
+    />
+  }
   <span class="flex-1 flex flex-col items-start gap-0 leading-tight text-left">
     <span>{{ head() }}</span>
     @if (sub()) {

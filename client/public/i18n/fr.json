@@ -814,6 +814,7 @@
     "episodes": "Épisodes",
     "episode_count_one": "{{count}} épisode",
     "episode_count_other": "{{count}} épisodes",
+    "season_watched_count": "{{count}} vus",
     "back": "Retour à la liste",
     "request_media": "Demander",
     "request_season": "Demander cette saison",

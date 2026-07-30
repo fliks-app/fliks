@@ -125,6 +125,28 @@ export class MediaDetailSeasonsComponent {
     return filterSeasonEpisodesOnDisk(season, this.episodesHasFileOnly()).length;
   }
 
+  /**
+   * Season header. Skipped on the episode page, where the series synopsis is
+   * already above and a season one would just repeat the context. Needs a
+   * synopsis or an air date to be worth a row: the episode count alone is
+   * already on the picker.
+   */
+  readonly showSeasonInfo = computed(() => {
+    if (this.hideControls()) return false;
+    const s = this.selectedSeason();
+    return !!s && (!!s.overview || !!s.airDate);
+  });
+
+  /** TVDB reports a bare year, which date formatting would widen into a day. */
+  seasonAirDateIsYearOnly(season: Season): boolean {
+    return /^\d{4}$/.test(season.airDate ?? '');
+  }
+
+  seasonWatchedCount(season: Season): number {
+    const watched = this.watchedEpisodeIds();
+    return (season.episodes ?? []).filter((ep) => watched.has(ep.id)).length;
+  }
+
   /** True when at least one episode of the season isn't on disk — the
    *  prerequisite for surfacing a Demander entry. Uses coverage so a season
    *  fully covered by multi-episode files isn't flagged as missing. */

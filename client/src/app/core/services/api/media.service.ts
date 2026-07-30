@@ -72,6 +72,10 @@ export interface Season {
   preferredProvider?: 'tmdb' | 'tvdb' | null;
   /** Season-specific poster (TMDB/TVDB); null → fall back to series poster. */
   posterUrl: string | null;
+  /** Season synopsis; null on providers that don't carry one (TVDB). */
+  overview?: string | null;
+  /** First air date. May be a bare year: that's what TVDB reports. */
+  airDate?: string | null;
   episodes: Episode[];
 }
 
