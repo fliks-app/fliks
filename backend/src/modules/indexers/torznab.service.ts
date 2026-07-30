@@ -54,6 +54,24 @@ function buildTorznabQuery(opts: {
   return parts.join('&');
 }
 
+/** Log-friendly summary of a Torznab query. Never includes the API key. */
+function describeTorznabQuery(url: string): string {
+  let params: URLSearchParams;
+  try {
+    params = new URL(url).searchParams;
+  } catch {
+    return 'search';
+  }
+  const parts = [params.get('t') ?? 'search'];
+  const q = params.get('q');
+  if (q) parts.push(`q="${q}"`);
+  for (const key of ['season', 'ep', 'cat', 'tvdbid', 'imdbid', 'tmdbid']) {
+    const value = params.get(key);
+    if (value) parts.push(`${key}=${value}`);
+  }
+  return parts.join(' ');
+}
+
 function extractInnerXml(block: string, tag: string): string | null {
   const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i');
   const m = block.match(re);
@@ -177,8 +195,10 @@ export class TorznabService {
         ready.push(ix);
       }
     }
+    // Info, not debug: a cooldown is the usual reason a search silently
+    // returns nothing, and the caller only logs the indexers it kept.
     if (skipped.length) {
-      this.log.debug?.(
+      this.log.log(
         `skipping ${skipped.length} indexer(s) in cooldown: ${skipped.join(', ')}`,
       );
     }
@@ -254,12 +274,45 @@ export class TorznabService {
     indexer.capsSearchFallback = false;
   }
 
+  /**
+   * Whether this indexer can serve a search, and the endpoint to hit.
+   * Null means skipped — the reason is logged here so every search path
+   * reports it the same way.
+   */
+  private resolveSearchTarget(
+    indexer: Indexer,
+  ): { baseUrl: string; apiKey: string } | null {
+    if (!indexer.enabled) {
+      this.log.debug(`[${indexer.name}] skipped — indexer disabled`);
+      return null;
+    }
+    if (!indexer.enableSearch) {
+      this.log.debug(`[${indexer.name}] skipped — search disabled`);
+      return null;
+    }
+    const impl = (indexer.implementation || '').toLowerCase();
+    if (!impl.includes('torznab')) {
+      this.log.debug(
+        `[${indexer.name}] skipped — implementation "${indexer.implementation}" is not Torznab`,
+      );
+      return null;
+    }
+    const settings = indexer.settings as { baseUrl?: string; apiKey?: string };
+    const baseUrl = String(settings.baseUrl || '').replace(/\/$/, '');
+    if (!baseUrl) {
+      this.log.warn(`Indexer "${indexer.name}" has no baseUrl`);
+      return null;
+    }
+    return { baseUrl, apiKey: String(settings.apiKey || '') };
+  }
+
   /** Execute a Torznab search URL. Returns results and the Torznab error message if any. */
   private async execSearch(
     url: string,
     queryType: string,
     indexer: Indexer,
   ): Promise<{ results: TorznabRelease[]; torznabError: string | null }> {
+    const query = describeTorznabQuery(url);
     const start = Date.now();
     try {
       const res = await this.throttle.run(indexer, () =>
@@ -283,6 +336,7 @@ export class TorznabService {
             errorMessage: msg,
           }),
         );
+        this.log.warn(`[${indexer.name}] ${query} → ${msg}`);
         return { results: [], torznabError: msg };
       }
       const results = parseTorznabItems(body, indexer);
@@ -294,6 +348,9 @@ export class TorznabService {
           resultCount: results.length,
           errorMessage: null,
         }),
+      );
+      this.log.log(
+        `[${indexer.name}] ${query} → ${results.length} result(s) in ${Date.now() - start}ms`,
       );
       return { results, torznabError: null };
     } catch (e) {
@@ -309,6 +366,7 @@ export class TorznabService {
           errorMessage: msg,
         }),
       );
+      this.log.warn(`[${indexer.name}] ${query} failed: ${msg}`);
       return { results: [], torznabError: msg };
     }
   }
@@ -433,14 +491,9 @@ export class TorznabService {
     season: number,
     externalIds?: { tvdbId?: number | null; imdbId?: string | null },
   ): Promise<TorznabRelease[]> {
-    if (!indexer.enabled || !indexer.enableSearch) return [];
-    const impl = (indexer.implementation || '').toLowerCase();
-    if (!impl.includes('torznab')) return [];
-
-    const settings = indexer.settings as { baseUrl?: string; apiKey?: string };
-    const baseUrl = String(settings.baseUrl || '').replace(/\/$/, '');
-    const apiKey = String(settings.apiKey || '');
-    if (!baseUrl) return [];
+    const target = this.resolveSearchTarget(indexer);
+    if (!target) return [];
+    const { baseUrl, apiKey } = target;
 
     const useTvSearch = indexer.capsTvSearch && !indexer.capsSearchFallback;
     // See comment in searchSeries: text-mode search needs the season tag
@@ -487,14 +540,9 @@ export class TorznabService {
     episode: number,
     externalIds?: { tvdbId?: number | null; imdbId?: string | null },
   ): Promise<TorznabRelease[]> {
-    if (!indexer.enabled || !indexer.enableSearch) return [];
-    const impl = (indexer.implementation || '').toLowerCase();
-    if (!impl.includes('torznab')) return [];
-
-    const settings = indexer.settings as { baseUrl?: string; apiKey?: string };
-    const baseUrl = String(settings.baseUrl || '').replace(/\/$/, '');
-    const apiKey = String(settings.apiKey || '');
-    if (!baseUrl) return [];
+    const target = this.resolveSearchTarget(indexer);
+    if (!target) return [];
+    const { baseUrl, apiKey } = target;
 
     const useTvSearch = indexer.capsTvSearch && !indexer.capsSearchFallback;
     // When using t=search (indexer can't tvsearch, or admin pinned the
@@ -545,29 +593,9 @@ export class TorznabService {
     query: string,
     externalIds?: { imdbId?: string | null; tmdbId?: number | null },
   ): Promise<TorznabRelease[]> {
-    if (!indexer.enabled) {
-      this.log.debug(`[${indexer.name}] skipped — indexer disabled`);
-      return [];
-    }
-    if (!indexer.enableSearch) {
-      this.log.debug(`[${indexer.name}] skipped — search disabled`);
-      return [];
-    }
-    const impl = (indexer.implementation || '').toLowerCase();
-    if (!impl.includes('torznab')) {
-      this.log.debug(
-        `[${indexer.name}] skipped — implementation "${indexer.implementation}" is not Torznab`,
-      );
-      return [];
-    }
-
-    const settings = indexer.settings as { baseUrl?: string; apiKey?: string };
-    const baseUrl = String(settings.baseUrl || '').replace(/\/$/, '');
-    const apiKey = String(settings.apiKey || '');
-    if (!baseUrl) {
-      this.log.warn(`Indexer "${indexer.name}" has no baseUrl`);
-      return [];
-    }
+    const target = this.resolveSearchTarget(indexer);
+    if (!target) return [];
+    const { baseUrl, apiKey } = target;
 
     const useMovieSearch =
       indexer.capsMovieSearch &&
@@ -588,12 +616,7 @@ export class TorznabService {
       'search',
       indexer,
     );
-    if (!torznabError) {
-      this.log.log(
-        `[${indexer.name}] search "${query}" → ${results.length} result(s)`,
-      );
-      return results;
-    }
+    if (!torznabError) return results;
 
     if (useMovieSearch) {
       this.log.warn(

@@ -174,6 +174,16 @@ export class EpisodeDownloadService {
       resolveSearchTitles(media, customQuery);
     const externalIds = { tvdbId: media.tvdbId, imdbId: media.imdbId };
     const ready = this.torznab.filterReadyIndexers(indexers);
+    const label = `"${media.title}" S${String(season.seasonNumber).padStart(2, '0')}E${String(episode.episodeNumber).padStart(2, '0')}`;
+    if (!ready.length) {
+      this.log.warn(
+        `[searchEpisodeReleases] ${label} — no indexer ready (${indexers.length} enabled)`,
+      );
+      return [];
+    }
+    this.log.log(
+      `[searchEpisodeReleases] ${label} — query="${queryTitle}", indexers=[${ready.map((i) => i.name).join(', ')}]`,
+    );
     const batches = await Promise.all(
       ready.map((ix) =>
         this.torznab.searchSeries(
@@ -194,7 +204,8 @@ export class EpisodeDownloadService {
     //     or oddly-named release — let scoring decide), OR
     //   - the season matches AND (episode matches OR it's a season pack
     //     that contains the target episode).
-    const flat = batches.flat().filter((r) => {
+    const raw = batches.flat();
+    const flat = raw.filter((r) => {
       const p = parseSeasonEpisode(r.title);
       if (p.season === null) return true;
       if (p.season !== season.seasonNumber) return false;
@@ -202,6 +213,9 @@ export class EpisodeDownloadService {
       if (p.episode === null) return true;
       return p.episode === episode.episodeNumber;
     });
+    this.log.log(
+      `[searchEpisodeReleases] ${label} — ${raw.length} raw result(s) across ${ready.length} indexer(s), ${flat.length} for this episode`,
+    );
 
     // Season packs need their size scored against the WHOLE season's
     // runtime (sum of episode runtimes), not a single episode — else
@@ -236,6 +250,12 @@ export class EpisodeDownloadService {
     // comment in MovieDownloadService.searchMovieReleases.
     const maxRank = maxAllowedRank(allowed);
     const withinProfile = rowsWithKind.filter((x) => x.row.rank <= maxRank);
+    const accepted = withinProfile.filter(
+      (x) => x.row.rejections.length === 0,
+    ).length;
+    this.log.log(
+      `[searchEpisodeReleases] ${label} — ${withinProfile.length} within profile (rank ≤ ${maxRank}), ${accepted} accepted, ${withinProfile.length - accepted} rejected`,
+    );
 
     // User is asking for ONE episode. Season packs still match, but
     // they download a whole season for a single episode — they should
@@ -497,6 +517,16 @@ export class EpisodeDownloadService {
       resolveSearchTitles(media, customQuery);
     const externalIds = { tvdbId: media.tvdbId, imdbId: media.imdbId };
     const ready = this.torznab.filterReadyIndexers(indexers);
+    const label = `"${media.title}" S${String(season.seasonNumber).padStart(2, '0')}`;
+    if (!ready.length) {
+      this.log.warn(
+        `[searchSeasonReleases] ${label} — no indexer ready (${indexers.length} enabled)`,
+      );
+      return [];
+    }
+    this.log.log(
+      `[searchSeasonReleases] ${label} — query="${searchTitle}", indexers=[${ready.map((i) => i.name).join(', ')}]`,
+    );
     const batches = await Promise.all(
       ready.map((ix) =>
         this.torznab.searchSeasonPack(
@@ -512,11 +542,15 @@ export class EpisodeDownloadService {
     // ignore `season=` and return any release whose title contains
     // the show name. Keep only releases that parse to the requested
     // season (single episodes or full packs alike).
-    const flat = batches.flat().filter((r) => {
+    const raw = batches.flat();
+    const flat = raw.filter((r) => {
       const p = parseSeasonEpisode(r.title);
       if (p.season === null) return true;
       return p.season === season.seasonNumber;
     });
+    this.log.log(
+      `[searchSeasonReleases] ${label} — ${raw.length} raw result(s) across ${ready.length} indexer(s), ${flat.length} for this season`,
+    );
 
     const defaultEpisodeRuntime = media.runtime ?? 45;
     const rowsWithKind = await Promise.all(
@@ -545,6 +579,10 @@ export class EpisodeDownloadService {
     const packs = rowsWithKind
       .filter((x) => x.isPack && x.row.rank <= maxRank)
       .map((x) => x.row);
+    const accepted = packs.filter((r) => r.rejections.length === 0).length;
+    this.log.log(
+      `[searchSeasonReleases] ${label} — ${packs.length} pack(s) within profile (rank ≤ ${maxRank}), ${accepted} accepted, ${packs.length - accepted} rejected`,
+    );
     return sortReleasesByRelevance(packs);
   }
 
