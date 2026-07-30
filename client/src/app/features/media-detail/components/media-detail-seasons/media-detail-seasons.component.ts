@@ -19,6 +19,7 @@ import {
   LucideListChecks,
   LucideListPlus,
   LucidePackage,
+  LucidePlay,
   LucideUserPlus,
   LucideX,
 } from '@lucide/angular';
@@ -49,7 +50,7 @@ import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, UpperCasePipe, LocaleDatePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
+  imports: [TranslateModule, UpperCasePipe, LocaleDatePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideListChecks, LucideListPlus, LucidePackage, LucidePlay, LucideUserPlus, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
@@ -125,18 +126,6 @@ export class MediaDetailSeasonsComponent {
     return filterSeasonEpisodesOnDisk(season, this.episodesHasFileOnly()).length;
   }
 
-  /**
-   * Season header. Skipped on the episode page, where the series synopsis is
-   * already above and a season one would just repeat the context. Needs a
-   * synopsis or an air date to be worth a row: the episode count alone is
-   * already on the picker.
-   */
-  readonly showSeasonInfo = computed(() => {
-    if (this.hideControls()) return false;
-    const s = this.selectedSeason();
-    return !!s && (!!s.overview || !!s.airDate);
-  });
-
   /** TVDB reports a bare year, which date formatting would widen into a day. */
   seasonAirDateIsYearOnly(season: Season): boolean {
     return /^\d{4}$/.test(season.airDate ?? '');
@@ -145,6 +134,27 @@ export class MediaDetailSeasonsComponent {
   seasonWatchedCount(season: Season): number {
     const watched = this.watchedEpisodeIds();
     return (season.episodes ?? []).filter((ep) => watched.has(ep.id)).length;
+  }
+
+  seasonProgressPercent(season: Season): number {
+    const total = this.tabEpisodeCount(season);
+    if (!total) return 0;
+    return Math.min(100, Math.round((this.seasonWatchedCount(season) / total) * 100));
+  }
+
+  /**
+   * Next episode to play in this season. Only offered once the season has been
+   * started: on an untouched season the header's own resume button already
+   * covers it, and the first card is one click away either way.
+   */
+  seasonResumeEpisode(season: Season | null): Episode | null {
+    if (!season || this.seasonWatchedCount(season) === 0) return null;
+    const watched = this.watchedEpisodeIds();
+    return (
+      (season.episodes ?? [])
+        .filter((ep) => ep.hasFile && !watched.has(ep.id))
+        .sort((a, b) => a.episodeNumber - b.episodeNumber)[0] ?? null
+    );
   }
 
   /** True when at least one episode of the season isn't on disk — the
