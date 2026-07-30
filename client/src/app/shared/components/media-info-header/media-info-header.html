@@ -32,7 +32,7 @@
 
     <!-- Genres are navigation, so they stay out of the folded details panel. -->
     @if (genres().length) {
-      <div class="flex flex-wrap items-center gap-x-1 mt-1 pt-1 font-semibold text-base-content/80">
+      <div class="flex flex-wrap items-center gap-x-1 mt-1 pt-1 font-medium text-base-content/80">
         @for (genre of genres(); track genre; let last = $last) {
           <span><button type="button" class="cursor-pointer hover:underline rounded" (click)="navigateToGenre(genre)">{{ genre }}</button>@if (!last){,}</span>
         }
@@ -252,7 +252,7 @@
 
       <!-- Genres are navigation, so they stay out of the folded details panel. -->
       @if (genres().length) {
-        <div class="flex flex-wrap items-center gap-x-1 mt-1 pt-1 font-semibold text-base-content/80">
+        <div class="flex flex-wrap items-center gap-x-1 mt-1 pt-1 font-medium text-base-content/80">
           @for (genre of genres(); track genre; let last = $last) {
             <span><button type="button" class="cursor-pointer hover:underline rounded" (click)="navigateToGenre(genre)">{{ genre }}</button>@if (!last){,}</span>
           }
