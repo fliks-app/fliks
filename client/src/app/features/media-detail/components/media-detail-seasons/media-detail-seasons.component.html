@@ -274,9 +274,19 @@
                   <svg lucideFilm class="h-6 w-6" [strokeWidth]="1.5" aria-hidden="true"></svg>
                 </span>
               }
-              <span
-                class="absolute top-1 start-1 rounded bg-base-300/85 px-1.5 text-sm tabular-nums"
-              >{{ episodeBadgeLabel(ep) }}</span>
+              <!-- Same overlay language as app-media-card: red cross for a
+                   missing file, then the episode number. -->
+              <div class="absolute top-2 left-2 z-10 flex items-center gap-1">
+                @if (!ep.hasFile) {
+                  <svg
+                    lucideCircleX
+                    class="h-5 w-5 text-error drop-shadow"
+                    [attr.aria-label]="'media_card.missing_files' | translate"
+                    [attr.title]="'media_card.missing_files' | translate"
+                  ></svg>
+                }
+                <span class="badge badge-neutral font-mono">{{ episodeBadgeLabel(ep) }}</span>
+              </div>
               @if (episodeProgress()[ep.id]) {
                 <span class="absolute bottom-0 inset-x-0 h-1 bg-base-300/60">
                   <span class="block h-full bg-primary" [style.width.%]="episodeProgress()[ep.id]"></span>
@@ -324,8 +334,6 @@
                 >
                   <svg lucideCheck class="h-4 w-4"></svg>
                 </button>
-              } @else {
-                <span class="badge badge-ghost badge-sm">{{ 'media_card.missing_files' | translate }}</span>
               }
             </div>
           </li>
