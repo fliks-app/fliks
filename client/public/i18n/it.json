@@ -811,7 +811,6 @@
     "episode_count_one": "{{count}} episodio",
     "episode_count_other": "{{count}} episodi",
     "season_watched_count": "{{count}} visti",
-    "season_resume": "Riprendi E{{episode}}",
     "episode_view_grid": "Vista a schede",
     "episode_view_list": "Vista a elenco",
     "back": "Torna all'elenco",

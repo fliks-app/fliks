@@ -811,7 +811,6 @@
     "episode_count_one": "{{count}} Episode",
     "episode_count_other": "{{count}} Episoden",
     "season_watched_count": "{{count}} gesehen",
-    "season_resume": "E{{episode}} fortsetzen",
     "episode_view_grid": "Kartenansicht",
     "episode_view_list": "Listenansicht",
     "back": "Zurück zur Liste",

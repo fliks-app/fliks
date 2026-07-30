@@ -811,7 +811,6 @@
     "episode_count_one": "{{count}} episodio",
     "episode_count_other": "{{count}} episodios",
     "season_watched_count": "{{count}} vistos",
-    "season_resume": "Reanudar E{{episode}}",
     "episode_view_grid": "Vista de tarjetas",
     "episode_view_list": "Vista de lista",
     "back": "Volver a la lista",
