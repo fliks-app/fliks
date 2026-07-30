@@ -1,14 +1,16 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  DestroyRef,
   ElementRef,
+  computed,
   signal,
   inject,
   OnInit,
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { LucideX } from '@lucide/angular';
+import { LucideSnowflake, LucideX } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
@@ -16,10 +18,11 @@ import {
   IndexerRow,
 } from '../../../core/services/api/indexers-api.service';
 import { ProfilesService } from '../../../core/services/api/profiles.service';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-indexers-settings',
-  imports: [FormsModule, LucideX, TranslateModule],
+  imports: [FormsModule, LucideSnowflake, LucideX, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './indexers.html',
 })
@@ -28,6 +31,7 @@ export class IndexersSettingsComponent implements OnInit {
   private readonly profilesApi = inject(ProfilesService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly toast = inject(ToastService);
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
   private readonly statsDialog = viewChild<ElementRef<HTMLDialogElement>>('statsDialog');
 
@@ -56,6 +60,95 @@ export class IndexersSettingsComponent implements OnInit {
   readonly statsData = signal<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>([]);
   readonly statsIndexerName = signal('');
   readonly languages = signal<{ id: number; name: string; isoCode: string }[]>([]);
+
+  // ── Cooldowns ──
+  private readonly cooldownDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('cooldownDialog');
+  /** Ticks so countdowns tick down and expired windows drop without a refetch. */
+  private readonly now = signal(Date.now());
+  readonly cooldownRow = signal<IndexerRow | null>(null);
+  readonly resettingCooldown = signal(false);
+
+  /** Rows whose window is still open, recomputed against the local clock. */
+  readonly cooledDown = computed(() => {
+    const now = this.now();
+    return this.rows().filter(
+      (ix) => ix.cooldown && Date.parse(ix.cooldown.until) > now,
+    );
+  });
+  readonly hasCooldowns = computed(() => this.cooledDown().length > 0);
+
+  constructor() {
+    const timer = setInterval(() => this.now.set(Date.now()), 5_000);
+    inject(DestroyRef).onDestroy(() => clearInterval(timer));
+  }
+
+  isCooledDown(ix: IndexerRow): boolean {
+    return !!ix.cooldown && Date.parse(ix.cooldown.until) > this.now();
+  }
+
+  /** Remaining window as `1 h 05 min`, `4 min 12 s`, `38 s`. */
+  cooldownRemaining(ix: IndexerRow): string {
+    if (!ix.cooldown) return '';
+    const total = Math.max(
+      0,
+      Math.round((Date.parse(ix.cooldown.until) - this.now()) / 1000),
+    );
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    if (h) return `${h} h ${String(m).padStart(2, '0')} min`;
+    if (m) return `${m} min ${String(s).padStart(2, '0')} s`;
+    return `${s} s`;
+  }
+
+  cooldownExpiresAt(ix: IndexerRow): string {
+    return ix.cooldown ? new Date(ix.cooldown.until).toLocaleTimeString() : '';
+  }
+
+  openCooldown(ix: IndexerRow) {
+    this.cooldownRow.set(ix);
+    this.cooldownDialog()?.nativeElement.showModal();
+  }
+
+  closeCooldown() {
+    this.cooldownDialog()?.nativeElement.close();
+  }
+
+  async resetCooldown(ix: IndexerRow) {
+    this.resettingCooldown.set(true);
+    try {
+      await this.api.clearCooldown(ix.id);
+      this.closeCooldown();
+      await this.reloadAll();
+      this.toast.success(
+        this.translate.instant('settings.indexers.cooldown_reset_done', {
+          name: ix.name,
+        }),
+      );
+    } catch {
+      // handled by global error interceptor
+    } finally {
+      this.resettingCooldown.set(false);
+    }
+  }
+
+  async resetAllCooldowns() {
+    this.resettingCooldown.set(true);
+    try {
+      const { cleared } = await this.api.clearAllCooldowns();
+      await this.reloadAll();
+      this.toast.success(
+        this.translate.instant('settings.indexers.cooldown_reset_all_done', {
+          count: cleared,
+        }),
+      );
+    } catch {
+      // handled by global error interceptor
+    } finally {
+      this.resettingCooldown.set(false);
+    }
+  }
 
   ngOnInit() {
     this.reloadAll();

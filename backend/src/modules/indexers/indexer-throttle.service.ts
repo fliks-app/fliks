@@ -21,6 +21,16 @@ import { Indexer } from './entities/indexer.entity';
  *      15min → 1h → 6h, at most one step per elapsed window. Resets on
  *      success.
  */
+/** Why an indexer is being skipped, and until when. */
+export interface IndexerCooldown {
+  until: number;
+  reason: 'rate-limit' | 'failures';
+  /** Consecutive failures that produced the window (failure backoff only). */
+  failureCount?: number;
+  /** Last error text or Retry-After value, when the caller had one. */
+  detail?: string;
+}
+
 @Injectable()
 export class IndexerThrottle {
   private readonly log = new Logger(IndexerThrottle.name);
@@ -37,7 +47,7 @@ export class IndexerThrottle {
    *  only by failure backoff and Retry-After, never by routine request
    *  spacing. Lets searches skip a backing-off indexer instead of queueing
    *  behind its full cooldown. */
-  private cooldownUntil = new Map<number, number>();
+  private cooldownUntil = new Map<number, IndexerCooldown>();
 
   /** Queue `fn` against `indexer`. Returns whatever `fn` resolves to.
    *  Rejections propagate untouched (so callers can pattern-match on
@@ -77,7 +87,10 @@ export class IndexerThrottle {
   setRetryAfter(indexer: Indexer, headerValue: string | undefined): void {
     const ms = parseRetryAfter(headerValue);
     if (ms <= 0) return;
-    this.bumpCooldown(indexer.id, Date.now() + ms);
+    this.bumpCooldown(indexer.id, Date.now() + ms, {
+      reason: 'rate-limit',
+      detail: headerValue?.trim(),
+    });
     this.log.warn(
       `[${indexer.name}] Retry-After honoured — next request in ${Math.round(ms / 1000)}s`,
     );
@@ -88,13 +101,17 @@ export class IndexerThrottle {
    *  arriving inside an open cooldown belong to the outage that opened it, so
    *  the ladder tracks how long an indexer has been broken rather than how
    *  many requests hit it. */
-  notifyFailure(indexer: Indexer): void {
+  notifyFailure(indexer: Indexer, detail?: string): void {
     if (this.cooldownRemainingMs(indexer.id) > 0) return;
     const n = (this.failureCount.get(indexer.id) ?? 0) + 1;
     this.failureCount.set(indexer.id, n);
     const cooldownMs = backoffFor(n);
     if (cooldownMs <= 0) return;
-    this.bumpCooldown(indexer.id, Date.now() + cooldownMs);
+    this.bumpCooldown(indexer.id, Date.now() + cooldownMs, {
+      reason: 'failures',
+      failureCount: n,
+      detail,
+    });
     this.log.warn(
       `[${indexer.name}] consecutive failure #${n} — cooldown ${Math.round(cooldownMs / 1000)}s`,
     );
@@ -110,19 +127,55 @@ export class IndexerThrottle {
    *  ready). Routine request-delay spacing is deliberately excluded so a
    *  healthy indexer queried seconds ago still reads as ready. */
   cooldownRemainingMs(indexerId: number): number {
-    const until = this.cooldownUntil.get(indexerId) ?? 0;
+    const until = this.cooldownUntil.get(indexerId)?.until ?? 0;
     return Math.max(0, until - Date.now());
+  }
+
+  /** The live cooldown for an indexer, or null when it's ready. */
+  getCooldown(indexerId: number): IndexerCooldown | null {
+    const entry = this.cooldownUntil.get(indexerId);
+    if (!entry || entry.until <= Date.now()) return null;
+    return entry;
+  }
+
+  /**
+   * Lift a penalty window. Clears the queue gate too: `bumpCooldown` pushed
+   * both, so leaving `nextAllowedAt` set would make the next request sleep the
+   * window we just claimed to have cancelled. Returns false when there was
+   * nothing to lift.
+   */
+  clearCooldown(indexerId: number): boolean {
+    const had = this.cooldownRemainingMs(indexerId) > 0;
+    this.cooldownUntil.delete(indexerId);
+    this.failureCount.delete(indexerId);
+    this.nextAllowedAt.delete(indexerId);
+    return had;
+  }
+
+  /** Lift every penalty window. Returns how many indexers were in cooldown. */
+  clearAllCooldowns(): number {
+    let cleared = 0;
+    for (const id of [...this.cooldownUntil.keys()]) {
+      if (this.clearCooldown(id)) cleared++;
+    }
+    return cleared;
   }
 
   /** Push a backpressure window onto an indexer: bumps both the queue's
    *  earliest-start gate (so a request that does get queued still waits) and
    *  the skip gate (so searches can drop it from the fan-out). Monotonic —
    *  only ever extends the window, never shortens it. */
-  private bumpCooldown(indexerId: number, until: number): void {
+  private bumpCooldown(
+    indexerId: number,
+    until: number,
+    info: Omit<IndexerCooldown, 'until'>,
+  ): void {
     const curNext = this.nextAllowedAt.get(indexerId) ?? 0;
     if (until > curNext) this.nextAllowedAt.set(indexerId, until);
-    const curCooldown = this.cooldownUntil.get(indexerId) ?? 0;
-    if (until > curCooldown) this.cooldownUntil.set(indexerId, until);
+    const curCooldown = this.cooldownUntil.get(indexerId)?.until ?? 0;
+    if (until > curCooldown) {
+      this.cooldownUntil.set(indexerId, { until, ...info });
+    }
   }
 }
 

@@ -1569,6 +1569,7 @@
       "col_name": "Nome",
       "col_priority": "Prioridade",
       "col_enabled": "Ativo",
+      "col_status": "Estado",
       "actions": "Ações",
       "edit": "Editar",
       "delete": "Eliminar",
@@ -1604,7 +1605,19 @@
       "stats_queries": "Pedidos",
       "stats_avg_time": "Tempo méd.",
       "stats_results": "Resultados",
-      "stats_errors": "Erros"
+      "stats_errors": "Erros",
+      "cooldown_reset_all": "Reiniciar todos os cooldowns ({{count}})",
+      "cooldown_reset": "Reiniciar o cooldown",
+      "cooldown_badge_title": "Em cooldown — clique para ver os detalhes",
+      "cooldown_title": "{{name}} está em cooldown",
+      "cooldown_reason_rate_limit": "O indexador pediu para abrandar (limite de pedidos). Os pedidos estão suspensos até terminar o prazo indicado.",
+      "cooldown_reason_failures": "O indexador falhou {{count}} vez/vezes seguidas. Cada nova falha alarga a pausa, de 30 segundos até 6 horas.",
+      "cooldown_remaining": "Tempo restante",
+      "cooldown_expires_at": "Expira às",
+      "cooldown_detail": "Último erro",
+      "cooldown_reset_hint": "Reiniciar limpa a pausa e o contador de falhas. Se o indexador continuar inacessível, a próxima pesquisa abrirá um novo prazo.",
+      "cooldown_reset_done": "Cooldown levantado em {{name}}",
+      "cooldown_reset_all_done": "{{count}} cooldown(s) levantado(s)"
     },
     "quality_profiles": {
       "title": "Perfis de qualidade",
