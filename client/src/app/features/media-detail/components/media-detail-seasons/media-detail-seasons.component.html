@@ -30,7 +30,7 @@
         </button>
       </div>
     }
-    <app-dropdown-menu placement="bottom-start" [class]="canSwitchEpisodeView() ? 'order-last' : 'order-last ms-auto'">
+    <app-dropdown-menu placement="bottom-end" [class]="canSwitchEpisodeView() ? 'order-last' : 'order-last ms-auto'">
       <button trigger type="button" class="btn btn-ghost btn-circle shrink-0">
         <svg lucideEllipsisVertical class="h-5 w-5"></svg>
       </button>
@@ -259,7 +259,7 @@
             <a
               [routerLink]="episodeRoute(ep)"
               [replaceUrl]="hideControls()"
-              class="relative block w-32 sm:w-40 shrink-0 aspect-video rounded-lg overflow-hidden bg-base-200"
+              class="relative block w-40 sm:w-56 shrink-0 aspect-video rounded-lg overflow-hidden bg-base-200"
             >
               @if (ep.stillUrl) {
                 <img
@@ -271,7 +271,7 @@
                 />
               } @else {
                 <span class="flex items-center justify-center w-full h-full text-base-content/20">
-                  <svg lucideFilm class="h-6 w-6" [strokeWidth]="1.5" aria-hidden="true"></svg>
+                  <svg lucideFilm class="h-8 w-8" [strokeWidth]="1.5" aria-hidden="true"></svg>
                 </span>
               }
               <!-- Same overlay language as app-media-card: red cross for a
