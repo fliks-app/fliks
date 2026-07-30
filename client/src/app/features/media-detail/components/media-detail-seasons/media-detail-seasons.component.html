@@ -227,22 +227,6 @@
           }
         </div>
 
-        @if (seasonWatchedCount(selSeason) > 0) {
-          <div class="flex items-center gap-3">
-            <progress
-              class="progress progress-primary h-1 w-full max-w-xs"
-              [value]="seasonProgressPercent(selSeason)"
-              max="100"
-            ></progress>
-            @if (seasonResumeEpisode(selSeason); as next) {
-              <button type="button" class="btn btn-primary btn-xs shrink-0" (click)="playEpisode(next)">
-                <svg lucidePlay class="h-3 w-3 shrink-0" aria-hidden="true"></svg>
-                {{ 'media_detail.season_resume' | translate:{ episode: next.episodeNumber } }}
-              </button>
-            }
-          </div>
-        }
-
         @if (selSeason.overview) {
           <p class="text-sm text-base-content/80 line-clamp-4">{{ selSeason.overview }}</p>
         }

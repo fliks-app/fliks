@@ -189,27 +189,6 @@ export class MediaDetailSeasonsComponent {
     return parts.join(' · ');
   }
 
-  seasonProgressPercent(season: Season): number {
-    const total = this.tabEpisodeCount(season);
-    if (!total) return 0;
-    return Math.min(100, Math.round((this.seasonWatchedCount(season) / total) * 100));
-  }
-
-  /**
-   * Next episode to play in this season. Only offered once the season has been
-   * started: on an untouched season the header's own resume button already
-   * covers it, and the first card is one click away either way.
-   */
-  seasonResumeEpisode(season: Season | null): Episode | null {
-    if (!season || this.seasonWatchedCount(season) === 0) return null;
-    const watched = this.watchedEpisodeIds();
-    return (
-      (season.episodes ?? [])
-        .filter((ep) => ep.hasFile && !watched.has(ep.id))
-        .sort((a, b) => a.episodeNumber - b.episodeNumber)[0] ?? null
-    );
-  }
-
   /** True when at least one episode of the season isn't on disk — the
    *  prerequisite for surfacing a Demander entry. Uses coverage so a season
    *  fully covered by multi-episode files isn't flagged as missing. */
