@@ -294,7 +294,7 @@
                   @if (clampedOverviews().has(ep.id) || expandedOverviews().has(ep.id)) {
                     <button
                       type="button"
-                      class="link link-primary no-underline hover:underline text-sm mt-0.5 cursor-pointer"
+                      class="block ms-auto link link-primary no-underline hover:underline text-sm mt-0.5 cursor-pointer"
                       (click)="toggleEpisodeOverview(ep.id)"
                     >
                       {{ (expandedOverviews().has(ep.id) ? 'common.show_less' : 'common.show_more') | translate }}
