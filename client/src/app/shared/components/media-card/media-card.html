@@ -148,6 +148,7 @@
   </figure>
 
   <!-- Title below -->
+  @if (!hideCaption()) {
   <div class="pt-1.5">
     @if (_link()) {
       <a [routerLink]="_link()" [state]="_navState()" [replaceUrl]="replaceUrl()" class="hover:underline" [attr.tabindex]="innerTabindex" (pointerdown)="onAnchorPointerdown()" (keydown.enter)="onAnchorPointerdown()">
@@ -166,5 +167,6 @@
       }
     }
   </div>
+  }
 
 </div>

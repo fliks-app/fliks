@@ -99,6 +99,9 @@ export class MediaCardComponent {
   readonly barPercent = input(100);
   /** Hide the colored status bar entirely. */
   readonly hideStatusBar = input(false);
+  /** Drop the title / subtitle block, for callers that render the caption
+   *  themselves beside the tile rather than under it. */
+  readonly hideCaption = input(false);
 
   // State
   readonly dimmed = input(false);

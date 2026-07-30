@@ -12,20 +12,17 @@ import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   LucideCheck,
-  LucideCircleX,
   LucideClipboardList,
   LucideDownload,
   LucideEllipsisVertical,
   LucideEye,
   LucideEyeOff,
-  LucideFilm,
   LucideHeart,
   LucideLayoutGrid,
   LucideList,
   LucideListChecks,
   LucideListPlus,
   LucidePackage,
-  LucidePlay,
   LucideUserPlus,
   LucideX,
 } from '@lucide/angular';
@@ -52,7 +49,6 @@ import { AddToPlaylistService } from '../../../../core/services/add-to-playlist.
 import { TvService } from '../../../../core/services/tv.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
-import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
 
 const LS_EPISODE_VIEW = 'fliks.mediaDetail.episodeView';
 
@@ -70,7 +66,7 @@ function readEpisodeViewFromStorage(): EpisodeView {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, UpperCasePipe, RouterLink, LocaleDatePipe, ResolveUrlPipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, LucideCheck, LucideCircleX, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideFilm, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucidePlay, LucideUserPlus, LucideX],
+  imports: [TranslateModule, UpperCasePipe, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
