@@ -66,3 +66,75 @@ describe('IndexerThrottle cooldown gate', () => {
     expect(t.cooldownRemainingMs(1)).toBe(0);
   });
 });
+
+describe('IndexerThrottle cooldown reporting', () => {
+  it('reports the failure reason and count', () => {
+    const t = new IndexerThrottle();
+    t.notifyFailure(indexer(), 'ECONNREFUSED');
+    expect(t.getCooldown(1)).toMatchObject({
+      reason: 'failures',
+      failureCount: 1,
+      detail: 'ECONNREFUSED',
+    });
+  });
+
+  it('reports the rate-limit reason with the header value', () => {
+    const t = new IndexerThrottle();
+    t.setRetryAfter(indexer(), '120');
+    expect(t.getCooldown(1)).toMatchObject({
+      reason: 'rate-limit',
+      detail: '120',
+    });
+  });
+
+  it('reports nothing once the window has elapsed', () => {
+    jest.useFakeTimers();
+    try {
+      const t = new IndexerThrottle();
+      t.notifyFailure(indexer());
+      jest.advanceTimersByTime(30_001);
+      expect(t.getCooldown(1)).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe('IndexerThrottle cooldown reset', () => {
+  it('lifts the window and restarts the failure ladder', () => {
+    const t = new IndexerThrottle();
+    t.notifyFailure(indexer());
+    expect(t.clearCooldown(1)).toBe(true);
+    expect(t.cooldownRemainingMs(1)).toBe(0);
+    // Ladder restarted: the next failure is the 30s step again, not 2min.
+    t.notifyFailure(indexer());
+    expect(t.cooldownRemainingMs(1)).toBeLessThanOrEqual(30_000);
+  });
+
+  it('lets a request run immediately after a reset', async () => {
+    const t = new IndexerThrottle();
+    t.setRetryAfter(indexer(), '3600');
+    t.clearCooldown(1);
+    // The queue gate was pushed to the same instant as the skip gate; if the
+    // reset left it set, this call would sleep an hour instead of running.
+    const ran = await Promise.race([
+      t.run(indexer(), async () => 'ok'),
+      new Promise((r) => setTimeout(() => r('timeout'), 200)),
+    ]);
+    expect(ran).toBe('ok');
+  });
+
+  it('reports false when there was nothing to lift', () => {
+    const t = new IndexerThrottle();
+    expect(t.clearCooldown(1)).toBe(false);
+  });
+
+  it('counts only the indexers actually in cooldown', () => {
+    const t = new IndexerThrottle();
+    t.notifyFailure(indexer({ id: 1 }));
+    t.notifyFailure(indexer({ id: 2, name: 'other' }));
+    t.clearCooldown(2);
+    expect(t.clearAllCooldowns()).toBe(1);
+    expect(t.cooldownRemainingMs(1)).toBe(0);
+  });
+});

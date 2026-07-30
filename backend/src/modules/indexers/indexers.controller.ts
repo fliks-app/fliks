@@ -49,6 +49,19 @@ export class IndexersController {
     return this.indexersService.findAll();
   }
 
+  /** Declared before `:id` routes — `cooldowns` would otherwise hit ParseIntPipe. */
+  @Delete('cooldowns')
+  @CheckPolicies((ability) => ability.can(Action.Update, Indexer))
+  clearAllCooldowns() {
+    return this.indexersService.clearAllCooldowns();
+  }
+
+  @Delete(':id/cooldown')
+  @CheckPolicies((ability) => ability.can(Action.Update, Indexer))
+  clearCooldown(@Param('id', ParseIntPipe) id: number) {
+    return this.indexersService.clearCooldown(id);
+  }
+
   @Get(':id')
   @CheckPolicies((ability) => ability.can(Action.Read, Indexer))
   findOne(@Param('id', ParseIntPipe) id: number) {

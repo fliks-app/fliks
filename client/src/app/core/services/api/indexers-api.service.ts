@@ -2,6 +2,16 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
+/** Live throttle state: why the indexer is being skipped, and until when. */
+export interface IndexerCooldown {
+  reason: 'rate-limit' | 'failures';
+  remainingMs: number;
+  /** ISO timestamp — the client recomputes the countdown from it. */
+  until: string;
+  failureCount?: number;
+  detail?: string;
+}
+
 export interface IndexerRow {
   id: number;
   name: string;
@@ -12,6 +22,8 @@ export interface IndexerRow {
   priority: number;
   requestDelay: number;
   enabled: boolean;
+  /** Only the list endpoint reports it; create/update responses carry none. */
+  cooldown?: IndexerCooldown | null;
 }
 
 export interface CreateIndexerBody {
@@ -65,6 +77,20 @@ export class IndexersApiService {
         '/api/indexers/test-connection',
         body,
       ),
+    );
+  }
+
+  /** Lift the throttle window on one indexer. */
+  clearCooldown(id: number) {
+    return firstValueFrom(
+      this.http.delete<{ cleared: boolean }>(`/api/indexers/${id}/cooldown`),
+    );
+  }
+
+  /** Lift every throttle window. */
+  clearAllCooldowns() {
+    return firstValueFrom(
+      this.http.delete<{ cleared: number }>('/api/indexers/cooldowns'),
     );
   }
 

@@ -258,7 +258,7 @@ export class TorznabService {
       );
     } catch (e) {
       this.maybeHandleRateLimit(indexer, e);
-      this.throttle.notifyFailure(indexer);
+      this.throttle.notifyFailure(indexer, (e as Error).message);
       this.log.warn(
         `[${indexer.name}] caps fetch failed: ${(e as Error).message}`,
       );
@@ -355,7 +355,7 @@ export class TorznabService {
       return { results, torznabError: null };
     } catch (e) {
       this.maybeHandleRateLimit(indexer, e);
-      this.throttle.notifyFailure(indexer);
+      this.throttle.notifyFailure(indexer, (e as Error).message);
       const msg = (e as Error).message;
       void this.statRepo.save(
         this.statRepo.create({
@@ -467,7 +467,7 @@ export class TorznabService {
       return results;
     } catch (e) {
       this.maybeHandleRateLimit(indexer, e);
-      this.throttle.notifyFailure(indexer);
+      this.throttle.notifyFailure(indexer, (e as Error).message);
       void this.statRepo.save(
         this.statRepo.create({
           indexer,

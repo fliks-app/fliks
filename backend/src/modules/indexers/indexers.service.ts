@@ -5,7 +5,19 @@ import { Indexer } from './entities/indexer.entity';
 import { CreateIndexerDto } from './dto/create-indexer.dto';
 import { UpdateIndexerDto } from './dto/update-indexer.dto';
 import { TorznabService } from './torznab.service';
+import { IndexerThrottle } from './indexer-throttle.service';
 import { TestIndexerConnectionDto } from './dto/test-indexer-connection.dto';
+
+/** An indexer plus its live throttle state, as the settings page needs it. */
+export type IndexerWithCooldown = Indexer & {
+  cooldown: {
+    reason: 'rate-limit' | 'failures';
+    remainingMs: number;
+    until: string;
+    failureCount?: number;
+    detail?: string;
+  } | null;
+};
 
 @Injectable()
 export class IndexersService {
@@ -13,6 +25,7 @@ export class IndexersService {
     @InjectRepository(Indexer)
     private readonly indexerRepo: Repository<Indexer>,
     private readonly torznab: TorznabService,
+    private readonly throttle: IndexerThrottle,
   ) {}
 
   async testConnection(
@@ -53,10 +66,35 @@ export class IndexersService {
     return saved;
   }
 
-  findAll(): Promise<Indexer[]> {
-    return this.indexerRepo.find({
+  async findAll(): Promise<IndexerWithCooldown[]> {
+    const rows = await this.indexerRepo.find({
       order: { priority: 'ASC', id: 'ASC' },
     });
+    return rows.map((ix) => {
+      const cd = this.throttle.getCooldown(ix.id);
+      return Object.assign(ix, {
+        cooldown: cd
+          ? {
+              reason: cd.reason,
+              remainingMs: Math.max(0, cd.until - Date.now()),
+              until: new Date(cd.until).toISOString(),
+              failureCount: cd.failureCount,
+              detail: cd.detail,
+            }
+          : null,
+      });
+    });
+  }
+
+  /** Lift the throttle window on one indexer. */
+  async clearCooldown(id: number): Promise<{ cleared: boolean }> {
+    await this.findOne(id);
+    return { cleared: this.throttle.clearCooldown(id) };
+  }
+
+  /** Lift every throttle window. */
+  clearAllCooldowns(): { cleared: number } {
+    return { cleared: this.throttle.clearAllCooldowns() };
   }
 
   async findOne(id: number): Promise<Indexer> {

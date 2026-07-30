@@ -1614,7 +1614,19 @@
       "stats_queries": "Queries",
       "stats_avg_time": "Avg. time",
       "stats_results": "Results",
-      "stats_errors": "Errors"
+      "stats_errors": "Errors",
+      "cooldown_reset_all": "Reset all cooldowns ({{count}})",
+      "cooldown_reset": "Reset cooldown",
+      "cooldown_badge_title": "In cooldown — click for details",
+      "cooldown_title": "{{name}} is in cooldown",
+      "cooldown_reason_rate_limit": "The indexer asked us to slow down (rate limit). Requests are paused until the window it gave us has elapsed.",
+      "cooldown_reason_failures": "The indexer failed {{count}} time(s) in a row. Each further failure widens the pause, from 30 seconds up to 6 hours.",
+      "cooldown_remaining": "Remaining",
+      "cooldown_expires_at": "Expires at",
+      "cooldown_detail": "Last error",
+      "cooldown_reset_hint": "Resetting clears the pause and the failure counter. If the indexer is still unreachable, the next search will open a new window.",
+      "cooldown_reset_done": "Cooldown lifted on {{name}}",
+      "cooldown_reset_all_done": "{{count}} cooldown(s) lifted"
     },
     "quality_profiles": {
       "title": "Quality profiles",

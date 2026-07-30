@@ -1604,7 +1604,19 @@
       "stats_queries": "Richieste",
       "stats_avg_time": "Tempo med.",
       "stats_results": "Risultati",
-      "stats_errors": "Errori"
+      "stats_errors": "Errori",
+      "cooldown_reset_all": "Reimposta tutti i cooldown ({{count}})",
+      "cooldown_reset": "Reimposta il cooldown",
+      "cooldown_badge_title": "In cooldown — clicca per i dettagli",
+      "cooldown_title": "{{name}} è in cooldown",
+      "cooldown_reason_rate_limit": "L'indexer ha chiesto di rallentare (limite di richieste). Le richieste sono sospese fino allo scadere della finestra indicata.",
+      "cooldown_reason_failures": "L'indexer ha fallito {{count}} volta/volte di seguito. Ogni ulteriore errore allunga la pausa, da 30 secondi fino a 6 ore.",
+      "cooldown_remaining": "Tempo rimanente",
+      "cooldown_expires_at": "Scade alle",
+      "cooldown_detail": "Ultimo errore",
+      "cooldown_reset_hint": "La reimpostazione azzera la pausa e il contatore degli errori. Se l'indexer resta irraggiungibile, la prossima ricerca aprirà una nuova finestra.",
+      "cooldown_reset_done": "Cooldown rimosso su {{name}}",
+      "cooldown_reset_all_done": "{{count}} cooldown rimossi"
     },
     "quality_profiles": {
       "title": "Profili di qualità",

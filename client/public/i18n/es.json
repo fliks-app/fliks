@@ -1604,7 +1604,19 @@
       "stats_queries": "Peticiones",
       "stats_avg_time": "Tiempo medio",
       "stats_results": "Resultados",
-      "stats_errors": "Errores"
+      "stats_errors": "Errores",
+      "cooldown_reset_all": "Restablecer todos los cooldowns ({{count}})",
+      "cooldown_reset": "Restablecer el cooldown",
+      "cooldown_badge_title": "En cooldown — haz clic para ver los detalles",
+      "cooldown_title": "{{name}} está en cooldown",
+      "cooldown_reason_rate_limit": "El indexador pidió reducir el ritmo (límite de peticiones). Las consultas están en pausa hasta que termine el plazo indicado.",
+      "cooldown_reason_failures": "El indexador falló {{count}} vez/veces seguidas. Cada nuevo fallo alarga la pausa, de 30 segundos hasta 6 horas.",
+      "cooldown_remaining": "Tiempo restante",
+      "cooldown_expires_at": "Expira a las",
+      "cooldown_detail": "Último error",
+      "cooldown_reset_hint": "Restablecer borra la pausa y el contador de fallos. Si el indexador sigue inaccesible, la próxima búsqueda abrirá un plazo nuevo.",
+      "cooldown_reset_done": "Cooldown retirado en {{name}}",
+      "cooldown_reset_all_done": "{{count}} cooldown(s) retirado(s)"
     },
     "quality_profiles": {
       "title": "Perfiles de calidad",

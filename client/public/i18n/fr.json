@@ -1614,7 +1614,19 @@
       "stats_queries": "Requêtes",
       "stats_avg_time": "Temps moy.",
       "stats_results": "Résultats",
-      "stats_errors": "Erreurs"
+      "stats_errors": "Erreurs",
+      "cooldown_reset_all": "Réinitialiser tous les cooldowns ({{count}})",
+      "cooldown_reset": "Réinitialiser le cooldown",
+      "cooldown_badge_title": "En cooldown — cliquez pour les détails",
+      "cooldown_title": "{{name}} est en cooldown",
+      "cooldown_reason_rate_limit": "L'indexeur a demandé de ralentir (limite de débit). Les requêtes sont suspendues jusqu'à la fin du délai qu'il a indiqué.",
+      "cooldown_reason_failures": "L'indexeur a échoué {{count}} fois de suite. Chaque nouvel échec allonge la pause, de 30 secondes jusqu'à 6 heures.",
+      "cooldown_remaining": "Temps restant",
+      "cooldown_expires_at": "Expire à",
+      "cooldown_detail": "Dernière erreur",
+      "cooldown_reset_hint": "La réinitialisation efface la pause et le compteur d'échecs. Si l'indexeur reste injoignable, la prochaine recherche ouvrira un nouveau délai.",
+      "cooldown_reset_done": "Cooldown levé sur {{name}}",
+      "cooldown_reset_all_done": "{{count}} cooldown(s) levé(s)"
     },
     "quality_profiles": {
       "title": "Profils de qualité",
