@@ -3246,12 +3246,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const kind = (this.media?.type ?? offlineType) === 'series' ? 'series' : 'movies';
       if (this.episodeId && kind === 'series') {
         // A finished episode returns to the NEXT episode's detail page so the
-        // user lands ready to continue; an episode left mid-watch returns to
-        // its own page (to resume).
+        // user lands ready to continue. Otherwise the origin wins: opening an
+        // episode straight from the series page and backing out should land
+        // back there, not on a page the user never visited. Only a player
+        // opened from somewhere else (the episode's own page, a deep link, a
+        // continue-watching row) falls back to the episode page.
         const next = this.nextEpisodeContext();
-        const epId =
-          this.episodeFinished() && next ? next.episodeId : this.episodeId;
-        target = `/series/${this.mediaId}/episode/${epId}`;
+        const seriesPath = `/series/${this.mediaId}`;
+        const cameFromSeries =
+          this.navHistory.previousUrl?.split('?')[0] === seriesPath;
+        target =
+          this.episodeFinished() && next
+            ? `${seriesPath}/episode/${next.episodeId}`
+            : cameFromSeries
+              ? seriesPath
+              : `${seriesPath}/episode/${this.episodeId}`;
       } else {
         target = `/${kind}/${this.mediaId}`;
       }
