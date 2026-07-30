@@ -5,17 +5,23 @@ import {
   inject,
   input,
   output,
+  signal,
 } from '@angular/core';
 import { UpperCasePipe } from '@angular/common';
-import { TranslateModule } from '@ngx-translate/core';
+import { RouterLink } from '@angular/router';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   LucideCheck,
+  LucideCircleX,
   LucideClipboardList,
   LucideDownload,
   LucideEllipsisVertical,
   LucideEye,
   LucideEyeOff,
+  LucideFilm,
   LucideHeart,
+  LucideLayoutGrid,
+  LucideList,
   LucideListChecks,
   LucideListPlus,
   LucidePackage,
@@ -46,17 +52,32 @@ import { AddToPlaylistService } from '../../../../core/services/add-to-playlist.
 import { TvService } from '../../../../core/services/tv.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
+import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
+
+const LS_EPISODE_VIEW = 'fliks.mediaDetail.episodeView';
+
+type EpisodeView = 'grid' | 'list';
+
+function readEpisodeViewFromStorage(): EpisodeView {
+  if (typeof localStorage === 'undefined') return 'grid';
+  try {
+    return localStorage.getItem(LS_EPISODE_VIEW) === 'list' ? 'list' : 'grid';
+  } catch {
+    return 'grid';
+  }
+}
 
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, UpperCasePipe, LocaleDatePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideListChecks, LucideListPlus, LucidePackage, LucidePlay, LucideUserPlus, LucideX],
+  imports: [TranslateModule, UpperCasePipe, RouterLink, LocaleDatePipe, ResolveUrlPipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, LucideCheck, LucideCircleX, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideFilm, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucidePlay, LucideUserPlus, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
 export class MediaDetailSeasonsComponent {
   private readonly playableMedia = inject(PlayableMediaService);
   private readonly addToPlaylist = inject(AddToPlaylistService);
+  private readonly translate = inject(TranslateService);
   readonly tv = inject(TvService);
   readonly auth = inject(AuthService);
   readonly media = input.required<Media>();
@@ -134,6 +155,38 @@ export class MediaDetailSeasonsComponent {
   seasonWatchedCount(season: Season): number {
     const watched = this.watchedEpisodeIds();
     return (season.episodes ?? []).filter((ep) => watched.has(ep.id)).length;
+  }
+
+  /**
+   * Card row or detail list. Kept local: nothing outside this component reacts
+   * to it, unlike the on-disk filter the parent owns. Cards only on a TV, where
+   * a vertical list has no idiom and the d-pad row does.
+   */
+  readonly episodeView = signal<EpisodeView>(readEpisodeViewFromStorage());
+  readonly canSwitchEpisodeView = computed(
+    () => !this.hideControls() && !this.tv.isTv(),
+  );
+  readonly showEpisodeList = computed(
+    () => this.canSwitchEpisodeView() && this.episodeView() === 'list',
+  );
+
+  setEpisodeView(view: EpisodeView) {
+    this.episodeView.set(view);
+    try {
+      localStorage.setItem(LS_EPISODE_VIEW, view);
+    } catch {
+      /* private mode / quota */
+    }
+  }
+
+  /**
+   * `05/08/2026 · 34 min`. Takes the date already formatted so the impure
+   * locale pipe stays in the template and keeps re-running on a language switch.
+   */
+  episodeCardSubtitle(formattedDate: string, runtime?: number | null): string {
+    const parts = [formattedDate || '—'];
+    if (runtime) parts.push(`${runtime} ${this.translate.instant('common.min')}`);
+    return parts.join(' · ');
   }
 
   seasonProgressPercent(season: Season): number {

@@ -4,7 +4,33 @@
 <section class="space-y-4">
   @if (!hideControls()) {
   <div appTvRow class="flex items-center gap-2 flex-wrap">
-    <app-dropdown-menu placement="bottom-start" class="order-last ms-auto">
+    @if (canSwitchEpisodeView()) {
+      <div class="order-last join ms-auto" role="group">
+        <button
+          type="button"
+          class="btn btn-sm join-item"
+          [class.btn-active]="episodeView() === 'grid'"
+          [attr.aria-pressed]="episodeView() === 'grid'"
+          [attr.aria-label]="'media_detail.episode_view_grid' | translate"
+          [attr.title]="'media_detail.episode_view_grid' | translate"
+          (click)="setEpisodeView('grid')"
+        >
+          <svg lucideLayoutGrid class="h-4 w-4"></svg>
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm join-item"
+          [class.btn-active]="episodeView() === 'list'"
+          [attr.aria-pressed]="episodeView() === 'list'"
+          [attr.aria-label]="'media_detail.episode_view_list' | translate"
+          [attr.title]="'media_detail.episode_view_list' | translate"
+          (click)="setEpisodeView('list')"
+        >
+          <svg lucideList class="h-4 w-4"></svg>
+        </button>
+      </div>
+    }
+    <app-dropdown-menu placement="bottom-end" [class]="canSwitchEpisodeView() ? 'order-last' : 'order-last ms-auto'">
       <button trigger type="button" class="btn btn-ghost btn-circle shrink-0">
         <svg lucideEllipsisVertical class="h-5 w-5"></svg>
       </button>
@@ -226,6 +252,103 @@
       <p class="text-sm text-base-content/50 py-8 text-center">
         {{ 'media_detail.episodes_filter_empty' | translate }}
       </p>
+    } @else if (filteredEpisodes().length > 0 && showEpisodeList()) {
+      <ul class="divide-y divide-base-200 border-y border-base-200">
+        @for (ep of filteredEpisodes(); track ep.id) {
+          <li class="flex gap-4 py-3" [class.opacity-50]="!ep.monitored">
+            <div class="relative w-40 sm:w-56 shrink-0 aspect-video rounded-lg overflow-hidden bg-base-200">
+              @if (ep.stillUrl) {
+                <img
+                  [src]="ep.stillUrl | resolveUrl:'thumb'"
+                  class="w-full h-full object-cover"
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                />
+              } @else {
+                <span class="flex items-center justify-center w-full h-full text-base-content/20">
+                  <svg lucideFilm class="h-8 w-8" [strokeWidth]="1.5" aria-hidden="true"></svg>
+                </span>
+              }
+
+              <!-- Same overlay language as app-media-card: red cross for a
+                   missing file, then the episode number. -->
+              <div class="absolute top-2 left-2 z-20 flex items-center gap-1 pointer-events-none">
+                @if (!ep.hasFile) {
+                  <svg
+                    lucideCircleX
+                    class="h-5 w-5 text-error drop-shadow"
+                    [attr.aria-label]="'media_card.missing_files' | translate"
+                    [attr.title]="'media_card.missing_files' | translate"
+                  ></svg>
+                }
+                <span class="badge badge-neutral font-mono">{{ episodeBadgeLabel(ep) }}</span>
+              </div>
+              @if (episodeProgress()[ep.id]) {
+                <span class="absolute bottom-0 inset-x-0 h-1 z-20 bg-base-300/60 pointer-events-none">
+                  <span class="block h-full bg-primary" [style.width.%]="episodeProgress()[ep.id]"></span>
+                </span>
+              }
+
+              <!-- Cover plays when there is a file, mirroring the card's hover
+                   overlay; otherwise it opens the episode so it can be grabbed. -->
+              @if (ep.hasFile) {
+                <button
+                  type="button"
+                  class="absolute inset-0 z-10 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer"
+                  [attr.aria-label]="'media_card.play' | translate"
+                  (click)="playEpisode(ep)"
+                >
+                  <span class="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center text-white">
+                    <svg lucidePlay class="h-6 w-6" [strokeWidth]="2"></svg>
+                  </span>
+                </button>
+              } @else {
+                <a
+                  [routerLink]="episodeRoute(ep)"
+                  [replaceUrl]="hideControls()"
+                  class="absolute inset-0 z-10"
+                  [attr.aria-label]="ep.title ?? ('media_detail.ep_no_title' | translate)"
+                ></a>
+              }
+            </div>
+
+            <div class="min-w-0 flex-1 flex flex-col gap-1">
+              <div class="flex flex-wrap items-baseline gap-x-2">
+                <a
+                  [routerLink]="episodeRoute(ep)"
+                  [replaceUrl]="hideControls()"
+                  class="text-lg font-medium hover:underline"
+                >{{ ep.title ?? ('media_detail.ep_no_title' | translate) }}</a>
+                <span class="text-sm text-base-content/50 tabular-nums">
+                  {{ episodeCardSubtitle((ep.airDate | localeDate), ep.runtime) }}
+                </span>
+              </div>
+              @if (ep.overview) {
+                <p class="text-base text-base-content/70 line-clamp-2">{{ ep.overview }}</p>
+              } @else {
+                <p class="text-base text-base-content/35 italic">{{ 'media_detail.ep_no_overview' | translate }}</p>
+              }
+            </div>
+
+            <div class="flex items-start gap-1 shrink-0">
+              @if (ep.hasFile) {
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm btn-circle"
+                  [class.text-success]="watchedEpisodeIds().has(ep.id)"
+                  [attr.aria-pressed]="watchedEpisodeIds().has(ep.id)"
+                  [attr.aria-label]="(watchedEpisodeIds().has(ep.id) ? 'media_card.mark_unwatched' : 'media_card.mark_watched') | translate"
+                  [attr.title]="(watchedEpisodeIds().has(ep.id) ? 'media_card.mark_unwatched' : 'media_card.mark_watched') | translate"
+                  (click)="toggleEpisodeWatched.emit({ episode: ep, watched: !watchedEpisodeIds().has(ep.id) })"
+                >
+                  <svg lucideCheck class="h-4 w-4"></svg>
+                </button>
+              }
+            </div>
+          </li>
+        }
+      </ul>
     } @else if (filteredEpisodes().length > 0) {
       <app-horizontal-scroller [title]="sectionTitle() ?? ''">
         @for (ep of filteredEpisodes(); track ep.id) {
@@ -233,7 +356,7 @@
             [id]="'episode-' + ep.id"
             [imageUrl]="ep.stillUrl ?? null"
             [title]="ep.title ?? ('media_detail.ep_no_title' | translate)"
-            [subtitle]="(ep.airDate | localeDate) || '—'"
+            [subtitle]="episodeCardSubtitle((ep.airDate | localeDate), ep.runtime)"
             [topLeftBadge]="episodeBadgeLabel(ep)"
             [status]="watchedEpisodeIds().has(ep.id) ? 'watched' : (!ep.hasFile ? 'missing' : null)"
             [progressPercent]="episodeProgress()[ep.id]"
