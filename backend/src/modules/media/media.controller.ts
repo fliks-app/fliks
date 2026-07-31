@@ -800,6 +800,31 @@ export class MediaController {
     return this.mediaService.findOne(id);
   }
 
+  @Get(':id/similar')
+  @CheckPolicies((ability) => ability.can(Action.Read, Media))
+  async getSimilar(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+    @Query('limit') limit?: string,
+  ) {
+    await this.assertMediaAccessible(id, user);
+    const parsed = Number(limit);
+    return this.mediaService.findSimilar(
+      id,
+      Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 30) : undefined,
+    );
+  }
+
+  @Get(':id/collection')
+  @CheckPolicies((ability) => ability.can(Action.Read, Media))
+  async getCollection(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
+    await this.assertMediaAccessible(id, user);
+    return this.mediaService.findCollection(id);
+  }
+
   @Get(':id/cast')
   @CheckPolicies((ability) => ability.can(Action.Read, Media))
   async getCast(

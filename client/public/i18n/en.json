@@ -810,6 +810,8 @@
     "details": "Details"
   },
   "media_detail": {
+    "part_of": "Part of {{name}}",
+    "similar": "Similar movies",
     "cast": "Cast",
     "crew": "Crew",
     "episodes": "Episodes",

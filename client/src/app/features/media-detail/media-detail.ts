@@ -22,6 +22,8 @@ import {
   MovieRelease,
   MediaCastEntry,
   MediaCrewEntry,
+  RelatedMedia,
+  MediaCollection,
 } from '../../core/services/api/media.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
@@ -186,6 +188,23 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
    */
   private readonly routeParams = toSignal(this.route.paramMap);
 
+  private loadedId: number | null = null;
+
+  /**
+   * Angular reuses this component between two `movies/:id` URLs — the similar
+   * -movies rail links to one — so the load is driven by the route param
+   * instead of ngOnInit, which would only ever run for the first title.
+   */
+  private readonly routeMediaEffect = effect(() => {
+    const params = this.routeParams();
+    if (!params) return;
+    const id = Number(params.get('id'));
+    if (id === this.loadedId) return;
+    const arriving = this.loadedId === null;
+    this.loadedId = id;
+    void this.loadMedia(id, arriving);
+  });
+
   /**
    * Keep the episode-focus state in sync with the URL whenever either the
    * loaded media or the route params change.
@@ -251,6 +270,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly media = signal<Media | null>(null);
   readonly cast = signal<MediaCastEntry[]>([]);
   readonly crew = signal<MediaCrewEntry[]>([]);
+  readonly similar = signal<RelatedMedia[]>([]);
+  readonly collection = signal<MediaCollection | null>(null);
   readonly resumeInfo = signal<MediaResumeInfo | null>(null);
   readonly watchedEpisodeIds = signal<Set<number>>(new Set());
   readonly episodeProgress = signal<Record<number, number>>({});
@@ -742,19 +763,65 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.backgroundService.clear();
   }
 
-  async ngOnInit() {
+  ngOnInit() {
     // Enter hero page immediately (transparent navbar) — title will be set after media loads
     this.navbarService.enterHeroPage('');
+    this.expectedKind.set(this.route.snapshot.data['kind'] as MediaType);
+    // Load profiles in parallel with media — neither blocks the other
+    void this.loadProfiles();
+  }
+
+  private async loadProfiles() {
+    // Admins edit profiles inline; regular requesters need the same
+    // options surfaced to fill the request modal. Either permission
+    // is enough to justify the round-trip.
+    if (
+      !this.auth.hasPermission('media.edit') &&
+      !this.auth.hasPermission('requests.create')
+    ) return;
+    this.profilesOptionsLoading.set(true);
+    try {
+      const [q, l, libs] = await Promise.all([
+        this.profilesApi.getQualityProfiles(),
+        this.profilesApi.getLanguageProfiles(),
+        this.librariesApi.listMine(),
+      ]);
+      this.qualityProfileOptions.set(q.map((p) => ({ id: p.id, name: p.name })));
+      this.languageProfiles.set(l);
+      this.languageProfileOptions.set(l.map((p) => ({ id: p.id, name: p.name })));
+      this.libraries.set(libs);
+    } catch {
+      // Profiles will just be empty — the page still works
+    } finally {
+      this.profilesOptionsLoading.set(false);
+    }
+  }
+
+  /**
+   * `arriving` is false when the page swaps titles under itself (a related
+   * -movies card): the router already puts us back at the top, and pushing
+   * the scroll to wherever this title was last read would fight that.
+   */
+  private async loadMedia(id: number, arriving: boolean) {
     const kind = this.route.snapshot.data['kind'] as MediaType;
-    this.expectedKind.set(kind);
     this.scrollMemory.activate(this.scrollKey());
-    const idParam = this.route.snapshot.paramMap.get('id');
-    const id = idParam ? Number(idParam) : NaN;
     if (!Number.isFinite(id) || id < 1) {
       this.loading.set(false);
       this.notFound.set(true);
       return;
     }
+
+    // Nothing here survives a switch to another title.
+    this.notFound.set(false);
+    this.cast.set([]);
+    this.crew.set([]);
+    this.similar.set([]);
+    this.collection.set(null);
+    this.resumeInfo.set(null);
+    this.watchedEpisodeIds.set(new Set());
+    this.episodeProgress.set({});
+    this.selectedFileId.set(null);
+    this.activeSeasonId.set(null);
 
     // Card → detail handoff: when the user clicks a media card, we ship the
     // already-loaded Media via router state so the detail page can render
@@ -765,36 +832,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (passed && passed.id === id && passed.type === kind) {
       this.media.set(passed);
       this.loading.set(false);
+    } else if (this.media()?.id !== id) {
+      this.media.set(null);
+      this.loading.set(true);
     }
-
-    const loadProfiles = async () => {
-      // Admins edit profiles inline; regular requesters need the same
-      // options surfaced to fill the request modal. Either permission
-      // is enough to justify the round-trip.
-      if (
-        !this.auth.hasPermission('media.edit') &&
-        !this.auth.hasPermission('requests.create')
-      ) return;
-      this.profilesOptionsLoading.set(true);
-      try {
-        const [q, l, libs] = await Promise.all([
-          this.profilesApi.getQualityProfiles(),
-          this.profilesApi.getLanguageProfiles(),
-          this.librariesApi.listMine(),
-        ]);
-        this.qualityProfileOptions.set(q.map((p) => ({ id: p.id, name: p.name })));
-        this.languageProfiles.set(l);
-        this.languageProfileOptions.set(l.map((p) => ({ id: p.id, name: p.name })));
-        this.libraries.set(libs);
-      } catch {
-        // Profiles will just be empty — the page still works
-      } finally {
-        this.profilesOptionsLoading.set(false);
-      }
-    };
-
-    // Load profiles in parallel with media — neither blocks the other
-    void loadProfiles();
 
     try {
       const m = await this.mediaService.getOne(id);
@@ -814,7 +855,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // offset put back by hand. Sticky, not a single shot: cast, crew and the
       // hero artwork land after this point, so a one-off scrollTo gets clamped
       // by a document that hasn't reached its full height yet.
-      this.scrollMemory.restoreSticky(this.scrollKey());
+      if (arriving) this.scrollMemory.restoreSticky(this.scrollKey());
       this.draftQualityProfileId.set(m.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(m.languageProfile?.id ?? null);
       this.selectedLibraryId.set(m.libraryId ?? null);
@@ -835,6 +876,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // Load cast/crew async — doesn't block page render
       this.mediaService.getCast(m.id).then((c) => this.cast.set(c)).catch(() => {});
       this.mediaService.getCrew(m.id).then((c) => this.crew.set(c)).catch(() => {});
+      if (m.type === 'movie') {
+        this.mediaService.getSimilar(m.id).then((s) => this.similar.set(s)).catch(() => {});
+        this.mediaService.getCollection(m.id).then((c) => this.collection.set(c)).catch(() => {});
+      }
       // Active requests (only for users who would ever see the Demander
       // button — admins skip the round-trip).
       if (this.canRequest()) {

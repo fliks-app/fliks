@@ -19,6 +19,7 @@ import { MediaType } from '../../common/enums';
 import { MediaImportService } from './media-service/media-import.service';
 import { MediaMetadataService } from './media-service/media-metadata.service';
 import { MediaQueryService } from './media-service/media-query.service';
+import { MediaRelatedService } from './media-service/media-related.service';
 import { MediaMutationService } from './media-service/media-mutation.service';
 import { MediaRescanService } from './media-service/media-rescan.service';
 
@@ -36,6 +37,7 @@ export class MediaService {
     private readonly imports: MediaImportService,
     private readonly metadata: MediaMetadataService,
     private readonly query: MediaQueryService,
+    private readonly related: MediaRelatedService,
     private readonly mutation: MediaMutationService,
     private readonly rescan: MediaRescanService,
   ) {}
@@ -108,6 +110,14 @@ export class MediaService {
 
   findOne(id: number) {
     return this.query.findOne(id);
+  }
+
+  findSimilar(id: number, limit?: number) {
+    return this.related.findSimilar(id, limit);
+  }
+
+  findCollection(id: number) {
+    return this.related.findCollection(id);
   }
 
   getTrackingStatus(id: number) {
