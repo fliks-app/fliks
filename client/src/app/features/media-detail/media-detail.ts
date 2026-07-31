@@ -8,6 +8,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -200,9 +201,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!params) return;
     const id = Number(params.get('id'));
     if (id === this.loadedId) return;
-    const arriving = this.loadedId === null;
     this.loadedId = id;
-    void this.loadMedia(id, arriving);
+    void this.loadMedia(id);
   });
 
   /**
@@ -797,13 +797,15 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * `arriving` is false when the page swaps titles under itself (a related
-   * -movies card): the router already puts us back at the top, and pushing
-   * the scroll to wherever this title was last read would fight that.
-   */
-  private async loadMedia(id: number, arriving: boolean) {
+  private async loadMedia(id: number) {
     const kind = this.route.snapshot.data['kind'] as MediaType;
+    // Only a back navigation earns the memorized offset. Opening a title from
+    // anywhere else — a home card, a similar-movies card that swaps the page
+    // under itself — starts at the top, whether or not it was read before.
+    const nav =
+      this.router.getCurrentNavigation() ??
+      untracked(this.router.lastSuccessfulNavigation);
+    const wentBack = nav?.trigger === 'popstate';
     this.scrollMemory.activate(this.scrollKey());
     if (!Number.isFinite(id) || id < 1) {
       this.loading.set(false);
@@ -855,7 +857,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // offset put back by hand. Sticky, not a single shot: cast, crew and the
       // hero artwork land after this point, so a one-off scrollTo gets clamped
       // by a document that hasn't reached its full height yet.
-      if (arriving) this.scrollMemory.restoreSticky(this.scrollKey());
+      if (wentBack) this.scrollMemory.restoreSticky(this.scrollKey());
       this.draftQualityProfileId.set(m.qualityProfile?.id ?? null);
       this.draftLanguageProfileId.set(m.languageProfile?.id ?? null);
       this.selectedLibraryId.set(m.libraryId ?? null);
