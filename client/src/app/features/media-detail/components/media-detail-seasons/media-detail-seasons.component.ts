@@ -1,14 +1,11 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
   computed,
-  effect,
   inject,
   input,
   output,
   signal,
-  viewChildren,
 } from '@angular/core';
 import { UpperCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -34,6 +31,7 @@ import { MediaCardComponent } from '../../../../shared/components/media-card/med
 import { DropdownMenuComponent } from '../../../../shared/components/dropdown-menu';
 import { DropdownOptionComponent } from '../../../../shared/components/dropdown-option/dropdown-option';
 import { TvRowDirective } from '../../../../shared/directives/tv-row.directive';
+import { ClampToggleDirective } from '../../../../shared/directives/clamp-toggle.directive';
 import {
   Episode,
   Media,
@@ -69,7 +67,7 @@ function readEpisodeViewFromStorage(): EpisodeView {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, UpperCasePipe, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
+  imports: [TranslateModule, UpperCasePipe, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, ClampToggleDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
@@ -149,42 +147,6 @@ export class MediaDetailSeasonsComponent {
   /** TVDB reports a bare year, which date formatting would widen into a day. */
   seasonAirDateIsYearOnly(season: Season): boolean {
     return /^\d{4}$/.test(season.airDate ?? '');
-  }
-
-  // ── Episode synopsis clamp ──
-
-  private readonly overviewRefs =
-    viewChildren<ElementRef<HTMLParagraphElement>>('epOverview');
-  readonly expandedOverviews = signal<ReadonlySet<number>>(new Set());
-  /** Episodes whose synopsis actually overflows three lines. */
-  readonly clampedOverviews = signal<ReadonlySet<number>>(new Set());
-
-  /**
-   * CSS can't report that a clamp took effect, so measure it. Reads the episode
-   * list but not the expanded set: an expanded paragraph stops overflowing, and
-   * re-measuring on toggle would drop the button that collapses it again.
-   */
-  private readonly clampEffect = effect(() => {
-    this.filteredEpisodes();
-    this.showEpisodeList();
-    requestAnimationFrame(() => {
-      const clamped = new Set<number>();
-      for (const ref of this.overviewRefs()) {
-        const el = ref.nativeElement;
-        const id = Number(el.dataset['epId']);
-        if (!Number.isFinite(id)) continue;
-        if (el.scrollHeight > el.clientHeight + 1) clamped.add(id);
-      }
-      this.clampedOverviews.set(clamped);
-    });
-  });
-
-  toggleEpisodeOverview(id: number) {
-    this.expandedOverviews.update((set) => {
-      const next = new Set(set);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
   }
 
   seasonWatchedCount(season: Season): number {

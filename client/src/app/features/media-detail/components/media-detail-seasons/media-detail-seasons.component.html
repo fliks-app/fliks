@@ -286,18 +286,18 @@
               <div class="col-span-2 sm:col-span-1 sm:col-start-2">
                 @if (ep.overview) {
                   <p
-                    #epOverview
-                    [attr.data-ep-id]="ep.id"
+                    [appClampToggle]="ep.overview"
+                    #syn="clampToggle"
                     class="text-sm sm:text-base text-base-content/70"
-                    [class.line-clamp-3]="!expandedOverviews().has(ep.id)"
+                    [class.line-clamp-3]="!syn.expanded()"
                   >{{ ep.overview }}</p>
-                  @if (clampedOverviews().has(ep.id) || expandedOverviews().has(ep.id)) {
+                  @if (syn.showToggle()) {
                     <button
                       type="button"
                       class="link link-primary no-underline hover:underline text-sm mt-0.5 cursor-pointer"
-                      (click)="toggleEpisodeOverview(ep.id)"
+                      (click)="syn.toggle()"
                     >
-                      {{ (expandedOverviews().has(ep.id) ? 'common.show_less' : 'common.show_more') | translate }}
+                      {{ (syn.expanded() ? 'common.show_less' : 'common.show_more') | translate }}
                     </button>
                   }
                 } @else {

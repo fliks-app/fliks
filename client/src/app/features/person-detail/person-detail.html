@@ -40,11 +40,11 @@
           </p>
         }
         @if (d.person.biography) {
-          <p #bioText class="text-sm leading-relaxed" [class.line-clamp-4]="!bioExpanded()">{{ d.person.biography }}</p>
-          @if (bioClamped() || bioExpanded()) {
+          <p [appClampToggle]="d.person.biography" #bio="clampToggle" class="text-sm leading-relaxed" [class.line-clamp-4]="!bio.expanded()">{{ d.person.biography }}</p>
+          @if (bio.showToggle()) {
             <div class="flex justify-end">
-              <button class="btn btn-xs btn-ghost mt-1" (click)="toggleBio()">
-                {{ bioExpanded() ? ('common.show_less' | translate) : ('common.show_more' | translate) }}
+              <button class="btn btn-xs btn-ghost mt-1" (click)="bio.toggle()">
+                {{ bio.expanded() ? ('common.show_less' | translate) : ('common.show_more' | translate) }}
               </button>
             </div>
           }

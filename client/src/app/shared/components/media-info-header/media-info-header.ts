@@ -1,14 +1,12 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
   computed,
   effect,
   inject,
   input,
   output,
   signal,
-  viewChildren,
 } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
@@ -54,6 +52,7 @@ import { DropdownMenuComponent } from '../dropdown-menu';
 import { DropdownOptionComponent } from '../dropdown-option/dropdown-option';
 import { ProgressBadgeComponent } from '../progress-badge/progress-badge.component';
 import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
+import { ClampToggleDirective } from '../../directives/clamp-toggle.directive';
 import { TvRowDirective } from '../../directives/tv-row.directive';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { NgTemplateOutlet } from '@angular/common';
@@ -104,6 +103,7 @@ interface AudioTrack {
     DropdownMenuComponent, DropdownOptionComponent,
     ProgressBadgeComponent,
     ImgFadeInDirective,
+    ClampToggleDirective,
     TvRowDirective,
     TvSelectDirective,
     NgTemplateOutlet,
@@ -276,31 +276,6 @@ export class MediaInfoHeaderComponent {
   readonly selectedSubtitle = computed(
     () => this.subtitles().find((s) => s.id === this.selectedSubtitleId()) ?? null,
   );
-
-  // Overview clamp / expand. The mobile and desktop layouts each render an
-  // `#overviewText` paragraph (both live in the DOM; CSS hides one), so we
-  // measure whichever is actually on screen.
-  private readonly overviewTextRefs = viewChildren<ElementRef<HTMLParagraphElement>>('overviewText');
-  readonly overviewClamped = signal(false);
-  readonly overviewExpanded = signal(false);
-
-  private readonly overviewClampEffect = effect(() => {
-    // Re-measure whenever the overview text changes.
-    this.overview();
-    this.overviewExpanded.set(false);
-    requestAnimationFrame(() => {
-      const refs = this.overviewTextRefs();
-      const el =
-        refs.map((r) => r.nativeElement).find((n) => n.offsetParent !== null) ??
-        refs[0]?.nativeElement;
-      if (el) this.overviewClamped.set(el.scrollHeight > el.clientHeight + 1);
-      else this.overviewClamped.set(false);
-    });
-  });
-
-  toggleOverview() {
-    this.overviewExpanded.update(v => !v);
-  }
 
   // ── Load playback state + watched when media/episode changes ──
 

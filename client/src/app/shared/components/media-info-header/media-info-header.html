@@ -169,12 +169,12 @@
 
     <!-- Overview -->
     @if (overview()) {
-      <p #overviewText
+      <p [appClampToggle]="overview()" #syn="clampToggle"
          class="mt-4 text-base-content/80 leading-relaxed"
-         [class.line-clamp-4]="!overviewExpanded()">{{ overview() }}</p>
-      @if (overviewClamped() || overviewExpanded()) {
-        <button type="button" class="link link-primary no-underline hover:underline text-sm mt-1" (click)="toggleOverview()">
-          {{ (overviewExpanded() ? 'common.show_less' : 'common.show_more') | translate }}
+         [class.line-clamp-4]="!syn.expanded()">{{ overview() }}</p>
+      @if (syn.showToggle()) {
+        <button type="button" class="link link-primary no-underline hover:underline text-sm mt-1" (click)="syn.toggle()">
+          {{ (syn.expanded() ? 'common.show_less' : 'common.show_more') | translate }}
         </button>
       }
     }
@@ -387,12 +387,12 @@
 
       <!-- Overview -->
       @if (overview()) {
-        <p #overviewText
+        <p [appClampToggle]="overview()" #synDesktop="clampToggle"
            class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line"
-           [class.line-clamp-4]="!overviewExpanded()">{{ overview() }}</p>
-        @if (overviewClamped() || overviewExpanded()) {
-          <button type="button" class="link link-primary no-underline hover:underline text-sm mt-1" (click)="toggleOverview()">
-            {{ (overviewExpanded() ? 'common.show_less' : 'common.show_more') | translate }}
+           [class.line-clamp-4]="!synDesktop.expanded()">{{ overview() }}</p>
+        @if (synDesktop.showToggle()) {
+          <button type="button" class="link link-primary no-underline hover:underline text-sm mt-1" (click)="synDesktop.toggle()">
+            {{ (synDesktop.expanded() ? 'common.show_less' : 'common.show_more') | translate }}
           </button>
         }
       }
