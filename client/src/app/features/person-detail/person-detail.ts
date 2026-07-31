@@ -4,9 +4,6 @@ import {
   signal,
   inject,
   OnInit,
-  ViewChild,
-  ElementRef,
-  AfterViewInit,
 } from '@angular/core';
 import { ActivatedRoute, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
@@ -17,45 +14,25 @@ import {
 import { NavbarService } from '../../core/services/navbar.service';
 import { LucideChevronLeft } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { ClampToggleDirective } from '../../shared/directives/clamp-toggle.directive';
 
 @Component({
   selector: 'app-person-detail',
-  imports: [TranslateModule, RouterLink, RouterLinkActive, RouterOutlet, ResolveUrlPipe, LucideChevronLeft],
+  imports: [TranslateModule, RouterLink, RouterLinkActive, RouterOutlet, ResolveUrlPipe, ClampToggleDirective, LucideChevronLeft],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './person-detail.html',
 })
-export class PersonDetailComponent implements OnInit, AfterViewInit {
+export class PersonDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly personsApi = inject(PersonsApiService);
   private readonly navbar = inject(NavbarService);
 
-  @ViewChild('bioText') bioTextRef?: ElementRef<HTMLParagraphElement>;
-
   readonly detail = signal<PersonDetail | null>(null);
   readonly loading = signal(true);
-  readonly bioClamped = signal(false);
-  readonly bioExpanded = signal(false);
 
   ngOnInit() {
     const id = Number(this.route.snapshot.paramMap.get('id'));
     this.load(id);
-  }
-
-  ngAfterViewInit() {
-    this.checkBioClamped();
-  }
-
-  private checkBioClamped() {
-    requestAnimationFrame(() => {
-      const el = this.bioTextRef?.nativeElement;
-      if (el) {
-        this.bioClamped.set(el.scrollHeight > el.clientHeight);
-      }
-    });
-  }
-
-  toggleBio() {
-    this.bioExpanded.update((v) => !v);
   }
 
   goBack() {
@@ -69,7 +46,6 @@ export class PersonDetailComponent implements OnInit, AfterViewInit {
       this.detail.set(detail);
     } finally {
       this.loading.set(false);
-      this.checkBioClamped();
     }
   }
 }

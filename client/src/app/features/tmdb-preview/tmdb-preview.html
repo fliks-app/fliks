@@ -69,7 +69,14 @@
       }
 
       @if (m.overview) {
-        <p class="mt-3 text-sm text-base-content/80 leading-relaxed line-clamp-4">{{ m.overview }}</p>
+        <p [appClampToggle]="m.overview" #syn="clampToggle"
+           class="mt-3 text-sm text-base-content/80 leading-relaxed"
+           [class.line-clamp-4]="!syn.expanded()">{{ m.overview }}</p>
+        @if (syn.showToggle()) {
+          <button type="button" class="link link-primary no-underline hover:underline text-sm mt-1" (click)="syn.toggle()">
+            {{ (syn.expanded() ? 'common.show_less' : 'common.show_more') | translate }}
+          </button>
+        }
       }
 
       <!-- Metadata grid -->

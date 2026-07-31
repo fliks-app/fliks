@@ -34,10 +34,11 @@ import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
+import { ClampToggleDirective } from '../../shared/directives/clamp-toggle.directive';
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DecimalPipe, TranslateModule, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
+  imports: [FormsModule, CurrencyPipe, DecimalPipe, TranslateModule, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, ClampToggleDirective, LucideFilm, LucideUser, LucidePlay, LucidePlus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })
