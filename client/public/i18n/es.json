@@ -805,6 +805,8 @@
     "details": "Detalles"
   },
   "media_detail": {
+    "part_of": "Parte de {{name}}",
+    "similar": "Películas similares",
     "cast": "Reparto",
     "crew": "Equipo técnico",
     "episodes": "Episodios",

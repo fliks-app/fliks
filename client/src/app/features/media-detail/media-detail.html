@@ -214,6 +214,80 @@
           <app-media-info-extra [media]="m" [directors]="directors()" />
         }
 
+        @if (m.type === 'movie' && collection(); as coll) {
+          <div class="divider my-6"></div>
+          <app-collapsible-section
+            [heading]="'media_detail.part_of' | translate:{ name: coll.name }"
+            persistKey="collection"
+          >
+            @if (coll.items.length > 1) {
+              <app-horizontal-scroller>
+                @for (c of coll.items; track c.id) {
+                  <app-media-card
+                    class="shrink-0 w-28 sm:w-32 lg:w-40"
+                    [aspect]="'portrait'"
+                    [imageUrl]="c.posterUrl"
+                    [title]="c.title"
+                    [subtitle]="c.year ? ('' + c.year) : ''"
+                    [rating]="c.rating ?? 0"
+                    [status]="c.hasFile ? null : 'missing'"
+                    [link]="['/movies', '' + c.id]"
+                  />
+                }
+              </app-horizontal-scroller>
+            } @else if (coll.items[0]; as only) {
+              <!-- A lone sibling doesn't earn a rail: one row, poster beside title. -->
+              <a
+                [routerLink]="['/movies', '' + only.id]"
+                class="flex items-center gap-4 p-3 rounded-box bg-base-200/40 hover:bg-base-200 transition-colors max-w-md"
+              >
+                @if (only.posterUrl) {
+                  <img
+                    appImgFadeIn
+                    [src]="only.posterUrl | resolveUrl:'thumb'"
+                    [alt]="only.title"
+                    class="w-16 rounded-md shrink-0"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                }
+                <div class="min-w-0">
+                  <p class="font-semibold truncate">{{ only.title }}</p>
+                  @if (only.year) {
+                    <p class="text-sm text-base-content/60">{{ only.year }}</p>
+                  }
+                  @if (!only.hasFile) {
+                    <span class="badge badge-sm badge-warning mt-1">{{ 'media_card.missing_files' | translate }}</span>
+                  }
+                </div>
+              </a>
+            }
+          </app-collapsible-section>
+        }
+
+        @if (m.type === 'movie' && similar().length) {
+          <div class="divider my-6"></div>
+          <app-collapsible-section
+            [heading]="'media_detail.similar' | translate"
+            persistKey="similar"
+          >
+            <app-horizontal-scroller>
+              @for (s of similar(); track s.id) {
+                <app-media-card
+                  class="shrink-0 w-28 sm:w-32 lg:w-40"
+                  [aspect]="'portrait'"
+                  [imageUrl]="s.posterUrl"
+                  [title]="s.title"
+                  [subtitle]="s.year ? ('' + s.year) : ''"
+                  [rating]="s.rating ?? 0"
+                  [status]="s.hasFile ? null : 'missing'"
+                  [link]="['/movies', '' + s.id]"
+                />
+              }
+            </app-horizontal-scroller>
+          </app-collapsible-section>
+        }
+
         @if (m.type === 'movie' && cast().length) {
           <div class="divider my-6"></div>
           <ng-container *ngTemplateOutlet="castCrewBlock" />

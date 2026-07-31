@@ -52,6 +52,15 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
   protected onFocusIn(event: FocusEvent): void {
     const from = event.relatedTarget as Node | null;
     if (from && this.host.nativeElement.contains(from)) return;
+    // Clicking a card focuses it too, and pulling the page under the cursor
+    // mid-click is never wanted. Chromium 76 (Tizen) throws on the selector —
+    // those builds are D-pad only, where every focus deserves the snap.
+    try {
+      const target = event.target as HTMLElement | null;
+      if (target && !target.matches(':focus-visible')) return;
+    } catch {
+      // No :focus-visible support — fall through and snap.
+    }
     queueMicrotask(() => this.snapToRowTop());
   }
 

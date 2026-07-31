@@ -805,6 +805,8 @@
     "details": "Dettagli"
   },
   "media_detail": {
+    "part_of": "Fa parte di {{name}}",
+    "similar": "Film simili",
     "cast": "Cast",
     "crew": "Troupe tecnica",
     "episodes": "Episodi",

@@ -810,6 +810,8 @@
     "details": "Détails"
   },
   "media_detail": {
+    "part_of": "Inclus dans {{name}}",
+    "similar": "Films similaires",
     "cast": "Casting",
     "crew": "Équipe technique",
     "episodes": "Épisodes",

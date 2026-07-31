@@ -171,6 +171,24 @@ export interface MediaCastEntry {
   person: { id: number; name: string; avatarUrl: string | null };
 }
 
+/** Movie from the same library, related to the one being viewed. */
+export interface RelatedMedia {
+  id: number;
+  title: string;
+  year: number;
+  posterUrl: string | null;
+  rating: number | null;
+  genres: string[];
+  hasFile: boolean;
+}
+
+/** TMDB collection the viewed movie belongs to, minus the movie itself. */
+export interface MediaCollection {
+  id: number;
+  name: string;
+  items: RelatedMedia[];
+}
+
 export interface MediaCrewEntry {
   id: number;
   job: string;
@@ -390,6 +408,18 @@ export class MediaService {
 
   getCast(id: number) {
     return firstValueFrom(this.http.get<MediaCastEntry[]>(`/api/media/${id}/cast`));
+  }
+
+  getSimilar(id: number) {
+    return firstValueFrom(
+      this.http.get<RelatedMedia[]>(`/api/media/${id}/similar`),
+    );
+  }
+
+  getCollection(id: number) {
+    return firstValueFrom(
+      this.http.get<MediaCollection | null>(`/api/media/${id}/collection`),
+    );
   }
 
   getCrew(id: number) {
