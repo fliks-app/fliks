@@ -17,7 +17,10 @@
   class="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
   [style.grid-template-rows]="open() ? '1fr' : '0fr'"
 >
-  <div [class.overflow-hidden]="clipped()" [attr.inert]="open() ? null : ''">
+  <!-- min-w-0: a grid item only shrinks below its content when its overflow is
+       clipped, and the clip goes away once open — without it a card rail widens
+       the page instead of scrolling inside its own box. -->
+  <div class="min-w-0" [class.overflow-hidden]="clipped()" [attr.inert]="open() ? null : ''">
     <div class="mt-3">
       <ng-content />
     </div>
