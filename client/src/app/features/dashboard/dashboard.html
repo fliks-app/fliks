@@ -146,7 +146,10 @@
                 @for (r of sub.recent; track r.id) {
                   <tr>
                     <td class="font-medium max-w-[12rem]" [title]="r.mediaTitle">
-                      <span class="block truncate">{{ r.mediaTitle }}</span>
+                      <a
+                        [routerLink]="['/', r.mediaType === 'series' ? 'series' : 'movies', r.mediaId]"
+                        class="link link-hover block truncate"
+                      >{{ r.mediaTitle }}</a>
                       @if (episodeLabel(r)) {
                         <span class="block text-xs font-normal text-base-content/60 truncate" [title]="episodeLabel(r)">
                           @if (r.episodeId != null) {

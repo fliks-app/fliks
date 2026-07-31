@@ -245,6 +245,7 @@ export interface SubtitleStats {
     id: number;
     mediaId: number;
     mediaTitle: string;
+    mediaType: 'movie' | 'series' | null;
     episodeId: number | null;
     seasonNumber: number | null;
     episodeNumber: number | null;

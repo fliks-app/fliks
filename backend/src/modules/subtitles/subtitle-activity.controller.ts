@@ -165,6 +165,7 @@ export class SubtitleActivityController {
         id: sf.id,
         mediaId: sf.mediaId,
         mediaTitle: sf.media?.title ?? '?',
+        mediaType: sf.media?.type ?? null,
         ...episodeScope(sf),
         language: sf.language,
         providerType: sf.providerType,
