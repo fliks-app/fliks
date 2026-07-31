@@ -90,25 +90,25 @@
         @if (m.originalLanguage) {
           <div>
             <span class="text-base-content/50 block">{{ 'discover.preview_original_language' | translate }}</span>
-            <span class="font-medium">{{ m.originalLanguage }}</span>
+            <span class="font-medium">{{ originalLanguageLabel() }}</span>
           </div>
         }
         @if (m.releaseDate) {
           <div>
             <span class="text-base-content/50 block">{{ 'discover.preview_release_date' | translate }}</span>
-            <span class="font-medium">{{ m.releaseDate | localeDate }}</span>
+            <span class="font-medium">{{ m.releaseDate | localeDate:{ dateStyle: 'long' } }}</span>
           </div>
         }
         @if (m.inCinemas) {
           <div>
             <span class="text-base-content/50 block">{{ 'discover.preview_in_cinemas' | translate }}</span>
-            <span class="font-medium">{{ m.inCinemas | localeDate }}</span>
+            <span class="font-medium">{{ m.inCinemas | localeDate:{ dateStyle: 'long' } }}</span>
           </div>
         }
         @if (m.digitalRelease) {
           <div>
             <span class="text-base-content/50 block">{{ 'discover.preview_digital' | translate }}</span>
-            <span class="font-medium">{{ m.digitalRelease | localeDate }}</span>
+            <span class="font-medium">{{ m.digitalRelease | localeDate:{ dateStyle: 'long' } }}</span>
           </div>
         }
         @if (m.productionCountries.length) {
@@ -213,7 +213,7 @@
           @if (m.originalLanguage) {
             <div>
               <span class="text-base-content/50 block">{{ 'discover.preview_original_language' | translate }}</span>
-              <span class="font-medium">{{ m.originalLanguage }}</span>
+              <span class="font-medium">{{ originalLanguageLabel() }}</span>
             </div>
           }
           @if (m.releaseDate) {
