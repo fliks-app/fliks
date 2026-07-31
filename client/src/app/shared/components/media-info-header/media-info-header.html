@@ -32,9 +32,9 @@
 
     <!-- Genres are navigation, so they stay out of the folded details panel. -->
     @if (genres().length) {
-      <div class="flex flex-wrap items-center gap-x-1 mt-1 pt-1 font-medium text-base-content/80">
+      <div appTvRow class="flex flex-wrap items-center gap-x-1 mt-1 pt-1 font-medium text-base-content/80">
         @for (genre of genres(); track genre; let last = $last) {
-          <span><button type="button" class="cursor-pointer hover:underline rounded" (click)="navigateToGenre(genre)">{{ genre }}</button>@if (!last){,}</span>
+          <span><button type="button" class="cursor-pointer hover:underline" (click)="navigateToGenre(genre)">{{ genre }}</button>@if (!last){,}</span>
         }
       </div>
     }
@@ -252,9 +252,9 @@
 
       <!-- Genres are navigation, so they stay out of the folded details panel. -->
       @if (genres().length) {
-        <div class="flex flex-wrap items-center gap-x-1 mt-1 pt-1 font-medium text-base-content/80">
+        <div appTvRow class="flex flex-wrap items-center gap-x-1 mt-1 pt-1 font-medium text-base-content/80">
           @for (genre of genres(); track genre; let last = $last) {
-            <span><button type="button" class="cursor-pointer hover:underline rounded" (click)="navigateToGenre(genre)">{{ genre }}</button>@if (!last){,}</span>
+            <span><button type="button" class="cursor-pointer hover:underline" (click)="navigateToGenre(genre)">{{ genre }}</button>@if (!last){,}</span>
           }
         </div>
       }
@@ -434,7 +434,7 @@
      when iterating on the layout. -->
 <ng-template #streamInfoBlock>
   @if (selectedFileId() && (mediaType() !== 'series' || episodeId())) {
-    <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-5">
+    <div appTvRow class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-5">
       <div class="flex items-center gap-2">
         <span class="text-base-content/50">{{ 'media_info.video' | translate }}</span>
         @if (multipleFiles()) {

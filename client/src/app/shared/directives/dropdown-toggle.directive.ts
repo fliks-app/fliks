@@ -1,5 +1,6 @@
 import { Directive, ElementRef, inject, OnDestroy } from '@angular/core';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
+import { TABBABLE_SELECTOR } from '../../core/services/focusable.constants';
 
 /**
  * Click-driven `.dropdown-open` toggle for any DaisyUI dropdown trigger.
@@ -16,8 +17,6 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
  *     <div class="dropdown-content">…</div>
  *   </div>
  */
-const MENU_FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 @Directive({
   selector: '[appDropdownToggle]',
@@ -80,7 +79,7 @@ export class DropdownToggleDirective implements OnDestroy {
     // and keyboard users can act without an extra Tab. Standard ARIA
     // menu pattern.
     queueMicrotask(() => {
-      const first = content?.querySelector<HTMLElement>(MENU_FOCUSABLE_SELECTOR);
+      const first = content?.querySelector<HTMLElement>(TABBABLE_SELECTOR);
       first?.focus({ preventScroll: true });
     });
     const close = () => {
@@ -108,7 +107,7 @@ export class DropdownToggleDirective implements OnDestroy {
     this.tabKeyHandler = (e: KeyboardEvent) => {
       if (e.key !== 'Tab' || !content) return;
       const items = Array.from(
-        content.querySelectorAll<HTMLElement>(MENU_FOCUSABLE_SELECTOR),
+        content.querySelectorAll<HTMLElement>(TABBABLE_SELECTOR),
       );
       if (!items.length) return;
       const first = items[0];

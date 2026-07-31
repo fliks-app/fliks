@@ -221,22 +221,8 @@
             persistKey="collection"
           >
             @if (coll.items.length > 1) {
-              <app-horizontal-scroller>
-                @for (c of coll.items; track c.id) {
-                  <app-media-card
-                    class="shrink-0 w-28 sm:w-32 lg:w-40"
-                    [aspect]="'portrait'"
-                    [imageUrl]="c.posterUrl"
-                    [title]="c.title"
-                    [subtitle]="c.year ? ('' + c.year) : ''"
-                    [rating]="c.rating ?? 0"
-                    [status]="c.hasFile ? null : 'missing'"
-                    [link]="['/movies', '' + c.id]"
-                  />
-                }
-              </app-horizontal-scroller>
+              <ng-container *ngTemplateOutlet="movieRow; context: { $implicit: coll.items }" />
             } @else if (coll.items[0]; as only) {
-              <!-- A lone sibling doesn't earn a rail: one row, poster beside title. -->
               <a
                 [routerLink]="['/movies', '' + only.id]"
                 class="flex items-center gap-4 p-3 rounded-box bg-base-200/40 hover:bg-base-200 transition-colors max-w-md"
@@ -271,20 +257,7 @@
             [heading]="'media_detail.similar' | translate"
             persistKey="similar"
           >
-            <app-horizontal-scroller>
-              @for (s of similar(); track s.id) {
-                <app-media-card
-                  class="shrink-0 w-28 sm:w-32 lg:w-40"
-                  [aspect]="'portrait'"
-                  [imageUrl]="s.posterUrl"
-                  [title]="s.title"
-                  [subtitle]="s.year ? ('' + s.year) : ''"
-                  [rating]="s.rating ?? 0"
-                  [status]="s.hasFile ? null : 'missing'"
-                  [link]="['/movies', '' + s.id]"
-                />
-              }
-            </app-horizontal-scroller>
+            <ng-container *ngTemplateOutlet="movieRow; context: { $implicit: similar() }" />
           </app-collapsible-section>
         }
 
@@ -433,9 +406,26 @@
   }
 </div>
 
+<ng-template #movieRow let-items>
+  <app-horizontal-scroller>
+    @for (item of items; track item.id) {
+      <app-media-card
+        class="shrink-0 w-28 sm:w-32 lg:w-40"
+        [aspect]="'portrait'"
+        [imageUrl]="item.posterUrl"
+        [title]="item.title"
+        [subtitle]="item.year ? ('' + item.year) : ''"
+        [rating]="item.rating ?? 0"
+        [status]="item.hasFile ? null : 'missing'"
+        [link]="['/movies', '' + item.id]"
+      />
+    }
+  </app-horizontal-scroller>
+</ng-template>
+
 <ng-template #castCrewBlock>
   @if (cast().length) {
-    <div class="cv-auto" style="contain-intrinsic-size: auto 12rem">
+    <div class="cv-auto py-5 -my-5 px-4 -mx-4" style="contain-intrinsic-size: auto 12rem">
     <app-collapsible-section [heading]="'media_detail.cast' | translate" persistKey="cast">
     <app-horizontal-scroller>
       @for (c of cast(); track c.id) {
