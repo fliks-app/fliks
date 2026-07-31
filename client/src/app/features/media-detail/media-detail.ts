@@ -55,6 +55,7 @@ import { AddToPlaylistService } from '../../core/services/add-to-playlist.servic
 import { RecommendService } from '../../core/services/recommend.service';
 import { LikesApiService, LikeState } from '../../core/services/api/likes-api.service';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
+import { CollapsibleSectionComponent } from '../../shared/components/collapsible-section/collapsible-section';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
@@ -105,6 +106,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     MediaDetailLibraryModalComponent,
     RequestModalComponent,
     HorizontalScrollerComponent,
+    CollapsibleSectionComponent,
     MediaCardComponent,
     DownloadQualityModalComponent,
     DownloadDetailModalComponent,

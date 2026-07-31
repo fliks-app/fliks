@@ -96,7 +96,11 @@
 
         @if (otherSeasons().length) {
           <div class="divider my-6"></div>
-          <app-horizontal-scroller [title]="'media_detail.other_seasons_of' | translate:{ title: m.title }">
+          <app-collapsible-section
+            [heading]="'media_detail.other_seasons_of' | translate:{ title: m.title }"
+            persistKey="otherSeasons"
+          >
+          <app-horizontal-scroller>
             @for (other of otherSeasons(); track other.id) {
               <app-media-card
                 class="shrink-0 w-28 sm:w-32 lg:w-40"
@@ -112,6 +116,7 @@
               />
             }
           </app-horizontal-scroller>
+          </app-collapsible-section>
         }
 
         @if (cast().length) {
@@ -357,7 +362,8 @@
 <ng-template #castCrewBlock>
   @if (cast().length) {
     <div class="cv-auto" style="contain-intrinsic-size: auto 12rem">
-    <app-horizontal-scroller [title]="'media_detail.cast' | translate">
+    <app-collapsible-section [heading]="'media_detail.cast' | translate" persistKey="cast">
+    <app-horizontal-scroller>
       @for (c of cast(); track c.id) {
         <a [routerLink]="['/persons', c.person.id]" data-no-focus-ring class="shrink-0 w-20 sm:w-24 flex flex-col items-center gap-1.5 group">
           <div class="avatar">
@@ -378,6 +384,7 @@
         </a>
       }
     </app-horizontal-scroller>
+    </app-collapsible-section>
     </div>
   }
 </ng-template>

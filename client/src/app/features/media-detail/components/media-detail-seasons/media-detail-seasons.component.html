@@ -311,8 +311,8 @@
       <!-- Same top rule and inset as the list, so toggling views doesn't shift
            the block; the padding stands in for a list row's own. Only where the
            toggle exists: the "more from season" row has nothing to switch to. -->
-      <div [class]="canSwitchEpisodeView() ? 'border-t border-base-content/10 py-3' : ''">
-      <app-horizontal-scroller [title]="sectionTitle() ?? ''">
+      <ng-template #episodeRow>
+        <app-horizontal-scroller>
         @for (ep of filteredEpisodes(); track ep.id) {
           <app-media-card [aspect]="'landscape'"
             [id]="'episode-' + ep.id"
@@ -333,7 +333,17 @@
             (watchedToggled)="toggleEpisodeWatched.emit({ episode: ep, watched: $event })"
           />
         }
-      </app-horizontal-scroller>
+        </app-horizontal-scroller>
+      </ng-template>
+
+      <div [class]="canSwitchEpisodeView() ? 'border-t border-base-content/10 py-3' : ''">
+        @if (sectionTitle(); as heading) {
+          <app-collapsible-section [heading]="heading" persistKey="moreFromSeason">
+            <ng-container *ngTemplateOutlet="episodeRow" />
+          </app-collapsible-section>
+        } @else {
+          <ng-container *ngTemplateOutlet="episodeRow" />
+        }
       </div>
     }
 

@@ -1,6 +1,6 @@
 @if (file(); as f) {
+  <app-collapsible-section [heading]="'file_info.title' | translate" persistKey="fileInfo">
   <div class="space-y-4">
-    <h2 class="text-lg font-bold">{{ 'file_info.title' | translate }}</h2>
 
     <!-- File info from DB (always available) -->
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1 text-sm">
@@ -110,4 +110,5 @@
       </div>
     }
   </div>
+  </app-collapsible-section>
 }

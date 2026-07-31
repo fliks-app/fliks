@@ -6,19 +6,12 @@
       <p class="italic text-base-content/70 text-lg">{{ tagline() }}</p>
     }
 
-    <details class="group">
-      <summary
-        class="flex items-center gap-2 cursor-pointer text-lg font-bold list-none [&::-webkit-details-marker]:hidden"
-      >
-        {{ 'media_info.details' | translate }}
-        <svg
-          lucideChevronDown
-          class="h-4 w-4 opacity-60 transition-transform group-open:rotate-180"
-          aria-hidden="true"
-        ></svg>
-      </summary>
-
-      <dl class="grid grid-cols-2 gap-x-6 gap-y-3 mt-3">
+    <app-collapsible-section
+      [heading]="'media_info.details' | translate"
+      persistKey="details"
+      [defaultOpen]="false"
+    >
+      <dl class="grid grid-cols-2 gap-x-6 gap-y-3">
         @if (originalTitle()) {
           <div>
             <dt class="text-base-content/50 text-sm">{{ 'discover.preview_original_title' | translate }}</dt>
@@ -68,7 +61,7 @@
           </div>
         }
       </dl>
-    </details>
+    </app-collapsible-section>
 
     @if (trailerKey()) {
       <button type="button" class="btn btn-outline gap-2 mt-2" (click)="openTrailer()">
