@@ -29,6 +29,8 @@ export interface MetadataDetails extends MetadataSearchResult {
    *  has no additional artwork. */
   additionalFanartUrls: string[];
   runtime: number | null;
+  seasonCount: number | null;
+  episodeCount: number | null;
   releaseDate: string | null;
   inCinemas: string | null;
   digitalRelease: string | null;

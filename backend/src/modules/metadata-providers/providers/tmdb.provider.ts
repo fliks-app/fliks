@@ -245,6 +245,8 @@ export class TmdbProvider implements IMetadataProvider {
     return {
       tmdbId: data.id,
       tvdbId: null,
+      seasonCount: null,
+      episodeCount: null,
       imdbId: data.external_ids?.imdb_id ?? data.imdb_id ?? null,
       provider: 'tmdb',
       title: data.title,
@@ -356,6 +358,8 @@ export class TmdbProvider implements IMetadataProvider {
       genres: data.genres?.map((g: TmdbNamed) => g.name) ?? [],
       mediaType: 'series',
       runtime: data.episode_run_time?.[0] ?? null,
+      seasonCount: data.number_of_seasons ?? null,
+      episodeCount: data.number_of_episodes ?? null,
       releaseDate: data.first_air_date ?? null,
       inCinemas: null,
       digitalRelease: null,

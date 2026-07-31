@@ -654,6 +654,7 @@
     "clear": "Clear"
   },
   "discover": {
+    "seasons_failed": "Could not load the seasons",
     "title": "Add to library",
     "subtitle": "Search on The Movie Database (TMDB) — like in Radarr / Sonarr.",
     "tab_movies": "Movies",
@@ -810,6 +811,8 @@
     "details": "Details"
   },
   "media_detail": {
+    "season_count_one": "{{count}} season",
+    "season_count_other": "{{count}} seasons",
     "part_of": "Part of {{name}}",
     "similar": "Similar movies",
     "cast": "Cast",

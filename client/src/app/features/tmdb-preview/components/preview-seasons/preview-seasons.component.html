@@ -1,0 +1,103 @@
+@if (loading()) {
+  <div class="flex justify-center py-8">
+    <span class="loading loading-spinner"></span>
+  </div>
+} @else if (failed()) {
+  <p class="text-sm text-warning py-2">{{ 'discover.seasons_failed' | translate }}</p>
+} @else if (seasons().length) {
+  <div appTvRow class="flex flex-wrap items-center gap-2 mb-4">
+    @for (s of seasons(); track s.seasonNumber) {
+      <button
+        type="button"
+        class="btn btn-sm"
+        [class.btn-primary]="s.seasonNumber === activeSeasonNumber()"
+        [class.btn-ghost]="s.seasonNumber !== activeSeasonNumber()"
+        (click)="selectSeason(s.seasonNumber)"
+      >
+        {{ 'media_detail.season' | translate }} {{ s.seasonNumber }}
+        <span class="opacity-60 tabular-nums">{{ s.episodeCount }}</span>
+      </button>
+    }
+  </div>
+
+  @if (activeSeason(); as season) {
+    @if (season.airDate || season.overview) {
+      <div class="mb-4 text-sm text-base-content/70 space-y-1">
+        @if (season.airDate) {
+          <p class="tabular-nums">{{ season.airDate | localeDate:{ dateStyle: 'long' } }}</p>
+        }
+        @if (season.overview) {
+          <p
+            [appClampToggle]="season.overview"
+            #syn="clampToggle"
+            [class.line-clamp-3]="!syn.expanded()"
+          >{{ season.overview }}</p>
+          @if (syn.showToggle()) {
+            <button
+              type="button"
+              class="link link-primary no-underline hover:underline text-sm"
+              (click)="syn.toggle()"
+            >
+              {{ (syn.expanded() ? 'common.show_less' : 'common.show_more') | translate }}
+            </button>
+          }
+        }
+      </div>
+    }
+
+    <ul class="divide-y divide-base-content/10 border-t border-base-content/10">
+      @for (ep of season.episodes; track ep.episodeNumber) {
+        <li appTvRow class="grid grid-cols-[auto_1fr] gap-x-3 sm:gap-x-4 gap-y-1.5 py-3">
+          <div class="w-28 sm:w-48 lg:w-56 shrink-0 sm:row-span-2">
+            <div class="aspect-video rounded-lg overflow-hidden bg-base-300/40">
+              @if (ep.stillUrl) {
+                <img
+                  appImgFadeIn
+                  [src]="ep.stillUrl"
+                  [alt]="ep.title"
+                  class="w-full h-full object-cover"
+                  loading="lazy"
+                  decoding="async"
+                />
+              }
+            </div>
+          </div>
+
+          <div class="min-w-0 flex flex-col gap-0.5 sm:gap-1">
+            <p class="text-base sm:text-lg font-medium">
+              <span class="text-base-content/50 tabular-nums mr-1.5">{{ ep.episodeNumber }}</span>
+              {{ ep.title }}
+            </p>
+            <span class="text-sm text-base-content/50 tabular-nums">
+              @if (ep.airDate) { {{ ep.airDate | localeDate:{ dateStyle: 'medium' } }} }
+              @if (ep.airDate && ep.runtime) { · }
+              @if (ep.runtime) { {{ ep.runtime }}min }
+            </span>
+          </div>
+
+          <div class="col-span-2 sm:col-span-1 sm:col-start-2">
+            @if (ep.overview) {
+              <p
+                [appClampToggle]="ep.overview"
+                #epSyn="clampToggle"
+                class="text-sm sm:text-base text-base-content/70"
+                [class.line-clamp-3]="!epSyn.expanded()"
+              >{{ ep.overview }}</p>
+              @if (epSyn.showToggle()) {
+                <button
+                  type="button"
+                  class="link link-primary no-underline hover:underline text-sm mt-0.5"
+                  (click)="epSyn.toggle()"
+                >
+                  {{ (epSyn.expanded() ? 'common.show_less' : 'common.show_more') | translate }}
+                </button>
+              }
+            } @else {
+              <p class="text-sm sm:text-base text-base-content/35 italic">{{ 'media_detail.ep_no_overview' | translate }}</p>
+            }
+          </div>
+        </li>
+      }
+    </ul>
+  }
+}

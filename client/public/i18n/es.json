@@ -649,6 +649,7 @@
     "clear": "Borrar"
   },
   "discover": {
+    "seasons_failed": "No se pudieron cargar las temporadas",
     "title": "Añadir a la biblioteca",
     "subtitle": "Búsqueda en The Movie Database (TMDB) — como en Radarr / Sonarr.",
     "tab_movies": "Películas",
@@ -805,6 +806,8 @@
     "details": "Detalles"
   },
   "media_detail": {
+    "season_count_one": "{{count}} temporada",
+    "season_count_other": "{{count}} temporadas",
     "part_of": "Parte de {{name}}",
     "similar": "Películas similares",
     "cast": "Reparto",

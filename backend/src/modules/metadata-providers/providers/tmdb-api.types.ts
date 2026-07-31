@@ -153,6 +153,8 @@ export interface TmdbTvDetailsResponse {
   genres?: TmdbNamed[];
   external_ids?: { imdb_id?: string | null };
   episode_run_time?: number[];
+  number_of_seasons?: number;
+  number_of_episodes?: number;
   status?: string;
   original_language?: string;
   origin_country?: string[];

@@ -155,6 +155,8 @@ export class TvdbProvider implements IMetadataProvider {
     const imdbId = this.extractRemoteId(m.remoteIds, 'IMDB');
 
     return {
+      seasonCount: null,
+      episodeCount: null,
       tmdbId: parseInt(
         this.extractRemoteId(m.remoteIds, 'TheMovieDB.com') ?? '0',
         10,
@@ -232,6 +234,8 @@ export class TvdbProvider implements IMetadataProvider {
     const imdbId = this.extractRemoteId(s.remoteIds, 'IMDB');
 
     return {
+      seasonCount: (s.seasons ?? []).filter((x: { number?: number }) => x.number !== 0).length || null,
+      episodeCount: null,
       tmdbId: parseInt(
         this.extractRemoteId(s.remoteIds, 'TheMovieDB.com') ?? '0',
         10,
