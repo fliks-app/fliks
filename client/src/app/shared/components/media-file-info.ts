@@ -14,6 +14,7 @@ import {
   AudioStreamInfo,
 } from '../../core/services/api/media.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
+import { CollapsibleSectionComponent } from './collapsible-section/collapsible-section';
 
 type FileInput = {
   relativePath: string;
@@ -24,7 +25,7 @@ type FileInput = {
 
 @Component({
   selector: 'app-media-file-info',
-  imports: [TranslateModule, LucideVideo, LucideVolume2, LucideTrash2],
+  imports: [TranslateModule, CollapsibleSectionComponent, LucideVideo, LucideVolume2, LucideTrash2],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-file-info.html',
 })

@@ -7,7 +7,7 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { UpperCasePipe } from '@angular/common';
+import { NgTemplateOutlet, UpperCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
@@ -32,6 +32,7 @@ import { DropdownMenuComponent } from '../../../../shared/components/dropdown-me
 import { DropdownOptionComponent } from '../../../../shared/components/dropdown-option/dropdown-option';
 import { TvRowDirective } from '../../../../shared/directives/tv-row.directive';
 import { ClampToggleDirective } from '../../../../shared/directives/clamp-toggle.directive';
+import { CollapsibleSectionComponent } from '../../../../shared/components/collapsible-section/collapsible-section';
 import {
   Episode,
   Media,
@@ -67,7 +68,7 @@ function readEpisodeViewFromStorage(): EpisodeView {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, UpperCasePipe, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, ClampToggleDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
+  imports: [TranslateModule, UpperCasePipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, CollapsibleSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, ClampToggleDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
