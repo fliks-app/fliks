@@ -392,6 +392,16 @@ body:not(.keyboard-modality):not(.tv) app-mosaic-card button:focus-visible .mosa
   z-index: 1;
   position: relative;
 }
+/* Default radius for the ring above, so a bare focusable (a section heading,
+   a plain link) doesn't get a rectangle around it and no component has to
+   remember its own. On an element with no background or border a radius paints
+   nothing, so this is invisible until focus. In `base`, so a `rounded-*`
+   utility or a daisyUI component radius still wins. */
+@layer base {
+  :is(a, button, select, input, [role="button"], [tabindex]) {
+    @apply rounded-lg;
+  }
+}
 /* The floating player cues position themselves absolutely via inline right /
    bottom offsets. The generic ring above forces `position: relative` (and a low
    z-index), which would re-anchor those offsets to the cue's in-flow origin and

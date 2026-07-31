@@ -16,6 +16,7 @@ import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
+import { rowTopOffset, snapRowOnFocus } from '../../core/utils/focus-snap.util';
 
 @Component({
   selector: 'app-horizontal-scroller',
@@ -42,51 +43,9 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
   private readonly scrollerEl = viewChild<ElementRef<HTMLElement>>('scroller');
   private resizeObserver?: ResizeObserver;
 
-  /** Smooth-scroll the page so this row's top sits at the viewport top
-   *  when focus arrives from outside (e.g. the row above/below). The
-   *  spatial-nav default `focus()` triggers an `instant` scrollIntoView
-   *  that drops the user mid-row — this hostlistener replaces it with
-   *  a smooth, row-aligned animation. Skips when focus moves between
-   *  cards inside the same rail. */
   @HostListener('focusin', ['$event'])
   protected onFocusIn(event: FocusEvent): void {
-    const from = event.relatedTarget as Node | null;
-    if (from && this.host.nativeElement.contains(from)) return;
-    // Clicking a card focuses it too, and pulling the page under the cursor
-    // mid-click is never wanted. Chromium 76 (Tizen) throws on the selector —
-    // those builds are D-pad only, where every focus deserves the snap.
-    try {
-      const target = event.target as HTMLElement | null;
-      if (target && !target.matches(':focus-visible')) return;
-    } catch {
-      // No :focus-visible support — fall through and snap.
-    }
-    queueMicrotask(() => this.snapToRowTop());
-  }
-
-  private snapToRowTop(): void {
-    if (typeof window === 'undefined') return;
-    const scrollEl = document.scrollingElement ?? document.documentElement;
-    const rect = this.host.nativeElement.getBoundingClientRect();
-    const currentTop = scrollEl.scrollTop ?? 0;
-    // Leave a gap above the row title so the focused row doesn't sit
-    // flush against the viewport edge. On TV the cast/user dock floats
-    // top-right (~48 px tall at top:24); bump the offset so the focused
-    // row clears the dock with its own breathing room.
-    const TOP_OFFSET = this.tv.isTv() ? 96 : 24;
-    // Skip when the row is already fully visible in the viewport: the
-    // user is just walking between visible rows, no scroll is warranted.
-    // Only snap when the row is partially / fully off-screen, in which
-    // case we need to bring it back into view.
-    const viewportH = window.innerHeight;
-    if (rect.top >= TOP_OFFSET && rect.bottom <= viewportH) return;
-    const targetTop = Math.max(0, currentTop + rect.top - TOP_OFFSET);
-    if (Math.abs(targetTop - currentTop) < 4) return;
-    try {
-      window.scrollTo({ top: targetTop, left: 0, behavior: 'smooth' });
-    } catch {
-      window.scrollTo(0, targetTop);
-    }
+    snapRowOnFocus(event, this.host.nativeElement, rowTopOffset(this.tv.isTv()));
   }
 
   ngAfterViewInit() {

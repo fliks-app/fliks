@@ -13,15 +13,11 @@
   ></svg>
 </button>
 
-<!-- 0fr → 1fr is the one grid-row trick that animates to the content's own
-     height; browsers that can't interpolate it just snap open. -->
 <div
   class="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
   [style.grid-template-rows]="open() ? '1fr' : '0fr'"
 >
-  <!-- Collapsed content still occupies the DOM, so keep it out of tab and
-       spatial-navigation reach. -->
-  <div class="overflow-hidden" [attr.inert]="open() ? null : ''">
+  <div [class.overflow-hidden]="clipped()" [attr.inert]="open() ? null : ''">
     <div class="mt-3">
       <ng-content />
     </div>

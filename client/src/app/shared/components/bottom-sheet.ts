@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
 import { TvService } from '../../core/services/tv.service';
+import { TABBABLE_SELECTOR } from '../../core/services/focusable.constants';
 
 @Component({
   selector: 'app-bottom-sheet',
@@ -92,8 +93,6 @@ export class BottomSheetComponent {
   private focusTrapActive = false;
   /** Element focused when the sheet opened — restored on close. */
   private prevFocused: HTMLElement | null = null;
-  private static readonly FOCUSABLE_SELECTOR =
-    'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
   /**
    * TV-only focus trap. The WebView's spatial navigation moves focus to the
@@ -109,7 +108,7 @@ export class BottomSheetComponent {
     if (!sheetEl) return;
     const target = e.target as HTMLElement | null;
     if (!target || sheetEl.contains(target)) return;
-    const first = sheetEl.querySelector<HTMLElement>(BottomSheetComponent.FOCUSABLE_SELECTOR);
+    const first = sheetEl.querySelector<HTMLElement>(TABBABLE_SELECTOR);
     first?.focus({ preventScroll: true });
   };
 
@@ -169,7 +168,7 @@ export class BottomSheetComponent {
               if (!this.open()) return;
               const sheetEl = this.sheet()?.nativeElement;
               const first = sheetEl?.querySelector<HTMLElement>(
-                BottomSheetComponent.FOCUSABLE_SELECTOR,
+                TABBABLE_SELECTOR,
               );
               first?.focus({ preventScroll: true });
             });

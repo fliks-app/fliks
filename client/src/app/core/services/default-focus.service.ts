@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { DeviceService } from './device.service';
 import { FocusMemoryService } from './focus-memory.service';
 import { NavbarService } from './navbar.service';
-import { FOCUSABLE_SELECTOR } from './focusable.constants';
+import { FOCUSABLE_SELECTOR, isFocusCandidate } from './focusable.constants';
 
 /** How long to wait for an async-loaded target to render before giving up and
  *  focusing whatever's there (so a slow/empty list doesn't sit unfocused). */
@@ -162,15 +162,11 @@ export class DefaultFocusService {
    *  descendant. Null when nothing visible is focusable. */
   private firstVisibleFocusable(el: HTMLElement | null): HTMLElement | null {
     if (!el) return null;
-    if (el.matches(FOCUSABLE_SELECTOR) && this.isVisible(el)) return el;
+    if (el.matches(FOCUSABLE_SELECTOR) && isFocusCandidate(el)) return el;
     for (const c of Array.from(el.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))) {
-      if (this.isVisible(c)) return c;
+      if (isFocusCandidate(c)) return c;
     }
     return null;
   }
 
-  /** Rendered (not display:none on itself or an ancestor). */
-  private isVisible(el: HTMLElement): boolean {
-    return el.offsetParent !== null;
-  }
 }

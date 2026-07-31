@@ -1,7 +1,12 @@
 import { Injectable, inject, DestroyRef } from '@angular/core';
 import { TvService } from './tv.service';
 import { DefaultFocusService } from './default-focus.service';
-import { FOCUSABLE_SELECTOR } from './focusable.constants';
+import {
+  FOCUSABLE_SELECTOR,
+  SCROLLER_SELECTOR,
+  isFocusCandidate,
+  isRendered,
+} from './focusable.constants';
 
 /**
  * Spatial navigation for D-pad input on Android TV — and keyboard
@@ -118,7 +123,7 @@ export class TvSpatialNavService {
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ['class', 'style', 'disabled', 'hidden', 'aria-hidden', 'tabindex'],
+        attributeFilter: ['class', 'style', 'disabled', 'hidden', 'aria-hidden', 'tabindex', 'inert'],
       });
       this.destroyRef.onDestroy(() => this.focusObserver?.disconnect());
     }
@@ -207,8 +212,10 @@ export class TvSpatialNavService {
   private focusFirstIfNoFocus() {
     if (typeof document === 'undefined') return;
     if (document.activeElement && document.activeElement !== document.body) return;
-    const all = this.getFocusables();
-    all[0]?.focus({ preventScroll: true });
+    // Same choice as the cold-load branch of findNeighbor: the page's declared
+    // default beats the first document focusable, which is the topbar.
+    const target = this.defaultFocus.currentTarget() ?? this.getFocusables()[0];
+    target?.focus({ preventScroll: true });
   }
 
   private onKey(e: KeyboardEvent) {
@@ -358,16 +365,11 @@ export class TvSpatialNavService {
     while (Math.abs(this.wheelAcc) >= STEP) {
       const dir = this.wheelAcc > 0 ? 'down' : 'up';
       this.wheelAcc -= dir === 'down' ? STEP : -STEP;
-      this.navigateVertical(dir);
+      // Same paced dispatcher as the D-pad, so a fast spin can't fire smooth
+      // scrolls faster than they settle. crossZones: a wheel is a scroll
+      // gesture, not a discrete press, so it may leave the current zone.
+      this.dispatchMove(dir, true);
     }
-  }
-
-  /** Magic-Remote wheel vertical step. Routes through the same paced dispatcher
-   *  as the D-pad so a fast spin can't fire smooth scrolls faster than they
-   *  settle. crossZones=true: a wheel is a scroll gesture, not a discrete press,
-   *  so it may scroll out of a zone (unlike a held D-pad key). */
-  private navigateVertical(dir: 'up' | 'down') {
-    this.dispatchMove(dir, true);
   }
 
   /** Currently-open overlays that scope spatial navigation. Bottom sheets
@@ -448,7 +450,7 @@ export class TvSpatialNavService {
     // so the user can step out of the row toward a same-band element
     // outside it (typically: the layout sidebar on the left).
     const activeScroller = horizontal
-      ? active.closest<HTMLElement>('.flex.overflow-x-auto, [data-scroller]')
+      ? active.closest<HTMLElement>(SCROLLER_SELECTOR)
       : null;
 
     // Three-pass selection:
@@ -595,7 +597,7 @@ export class TvSpatialNavService {
     let bestScore = Infinity;
     for (const c of this.containers.values()) {
       if (c === from || c.parent !== null) continue;
-      if (!isVisibleElement(c.el)) continue;
+      if (!isRendered(c.el)) continue;
       const r = c.el.getBoundingClientRect();
       const cx = r.left + r.width / 2;
       const cy = r.top + r.height / 2;
@@ -634,12 +636,12 @@ export class TvSpatialNavService {
   private digDown(el: HTMLElement, preferFirst = false): HTMLElement | null {
     const c = this.containers.get(el);
     if (!c) return el; // it's a leaf focusable
-    if (!preferFirst && c.activeChild && c.el.contains(c.activeChild) && isVisibleFocusable(c.activeChild)) {
+    if (!preferFirst && c.activeChild && c.el.contains(c.activeChild) && isFocusCandidate(c.activeChild)) {
       return c.activeChild;
     }
     if (!preferFirst) {
       const auto = c.el.querySelector<HTMLElement>('[autofocus]');
-      if (auto && isVisibleFocusable(auto)) return auto;
+      if (auto && isFocusCandidate(auto)) return auto;
     }
     const children = this.getNavigableChildren(c);
     for (const child of children) {
@@ -662,11 +664,11 @@ export class TvSpatialNavService {
       // A registered sub-container: it is itself a navigable child; do not
       // descend (the recursion stops, its own children belong to its tree).
       if (el !== container.el && this.containers.has(el)) {
-        if (isVisibleElement(el)) out.push(el);
+        if (isRendered(el)) out.push(el);
         return;
       }
       // A focusable leaf at this level — treat as navigable, do not descend.
-      if (matchesFocusable(el) && isVisibleFocusable(el)) {
+      if (matchesFocusable(el) && isFocusCandidate(el)) {
         out.push(el);
         return;
       }
@@ -686,21 +688,6 @@ function matchesFocusable(el: HTMLElement): boolean {
   return el.matches?.(FOCUSABLE_SELECTOR) ?? false;
 }
 
-function isVisibleElement(el: HTMLElement): boolean {
-  if (el.offsetParent === null && el.tagName !== 'BODY') return false;
-  const r = el.getBoundingClientRect();
-  if (r.width === 0 && r.height === 0) return false;
-  const style = getComputedStyle(el);
-  return style.visibility !== 'hidden' && style.display !== 'none';
-}
-
-function isVisibleFocusable(el: HTMLElement): boolean {
-  if (el.hasAttribute('disabled')) return false;
-  if (el.getAttribute('aria-hidden') === 'true') return false;
-  if (el.getAttribute('tabindex') === '-1') return false;
-  return isVisibleElement(el);
-}
-
 const ARROW_TO_DIR: Record<string, 'left' | 'right' | 'up' | 'down' | undefined> = {
   ArrowLeft: 'left',
   ArrowRight: 'right',
@@ -718,19 +705,10 @@ const KEYCODE_TO_DIR: Record<number, 'left' | 'right' | 'up' | 'down' | undefine
 function collectFocusables(root: ParentNode = document): HTMLElement[] {
   const nodes = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
   const visible = nodes.filter((el) => {
-    if (el.hasAttribute('disabled')) return false;
-    if (el.getAttribute('aria-hidden') === 'true') return false;
-    // tabindex=-1 means "skip spatial nav". The FOCUSABLE_SELECTOR matches
-    // anchors via `a[href]` independently of tabindex, so without this filter
-    // a media-card's inner title/subtitle links (which we set tabindex=-1 on
-    // TV) would still be picked up by the D-pad as separate focus targets.
-    if (el.getAttribute('tabindex') === '-1') return false;
-    // offsetParent is null when the element (or any ancestor) has display:none,
-    // visibility:hidden, or is detached — covers the cases where a parent hides
-    // a focusable child via class toggling without the child itself being hidden.
-    if (el.offsetParent === null && el.tagName !== 'BODY') return false;
+    const style = getComputedStyle(el);
+    if (!isFocusCandidate(el, style)) return false;
+    if (style.pointerEvents === 'none') return false;
     const r = el.getBoundingClientRect();
-    if (r.width === 0 || r.height === 0) return false;
     // Reject focusables only when they're positioned entirely off-document —
     // not just scrolled out of view. DaisyUI's drawer-toggle checkbox lives
     // at left: -100% and would otherwise pollute spatial nav (Left key would
@@ -741,17 +719,11 @@ function collectFocusables(root: ParentNode = document): HTMLElement[] {
     // for scrolled-off content, and a horizontal-scroller's internal
     // scrollLeft reaches its hidden siblings, so allow either case.
     if (r.right <= 0 || r.bottom <= 0) {
-      const inScroller = el.closest('.flex.overflow-x-auto, [data-scroller]');
+      const inScroller = el.closest(SCROLLER_SELECTOR);
       const docRight = r.right + window.scrollX;
       const docBottom = r.bottom + window.scrollY;
       if (!inScroller && (docRight <= 0 || docBottom <= 0)) return false;
     }
-    const style = getComputedStyle(el);
-    if (style.visibility === 'hidden' || style.display === 'none') return false;
-    // pointerEvents:none folded in here (the scoring loop used to call
-    // getComputedStyle a second time per element for this) — reuses the style
-    // object already resolved above, so it's free, and the result is cached.
-    if (style.pointerEvents === 'none') return false;
     return true;
   });
   // Keep only the outermost focusables: if an element has an ancestor that is
