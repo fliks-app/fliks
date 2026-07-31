@@ -34,6 +34,7 @@ import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
+import { localizeLanguage } from '../../core/utils/language.utils';
 import { ClampToggleDirective } from '../../shared/directives/clamp-toggle.directive';
 
 @Component({
@@ -132,6 +133,10 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   });
   readonly directorsLabel = computed(() =>
     this.directors().map((d) => d.name).join(', '),
+  );
+
+  readonly originalLanguageLabel = computed(() =>
+    localizeLanguage(this.media()?.originalLanguage, this.translate),
   );
 
   /** i18n key for the provider status (lowercased, spaces → underscores). */
