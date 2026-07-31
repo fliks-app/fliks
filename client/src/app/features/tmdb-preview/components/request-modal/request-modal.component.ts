@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { MetadataService, SeasonStub } from '../../../../core/services/api/metadata.service';
+import { MetadataService, MetadataSeason } from '../../../../core/services/api/metadata.service';
 import { RequestsService } from '../../../../core/services/api/requests.service';
 import { LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
@@ -48,7 +48,7 @@ export class RequestModalComponent {
   readonly libraryId = signal<number | null>(null);
   readonly requesting = signal(false);
 
-  readonly seasons = signal<SeasonStub[]>([]);
+  readonly seasons = signal<MetadataSeason[]>([]);
   readonly selectedSeasons = signal<Set<number>>(new Set());
   readonly seasonsLoading = signal(false);
   /** Season numbers already covered by an active request — passed in by

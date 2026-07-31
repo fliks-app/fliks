@@ -36,10 +36,12 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { localizeLanguage } from '../../core/utils/language.utils';
 import { ClampToggleDirective } from '../../shared/directives/clamp-toggle.directive';
+import { CollapsibleSectionComponent } from '../../shared/components/collapsible-section/collapsible-section';
+import { PreviewSeasonsComponent } from './components/preview-seasons/preview-seasons.component';
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DecimalPipe, TranslateModule, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, ClampToggleDirective, LucideFilm, LucideUser, LucidePlay, LucidePlus],
+  imports: [FormsModule, CurrencyPipe, DecimalPipe, TranslateModule, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, ClampToggleDirective, CollapsibleSectionComponent, PreviewSeasonsComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })
@@ -134,6 +136,24 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   readonly directorsLabel = computed(() =>
     this.directors().map((d) => d.name).join(', '),
   );
+
+  readonly typeLabelKey = computed(() =>
+    this.type() === 'series' ? 'requests.type_series' : 'requests.type_movie',
+  );
+
+  readonly seasonsLabel = computed(() => {
+    const m = this.media();
+    if (this.type() !== 'series' || !m?.seasonCount) return '';
+    const plural = (key: string, count: number) =>
+      this.translate.instant(
+        `media_detail.${key}_${count <= 1 ? 'one' : 'other'}`,
+        { count },
+      );
+    const seasons = plural('season_count', m.seasonCount);
+    return m.episodeCount
+      ? `${seasons} · ${plural('episode_count', m.episodeCount)}`
+      : seasons;
+  });
 
   readonly originalLanguageLabel = computed(() =>
     localizeLanguage(this.media()?.originalLanguage, this.translate),

@@ -49,6 +49,8 @@ export interface MetadataDetails extends MetadataSearchResult {
   /** Transparent PNG "clearlogo" title treatment when the provider has one. */
   logoUrl: string | null;
   runtime: number | null;
+  seasonCount: number | null;
+  episodeCount: number | null;
   releaseDate: string | null;
   inCinemas: string | null;
   digitalRelease: string | null;
@@ -70,9 +72,22 @@ export interface MetadataDetails extends MetadataSearchResult {
   tmdbCollectionName: string | null;
 }
 
-export interface SeasonStub {
+export interface MetadataEpisode {
+  episodeNumber: number;
+  title: string;
+  overview: string | null;
+  airDate: string | null;
+  runtime: number | null;
+  stillUrl: string | null;
+}
+
+export interface MetadataSeason {
   seasonNumber: number;
   episodeCount: number;
+  overview: string | null;
+  airDate: string | null;
+  posterUrl: string | null;
+  episodes: MetadataEpisode[];
 }
 
 /** A TMDB genre (id + localized name). */
@@ -158,7 +173,15 @@ export class MetadataService {
 
   getTvSeasons(tmdbId: number) {
     return firstValueFrom(
-      this.http.get<SeasonStub[]>(`/api/metadata/tv/${tmdbId}/seasons`),
+      this.http.get<MetadataSeason[]>(`/api/metadata/tv/${tmdbId}/seasons`),
+    );
+  }
+
+  getSeasons(provider: string, externalId: string) {
+    return firstValueFrom(
+      this.http.get<MetadataSeason[]>(
+        `/api/metadata/${provider}/tv/${externalId}/seasons`,
+      ),
     );
   }
 

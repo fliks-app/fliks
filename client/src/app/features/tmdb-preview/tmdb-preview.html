@@ -29,7 +29,9 @@
         }
         @if (m.year) { <span>{{ m.year }}</span> }
         @if (m.runtime) { <span>{{ m.runtime }}min</span> }
+        @if (seasonsLabel()) { <span>{{ seasonsLabel() }}</span> }
         @if (m.status && m.status !== 'unknown') { <span>{{ statusKey() | translate }}</span> }
+        <span class="badge badge-outline badge-sm">{{ typeLabelKey() | translate }}</span>
       </div>
 
       @if (m.genres.length) {
@@ -159,7 +161,9 @@
           }
           @if (m.year) { <span>{{ m.year }}</span> }
           @if (m.runtime) { <span>{{ m.runtime }}min</span> }
+          @if (seasonsLabel()) { <span>{{ seasonsLabel() }}</span> }
           @if (m.status && m.status !== 'unknown') { <span>{{ statusKey() | translate }}</span> }
+          <span class="badge badge-outline">{{ typeLabelKey() | translate }}</span>
         </div>
 
         @if (m.genres.length) {
@@ -278,6 +282,17 @@
       </div>
     </div>
   </div>
+
+  @if (type() === 'series') {
+    <section class="px-1 md:px-0 mt-8">
+      <app-collapsible-section
+        [heading]="'media_detail.seasons_section' | translate"
+        persistKey="previewSeasons"
+      >
+        <app-preview-seasons [provider]="provider()" [externalId]="externalId()" />
+      </app-collapsible-section>
+    </section>
+  }
 
   <!-- Cast (shared mobile + desktop) -->
   @if (topCast().length) {
