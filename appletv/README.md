@@ -4,8 +4,10 @@ Native **tvOS (Apple TV)** app for Fliks, in SwiftUI. tvOS exposes no
 WebView, so the Angular client can't run here — this is a from-scratch
 native UI talking to the same backend.
 
-This is **P0**: project scaffolding + the remote-build toolchain + a
-"hello" `RootView`. No data layer, no auth, no player yet.
+Feature-complete against the web client's core: onboarding (server setup,
+login, Quick Connect, user switch), home, library, media and episode pages,
+search, playlists, settings, and the player. Signed builds go to App Store
+Connect from `tvos-publish.yml` on release tags.
 
 ## Development model
 
