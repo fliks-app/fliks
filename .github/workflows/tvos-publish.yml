@@ -102,6 +102,10 @@ jobs:
             $(security list-keychains -d user | sed -e 's/^[[:space:]]*//' -e 's/"//g')
         working-directory: ${{ github.workspace }}
 
+      # Signed with the distribution identity from the start. Left to its
+      # default, Xcode archives with `Apple Development` and asks Apple for a
+      # tvOS development profile, which needs a registered tvOS device — the
+      # team has none, and an App Store profile needs none either way.
       - name: Archive tvOS app
         env:
           KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
@@ -119,6 +123,7 @@ jobs:
             -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8 \
             CURRENT_PROJECT_VERSION=${{ steps.bnum.outputs.value }} \
             DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             clean archive
 
       - name: Export signed IPA
