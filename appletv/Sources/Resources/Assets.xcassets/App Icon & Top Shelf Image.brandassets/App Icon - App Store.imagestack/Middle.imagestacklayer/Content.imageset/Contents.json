@@ -1,14 +1,9 @@
 {
   "images" : [
     {
-      "filename" : "icon-middle.png",
+      "filename" : "store-middle.png",
       "idiom" : "tv",
       "scale" : "1x"
-    },
-    {
-      "filename" : "icon-middle@2x.png",
-      "idiom" : "tv",
-      "scale" : "2x"
     }
   ],
   "info" : {

@@ -1,13 +1,13 @@
 {
   "images" : [
     {
-      "filename" : "icon-middle.png",
-      "idiom" : "tv",
+      "filename" : "logo.png",
+      "idiom" : "universal",
       "scale" : "1x"
     },
     {
-      "filename" : "icon-middle@2x.png",
-      "idiom" : "tv",
+      "filename" : "logo@2x.png",
+      "idiom" : "universal",
       "scale" : "2x"
     }
   ],
