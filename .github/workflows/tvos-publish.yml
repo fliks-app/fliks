@@ -26,6 +26,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build and sign, but validate instead of uploading'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -143,13 +148,15 @@ jobs:
             -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8
 
       # `altool --upload-app` is the only ASC upload path that takes an API key
-      # on the command line; `notarytool` notarises, it doesn't publish.
+      # on the command line; `notarytool` notarises, it doesn't publish. A dry
+      # run checks the same package against App Store Connect without shipping it.
       - name: Upload IPA to App Store Connect
         env:
           KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          ACTION: ${{ inputs.dry_run && '--validate-app' || '--upload-app' }}
         run: |
-          xcrun altool --upload-app \
+          xcrun altool $ACTION \
             --type tvos \
             --file "$(ls build/export/*.ipa | head -1)" \
             --apiKey "$KEY_ID" \

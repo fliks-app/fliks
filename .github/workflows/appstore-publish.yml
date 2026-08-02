@@ -26,6 +26,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build and sign, but skip the upload to App Store Connect'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -90,33 +95,23 @@ jobs:
       # Xcode REUSES it instead of minting a new signing certificate every run.
       # On a blank runner keychain, `-allowProvisioningUpdates` cloud-signing
       # regenerates a cert each build and quickly hits Apple's cert cap. The
-      # provisioning profile stays cloud-managed (profiles aren't capped).
-      # Import BOTH the team's Apple Distribution and Apple Development certs into
-      # a throwaway keychain so Xcode reuses them instead of minting fresh ones on
-      # every run (archive needs a Development cert + a Distribution cert; on a
-      # blank runner keychain -allowProvisioningUpdates regenerated each, climbing
-      # toward Apple's cert cap). The temp keychain is ADDED to the search list
-      # (login kept) so cloud-managed provisioning profiles still resolve.
-      - name: Import signing certificates
+      # provisioning profile stays cloud-managed (profiles aren't capped). The
+      # temp keychain is ADDED to the search list (login kept) so cloud-managed
+      # profiles still resolve.
+      - name: Import signing certificate
         env:
           DIST_P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
           DIST_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
-          DEV_P12_BASE64: ${{ secrets.IOS_DEV_CERT_P12_BASE64 }}
-          DEV_PASSWORD: ${{ secrets.IOS_DEV_CERT_PASSWORD }}
         run: |
           KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
           KEYCHAIN_PWD="$(openssl rand -base64 24)"
           security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
-          import_p12() {
-            local path="$RUNNER_TEMP/cert.p12"
-            echo "$1" | base64 -d > "$path"
-            security import "$path" -P "$2" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-            rm -f "$path"
-          }
-          import_p12 "$DIST_P12_BASE64" "$DIST_PASSWORD"
-          import_p12 "$DEV_P12_BASE64" "$DEV_PASSWORD"
+          echo "$DIST_P12_BASE64" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$DIST_PASSWORD" -A -t cert \
+            -f pkcs12 -k "$KEYCHAIN_PATH"
+          rm -f "$RUNNER_TEMP/cert.p12"
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" \
             $(security list-keychains -d user | sed -e 's/^[[:space:]]*//' -e 's/"//g')
@@ -126,6 +121,10 @@ jobs:
         run: pod install
         working-directory: client/ios/App
 
+      # Archived unsigned: with automatic signing, `xcodebuild archive` asks
+      # Apple for a *development* profile, which ties every release to having a
+      # registered device on the team. The export below re-signs for the App
+      # Store, and that profile type needs none.
       - name: Archive iOS app
         working-directory: client/ios/App
         env:
@@ -144,6 +143,7 @@ jobs:
             -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8 \
             CURRENT_PROJECT_VERSION=${{ steps.bnum.outputs.value }} \
             DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} \
+            CODE_SIGNING_ALLOWED=NO \
             clean archive
 
       - name: Export signed IPA
@@ -167,12 +167,15 @@ jobs:
       # notarisation, `xcrun stapler` for stapling. The deprecation
       # warning on altool has been "any release now" for years; the
       # command is still the documented App Store upload entry point.
+      # A dry run validates the very same package against App Store Connect
+      # without publishing it — signature, entitlements and SDK are checked.
       - name: Upload IPA to App Store Connect
         env:
           KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          ACTION: ${{ inputs.dry_run && '--validate-app' || '--upload-app' }}
         run: |
-          xcrun altool --upload-app \
+          xcrun altool $ACTION \
             --type ios \
             --file client/ios/App/build/export/App.ipa \
             --apiKey "$KEY_ID" \
