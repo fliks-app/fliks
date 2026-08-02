@@ -399,32 +399,55 @@ private struct SkipCueStyle: ButtonStyle {
     // MARK: - Subtitle preference
 
     /// Native HLS `SUBTITLES` renditions surface as an `AVMediaSelectionGroup`
-    /// — pick the user's preferred language from it (no extra network call).
-    /// "off" disables AVFoundation's own automatic selection entirely; a
-    /// language match wins regardless of mode; "always" falls back to the
-    /// first available track when no match exists; "intelligent" leaves
-    /// AVFoundation's system default heuristic in charge.
+    /// — pick from it, no extra network call:
+    ///   - off: nothing selected, and AVFoundation's own heuristic disabled;
+    ///   - always: the preferred language, else the first track;
+    ///   - intelligent: the preferred language only when the audio is in
+    ///     another one (same rule as the web `track-manager`).
     private func applyPreferredSubtitle(to item: AVPlayerItem, player: AVPlayer) {
         let settings = AppSettingsStore.shared
-        if settings.subtitleMode == "off" {
-            player.appliesMediaSelectionCriteriaAutomatically = false
-            return
-        }
-        player.appliesMediaSelectionCriteriaAutomatically = true
-        guard !settings.preferredSubtitleLanguage.isEmpty || settings.subtitleMode == "always" else { return }
+        let mode = settings.subtitleMode
+        let preferred = settings.preferredSubtitleLanguage
+        player.appliesMediaSelectionCriteriaAutomatically = mode != "off"
+
         Task {
             _ = try? await item.asset.load(.availableMediaCharacteristicsWithMediaSelectionOptions)
             guard let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) else { return }
-            if !settings.preferredSubtitleLanguage.isEmpty {
-                let locale = Locale(identifier: settings.preferredSubtitleLanguage)
-                if let match = AVMediaSelectionGroup.mediaSelectionOptions(from: group.options, with: locale).first {
-                    item.select(match, in: group)
-                    return
-                }
+            if mode == "off" {
+                item.select(nil, in: group)
+                return
             }
-            if settings.subtitleMode == "always", let first = group.options.first {
-                item.select(first, in: group)
+
+            let match = preferred.isEmpty ? nil : AVMediaSelectionGroup.mediaSelectionOptions(
+                from: group.options, with: Locale(identifier: preferred)
+            ).first
+
+            if mode == "always" {
+                item.select(match ?? group.options.first, in: group)
+                return
             }
+            guard let match, let audio = await audioLanguage(of: item),
+                  audio != Self.languageCode(preferred) else { return }
+            item.select(match, in: group)
         }
+    }
+
+    /// Language of the audio actually playing — the selected option when the
+    /// stream carries several, else the only track's own tag.
+    private func audioLanguage(of item: AVPlayerItem) async -> String? {
+        if let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .audible),
+           let selected = item.currentMediaSelection.selectedMediaOption(in: group),
+           let tag = selected.extendedLanguageTag {
+            return Self.languageCode(tag)
+        }
+        let track = try? await item.asset.loadTracks(withMediaType: .audio).first
+        guard let tag = try? await track?.load(.languageCode) else { return nil }
+        return Self.languageCode(tag)
+    }
+
+    /// `fra` and `fr` are the same language; `und` is no language at all.
+    private static func languageCode(_ tag: String?) -> String? {
+        guard let tag, !tag.isEmpty, tag != "und" else { return nil }
+        return Locale.LanguageCode(tag).identifier(.alpha2) ?? tag
     }
 }

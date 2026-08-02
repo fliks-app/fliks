@@ -16,6 +16,10 @@ struct SettingsView: View {
                 NavigationLink(tr("app_settings.nav.subtitles")) { SubtitleSettingsView() }
                 NavigationLink(tr("app_settings.nav.home")) { HomeLayoutView() }
             }
+            // A focused row grows past the scroller's bounds; without room and
+            // without clipping the first one gets its top shaved off.
+            .contentMargins(.vertical, 28, for: .scrollContent)
+            .scrollClipDisabled()
         }
     }
 }

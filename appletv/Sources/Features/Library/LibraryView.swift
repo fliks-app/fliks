@@ -61,7 +61,7 @@ struct LibraryView: View {
             } else {
                 ContentGrid(title: nil, items: items, onReachEnd: loadMore) { m in
                     MediaCard(imagePath: m.posterUrl, title: m.title, subtitle: m.year.map(String.init),
-                              backdropPath: m.fanartUrl) {
+                              backdropPath: m.fanartUrl, mediaId: m.id) {
                         onSelectMedia(m.id)
                     }
                 }

@@ -11,6 +11,7 @@ enum Route: Hashable {
     case home
     case library(id: Int)
     case mediaDetail(id: Int)
+    case episodeDetail(mediaId: Int, episodeId: Int)
     case search
     case playlists
     case playlistDetail(id: Int)

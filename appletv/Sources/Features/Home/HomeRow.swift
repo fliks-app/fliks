@@ -116,32 +116,29 @@ private struct LibraryTile: View {
     var onSelect: () -> Void
     @FocusState private var focused: Bool
 
+    private var tint: Color { library.tint }
+
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 14) {
-                Image(systemName: symbol)
-                    .font(.title2)
-                Text(library.name).font(.headline).lineLimit(1)
+                Image(systemName: library.symbol)
+                    .font(.title3)
+                    .foregroundStyle(tint)
+                // Long names shrink before they truncate — a library called
+                // "Les petits" shouldn't read as "Les pe…".
+                Text(library.name)
+                    .font(.body.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
             .padding(.horizontal, 22)
-            .frame(width: 280, height: 110, alignment: .leading)
-            .background(Color.accentColor.opacity(focused ? 0.4 : 0.18), in: RoundedRectangle(cornerRadius: 16))
+            .frame(width: 360, height: 110, alignment: .leading)
+            .background(tint.opacity(focused ? 0.42 : 0.16), in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(tint.opacity(focused ? 0.9 : 0.3), lineWidth: 2))
         }
         .buttonStyle(.card)
         .focused($focused)
-    }
-
-    // ponytail: a fixed SF Symbol per rough category stands in for the
-    // Angular lucide-icon + per-library color; add a real icon/color mapping
-    // if libraries want a more distinct look on TV.
-    private var symbol: String {
-        switch library.icon {
-        case "film": "film"
-        case "tv", "monitor": "tv"
-        case "music": "music.note"
-        case "book", "book-open": "book"
-        default: "folder.fill"
-        }
     }
 }
 
@@ -157,7 +154,8 @@ private struct ContinueWatchingRow: View {
         ZoneRow(title: tr("home.continue_watching"), portrait: false, state: state, onRetry: { Task { await load() } }) { item in
             MediaCard(imagePath: item.stillUrl ?? item.fanartUrl ?? item.posterUrl,
                       title: item.mediaTitle, subtitle: item.episodeLabel, portrait: false,
-                      progressPercent: item.progressPercent, backdropPath: item.fanartUrl) {
+                      progressPercent: item.progressPercent, backdropPath: item.fanartUrl,
+                      mediaId: item.mediaId, episodeId: item.episodeId) {
                 onSelect(item.mediaId)
             }
         }
@@ -165,13 +163,11 @@ private struct ContinueWatchingRow: View {
     }
 
     private func load() async {
-        state = .loading
-        do {
-            let items: [ContinueWatchingItem] = try await APIClient.shared.get("/api/playback/continue-watching")
-            state = .loaded(items)
-            backdrop.seed(items.first?.fanartUrl)
-        } catch {
-            state = .failed
+        await revalidateZone("continue-watching", apply: { next in
+            state = next
+            backdrop.seed(next.items.first?.fanartUrl)
+        }) {
+            try await APIClient.shared.get("/api/playback/continue-watching")
         }
     }
 }
@@ -187,7 +183,8 @@ private struct RecommendationsRow: View {
     var body: some View {
         ZoneRow(title: tr("home.recommendations"), state: state, onRetry: { Task { await load() } }) { rec in
             MediaCard(imagePath: rec.media.posterUrl, title: rec.media.title,
-                      subtitle: rec.media.year.map(String.init), backdropPath: rec.media.fanartUrl) {
+                      subtitle: rec.media.year.map(String.init), backdropPath: rec.media.fanartUrl,
+                      mediaId: rec.media.id) {
                 onSelect(rec.media.id)
             }
         }
@@ -195,13 +192,11 @@ private struct RecommendationsRow: View {
     }
 
     private func load() async {
-        state = .loading
-        do {
-            let items: [RecommendationItem] = try await APIClient.shared.get("/api/playback/recommendations")
-            state = .loaded(items)
-            backdrop.seed(items.first?.media.fanartUrl)
-        } catch {
-            state = .failed
+        await revalidateZone("recommendations", apply: { next in
+            state = next
+            backdrop.seed(next.items.first?.media.fanartUrl)
+        }) {
+            try await APIClient.shared.get("/api/playback/recommendations")
         }
     }
 }
@@ -217,7 +212,8 @@ private struct LikesRow: View {
     var body: some View {
         ZoneRow(title: tr("home.likes"), portrait: false, state: state, onRetry: { Task { await load() } }) { item in
             MediaCard(imagePath: item.stillUrl ?? item.fanartUrl ?? item.posterUrl,
-                      title: item.title, subtitle: item.label, portrait: false, backdropPath: item.fanartUrl) {
+                      title: item.title, subtitle: item.label, portrait: false, backdropPath: item.fanartUrl,
+                      mediaId: item.mediaId) {
                 onSelect(item.mediaId)
             }
         }
@@ -225,13 +221,11 @@ private struct LikesRow: View {
     }
 
     private func load() async {
-        state = .loading
-        do {
-            let items: [LikedItem] = try await APIClient.shared.get("/api/likes")
-            state = .loaded(items)
-            backdrop.seed(items.first?.fanartUrl)
-        } catch {
-            state = .failed
+        await revalidateZone("likes", apply: { next in
+            state = next
+            backdrop.seed(next.items.first?.fanartUrl)
+        }) {
+            try await APIClient.shared.get("/api/likes")
         }
     }
 }
@@ -250,7 +244,7 @@ private struct RecentlyAddedRow: View {
     var body: some View {
         ZoneRow(title: title, state: state, onRetry: { Task { await load() } }) { m in
             MediaCard(imagePath: m.posterUrl, title: m.title, subtitle: m.year.map(String.init),
-                      backdropPath: m.fanartUrl) {
+                      backdropPath: m.fanartUrl, mediaId: m.id) {
                 onSelect(m.id)
             }
         }
@@ -258,15 +252,14 @@ private struct RecentlyAddedRow: View {
     }
 
     private func load() async {
-        state = .loading
-        var query = ["mode": homeSettings.settings.recentlyAddedMode.rawValue, "limit": "20", "excludeWatched": "true"]
+        let mode = homeSettings.settings.recentlyAddedMode.rawValue
+        var query = ["mode": mode, "limit": "20", "excludeWatched": "true"]
         if let libraryId { query["libraryId"] = String(libraryId) }
-        do {
-            let items: [Media] = try await APIClient.shared.get("/api/media/recently-added", query: query)
-            state = .loaded(items)
-            backdrop.seed(items.first?.fanartUrl)
-        } catch {
-            state = .failed
+        await revalidateZone("recently-added:\(libraryId ?? 0):\(mode)", apply: { next in
+            state = next
+            backdrop.seed(next.items.first?.fanartUrl)
+        }) {
+            try await APIClient.shared.get("/api/media/recently-added", query: query)
         }
     }
 }
@@ -290,13 +283,9 @@ private struct PlaylistsRow: View {
     }
 
     private func load() async {
-        state = .loading
-        do {
+        await revalidateZone("playlists", apply: { state = $0 }) {
             let items: [Playlist] = try await APIClient.shared.get("/api/playlists")
-            let sorted = items.sorted { $0.updatedAt > $1.updatedAt }.prefix(20)
-            state = .loaded(Array(sorted))
-        } catch {
-            state = .failed
+            return Array(items.sorted { $0.updatedAt > $1.updatedAt }.prefix(20))
         }
     }
 }
@@ -310,7 +299,7 @@ private struct ComingSoonRow: View {
 
     var body: some View {
         ZoneRow(title: tr("home.coming_soon"), state: state, onRetry: { Task { await load() } }) { entry in
-            MediaCard(imagePath: entry.posterUrl, title: entry.title, subtitle: entry.date) {
+            MediaCard(imagePath: entry.posterUrl, title: entry.title, subtitle: AppDate.short(entry.date)) {
                 onSelect(entry.mediaId)
             }
         }
@@ -318,14 +307,13 @@ private struct ComingSoonRow: View {
     }
 
     private func load() async {
-        state = .loading
         let df = DateFormatter()
         df.dateFormat = "yyyy-MM-dd"
         df.timeZone = TimeZone(identifier: "UTC")
         let today = Date()
         let start = Calendar.current.date(byAdding: .day, value: -3, to: today) ?? today
         let end = Calendar.current.date(byAdding: .day, value: 30, to: today) ?? today
-        do {
+        await revalidateZone("coming-soon", apply: { state = $0 }) {
             let entries: [CalendarEntry] = try await APIClient.shared.get(
                 "/api/media/calendar",
                 query: ["start": df.string(from: start), "end": df.string(from: end), "monitoredOnly": "true"]
@@ -334,9 +322,7 @@ private struct ComingSoonRow: View {
                 .filter { !($0.hasFile ?? false) && ["digital", "airing", "release"].contains($0.event) }
                 .sorted { $0.date < $1.date }
             var seen = Set<Int>()
-            state = .loaded(upcoming.filter { seen.insert($0.mediaId).inserted })
-        } catch {
-            state = .failed
+            return upcoming.filter { seen.insert($0.mediaId).inserted }
         }
     }
 }
@@ -358,12 +344,9 @@ private struct RequestsRecentRow: View {
     }
 
     private func load() async {
-        state = .loading
-        do {
+        await revalidateZone("requests-recent", apply: { state = $0 }) {
             let page: Paginated<RequestSummary> = try await APIClient.shared.get("/api/requests", query: ["limit": "12"])
-            state = .loaded(page.data)
-        } catch {
-            state = .failed
+            return page.data
         }
     }
 }

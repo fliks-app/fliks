@@ -49,7 +49,9 @@ struct PlaylistDetailView: View {
                     Text(tr("playlists.detail_empty")).foregroundStyle(.secondary)
                 } else {
                     ContentGrid(title: nil, items: items) { item in
-                        PosterCard(imagePath: itemImage(item), title: itemTitle(item)) {
+                        PosterCard(imagePath: itemImage(item), title: itemTitle(item),
+                                   progressPercent: item.progressPercent,
+                                   mediaId: item.media.id, episodeId: item.episode?.id) {
                             Task { await play(item) }
                         }
                     }

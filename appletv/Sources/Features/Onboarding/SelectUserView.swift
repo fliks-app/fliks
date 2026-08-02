@@ -1,15 +1,34 @@
 import SwiftUI
 
-/// Pre-login user picker. Selecting a tile opens a sheet offering quick
-/// connect (recommended, code-less) or password sign-in for that user.
+/// Pre-login user picker. An account with a session stored on this device
+/// signs straight back in; anything else opens a sheet offering quick connect
+/// (recommended, code-less) or password sign-in.
 struct SelectUserView: View {
     @Binding var path: NavigationPath
     @Environment(ServerStore.self) private var server
+    @Environment(AuthService.self) private var auth
 
-    @State private var users: [PublicUser] = []
+    @State private var serverUsers: [PublicUser] = []
     @State private var loading = true
     @State private var loadError = false
+    @State private var notice: String?
+    @State private var resuming: Int?
     @State private var openSheetFor: PublicUser?
+
+    /// The server's roster plus the accounts stored here: the union is what
+    /// keeps sign-in possible while the server is unreachable.
+    private var users: [PublicUser] {
+        var byId: [Int: PublicUser] = [:]
+        for session in auth.resumableSessions {
+            byId[session.user.id] = PublicUser(id: session.user.id,
+                                               username: session.user.username,
+                                               avatar: session.user.avatar)
+        }
+        for user in serverUsers { byId[user.id] = user }
+        return byId.values.sorted { $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending }
+    }
+
+    private var resumableIds: Set<Int> { Set(auth.resumableSessions.map(\.user.id)) }
 
     var body: some View {
         VStack(spacing: 40) {
@@ -17,16 +36,26 @@ struct SelectUserView: View {
 
             if loading {
                 ProgressView()
-            } else if loadError {
+            } else if loadError && users.isEmpty {
                 VStack(spacing: 16) {
-                    Text(tr("error.network"))
+                    Text(tr("select_user.load_error"))
                     Button(tr("common.retry")) { Task { await load() } }
                 }
             } else {
+                if loadError {
+                    Text(tr("select_user.offline_hint")).foregroundStyle(.secondary)
+                }
+                if let notice {
+                    Text(notice).foregroundStyle(.orange)
+                }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 44) {
                         ForEach(users) { user in
-                            UserTile(user: user) { openSheetFor = user }
+                            UserTile(user: user,
+                                     resumable: resumableIds.contains(user.id),
+                                     busy: resuming == user.id) {
+                                Task { await select(user) }
+                            }
                         }
                     }
                     .padding(.horizontal, 60)
@@ -56,11 +85,32 @@ struct SelectUserView: View {
         }
     }
 
+    private func select(_ user: PublicUser) async {
+        guard resuming == nil else { return }
+        notice = nil
+        guard resumableIds.contains(user.id) else {
+            openSheetFor = user
+            return
+        }
+        // The tile stays enabled while resuming: disabling it would drop focus,
+        // and a remote has nowhere to go from a focusless screen.
+        resuming = user.id
+        let outcome = await auth.resumeSession(userId: user.id)
+        resuming = nil
+        switch outcome {
+        case .resumed: break
+        case .unreachable: notice = tr("error.network")
+        case .expired:
+            notice = tr("select_user.session_expired")
+            openSheetFor = user
+        }
+    }
+
     private func load() async {
         loading = true
         loadError = false
         do {
-            users = try await APIClient.shared.get("/api/auth/users-public")
+            serverUsers = try await APIClient.shared.get("/api/auth/users-public")
         } catch {
             loadError = true
         }
@@ -78,6 +128,8 @@ private struct RingTileStyle: ButtonStyle {
 
 private struct UserTile: View {
     let user: PublicUser
+    var resumable = false
+    var busy = false
     var action: () -> Void
     @FocusState private var focused: Bool
 
@@ -87,6 +139,8 @@ private struct UserTile: View {
                 avatarView
                     .frame(width: 180, height: 180)
                     .clipShape(Circle())
+                    .overlay { if busy { spinner } }
+                    .overlay(alignment: .bottomTrailing) { if resumable && !busy { sessionBadge } }
                     .overlay(Circle().strokeBorder(.white, lineWidth: focused ? 6 : 0))
             }
             .buttonStyle(RingTileStyle())
@@ -99,6 +153,21 @@ private struct UserTile: View {
         }
         .frame(width: 220)
         .animation(.easeOut(duration: 0.15), value: focused)
+    }
+
+    private var spinner: some View {
+        ZStack {
+            Circle().fill(.black.opacity(0.5))
+            ProgressView().controlSize(.large)
+        }
+    }
+
+    private var sessionBadge: some View {
+        Image(systemName: "checkmark.circle.fill")
+            .font(.system(size: 40))
+            .symbolRenderingMode(.palette)
+            .foregroundStyle(.white, .green)
+            .offset(x: -6, y: -6)
     }
 
     @ViewBuilder private var avatarView: some View {

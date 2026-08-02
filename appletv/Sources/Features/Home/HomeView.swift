@@ -52,12 +52,12 @@ struct HomeView: View {
     }
 
     private func loadLibraries() async {
-        librariesState = .loading
-        do {
-            let libs: [Library] = try await APIClient.shared.get("/api/libraries/mine")
-            librariesState = .loaded(libs)
-        } catch {
-            librariesState = .failed
+        // `hiddenLibraryIds` is a display preference the clients apply
+        // themselves — the endpoint returns everything the ACL allows.
+        let hidden = Set(auth.currentUser?.hiddenLibraryIds ?? [])
+        await revalidateZone("libraries", apply: { librariesState = $0 }) {
+            let libraries: [Library] = try await APIClient.shared.get("/api/libraries/mine")
+            return libraries.filter { !hidden.contains($0.id) }
         }
     }
 }

@@ -25,15 +25,30 @@ struct MediaCard: View {
     let title: String?
     var subtitle: String? = nil
     var portrait: Bool = true
-    /// 0-100 resume progress; nil or 0 hides the bar.
+    /// 0-100 resume progress; nil falls back to `WatchedStore`, 0 hides the bar.
     var progressPercent: Double? = nil
     var backdropPath: String? = nil
+    /// Set to show the watched badge and offer the card actions.
+    var mediaId: Int? = nil
+    var episodeId: Int? = nil
     var onSelect: () -> Void
 
     @FocusState private var focused: Bool
     @Environment(Backdrop.self) private var backdrop
+    @Environment(WatchedStore.self) private var watched
 
     private var size: CGSize { portrait ? CGSize(width: 220, height: 330) : CGSize(width: 360, height: 202) }
+
+    private var isWatched: Bool {
+        guard let mediaId else { return false }
+        return watched.isWatched(mediaId: mediaId, episodeId: episodeId)
+    }
+
+    private var progress: Double? {
+        if let progressPercent { return progressPercent }
+        guard let mediaId else { return nil }
+        return watched.progress(mediaId: mediaId, episodeId: episodeId)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -42,14 +57,14 @@ struct MediaCard: View {
                     PosterImage(path: imagePath)
                         .frame(width: size.width, height: size.height)
                         .clipped()
-                    if let progressPercent, progressPercent > 0 {
-                        ProgressView(value: min(progressPercent, 100), total: 100)
-                            .tint(.white)
-                            .padding(6)
+                    if let progress, progress > 0 {
+                        ProgressBar(percent: progress).padding(8)
                     }
                 }
+                .overlay(alignment: .topTrailing) { if isWatched { WatchedBadge() } }
             }
             .buttonStyle(.card)
+            .cardActions(mediaId: mediaId, episodeId: episodeId)
             .focused($focused)
 
             if let title, !title.isEmpty {
@@ -73,30 +88,120 @@ struct MediaCard: View {
         .onChange(of: focused) { _, now in
             guard now else { return }
             SoundManager.play()
-            backdrop.url = backdropPath ?? imagePath
+            // A card with no artwork (a playlist with no posters, a request
+            // without a poster) keeps the current backdrop rather than
+            // flashing the bare black root.
+            if let path = backdropPath ?? imagePath { backdrop.url = path }
         }
     }
 }
 
-/// Bare-bones poster card (no subtitle/progress/backdrop push) for simpler
-/// listings — search results, etc.
+/// Resume bar drawn over card artwork — its own track, since the system
+/// `ProgressView` washes out over a bright still.
+struct ProgressBar: View {
+    /// 0-100.
+    let percent: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(.black.opacity(0.55))
+                Capsule().fill(.white)
+                    .frame(width: geo.size.width * min(max(percent, 0), 100) / 100)
+            }
+        }
+        .frame(height: 6)
+    }
+}
+
+/// Watched marker drawn over card artwork.
+struct WatchedBadge: View {
+    var body: some View {
+        Image(systemName: "checkmark.circle.fill")
+            .font(.system(size: 34))
+            .symbolRenderingMode(.palette)
+            .foregroundStyle(.white, .green)
+            .padding(8)
+    }
+}
+
+/// Long-press actions shared by every card: watched toggle + add to playlist.
+private struct CardActions: ViewModifier {
+    let mediaId: Int?
+    let episodeId: Int?
+    @Environment(WatchedStore.self) private var watched
+    @Environment(PlaylistPicker.self) private var picker
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let mediaId {
+            content.contextMenu {
+                Button {
+                    Task { await watched.toggle(mediaId: mediaId, episodeId: episodeId) }
+                } label: {
+                    let isWatched = watched.isWatched(mediaId: mediaId, episodeId: episodeId)
+                    Label(isWatched ? tr("media_card.mark_unwatched") : tr("media_card.mark_watched"),
+                          systemImage: isWatched ? "eye.slash" : "checkmark.circle")
+                }
+                Button {
+                    picker.open(mediaId: mediaId, episodeId: episodeId)
+                } label: {
+                    Label(tr("playlists.add_to_playlist_title"), systemImage: "text.badge.plus")
+                }
+            }
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func cardActions(mediaId: Int?, episodeId: Int? = nil) -> some View {
+        modifier(CardActions(mediaId: mediaId, episodeId: episodeId))
+    }
+}
+
+/// Bare-bones poster card (no subtitle/backdrop push) for simpler listings —
+/// search results, playlist items.
 struct PosterCard: View {
     let imagePath: String?
     let title: String?
     var portrait: Bool = true
+    var progressPercent: Double? = nil
+    var mediaId: Int? = nil
+    var episodeId: Int? = nil
     var onSelect: () -> Void
     @FocusState private var focused: Bool
+    @Environment(WatchedStore.self) private var watched
 
     private var size: CGSize { portrait ? CGSize(width: 220, height: 330) : CGSize(width: 360, height: 202) }
+
+    private var isWatched: Bool {
+        guard let mediaId else { return false }
+        return watched.isWatched(mediaId: mediaId, episodeId: episodeId)
+    }
+
+    private var progress: Double? {
+        if let progressPercent { return progressPercent }
+        guard let mediaId else { return nil }
+        return watched.progress(mediaId: mediaId, episodeId: episodeId)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button(action: onSelect) {
-                PosterImage(path: imagePath)
-                    .frame(width: size.width, height: size.height)
-                    .clipped()
+                ZStack(alignment: .bottom) {
+                    PosterImage(path: imagePath)
+                        .frame(width: size.width, height: size.height)
+                        .clipped()
+                    if let progress, progress > 0 {
+                        ProgressBar(percent: progress).padding(8)
+                    }
+                }
+                .overlay(alignment: .topTrailing) { if isWatched { WatchedBadge() } }
             }
             .buttonStyle(.card)
+            .cardActions(mediaId: mediaId, episodeId: episodeId)
             .focused($focused)
             if let title, !title.isEmpty {
                 Text(title).font(.callout).lineLimit(1)
@@ -232,6 +337,13 @@ struct HeroSlide: View {
             .frame(height: 480)
         }
         .buttonStyle(HeroSlideStyle())
+    }
+}
+
+/// No system focus decoration — for controls that draw their own.
+struct FlatButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.opacity(configuration.isPressed ? 0.7 : 1)
     }
 }
 

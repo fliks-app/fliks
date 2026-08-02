@@ -34,11 +34,14 @@ app_path() {
 
 build_sim() {
   generate
+  # Ad-hoc signed, not unsigned: without the entitlements a signed build carries,
+  # every SecItem call in the Simulator returns errSecMissingEntitlement (-34018)
+  # and the session can never be stored.
   xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
     -destination "platform=tvOS Simulator,name=$SIM_NAME" \
     -derivedDataPath "$DERIVED" \
     PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" INFOPLIST_KEY_CFBundleDisplayName="$APP_NAME" \
-    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES \
     build
 }
 

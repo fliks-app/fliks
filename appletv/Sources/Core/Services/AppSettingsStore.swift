@@ -55,27 +55,6 @@ import Foundation
     var subtitleMode: String {
         didSet { d.set(subtitleMode, forKey: Keys.subtitleMode) }
     }
-    var hideImageSubtitles: Bool {
-        didSet { d.set(hideImageSubtitles, forKey: Keys.hideImageSubtitles) }
-    }
-    var subtitleSize: String {
-        didSet { d.set(subtitleSize, forKey: Keys.subtitleSize) }
-    }
-    var subtitleColor: String {
-        didSet { d.set(subtitleColor, forKey: Keys.subtitleColor) }
-    }
-    var subtitleShadow: String {
-        didSet { d.set(subtitleShadow, forKey: Keys.subtitleShadow) }
-    }
-    var subtitleBackground: String {
-        didSet { d.set(subtitleBackground, forKey: Keys.subtitleBackground) }
-    }
-    var subtitleBottomMargin: Double {
-        didSet { d.set(subtitleBottomMargin, forKey: Keys.subtitleBottomMargin) }
-    }
-    var subtitleTopMargin: Double {
-        didSet { d.set(subtitleTopMargin, forKey: Keys.subtitleTopMargin) }
-    }
 
     private init() {
         displayLanguage = d.string(forKey: Keys.displayLanguage) ?? ""
@@ -89,14 +68,7 @@ import Foundation
         autoPlayNext = d.object(forKey: Keys.autoPlayNext) as? Bool ?? true
         preferredSubtitleLanguage = d.string(forKey: Keys.preferredSubtitleLanguage) ?? ""
         subtitleMode = d.string(forKey: Keys.subtitleMode) ?? "intelligent"
-        hideImageSubtitles = d.object(forKey: Keys.hideImageSubtitles) as? Bool ?? true
         // 10-foot UI: default to large subtitles, matching the web client's isTv() branch.
-        subtitleSize = d.string(forKey: Keys.subtitleSize) ?? "large"
-        subtitleColor = d.string(forKey: Keys.subtitleColor) ?? "white"
-        subtitleShadow = d.string(forKey: Keys.subtitleShadow) ?? "drop"
-        subtitleBackground = d.string(forKey: Keys.subtitleBackground) ?? "transparent"
-        subtitleBottomMargin = d.object(forKey: Keys.subtitleBottomMargin) as? Double ?? 5
-        subtitleTopMargin = d.object(forKey: Keys.subtitleTopMargin) as? Double ?? 5
     }
 
     private enum Keys {
@@ -111,12 +83,5 @@ import Foundation
         static let autoPlayNext = "settings.autoPlayNext"
         static let preferredSubtitleLanguage = "settings.preferredSubtitleLanguage"
         static let subtitleMode = "settings.subtitleMode"
-        static let hideImageSubtitles = "settings.hideImageSubtitles"
-        static let subtitleSize = "settings.subtitleSize"
-        static let subtitleColor = "settings.subtitleColor"
-        static let subtitleShadow = "settings.subtitleShadow"
-        static let subtitleBackground = "settings.subtitleBackground"
-        static let subtitleBottomMargin = "settings.subtitleBottomMargin"
-        static let subtitleTopMargin = "settings.subtitleTopMargin"
     }
 }

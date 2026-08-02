@@ -21,6 +21,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: media.fliks.tv
         INFOPLIST_KEY_CFBundleDisplayName: Fliks
+        ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
         GENERATE_INFOPLIST_FILE: "YES"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 85ZC7Y8WQ2

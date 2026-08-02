@@ -23,16 +23,21 @@ enum ImageCache {
         URLCache.shared.removeAllCachedResponses()
     }
 
+    /// Decoded image for a URL — memory cache when warm, otherwise fetched and cached.
+    static func load(_ url: URL) async -> UIImage? {
+        if let hit = memory.object(forKey: url as NSURL) { return hit }
+        guard let (data, _) = try? await URLSession.shared.data(from: url),
+              let img = UIImage(data: data) else { return nil }
+        memory.setObject(img, forKey: url as NSURL, cost: data.count)
+        return img
+    }
+
     /// Warm the cache for URLs not yet loaded (e.g. an upcoming rail's posters).
     /// Runs at low priority off the main thread.
     static func prefetch(_ urls: [String]) {
         for str in urls {
             guard let u = URL(string: str), memory.object(forKey: u as NSURL) == nil else { continue }
-            Task.detached(priority: .utility) {
-                guard let (data, _) = try? await URLSession.shared.data(from: u),
-                      let img = UIImage(data: data) else { return }
-                memory.setObject(img, forKey: u as NSURL, cost: data.count)
-            }
+            Task.detached(priority: .utility) { _ = await load(u) }
         }
     }
 }
@@ -67,9 +72,6 @@ struct CachedAsyncImage<Placeholder: View>: View {
         guard let str = url, let u = URL(string: str) else { image = nil; return }
         if let hit = ImageCache.memory.object(forKey: u as NSURL) { image = hit; return }
         image = nil
-        guard let (data, _) = try? await URLSession.shared.data(from: u),
-              let img = UIImage(data: data) else { return }
-        ImageCache.memory.setObject(img, forKey: u as NSURL, cost: data.count)
-        image = img
+        image = await ImageCache.load(u)
     }
 }

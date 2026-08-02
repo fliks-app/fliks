@@ -98,7 +98,8 @@ struct QuickConnectView: View {
                 switch res.status {
                 case "approved":
                     if let token = res.accessToken {
-                        try await auth.loginWithToken(access: token, refresh: res.refreshToken)
+                        try await auth.loginWithToken(access: token, refresh: res.refreshToken,
+                                                      refreshExpiresAt: res.refreshTokenExpiresAt)
                         return
                     }
                 case "denied":
