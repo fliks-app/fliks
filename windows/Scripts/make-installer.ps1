@@ -28,7 +28,7 @@ $winDir = Split-Path -Parent $PSScriptRoot
 $build  = Join-Path $winDir 'build'
 $bundle = Join-Path $build 'Bundle'
 $nsi    = Join-Path $winDir 'Installer\fliks.nsi'
-$outFile = Join-Path $build "Fliks-Setup-$Version.exe"
+$outFile = Join-Path $build "Fliks-Server-$Version-x64.exe"
 
 # VIProductVersion needs a strict numeric X.X.X.X — derive it from the display
 # version (e.g. "1.2.3" -> "1.2.3.0", "dev-abc123" -> "0.0.0.0").

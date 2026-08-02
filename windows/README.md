@@ -41,7 +41,7 @@ $env:TMDB_API_KEY = "..."   # optional; baked into the tray
 $env:TVDB_API_KEY = "..."
 .\Scripts\build-app.ps1
 
-# 3. Package the installer → .\build\Fliks-Setup-<version>.exe
+# 3. Package the installer → .\build\Fliks-Server-<version>-x64.exe
 .\Scripts\make-installer.ps1 -Version 1.0.0
 ```
 

@@ -16,6 +16,7 @@
 - **Don't run `git push` against `main` directly**; it always fails. If you mistakenly committed straight to local `main`, move the commit onto a branch (`git checkout -b <branch>` while on the commit, then `git reset --hard origin/main` on `main`) before pushing.
 - **Squash-merge to escape a bad-message branch**: when an existing branch's history has commits that fail commitlint (the lint runs on every commit in the PR), prefer `gh pr merge --squash` with a clean conventional title over rewriting + force-pushing. Force-push to a published branch is destructive and needs explicit user approval.
 - **Local hooks**: see `.husky/` if present. Don't bypass them.
+- **Write pull requests in English** — title and body — like commit messages and code comments, whatever language the conversation uses.
 
 ## Commit conventions
 

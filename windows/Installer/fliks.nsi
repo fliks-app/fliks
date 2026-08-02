@@ -16,7 +16,7 @@
   !error "BUNDLE_DIR is required"
 !endif
 !ifndef OUT_FILE
-  !define OUT_FILE "Fliks-Setup-${VERSION}.exe"
+  !define OUT_FILE "Fliks-Server-${VERSION}-x64.exe"
 !endif
 
 !define APPNAME "Fliks"
