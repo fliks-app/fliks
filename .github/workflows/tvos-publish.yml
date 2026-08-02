@@ -17,8 +17,9 @@
 #   - IOS_DEV_CERT_P12_BASE64 / IOS_DEV_CERT_PASSWORD
 #   - APPLE_TEAM_ID
 #
-# One-shot setup outside this repo: an App Store Connect app record for the
-# tvOS platform on bundle id `media.fliks.tv`.
+# One-shot setup outside this repo: add the tvOS platform to the existing
+# `media.fliks.app` record in App Store Connect — same bundle id as the iOS
+# client, which is what keeps both under one app listing.
 name: Publish tvOS to App Store Connect
 
 on:
