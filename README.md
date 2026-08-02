@@ -1,153 +1,195 @@
 # Fliks
 
-Self-hosted media server — an alternative to Plex, Jellyfin and Emby.
-Organise your media folders into libraries and stream them on every
-screen in the house, with adaptive streaming, multi-audio and
-multi-subtitle support and fast Cast-to-TV.
+**Your media, on every screen in the house.** Point Fliks at the folders
+where your films and series live; it builds a browsable library with
+posters and metadata, and streams them to phones, TVs, browsers and
+Chromecast — transcoding on the fly when a device can't play the file
+as-is.
 
-NestJS backend, Angular client (web + iOS + Android + Android TV via
-Capacitor; Samsung Tizen and LG webOS targets in progress), custom
-Chromecast receiver, FFmpeg / Shaka transcoding pipeline.
+Self-hosted, no account, no cloud: the server runs on your machine and
+nothing leaves it.
 
-## What you get
+- **Server** — Docker, a Windows tray app or a macOS menu-bar app
+- **Clients** — web, iOS, Android, Android TV, Apple TV, Samsung, LG, desktop, Chromecast
+- **License** — [AGPL-3.0-or-later](LICENSE)
 
-### Player
-- Adaptive HLS streaming with Shaka Player — quality switches on the
-  fly without unloading, no playback hiccup on bandwidth changes.
-- Per-quality manual lock when you want to pin a specific bitrate.
-- Smart resume across devices: pick a movie back up on the TV after
-  starting on your phone, with the position synced live.
-- Skip-intro / next-episode prompts, chapter markers on the seekbar,
-  and sprite-sheet thumbnail previews on seek hover.
-- Full-track switching at runtime: every embedded audio rendition is
-  selectable, every embedded subtitle (and external `.srt` / `.ass`)
-  is loaded on demand, and the player remembers your per-show
-  preferences.
-- Subtitle appearance settings: size, colour, shadow style, background
-  opacity, top / bottom margin — saved per user.
-- HDR → SDR tonemapping when the receiver can't render HDR; HDR
-  auto-brightness on devices that expose the API.
-- 10-foot TV UI with D-pad spatial navigation; one-handed phone UI
-  with a long-press contextual menu.
+---
 
-### Browse & discover
-- Multiple libraries side by side, each pointed at its own folder
-  (movies, series, anime, kids, …) — switch from the sidebar.
-- Cross-library search by title with a movie / series filter, plus
-  TMDB-backed metadata suggestions to surface posters and details for
-  matching titles.
-- Per-library filter and sort: by status, by date added, alphabetical,
-  rating, runtime.
-- Genre tags pulled from TMDB / TVDB and surfaced on every detail
-  page; click a genre to see everything in your libraries that shares
-  it.
-- People browsing — every cast and crew member becomes a clickable
-  page listing all the media they worked on across your libraries.
-- Home rows: Continue Watching (resume position synced across
-  devices), Recently Added, and personalised Recommendations weighted
-  by the genres of what you've already watched.
-- Per-user watch history with mark-watched / mark-unwatched and
-  "remove from continue watching" gestures.
-- Calendar view of upcoming episode releases for the series you
-  follow.
+## Get started
 
-### Streaming engine
-- FFmpeg-driven HLS / fMP4 transcoder. Hardware acceleration on Intel
-  QSV / VAAPI and NVIDIA NVENC; CPU fallback otherwise.
-- Smart-remux when codec / container is already client-compatible —
-  copies the video stream and only transcodes audio when needed.
-- Per-segment, per-quality session cache so seeks land on already-
-  encoded segments instantly.
-- Burn-in path for image-based subtitles (PGS, VOBSUB, DVD) on devices
-  that can't render them natively.
-- Live transcode dashboard for admins: which user is watching what at
-  which quality, with HW accel state and the reason a transcode was
-  triggered (codec, resolution, audio container, bandwidth lock).
-
-### Cast (Chromecast)
-- Custom CAF receiver running Shaka — the same engine the web and
-  Android paths use, so all three clients buffer and adapt the same
-  way.
-- Multi-audio rendition switching from the sender (sender-side picker
-  drives the receiver via the standard EditTracksInfoRequest bus).
-- Subtitle styling roundtripped from the user's preferences.
-
-### Cross-platform
-- Web (PWA-installable).
-- Native iOS — available on the App Store.
-- Native Android — available on the Play Store.
-- Native Android TV integration.
-- Samsung Tizen — fully functional, not yet published to Samsung Apps.
-- LG webOS — submitted, under review on the LG Content Store.
-
-### Server-side
-- Multi-user with per-user playback state and preferences.
-- Pairing flow for TV / Cast — scan a QR code or type a short code on
-  the phone, the TV picks up the session.
-- TMDB metadata enrichment with locally-cached posters / fanart /
-  thumbnails (no external image hotlinking at runtime).
-- Sprite-sheet generator for seekbar previews, computed lazily.
-
-## Self-hosting with Docker
-
-The recommended way to run Fliks is via the published image on GitHub
-Container Registry (`ghcr.io/fliks-app/fliks`). It bundles the backend,
-the built Angular client served as static assets, and the FFmpeg /
-hardware-acceleration stack.
+The quickest path is Docker. You need a folder with your video files and
+about two minutes.
 
 ```bash
-# 1. Grab the example Compose
 curl -LO https://raw.githubusercontent.com/fliks-app/fliks/main/docker-compose.example.yml
 mv docker-compose.example.yml docker-compose.yml
+```
 
-# 2. Edit:
-#    - `POSTGRES_PASSWORD` + `DB_PASSWORD` (set a real password)
-#    - the `/path/to/your/media:/medias:ro` mount → point at the folder
-#      that holds your video files
-#    - `PORT` if 4848 collides on the host
+Open the file and set three things:
 
-# 3. Run
+1. `POSTGRES_PASSWORD` and `DB_PASSWORD` — the same real password
+2. the `/path/to/your/media:/medias:ro` mount — where your files are
+3. `PORT` — only if `4848` is taken on the host
+
+```bash
 docker compose up -d
 ```
 
-UI at `http://<host>:4848`.
+Then open `http://<host>:4848` and create the first account. Add a
+library pointing at `/medias`, and Fliks scans it.
+
+Prefer to run it as a normal desktop app? See
+[Windows](#windows) and [macOS](#macos) below.
+
+---
+
+## Server compatibility
+
+| How you run it | Platforms | Hardware transcoding | Ships with |
+|---|---|---|---|
+| **Docker** *(recommended)* | `linux/amd64`, `linux/arm64` | Intel QSV · VAAPI · NVIDIA NVENC · AMD | backend, web client, FFmpeg |
+| **Windows** — tray app, NSIS installer | Windows x64 | Intel QSV · AMD AMF · NVIDIA NVENC, auto-detected | everything, no dependencies |
+| **macOS** — menu-bar app, `.dmg` | macOS 13 Ventura+, Apple Silicon | VideoToolbox | everything, no dependencies |
+| **From source** | anywhere Node runs | whatever your FFmpeg exposes | — |
+
+The image is a single container: NestJS backend, the built Angular
+client served as static assets, and a self-contained
+[jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg) build. A
+PostgreSQL container sits beside it (the example Compose pins 18.3).
+
+### Encoders
+
+Which hardware path is available depends on the machine, not on Fliks —
+it probes at startup and falls back to CPU when nothing else answers.
+
+| Codec | CPU | Intel QSV | VAAPI | NVIDIA NVENC | AMD AMF | VideoToolbox |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| H.264 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| HEVC | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| AV1 | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+
+HDR10, HLG and Dolby Vision are tone-mapped to SDR when the receiving
+device can't render them.
+
+### Windows
+
+A tray app that runs the server in the background; the UI stays in your
+browser at `http://localhost:4848`. Grab the installer from the
+[latest release](https://github.com/fliks-app/fliks/releases). Details in
+[`windows/`](windows/).
+
+### macOS
+
+Same idea, in the menu bar, with VideoToolbox acceleration. `.dmg` on the
+[latest release](https://github.com/fliks-app/fliks/releases), Apple
+Silicon, macOS 13+. Details in [`macos/`](macos/).
+
+---
+
+## Client compatibility
+
+One Angular codebase ships as the web app and as the mobile / TV apps,
+so every screen gets the same features — adapted to its input (touch,
+mouse, D-pad). Apple TV is the exception: tvOS has no WebView, so it has
+its own native SwiftUI app talking to the same backend.
+
+| Client | Where to get it | Minimum | Notes |
+|---|---|---|---|
+| **Web / PWA** | your browser, at the server URL | any current browser | installable to the home screen |
+| **iOS · iPadOS** | App Store | iOS 14 | |
+| **Android** | Play Store | Android 6 (API 23) | phone + tablet |
+| **Android TV** | Play Store | Android 6 | 10-foot UI, D-pad navigation |
+| **Samsung TV (Tizen)** | sideload for now | Tizen 5.5 — 2020 sets and newer | works fully, not yet on Samsung Apps |
+| **LG TV (webOS)** | LG Content Store | built for Chromium 85 | submitted, under review |
+| **Desktop** | release assets | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
+| **Chromecast** | built in — cast from any client | — | custom receiver, same player engine |
+| **Apple TV** | App Store — same app record as iOS | tvOS 17 | native SwiftUI app, not the web client |
+
+The desktop app is a thin client with an mpv video pipeline — it
+connects to your server like the mobile apps do, it doesn't host one.
+
+---
+
+## What you get
+
+### Watching
+
+- **Adaptive streaming** — quality follows the bandwidth without a
+  hiccup, or lock a bitrate by hand when you'd rather decide.
+- **Resume anywhere** — start on the phone, finish on the TV; the
+  position syncs live.
+- **Every track, switchable mid-playback** — all embedded audio
+  renditions, all embedded and external subtitles (`.srt`, `.ass`), with
+  your choice remembered per show.
+- **Subtitle appearance** per user: size, colour, shadow, background
+  opacity, margins.
+- **Skip intro, next episode, chapter markers** and thumbnail previews
+  when you scrub.
+
+### Browsing
+
+- **Several libraries side by side** — films, series, anime, kids —
+  each pointed at its own folder.
+- **Search across all of them**, filter and sort by status, date added,
+  rating, runtime.
+- **Metadata from TMDB / TVDB**: posters, fanart, genres, cast and crew.
+  Every person is a page listing everything they worked on in your
+  libraries; every genre is a filter.
+- **Home rows** — Continue Watching, Recently Added, and
+  recommendations weighted by what you've actually watched.
+- **Calendar** of upcoming episodes for the series you follow.
+
+### Running it
+
+- **Multi-user**, each with their own history, progress and preferences.
+- **Pairing by QR code or short code** — the TV picks up the session
+  from your phone.
+- **Live transcode dashboard** for admins: who's watching what, at which
+  quality, on which hardware path, and why a transcode was needed.
+- **Images cached locally** — no hotlinking to external services while
+  you browse.
+
+---
+
+## Hosting notes
 
 ### Pinning a version
 
-`:latest` follows the most recent stable release. To pin, replace with a
-specific tag (e.g. `:1.2.3`) — full list at
-https://github.com/fliks-app/fliks/pkgs/container/fliks.
+`:latest` follows the most recent stable release. Pin a specific tag
+(`:1.2.3`) from the
+[package list](https://github.com/fliks-app/fliks/pkgs/container/fliks).
 
-### Hardware-accelerated transcoding
+### Hardware acceleration in Docker
 
-Intel QSV / VAAPI works out of the box if you uncomment the `/dev/dri`
-device mount in the example Compose. NVIDIA NVENC requires the host to
-have `nvidia-container-toolkit` installed and a different Compose
-snippet — the [transcoding docs](docs/transcoding-pipelines.md) cover
-both paths.
+Intel QSV and VAAPI work out of the box once you uncomment the
+`/dev/dri` device mount in the example Compose. NVIDIA NVENC needs
+`nvidia-container-toolkit` on the host and a slightly different Compose
+snippet — the example Compose carries both, commented.
 
 ### Update checks
 
-Fliks checks for new releases via the **public GitHub releases API**
-(`api.github.com`): the server does it to tell admins when their server is
-behind the latest release, and the desktop app does it to offer in-app
-updates. It's a single read request (no token, no telemetry, no data sent),
-cached for hours.
+Fliks asks the **public GitHub releases API** whether a newer version
+exists: the server does it to tell admins their install is behind, the
+desktop app to offer in-app updates. One unauthenticated read, cached
+for hours — no token, no telemetry, nothing sent about you.
 
-To turn it off on the server, set `FLIKS_DISABLE_UPDATE_CHECK=1` — the
-`/api/system/update` endpoint then always reports "up to date" and never
-contacts GitHub.
+Set `FLIKS_DISABLE_UPDATE_CHECK=1` to turn it off; `/api/system/update`
+then always reports "up to date" and never contacts GitHub.
 
-## Layout
+---
 
-- **`backend/`** — NestJS + TypeORM + PostgreSQL + FFmpeg.
-- **`client/`** — Angular + DaisyUI / Tailwind + Shaka Player. Same
-  codebase ships as web app and as Capacitor-wrapped iOS / Android /
-  Android TV apps. Tizen and webOS builds live under `client/tizen/`
-  and `client/webos/`.
-- **`cast-receiver/`** — custom CAF receiver hosted on GitHub Pages.
+## Repository layout
+
+| Path | What lives there |
+|---|---|
+| `backend/` | NestJS, TypeORM, PostgreSQL, the FFmpeg pipeline |
+| `client/` | Angular + Tailwind / DaisyUI + Shaka Player — web, iOS, Android, Android TV (Capacitor), plus the Tizen and webOS packagers |
+| `desktop/` | Electron + libmpv thin client for Windows / macOS / Linux |
+| `windows/`, `macos/` | native server hosts (tray / menu bar) |
+| `appletv/` | native tvOS app (SwiftUI) |
+| `cast-receiver/` | custom Chromecast receiver |
 
 ## License
 
-[AGPL-3.0-or-later](LICENSE) — anyone running a modified version of Fliks on
-a network must make the modified source available to its users.
+[AGPL-3.0-or-later](LICENSE) — run a modified version on a network and
+you owe its users the modified source.
