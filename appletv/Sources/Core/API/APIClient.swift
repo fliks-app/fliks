@@ -54,6 +54,34 @@ extension JSONEncoder {
     }()
 }
 
+/// Carries a request across a server-side redirect. Left alone, URLSession
+/// turns a 301/302 POST into a bodyless GET and drops `Authorization` when the
+/// scheme changes — which is precisely what a server entered as `http://` but
+/// redirecting to `https://` does to every write.
+private final class RedirectKeeper: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest) async -> URLRequest? {
+        guard let original = task.originalRequest,
+              let from = original.url, let to = request.url,
+              // Credentials follow the redirect only within the same host.
+              from.host == to.host else { return request }
+
+        if from.scheme == "http", to.scheme == "https" {
+            await ServerStore.shared.upgradeToHTTPS(redirectedTo: to)
+        }
+
+        var rebuilt = request
+        rebuilt.httpMethod = original.httpMethod
+        rebuilt.httpBody = original.httpBody
+        for (key, value) in original.allHTTPHeaderFields ?? [:]
+        where rebuilt.value(forHTTPHeaderField: key) == nil {
+            rebuilt.setValue(value, forHTTPHeaderField: key)
+        }
+        return rebuilt
+    }
+}
+
 /// Generic async REST client. Base URL comes from `ServerStore`, the Bearer
 /// token from `TokenStore` — every `/api/*` request except `/auth/refresh`
 /// carries `Authorization: Bearer <access>` (mirrors the native branch of
@@ -68,10 +96,13 @@ final class APIClient {
     var refreshTokens: (() async throws -> Void)?
 
     private let session: URLSession
+    private let redirects: RedirectKeeper
     private var refreshTask: Task<Void, Error>?
 
-    init(session: URLSession = .shared) {
-        self.session = session
+    init(session: URLSession? = nil) {
+        let keeper = RedirectKeeper()
+        redirects = keeper
+        self.session = session ?? URLSession(configuration: .default, delegate: keeper, delegateQueue: nil)
     }
 
     func get<T: Decodable>(_ path: String, query: [String: String] = [:], headers: [String: String] = [:]) async throws -> T {
