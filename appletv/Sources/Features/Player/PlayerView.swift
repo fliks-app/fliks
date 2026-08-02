@@ -411,8 +411,7 @@ private struct SkipCueStyle: ButtonStyle {
         player.appliesMediaSelectionCriteriaAutomatically = mode != "off"
 
         Task {
-            _ = try? await item.asset.load(.availableMediaCharacteristicsWithMediaSelectionOptions)
-            guard let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) else { return }
+            guard let group = try? await item.asset.loadMediaSelectionGroup(for: .legible) else { return }
             if mode == "off" {
                 item.select(nil, in: group)
                 return
@@ -435,7 +434,7 @@ private struct SkipCueStyle: ButtonStyle {
     /// Language of the audio actually playing — the selected option when the
     /// stream carries several, else the only track's own tag.
     private func audioLanguage(of item: AVPlayerItem) async -> String? {
-        if let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .audible),
+        if let group = try? await item.asset.loadMediaSelectionGroup(for: .audible),
            let selected = item.currentMediaSelection.selectedMediaOption(in: group),
            let tag = selected.extendedLanguageTag {
             return Self.languageCode(tag)

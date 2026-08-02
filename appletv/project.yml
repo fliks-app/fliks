@@ -8,7 +8,9 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "1.15.2" # x-release-please-version
+    # CI overrides this with the repo's commit count: Apple rejects a build
+    # number it has already seen for the app.
     CURRENT_PROJECT_VERSION: "1"
 
 targets:
@@ -17,12 +19,28 @@ targets:
     platform: tvOS
     sources:
       - Sources
+    # A written plist rather than GENERATE_INFOPLIST_FILE: App Transport
+    # Security takes a dictionary, which the INFOPLIST_KEY_* settings can't
+    # express.
+    info:
+      path: FliksTV-Info.plist
+      properties:
+        CFBundleDisplayName: Fliks
+        # XcodeGen would otherwise hardcode 1.0 / 1 and ignore the settings
+        # above, so a CI build number would never reach the bundle.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Self-hosted servers are routinely plain http on a LAN — same
+        # exception the iOS client ships with.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        # No encryption beyond HTTPS: declared here so every upload skips the
+        # export-compliance prompt.
+        ITSAppUsesNonExemptEncryption: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: media.fliks.tv
-        INFOPLIST_KEY_CFBundleDisplayName: Fliks
         ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
-        GENERATE_INFOPLIST_FILE: "YES"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 85ZC7Y8WQ2
 
@@ -33,3 +51,5 @@ schemes:
         FliksTV: all
     run:
       config: Debug
+    archive:
+      config: Release

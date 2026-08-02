@@ -39,7 +39,8 @@
         "client/android/app/build.gradle",
         "client/src/environments/environment.ts",
         "cast-receiver/index.html",
-        "client/ios/App/App.xcodeproj/project.pbxproj"
+        "client/ios/App/App.xcodeproj/project.pbxproj",
+        "appletv/project.yml"
       ]
     }
   }

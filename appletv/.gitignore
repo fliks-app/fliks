@@ -10,3 +10,5 @@ last-shot.png
 
 # macOS
 .DS_Store
+FliksTV-Info.plist
+build/
