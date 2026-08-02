@@ -14,7 +14,6 @@
 # covers every platform of the team):
 #   - APPSTORE_API_KEY_ID / APPSTORE_API_ISSUER_ID / APPSTORE_API_KEY_P8_BASE64
 #   - IOS_DIST_CERT_P12_BASE64 / IOS_DIST_CERT_PASSWORD
-#   - IOS_DEV_CERT_P12_BASE64 / IOS_DEV_CERT_PASSWORD
 #   - APPLE_TEAM_ID
 #
 # One-shot setup outside this repo: add the tvOS platform to the existing
@@ -77,31 +76,25 @@ jobs:
             > ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8
 
-      # Import the team's certificates into a throwaway keychain so Xcode
-      # reuses them: on a blank runner keychain, `-allowProvisioningUpdates`
+      # Import the team's distribution certificate into a throwaway keychain so
+      # Xcode reuses it: on a blank runner keychain, `-allowProvisioningUpdates`
       # mints a fresh certificate every run and climbs toward Apple's cap. The
       # keychain is ADDED to the search list (login kept) so cloud-managed
       # profiles still resolve.
-      - name: Import signing certificates
+      - name: Import signing certificate
         env:
           DIST_P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
           DIST_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
-          DEV_P12_BASE64: ${{ secrets.IOS_DEV_CERT_P12_BASE64 }}
-          DEV_PASSWORD: ${{ secrets.IOS_DEV_CERT_PASSWORD }}
         run: |
           KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
           KEYCHAIN_PWD="$(openssl rand -base64 24)"
           security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
-          import_p12() {
-            local path="$RUNNER_TEMP/cert.p12"
-            echo "$1" | base64 -d > "$path"
-            security import "$path" -P "$2" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-            rm -f "$path"
-          }
-          import_p12 "$DIST_P12_BASE64" "$DIST_PASSWORD"
-          import_p12 "$DEV_P12_BASE64" "$DEV_PASSWORD"
+          echo "$DIST_P12_BASE64" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$DIST_PASSWORD" -A -t cert \
+            -f pkcs12 -k "$KEYCHAIN_PATH"
+          rm -f "$RUNNER_TEMP/cert.p12"
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" \
             $(security list-keychains -d user | sed -e 's/^[[:space:]]*//' -e 's/"//g')
