@@ -4,8 +4,8 @@ _Last updated: 3 May 2026_
 
 Fliks is an open-source self-hosted media server. This document
 describes which data is collected, by whom, and how it is used in the
-context of the Fliks application (web, Android, iOS, Android TV) and
-the Fliks Chromecast receiver.
+context of the Fliks application (web, Android, iOS, Android TV,
+Apple TV) and the Fliks Chromecast receiver.
 
 ## In a nutshell
 
@@ -23,13 +23,18 @@ the Fliks Chromecast receiver.
 The Fliks application (web and mobile) stores the following data
 locally, on the user's device only:
 
-- **Authentication token** (JWT) used to keep you signed in to your
-  Fliks server after first login;
+- **Authentication tokens** (JWT) used to keep you signed in to your
+  Fliks server after first login. On iOS and Apple TV they live in the
+  system keychain, one session per account and per server, so you can
+  switch profiles without signing in again;
 - **Playback preferences** (preferred audio language, subtitle
   language, subtitle size / colour, etc.);
 - **Playback cache** (pre-fetched HLS segments, sprite sheets for the
   seek-bar preview) — automatically purged on app shutdown or
   expiration;
+- **Home page cache** (titles and artwork addresses of the rows last
+  received from your server) so the app can show its previous state
+  while it refreshes;
 - **Server configuration** (the URL of the Fliks server you use,
   picked by you on first connection).
 
@@ -67,7 +72,7 @@ third-party services bundled into the software:
 
 | Service | Purpose | Data involved |
 |---|---|---|
-| **Google Cast SDK** | Streaming to Chromecast | Reference of the media to play, duration, position. No user data |
+| **Google Cast SDK** (web, Android, iOS — absent from the Apple TV app) | Streaming to Chromecast | Reference of the media to play, duration, position. No user data |
 | **Google Play crash reports (Android)** | Diagnosing app crashes | Stack trace, Android version, device model — collected by Google if you opted in when installing from the Play Store. Disable from Android settings |
 
 The application **does not use** Google Analytics, Firebase Analytics,
