@@ -134,11 +134,14 @@ jobs:
 
       - name: Attach signed APK to the GitHub release
         if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.apk_tag != ''
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ steps.apk.outputs.tag }}
-          files: ${{ steps.apk.outputs.path }}
-          fail_on_unmatched_files: true
+        # `gh release upload` only POSTs the asset. The action we used before
+        # PATCHes the release first to sync its fields, and that call is
+        # refused ("Resource not accessible by integration") even with
+        # contents: write — attaching a file never needed it.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ steps.apk.outputs.tag }}" "${{ steps.apk.outputs.path }}" --clobber
+        working-directory: ${{ github.workspace }}
 
       - name: Extract latest release notes from CHANGELOG.md
         if: github.event.inputs.apk_tag == ''

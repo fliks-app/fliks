@@ -154,6 +154,11 @@ jobs:
       # ── Attach DMG to GitHub Release (tag pushes only) ──
       - name: Attach to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v3
-        with:
-          files: macos/build/Fliks-*.dmg
+        # `gh release upload` only POSTs the asset. The action we used before
+        # PATCHes the release first to sync its fields, and that call is
+        # refused ("Resource not accessible by integration") even with
+        # contents: write — attaching a file never needed it.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" macos/build/Fliks-*.dmg --clobber
+        working-directory: ${{ github.workspace }}
