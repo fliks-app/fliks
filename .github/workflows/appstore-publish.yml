@@ -167,13 +167,15 @@ jobs:
       # notarisation, `xcrun stapler` for stapling. The deprecation
       # warning on altool has been "any release now" for years; the
       # command is still the documented App Store upload entry point.
+      # A dry run validates the very same package against App Store Connect
+      # without publishing it — signature, entitlements and SDK are checked.
       - name: Upload IPA to App Store Connect
-        if: ${{ !inputs.dry_run }}
         env:
           KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          ACTION: ${{ inputs.dry_run && '--validate-app' || '--upload-app' }}
         run: |
-          xcrun altool --upload-app \
+          xcrun altool $ACTION \
             --type ios \
             --file client/ios/App/build/export/App.ipa \
             --apiKey "$KEY_ID" \
