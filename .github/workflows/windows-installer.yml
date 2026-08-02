@@ -140,6 +140,11 @@ jobs:
 
       - name: Attach to GitHub Release
         if: env.IS_TAG == 'true'
-        uses: softprops/action-gh-release@v3
-        with:
-          files: windows/build/Fliks-Setup-*.exe
+        # `gh release upload` only POSTs the asset. The action we used before
+        # PATCHes the release first to sync its fields, and that call is
+        # refused ("Resource not accessible by integration") even with
+        # contents: write — attaching a file never needed it.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" windows/build/Fliks-Setup-*.exe --clobber
+        working-directory: ${{ github.workspace }}
