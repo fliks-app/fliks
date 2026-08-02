@@ -49,6 +49,26 @@ struct KnownServer: Codable, Identifiable, Hashable {
         url = ""
     }
 
+    /// A server typed as `http://` that answers with a redirect to `https://`
+    /// is stored by its https address: later requests skip the hop instead of
+    /// making every write survive it, and image URLs stop being downgraded.
+    ///
+    /// Port comes from the redirect target, not from what was typed — a server
+    /// reached on `:8096` usually answers TLS on 443.
+    @MainActor
+    func upgradeToHTTPS(redirectedTo target: URL) {
+        guard var comps = URLComponents(string: url), comps.scheme == "http",
+              target.scheme == "https", comps.host == target.host else { return }
+        let previous = url
+        comps.scheme = "https"
+        comps.port = target.port
+        guard let upgraded = comps.string else { return }
+        let known = knownServers.first { $0.url == previous }
+        save(upgraded)
+        forgetKnownServer(previous)
+        touchKnownServer(upgraded, name: known?.name, username: known?.lastUsername)
+    }
+
     /// Append to the known list, or bump `lastUsedAt` if already present.
     func touchKnownServer(_ serverUrl: String, name: String? = nil, username: String? = nil) {
         let cleaned = Self.trimTrailingSlashes(serverUrl)
