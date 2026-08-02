@@ -102,10 +102,11 @@ jobs:
             $(security list-keychains -d user | sed -e 's/^[[:space:]]*//' -e 's/"//g')
         working-directory: ${{ github.workspace }}
 
-      # Signed with the distribution identity from the start. Left to its
-      # default, Xcode archives with `Apple Development` and asks Apple for a
-      # tvOS development profile, which needs a registered tvOS device — the
-      # team has none, and an App Store profile needs none either way.
+      # Archived unsigned on purpose. With automatic signing, `xcodebuild
+      # archive` asks Apple for a *development* profile, which can only be
+      # issued to a team with a registered tvOS device — there is none, and a
+      # simulator can't be registered. The export below re-signs the bundle for
+      # the App Store, and that profile type needs no device.
       - name: Archive tvOS app
         env:
           KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
@@ -123,7 +124,7 @@ jobs:
             -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8 \
             CURRENT_PROJECT_VERSION=${{ steps.bnum.outputs.value }} \
             DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
+            CODE_SIGNING_ALLOWED=NO \
             clean archive
 
       - name: Export signed IPA
