@@ -1,8 +1,7 @@
-# Example Docker Compose for self-hosting Fliks.
-# Copy to `docker-compose.yml`, edit the volume paths + DB password, then
-# `docker compose up -d`. Web UI: http://<host>:4848.
-# Pin a version by replacing `:latest` with `:1.2.3` (tags:
-# https://github.com/fliks-app/fliks/pkgs/container/fliks).
+# Example Compose for self-hosting Fliks. Copy to `docker-compose.yml`, set the
+# password and the media path, then `docker compose up -d`. UI: http://<host>:4848.
+# Pin a release by replacing `:latest`:
+# https://github.com/fliks-app/fliks/pkgs/container/fliks
 
 services:
   postgres:
@@ -10,11 +9,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: fliks
-      # Change before exposing the stack beyond localhost.
       POSTGRES_PASSWORD: changeme
       POSTGRES_DB: fliks
     volumes:
-      - fliks_pgdata:/var/lib/postgresql/data
+      - fliks_pgdata:/var/lib/postgresql/18/docker
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U fliks']
       interval: 10s
@@ -27,9 +25,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # On a bridge network, LAN Chromecast/DLNA discovery (mDNS) can't reach the
-    # container. For Cast auto-discovery use `network_mode: host` (then drop
-    # `ports:` and set DB_HOST to 127.0.0.1).
+    # mDNS doesn't cross a bridge network, so Chromecast auto-discovery needs
+    # `network_mode: host` — then drop `ports:` and set DB_HOST to 127.0.0.1.
     ports:
       - '4848:4848'
     environment:
@@ -39,57 +36,66 @@ services:
       DB_USERNAME: fliks
       DB_PASSWORD: changeme
       DB_NAME: fliks
-      NODE_ENV: production
-      # Disable the GitHub update check (no outbound request). Default: enabled.
+      # TZ: Europe/Paris
+
+      # ---- Access (optional) ----
+      # Public URL behind a reverse proxy. Settings > General wins over it.
+      # EXTERNAL_URL: https://fliks.example.com
+      # Extra origins allowed to call the API (comma-separated).
+      # CORS_ORIGIN: https://fliks.example.com
+      # Session lifetime. Default 7d.
+      # JWT_EXPIRATION: 7d
+      # Playback-token lifetime. Default 12h.
+      # STREAM_TOKEN_TTL: 12h
+      # Signing key. Generated into /app/conf on first start when unset.
+      # JWT_SECRET: ''
+      # Metadata providers. Baked into the published image — set your own only
+      # if you build the image yourself.
+      # TMDB_API_KEY: ''
+      # TVDB_API_KEY: ''
+      # Skip the GitHub release check.
       # FLIKS_DISABLE_UPDATE_CHECK: '1'
 
-      # ---- Streaming tuning (optional, safe defaults) ----
-      # Live-viewer TTL without a heartbeat (client beats every 10s). Default 30000.
-      # STREAM_LIVE_SESSION_TTL_MS: 30000
-      # Grace before the encoder is killed after the last viewer leaves. Default 60000.
-      # STREAM_JOB_GRACE_MS: 60000
-      # Idle timeout for sessions never paired with a live viewer. Default 1800000.
-      # STREAM_JOB_FALLBACK_TIMEOUT_MS: 1800000
-      # Segment retention on disk after last access. Default 14400000 (4 h).
-      # TRANSCODE_CACHE_TTL_MS: 14400000
-      # Transcode cache size cap (LRU eviction above it). Default 21474836480 (20 GB).
-      # TRANSCODE_CACHE_MAX_BYTES: 21474836480
-      # Cache GC interval. Default 300000 (5 min).
+      # ---- Streaming (optional) ----
+      # STREAM_LIVE_SESSION_TTL_MS: 30000        # viewer TTL without a heartbeat
+      # STREAM_JOB_GRACE_MS: 60000               # encoder kill delay after the last viewer
+      # STREAM_JOB_FALLBACK_TIMEOUT_MS: 1800000  # idle session timeout
+      # STREAM_MAX_SESSIONS_PER_USER: 10
+      # TRANSCODE_CACHE_TTL_MS: 14400000         # segment retention, 4 h
+      # TRANSCODE_CACHE_MAX_BYTES: 21474836480   # LRU cap, 20 GB
       # TRANSCODE_CACHE_GC_INTERVAL_MS: 300000
 
-      # ---- HW transcode / HDR (optional) ----
-      # HDR->SDR tonemap method. auto (default) uses OpenCL when the GPU probe
-      # passes (best quality — a proper tone curve, zero-copy on the GPU), else
-      # the fixed-function LUT (also fast, but can look darker/flatter).
-      # Values: auto | opencl | vaapi | qsv
-      # TRANSCODE_TONEMAP_ALGO: auto
-      # HDR->SDR tonemap curve (CPU + OpenCL). Default hable. Values: hable | mobius | reinhard
-      # TRANSCODE_TONEMAP_CURVE: hable
-      # DRI render node for VAAPI / Linux QSV. Default /dev/dri/renderD128.
-      # FLIKS_VAAPI_RENDER_NODE: /dev/dri/renderD128
-      # Pin the OpenCL platform.device on multi-GPU hosts. Default: auto-pick.
-      # FLIKS_OPENCL_DEVICE: '0.0'
+      # ---- Hardware / HDR (optional) ----
+      # The GPU and the tone-map algorithm live in Settings > Streaming.
+      # TRANSCODE_TONEMAP_CURVE: hable           # hable | mobius | reinhard
+      # FLIKS_OPENCL_DEVICE: '0.0'               # pin platform.device for the OpenCL tone-map
+      # THUMB_HWACCEL_DEVICE: off                # thumbnails: off, or a render node
     volumes:
-      # Media library: use this container path when adding a library in the UI.
-      # Add more mounts for more roots (e.g. /medias/movies, /medias/series).
+      # Library root — this is the path you type when adding a library in the UI.
       - /path/to/your/media:/medias
-      # Download folder: mount the SAME path here and on your download client.
+      # Same path here and in your download client.
       - /path/to/download/folder:/downloads
-      # Server secrets (JWT key) — persist across restarts or all users re-login.
+      # JWT key: lose it and everyone is logged out.
       - fliks_conf:/app/conf
-      # Cached images + seek-preview sprites.
+      # Posters, fanart, seek-preview sprites.
       - fliks_images:/app/images
-      # Transcode cache (HLS segments). Omit to use a per-restart tmpfs.
+      # HLS segment cache. Omit for a per-restart tmpfs.
       - fliks_transcode:/app/transcode
 
-  # GPU transcode (Intel QSV / VAAPI): add a `devices` block to the fliks
-  # service with your /dev/dri node. NVENC needs runtime: nvidia +
-  # nvidia-container-toolkit (not covered here).
-  #   fliks:
-  #     devices:
-  #       - /dev/dri:/dev/dri
-  # ARM (Apple Silicon, Pi 5, ARM NAS): linux/arm64 is auto-pulled, but there's
-  # no HW transcode (Intel stack is amd64-only) -> CPU libx264 fallback.
+  # ---- Intel QSV / VAAPI ---- add to the fliks service:
+  #   devices:
+  #     - /dev/dri:/dev/dri
+
+  # ---- NVIDIA NVENC ---- needs nvidia-container-toolkit on the host. Add to
+  # the fliks service:
+  #   runtime: nvidia
+  #   environment:
+  #     NVIDIA_VISIBLE_DEVICES: all
+  #     # video = NVENC/NVDEC, compute = the CUDA filters (scale_cuda), utility = nvidia-smi
+  #     NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+
+  # arm64 (Pi 5, ARM NAS) pulls fine, but the Intel and NVIDIA stacks are
+  # amd64-only — transcodes fall back to CPU.
 
 volumes:
   fliks_pgdata:
