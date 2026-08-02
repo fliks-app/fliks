@@ -1,5 +1,10 @@
 # Fliks
 
+## Comments
+
+- Keep them short and rare. Comment only what the code can't say: a non-obvious constraint, a why.
+- No verbose block comments, no restating the next line, no narrating a past bug — that belongs in the commit message.
+
 ## Angular conventions
 
 - Always use external template files (`templateUrl`) instead of inline templates (`template`) in components.
