@@ -1,0 +1,149 @@
+# Builds a signed IPA of the Fliks tvOS app and uploads it to App Store
+# Connect on every release tag (`v*` produced by release-please) plus on
+# manual `workflow_dispatch`. The build lands in TestFlight after Apple's
+# processing (~10-30 min); promotion to the public App Store still requires
+# clicking "Submit for Review" from App Store Connect.
+#
+# Marketing version comes from `appletv/project.yml`, which release-please
+# bumps along with the other clients, so the tag and the uploaded build always
+# agree. Build number comes from `git rev-list --count HEAD`, shared with the
+# iOS workflow — Apple rejects a build number it has already seen, and a
+# commit count only ever grows.
+#
+# Uses the same secrets as the iOS workflow (an Apple Distribution certificate
+# covers every platform of the team):
+#   - APPSTORE_API_KEY_ID / APPSTORE_API_ISSUER_ID / APPSTORE_API_KEY_P8_BASE64
+#   - IOS_DIST_CERT_P12_BASE64 / IOS_DIST_CERT_PASSWORD
+#   - IOS_DEV_CERT_P12_BASE64 / IOS_DEV_CERT_PASSWORD
+#   - APPLE_TEAM_ID
+#
+# One-shot setup outside this repo: an App Store Connect app record for the
+# tvOS platform on bundle id `media.fliks.tv`.
+name: Publish tvOS to App Store Connect
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-publish:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: appletv
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history → `git rev-list --count HEAD` gives a real commit
+          # count for the build number.
+          fetch-depth: 0
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      # The .xcodeproj isn't versioned — XcodeGen rebuilds it from project.yml.
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        run: xcodegen generate --spec project.yml
+
+      - name: Compute build number from commit count
+        id: bnum
+        run: echo "value=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+        working-directory: ${{ github.workspace }}
+
+      # Xcode discovers the key at this exact path, so the decode is all the
+      # staging it needs.
+      - name: Stage App Store Connect API key
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8_BASE64 }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$KEY_P8" | base64 -d \
+            > ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8
+
+      # Import the team's certificates into a throwaway keychain so Xcode
+      # reuses them: on a blank runner keychain, `-allowProvisioningUpdates`
+      # mints a fresh certificate every run and climbs toward Apple's cap. The
+      # keychain is ADDED to the search list (login kept) so cloud-managed
+      # profiles still resolve.
+      - name: Import signing certificates
+        env:
+          DIST_P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+          DIST_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          DEV_P12_BASE64: ${{ secrets.IOS_DEV_CERT_P12_BASE64 }}
+          DEV_PASSWORD: ${{ secrets.IOS_DEV_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PWD="$(openssl rand -base64 24)"
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          import_p12() {
+            local path="$RUNNER_TEMP/cert.p12"
+            echo "$1" | base64 -d > "$path"
+            security import "$path" -P "$2" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+            rm -f "$path"
+          }
+          import_p12 "$DIST_P12_BASE64" "$DIST_PASSWORD"
+          import_p12 "$DEV_P12_BASE64" "$DEV_PASSWORD"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" \
+            $(security list-keychains -d user | sed -e 's/^[[:space:]]*//' -e 's/"//g')
+        working-directory: ${{ github.workspace }}
+
+      - name: Archive tvOS app
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+        run: |
+          xcodebuild \
+            -project FliksTV.xcodeproj \
+            -scheme FliksTV \
+            -configuration Release \
+            -destination 'generic/platform=tvOS' \
+            -archivePath build/FliksTV.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8 \
+            CURRENT_PROJECT_VERSION=${{ steps.bnum.outputs.value }} \
+            DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} \
+            clean archive
+
+      - name: Export signed IPA
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+        run: |
+          xcodebuild \
+            -exportArchive \
+            -archivePath build/FliksTV.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath build/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8
+
+      # `altool --upload-app` is the only ASC upload path that takes an API key
+      # on the command line; `notarytool` notarises, it doesn't publish.
+      - name: Upload IPA to App Store Connect
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+        run: |
+          xcrun altool --upload-app \
+            --type tvos \
+            --file "$(ls build/export/*.ipa | head -1)" \
+            --apiKey "$KEY_ID" \
+            --apiIssuer "$ISSUER_ID"
