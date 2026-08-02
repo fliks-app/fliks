@@ -11,7 +11,7 @@ cd "$HERE"
 
 PROJECT="FliksTV.xcodeproj"
 SCHEME="FliksTV"
-BUNDLE_ID="${BUNDLE_ID:-media.fliks.tv}"
+BUNDLE_ID="${BUNDLE_ID:-media.fliks.app}"
 APP_NAME="${APP_NAME:-Fliks}"
 DERIVED=".build"
 SIM_NAME="${SIM_NAME:-Apple TV 4K (3rd generation)}"

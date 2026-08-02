@@ -39,7 +39,9 @@ targets:
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: media.fliks.tv
+        # Same id as the iOS client on purpose: App Store Connect only
+        # groups iOS and tvOS under one app record when the ids match.
+        PRODUCT_BUNDLE_IDENTIFIER: media.fliks.app
         ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 85ZC7Y8WQ2
