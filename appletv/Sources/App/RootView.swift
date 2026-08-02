@@ -11,6 +11,8 @@ struct RootView: View {
     @State private var homeSettings = HomeSettingsStore.shared
     @State private var backdrop = Backdrop()
     @State private var homeRefresh = HomeRefresh.shared
+    @State private var watched = WatchedStore.shared
+    @State private var playlistPicker = PlaylistPicker.shared
     @State private var path = NavigationPath()
 
     var body: some View {
@@ -22,9 +24,21 @@ struct RootView: View {
             .environment(homeSettings)
             .environment(backdrop)
             .environment(homeRefresh)
+            .environment(watched)
+            .environment(playlistPicker)
             .id(locale.lang)
             .task {
                 if server.isConfigured { await auth.bootstrap() }
+            }
+            .task(id: auth.state) {
+                if auth.state == .signedIn { await watched.loadOverview() }
+            }
+            .task(id: homeRefresh.tick) {
+                if auth.state == .signedIn { await watched.loadOverview() }
+            }
+            .sheet(item: Binding(get: { playlistPicker.target },
+                                 set: { playlistPicker.target = $0 })) { target in
+                AddToPlaylistSheet(target: target) { playlistPicker.target = nil }
             }
             .onChange(of: auth.state) { _, newState in
                 // Both edges start the stack fresh: signing out must not leave
@@ -77,10 +91,24 @@ struct RootView: View {
                     case let .library(id):
                         LibraryView(libraryId: id, onSelectMedia: { path.append(Route.mediaDetail(id: $0)) })
                     case let .mediaDetail(id):
-                        MediaDetailView(mediaId: id, onPlay: { mediaFileId, episodeId, startAt in
-                            path.append(Route.player(mediaFileId: mediaFileId, mediaId: id,
-                                                      episodeId: episodeId, startAt: startAt))
-                        })
+                        MediaDetailView(
+                            mediaId: id,
+                            onPlay: { mediaFileId, episodeId, startAt in
+                                path.append(Route.player(mediaFileId: mediaFileId, mediaId: id,
+                                                          episodeId: episodeId, startAt: startAt))
+                            },
+                            onSelectEpisode: { path.append(Route.episodeDetail(mediaId: id, episodeId: $0)) }
+                        )
+                    case let .episodeDetail(mediaId, episodeId):
+                        EpisodeDetailView(
+                            mediaId: mediaId,
+                            episodeId: episodeId,
+                            onPlay: { mediaFileId, epId, startAt in
+                                path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId,
+                                                          episodeId: epId, startAt: startAt))
+                            },
+                            onSelectEpisode: { path.append(Route.episodeDetail(mediaId: mediaId, episodeId: $0)) }
+                        )
                     case let .player(mediaFileId, mediaId, episodeId, startAt):
                         PlayerView(
                             mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: startAt,
@@ -128,12 +156,14 @@ struct Sidebar: View {
     @Environment(AuthService.self) private var auth
     @State private var libraries: [Library] = []
     @FocusState private var focused: String?
-    @State private var confirmSignOut = false
+    @State private var accountActions = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Fliks")
-                .font(.system(size: 24, weight: .bold))
+            Image("FliksLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 52)
                 .padding(.leading, 16)
                 .padding(.bottom, 24)
 
@@ -149,7 +179,7 @@ struct Sidebar: View {
                     .padding(.top, 14)
                     .padding(.bottom, 2)
                 ForEach(libraries) { lib in
-                    SidebarRow(label: lib.name, systemImage: "folder.fill", focusID: "lib:\(lib.id)",
+                    SidebarRow(label: lib.name, systemImage: lib.symbol, focusID: "lib:\(lib.id)",
                                indent: true, focused: $focused) {
                         path.append(Route.library(id: lib.id))
                     }
@@ -168,9 +198,11 @@ struct Sidebar: View {
 
             SidebarRow(label: auth.currentUser?.username ?? "", systemImage: "person.crop.circle.fill",
                        focusID: "account", focused: $focused) {
-                confirmSignOut = true
+                accountActions = true
             }
-            .confirmationDialog(tr("sidebar.sign_out_confirm"), isPresented: $confirmSignOut, titleVisibility: .visible) {
+            .confirmationDialog(auth.currentUser?.username ?? "", isPresented: $accountActions,
+                                titleVisibility: .visible) {
+                Button(tr("sidebar.switch_user")) { auth.switchUser() }
                 Button(tr("root.sign_out"), role: .destructive) { Task { await auth.logout() } }
                 Button(tr("common.cancel"), role: .cancel) {}
             }
@@ -184,7 +216,9 @@ struct Sidebar: View {
     }
 
     private func loadLibraries() async {
-        libraries = (try? await APIClient.shared.get("/api/libraries/mine")) ?? []
+        let all: [Library] = (try? await APIClient.shared.get("/api/libraries/mine")) ?? []
+        let hidden = Set(auth.currentUser?.hiddenLibraryIds ?? [])
+        libraries = all.filter { !hidden.contains($0.id) }
     }
 }
 

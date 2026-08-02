@@ -7,6 +7,7 @@ struct MediaDetailView: View {
     let mediaId: Int
     /// P5 owns actual playback — this only hands off the resolved target.
     var onPlay: (_ mediaFileId: Int, _ episodeId: Int?, _ startAt: Double) -> Void
+    var onSelectEpisode: (_ episodeId: Int) -> Void
 
     private enum LoadState {
         case loading
@@ -20,6 +21,10 @@ struct MediaDetailView: View {
     @State private var liked = false
     @State private var activeSeasonId: Int?
     @Environment(Backdrop.self) private var backdrop
+    @Environment(WatchedStore.self) private var watched
+    @Environment(PlaylistPicker.self) private var playlistPicker
+
+    private var isWatched: Bool { watched.isWatched(mediaId: mediaId) }
 
     var body: some View {
         Group {
@@ -47,17 +52,17 @@ struct MediaDetailView: View {
             VStack(alignment: .leading, spacing: 40) {
                 header(media)
 
+                if media.type == "series", let seasons = media.seasons, !seasons.isEmpty {
+                    seasonPicker(seasons)
+                    if let season = seasons.first(where: { $0.id == activeSeasonId }) {
+                        episodesRail(season: season)
+                    }
+                }
+
                 if !cast.isEmpty {
                     Rail(title: tr("media_detail.cast"), items: cast) { entry in
                         MediaCard(imagePath: entry.person.avatarUrl, title: entry.person.name,
                                   subtitle: entry.character) {}
-                    }
-                }
-
-                if media.type == "series", let seasons = media.seasons, !seasons.isEmpty {
-                    seasonPicker(seasons)
-                    if let season = seasons.first(where: { $0.id == activeSeasonId }) {
-                        episodesRail(media: media, season: season)
                     }
                 }
             }
@@ -110,8 +115,22 @@ struct MediaDetailView: View {
                     .buttonStyle(.borderedProminent)
                 }
                 Button(action: { Task { await toggleFavorite() } }) {
-                    Label(liked ? tr("media_detail.unfavorite") : tr("media_detail.favorite"),
-                          systemImage: liked ? "heart.fill" : "heart")
+                    Label {
+                        Text(liked ? tr("media_detail.unfavorite") : tr("media_detail.favorite"))
+                    } icon: {
+                        Image(systemName: liked ? "heart.fill" : "heart")
+                            .foregroundStyle(liked ? Color.red : Color.primary)
+                    }
+                }
+                .buttonStyle(.bordered)
+
+                Button(action: { Task { await toggleWatched(media) } }) {
+                    Label(watchedLabel(media), systemImage: isWatched ? "eye.slash" : "checkmark.circle")
+                }
+                .buttonStyle(.bordered)
+
+                Button(action: { playlistPicker.open(mediaId: mediaId) }) {
+                    Label(tr("playlists.add_to_playlist_title"), systemImage: "text.badge.plus")
                 }
                 .buttonStyle(.bordered)
             }
@@ -167,26 +186,25 @@ struct MediaDetailView: View {
         .focusSection()
     }
 
-    /// Split into if/else (not a `.buttonStyle(cond ? .a : .b)` ternary) —
-    /// `.borderedProminent`/`.bordered` are different concrete style types.
-    @ViewBuilder
     private func seasonButton(_ season: Season) -> some View {
-        let label = season.seasonNumber > 0
-            ? tr("media_detail.season_number", season.seasonNumber)
-            : tr("media_detail.specials")
-        if activeSeasonId == season.id {
-            Button(label) { activeSeasonId = season.id }.buttonStyle(.borderedProminent)
-        } else {
-            Button(label) { activeSeasonId = season.id }.buttonStyle(.bordered)
+        SeasonButton(label: Self.seasonLabel(season), active: activeSeasonId == season.id) {
+            activeSeasonId = season.id
         }
     }
 
+    static func seasonLabel(_ season: Season) -> String {
+        season.seasonNumber > 0
+            ? tr("media_detail.season_number", season.seasonNumber)
+            : tr("media_detail.specials")
+    }
+
     @ViewBuilder
-    private func episodesRail(media: Media, season: Season) -> some View {
-        Rail(title: nil, items: season.episodes.sorted { $0.episodeNumber < $1.episodeNumber }) { ep in
-            MediaCard(imagePath: ep.stillUrl, title: "E\(ep.episodeNumber)", subtitle: ep.title, portrait: false) {
-                guard ep.hasFile, let file = media.files?.first(where: { $0.episodeId == ep.id }) else { return }
-                onPlay(file.id, ep.id, 0)
+    private func episodesRail(season: Season) -> some View {
+        Rail(title: tr("media_detail.episodes"),
+             items: season.episodes.sorted { $0.episodeNumber < $1.episodeNumber }) { ep in
+            MediaCard(imagePath: ep.stillUrl, title: "E\(ep.episodeNumber)", subtitle: ep.title,
+                      portrait: false, mediaId: mediaId, episodeId: ep.id) {
+                onSelectEpisode(ep.id)
             }
             .opacity(ep.hasFile ? 1 : 0.4)
         }
@@ -204,12 +222,61 @@ struct MediaDetailView: View {
             state = .failed
             return
         }
+        await watched.loadSeries(mediaId)
         async let castTask: [MediaCastEntry] = APIClient.shared.get("/api/media/\(mediaId)/cast")
         async let resumeTask: MediaResumeInfo? = APIClient.shared.get("/api/playback/media/\(mediaId)")
         async let likeTask: LikeState = APIClient.shared.get("/api/likes/state/\(mediaId)")
         if let c = try? await castTask { cast = c }
         if let r = try? await resumeTask { resumeInfo = r }
         if let l = try? await likeTask { liked = l.media }
+    }
+
+    /// Selection has to survive losing focus, so the season keeps its own fill
+    /// instead of relying on the system focus decoration.
+    private struct SeasonButton: View {
+        let label: String
+        let active: Bool
+        var action: () -> Void
+        @FocusState private var focused: Bool
+
+        var body: some View {
+            Button(action: action) {
+                Text(label)
+                    .font(.callout.weight(active ? .semibold : .regular))
+                    .foregroundStyle(active ? Color.black : Color.white)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 26)
+            }
+            .buttonStyle(FlatButtonStyle())
+            .background(RoundedRectangle(cornerRadius: 14)
+                .fill(active ? Color.white : Color.white.opacity(0.16)))
+            .overlay(RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(.white, lineWidth: focused ? 4 : 0))
+            .scaleEffect(focused ? 1.06 : 1)
+            .focused($focused)
+            .animation(.easeOut(duration: 0.15), value: focused)
+        }
+    }
+
+    private func watchedLabel(_ media: Media) -> String {
+        if media.type == "series" {
+            return isWatched ? tr("media_detail.mark_series_unwatched") : tr("media_detail.mark_series_watched")
+        }
+        return isWatched ? tr("media_card.mark_unwatched") : tr("media_card.mark_watched")
+    }
+
+    private func toggleWatched(_ media: Media) async {
+        guard media.type == "series" else {
+            await watched.toggle(mediaId: mediaId)
+            return
+        }
+        // Mirrors the backend's own scope: episodes with a file, specials excluded.
+        let episodeIds = (media.seasons ?? [])
+            .filter { $0.seasonNumber > 0 }
+            .flatMap(\.episodes)
+            .filter(\.hasFile)
+            .map(\.id)
+        await watched.toggleSeries(mediaId: mediaId, watched: !isWatched, episodeIds: episodeIds)
     }
 
     private func toggleFavorite() async {
