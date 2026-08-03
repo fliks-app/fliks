@@ -68,6 +68,12 @@ jobs:
           mkdir -p "$certs"
           echo "$TIZEN_AUTHOR_P12" | base64 -d > "$certs/author.p12"
 
+          # Fail here rather than let `tizen package` block on its password prompt:
+          # a keyring that cannot round-trip a secret makes the signing step hang.
+          enc="$HOME/tizen-studio/tools/certificate-encryptor/secret-tool"
+          "$enc" store -l ci-probe --password probe
+          [ "$("$enc" lookup -l ci-probe)" = probe ] || { echo "keyring unusable"; exit 1; }
+
           distributor="$HOME/tizen-studio/tools/certificate-generator/certificates/distributor/sdk-public/tizen-distributor-signer.p12"
           tizen cli-config "profiles.path=$HOME/tizen-studio-data/profile/profiles.xml"
           tizen security-profiles add -n store \
@@ -78,7 +84,8 @@ jobs:
           out="$PWD/dist/store"
           mkdir -p "$out"
           # The CLI prints "An error has occurred" and keeps the reason in its log file.
-          tizen package -t wgt -s store -o "$out" -- "$PWD/dist/tizen-stage" \
+          # Closed stdin so a password prompt errors out instead of waiting forever.
+          timeout 300 tizen package -t wgt -s store -o "$out" -- "$PWD/dist/tizen-stage" < /dev/null \
             || { cat "$HOME/tizen-studio-data/cli/logs/cli.log"; exit 1; }
           mv "$out/Fliks.wgt" "dist/Fliks-$(node -p "require('./package.json').version")-store.wgt"
           unzip -l dist/Fliks-*-store.wgt | grep -q author-signature.xml
