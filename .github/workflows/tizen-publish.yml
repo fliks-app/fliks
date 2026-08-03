@@ -69,7 +69,9 @@ jobs:
           # `tizen package` resolves relative paths against its own bin directory.
           out="$PWD/dist/store"
           mkdir -p "$out"
-          tizen package -t wgt -s store -o "$out" -- "$PWD/dist/tizen-stage"
+          # The CLI prints "An error has occurred" and keeps the reason in its log file.
+          tizen package -t wgt -s store -o "$out" -- "$PWD/dist/tizen-stage" \
+            || { cat "$HOME/tizen-studio-data/cli/logs/cli.log"; exit 1; }
           mv "$out/Fliks.wgt" "dist/Fliks-$(node -p "require('./package.json').version")-store.wgt"
           unzip -l dist/Fliks-*-store.wgt | grep -q author-signature.xml
 
