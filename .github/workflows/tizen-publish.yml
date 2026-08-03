@@ -44,51 +44,42 @@ jobs:
       - name: Build Tizen widget
         run: npm run tizen:build
 
-      - name: Sign for TV Seller Office
+      # The Tizen CLI runs on the JVM; pin a JDK instead of relying on the
+      # runner image default.
+      - name: Set up JDK
+        if: env.TIZEN_AUTHOR_P12 != ''
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install the Tizen CLI and a keyring for it
         if: env.TIZEN_AUTHOR_P12 != ''
         run: |
           set -euo pipefail
-          # The signing engine keeps certificate passwords in a Freedesktop secret
-          # service through its own `certificate-encryptor/secret-tool`: with no
-          # keyring reachable it stores nothing and every password reads back as
-          # "Invaild password". `secret-tool` spawns its own bus via dbus-launch.
+          # The signing engine stores certificate passwords in a Freedesktop
+          # keyring; a runner has none, and without one every password reads
+          # back as "Invaild password".
           sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends gnome-keyring dbus-x11
-          mkdir -p ~/.cache ~/.local/share/keyrings
-          # Without --daemonize the unlock stays in the foreground and hangs the job.
-          echo "" | timeout 30 gnome-keyring-daemon --unlock --daemonize
-
-          installer=web-cli_Tizen_SDK_10.0_ubuntu-64.bin
-          curl -fsSLO "https://download.tizen.org/sdk/Installer/tizen-sdk_10.0/$installer"
+          sudo apt-get install -y -qq gnome-keyring dbus-x11
+          installer="$RUNNER_TEMP/tizen-installer.bin"
+          # download.tizen.org connects flakily from runners, and plain --retry
+          # does not cover connect failures.
+          curl -fSL --retry 5 --retry-all-errors --retry-delay 15 -o "$installer" \
+            https://download.tizen.org/sdk/Installer/tizen-sdk_10.0/web-cli_Tizen_SDK_10.0_ubuntu-64.bin
           chmod +x "$installer"
-          "./$installer" --accept-license "$HOME/tizen-studio" > /dev/null
-          export PATH="$HOME/tizen-studio/tools/ide/bin:$PATH"
+          "$installer" --accept-license "$HOME/tizen-studio" > /dev/null
+          echo "$HOME/tizen-studio/tools/ide/bin" >> "$GITHUB_PATH"
 
-          certs="$RUNNER_TEMP/certs"
-          mkdir -p "$certs"
-          echo "$TIZEN_AUTHOR_P12" | base64 -d > "$certs/author.p12"
+      - name: Sign for TV Seller Office
+        if: env.TIZEN_AUTHOR_P12 != ''
+        timeout-minutes: 10
+        run: dbus-run-session -- tizen/sign-wgt.sh
 
-          # Fail here rather than let `tizen package` block on its password prompt:
-          # a keyring that cannot round-trip a secret makes the signing step hang.
-          enc="$HOME/tizen-studio/tools/certificate-encryptor/secret-tool"
-          "$enc" store -l ci-probe --password probe
-          [ "$("$enc" lookup -l ci-probe)" = probe ] || { echo "keyring unusable"; exit 1; }
-
-          distributor="$HOME/tizen-studio/tools/certificate-generator/certificates/distributor/sdk-public/tizen-distributor-signer.p12"
-          tizen cli-config "profiles.path=$HOME/tizen-studio-data/profile/profiles.xml"
-          tizen security-profiles add -n store \
-            -a "$certs/author.p12" -p "$TIZEN_AUTHOR_PASSWORD" \
-            -d "$distributor" -dp tizenpkcs12passfordsigner
-
-          # `tizen package` resolves relative paths against its own bin directory.
-          out="$PWD/dist/store"
-          mkdir -p "$out"
-          # The CLI prints "An error has occurred" and keeps the reason in its log file.
-          # Closed stdin so a password prompt errors out instead of waiting forever.
-          timeout 300 tizen package -t wgt -s store -o "$out" -- "$PWD/dist/tizen-stage" < /dev/null \
-            || { cat "$HOME/tizen-studio-data/cli/logs/cli.log"; exit 1; }
-          mv "$out/Fliks.wgt" "dist/Fliks-$(node -p "require('./package.json').version")-store.wgt"
-          unzip -l dist/Fliks-*-store.wgt | grep -q author-signature.xml
+      # The signer writes its real error to cli.log, not to stdout.
+      - name: Dump the signer log on failure
+        if: failure()
+        run: tail -40 "$HOME/tizen-studio-data/cli/logs/cli.log" || true
 
       - uses: actions/upload-artifact@v4
         with:
