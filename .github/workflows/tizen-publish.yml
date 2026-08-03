@@ -1,13 +1,15 @@
-# Builds an unsigned Tizen `.wgt` of the Fliks client on every release
-# tag (`v*` produced by release-please) and on manual `workflow_dispatch`
-# for ad-hoc builds. The artifact is uploaded to the matching GitHub
-# Release.
+# Builds the Tizen `.wgt` of the Fliks client on every release tag (`v*`
+# produced by release-please) and on manual `workflow_dispatch`. Both
+# artifacts are attached to the matching GitHub Release:
 #
-# Production signing (Samsung Apps TV distributor profile) is not done
-# here yet — the `.wgt` produced is sideloadable on a Tizen TV in
-# developer mode. When a Samsung distributor certificate is available,
-# a follow-up step using `tizen package -t wgt -s <profile>` will be
-# added between the build and the upload.
+#   Fliks-<v>.wgt        unsigned — sideloaders re-sign it with their own
+#                        Samsung certs (a distributor cert is bound to a TV DUID)
+#   Fliks-<v>-store.wgt  signed — the file to upload to TV Seller Office
+#
+# Only the author certificate is secret: it is the app's identity, and every
+# update has to carry the same one. The distributor certificate ships with
+# Tizen Studio (its password is a public constant) and Samsung replaces that
+# signature when the app is published.
 name: Publish Samsung Tizen widget
 
 on:
@@ -24,6 +26,9 @@ jobs:
     defaults:
       run:
         working-directory: client
+    env:
+      TIZEN_AUTHOR_P12: ${{ secrets.TIZEN_AUTHOR_P12 }}
+      TIZEN_AUTHOR_PASSWORD: ${{ secrets.TIZEN_AUTHOR_PASSWORD }}
     steps:
       - uses: actions/checkout@v6
 
@@ -39,17 +44,39 @@ jobs:
       - name: Build Tizen widget
         run: npm run tizen:build
 
-      - name: Resolve artifact path
-        id: art
+      - name: Sign for TV Seller Office
+        if: env.TIZEN_AUTHOR_P12 != ''
         run: |
-          wgt=$(ls dist/Fliks-*.wgt | head -n1)
-          echo "path=client/$wgt" >> "$GITHUB_OUTPUT"
-          echo "name=$(basename "$wgt")" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          installer=web-cli_Tizen_Studio_6.1_ubuntu-64.bin
+          curl -fsSLO "https://download.tizen.org/sdk/Installer/tizen-studio_6.1/$installer"
+          chmod +x "$installer"
+          "./$installer" --accept-license "$HOME/tizen-studio" > /dev/null
+          export PATH="$HOME/tizen-studio/tools/ide/bin:$PATH"
+
+          certs="$RUNNER_TEMP/certs"
+          mkdir -p "$certs"
+          echo "$TIZEN_AUTHOR_P12" | base64 -d > "$certs/author.p12"
+          # The signing engine reads the password back from a `.pwd` companion file.
+          printf '%s' "$TIZEN_AUTHOR_PASSWORD" > "$certs/author.pwd"
+
+          distributor="$HOME/tizen-studio/tools/certificate-generator/certificates/distributor/sdk-public/tizen-distributor-signer.p12"
+          tizen security-profiles add -n store \
+            -a "$certs/author.p12" -p "$TIZEN_AUTHOR_PASSWORD" \
+            -d "$distributor" -dp tizenpkcs12passfordsigner
+          tizen cli-config "profiles.path=$HOME/tizen-studio-data/profile/profiles.xml"
+
+          # `tizen package` resolves relative paths against its own bin directory.
+          out="$PWD/dist/store"
+          mkdir -p "$out"
+          tizen package -t wgt -s store -o "$out" -- "$PWD/dist/tizen-stage"
+          mv "$out/Fliks.wgt" "dist/Fliks-$(node -p "require('./package.json').version")-store.wgt"
+          unzip -l dist/Fliks-*-store.wgt | grep -q author-signature.xml
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.art.outputs.name }}
-          path: ${{ steps.art.outputs.path }}
+          name: tizen-wgt
+          path: client/dist/Fliks-*.wgt
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -59,5 +86,5 @@ jobs:
         # contents: write — attaching a file never needed it.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.ref_name }}" "${{ steps.art.outputs.path }}" --clobber
+        run: gh release upload "${{ github.ref_name }}" client/dist/Fliks-*.wgt --clobber
         working-directory: ${{ github.workspace }}
