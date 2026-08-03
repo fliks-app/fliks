@@ -11,6 +11,8 @@ code that packages them:
 | Tizen home icon (1024×1024) | `client/tizen/icon.png` |
 | webOS icon (400×400) + splash (1920×1080) | `client/webos/icon.png`, `splash.png` |
 | tvOS App Icon layers + Top Shelf | `appletv/Sources/Resources/Assets.xcassets/` |
+| iOS app + marketing icon (1024×1024) | `client/ios/App/App/Assets.xcassets/AppIcon.appiconset/` |
+| Android launcher icon | `client/android/app/src/main/res/mipmap-*/` |
 | Brand logo / icon sources (SVG) | `client/public/fliks-logo*.svg`, `fliks-icon.svg` |
 
 Signed packages are never committed — CI produces them (`tizen-publish.yml`
@@ -49,6 +51,31 @@ each one before submitting. The packaged icon (`client/webos/icon.png`) already
 is 400×400 and can be reused as the store icon; `appinfo.json` points both
 `icon` and `largeIcon` at it, where webOS docs describe 80×80 and 130×130
 in-package icons — worth revisiting only if LG ever flags it.
+
+## android/ — Google Play Console
+
+| Slot | File | Requirement |
+|---|---|---|
+| App icon | `icon-512x512.png` | 512×512, 32-bit PNG, ≤ 1 MB |
+| Feature graphic | `feature-graphic-1024x500.png` | exactly 1024×500, JPG or 24-bit PNG, **no alpha** |
+| TV banner | `banner-tv-1280x720.png` | 1280×720, no alpha — mandatory for the Android TV listing |
+| Phone screenshots | `screenshots/phone-*.png` | 2 to 8, 320–3840 px per side, max 2:1, no alpha; 1080×1920 recommended |
+| TV screenshots | `screenshots/tv-*.png` | 16:9, for the Android TV listing |
+
+Android TV submissions get rejected for a missing full-size banner, so it is not
+optional here even though the phone listing does not use it.
+
+## ios/ — App Store Connect
+
+| Slot | File | Requirement |
+|---|---|---|
+| iPhone screenshots | `screenshots/iphone-69-*.png` | exactly 1320×2868 (6.9"), 1 to 10 |
+| iPad screenshots | `screenshots/ipad-13-*.png` | exactly 2064×2752 (13"), 1 to 10 |
+
+PNG or JPEG, RGB, **no alpha**, and the pixel dimensions are exact — there is no
+tolerance. Only the largest device of each family needs supplying; Apple scales
+the rest down. No icon here: App Store Connect reads the 1024×1024 marketing
+icon from the app bundle's asset catalog.
 
 ## appletv/ — App Store (tvOS)
 
