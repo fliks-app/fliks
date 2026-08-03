@@ -53,6 +53,12 @@ client/android/app/fliks-upload.jks
 *.pwd
 client/tizen-studio-cli.bin
 client/webos/*.ipk
+
+# Store listing assets are versioned (see store/README.md), signed packages are
+# not: a signature embeds the author certificate and this repository is public.
+store/**/*.wgt
+store/**/*.ipk
+store/**/*.ipa
 volumes/*
 /backend/images/
 /scripts/
