@@ -1,13 +1,19 @@
 # Fliks
 
-**Your media, on every screen in the house.** Point Fliks at the folders
-where your films and series live; it builds a browsable library with
-posters and metadata, and streams them to phones, TVs, browsers and
-Chromecast — transcoding on the fly when a device can't play the file
-as-is.
+**Your personal video collection, on every screen in the house.** Point
+Fliks at the folders where your videos live and it does the rest: covers,
+descriptions, cast, seasons and episodes, laid out like the streaming
+apps you already use — except the library is yours.
 
-Self-hosted, no account, no cloud: the server runs on your machine and
-nothing leaves it.
+It turns a folder of video files into a proper streaming service for the
+household. Everyone gets their own profile and their own place in every
+episode; start something on your phone, sit down, and the TV picks it up
+where you left off. It plays on whatever screen is in front of you, and
+converts the video on the fly when that screen can't handle the original
+file.
+
+Self-hosted: the server runs on your machine, there is no account to
+create, no subscription, and nothing leaves the house.
 
 - **Server** — Docker, a Windows tray app or a macOS menu-bar app
 - **Clients** — web, iOS, Android, Android TV, Apple TV, Samsung, LG, desktop, Chromecast
@@ -17,8 +23,26 @@ nothing leaves it.
 
 ## Get started
 
-The quickest path is Docker. You need a folder with your video files and
-about two minutes.
+The server runs on one machine in the house — the one holding your video
+files. Everything else connects to it. Three ways to install it; they
+give you the same Fliks, so pick whichever suits the machine. All you
+need is a folder with your videos and about two minutes.
+
+### Windows
+
+Download the installer from the
+[latest release](https://github.com/fliks-app/fliks/releases) and run it.
+Fliks sits in the system tray and starts with the machine. Nothing else
+to install. Details in [`windows/`](windows/).
+
+### macOS
+
+Download the `.dmg` from the
+[latest release](https://github.com/fliks-app/fliks/releases) and drag it
+to Applications. Fliks sits in the menu bar. Apple Silicon, macOS 13
+Ventura or newer. Details in [`macos/`](macos/).
+
+### Docker — Linux, NAS, or a home server
 
 ```bash
 curl -LO https://raw.githubusercontent.com/fliks-app/fliks/main/docker-compose.example.yml
@@ -35,11 +59,15 @@ Open the file and set three things:
 docker compose up -d
 ```
 
-Then open `http://<host>:4848` and create the first account. Add a
-library pointing at `/medias`, and Fliks scans it.
+### First run
 
-Prefer to run it as a normal desktop app? See
-[Windows](#windows) and [macOS](#macos) below.
+Whichever you picked, open `http://<host>:4848` in a browser — on the
+machine itself that's `http://localhost:4848`. Create the first account,
+add a library pointing at your video folder (`/medias` under Docker), and
+Fliks scans it and goes looking for the covers.
+
+Then install the app on your phone or TV, point it at the same address,
+and you're done.
 
 ---
 
@@ -71,19 +99,6 @@ it probes at startup and falls back to CPU when nothing else answers.
 HDR10, HLG and Dolby Vision are tone-mapped to SDR when the receiving
 device can't render them.
 
-### Windows
-
-A tray app that runs the server in the background; the UI stays in your
-browser at `http://localhost:4848`. Grab the installer from the
-[latest release](https://github.com/fliks-app/fliks/releases). Details in
-[`windows/`](windows/).
-
-### macOS
-
-Same idea, in the menu bar, with VideoToolbox acceleration. `.dmg` on the
-[latest release](https://github.com/fliks-app/fliks/releases), Apple
-Silicon, macOS 13+. Details in [`macos/`](macos/).
-
 ---
 
 ## Client compatibility
@@ -100,7 +115,7 @@ its own native SwiftUI app talking to the same backend.
 | **Android** | Play Store | Android 6 (API 23) | phone + tablet |
 | **Android TV** | Play Store | Android 6 | 10-foot UI, D-pad navigation |
 | **Samsung TV (Tizen)** | sideload for now | Tizen 5.5 — 2020 sets and newer | works fully, not yet on Samsung Apps |
-| **LG TV (webOS)** | LG Content Store | built for Chromium 85 | submitted, under review |
+| **LG TV (webOS)** | LG Content Store | built for Chromium 85 | approved, on the store |
 | **Desktop** | release assets | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
 | **Chromecast** | built in — cast from any client | — | custom receiver, same player engine |
 | **Apple TV** | App Store — same app record as iOS | tvOS 17 | native SwiftUI app, not the web client |
@@ -121,6 +136,16 @@ connects to your server like the mobile apps do, it doesn't host one.
 - **Every track, switchable mid-playback** — all embedded audio
   renditions, all embedded and external subtitles (`.srt`, `.ass`), with
   your choice remembered per show.
+- **Subtitles found for you** — a video that came without any? Fliks
+  goes looking on the usual subtitle sites and picks the one that
+  actually matches your copy, in the languages you asked for.
+- **Out of sync, fixed in one click** — Fliks listens to the dialogue
+  and slides the subtitles back onto it. No hunting for the right
+  offset, no re-downloading three files hoping one lands.
+- **Translated on demand** — nothing available in your language? Take a
+  track you do have and have it translated into one you can read. You
+  bring the translation service; the result is saved next to the video
+  so it's only done once.
 - **Subtitle appearance** per user: size, colour, shadow, background
   opacity, margins.
 - **Skip intro, next episode, chapter markers** and thumbnail previews
@@ -128,7 +153,7 @@ connects to your server like the mobile apps do, it doesn't host one.
 
 ### Browsing
 
-- **Several libraries side by side** — films, series, anime, kids —
+- **Several libraries side by side** — movies, shows, home videos, kids —
   each pointed at its own folder.
 - **Search across all of them**, filter and sort by status, date added,
   rating, runtime.
@@ -138,6 +163,25 @@ connects to your server like the mobile apps do, it doesn't host one.
 - **Home rows** — Continue Watching, Recently Added, and
   recommendations weighted by what you've actually watched.
 - **Calendar** of upcoming episodes for the series you follow.
+
+### Sharing with the household
+
+- **Recommend something to someone** — pick a film or a season and send
+  it to another user. It shows up on their home page under *Recommended
+  for you*, with your name on it.
+- **Playlists** — your own running order, drag to reorder, autoplay from
+  one item to the next, and watched items drop off on their own if you
+  want them to.
+- **Shared playlists** — invite other users as viewer, editor or admin
+  and build one together, or save someone else's public playlist to your
+  own list.
+- **Downloads that keep themselves current** — turn a playlist to
+  automatic on your phone, tablet or the desktop app: what you haven't
+  watched is downloaded to the device, and what you have watched is
+  removed to give the space back. Nothing to think about before a flight.
+- **Everyone stays in control** — each user decides whether their
+  profile is public and what appears on it: tastes, recent activity,
+  favourites, statistics — or nothing at all.
 
 ### Running it
 
