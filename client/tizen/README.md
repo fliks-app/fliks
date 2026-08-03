@@ -160,35 +160,72 @@ tizen package -t wgt -s fliks -- dist/tizen-stage
 tizen install -n Fliks.wgt -s <TV_IP>:26101 -- dist/tizen-stage
 
 # 4. Launch
-tizen run -p abcdefghij.Fliks -s <TV_IP>:26101
+tizen run -p FliksMedia.Fliks -s <TV_IP>:26101
 ```
 
-The application ID `abcdefghij.Fliks` comes from `config.xml`. It is
-a placeholder until/unless a real Samsung Seller Office package ID is
-registered.
+The application ID `FliksMedia.Fliks` comes from `config.xml`, where
+`package="FliksMedia"` is the TV Seller Office package ID. It must stay
+identical for every future version — Seller Office matches updates on it.
 
 To stop the app:
 
 ```bash
-sdb -s <TV_IP>:26101 shell 0 was_kill abcdefghij.Fliks
+sdb -s <TV_IP>:26101 shell 0 was_kill FliksMedia.Fliks
 ```
 
 To uninstall:
 
 ```bash
-tizen uninstall -p abcdefghij.Fliks -s <TV_IP>:26101
+tizen uninstall -p FliksMedia.Fliks -s <TV_IP>:26101
 ```
 
 ---
 
-## 3. Debug — Chrome DevTools on the TV
+## 3. Package for TV Seller Office
+
+Seller Office rejects a package at pre-test unless it contains
+`config.xml`, `author-signature.xml` **and** `signature1.xml` — the
+unsigned `dist/Fliks-<version>.wgt` never passes. Sign the staged bundle
+with the author certificate and the public distributor certificate that
+ships with Tizen Studio:
+
+```bash
+tizen security-profiles add -n fliks-store \
+  -a ~/tizen-studio-data/certs/fliks/author.p12 \
+  -p "$(cat ~/tizen-studio-data/certs/fliks/author.pwd)" \
+  -d ~/tizen-studio/tools/certificate-generator/certificates/distributor/sdk-public/tizen-distributor-signer.p12 \
+  -dp tizenpkcs12passfordsigner
+
+# Both paths must be absolute — the CLI resolves relative ones against its own bin dir.
+tizen package -t wgt -s fliks-store -o "$PWD/dist/store" -- "$PWD/dist/tizen-stage"
+```
+
+The DUID-bound dev distributor certificate is not needed here: Samsung
+replaces the distributor signature when the app is published. The
+**author** certificate is the app's identity — every update must be signed
+with the same one, so keep a backup of `author.p12` and its password
+outside this machine. Losing it means the published app can never be
+updated.
+
+`tizen-publish.yml` runs the same signing on release tags when the repo
+provides `TIZEN_AUTHOR_P12` (base64 of `author.p12`) and
+`TIZEN_AUTHOR_PASSWORD`. The result is kept as a build artifact
+(`tizen-wgt`, 7-day retention) and deliberately **not** attached to the
+release: a signature embeds the author certificate, whose subject is a
+personal identity, and this repository is public. Only the unsigned widget
+is published. Upload and pre-test stay manual — TV Seller Office has no
+submission API.
+
+---
+
+## 4. Debug — Chrome DevTools on the TV
 
 Tizen WebApps expose a remote Web Inspector when launched with
 `debug`. Forward the port and open it in Chrome:
 
 ```bash
 # Launch with debug; the command prints the assigned port
-sdb -s <TV_IP>:26101 shell 0 debug abcdefghij.Fliks
+sdb -s <TV_IP>:26101 shell 0 debug FliksMedia.Fliks
 # → "... successfully launched pid = N with debug 1 port: <PORT>"
 
 # Forward the inspector port to localhost
@@ -212,7 +249,7 @@ account; the Web Inspector is the reliable path.)
 
 ---
 
-## 4. Signing material is never committed
+## 5. Signing material is never committed
 
 The repo `.gitignore` excludes:
 
@@ -230,12 +267,17 @@ Recommended layout (mirrors the Android keystore policy):
 | Tizen security profiles  | `~/tizen-studio-data/profile/profiles.xml` |
 | `tizencertificates` tool | `~/tools/tizencertificates/`               |
 
-CI receives the distributor `.p12` as a base64-encoded repo secret
-decoded at build time (same pattern as `client/android/app/fliks-upload.jks`).
+CI receives the author `.p12` as a base64-encoded repo secret decoded at
+build time (same pattern as `client/android/app/fliks-upload.jks`):
+
+```bash
+openssl base64 -A -in ~/tizen-studio-data/certs/fliks/author.p12
+# → paste into the TIZEN_AUTHOR_P12 repo secret; password into TIZEN_AUTHOR_PASSWORD
+```
 
 ---
 
-## 5. Notes on the build pipeline
+## 6. Notes on the build pipeline
 
 - `client/tizen/config.xml` declares the W3C widget manifest, the
   CSP, Tizen privileges and the application ID. Bumping the widget
