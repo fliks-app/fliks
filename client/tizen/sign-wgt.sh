@@ -34,8 +34,10 @@ out="$client/dist/store"
 mkdir -p "$out"
 tizen package -t wgt -s store -o "$out" -- "$client/dist/tizen-stage"
 
+# Stays under dist/store/, out of the glob that feeds public release assets: the
+# signature embeds the author certificate, whose subject is a personal identity.
 version=$(node -p "require('$client/package.json').version")
-signed="$client/dist/Fliks-$version-store.wgt"
+signed="$out/Fliks-$version-store.wgt"
 mv "$out/Fliks.wgt" "$signed"
 unzip -l "$signed" | grep -q author-signature.xml
 echo "signed $(basename "$signed")"

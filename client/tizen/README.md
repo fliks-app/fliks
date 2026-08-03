@@ -209,8 +209,11 @@ updated.
 
 `tizen-publish.yml` runs the same signing on release tags when the repo
 provides `TIZEN_AUTHOR_P12` (base64 of `author.p12`) and
-`TIZEN_AUTHOR_PASSWORD`, and attaches `Fliks-<version>-store.wgt` to the
-release. Upload and pre-test stay manual — TV Seller Office has no
+`TIZEN_AUTHOR_PASSWORD`. The result is kept as a build artifact
+(`tizen-wgt`, 7-day retention) and deliberately **not** attached to the
+release: a signature embeds the author certificate, whose subject is a
+personal identity, and this repository is public. Only the unsigned widget
+is published. Upload and pre-test stay manual — TV Seller Office has no
 submission API.
 
 ---
