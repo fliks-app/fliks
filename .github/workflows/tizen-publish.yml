@@ -48,8 +48,10 @@ jobs:
         if: env.TIZEN_AUTHOR_P12 != ''
         run: |
           set -euo pipefail
-          installer=web-cli_Tizen_Studio_6.1_ubuntu-64.bin
-          curl -fsSLO "https://download.tizen.org/sdk/Installer/tizen-studio_6.1/$installer"
+          # Tizen Studio 6.1 rejects the author password its own `security-profiles
+          # add` just stored; SDK 10.0 round-trips it.
+          installer=web-cli_Tizen_SDK_10.0_ubuntu-64.bin
+          curl -fsSLO "https://download.tizen.org/sdk/Installer/tizen-sdk_10.0/$installer"
           chmod +x "$installer"
           "./$installer" --accept-license "$HOME/tizen-studio" > /dev/null
           export PATH="$HOME/tizen-studio/tools/ide/bin:$PATH"
@@ -57,40 +59,19 @@ jobs:
           certs="$RUNNER_TEMP/certs"
           mkdir -p "$certs"
           echo "$TIZEN_AUTHOR_P12" | base64 -d > "$certs/author.p12"
-          # The signing engine reads the password back from a `.pwd` companion file.
-          printf '%s' "$TIZEN_AUTHOR_PASSWORD" > "$certs/author.pwd"
 
           distributor="$HOME/tizen-studio/tools/certificate-generator/certificates/distributor/sdk-public/tizen-distributor-signer.p12"
-
-          profiles="$HOME/tizen-studio-data/profile/profiles.xml"
-          tizen cli-config "profiles.path=$profiles"
+          tizen cli-config "profiles.path=$HOME/tizen-studio-data/profile/profiles.xml"
           tizen security-profiles add -n store \
             -a "$certs/author.p12" -p "$TIZEN_AUTHOR_PASSWORD" \
             -d "$distributor" -dp tizenpkcs12passfordsigner
-          sed 's/password="[^"]*"/password="MASKED"/g' "$profiles"
 
           # `tizen package` resolves relative paths against its own bin directory.
           out="$PWD/dist/store"
           mkdir -p "$out"
           # The CLI prints "An error has occurred" and keeps the reason in its log file.
-          if tizen package -t wgt -s store -o "$out" -- "$PWD/dist/tizen-stage"; then
-            echo "DEBUG signed via security-profiles add"
-          else
-            cat "$HOME/tizen-studio-data/cli/logs/cli.log"
-            echo "DEBUG retrying with a hand-written profile"
-            printf '%s\n' \
-              '<?xml version="1.0" encoding="UTF-8" standalone="no"?>' \
-              '<profiles active="raw" version="3.1">' \
-              '  <profile name="raw">' \
-              "    <profileitem ca=\"\" distributor=\"0\" key=\"$certs/author.p12\" password=\"$TIZEN_AUTHOR_PASSWORD\" rootca=\"\"/>" \
-              "    <profileitem ca=\"\" distributor=\"1\" key=\"$distributor\" password=\"tizenpkcs12passfordsigner\" rootca=\"\"/>" \
-              '    <profileitem ca="" distributor="2" key="" password="" rootca=""/>' \
-              '  </profile>' \
-              '</profiles>' > "$profiles"
-            tizen package -t wgt -s raw -o "$out" -- "$PWD/dist/tizen-stage" \
-              || { cat "$HOME/tizen-studio-data/cli/logs/cli.log"; exit 1; }
-            echo "DEBUG signed via hand-written profile"
-          fi
+          tizen package -t wgt -s store -o "$out" -- "$PWD/dist/tizen-stage" \
+            || { cat "$HOME/tizen-studio-data/cli/logs/cli.log"; exit 1; }
           mv "$out/Fliks.wgt" "dist/Fliks-$(node -p "require('./package.json').version")-store.wgt"
           unzip -l dist/Fliks-*-store.wgt | grep -q author-signature.xml
 
