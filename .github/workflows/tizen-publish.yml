@@ -61,6 +61,13 @@ jobs:
           printf '%s' "$TIZEN_AUTHOR_PASSWORD" > "$certs/author.pwd"
 
           distributor="$HOME/tizen-studio/tools/certificate-generator/certificates/distributor/sdk-public/tizen-distributor-signer.p12"
+
+          sha256sum "$certs/author.p12"
+          openssl pkcs12 -in "$certs/author.p12" -passin env:TIZEN_AUTHOR_PASSWORD -legacy -noout \
+            && echo "DEBUG author p12: opens" || echo "DEBUG author p12: password rejected"
+          openssl pkcs12 -in "$distributor" -passin pass:tizenpkcs12passfordsigner -legacy -noout \
+            && echo "DEBUG distributor p12: opens" || echo "DEBUG distributor p12: password rejected"
+          java -version
           tizen security-profiles add -n store \
             -a "$certs/author.p12" -p "$TIZEN_AUTHOR_PASSWORD" \
             -d "$distributor" -dp tizenpkcs12passfordsigner
