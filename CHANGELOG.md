@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.1](https://github.com/fliks-app/fliks/compare/v2.0.0...v2.0.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* **appletv:** stop importing the development certificate in the tvOS workflow ([#848](https://github.com/fliks-app/fliks/issues/848)) ([d644612](https://github.com/fliks-app/fliks/commit/d644612abb2d8bea7c976bd931b7b98efba0c01b))
+* **ci:** attach release assets without updating the release ([#850](https://github.com/fliks-app/fliks/issues/850)) ([5d52dd6](https://github.com/fliks-app/fliks/commit/5d52dd6e5bf83e401a4bd2a93502a37150ab551c))
+* **tv:** exit on the first return-key press from the entry screen ([#859](https://github.com/fliks-app/fliks/issues/859)) ([d46970a](https://github.com/fliks-app/fliks/commit/d46970a52698e6a5bcccfc62856f72d6718c0cfd))
+
 ## [2.0.0](https://github.com/fliks-app/fliks/compare/v1.15.2...v2.0.0) (2026-08-02)
 
 
