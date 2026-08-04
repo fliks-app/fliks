@@ -148,13 +148,27 @@ Android tablet set).
 
 ## appletv/ — App Store (tvOS)
 
-| Slot | Requirement |
-|---|---|
-| Screenshots | 1920×1080 or 3840×2160, landscape only, 1 minimum and up to 10 |
-| App Store icon | 1280×768, layered for the parallax effect |
+| Slot | File | Requirement |
+|---|---|---|
+| Screenshots | `screenshots/<locale>/NN-*.jpg` | 1920×1080 or 3840×2160, landscape only, 1 to 10 |
+| App Store icon | — | 1280×768, layered for the parallax effect |
 
-Empty for now: the tvOS client is not submitted yet. Drop captures from the
-Apple TV or the simulator into `appletv/screenshots/`.
+Same locale + `NN-` convention as the other stores, minus the device-slot level
+since tvOS has only one. The tvOS client covers fewer screens than the phone one,
+so the set stops at four: home, movies list, movie detail, player.
+
+Captured on the `Apple TV 4K (3rd generation)` simulator at its native 3840×2160,
+via the workflow the tvOS project already ships:
+
+```bash
+appletv/scripts/remote-build.sh run-sim   # generate, build, install, launch
+```
+
+That script runs on the Mac — `appletv/appletv` is the PC-side wrapper that
+rsyncs and drives it over SSH. Same alpha caveat as iOS: `⌘S` output is flattened
+to JPEG q92 4:4:4 on the way in.
+
+No icon here yet: the layered 1280×768 App Store icon is still to produce.
 
 ---
 
