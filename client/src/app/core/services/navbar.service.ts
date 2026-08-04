@@ -61,7 +61,10 @@ export class NavbarService {
       this.isLargeScreen.set(mq.matches);
       mq.addEventListener('change', (e) => this.isLargeScreen.set(e.matches));
     }
-    let lastUrl = this.router.url;
+    // Empty, not `router.url`: this service is constructed before the router's
+    // initial navigation, so seeding it would push a phantom '/' entry and make
+    // the first hardware-back press on the entry screen a no-op redirect.
+    let lastUrl = '';
     this.router.events.subscribe((e) => {
       // Browser back/forward: mirror the pop on our internal stack so the
       // next in-app back button doesn't re-push the URL we just left (which

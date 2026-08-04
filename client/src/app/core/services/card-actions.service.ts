@@ -152,7 +152,16 @@ export class CardActionsService {
       this.show();
       return;
     }
-    if (this.open() && (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'GoBack')) {
+    // Tizen's Return key (10009 / XF86Back) must close this popup rather than
+    // reach the app-shell back handler, which would navigate away or exit.
+    if (
+      this.open() &&
+      (e.key === 'Escape' ||
+        e.key === 'Backspace' ||
+        e.key === 'GoBack' ||
+        e.key === 'XF86Back' ||
+        e.keyCode === 10009)
+    ) {
       e.preventDefault();
       e.stopPropagation();
       this.close();
