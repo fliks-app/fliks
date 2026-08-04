@@ -120,14 +120,18 @@ Same layout as `android/` — one directory per App Store locale, then one per
 device slot, with the `NN-` prefix carrying the upload order:
 
 ```
-screenshots/en-US/iphone-65/
-screenshots/fr-FR/iphone-65/
+screenshots/en-US/{iphone-69,iphone-65}/
+screenshots/fr-FR/{iphone-69,iphone-65}/
 ```
 
-Captured on the `iPhone 11 Pro Max (6.5in)` simulator, the one 6.5" device type
-still shipping a bootable runtime:
+Both sets show the same six screens, so the `NN-` order matches across slots and
+locales. Captured on two simulators — the 6.5" one being the last device type of
+that size still shipping a bootable runtime:
 
 ```bash
+xcrun simctl create "iPhone 16 Pro Max (6.9in)" \
+  com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max \
+  com.apple.CoreSimulator.SimRuntime.iOS-26-4
 xcrun simctl create "iPhone 11 Pro Max (6.5in)" \
   com.apple.CoreSimulator.SimDeviceType.iPhone-11-Pro-Max \
   com.apple.CoreSimulator.SimRuntime.iOS-26-4
