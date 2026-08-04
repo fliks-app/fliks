@@ -104,23 +104,71 @@ files are the original JPEGs, copied untouched rather than re-encoded.
 
 | Slot | File | Requirement |
 |---|---|---|
-| iPhone screenshots | `screenshots/iphone-69-*.png` | exactly 1320×2868 (6.9"), 1 to 10 |
-| iPad screenshots | `screenshots/ipad-13-*.png` | exactly 2064×2752 (13"), 1 to 10 |
+| iPhone 6.9" screenshots | `screenshots/<locale>/iphone-69/NN-*.jpg` | exactly 1320×2868 or 2868×1320, 1 to 10 |
+| iPhone 6.5" screenshots | `screenshots/<locale>/iphone-65/NN-*.jpg` | exactly 1242×2688 or 2688×1242, 1 to 10 |
+| iPad 13" screenshots | `screenshots/<locale>/ipad-13/NN-*.jpg` | exactly 2064×2752 or 2752×2064, 1 to 10 |
 
 PNG or JPEG, RGB, **no alpha**, and the pixel dimensions are exact — there is no
-tolerance. Only the largest device of each family needs supplying; Apple scales
-the rest down. No icon here: App Store Connect reads the 1024×1024 marketing
-icon from the app bundle's asset catalog.
+tolerance. 6.9" is the only required iPhone size and Apple scales it down for the
+rest; 6.5" is optional and only worth filling when the framing deserves its own
+capture. No icon here: App Store Connect reads the 1024×1024 marketing icon from
+the app bundle's asset catalog.
+
+### Screenshots
+
+Same layout as `android/` — one directory per App Store locale, then one per
+device slot, with the `NN-` prefix carrying the upload order:
+
+```
+screenshots/en-US/{iphone-69,iphone-65,ipad-13}/
+screenshots/fr-FR/{iphone-69,iphone-65,ipad-13}/
+```
+
+Every set shows the same six screens, so the `NN-` order matches across slots and
+locales. The iPhone sets are portrait except the player; the iPad set is landscape
+throughout, which is where the sidebar layout shows. Captured on three simulators
+— the 6.5" one being the last device type of that size still shipping a bootable
+runtime:
+
+```bash
+xcrun simctl create "iPhone 16 Pro Max (6.9in)" \
+  com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max \
+  com.apple.CoreSimulator.SimRuntime.iOS-26-4
+xcrun simctl create "iPhone 11 Pro Max (6.5in)" \
+  com.apple.CoreSimulator.SimDeviceType.iPhone-11-Pro-Max \
+  com.apple.CoreSimulator.SimRuntime.iOS-26-4
+xcrun simctl create "iPad Pro 13-inch (13in)" \
+  com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4-8GB \
+  com.apple.CoreSimulator.SimRuntime.iOS-26-4
+```
+
+`⌘S` in the Simulator writes PNGs **with an alpha channel**, which App Store
+Connect rejects — flatten them on the way in (JPEG q92 4:4:4, same recipe as the
+Android tablet set).
 
 ## appletv/ — App Store (tvOS)
 
-| Slot | Requirement |
-|---|---|
-| Screenshots | 1920×1080 or 3840×2160, landscape only, 1 minimum and up to 10 |
-| App Store icon | 1280×768, layered for the parallax effect |
+| Slot | File | Requirement |
+|---|---|---|
+| Screenshots | `screenshots/<locale>/NN-*.jpg` | 1920×1080 or 3840×2160, landscape only, 1 to 10 |
+| App Store icon | — | 1280×768, layered for the parallax effect |
 
-Empty for now: the tvOS client is not submitted yet. Drop captures from the
-Apple TV or the simulator into `appletv/screenshots/`.
+Same locale + `NN-` convention as the other stores, minus the device-slot level
+since tvOS has only one. The tvOS client covers fewer screens than the phone one,
+so the set stops at four: home, movies list, movie detail, player.
+
+Captured on the `Apple TV 4K (3rd generation)` simulator at its native 3840×2160,
+via the workflow the tvOS project already ships:
+
+```bash
+appletv/scripts/remote-build.sh run-sim   # generate, build, install, launch
+```
+
+That script runs on the Mac — `appletv/appletv` is the PC-side wrapper that
+rsyncs and drives it over SSH. Same alpha caveat as iOS: `⌘S` output is flattened
+to JPEG q92 4:4:4 on the way in.
+
+No icon here yet: the layered 1280×768 App Store icon is still to produce.
 
 ---
 
