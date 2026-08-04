@@ -1,9 +1,17 @@
-# Fliks
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/logo-stacked-dark.webp">
+    <img src=".github/readme/logo-stacked-light.webp" width="170" alt="Fliks">
+  </picture>
+</p>
 
-**Your personal video collection, on every screen in the house.** Point
-Fliks at the folders where your videos live and it does the rest: covers,
-descriptions, cast, seasons and episodes, laid out like the streaming
-apps you already use — except the library is yours.
+<p align="center">
+  <b>Your personal video collection, on every screen in the house.</b>
+</p>
+
+Point Fliks at the folders where your videos live and it does the rest:
+covers, descriptions, cast, seasons and episodes, laid out like the
+streaming apps you already use — except the library is yours.
 
 It turns a folder of video files into a proper streaming service for the
 household. Everyone gets their own profile and their own place in every
@@ -18,6 +26,11 @@ create, no subscription, and nothing leaves the house.
 - **Server** — Docker, a Windows tray app or a macOS menu-bar app
 - **Clients** — web, iOS, Android, Android TV, Apple TV, Samsung, LG, desktop, Chromecast
 - **License** — [AGPL-3.0-or-later](LICENSE)
+
+<p align="center">
+  <img src=".github/readme/collage.webp" width="70%"
+       alt="The home page, a library, discovery and a film page">
+</p>
 
 ---
 

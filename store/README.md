@@ -112,8 +112,12 @@ Both generators are reproducible and take the brand SVGs as their only input:
 
 ```bash
 store/tools/samsung-icons.sh              # → samsung/icons/
+store/tools/android-banner.sh             # → android/banner-tv-1280x720.png
 uv run --with python-pptx python store/tools/samsung-app-description.py
 ```
+
+The TV banner reuses the tvOS App Store icon's background layer, so the two TV
+stores share one gradient — replacing it in `appletv/` reflows into the banner.
 
 The description document embeds the screenshots from `samsung/screenshots/`, so
 regenerate it after replacing them.
