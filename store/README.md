@@ -76,11 +76,29 @@ in-package icons — worth revisiting only if LG ever flags it.
 | App icon | `icon-512x512.png` | 512×512, 32-bit PNG, ≤ 1 MB |
 | Feature graphic | `feature-graphic-1024x500.png` | exactly 1024×500, JPG or 24-bit PNG, **no alpha** |
 | TV banner | `banner-tv-1280x720.png` | 1280×720, no alpha — mandatory for the Android TV listing |
-| Phone screenshots | `screenshots/phone-*.png` | 2 to 8, 320–3840 px per side, max 2:1, no alpha; 1080×1920 recommended |
-| TV screenshots | `screenshots/tv-*.png` | 16:9, for the Android TV listing |
+| Screenshots | `screenshots/<locale>/<slot>/NN-*.jpg` | 2 to 8 per slot, 320–3840 px per side, max 2:1 |
 
 Android TV submissions get rejected for a missing full-size banner, so it is not
 optional here even though the phone listing does not use it.
+
+### Screenshots
+
+One directory per Play locale, then one per device slot — Play uploads and
+stores them per locale, and a slot left empty falls back to the phone set.
+
+```
+screenshots/en-US/{phone,tablet-7,tablet-10,tv}/
+screenshots/fr-FR/{phone,tablet-7,tablet-10,tv}/
+```
+
+The `NN-` prefix is the upload order, and the rest names the screen
+(`04-movie-detail-wing-it-landscape.jpg`). Tablet slots hold both orientations,
+landscape first. Captured on the emulators — `fliks_tablet7`, `fliks_tablet10`,
+`fliks_androidtv` — except the phone set, which comes from a device.
+
+Tablet and TV captures are JPEG q92 4:4:4: as PNG the set weighed 109 MB, which
+does not belong in git history for assets Play re-encodes anyway. The phone
+files are the original JPEGs, copied untouched rather than re-encoded.
 
 ## ios/ — App Store Connect
 
