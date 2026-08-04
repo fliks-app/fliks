@@ -120,13 +120,15 @@ Same layout as `android/` — one directory per App Store locale, then one per
 device slot, with the `NN-` prefix carrying the upload order:
 
 ```
-screenshots/en-US/{iphone-69,iphone-65}/
-screenshots/fr-FR/{iphone-69,iphone-65}/
+screenshots/en-US/{iphone-69,iphone-65,ipad-13}/
+screenshots/fr-FR/{iphone-69,iphone-65,ipad-13}/
 ```
 
-Both sets show the same six screens, so the `NN-` order matches across slots and
-locales. Captured on two simulators — the 6.5" one being the last device type of
-that size still shipping a bootable runtime:
+Every set shows the same six screens, so the `NN-` order matches across slots and
+locales. The iPhone sets are portrait except the player; the iPad set is landscape
+throughout, which is where the sidebar layout shows. Captured on three simulators
+— the 6.5" one being the last device type of that size still shipping a bootable
+runtime:
 
 ```bash
 xcrun simctl create "iPhone 16 Pro Max (6.9in)" \
@@ -134,6 +136,9 @@ xcrun simctl create "iPhone 16 Pro Max (6.9in)" \
   com.apple.CoreSimulator.SimRuntime.iOS-26-4
 xcrun simctl create "iPhone 11 Pro Max (6.5in)" \
   com.apple.CoreSimulator.SimDeviceType.iPhone-11-Pro-Max \
+  com.apple.CoreSimulator.SimRuntime.iOS-26-4
+xcrun simctl create "iPad Pro 13-inch (13in)" \
+  com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4-8GB \
   com.apple.CoreSimulator.SimRuntime.iOS-26-4
 ```
 
