@@ -104,13 +104,38 @@ files are the original JPEGs, copied untouched rather than re-encoded.
 
 | Slot | File | Requirement |
 |---|---|---|
-| iPhone screenshots | `screenshots/iphone-69-*.png` | exactly 1320×2868 (6.9"), 1 to 10 |
-| iPad screenshots | `screenshots/ipad-13-*.png` | exactly 2064×2752 (13"), 1 to 10 |
+| iPhone 6.9" screenshots | `screenshots/<locale>/iphone-69/NN-*.jpg` | exactly 1320×2868 or 2868×1320, 1 to 10 |
+| iPhone 6.5" screenshots | `screenshots/<locale>/iphone-65/NN-*.jpg` | exactly 1242×2688 or 2688×1242, 1 to 10 |
+| iPad 13" screenshots | `screenshots/<locale>/ipad-13/NN-*.jpg` | exactly 2064×2752 or 2752×2064, 1 to 10 |
 
 PNG or JPEG, RGB, **no alpha**, and the pixel dimensions are exact — there is no
-tolerance. Only the largest device of each family needs supplying; Apple scales
-the rest down. No icon here: App Store Connect reads the 1024×1024 marketing
-icon from the app bundle's asset catalog.
+tolerance. 6.9" is the only required iPhone size and Apple scales it down for the
+rest; 6.5" is optional and only worth filling when the framing deserves its own
+capture. No icon here: App Store Connect reads the 1024×1024 marketing icon from
+the app bundle's asset catalog.
+
+### Screenshots
+
+Same layout as `android/` — one directory per App Store locale, then one per
+device slot, with the `NN-` prefix carrying the upload order:
+
+```
+screenshots/en-US/iphone-65/
+screenshots/fr-FR/iphone-65/
+```
+
+Captured on the `iPhone 11 Pro Max (6.5in)` simulator, the one 6.5" device type
+still shipping a bootable runtime:
+
+```bash
+xcrun simctl create "iPhone 11 Pro Max (6.5in)" \
+  com.apple.CoreSimulator.SimDeviceType.iPhone-11-Pro-Max \
+  com.apple.CoreSimulator.SimRuntime.iOS-26-4
+```
+
+`⌘S` in the Simulator writes PNGs **with an alpha channel**, which App Store
+Connect rejects — flatten them on the way in (JPEG q92 4:4:4, same recipe as the
+Android tablet set).
 
 ## appletv/ — App Store (tvOS)
 
