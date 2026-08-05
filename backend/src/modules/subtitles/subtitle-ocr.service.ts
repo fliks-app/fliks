@@ -29,6 +29,28 @@ const execFileAsync = promisify(execFile);
 // a dense 2h+ track can take past 10 minutes, so this needs real headroom.
 const OCR_TOOL_TIMEOUT_MS = 1_800_000;
 
+/** execFile's `timeout` option kills the child but throws the same generic
+ *  "Command failed" message as a real crash — call this out explicitly so
+ *  the OCR failure log says what actually happened. */
+async function execFileOrTimeout(
+  command: string,
+  args: string[],
+  options: { timeout: number; maxBuffer?: number },
+) {
+  const start = Date.now();
+  try {
+    return await execFileAsync(command, args, options);
+  } catch (err: any) {
+    if (err?.killed) {
+      const elapsed = Math.round((Date.now() - start) / 1000);
+      throw new Error(
+        `${command} timed out after ${elapsed}s (limit ${Math.round(options.timeout / 1000)}s)`,
+      );
+    }
+    throw err;
+  }
+}
+
 /** ISO 639-1 → tesseract (ISO 639-2/T) traineddata names, for subtile-ocr's
  *  `-l`. All packs ship via `tesseract-ocr-all`. Falls back to `eng`.
  *  (pgsrip derives its own language from the staged .sup filename.) */
@@ -157,10 +179,11 @@ export class SubtitleOcrService {
     source: SubtitleFile,
     automatic?: boolean,
   ): Promise<void> {
-    const media = await this.mediaRepo.findOne({
-      where: { id: source.mediaId },
-    });
+    // Fetched inside the try: a query failure here must still land the sub
+    // in FAILED (not leave the PROCESSING placeholder stuck forever).
+    let media: Media | null = null;
     try {
+      media = await this.mediaRepo.findOne({ where: { id: source.mediaId } });
       if (!media?.path) throw new Error('media root folder not set');
       const videoPath = path.join(media.path, source.mediaFile.relativePath);
       const limit = await this.ocrConcurrencyLimit();
@@ -269,10 +292,10 @@ export class SubtitleOcrService {
     try {
       if (codec === 'hdmv_pgs_subtitle') {
         const sup = `${base}.${ietf}.sup`;
-        await execFileAsync('ffmpeg', [
+        await execFileOrTimeout('ffmpeg', [
           '-y', '-i', videoPath, '-map', `0:${streamIndex}`, '-c:s', 'copy', sup,
         ], { timeout: 120_000 });
-        const { stdout, stderr } = await execFileAsync(
+        const { stdout, stderr } = await execFileOrTimeout(
           'pgsrip',
           ['--language', ietf, sup],
           { timeout: OCR_TOOL_TIMEOUT_MS, maxBuffer: 1 << 24 },
@@ -297,7 +320,7 @@ export class SubtitleOcrService {
           throw new Error('VobSub OCR requires a Matroska (.mkv) source');
         }
         try {
-          await execFileAsync('mkvextract', [
+          await execFileOrTimeout('mkvextract', [
             'tracks', videoPath, `${streamIndex}:${base}.idx`,
           ], { timeout: 120_000 });
         } catch (err) {
@@ -306,7 +329,7 @@ export class SubtitleOcrService {
           if (!(await this.exists(`${base}.sub`))) throw err;
         }
         // subtile-ocr reads the .idx (+ paired .sub) and writes "<base>.srt".
-        await execFileAsync('subtile-ocr', [
+        await execFileOrTimeout('subtile-ocr', [
           '-l', tess, '-o', `${base}.srt`, `${base}.idx`,
         ], { timeout: OCR_TOOL_TIMEOUT_MS, maxBuffer: 1 << 24 });
         return await fs.readFile(`${base}.srt`, 'utf-8');
