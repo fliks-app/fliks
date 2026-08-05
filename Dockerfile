@@ -80,6 +80,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && ln -sf /usr/lib/jellyfin-ffmpeg/ffprobe /usr/local/bin/ffprobe \
   && rm -f /tmp/jellyfin-ffmpeg.deb \
   && python3 -m pip install --no-cache-dir --break-system-packages ffsubsync pgsrip \
+  # pgsrip pulls opencv-python (GUI build, needs libGL.so.1, missing here) —
+  # remove it first so its files don't collide with the headless build below.
   && python3 -m pip uninstall -y --break-system-packages opencv-python \
   && python3 -m pip install --no-cache-dir --break-system-packages opencv-python-headless \
   && if [ "$TARGETARCH" = "amd64" ]; then \
