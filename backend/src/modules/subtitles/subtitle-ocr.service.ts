@@ -25,6 +25,9 @@ import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
 
 const execFileAsync = promisify(execFile);
+// pgsrip/subtile-ocr batch the whole track through Tesseract in one call —
+// a dense 2h+ track can take past 10 minutes, so this needs real headroom.
+const OCR_TOOL_TIMEOUT_MS = 1_800_000;
 
 /** ISO 639-1 → tesseract (ISO 639-2/T) traineddata names, for subtile-ocr's
  *  `-l`. All packs ship via `tesseract-ocr-all`. Falls back to `eng`.
@@ -272,7 +275,7 @@ export class SubtitleOcrService {
         const { stdout, stderr } = await execFileAsync(
           'pgsrip',
           ['--language', ietf, sup],
-          { timeout: 600_000, maxBuffer: 1 << 24 },
+          { timeout: OCR_TOOL_TIMEOUT_MS, maxBuffer: 1 << 24 },
         );
         // pgsrip names the output "<base>.<lang>.srt" (babelfish's own form),
         // so find it by prefix rather than reconstructing the exact name.
@@ -305,7 +308,7 @@ export class SubtitleOcrService {
         // subtile-ocr reads the .idx (+ paired .sub) and writes "<base>.srt".
         await execFileAsync('subtile-ocr', [
           '-l', tess, '-o', `${base}.srt`, `${base}.idx`,
-        ], { timeout: 600_000, maxBuffer: 1 << 24 });
+        ], { timeout: OCR_TOOL_TIMEOUT_MS, maxBuffer: 1 << 24 });
         return await fs.readFile(`${base}.srt`, 'utf-8');
       }
 
