@@ -15,6 +15,8 @@ export type SseEvent =
       subtitleId: number;
       language: string;
       mediaId?: number;
+      /** Unattended scheduler run — client skips the confirmation toast */
+      automatic?: boolean;
     }
   | {
       type: 'subtitle.downloaded';
@@ -25,6 +27,8 @@ export type SseEvent =
       /** Set for translation results so a client can target the finished row
        *  (e.g. add just that track) instead of a blind refetch. */
       subtitleId?: number;
+      /** Unattended scheduler run — client skips the confirmation toast */
+      automatic?: boolean;
     }
   | {
       type: 'subtitle.failed';
@@ -35,6 +39,8 @@ export type SseEvent =
       /** Set to 'rate_limit' when a translation failed on a Gemini quota/rate
        *  limit, so the client can show a specific message. */
       reason?: string;
+      /** Unattended scheduler run — client skips the confirmation toast */
+      automatic?: boolean;
     }
   | {
       // Machine-translation progress for a PROCESSING subtitle row. `progress`

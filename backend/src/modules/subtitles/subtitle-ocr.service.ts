@@ -77,6 +77,7 @@ export class SubtitleOcrService {
   async ocrSubtitle(
     subtitleId: number,
     language?: string,
+    options: { automatic?: boolean } = {},
   ): Promise<SubtitleFile> {
     const source = await this.repo.findOne({
       where: { id: subtitleId },
@@ -122,7 +123,7 @@ export class SubtitleOcrService {
       sourceStreamIndex: source.streamIndex,
     } as any);
 
-    void this.runOcr(placeholder.id, source).catch((err) => {
+    void this.runOcr(placeholder.id, source, options.automatic).catch((err) => {
       this.log.error(`OCR run crashed for sub #${subtitleId}: ${err}`);
     });
     return placeholder;
@@ -148,7 +149,11 @@ export class SubtitleOcrService {
     this.ocrWaiters.shift()?.();
   }
 
-  private async runOcr(placeholderId: number, source: SubtitleFile): Promise<void> {
+  private async runOcr(
+    placeholderId: number,
+    source: SubtitleFile,
+    automatic?: boolean,
+  ): Promise<void> {
     const media = await this.mediaRepo.findOne({
       where: { id: source.mediaId },
     });
@@ -215,6 +220,7 @@ export class SubtitleOcrService {
         title: media.title,
         language: source.language,
         provider: 'ocr',
+        automatic,
       });
 
       if ((await this.settings.get('subtitle_ocr_delete_source')) === 'true') {
@@ -231,6 +237,7 @@ export class SubtitleOcrService {
         title: media?.title ?? '',
         language: source.language,
         error: String(err),
+        automatic,
       });
       // Leave nothing behind: drop the PROCESSING placeholder so a failed run
       // never lingers in the subtitle list (temp artefacts are already removed

@@ -184,7 +184,7 @@ export class SubtitleSchedulerService {
           await this.subtitleSync.reencodeToUtf8(sub.id);
         }
         if (opts.autoSyncEnabled) {
-          await this.subtitleSync.syncSubtitle(sub.id);
+          await this.subtitleSync.syncSubtitle(sub.id, { automatic: true });
         }
 
         void this.notifications.dispatch('subtitle.downloaded', {
@@ -255,7 +255,7 @@ export class SubtitleSchedulerService {
     if (!imageSub) return false;
 
     try {
-      await this.subtitleOcr.ocrSubtitle(imageSub.id, isoCode);
+      await this.subtitleOcr.ocrSubtitle(imageSub.id, isoCode, { automatic: true });
       return true;
     } catch (err) {
       this.log.warn(`SubtitleOcr: OCR-first failed for ${isoCode}: ${err}`);
@@ -375,7 +375,7 @@ export class SubtitleSchedulerService {
           await this.subtitleSync.reencodeToUtf8(upgraded.id);
         }
         if (opts.autoSyncEnabled) {
-          await this.subtitleSync.syncSubtitle(upgraded.id);
+          await this.subtitleSync.syncSubtitle(upgraded.id, { automatic: true });
         }
 
         void this.notifications.dispatch('subtitle.upgraded', {

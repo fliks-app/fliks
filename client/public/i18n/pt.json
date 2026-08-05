@@ -123,8 +123,6 @@
     "subtitle_synced": "Legenda sincronizada com sucesso.",
     "subtitle_downloaded": "Legenda transferida: {{title}} [{{lang}}]",
     "subtitle_failed": "Falha na extração OCR ({{lang}})",
-    "import_complete": "Importação concluída: {{title}}",
-    "stalled_removed": "Torrent bloqueado removido: {{title}}",
     "rescan_started": "Análise em curso: {{title}}",
     "rescan_completed": "Análise concluída: {{title}} — {{added}} adicionado(s), {{removed}} removido(s), {{updated}} atualizado(s)",
     "rescan_subtitles_cleaned": "{{missing}} entrada(s) de legenda sem ficheiro removida(s), {{duplicates}} duplicado(s) fundido(s)",

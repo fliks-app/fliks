@@ -123,8 +123,6 @@
     "subtitle_synced": "Subtítulo sincronizado correctamente.",
     "subtitle_downloaded": "Subtítulo descargado: {{title}} [{{lang}}]",
     "subtitle_failed": "Error en la extracción OCR ({{lang}})",
-    "import_complete": "Importación completada: {{title}}",
-    "stalled_removed": "Torrent bloqueado eliminado: {{title}}",
     "rescan_started": "Escaneo en curso: {{title}}",
     "rescan_completed": "Escaneo completado: {{title}} — {{added}} añadido(s), {{removed}} eliminado(s), {{updated}} actualizado(s)",
     "rescan_subtitles_cleaned": "{{missing}} entrada(s) de subtítulo sin archivo eliminada(s), {{duplicates}} duplicado(s) fusionado(s)",
