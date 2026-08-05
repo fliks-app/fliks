@@ -612,26 +612,31 @@ export class SubtitlesModalComponent {
     if (event === this.lastSseEvent) return;
     this.lastSseEvent = event;
 
+    const automatic = event['automatic'] === true;
     if (event.type === 'subtitle.synced') {
-      this.toast.success(this.translate.instant('sse.subtitle_synced'));
+      if (!automatic) this.toast.success(this.translate.instant('sse.subtitle_synced'));
       void this.loadSubtitles(mediaId);
     } else if (event.type === 'subtitle.downloaded') {
-      this.toast.success(
-        this.translate.instant('sse.subtitle_downloaded', {
-          title: event['title'] ?? '',
-          lang: event['language'] ?? '',
-        }),
-      );
+      if (!automatic) {
+        this.toast.success(
+          this.translate.instant('sse.subtitle_downloaded', {
+            title: event['title'] ?? '',
+            lang: event['language'] ?? '',
+          }),
+        );
+      }
       void this.loadSubtitles(mediaId);
     } else if (event.type === 'subtitle.failed') {
-      this.toast.error(
-        this.translate.instant(
-          event['reason'] === 'rate_limit'
-            ? 'media_detail.translation_rate_limited'
-            : 'sse.subtitle_failed',
-          { lang: event['language'] ?? '' },
-        ),
-      );
+      if (!automatic) {
+        this.toast.error(
+          this.translate.instant(
+            event['reason'] === 'rate_limit'
+              ? 'media_detail.translation_rate_limited'
+              : 'sse.subtitle_failed',
+            { lang: event['language'] ?? '' },
+          ),
+        );
+      }
       void this.loadSubtitles(mediaId);
     }
   });

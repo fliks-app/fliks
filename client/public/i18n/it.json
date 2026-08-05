@@ -123,8 +123,6 @@
     "subtitle_synced": "Sottotitolo sincronizzato con successo.",
     "subtitle_downloaded": "Sottotitolo scaricato: {{title}} [{{lang}}]",
     "subtitle_failed": "Estrazione OCR fallita ({{lang}})",
-    "import_complete": "Importazione completata: {{title}}",
-    "stalled_removed": "Torrent bloccato rimosso: {{title}}",
     "rescan_started": "Scansione in corso: {{title}}",
     "rescan_completed": "Scansione completata: {{title}} — {{added}} aggiunto/i, {{removed}} rimosso/i, {{updated}} aggiornato/i",
     "rescan_subtitles_cleaned": "{{missing}} voce/i sottotitolo senza file rimossa/e, {{duplicates}} duplicato/i unito/i",

@@ -176,14 +176,11 @@ export class SseService implements OnDestroy {
           event['seasonNumber'] as number | undefined,
           event['episodeNumber'] as number | undefined,
         );
-        this.toast.success(
-          this.translate.instant('sse.import_complete', { title: event['title'] ?? '' }),
-        );
+        // Import always finishes unattended (torrent completion is polled by
+        // a scheduler) — no toast, just retire the live progress above.
         break;
       case 'stalled.removed':
-        this.toast.info(
-          this.translate.instant('sse.stalled_removed', { title: event['title'] ?? '' }),
-        );
+        // Unattended cleanup of a stalled torrent — no toast.
         break;
       case 'social.followed':
         this.toast.info(

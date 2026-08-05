@@ -128,8 +128,6 @@
     "subtitle_synced": "Subtitle synced successfully.",
     "subtitle_downloaded": "Subtitle downloaded: {{title}} [{{lang}}]",
     "subtitle_failed": "OCR extraction failed ({{lang}})",
-    "import_complete": "Import complete: {{title}}",
-    "stalled_removed": "Stalled torrent removed: {{title}}",
     "rescan_started": "Scan in progress: {{title}}",
     "rescan_completed": "Scan complete: {{title}} — {{added}} added, {{removed}} removed, {{updated}} updated",
     "rescan_subtitles_cleaned": "{{missing}} subtitle entry(ies) without file removed, {{duplicates}} duplicate(s) merged",

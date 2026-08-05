@@ -32,6 +32,8 @@ export interface SyncOptions {
   noFixFramerate?: boolean;
   /** Use golden-section search algorithm (ffsubsync --gss) */
   goldenSectionSearch?: boolean;
+  /** Set by the scheduler for unattended runs — tells the client to skip the toast */
+  automatic?: boolean;
 }
 
 export interface SyncQueueItem {
@@ -268,6 +270,7 @@ export class SubtitleSyncService {
                 subtitleId: saved.id,
                 language: saved.language,
                 mediaId: saved.mediaId,
+                automatic: options.automatic,
               });
             }
             return saved;
@@ -305,6 +308,7 @@ export class SubtitleSyncService {
         subtitleId: saved.id,
         language: saved.language,
         mediaId: saved.mediaId,
+        automatic: options.automatic,
       });
       // Notify media servers (Emby/Plex) to refresh
       const media = await this.mediaRepo.findOne({
