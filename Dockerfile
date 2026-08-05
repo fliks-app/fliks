@@ -80,6 +80,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && ln -sf /usr/lib/jellyfin-ffmpeg/ffprobe /usr/local/bin/ffprobe \
   && rm -f /tmp/jellyfin-ffmpeg.deb \
   && python3 -m pip install --no-cache-dir --break-system-packages ffsubsync pgsrip \
+  && python3 -m pip uninstall -y --break-system-packages opencv-python \
+  && python3 -m pip install --no-cache-dir --break-system-packages opencv-python-headless \
   && if [ "$TARGETARCH" = "amd64" ]; then \
        wget -q -O /usr/local/bin/alass https://github.com/kaegi/alass/releases/download/v2.0.0/alass-linux64 \
        && chmod +x /usr/local/bin/alass; \
