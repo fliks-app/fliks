@@ -102,7 +102,15 @@ export class NavbarService {
           this.history.push(lastUrl);
         }
         lastUrl = e.urlAfterRedirects;
-        this.canGoBack.set(this.history.length > 0 && this.router.url !== '/');
+        // Our own stack is empty right after a hard refresh (in-memory state
+        // doesn't survive reload), but the real browser session history does
+        // — fall back to it so the arrow doesn't vanish. Skipped on native:
+        // Capacitor's WebView doesn't reliably track window.history either
+        // (see goBack()'s comment).
+        const hasRealHistory = !this.isNative && window.history.length > 1;
+        this.canGoBack.set(
+          (this.history.length > 0 || hasRealHistory) && this.router.url !== '/',
+        );
       }
     });
   }
@@ -158,6 +166,18 @@ export class NavbarService {
         // it as `true`, but later programmatic navs from that page see `false`.
         setTimeout(() => this.lastWasBack.set(false), 0);
       });
+      return;
+    }
+    if (!this.isNative && window.history.length > 1) {
+      this.isPoppingBack = true;
+      this.lastWasBack.set(true);
+      const sub = this.router.events.subscribe((e) => {
+        if (e instanceof NavigationEnd) {
+          sub.unsubscribe();
+          setTimeout(() => this.lastWasBack.set(false), 0);
+        }
+      });
+      window.history.back();
       return;
     }
     if (fallback?.length) {
