@@ -28,6 +28,10 @@ export class SubtitleSchedulerService {
   private readonly log = new Logger(SubtitleSchedulerService.name);
   private lastSearchRun = 0;
   private lastUpgradeRun = 0;
+  /** Guards against the manual "search missing" action racing the scheduled
+   *  pass on the same file, which would search and download the same
+   *  language twice. */
+  private readonly filesSearching = new Set<number>();
 
   constructor(
     @InjectRepository(Media)
@@ -119,6 +123,20 @@ export class SubtitleSchedulerService {
     file: MediaFile,
     opts: { minScore: number; autoSyncEnabled: boolean; encodeUtf8: boolean },
   ): Promise<string[]> {
+    if (this.filesSearching.has(file.id)) return [];
+    this.filesSearching.add(file.id);
+    try {
+      return await this.doSearchMissingForFile(media, file, opts);
+    } finally {
+      this.filesSearching.delete(file.id);
+    }
+  }
+
+  private async doSearchMissingForFile(
+    media: Media,
+    file: MediaFile,
+    opts: { minScore: number; autoSyncEnabled: boolean; encodeUtf8: boolean },
+  ): Promise<string[]> {
     const subtitleLangs: SubtitleLanguageItem[] =
       media.languageProfile?.subtitleLanguages ?? [];
     if (!subtitleLangs.length) return [];
@@ -140,6 +158,10 @@ export class SubtitleSchedulerService {
     );
     const fileSeason = file.episode?.season?.seasonNumber ?? undefined;
     const fileEpisode = file.episode?.episodeNumber ?? undefined;
+    const episodeTag =
+      fileSeason != null && fileEpisode != null
+        ? ` S${String(fileSeason).padStart(2, '0')}E${String(fileEpisode).padStart(2, '0')}`
+        : '';
 
     const downloaded: string[] = [];
 
@@ -202,11 +224,11 @@ export class SubtitleSchedulerService {
         downloaded.push(langItem.isoCode);
 
         this.log.log(
-          `SubtitleSearch: downloaded ${langItem.isoCode} sub for "${media.title}" (score: ${best.score})`,
+          `SubtitleSearch: downloaded ${langItem.isoCode} sub for "${media.title}"${episodeTag} (score: ${best.score})`,
         );
       } catch (err) {
         this.log.warn(
-          `SubtitleSearch: failed for "${media.title}" [${langItem.isoCode}]: ${err}`,
+          `SubtitleSearch: failed for "${media.title}"${episodeTag} [${langItem.isoCode}]: ${err}`,
         );
         void this.notifications.dispatch('subtitle.failed', {
           title: media.title,
@@ -391,8 +413,14 @@ export class SubtitleSchedulerService {
           path: sub.media?.path,
         });
 
+        const upgradeSeason = sub.mediaFile?.episode?.season?.seasonNumber;
+        const upgradeEpisode = sub.mediaFile?.episode?.episodeNumber;
+        const upgradeEpisodeTag =
+          upgradeSeason != null && upgradeEpisode != null
+            ? ` S${String(upgradeSeason).padStart(2, '0')}E${String(upgradeEpisode).padStart(2, '0')}`
+            : '';
         this.log.log(
-          `SubtitleUpgrade: upgraded ${sub.language} for "${sub.media?.title}" (${sub.score} → ${better.score})`,
+          `SubtitleUpgrade: upgraded ${sub.language} for "${sub.media?.title}"${upgradeEpisodeTag} (${sub.score} → ${better.score})`,
         );
       } catch (err) {
         this.log.warn(`SubtitleUpgrade: failed for sub #${sub.id}: ${err}`);
