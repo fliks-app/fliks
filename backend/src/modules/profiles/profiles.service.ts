@@ -14,7 +14,7 @@ import { buildDefaultLanguageProfileDto } from './default-language-profile';
 import {
   buildAllowedQualityIds,
   allowedAudioLanguageIds,
-} from '../media/release-rejection.helper';
+} from '../../common/release-scoring';
 
 @Injectable()
 export class ProfilesService {

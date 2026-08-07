@@ -14,7 +14,7 @@ import { DownloadHistory } from './entities/download-history.entity';
 import { buildGrabHistoryRow } from './grab-history.util';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
-import { TorznabService, TorznabRelease } from '../indexers/torznab.service';
+import { TorznabService } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { CustomFormatsService } from '../profiles/custom-formats.service';
 import { ProfilesService } from '../profiles/profiles.service';
@@ -30,6 +30,7 @@ import {
 } from '../../common/constants/app-qualities';
 import { parseReleaseQuality } from '../../common/release-parsing';
 import {
+  ReleaseCandidate,
   ReleaseRejection,
   buildIndexerMinSeeders,
   buildAllowedQualityIds,
@@ -39,7 +40,7 @@ import {
   scoreAndSortReleases,
   sortReleasesByRelevance,
   formatRejectionForLog,
-} from './release-rejection.helper';
+} from '../../common/release-scoring';
 
 function inferTitleFromTorrentUrl(url: string): string {
   if (url.startsWith('magnet:')) {
@@ -111,7 +112,7 @@ export class MovieDownloadService {
   }
 
   private async buildMovieReleaseRows(
-    releases: TorznabRelease[],
+    releases: ReleaseCandidate[],
     media: Media,
     indexers: Indexer[],
     allowed: Set<number>,
@@ -142,7 +143,7 @@ export class MovieDownloadService {
     );
     // scoreAndSortReleases returns ScoredRelease; MovieReleaseRow is a
     // superset with leechers + downloadVolumeFactor which are already on
-    // the spread TorznabRelease fields.
+    // the spread ReleaseCandidate fields.
     return scored as MovieReleaseRow[];
   }
 
@@ -150,7 +151,7 @@ export class MovieDownloadService {
     indexer: Indexer,
     query: string,
     media?: Media,
-  ): Promise<TorznabRelease[]> {
+  ): Promise<ReleaseCandidate[]> {
     return this.torznab.searchMovie(indexer, query, {
       imdbId: media?.imdbId,
       tmdbId: media?.tmdbId,

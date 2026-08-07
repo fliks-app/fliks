@@ -6,7 +6,6 @@ import { RequestLifecycleService } from '../requests/request-lifecycle.service';
 import { DownloadHistory } from './entities/download-history.entity';
 import { buildGrabHistoryRow } from './grab-history.util';
 import { Indexer } from '../indexers/entities/indexer.entity';
-import { TorznabRelease } from '../indexers/torznab.service';
 import { parseReleaseQuality, parseSeasonEpisode } from '../../common/release-parsing';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
@@ -17,6 +16,7 @@ import { BlocklistService } from '../blocklist/blocklist.service';
 import { NamingService } from '../scheduler/naming.service';
 import { getAppQualityById } from '../../common/constants/app-qualities';
 import {
+  ReleaseCandidate,
   ScoredRelease,
   SizeLimits,
   buildIndexerMinSeeders,
@@ -25,7 +25,7 @@ import {
   resolveSearchTitles,
   scoreAndSortReleases,
   formatRejectionForLog,
-} from './release-rejection.helper';
+} from '../../common/release-scoring';
 
 /**
  * Scoring context that's identical across many media in the same SearchMissing
@@ -85,11 +85,11 @@ export class AutoGrabPipelineService {
    * No-op unless both `seasonNumber` and `episodeNumber` are provided.
    */
   private filterToTargetEpisode(
-    releases: TorznabRelease[],
+    releases: ReleaseCandidate[],
     seasonNumber: number | undefined,
     episodeNumber: number | undefined,
     label: string,
-  ): TorznabRelease[] {
+  ): ReleaseCandidate[] {
     if (seasonNumber == null || episodeNumber == null) return releases;
     const kept = releases.filter((r) => {
       const p = parseSeasonEpisode(r.title);
@@ -185,7 +185,7 @@ export class AutoGrabPipelineService {
   async tryAutoGrab(args: {
     media: Media;
     files: { quality?: string | null }[];
-    releases: TorznabRelease[];
+    releases: ReleaseCandidate[];
     qbitClient: DownloadClient;
     scoring: AutoGrabScoringContext;
     mediaType: 'movie' | 'series';

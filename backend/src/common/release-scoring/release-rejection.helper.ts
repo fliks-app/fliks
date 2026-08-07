@@ -1,14 +1,27 @@
-import { QualityProfileItem } from '../profiles/entities/quality-profile.entity';
-import { AudioLanguageItem } from '../profiles/entities/language-profile.entity';
-import { Indexer } from '../indexers/entities/indexer.entity';
-import { TorznabRelease } from '../indexers/torznab.service';
-import { APP_LANGUAGES } from '../../common/constants/app-languages';
+import { QualityProfileItem } from '../../modules/profiles/entities/quality-profile.entity';
+import { AudioLanguageItem } from '../../modules/profiles/entities/language-profile.entity';
+import { APP_LANGUAGES } from '../constants/app-languages';
 import {
   parseReleaseLanguage,
   parseReleaseQuality,
   parseSeasonEpisode,
   resolveUnknownLanguage,
-} from '../../common/release-parsing';
+} from '../release-parsing';
+
+/** Torznab search hit, as parsed off the wire by the indexer fetcher —
+ *  the input contract every scoring/rejection function below consumes. */
+export interface ReleaseCandidate {
+  title: string;
+  downloadUrl: string;
+  indexerId: number;
+  indexerName: string;
+  size: number; // bytes, 0 if unknown
+  seeders: number;
+  leechers: number;
+  publishDate: string | null; // ISO date string from <pubDate>, null if unavailable
+  freeleech: boolean;
+  downloadVolumeFactor: number; // 0=free, 0.5=half, 1=normal
+}
 
 /**
  * Resolve a stored media-file quality string (e.g. `"WEBDL-1080p"`,
@@ -229,7 +242,7 @@ export function buildAllowedQualityIds(
 }
 
 export function buildIndexerMinSeeders(
-  indexers: Indexer[],
+  indexers: { id: number; settings?: Record<string, unknown> | null }[],
 ): Map<number, number> {
   return new Map(
     indexers.map((ix) => [
@@ -553,8 +566,8 @@ export function sortReleasesByRelevance<
 // Shared scoring pipeline
 // ---------------------------------------------------------------------------
 
-/** A scored + ranked release row — superset of TorznabRelease. */
-export interface ScoredRelease extends TorznabRelease {
+/** A scored + ranked release row — superset of ReleaseCandidate. */
+export interface ScoredRelease extends ReleaseCandidate {
   qualityId: number;
   qualityName: string;
   rank: number;
@@ -580,7 +593,7 @@ export interface ReleaseScorerDeps {
 }
 
 /**
- * Score, reject, and sort a batch of torznab releases using the same
+ * Score, reject, and sort a batch of release candidates using the same
  * pipeline as the manual download modal. Shared by SearchMissing,
  * MovieDownloadService, and EpisodeDownloadService.
  *
@@ -588,7 +601,7 @@ export interface ReleaseScorerDeps {
  * whether to pick the first zero-rejection release or expose all rows.
  */
 export async function scoreAndSortReleases(
-  releases: TorznabRelease[],
+  releases: ReleaseCandidate[],
   opts: {
     allowed: Set<number>;
     allowedLangs: Set<number>;
