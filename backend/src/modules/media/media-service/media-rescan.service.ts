@@ -114,7 +114,9 @@ export class MediaRescanService {
 
     dbFile.size = diskSize;
     dbFile.streamInfo = streamInfo.streamInfo;
-    dbFile.quality = streamInfo.quality;
+    // No usable video dimensions: keep the file's existing quality rather than
+    // downgrading it to the filename-only 480p fallback.
+    if (streamInfo.quality !== null) dbFile.quality = streamInfo.quality;
     const saved = await this.mediaFileRepo.save(dbFile);
     this.log.log(
       `enrichMediaFileFromDisk: enriched media file #${mediaFileId} "${normPath}"`,
@@ -606,7 +608,9 @@ export class MediaRescanService {
         }
       }
       dbFile.streamInfo = streamInfo;
-      dbFile.quality = probed.quality;
+      // No usable video dimensions: keep the existing quality instead of
+      // downgrading it to the filename-only 480p fallback.
+      if (probed.quality !== null) dbFile.quality = probed.quality;
       try {
         await this.mediaFileRepo.save(dbFile);
         updated++;
@@ -686,6 +690,9 @@ export class MediaRescanService {
         contextLabel: `Rescan[media #${mediaId}] new file "${relativePath}"`,
       });
       if (!probed) continue;
+      // Brand-new row has no prior quality to protect — fall back to the
+      // filename-derived guess (source text at the 480p default bucket).
+      const quality = probed.quality ?? qualityFromResolution(filename);
       try {
         const savedFile = await this.mediaFileRepo.save(
           this.mediaFileRepo.create({
@@ -693,7 +700,7 @@ export class MediaRescanService {
             episode: episodeId != null ? ({ id: episodeId } as Episode) : null,
             relativePath,
             size,
-            quality: probed.quality,
+            quality,
             streamInfo: probed.streamInfo,
           }),
         );
@@ -875,13 +882,14 @@ export class MediaRescanService {
    * ffprobe + optional cropdetect + filename/resolution quality. Used by
    * every import path (rescan refresh, rescan new file, disk-import enrich)
    * so the probe pipeline lives in one place.
-   * Returns null on ffprobe error so callers can `continue`.
+   * Returns null on ffprobe error so callers can `continue`; `quality` is
+   * null when there are no usable video dimensions, letting callers decide.
    */
   private async probeAndResolve(
     absPath: string,
     filename: string,
     opts: { detectCrop: boolean; contextLabel: string },
-  ): Promise<{ streamInfo: ProbeResult; quality: string } | null> {
+  ): Promise<{ streamInfo: ProbeResult; quality: string | null } | null> {
     let streamInfo: ProbeResult;
     try {
       streamInfo = await this.ffprobe.detectMediaFileInfo(absPath);
@@ -910,11 +918,11 @@ export class MediaRescanService {
         );
       }
     }
-    const quality = qualityFromResolution(
-      filename,
-      streamInfo?.video?.[0]?.width,
-      streamInfo?.video?.[0]?.height,
-    );
+    const v = streamInfo?.video?.[0];
+    const quality =
+      v?.width && v?.height
+        ? qualityFromResolution(filename, v.width, v.height)
+        : null;
     return { streamInfo, quality };
   }
 
