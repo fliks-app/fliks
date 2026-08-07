@@ -1,7 +1,16 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { DataSource } from 'typeorm';
 import { CompletionService } from './completion.service';
+import { NamingService } from './naming.service';
 import { DownloadHistory } from '../media/entities/download-history.entity';
+import { Media } from '../media/entities/media.entity';
+import { Library } from '../libraries/entities/library.entity';
 import { QbittorrentTorrent } from '../download-clients/qbittorrent.service';
 import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
+import { FileTransferService } from '../../common/services/file-transfer.service';
+import { MediaType } from '../../common/enums';
 
 /** The exact stamp the orphan sweep writes — pinned here so the test guards
  *  the user-visible string the queue clears and re-applies. */
@@ -319,5 +328,567 @@ describe('CompletionService.cleanSeededTorrents', () => {
     const { deleteTorrent, done } = run({ ratio: 1.5 }, { seedRatio: 1 });
     await done;
     expect(deleteTorrent).toHaveBeenCalledWith({ id: 1 }, 'h1', true);
+  });
+});
+
+describe('CompletionService.processOne', () => {
+  // Same 5 tokens `naming.getFormats()` returns when no admin override exists —
+  // pinning real strings, not the defaults, is the point of these tests.
+  const FORMATS = {
+    movie: '{Movie Title} ({Release Year}) {Quality Full}',
+    movieFolder: '{Movie Title} ({Release Year})',
+    series:
+      '{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}',
+    seriesFolder: '{Series Title}',
+    seasonFolder: 'Season {season:00}',
+  };
+
+  function qbFile(name: string, size: number, progress = 1) {
+    return { name, size, progress, priority: 1 };
+  }
+
+  function completedTorrent(over: Record<string, unknown>) {
+    return {
+      hash: 'hash1',
+      name: 'Placeholder.Release-RELGRP',
+      save_path: '/downloads/Placeholder.Release-RELGRP',
+      _client: {},
+      ...over,
+    } as unknown as QbittorrentTorrent & { _client?: unknown };
+  }
+
+  function buildMedia(over: Record<string, unknown>): Media {
+    return {
+      id: 1,
+      title: 'placeholder title',
+      originalTitle: undefined,
+      year: undefined,
+      type: MediaType.MOVIE,
+      tmdbId: undefined,
+      folderName: null,
+      library: null,
+      libraryId: null,
+      ...over,
+    } as unknown as Media;
+  }
+
+  /**
+   * Wires every collaborator `processOne` (and the fire-and-forget
+   * post-import tasks it kicks off) touches, on a bare prototype instance —
+   * same approach as the other describe blocks in this file. `naming` is the
+   * real service (pure/sync for the methods used here) so destination
+   * strings are pinned against real formatting logic, not a stand-in.
+   */
+  function buildProcessOneHarness() {
+    const service = Object.create(CompletionService.prototype) as CompletionService;
+
+    const mediaRepo = {
+      findOne: jest.fn(),
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+    const mediaFileRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((x: unknown) => x),
+      save: jest.fn(async (x: unknown) => ({ id: 999, ...(x as object) })),
+    };
+    const historyRepo = { update: jest.fn().mockResolvedValue(undefined) };
+    const seasonRepo = { findOne: jest.fn().mockResolvedValue(null) };
+    const episodeRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      save: jest.fn().mockResolvedValue(undefined),
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+    const qbittorrent = {
+      getTorrentFiles: jest.fn().mockResolvedValue([]),
+      deleteTorrent: jest.fn().mockResolvedValue(undefined),
+    };
+    const blocklist = { createFromHistory: jest.fn().mockResolvedValue(undefined) };
+    // 'false' short-circuits autoDetectMarkersOnImport so the marker-detection
+    // background task never touches episodeRepo/seasonRepo a second time.
+    const settings = { get: jest.fn().mockResolvedValue('false') };
+    const sseAudience = { recipientsForMedia: jest.fn().mockResolvedValue([]) };
+    const events = { emit: jest.fn(), emitToUsers: jest.fn() };
+    const ffprobe = {
+      detectMediaFileInfo: jest
+        .fn()
+        .mockResolvedValue({ video: [], audio: [], subtitles: [] }),
+    };
+    const fileTransfer = {
+      transferFile: jest.fn().mockResolvedValue(undefined),
+      transferCompanions: jest.fn().mockResolvedValue(undefined),
+      getCompanionExts: jest.fn().mockResolvedValue(new Set<string>()),
+    };
+    const notifications = { dispatch: jest.fn() };
+    const mediaServers = { dispatch: jest.fn() };
+    const mediaService = {
+      finalizeImportedFile: jest.fn().mockResolvedValue(undefined),
+    };
+    const subtitleScheduler = {
+      onMediaFileImported: jest.fn().mockResolvedValue(undefined),
+    };
+    const markers = { detectSeason: jest.fn().mockResolvedValue(undefined) };
+    const thumbnailService = {
+      generateForFile: jest.fn().mockResolvedValue(undefined),
+    };
+    const dataSource = { query: jest.fn().mockResolvedValue([]) };
+    const log = {
+      log: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn(),
+    };
+    const naming = new NamingService({} as unknown as DataSource);
+
+    const wired = service as unknown as Record<string, unknown>;
+    wired.mediaRepo = mediaRepo;
+    wired.mediaFileRepo = mediaFileRepo;
+    wired.historyRepo = historyRepo;
+    wired.seasonRepo = seasonRepo;
+    wired.episodeRepo = episodeRepo;
+    wired.qbittorrent = qbittorrent;
+    wired.blocklist = blocklist;
+    wired.settings = settings;
+    wired.sseAudience = sseAudience;
+    wired.events = events;
+    wired.ffprobe = ffprobe;
+    wired.fileTransfer = fileTransfer;
+    wired.notifications = notifications;
+    wired.mediaServers = mediaServers;
+    wired.mediaService = mediaService;
+    wired.subtitleScheduler = subtitleScheduler;
+    wired.markers = markers;
+    wired.thumbnailService = thumbnailService;
+    wired.dataSource = dataSource;
+    wired.log = log;
+    wired.naming = naming;
+
+    const run = (
+      historyRow: DownloadHistory,
+      torrentRow: QbittorrentTorrent & { _client?: unknown },
+      mediaRow: Media,
+      libraries: Library[] = [],
+    ) => {
+      mediaRepo.findOne.mockResolvedValue(mediaRow);
+      return (
+        service as unknown as {
+          processOne: (...args: unknown[]) => Promise<void>;
+        }
+      ).processOne(
+        historyRow,
+        torrentRow,
+        FORMATS.movie,
+        FORMATS.movieFolder,
+        FORMATS.series,
+        FORMATS.seriesFolder,
+        FORMATS.seasonFolder,
+        libraries,
+      );
+    };
+
+    return {
+      service,
+      run,
+      mediaRepo,
+      mediaFileRepo,
+      historyRepo,
+      seasonRepo,
+      episodeRepo,
+      qbittorrent,
+      blocklist,
+      sseAudience,
+      events,
+      ffprobe,
+      fileTransfer,
+      notifications,
+      mediaServers,
+      mediaService,
+      subtitleScheduler,
+      markers,
+      thumbnailService,
+      dataSource,
+      log,
+    };
+  }
+
+  /** Wires the two-episode season-pack fixture shared by the "own episode per
+   *  file" and "history reconciliation" tests below. */
+  function wireSeasonPack(h: ReturnType<typeof buildProcessOneHarness>) {
+    h.episodeRepo.findOne.mockImplementation(
+      async (opts: { where?: { episodeNumber?: number } }) => {
+        if (opts.where?.episodeNumber === 1) {
+          return {
+            id: 601,
+            episodeNumber: 1,
+            title: 'Wake',
+            airDate: '2019-01-01',
+            endEpisodeNumber: null,
+          };
+        }
+        if (opts.where?.episodeNumber === 2) {
+          return {
+            id: 602,
+            episodeNumber: 2,
+            title: 'Drift',
+            airDate: '2019-01-08',
+            endEpisodeNumber: null,
+          };
+        }
+        return null;
+      },
+    );
+    h.seasonRepo.findOne.mockResolvedValue({ id: 20, seasonNumber: 1 });
+    h.qbittorrent.getTorrentFiles.mockResolvedValue([
+      qbFile('Skyline.Signals.S01E01.1080p.WEB-DL-RELGRP.mkv', 100),
+      qbFile('Skyline.Signals.S01E02.1080p.WEB-DL-RELGRP.mkv', 200),
+    ]);
+    const seriesMedia = buildMedia({
+      id: 2,
+      title: 'Skyline Signals',
+      type: MediaType.SERIES,
+      year: 2019,
+      library: { id: 11, path: '/media/shows' },
+      libraryId: 11,
+    });
+    const historyRow = history({
+      id: 70,
+      mediaId: 2,
+      sourceTitle: 'Skyline.Signals.S01.1080p.WEB-DL-RELGRP',
+      quality: 'WEBDL-1080p',
+    });
+    const torrentRow = completedTorrent({
+      hash: 'hseason',
+      name: historyRow.sourceTitle,
+      save_path: '/downloads/Skyline.Signals.S01.1080p.WEB-DL-RELGRP',
+    });
+    return { seriesMedia, historyRow, torrentRow };
+  }
+
+  it('imports the largest video file for a movie and ignores non-video extensions', async () => {
+    const h = buildProcessOneHarness();
+    h.qbittorrent.getTorrentFiles.mockResolvedValue([
+      qbFile('Nova.Skyline.2023.2160p.WEB-DL.x265-RELGRP.mkv', 500),
+      qbFile('Nova.Skyline.2023.2160p.WEB-DL.x265-RELGRP.proof.mp4', 9000),
+      qbFile('Sample/Nova.Skyline.Sample.mkv', 50),
+      qbFile('Nova.Skyline.2023.2160p.WEB-DL.x265-RELGRP.nfo', 2000),
+      qbFile('RARBG.txt', 100),
+    ]);
+    const movieMedia = buildMedia({
+      id: 1,
+      title: 'Nova Skyline',
+      year: 2023,
+      library: { id: 10, path: '/library/movies' },
+      libraryId: 10,
+    });
+    const historyRow = history({
+      id: 40,
+      mediaId: 1,
+      sourceTitle: 'Nova.Skyline.2023.2160p.WEB-DL.x265-RELGRP',
+      quality: 'WEBDL-2160p',
+    });
+    const torrentRow = completedTorrent({
+      hash: 'h40',
+      name: historyRow.sourceTitle,
+      save_path: '/downloads/Nova.Skyline.2023.2160p.WEB-DL.x265-RELGRP',
+    });
+
+    await h.run(historyRow, torrentRow, movieMedia);
+
+    expect(h.fileTransfer.transferFile).toHaveBeenCalledTimes(1);
+    expect(h.fileTransfer.transferFile).toHaveBeenCalledWith(
+      '/downloads/Nova.Skyline.2023.2160p.WEB-DL.x265-RELGRP/Nova.Skyline.2023.2160p.WEB-DL.x265-RELGRP.proof.mp4',
+      '/library/movies/Nova Skyline (2023)/Nova Skyline (2023) WEBDL-2160p.mp4',
+      'copy',
+    );
+    expect(h.mediaRepo.update).toHaveBeenCalledWith(1, {
+      folderName: 'Nova Skyline (2023)',
+    });
+    expect(h.mediaFileRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        relativePath: 'Nova Skyline (2023) WEBDL-2160p.mp4',
+        size: 9000,
+        quality: 'WEBDL-2160p',
+        episode: null,
+      }),
+    );
+    expect(h.historyRepo.update).toHaveBeenCalledWith(historyRow.id, {
+      status: 'completed',
+    });
+  });
+
+  it("fails the import when none of the torrent's files carry a video extension", async () => {
+    const h = buildProcessOneHarness();
+    h.qbittorrent.getTorrentFiles.mockResolvedValue([
+      qbFile('NoVideo.Release.2024.rar', 900_000),
+      qbFile('NoVideo.Release.2024.r00', 900_000),
+      qbFile('NoVideo.Release.2024.nfo', 5_000),
+      qbFile('NoVideo.Release.2024.txt', 100),
+      qbFile('Sample.iso', 800_000),
+    ]);
+    const historyRow = history({
+      id: 41,
+      mediaId: 1,
+      sourceTitle: 'NoVideo.Release.2024-RELGRP',
+      quality: 'HDTV-720p',
+    });
+    const torrentRow = completedTorrent({
+      hash: 'h41',
+      name: 'NoVideo.Release.2024',
+      save_path: '/downloads/NoVideo.Release.2024',
+    });
+
+    await h.run(historyRow, torrentRow, buildMedia({}));
+
+    expect(h.mediaRepo.findOne).not.toHaveBeenCalled();
+    const statusMessage =
+      'Import failed: no valid video file in the download "NoVideo.Release.2024"';
+    expect(h.historyRepo.update).toHaveBeenCalledWith(historyRow.id, {
+      status: 'failed',
+      statusMessage,
+    });
+    expect(h.blocklist.createFromHistory).toHaveBeenCalledWith(
+      historyRow,
+      'Auto-blocklist: no valid video file in the download',
+    );
+    expect(h.qbittorrent.deleteTorrent).toHaveBeenCalledWith(
+      torrentRow._client,
+      torrentRow.hash,
+      true,
+    );
+    expect(h.events.emitToUsers).toHaveBeenCalledWith([], {
+      type: 'import.failed',
+      mediaId: historyRow.mediaId,
+      title: historyRow.sourceTitle,
+      error: statusMessage,
+    });
+    expect(h.events.emit).toHaveBeenCalledWith({ type: 'queue.updated' });
+  });
+
+  it('imports each video file of a series season pack as its own episode under its season folder', async () => {
+    const h = buildProcessOneHarness();
+    const { seriesMedia, historyRow, torrentRow } = wireSeasonPack(h);
+
+    await h.run(historyRow, torrentRow, seriesMedia);
+
+    const destDir = '/media/shows/Skyline Signals/Season 01';
+    expect(h.fileTransfer.transferFile).toHaveBeenNthCalledWith(
+      1,
+      '/downloads/Skyline.Signals.S01.1080p.WEB-DL-RELGRP/Skyline.Signals.S01E01.1080p.WEB-DL-RELGRP.mkv',
+      `${destDir}/Skyline Signals - S01E01 - Wake WEBDL-1080p.mkv`,
+      'copy',
+    );
+    expect(h.fileTransfer.transferFile).toHaveBeenNthCalledWith(
+      2,
+      '/downloads/Skyline.Signals.S01.1080p.WEB-DL-RELGRP/Skyline.Signals.S01E02.1080p.WEB-DL-RELGRP.mkv',
+      `${destDir}/Skyline Signals - S01E02 - Drift WEBDL-1080p.mkv`,
+      'copy',
+    );
+    expect(h.mediaFileRepo.save).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        relativePath: 'Season 01/Skyline Signals - S01E01 - Wake WEBDL-1080p.mkv',
+        episode: { id: 601 },
+      }),
+    );
+    expect(h.mediaFileRepo.save).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        relativePath: 'Season 01/Skyline Signals - S01E02 - Drift WEBDL-1080p.mkv',
+        episode: { id: 602 },
+      }),
+    );
+  });
+
+  it('prefers the resolution-derived quality over a mislabeled release-name grab', async () => {
+    const h = buildProcessOneHarness();
+    h.ffprobe.detectMediaFileInfo.mockResolvedValue({
+      video: [{ width: 1920, height: 804 }],
+      audio: [],
+      subtitles: [],
+    });
+    h.qbittorrent.getTorrentFiles.mockResolvedValue([
+      qbFile('Halcyon.Reach.2024.2160p.WEB-DL.x265-RELGRP.mkv', 700),
+    ]);
+    const movieMedia = buildMedia({
+      id: 4,
+      title: 'Halcyon Reach',
+      year: 2024,
+      library: { id: 12, path: '/library/movies2' },
+      libraryId: 12,
+    });
+    const historyRow = history({
+      id: 90,
+      mediaId: 4,
+      sourceTitle: 'Halcyon.Reach.2024.2160p.WEB-DL.x265-RELGRP',
+      quality: 'WEBDL-2160p',
+    });
+    const torrentRow = completedTorrent({
+      hash: 'hq1',
+      name: historyRow.sourceTitle,
+      save_path: '/downloads/Halcyon.Reach.2024.2160p.WEB-DL.x265-RELGRP',
+    });
+
+    await h.run(historyRow, torrentRow, movieMedia);
+
+    expect(h.fileTransfer.transferFile).toHaveBeenCalledWith(
+      '/downloads/Halcyon.Reach.2024.2160p.WEB-DL.x265-RELGRP/Halcyon.Reach.2024.2160p.WEB-DL.x265-RELGRP.mkv',
+      '/library/movies2/Halcyon Reach (2024)/Halcyon Reach (2024) WEBDL-1080p.mkv',
+      'copy',
+    );
+    expect(h.mediaFileRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ quality: 'WEBDL-1080p' }),
+    );
+  });
+
+  it('falls back to the grabbed quality when ffprobe reports no dimensions', async () => {
+    const h = buildProcessOneHarness();
+    // Default ffprobe mock already resolves an empty video array.
+    h.qbittorrent.getTorrentFiles.mockResolvedValue([
+      qbFile('Halcyon.Reach.2024.2160p.WEB-DL.x265-RELGRP.mkv', 700),
+    ]);
+    const movieMedia = buildMedia({
+      id: 4,
+      title: 'Halcyon Reach',
+      year: 2024,
+      library: { id: 12, path: '/library/movies2' },
+      libraryId: 12,
+    });
+    const historyRow = history({
+      id: 91,
+      mediaId: 4,
+      sourceTitle: 'Halcyon.Reach.2024.2160p.WEB-DL.x265-RELGRP',
+      quality: 'HDTV-720p',
+    });
+    const torrentRow = completedTorrent({
+      hash: 'hq2',
+      name: historyRow.sourceTitle,
+      save_path: '/downloads/Halcyon.Reach.2024.2160p.WEB-DL.x265-RELGRP',
+    });
+
+    await h.run(historyRow, torrentRow, movieMedia);
+
+    expect(h.fileTransfer.transferFile).toHaveBeenCalledWith(
+      '/downloads/Halcyon.Reach.2024.2160p.WEB-DL.x265-RELGRP/Halcyon.Reach.2024.2160p.WEB-DL.x265-RELGRP.mkv',
+      '/library/movies2/Halcyon Reach (2024)/Halcyon Reach (2024) HDTV-720p.mkv',
+      'copy',
+    );
+    expect(h.mediaFileRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ quality: 'HDTV-720p' }),
+    );
+  });
+
+  it('copies an allow-listed companion file and skips one outside the allow-list', async () => {
+    const srcDir = fs.mkdtempSync(path.join(os.tmpdir(), 'completion-src-'));
+    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'completion-root-'));
+    try {
+      const videoName = 'Nova.Skyline.2023.1080p.WEB-DL-RELGRP.mkv';
+      fs.writeFileSync(path.join(srcDir, videoName), 'video-bytes');
+      fs.writeFileSync(
+        path.join(srcDir, 'Nova.Skyline.2023.1080p.WEB-DL-RELGRP.srt'),
+        'subtitle',
+      );
+      fs.writeFileSync(
+        path.join(srcDir, 'Nova.Skyline.2023.1080p.WEB-DL-RELGRP.txt'),
+        'readme',
+      );
+
+      const h = buildProcessOneHarness();
+      // Real FileTransferService for this one test — the allow-list filtering
+      // it does is exactly what's being pinned, a mock would hide it.
+      (h.service as unknown as { fileTransfer: unknown }).fileTransfer =
+        new FileTransferService(
+          { query: jest.fn().mockResolvedValue([]) } as unknown as DataSource,
+        );
+      h.qbittorrent.getTorrentFiles.mockResolvedValue([qbFile(videoName, 12)]);
+      const movieMedia = buildMedia({
+        id: 5,
+        title: 'Nova Skyline',
+        year: 2023,
+        library: { id: 13, path: rootDir },
+        libraryId: 13,
+      });
+      const historyRow = history({
+        id: 100,
+        mediaId: 5,
+        sourceTitle: 'Nova.Skyline.2023.1080p.WEB-DL-RELGRP',
+        quality: 'WEBDL-1080p',
+      });
+      const torrentRow = completedTorrent({
+        hash: 'hcompanion',
+        name: historyRow.sourceTitle,
+        save_path: srcDir,
+      });
+
+      await h.run(historyRow, torrentRow, movieMedia);
+
+      const destDir = path.join(rootDir, 'Nova Skyline (2023)');
+      expect(
+        fs.existsSync(path.join(destDir, 'Nova Skyline (2023) WEBDL-1080p.mkv')),
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(destDir, 'Nova Skyline (2023) WEBDL-1080p.srt')),
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(destDir, 'Nova Skyline (2023) WEBDL-1080p.txt')),
+      ).toBe(false);
+    } finally {
+      fs.rmSync(srcDir, { recursive: true, force: true });
+      fs.rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it('pins both season and episode on the history row when a single episode imports', async () => {
+    const h = buildProcessOneHarness();
+    h.seasonRepo.findOne.mockResolvedValue({ id: 30, seasonNumber: 1 });
+    h.episodeRepo.findOne.mockResolvedValue({
+      id: 900,
+      episodeNumber: 5,
+      title: 'Signal Lost',
+      airDate: '2019-02-01',
+      endEpisodeNumber: null,
+    });
+    h.qbittorrent.getTorrentFiles.mockResolvedValue([
+      qbFile('Skyline.Signals.S01E05.HDTV.x264-RELGRP.mkv', 400),
+    ]);
+    const seriesMedia = buildMedia({
+      id: 3,
+      title: 'Skyline Signals',
+      type: MediaType.SERIES,
+      year: 2019,
+      library: { id: 11, path: '/media/shows' },
+      libraryId: 11,
+    });
+    const historyRow = history({
+      id: 80,
+      mediaId: 3,
+      sourceTitle: 'Skyline.Signals.S01E05.HDTV.x264-RELGRP',
+      quality: 'HDTV-720p',
+    });
+    const torrentRow = completedTorrent({
+      hash: 'hsingle',
+      name: historyRow.sourceTitle,
+      save_path: '/downloads/Skyline.Signals.S01E05.HDTV.x264-RELGRP',
+    });
+
+    await h.run(historyRow, torrentRow, seriesMedia);
+
+    expect(h.historyRepo.update).toHaveBeenCalledWith(historyRow.id, {
+      status: 'completed',
+      episode: { id: 900 },
+      season: { id: 30 },
+    });
+    expect(h.episodeRepo.update).toHaveBeenCalledWith(900, { hasFile: true });
+  });
+
+  it('pins the season and clears the episode on the history row when a season pack imports', async () => {
+    const h = buildProcessOneHarness();
+    const { seriesMedia, historyRow, torrentRow } = wireSeasonPack(h);
+
+    await h.run(historyRow, torrentRow, seriesMedia);
+
+    expect(h.historyRepo.update).toHaveBeenCalledWith(historyRow.id, {
+      status: 'completed',
+      episode: null,
+      season: { id: 20 },
+    });
   });
 });
