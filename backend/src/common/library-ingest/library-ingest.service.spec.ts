@@ -34,7 +34,7 @@ function buildHarness() {
     getCompanionExts: jest.fn().mockResolvedValue(new Set<string>()),
   };
   const mediaService = {
-    enrichMediaFileFromDisk: jest.fn().mockResolvedValue(undefined),
+    finalizeImportedFile: jest.fn().mockResolvedValue(undefined),
   };
   const subtitleScheduler = {
     onMediaFileImported: jest.fn().mockResolvedValue(undefined),
@@ -45,6 +45,9 @@ function buildHarness() {
   const naming = new NamingService({
     query: jest.fn().mockResolvedValue([]),
   } as unknown as DataSource);
+  // Null probe result: both tests fall back to `fallbackQuality` and no
+  // `streamInfo` is written.
+  const ffprobe = { detectMediaFileInfo: jest.fn().mockResolvedValue(null) };
 
   const wired = service as unknown as Record<string, unknown>;
   wired.mediaRepo = mediaRepo;
@@ -54,6 +57,7 @@ function buildHarness() {
   wired.fileTransfer = fileTransfer;
   wired.mediaService = mediaService;
   wired.subtitleScheduler = subtitleScheduler;
+  wired.ffprobe = ffprobe;
   wired.logger = logger;
 
   return {
@@ -64,6 +68,7 @@ function buildHarness() {
     fileTransfer,
     mediaService,
     subtitleScheduler,
+    ffprobe,
     logger,
   };
 }
@@ -126,7 +131,7 @@ describe('LibraryIngestService.ingest', () => {
     expect(h.fileRepo.save).toHaveBeenCalledTimes(1);
     expect(h.fileRepo.save).toHaveBeenCalledWith(existingRow);
     expect(result.imported).toHaveLength(1);
-    expect(result.imported[0]).toEqual({
+    expect(result.imported[0].file).toEqual({
       id: 501,
       media: { id: 7 },
       relativePath: 'Lonely Harbor (2021) WEBDL-1080p.mkv',
@@ -149,7 +154,7 @@ describe('LibraryIngestService.ingest', () => {
     });
     h.mediaRepo.findOne.mockResolvedValue(media);
     h.fileRepo.findOne.mockResolvedValue(null);
-    h.mediaService.enrichMediaFileFromDisk.mockRejectedValue(
+    h.mediaService.finalizeImportedFile.mockRejectedValue(
       new Error('ffprobe crashed'),
     );
 
@@ -162,16 +167,18 @@ describe('LibraryIngestService.ingest', () => {
     };
 
     const result = await h.service.ingest(req);
+    // Post-import work is fire-and-forget — let it settle before asserting.
+    await new Promise((r) => setImmediate(r));
 
     expect(result.imported).toHaveLength(1);
-    expect(result.imported[0]).toEqual({
+    expect(result.imported[0].file).toEqual({
       media,
       episode: null,
       relativePath: 'Coral Drift (2022) WEBDL-720p.mkv',
       size: 2048,
       quality: 'WEBDL-720p',
     });
-    expect(h.mediaService.enrichMediaFileFromDisk).toHaveBeenCalledTimes(1);
+    expect(h.mediaService.finalizeImportedFile).toHaveBeenCalledTimes(1);
     expect(h.logger.warn).toHaveBeenCalledWith(
       'Ingest[Coral Drift]: post-import enrichment failed — ffprobe crashed',
     );

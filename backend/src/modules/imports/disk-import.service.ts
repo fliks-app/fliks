@@ -35,6 +35,7 @@ import { SubtitleSchedulerService } from '../scheduler/subtitle-scheduler.servic
 import { LibrariesService } from '../libraries/libraries.service';
 import { TransferMethod } from '../../common/services/file-transfer.service';
 import { LibraryIngestService } from '../../common/library-ingest/library-ingest.service';
+import { MediaServersService } from '../media-servers/media-servers.service';
 
 const VIDEO_EXTS = new Set([
   '.mkv',
@@ -87,6 +88,7 @@ export class DiskImportService {
     private readonly metadata: MediaMetadataService,
     private readonly nfo: NfoMetadataService,
     private readonly libraryIngest: LibraryIngestService,
+    private readonly mediaServers: MediaServersService,
   ) {}
 
   /**
@@ -518,15 +520,20 @@ export class DiskImportService {
         // enrichment all live in the shared ingest service.
         const result = await this.libraryIngest.ingest({
           mediaId: media.id,
-          files: [{ path: entry.filePath }],
+          files: [{ path: entry.filePath, episodeId: entry.episodeId }],
           transfer: method,
           fallbackQuality: entry.quality,
           sourceLabel: media.title,
-          episodeId: entry.episodeId,
           force: entry.force,
           uniquifyOnCollision: opts.uniquifyOnCollision,
         });
         imported += result.imported.length;
+        if (result.imported.length) {
+          void this.mediaServers.dispatch('library.rescan', {
+            title: media.title,
+            path: media.path,
+          });
+        }
       } catch (e) {
         errors.push(
           `${path.basename(entry.filePath)}: ${(e as Error).message}`,
