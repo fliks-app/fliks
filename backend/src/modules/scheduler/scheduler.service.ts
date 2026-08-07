@@ -1,4 +1,10 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  forwardRef,
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { existsSync } from 'fs';
 import { In } from 'typeorm';
@@ -73,6 +79,7 @@ export class SchedulerService implements OnModuleInit {
     private readonly tmdb: TmdbProvider,
     private readonly mediaService: MediaService,
     private readonly config: ConfigService,
+    @Inject(forwardRef(() => CompletionService))
     private readonly completion: CompletionService,
     @InjectRepository(DelayProfile)
     private readonly delayProfileRepo: Repository<DelayProfile>,

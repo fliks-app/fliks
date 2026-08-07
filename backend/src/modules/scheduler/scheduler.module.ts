@@ -60,7 +60,9 @@ import { Library } from '../libraries/entities/library.entity';
       Library,
     ]),
     IndexersModule,
-    DownloadClientsModule,
+    // forwardRef: DownloadClientsModule now imports this module back for
+    // SchedulerService (block-torrent re-search).
+    forwardRef(() => DownloadClientsModule),
     MetadataProvidersModule,
     NotificationsModule,
     forwardRef(() => MediaModule),
