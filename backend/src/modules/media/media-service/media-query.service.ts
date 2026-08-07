@@ -14,7 +14,7 @@ import {
   getAppQualityById,
   AppQualityDefinition,
 } from '../../../common/constants/app-qualities';
-import { rankFromQualityString } from '../release-rejection.helper';
+import { rankFromQualityString } from '../../../common/release-scoring';
 import { parseReleaseQuality } from '../../../common/release-parsing';
 import { onDiskSql, shadowedEpisodeNumbers } from '../episode-coverage.util';
 

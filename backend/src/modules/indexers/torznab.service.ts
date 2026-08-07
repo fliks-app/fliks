@@ -6,19 +6,7 @@ import { Indexer } from './entities/indexer.entity';
 import { IndexerStat } from './entities/indexer-stat.entity';
 import { IndexerThrottle } from './indexer-throttle.service';
 import { decodeHtmlEntities } from '../../common/utils/decode-html-entities';
-
-export interface TorznabRelease {
-  title: string;
-  downloadUrl: string;
-  indexerId: number;
-  indexerName: string;
-  size: number; // bytes, 0 if unknown
-  seeders: number;
-  leechers: number;
-  publishDate: string | null; // ISO date string from <pubDate>, null if unavailable
-  freeleech: boolean;
-  downloadVolumeFactor: number; // 0=free, 0.5=half, 1=normal
-}
+import { ReleaseCandidate } from '../../common/release-scoring';
 
 const decodeXmlEntities = decodeHtmlEntities;
 
@@ -101,10 +89,10 @@ function ensureApiKey(url: string, apiKey: string): string {
   }
 }
 
-function parseTorznabItems(xml: string, indexer: Indexer): TorznabRelease[] {
+function parseTorznabItems(xml: string, indexer: Indexer): ReleaseCandidate[] {
   const settings = indexer.settings as { apiKey?: string };
   const apiKey = String(settings.apiKey || '');
-  const out: TorznabRelease[] = [];
+  const out: ReleaseCandidate[] = [];
   const itemRe = /<item>([\s\S]*?)<\/item>/gi;
   let m: RegExpExecArray | null;
   while ((m = itemRe.exec(xml)) !== null) {
@@ -311,7 +299,7 @@ export class TorznabService {
     url: string,
     queryType: string,
     indexer: Indexer,
-  ): Promise<{ results: TorznabRelease[]; torznabError: string | null }> {
+  ): Promise<{ results: ReleaseCandidate[]; torznabError: string | null }> {
     const query = describeTorznabQuery(url);
     const start = Date.now();
     try {
@@ -377,7 +365,7 @@ export class TorznabService {
     indexer: Indexer,
     fallbackUrl: string,
     queryType: string,
-  ): Promise<TorznabRelease[]> {
+  ): Promise<ReleaseCandidate[]> {
     const { results, torznabError } = await this.execSearch(
       fallbackUrl,
       queryType,
@@ -435,7 +423,7 @@ export class TorznabService {
   }
 
   /** Fetch RSS feed (t=search with no query = recent releases) */
-  async rssSearch(indexer: Indexer): Promise<TorznabRelease[]> {
+  async rssSearch(indexer: Indexer): Promise<ReleaseCandidate[]> {
     if (!indexer.enabled || !indexer.enableRss) return [];
     const settings = indexer.settings as { baseUrl?: string; apiKey?: string };
     const baseUrl = String(settings.baseUrl || '').replace(/\/$/, '');
@@ -490,7 +478,7 @@ export class TorznabService {
     showTitle: string,
     season: number,
     externalIds?: { tvdbId?: number | null; imdbId?: string | null },
-  ): Promise<TorznabRelease[]> {
+  ): Promise<ReleaseCandidate[]> {
     const target = this.resolveSearchTarget(indexer);
     if (!target) return [];
     const { baseUrl, apiKey } = target;
@@ -539,7 +527,7 @@ export class TorznabService {
     season: number,
     episode: number,
     externalIds?: { tvdbId?: number | null; imdbId?: string | null },
-  ): Promise<TorznabRelease[]> {
+  ): Promise<ReleaseCandidate[]> {
     const target = this.resolveSearchTarget(indexer);
     if (!target) return [];
     const { baseUrl, apiKey } = target;
@@ -592,7 +580,7 @@ export class TorznabService {
     indexer: Indexer,
     query: string,
     externalIds?: { imdbId?: string | null; tmdbId?: number | null },
-  ): Promise<TorznabRelease[]> {
+  ): Promise<ReleaseCandidate[]> {
     const target = this.resolveSearchTarget(indexer);
     if (!target) return [];
     const { baseUrl, apiKey } = target;

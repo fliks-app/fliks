@@ -37,6 +37,7 @@ import { QualityProfileItem } from '../profiles/entities/quality-profile.entity'
 
 import { GrabMovieDto } from './dto/grab-movie.dto';
 import {
+  ReleaseCandidate,
   ReleaseRejection,
   allowedAudioLanguageIds,
   buildIndexerMinSeeders,
@@ -47,7 +48,7 @@ import {
   resolveSearchTitles,
   sortReleasesByRelevance,
   SizeLimits,
-} from './release-rejection.helper';
+} from '../../common/release-scoring';
 
 export interface EpisodeReleaseRow {
   title: string;
@@ -395,7 +396,7 @@ export class EpisodeDownloadService {
   // ---------------------------------------------------------------------------
 
   private async buildReleaseRow(
-    r: import('../indexers/torznab.service').TorznabRelease,
+    r: ReleaseCandidate,
     allowed: Set<number>,
     allowedLangs: Set<number>,
     sizeByQuality: Map<number, SizeLimits>,

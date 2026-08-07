@@ -18,7 +18,7 @@ import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
-import { TorznabService, TorznabRelease } from '../indexers/torznab.service';
+import { TorznabService } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import { MediaService } from '../media/media.service';
@@ -43,10 +43,11 @@ import {
 } from '../media/auto-grab-pipeline.service';
 import { MarkersService } from '../markers/markers.service';
 import {
+  ReleaseCandidate,
   rankFromQualityString,
   releaseMatchesMedia,
   resolveSearchTitles,
-} from '../media/release-rejection.helper';
+} from '../../common/release-scoring';
 import { parseSeasonEpisode, matchesSeasonPack } from '../../common/release-parsing';
 
 // Note: scoring/profile/blocklist/quality-definition wiring lives in
@@ -1426,7 +1427,7 @@ export class SchedulerService implements OnModuleInit {
    *  mismatch is common across multi-season shows; the caller already
    *  requires a recognisable season in the release title. */
   private matchReleaseToMedia(
-    release: TorznabRelease,
+    release: ReleaseCandidate,
     candidates: Media[],
     yearGuard: boolean,
   ): Media | undefined {
@@ -1438,21 +1439,21 @@ export class SchedulerService implements OnModuleInit {
   }
 
   private matchMovieRelease(
-    release: TorznabRelease,
+    release: ReleaseCandidate,
     candidates: Media[],
   ): Media | undefined {
     return this.matchReleaseToMedia(release, candidates, true);
   }
 
   private matchSeriesRelease(
-    release: TorznabRelease,
+    release: ReleaseCandidate,
     candidates: Media[],
   ): Media | undefined {
     return this.matchReleaseToMedia(release, candidates, false);
   }
 
   private releaseTooFresh(
-    release: TorznabRelease,
+    release: ReleaseCandidate,
     media: Media,
     delayProfiles: DelayProfile[],
   ): boolean {
@@ -1468,7 +1469,7 @@ export class SchedulerService implements OnModuleInit {
   private async grabRssRelease(args: {
     media: Media;
     files: { quality?: string | null }[];
-    release: TorznabRelease;
+    release: ReleaseCandidate;
     qbitClient: DownloadClient;
     scoring: AutoGrabScoringContext;
     mediaType: 'movie' | 'series';
