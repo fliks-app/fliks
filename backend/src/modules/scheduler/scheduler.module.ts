@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { Command } from './entities/command.entity';
+import { FliksRequest } from '../requests/entities/request.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { DownloadHistory } from '../media/entities/download-history.entity';
@@ -44,6 +45,7 @@ import { Library } from '../libraries/entities/library.entity';
     ScheduleModule.forRoot(),
     TypeOrmModule.forFeature([
       Command,
+      FliksRequest,
       Media,
       MediaFile,
       DownloadHistory,

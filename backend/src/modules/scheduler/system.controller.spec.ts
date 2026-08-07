@@ -107,6 +107,7 @@ describe('SystemController.activeStreams recency filter', () => {
       playbackService as never,
       mediaFileRepo as never,
       {} as never, // episodeRepo
+      {} as never, // requestRepo
       {} as never, // updateCheck
     );
 
@@ -202,6 +203,7 @@ describe('SystemController.sendPlayerCommand', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     return {
@@ -265,6 +267,7 @@ describe('SystemController.restart', () => {
 
   function makeController() {
     return new SystemController(
+      {} as never,
       {} as never,
       {} as never,
       {} as never,
