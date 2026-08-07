@@ -13,14 +13,17 @@ export class PoliciesGuard implements CanActivate {
   ) {}
 
   canActivate(context: ExecutionContext): boolean {
+    // Handler wins over class so a controller-wide default can be tightened per route.
     const policyHandlers =
-      this.reflector.get<PolicyHandler[]>(
-        CHECK_POLICIES_KEY,
+      this.reflector.getAllAndOverride<PolicyHandler[]>(CHECK_POLICIES_KEY, [
         context.getHandler(),
-      ) ?? [];
+        context.getClass(),
+      ]) ?? [];
 
+    // Fail closed: a handler under this guard that declares no policy is denied,
+    // so forgetting `@CheckPolicies` cannot silently expose it to every account.
     if (policyHandlers.length === 0) {
-      return true;
+      return false;
     }
 
     const { user } = context

@@ -18,7 +18,10 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
-import { CheckPolicies } from '../auth/casl/check-policies.decorator';
+import {
+  CheckPolicies,
+  AnyAuthenticatedUser,
+} from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
 import { User } from './entities/user.entity';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -45,9 +48,10 @@ export class UsersController {
     return this.usersService.create(dto);
   }
 
-  /** Self: upload a new avatar (cropped square JPEG). No policy handler → the
-   *  class JWT guard is enough; the target is always the caller. */
+  /** Self: upload a new avatar (cropped square JPEG). The target is always the
+   *  caller, so there is no object for CASL to test. */
   @Post('me/avatar')
+  @CheckPolicies(AnyAuthenticatedUser)
   @UseInterceptors(
     FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
   )
@@ -60,6 +64,7 @@ export class UsersController {
 
   /** Self: remove the current avatar. */
   @Delete('me/avatar')
+  @CheckPolicies(AnyAuthenticatedUser)
   clearAvatar(@CurrentUser() user: User) {
     return this.usersService.clearAvatar(user.id);
   }
