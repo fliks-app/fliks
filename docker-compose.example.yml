@@ -25,6 +25,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Uncomment if your platform pins the container user (TrueNAS catalog uid
+    # 568, unraid 99:100, Kubernetes runAsNonRoot, OpenShift arbitrary uid).
+    # Any uid works as long as gid 0 is in the group list — the image's
+    # /app/conf, /app/images and /app/transcode are group-writable by root.
+    # user: '568:568'
+    # group_add: ['0']
     # mDNS doesn't cross a bridge network, so Chromecast auto-discovery needs
     # `network_mode: host` — then drop `ports:` and set DB_HOST to 127.0.0.1.
     ports:

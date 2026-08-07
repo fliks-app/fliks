@@ -2,7 +2,7 @@
 process.env.UV_THREADPOOL_SIZE = '16';
 
 import { NestFactory, Reflector } from '@nestjs/core';
-import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
+import { ClassSerializerInterceptor, Logger, ValidationPipe } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AppModule } from './app.module';
 import { LogBufferService } from './modules/scheduler/log-buffer.service';
@@ -93,4 +93,20 @@ async function bootstrap() {
   const port = Number(process.env.PORT) || 4848;
   await app.listen(port);
 }
-bootstrap();
+
+const bootstrapLogger = new Logger('Bootstrap');
+
+// `restart: unless-stopped` retries forever on a silent crash — log and exit visibly instead.
+process.on('unhandledRejection', (reason) => {
+  bootstrapLogger.error('Unhandled rejection', reason as Error);
+  process.exit(1);
+});
+process.on('uncaughtException', (err) => {
+  bootstrapLogger.error('Uncaught exception', err.stack);
+  process.exit(1);
+});
+
+bootstrap().catch((err) => {
+  bootstrapLogger.error('Failed to start', err instanceof Error ? err.stack : err);
+  process.exit(1);
+});
