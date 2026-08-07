@@ -42,6 +42,9 @@ services:
       DB_USERNAME: fliks
       DB_PASSWORD: changeme
       DB_NAME: fliks
+      # Without this the segment cache lands in /tmp, which is tmpfs on many
+      # hosts — and its LRU cap defaults to 20 GB.
+      FLIKS_TRANSCODE_DIR: /app/transcode
       # TZ: Europe/Paris
 
       # ---- Access (optional) ----
@@ -85,7 +88,8 @@ services:
       - fliks_conf:/app/conf
       # Posters, fanart, seek-preview sprites.
       - fliks_images:/app/images
-      # HLS segment cache. Omit for a per-restart tmpfs.
+      # HLS segment cache, paired with FLIKS_TRANSCODE_DIR above. Drop both to
+      # leave it in /tmp.
       - fliks_transcode:/app/transcode
 
   # ---- Intel QSV / VAAPI ---- add to the fliks service:
