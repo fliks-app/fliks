@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import { existsSync } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
+import { getImagesDir } from '../../common/constants/paths';
 import { EventsService } from '../scheduler/events.service';
 import { Command } from '../scheduler/entities/command.entity';
 import {
@@ -34,8 +35,8 @@ export interface SpriteMetadata {
   count: number;
 }
 
-const BASE_DIR = path.join(process.cwd(), 'images', 'thumbnails');
-const FRAMES_TMP_DIR = path.join(process.cwd(), 'images', 'thumbnails-tmp');
+const baseDir = () => path.join(getImagesDir(), 'thumbnails');
+const framesTmpDir = () => path.join(getImagesDir(), 'thumbnails-tmp');
 
 /** Concurrent ffmpeg `-ss` seeks per sprite. HW decode saturates much
  *  earlier than the CPU pool — the GPU's decoder-session count caps useful
@@ -159,7 +160,7 @@ export class ThumbnailService {
     skipTracking = false,
     crop?: CropArea,
   ): Promise<SpriteMetadata | null> {
-    const dir = path.join(BASE_DIR, String(mediaFileId));
+    const dir = path.join(baseDir(), String(mediaFileId));
     const metaPath = path.join(dir, 'sprite.json');
 
     if (!force && existsSync(metaPath)) {
@@ -193,11 +194,11 @@ export class ThumbnailService {
   }
 
   getSpritePath(mediaFileId: number): string {
-    return path.join(BASE_DIR, String(mediaFileId), 'sprite.jpg');
+    return path.join(baseDir(), String(mediaFileId), 'sprite.jpg');
   }
 
   getMetadataPath(mediaFileId: number): string {
-    return path.join(BASE_DIR, String(mediaFileId), 'sprite.json');
+    return path.join(baseDir(), String(mediaFileId), 'sprite.json');
   }
 
   /**
@@ -207,7 +208,7 @@ export class ThumbnailService {
    * import/rescan (scheduler) or via the manual regenerate button.
    */
   async readExistingMeta(mediaFileId: number): Promise<SpriteMetadata | null> {
-    const metaPath = path.join(BASE_DIR, String(mediaFileId), 'sprite.json');
+    const metaPath = path.join(baseDir(), String(mediaFileId), 'sprite.json');
     if (!existsSync(metaPath)) return null;
     try {
       return JSON.parse(await fsp.readFile(metaPath, 'utf-8'));
@@ -253,7 +254,7 @@ export class ThumbnailService {
     skipTracking = false,
     crop?: CropArea,
   ): Promise<SpriteMetadata | null> {
-    const dir = path.join(BASE_DIR, String(mediaFileId));
+    const dir = path.join(baseDir(), String(mediaFileId));
     const spritePath = path.join(dir, 'sprite.jpg');
     const metaPath = path.join(dir, 'sprite.json');
     const interval = this.pickInterval(durationSeconds);
@@ -304,7 +305,7 @@ export class ThumbnailService {
       });
     }
 
-    const framesDir = path.join(FRAMES_TMP_DIR, String(mediaFileId));
+    const framesDir = path.join(framesTmpDir(), String(mediaFileId));
     await fsp.mkdir(dir, { recursive: true });
     await fsp.mkdir(framesDir, { recursive: true });
 
@@ -442,7 +443,7 @@ export class ThumbnailService {
       });
       // Cleanup tmp frames (fire-and-forget).
       fsp
-        .rm(path.join(FRAMES_TMP_DIR, String(mediaFileId)), {
+        .rm(path.join(framesTmpDir(), String(mediaFileId)), {
           recursive: true,
           force: true,
         })

@@ -19,6 +19,7 @@ import { LogBufferService } from './log-buffer.service';
 import { UpdateCheckService } from './update-check.service';
 import { CommandsController } from './commands.controller';
 import { SystemController } from './system.controller';
+import { LivenessController } from './liveness.controller';
 import { IndexersModule } from '../indexers/indexers.module';
 import { DownloadClientsModule } from '../download-clients/download-clients.module';
 import { MetadataProvidersModule } from '../metadata-providers/metadata-providers.module';
@@ -77,7 +78,7 @@ import { Library } from '../libraries/entities/library.entity';
     ProfilesModule,
     MarkersModule,
   ],
-  controllers: [CommandsController, SystemController],
+  controllers: [CommandsController, SystemController, LivenessController],
   providers: [
     SchedulerService,
     CompletionService,

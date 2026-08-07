@@ -130,13 +130,16 @@ ARG TVDB_API_KEY=""
 ENV TMDB_API_KEY=${TMDB_API_KEY}
 ENV TVDB_API_KEY=${TVDB_API_KEY}
 
-# Persistent conf dir for auto-generated server-side secrets (JWT
-# signing key, future encryption keys, etc.). Mount this as a Docker
-# volume so the secret survives container restarts and image
-# rebuilds. Permissions stay 0700; the secret files inside are 0600.
-RUN mkdir -p /app/conf && chmod 700 /app/conf
-VOLUME /app/conf
+# Persistent dirs, group=root + g=u: writable by root, by an arbitrary uid
+# with gid 0, or via `--user <uid> --group-add 0` — no USER directive needed.
+RUN mkdir -p /app/conf /app/images /app/transcode \
+ && chgrp -R 0 /app/conf /app/images /app/transcode \
+ && chmod -R g=u /app/conf /app/images /app/transcode
+VOLUME /app/conf /app/images /app/transcode
 
 EXPOSE 4848
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||4848)+'/api/system/liveness',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 CMD ["node", "dist/main"]

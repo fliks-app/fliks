@@ -3,6 +3,7 @@ import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
+import { getImagesDir } from '../../common/constants/paths';
 
 export type ImageType =
   | 'media'
@@ -75,7 +76,7 @@ function sizeTokenWidth(token: string): number | null {
 @Injectable()
 export class ImageService {
   private readonly logger = new Logger(ImageService.name);
-  private readonly baseDir = path.join(process.cwd(), 'images');
+  private readonly baseDir = getImagesDir();
 
   /**
    * Download an image from a remote URL and store it locally, generating the
