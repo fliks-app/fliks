@@ -10,7 +10,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, LessThan, Repository } from 'typeorm';
 import * as path from 'path';
 import { Media } from '../media/entities/media.entity';
-import { MediaFile } from '../media/entities/media-file.entity';
 import { DownloadHistory } from '../media/entities/download-history.entity';
 import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
@@ -26,15 +25,12 @@ import { BlocklistService } from '../blocklist/blocklist.service';
 import { EventsService } from './events.service';
 import { SseAudienceService } from './sse-audience.service';
 import { SettingsService } from '../settings/settings.service';
-import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
-import { FfprobeService } from '../subtitles/ffprobe.service';
 import {
   ThumbnailService,
   buildSpriteLabel,
 } from '../streaming/thumbnail.service';
 import { MediaType } from '../../common/enums';
-import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import { StalledCheck } from './entities/stalled-check.entity';
 import {
   countStalledStrikes,
@@ -49,14 +45,10 @@ import {
 } from '../media/torrent-history-matcher.service';
 import { TorrentAutoMatcher } from '../media/torrent-auto-matcher.service';
 import { buildGrabHistoryRow } from '../media/grab-history.util';
-import {
-  parseReleaseQuality,
-  qualityFromResolution,
-} from '../../common/release-parsing';
+import { parseReleaseQuality } from '../../common/release-parsing';
 import { MarkersService } from '../markers/markers.service';
-import { FileTransferService } from '../../common/services/file-transfer.service';
-import { MediaService } from '../media/media.service';
 import { SchedulerService } from './scheduler.service';
+import { LibraryIngestService } from '../../common/library-ingest/library-ingest.service';
 
 /**
  * How long a `grabbed` or `importing` history row may stay without a
@@ -91,8 +83,6 @@ export class CompletionService implements OnModuleInit {
     private readonly dataSource: DataSource,
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
-    @InjectRepository(MediaFile)
-    private readonly mediaFileRepo: Repository<MediaFile>,
     @InjectRepository(DownloadHistory)
     private readonly historyRepo: Repository<DownloadHistory>,
     @InjectRepository(Season)
@@ -114,20 +104,17 @@ export class CompletionService implements OnModuleInit {
     private readonly naming: NamingService,
     private readonly blocklist: BlocklistService,
     private readonly settings: SettingsService,
-    private readonly subtitleScheduler: SubtitleSchedulerService,
     private readonly mediaServers: MediaServersService,
     private readonly events: EventsService,
-    private readonly ffprobe: FfprobeService,
     private readonly thumbnailService: ThumbnailService,
     private readonly historyMatcher: TorrentHistoryMatcher,
     private readonly autoMatcher: TorrentAutoMatcher,
-    private readonly fileTransfer: FileTransferService,
     private readonly markers: MarkersService,
     private readonly sseAudience: SseAudienceService,
-    @Inject(forwardRef(() => MediaService))
-    private readonly mediaService: MediaService,
     @Inject(forwardRef(() => SchedulerService))
     private readonly scheduler: SchedulerService,
+    @Inject(forwardRef(() => LibraryIngestService))
+    private readonly libraryIngest: LibraryIngestService,
   ) {}
 
   /**
@@ -391,11 +378,8 @@ export class CompletionService implements OnModuleInit {
     if (!completedTorrents.length) return;
 
     const formats = await this.naming.getFormats();
-    const movieFormat = formats.movie;
     const movieFolderFormat = formats.movieFolder;
-    const seriesFormat = formats.series;
     const seriesFolderFormat = formats.seriesFolder;
-    const seasonFolderFormat = formats.seasonFolder;
     const libraries = await this.libraryRepo.find({ order: { path: 'ASC' } });
 
     let imported = 0;
@@ -420,11 +404,8 @@ export class CompletionService implements OnModuleInit {
         await this.processOne(
           history,
           torrent,
-          movieFormat,
           movieFolderFormat,
-          seriesFormat,
           seriesFolderFormat,
-          seasonFolderFormat,
           libraries,
         );
         imported++;
@@ -615,11 +596,8 @@ export class CompletionService implements OnModuleInit {
       _clientId?: number;
       _client?: import('../download-clients/entities/download-client.entity').DownloadClient;
     },
-    movieFormat: string,
     movieFolderFormat: string,
-    seriesFormat: string,
     seriesFolderFormat: string,
-    seasonFolderFormat: string,
     libraries: Library[],
   ): Promise<void> {
     const VIDEO_EXTS = [
@@ -725,8 +703,6 @@ export class CompletionService implements OnModuleInit {
       `Import[${history.sourceTitle}]: media="${media.title}" (${media.type}, id=${media.id})`,
     );
 
-    const releaseGroup = this.naming.extractReleaseGroup(history.sourceTitle);
-
     // Destination root folder (just the root, without folderName — folderName
     // is appended separately when building destDir).
     let rootPath = media.library?.path ?? '';
@@ -780,10 +756,11 @@ export class CompletionService implements OnModuleInit {
       );
     }
 
-    // libraryRoot = rootPath + folderName (= media.path) — relativePath is
-    // stored relative to this because resolveFile joins media.path + relativePath.
-    const libraryRoot = path.normalize(path.join(rootPath, folderName));
-    const companionExts = await this.fileTransfer.getCompanionExts();
+    // Keep the in-memory media in sync with what was just persisted — the
+    // ingest service re-reads media.path (library.path + folderName) to
+    // derive the destination.
+    media.folderName = folderName;
+    if (resolvedLib) media.library = resolvedLib;
 
     // For movies or single episode: import the largest file
     // For series with multiple files: import each file as a separate episode
@@ -799,52 +776,26 @@ export class CompletionService implements OnModuleInit {
       );
     }
 
-    const importedFiles: {
-      savedFile: MediaFile;
+    // Resolve each file's episode (season packs carry one per file) before
+    // handing the batch to the shared ingest pipeline, which owns naming,
+    // the filesystem write and MediaFile persistence.
+    const resolved: {
+      path: string;
       episodeId?: number;
+      size: number;
       seasonId?: number;
-      destPath: string;
     }[] = [];
-
     for (let idx = 0; idx < filesToImport.length; idx++) {
       const videoFile = filesToImport[idx];
-      const ext = path.extname(videoFile.filePath);
-      const filename = path.basename(videoFile.filePath, ext);
-
-      // Derive quality from the real pixels, not the (sometimes mislabeled)
-      // release name: a torrent tagged "2160p" that is actually 1920×804 must
-      // be named + tracked as 1080p (drives the filename, the badge, and the
-      // upgrade cutoff). The source tag still comes from the release name. Falls
-      // back to the grabbed quality when probing yields no dimensions.
-      const streamInfo = await this.ffprobe.detectMediaFileInfo(
+      const filename = path.basename(
         videoFile.filePath,
+        path.extname(videoFile.filePath),
       );
-      const srcVideo = streamInfo?.video?.[0];
-      const fileQuality =
-        srcVideo?.width && srcVideo?.height
-          ? qualityFromResolution(
-              history.sourceTitle,
-              srcVideo.width,
-              srcVideo.height,
-            )
-          : history.quality;
 
-      let newFilename: string;
-      let destDir: string;
       let episodeId: number | undefined;
       let seasonId: number | undefined;
 
-      if (media.type === MediaType.MOVIE) {
-        newFilename = this.naming.applyMovieFormat(movieFormat, {
-          title: media.title,
-          originalTitle: media.originalTitle,
-          year: media.year,
-          quality: fileQuality,
-          releaseGroup,
-          tmdbId: media.tmdbId,
-        });
-        destDir = path.join(rootPath, folderName);
-      } else {
+      if (media.type !== MediaType.MOVIE) {
         // For season packs: parse from individual filename; for single ep: try filename then release name
         const epNums =
           this.naming.parseEpisodeNumbers(filename) ??
@@ -855,9 +806,6 @@ export class CompletionService implements OnModuleInit {
             `Import[${history.sourceTitle}]: [${idx + 1}/${filesToImport.length}] "${filename}" → ${epNums ? `S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')}` : 'no episode parsed'}`,
           );
         }
-
-        let epTitle: string | undefined;
-        let airDate: string | undefined;
 
         if (epNums) {
           const season = await this.seasonRepo.findOne({
@@ -872,8 +820,6 @@ export class CompletionService implements OnModuleInit {
               },
             });
             if (episode) {
-              epTitle = episode.title ?? undefined;
-              airDate = episode.airDate ?? undefined;
               episodeId = episode.id;
               if (
                 epNums.episodeEnd != null &&
@@ -885,93 +831,41 @@ export class CompletionService implements OnModuleInit {
             }
           }
         }
-
-        newFilename = this.naming.applySeriesFormat(seriesFormat, {
-          seriesTitle: media.title,
-          season: epNums?.season ?? 1,
-          episode: epNums?.episode ?? 1,
-          episodeTitle: epTitle,
-          quality: fileQuality,
-          releaseGroup,
-          airDate,
-        });
-
-        const seasonFolder = this.naming.applySeasonFolderFormat(
-          seasonFolderFormat,
-          { season: epNums?.season ?? 1 },
-        );
-        destDir = path.join(rootPath, folderName, seasonFolder);
       }
 
-      const destPath = path.join(destDir, newFilename + ext);
-
-      this.log.log(
-        `Import[${history.sourceTitle}]: copying "${path.basename(videoFile.filePath)}" → "${destPath}"`,
-      );
-      await this.fileTransfer.transferFile(
-        videoFile.filePath,
-        destPath,
-        'copy',
-      );
-
-      // Copy companion files for this video — torrent client keeps seeding
-      // from the source, so we never move.
-      const sourceBaseName = path.basename(
-        videoFile.filePath,
-        path.extname(videoFile.filePath),
-      );
-      await this.fileTransfer.transferCompanions({
-        srcDir: path.dirname(videoFile.filePath),
-        destDir,
-        sourceBaseName,
-        newBaseName: newFilename,
-        method: 'copy',
-        allowedExts: companionExts,
-        logTag: `Import[${history.sourceTitle}]`,
+      resolved.push({
+        path: videoFile.filePath,
+        episodeId,
+        size: videoFile.size,
+        seasonId,
       });
-
-      const relativePath = relativePathUnderMediaRoot(
-        path.resolve(libraryRoot),
-        path.resolve(destPath),
-      );
-      if (!relativePath) {
-        this.log.error(
-          `Import[${history.sourceTitle}]: dest outside library root — resolvedRoot=${path.resolve(libraryRoot)} resolvedDest=${path.resolve(destPath)} libraryRoot=${libraryRoot} dest=${destPath}`,
-        );
-        continue;
-      }
-      // Avoid duplicate: update existing record if same path already tracked
-      const existingFile = await this.mediaFileRepo.findOne({
-        where: { media: { id: media.id }, relativePath },
-      });
-      const savedFile = existingFile
-        ? await this.mediaFileRepo.save(
-            Object.assign(existingFile, {
-              episode:
-                episodeId != null ? ({ id: episodeId } as Episode) : null,
-              size: videoFile.size,
-              quality: fileQuality,
-              streamInfo,
-            }),
-          )
-        : await this.mediaFileRepo.save(
-            this.mediaFileRepo.create({
-              media,
-              episode:
-                episodeId != null ? ({ id: episodeId } as Episode) : null,
-              relativePath,
-              size: videoFile.size,
-              quality: fileQuality,
-              streamInfo,
-            }),
-          );
-
-      if (episodeId != null) {
-        await this.episodeRepo.update(episodeId, { hasFile: true });
-      }
-
-      importedFiles.push({ savedFile, episodeId, seasonId, destPath });
     }
+
+    // Keyed by source path, not by episode: a season pack whose season row
+    // exists but whose episode row doesn't still pins the season on the
+    // history row below.
+    const seasonByPath = new Map(resolved.map((r) => [r.path, r.seasonId]));
+
+    const result = await this.libraryIngest.ingest({
+      mediaId: media.id,
+      files: resolved.map((r) => ({
+        path: r.path,
+        episodeId: r.episodeId,
+        size: r.size,
+      })),
+      transfer: 'copy',
+      fallbackQuality: history.quality,
+      releaseName: history.sourceTitle,
+      sourceLabel: history.sourceTitle,
+      force: true,
+    });
+    const importedFiles = result.imported.map(
+      ({ file, episodeId, sourcePath }) => ({
+        savedFile: file,
+        episodeId,
+        seasonId: seasonByPath.get(sourcePath),
+      }),
+    );
 
     if (!importedFiles.length) {
       const statusMessage = `Import failed: no file could be placed under the library root for "${torrent.name}"`;
@@ -1068,33 +962,6 @@ export class CompletionService implements OnModuleInit {
       title: media.title,
       path: media.path,
     });
-
-    // Per-file post-import work: cropdetect + embedded-subtitle cache warmup
-    // via finalizeImportedFile (shared with disk import / rescan), then the
-    // external-subtitle search. Sequential to avoid hammering ffmpeg and the
-    // subtitle provider rate limits.
-    void (async () => {
-      for (const { savedFile, episodeId: epId, destPath } of importedFiles) {
-        try {
-          await this.mediaService.finalizeImportedFile(
-            savedFile,
-            destPath,
-            media,
-          );
-        } catch (e) {
-          this.log.warn(`Post-import enrichment failed: ${e}`);
-        }
-        try {
-          await this.subtitleScheduler.onMediaFileImported(
-            media.id,
-            savedFile.id,
-            epId,
-          );
-        } catch (e) {
-          this.log.warn(`Post-import subtitle search failed: ${e}`);
-        }
-      }
-    })();
 
     // Series only: kick off intro / outro marker detection for every
     // season whose episodes just landed. Detection runs at season

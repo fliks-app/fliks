@@ -23,6 +23,7 @@ import { LibrariesModule } from '../libraries/libraries.module';
 import { MediaModule } from '../media/media.module';
 import { FliksSchedulerModule } from '../scheduler/scheduler.module';
 import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.module';
+import { MediaServersModule } from '../media-servers/media-servers.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.
     forwardRef(() => MediaModule),
     forwardRef(() => FliksSchedulerModule),
     LibraryIngestModule,
+    MediaServersModule,
   ],
   controllers: [ImportsController],
   providers: [

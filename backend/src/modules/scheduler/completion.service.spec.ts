@@ -10,6 +10,7 @@ import { Library } from '../libraries/entities/library.entity';
 import { QbittorrentTorrent } from '../download-clients/qbittorrent.service';
 import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
 import { FileTransferService } from '../../common/services/file-transfer.service';
+import { LibraryIngestService } from '../../common/library-ingest/library-ingest.service';
 import { MediaType } from '../../common/enums';
 
 /** The exact stamp the orphan sweep writes — pinned here so the test guards
@@ -358,7 +359,9 @@ describe('CompletionService.processOne', () => {
   }
 
   function buildMedia(over: Record<string, unknown>): Media {
-    return {
+    // A real instance (not a cast object literal) so `media.path` — the
+    // getter LibraryIngestService reads to derive the destination — works.
+    return Object.assign(new Media(), {
       id: 1,
       title: 'placeholder title',
       originalTitle: undefined,
@@ -369,7 +372,7 @@ describe('CompletionService.processOne', () => {
       library: null,
       libraryId: null,
       ...over,
-    } as unknown as Media;
+    });
   }
 
   /**
@@ -378,9 +381,18 @@ describe('CompletionService.processOne', () => {
    * same approach as the other describe blocks in this file. `naming` is the
    * real service (pure/sync for the methods used here) so destination
    * strings are pinned against real formatting logic, not a stand-in.
+   *
+   * The destination-path/write/persistence work now lives in
+   * `LibraryIngestService` (also a bare prototype instance here), so most
+   * collaborators below are wired onto IT rather than onto `service`
+   * directly — `processOne` only keeps the media/history/episode
+   * bookkeeping around the single `libraryIngest.ingest()` call.
    */
   function buildProcessOneHarness() {
     const service = Object.create(CompletionService.prototype) as CompletionService;
+    const libraryIngest = Object.create(
+      LibraryIngestService.prototype,
+    ) as LibraryIngestService;
 
     const mediaRepo = {
       findOne: jest.fn(),
@@ -437,11 +449,15 @@ describe('CompletionService.processOne', () => {
       error: jest.fn(),
       debug: jest.fn(),
     };
-    const naming = new NamingService({} as unknown as DataSource);
+    // Stubbed `query` (unlike the other describe blocks' bare `{}`): ingest
+    // now calls `naming.getFormats()` itself, which round-trips through
+    // `dataSource.query` before falling back to the same defaults as FORMATS.
+    const naming = new NamingService({
+      query: jest.fn().mockResolvedValue([]),
+    } as unknown as DataSource);
 
     const wired = service as unknown as Record<string, unknown>;
     wired.mediaRepo = mediaRepo;
-    wired.mediaFileRepo = mediaFileRepo;
     wired.historyRepo = historyRepo;
     wired.seasonRepo = seasonRepo;
     wired.episodeRepo = episodeRepo;
@@ -450,17 +466,25 @@ describe('CompletionService.processOne', () => {
     wired.settings = settings;
     wired.sseAudience = sseAudience;
     wired.events = events;
-    wired.ffprobe = ffprobe;
-    wired.fileTransfer = fileTransfer;
     wired.notifications = notifications;
     wired.mediaServers = mediaServers;
-    wired.mediaService = mediaService;
-    wired.subtitleScheduler = subtitleScheduler;
     wired.markers = markers;
     wired.thumbnailService = thumbnailService;
     wired.dataSource = dataSource;
     wired.log = log;
     wired.naming = naming;
+    wired.libraryIngest = libraryIngest;
+
+    const ingestWired = libraryIngest as unknown as Record<string, unknown>;
+    ingestWired.mediaRepo = mediaRepo;
+    ingestWired.fileRepo = mediaFileRepo;
+    ingestWired.episodeRepo = episodeRepo;
+    ingestWired.naming = naming;
+    ingestWired.fileTransfer = fileTransfer;
+    ingestWired.mediaService = mediaService;
+    ingestWired.subtitleScheduler = subtitleScheduler;
+    ingestWired.ffprobe = ffprobe;
+    ingestWired.logger = log;
 
     const run = (
       historyRow: DownloadHistory,
@@ -476,17 +500,15 @@ describe('CompletionService.processOne', () => {
       ).processOne(
         historyRow,
         torrentRow,
-        FORMATS.movie,
         FORMATS.movieFolder,
-        FORMATS.series,
         FORMATS.seriesFolder,
-        FORMATS.seasonFolder,
         libraries,
       );
     };
 
     return {
       service,
+      libraryIngest,
       run,
       mediaRepo,
       mediaFileRepo,
@@ -511,27 +533,37 @@ describe('CompletionService.processOne', () => {
   }
 
   /** Wires the two-episode season-pack fixture shared by the "own episode per
-   *  file" and "history reconciliation" tests below. */
+   *  file" and "history reconciliation" tests below. `episodeRepo.findOne` is
+   *  hit with two different query shapes now: `processOne`'s own pre-pass
+   *  looks up `{ season, episodeNumber }`, while `LibraryIngestService`
+   *  (sharing the same mock) re-fetches by `{ id }` for naming. Both must
+   *  resolve to the same two episodes. */
   function wireSeasonPack(h: ReturnType<typeof buildProcessOneHarness>) {
+    const episodesById: Record<number, Record<string, unknown>> = {
+      601: {
+        id: 601,
+        episodeNumber: 1,
+        title: 'Wake',
+        airDate: '2019-01-01',
+        endEpisodeNumber: null,
+        season: { seasonNumber: 1 },
+      },
+      602: {
+        id: 602,
+        episodeNumber: 2,
+        title: 'Drift',
+        airDate: '2019-01-08',
+        endEpisodeNumber: null,
+        season: { seasonNumber: 1 },
+      },
+    };
+    const idByEpisodeNumber: Record<number, number> = { 1: 601, 2: 602 };
     h.episodeRepo.findOne.mockImplementation(
-      async (opts: { where?: { episodeNumber?: number } }) => {
-        if (opts.where?.episodeNumber === 1) {
-          return {
-            id: 601,
-            episodeNumber: 1,
-            title: 'Wake',
-            airDate: '2019-01-01',
-            endEpisodeNumber: null,
-          };
-        }
-        if (opts.where?.episodeNumber === 2) {
-          return {
-            id: 602,
-            episodeNumber: 2,
-            title: 'Drift',
-            airDate: '2019-01-08',
-            endEpisodeNumber: null,
-          };
+      async (opts: { where?: { id?: number; episodeNumber?: number } }) => {
+        if (opts.where?.id != null) return episodesById[opts.where.id] ?? null;
+        if (opts.where?.episodeNumber != null) {
+          const id = idByEpisodeNumber[opts.where.episodeNumber];
+          return id != null ? episodesById[id] : null;
         }
         return null;
       },
@@ -793,8 +825,9 @@ describe('CompletionService.processOne', () => {
 
       const h = buildProcessOneHarness();
       // Real FileTransferService for this one test — the allow-list filtering
-      // it does is exactly what's being pinned, a mock would hide it.
-      (h.service as unknown as { fileTransfer: unknown }).fileTransfer =
+      // it does is exactly what's being pinned, a mock would hide it. Lives
+      // on the ingest instance now: that's what actually calls it.
+      (h.libraryIngest as unknown as { fileTransfer: unknown }).fileTransfer =
         new FileTransferService(
           { query: jest.fn().mockResolvedValue([]) } as unknown as DataSource,
         );

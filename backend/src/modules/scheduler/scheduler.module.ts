@@ -40,6 +40,7 @@ import { LibrariesModule } from '../libraries/libraries.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { MarkersModule } from '../markers/markers.module';
 import { Library } from '../libraries/entities/library.entity';
+import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.module';
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { Library } from '../libraries/entities/library.entity';
     LibrariesModule,
     ProfilesModule,
     MarkersModule,
+    forwardRef(() => LibraryIngestModule),
   ],
   controllers: [CommandsController, SystemController, LivenessController],
   providers: [

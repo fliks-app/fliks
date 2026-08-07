@@ -12,20 +12,23 @@ import { NamingService } from '../../modules/scheduler/naming.service';
 import { SubtitleSchedulerService } from '../../modules/scheduler/subtitle-scheduler.service';
 import { MediaService } from '../../modules/media/media.service';
 import { FileTransferService, TransferMethod } from '../services/file-transfer.service';
+import { FfprobeService } from '../../modules/subtitles/ffprobe.service';
+import { qualityFromResolution } from '../release-parsing';
 
 export interface IngestRequest {
   /** Media the file(s) belong to. Must already be anchored to a library
    *  (`library` + `folderName` persisted) — resolving/pinning that is the
    *  caller's job, since each caller picks its own library differently. */
   mediaId: number;
-  files: { path: string }[];
+  /** `episodeId`: pre-resolved by the caller. `size`: last-resort size when
+   *  the destination cannot be stat'ed. */
+  files: { path: string; episodeId?: number; size?: number }[];
   transfer: TransferMethod;
-  /** Quality used for naming and the initial `MediaFile.quality` column. */
+  /** Quality used when the probe yields no usable dimensions. */
   fallbackQuality?: string;
-  /** For logs / companion-transfer log tags. */
+  /** Release title — source tag of the derived quality and release group. */
+  releaseName?: string;
   sourceLabel: string;
-  /** Pre-resolved episode for a series file; the caller already matched it. */
-  episodeId?: number;
   /** Bypass collision detection and overwrite in place. */
   force?: boolean;
   /** Append " (n)" instead of silently skipping when the computed name collides. */
@@ -33,9 +36,9 @@ export interface IngestRequest {
 }
 
 export interface IngestResult {
-  imported: MediaFile[];
-  seasonNumber?: number;
-  episodeNumber?: number;
+  /** `sourcePath` echoes the request entry, so a caller can map a landed file
+   *  back to what it knows about it — a skipped file leaves no entry. */
+  imported: { file: MediaFile; episodeId?: number; sourcePath: string }[];
 }
 
 /**
@@ -60,6 +63,7 @@ export class LibraryIngestService {
     private readonly mediaService: MediaService,
     @Inject(forwardRef(() => SubtitleSchedulerService))
     private readonly subtitleScheduler: SubtitleSchedulerService,
+    private readonly ffprobe: FfprobeService,
   ) {}
 
   async ingest(req: IngestRequest): Promise<IngestResult> {
@@ -70,30 +74,57 @@ export class LibraryIngestService {
     if (!media) {
       throw new Error(`Media #${req.mediaId} not found`);
     }
+    // `media.path` is a getter over library.path + folderName; both are the
+    // caller's to set, and a null here would surface as a path.join TypeError.
+    if (!media.path) {
+      throw new Error(
+        `Media #${req.mediaId} is not anchored to a library folder`,
+      );
+    }
 
     const formats = await this.naming.getFormats();
     const companionExts = await this.fileTransfer.getCompanionExts();
+    const releaseGroup = req.releaseName
+      ? this.naming.extractReleaseGroup(req.releaseName)
+      : undefined;
 
-    let seasonNumber: number | undefined;
-    let episodeNumber: number | undefined;
-    let episodeTitle: string | undefined;
-    let airDate: string | undefined;
-    if (req.episodeId) {
-      const ep = await this.episodeRepo.findOne({
-        where: { id: req.episodeId },
-        relations: ['season'],
-      });
-      if (ep) {
-        episodeNumber = ep.episodeNumber;
-        seasonNumber = ep.season?.seasonNumber ?? 1;
-        episodeTitle = ep.title ?? undefined;
-        airDate = ep.airDate ?? undefined;
-      }
-    }
-
-    const imported: MediaFile[] = [];
+    const imported: (IngestResult['imported'][number] & { destPath: string })[] =
+      [];
 
     for (const file of req.files) {
+      let seasonNumber: number | undefined;
+      let episodeNumber: number | undefined;
+      let episodeTitle: string | undefined;
+      let airDate: string | undefined;
+      if (file.episodeId) {
+        const ep = await this.episodeRepo.findOne({
+          where: { id: file.episodeId },
+          relations: ['season'],
+        });
+        if (ep) {
+          episodeNumber = ep.episodeNumber;
+          seasonNumber = ep.season?.seasonNumber ?? 1;
+          episodeTitle = ep.title ?? undefined;
+          airDate = ep.airDate ?? undefined;
+        }
+      }
+
+      // Derive quality from the real pixels, not the (sometimes mislabeled)
+      // release name: a torrent tagged "2160p" that is actually 1920×804 must
+      // be named + tracked as 1080p. The source tag still comes from the
+      // release name. Falls back to the caller's quality when probing yields
+      // no dimensions.
+      const streamInfo = await this.ffprobe.detectMediaFileInfo(file.path);
+      const srcVideo = streamInfo?.video?.[0];
+      const quality =
+        srcVideo?.width && srcVideo?.height
+          ? qualityFromResolution(
+              req.releaseName ?? path.basename(file.path),
+              srcVideo.width,
+              srcVideo.height,
+            )
+          : (req.fallbackQuality ?? '');
+
       const ext = path.extname(file.path);
       const sourceBase = path.basename(file.path, ext);
       let newBaseName: string;
@@ -104,7 +135,8 @@ export class LibraryIngestService {
           title: media.title,
           originalTitle: media.originalTitle,
           year: media.year,
-          quality: req.fallbackQuality ?? '',
+          quality,
+          releaseGroup,
           tmdbId: media.tmdbId,
         });
         destDir = media.path!;
@@ -114,7 +146,8 @@ export class LibraryIngestService {
           season: seasonNumber ?? 1,
           episode: episodeNumber ?? 1,
           episodeTitle,
-          quality: req.fallbackQuality ?? '',
+          quality,
+          releaseGroup,
           airDate,
         });
         const seasonFolder = this.naming.applySeasonFolderFormat(
@@ -133,7 +166,7 @@ export class LibraryIngestService {
         this.logger.error(
           `Ingest[${req.sourceLabel}]: computed dest outside media folder — root=${media.path!} dest=${destPath}`,
         );
-        throw new Error('destination en dehors du dossier du média');
+        continue;
       }
 
       const collides = async (rel: string, abs: string) =>
@@ -171,6 +204,9 @@ export class LibraryIngestService {
         // Caller already verified the source exists; best-effort fallback only.
       }
 
+      this.logger.log(
+        `Ingest[${req.sourceLabel}]: ${req.transfer} "${path.basename(file.path)}" → "${destPath}"`,
+      );
       await this.fileTransfer.transferFile(file.path, destPath, req.transfer);
       await this.fileTransfer.transferCompanions({
         srcDir: path.dirname(file.path),
@@ -186,9 +222,16 @@ export class LibraryIngestService {
         try {
           return fs.statSync(destPath).size;
         } catch {
-          return sourceSize;
+          return file.size ?? sourceSize;
         }
       })();
+
+      const payload = {
+        episode: file.episodeId != null ? ({ id: file.episodeId } as Episode) : null,
+        size: finalSize,
+        quality,
+        ...(streamInfo ? { streamInfo } : {}),
+      };
 
       // `force` skips the collision check above, so a re-import over an
       // already-tracked path must update that row instead of inserting a dupe.
@@ -196,55 +239,55 @@ export class LibraryIngestService {
         where: { media: { id: media.id }, relativePath },
       });
       const saved = existingFile
-        ? await this.fileRepo.save(
-            Object.assign(existingFile, {
-              episode:
-                req.episodeId != null
-                  ? ({ id: req.episodeId } as Episode)
-                  : null,
-              size: finalSize,
-              quality: req.fallbackQuality ?? '',
-            }),
-          )
+        ? await this.fileRepo.save(Object.assign(existingFile, payload))
         : await this.fileRepo.save(
-            this.fileRepo.create({
-              media,
-              episode:
-                req.episodeId != null
-                  ? ({ id: req.episodeId } as Episode)
-                  : null,
-              relativePath,
-              size: finalSize,
-              quality: req.fallbackQuality ?? '',
-            }),
+            this.fileRepo.create({ media, relativePath, ...payload }),
           );
 
-      try {
-        await this.mediaService.enrichMediaFileFromDisk(saved.id);
-      } catch (e) {
-        this.logger.warn(
-          `Ingest[${req.sourceLabel}]: post-import enrichment failed — ${(e as Error).message}`,
-        );
-      }
-      try {
-        await this.subtitleScheduler.onMediaFileImported(
-          media.id,
-          saved.id,
-          req.episodeId ?? undefined,
-        );
-      } catch (e) {
-        this.logger.warn(
-          `Ingest[${req.sourceLabel}]: post-import subtitle pipeline failed — ${(e as Error).message}`,
-        );
+      if (file.episodeId != null) {
+        await this.episodeRepo.update(file.episodeId, { hasFile: true });
       }
 
-      if (req.episodeId) {
-        await this.episodeRepo.update(req.episodeId, { hasFile: true });
-      }
-
-      imported.push(saved);
+      imported.push({
+        file: saved,
+        episodeId: file.episodeId,
+        sourcePath: file.path,
+        destPath,
+      });
     }
 
-    return { imported, seasonNumber, episodeNumber };
+    // Per-file post-import work: cropdetect + embedded-subtitle cache warmup
+    // via finalizeImportedFile, then the external-subtitle search. Sequential
+    // to avoid hammering ffmpeg and the subtitle provider rate limits.
+    void (async () => {
+      for (const { file, episodeId, destPath } of imported) {
+        try {
+          await this.mediaService.finalizeImportedFile(file, destPath, media);
+        } catch (e) {
+          this.logger.warn(
+            `Ingest[${req.sourceLabel}]: post-import enrichment failed — ${(e as Error).message}`,
+          );
+        }
+        try {
+          await this.subtitleScheduler.onMediaFileImported(
+            media.id,
+            file.id,
+            episodeId,
+          );
+        } catch (e) {
+          this.logger.warn(
+            `Ingest[${req.sourceLabel}]: post-import subtitle pipeline failed — ${(e as Error).message}`,
+          );
+        }
+      }
+    })();
+
+    return {
+      imported: imported.map(({ file, episodeId, sourcePath }) => ({
+        file,
+        episodeId,
+        sourcePath,
+      })),
+    };
   }
 }
