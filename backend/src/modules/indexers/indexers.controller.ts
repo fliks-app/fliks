@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { IndexersService } from './indexers.service';
+import { IndexersService, redactApiKey } from './indexers.service';
 import { CreateIndexerDto } from './dto/create-indexer.dto';
 import { UpdateIndexerDto } from './dto/update-indexer.dto';
 import { TestIndexerConnectionDto } from './dto/test-indexer-connection.dto';
@@ -64,8 +64,8 @@ export class IndexersController {
 
   @Get(':id')
   @CheckPolicies((ability) => ability.can(Action.Read, Indexer))
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.indexersService.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    return redactApiKey(await this.indexersService.findOne(id));
   }
 
   @Put(':id')

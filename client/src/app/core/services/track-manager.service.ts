@@ -149,7 +149,6 @@ export class TrackManagerService {
     if (!mediaId) return [];
 
     try {
-      await this.appSettings.ensureLoaded();
       const hideBurnIn = this.appSettings.hideBurnInSubtitles();
       // Devices whose player renders bitmap subs itself (ExoPlayer, mpv) show
       // them natively; others burn them into the video server-side.

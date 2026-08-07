@@ -199,7 +199,7 @@ export class IndexersSettingsComponent implements OnInit {
     this.formEnableSearch.set(ix.enableSearch);
     const s = ix.settings ?? {};
     this.formTorznabBase.set(String(s['baseUrl'] ?? ''));
-    this.formTorznabKey.set(String(s['apiKey'] ?? ''));
+    this.formTorznabKey.set('');
     this.formMinSeeders.set(Number(s['minSeeders'] ?? 0));
     this.formSeedRatio.set(Number(s['seedRatio'] ?? 1));
     this.formMaxRetentionDays.set(s['maxRetentionDays'] != null ? Number(s['maxRetentionDays']) : null);
@@ -257,7 +257,7 @@ export class IndexersSettingsComponent implements OnInit {
       enableSearch: this.formEnableSearch(),
       settings: {
         baseUrl: base.replace(/\/$/, ''),
-        apiKey: this.formTorznabKey().trim(),
+        apiKey: this.formTorznabKey().trim() || undefined,
         minSeeders: this.formMinSeeders(),
         seedRatio: this.formSeedRatio(),
         maxRetentionDays: this.formMaxRetentionDays() || undefined,

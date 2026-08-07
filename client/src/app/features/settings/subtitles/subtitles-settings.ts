@@ -8,7 +8,6 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
-import { AppSettingsService } from '../../../core/services/app-settings.service';
 import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
@@ -19,7 +18,6 @@ import { ToastService } from '../../../core/services/toast.service';
 })
 export class SubtitlesSettingsComponent implements OnInit {
   private readonly api = inject(SettingsApiService);
-  private readonly appSettings = inject(AppSettingsService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
 
@@ -75,7 +73,6 @@ export class SubtitlesSettingsComponent implements OnInit {
         subtitle_ocr_delete_source: this.deleteBurnInSource(),
         subtitle_custom_exclusions: this.customExclusions(),
       });
-      await this.appSettings.refresh();
       this.toast.success(this.translate.instant('settings.subtitles.saved'));
     } catch {
       // handled by global interceptor

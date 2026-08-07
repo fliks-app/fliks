@@ -8,6 +8,15 @@ import { TorznabService } from './torznab.service';
 import { IndexerThrottle } from './indexer-throttle.service';
 import { TestIndexerConnectionDto } from './dto/test-indexer-connection.dto';
 
+/** Strips the stored API key so it never reaches an HTTP response. */
+export function redactApiKey(ix: Indexer): Indexer {
+  const { apiKey: _apiKey, ...settings } = (ix.settings ?? {}) as Record<
+    string,
+    unknown
+  >;
+  return { ...ix, settings };
+}
+
 /** An indexer plus its live throttle state, as the settings page needs it. */
 export type IndexerWithCooldown = Indexer & {
   cooldown: {
@@ -63,7 +72,7 @@ export class IndexersService {
 
     const saved = await this.indexerRepo.save(row);
     void this.torznab.refreshCaps(saved);
-    return saved;
+    return redactApiKey(saved);
   }
 
   async findAll(): Promise<IndexerWithCooldown[]> {
@@ -72,7 +81,7 @@ export class IndexersService {
     });
     return rows.map((ix) => {
       const cd = this.throttle.getCooldown(ix.id);
-      return Object.assign(ix, {
+      return Object.assign(redactApiKey(ix), {
         cooldown: cd
           ? {
               reason: cd.reason,
@@ -114,12 +123,18 @@ export class IndexersService {
     if (dto.priority !== undefined) ix.priority = dto.priority;
     if (dto.requestDelay !== undefined) ix.requestDelay = dto.requestDelay;
     if (dto.enabled !== undefined) ix.enabled = dto.enabled;
-    if (dto.settings !== undefined)
-      ix.settings = this.sanitizeSettings(dto.settings);
+    if (dto.settings !== undefined) {
+      // Blank/absent apiKey keeps the stored one instead of wiping it —
+      // the client never sends the real value back on read.
+      const incoming = this.sanitizeSettings(dto.settings);
+      const existingApiKey = (ix.settings as Record<string, unknown>)
+        ?.apiKey;
+      ix.settings = { ...incoming, apiKey: incoming.apiKey || existingApiKey };
+    }
 
     const saved = await this.indexerRepo.save(ix);
     void this.torznab.refreshCaps(saved);
-    return saved;
+    return redactApiKey(saved);
   }
 
   async remove(id: number): Promise<void> {

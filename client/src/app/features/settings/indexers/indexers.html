@@ -153,6 +153,7 @@
             class="input input-bordered input-sm w-full"
             [ngModel]="formTorznabKey()"
             (ngModelChange)="formTorznabKey.set($event)"
+            [placeholder]="editingId() !== null ? '••••••••' : ''"
           />
         </label>
 
