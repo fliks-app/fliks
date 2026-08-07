@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DownloadClient } from './entities/download-client.entity';
 import { DownloadHistory } from '../media/entities/download-history.entity';
@@ -10,6 +10,7 @@ import { DownloadClientsController } from './download-clients.controller';
 import { AuthModule } from '../auth/auth.module';
 import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
 import { BlocklistModule } from '../blocklist/blocklist.module';
+import { FliksSchedulerModule } from '../scheduler/scheduler.module';
 
 @Module({
   imports: [
@@ -21,6 +22,9 @@ import { BlocklistModule } from '../blocklist/blocklist.module';
     ]),
     AuthModule,
     BlocklistModule,
+    // forwardRef: FliksSchedulerModule already imports this module for
+    // QbittorrentService/TorrentHistoryMatcher.
+    forwardRef(() => FliksSchedulerModule),
   ],
   controllers: [DownloadClientsController],
   providers: [

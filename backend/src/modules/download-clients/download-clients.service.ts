@@ -1,6 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  forwardRef,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { DownloadClient } from './entities/download-client.entity';
 import { DownloadHistory } from '../media/entities/download-history.entity';
 import { Media } from '../media/entities/media.entity';
@@ -17,7 +22,7 @@ import { UpdateDownloadClientDto } from './dto/update-download-client.dto';
 import { TestDownloadClientDto } from './dto/test-download-client.dto';
 import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
-import { enqueueCommand } from '../../common/utils/command-queue.util';
+import { SchedulerService } from '../scheduler/scheduler.service';
 
 export interface QueueEntry extends QbittorrentTorrent {
   clientId: number;
@@ -123,7 +128,8 @@ export class DownloadClientsService {
     private readonly qbittorrent: QbittorrentService,
     private readonly historyMatcher: TorrentHistoryMatcher,
     private readonly blocklist: BlocklistService,
-    private readonly dataSource: DataSource,
+    @Inject(forwardRef(() => SchedulerService))
+    private readonly scheduler: SchedulerService,
   ) {}
 
   async testConnection(
@@ -196,11 +202,11 @@ export class DownloadClientsService {
 
   /**
    * Blocklist a torrent's release so it can't be grabbed again, remove it
-   * (with its files) from the client, mark the history row failed, and queue
-   * a scoped SearchMissing for its media. The re-grab is best-effort and only
-   * acts when the configured rules allow it (media monitored, has a profile,
-   * still missing) — SearchMissing classifies and skips otherwise, and the
-   * blocklist row excludes the release we just removed.
+   * (with its files) from the client, mark the history row failed, and
+   * trigger a scoped SearchMissing for its media. The re-grab is best-effort
+   * and only acts when the configured rules allow it (media monitored, has a
+   * profile, still missing) — SearchMissing classifies and skips otherwise,
+   * and the blocklist row excludes the release we just removed.
    */
   async blockTorrent(clientId: number, hash: string): Promise<void> {
     const client = await this.findOne(clientId);
@@ -229,14 +235,10 @@ export class DownloadClientsService {
       });
     }
 
-    // Potentially re-grab a replacement per the configured rules: queue a
-    // scoped SearchMissing. The scheduler decides whether anything is grabbed
-    // (monitored + profiled + missing), and the blocklist row excludes the
-    // release we just removed.
+    // Fire-and-forget: the scheduler decides whether anything is grabbed
+    // (monitored + profiled + missing); the blocklist row excludes this release.
     if (entry?.mediaId) {
-      await enqueueCommand(this.dataSource, 'SearchMissing', {
-        mediaIds: [entry.mediaId],
-      });
+      void this.scheduler.searchMissingForMedia([entry.mediaId]);
     }
   }
 

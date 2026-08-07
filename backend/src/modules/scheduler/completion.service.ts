@@ -35,7 +35,6 @@ import {
 } from '../streaming/thumbnail.service';
 import { MediaType } from '../../common/enums';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
-import { enqueueCommand } from '../../common/utils/command-queue.util';
 import { StalledCheck } from './entities/stalled-check.entity';
 import {
   countStalledStrikes,
@@ -57,6 +56,7 @@ import {
 import { MarkersService } from '../markers/markers.service';
 import { FileTransferService } from '../../common/services/file-transfer.service';
 import { MediaService } from '../media/media.service';
+import { SchedulerService } from './scheduler.service';
 
 /**
  * How long a `grabbed` or `importing` history row may stay without a
@@ -126,6 +126,8 @@ export class CompletionService implements OnModuleInit {
     private readonly sseAudience: SseAudienceService,
     @Inject(forwardRef(() => MediaService))
     private readonly mediaService: MediaService,
+    @Inject(forwardRef(() => SchedulerService))
+    private readonly scheduler: SchedulerService,
   ) {}
 
   /**
@@ -1327,7 +1329,7 @@ export class CompletionService implements OnModuleInit {
         if (shouldRestart && history.mediaId) {
           mediaToResearch.add(history.mediaId);
           this.log.log(
-            `StalledCleanup: "${history.sourceTitle ?? t.name}" blocklisted — auto-restart queued for media #${history.mediaId}`,
+            `StalledCleanup: "${history.sourceTitle ?? t.name}" blocklisted — searching for a replacement for media #${history.mediaId}`,
           );
         } else if (!shouldRestart) {
           this.log.log(
@@ -1339,14 +1341,10 @@ export class CompletionService implements OnModuleInit {
 
     if (mediaToResearch.size > 0) {
       this.log.log(
-        `StalledCleanup: queueing SearchMissing for ${mediaToResearch.size} media(s)`,
+        `StalledCleanup: running SearchMissing for ${mediaToResearch.size} media(s)`,
       );
-      await enqueueCommand(
-        this.dataSource,
-        'SearchMissing',
-        { mediaIds: Array.from(mediaToResearch) },
-        'scheduled',
-      );
+      // Fire-and-forget: a slow indexer search shouldn't hold up this cron tick.
+      void this.scheduler.searchMissingForMedia(Array.from(mediaToResearch));
     }
   }
 
