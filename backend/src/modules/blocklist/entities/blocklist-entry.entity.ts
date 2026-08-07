@@ -1,10 +1,18 @@
-import { Entity, Column, ManyToOne, JoinColumn, RelationId } from 'typeorm';
+import {
+  Entity,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  RelationId,
+  Index,
+} from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Indexer } from '../../indexers/entities/indexer.entity';
 import { Media } from '../../media/entities/media.entity';
 import { User } from '../../users/entities/user.entity';
 
 @Entity('blocklist')
+@Index('UQ_blocklist_sourceTitle_lower', { synchronize: false })
 export class BlocklistEntry extends BaseEntity {
   @Column()
   sourceTitle: string;

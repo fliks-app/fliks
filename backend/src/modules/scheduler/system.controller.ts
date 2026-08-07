@@ -51,6 +51,8 @@ import { StreamLifetime } from '../streaming/lifetime-constants';
 import { PlaybackService } from '../streaming/playback.service';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
+import { FliksRequest } from '../requests/entities/request.entity';
+import { RequestStatus } from '../../common/enums';
 import { bucketResolutionLabel } from '../../common/utils/resolution.util';
 
 const APP_VERSION: string = (() => {
@@ -212,6 +214,8 @@ export class SystemController {
     private readonly mediaFileRepo: Repository<MediaFile>,
     @InjectRepository(Episode)
     private readonly episodeRepo: Repository<Episode>,
+    @InjectRepository(FliksRequest)
+    private readonly requestRepo: Repository<FliksRequest>,
     private readonly updateCheck: UpdateCheckService,
   ) {}
 
@@ -280,7 +284,7 @@ export class SystemController {
   @Get('stats')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   async stats(): Promise<StatsReport> {
-    const [[moviesRow], [seriesRow], [pendingRow], libraries] =
+    const [[moviesRow], [seriesRow], pendingRequests, libraries] =
       await Promise.all([
         this.dataSource.query(
           `SELECT COUNT(*)::int AS count FROM media WHERE type = 'movie'`,
@@ -288,9 +292,7 @@ export class SystemController {
         this.dataSource.query(
           `SELECT COUNT(*)::int AS count FROM media WHERE type = 'series'`,
         ),
-        this.dataSource.query(
-          `SELECT COUNT(*)::int AS count FROM requests WHERE status = 'pending'`,
-        ),
+        this.requestRepo.count({ where: { status: RequestStatus.PENDING } }),
         this.libraryRepo.find({ order: { name: 'ASC' } }),
       ]);
 
@@ -318,7 +320,7 @@ export class SystemController {
     return {
       movies: moviesRow.count,
       series: seriesRow.count,
-      pendingRequests: pendingRow.count,
+      pendingRequests,
       diskSpace,
     };
   }
