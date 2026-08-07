@@ -190,18 +190,42 @@ export class LibraryIngestService {
         }
       })();
 
-      const saved = await this.fileRepo.save(
-        this.fileRepo.create({
-          media,
-          episode:
-            req.episodeId != null ? ({ id: req.episodeId } as Episode) : null,
-          relativePath,
-          size: finalSize,
-          quality: req.fallbackQuality ?? '',
-        }),
-      );
+      // `force` skips the collision check above, so a re-import over an
+      // already-tracked path must update that row instead of inserting a dupe.
+      const existingFile = await this.fileRepo.findOne({
+        where: { media: { id: media.id }, relativePath },
+      });
+      const saved = existingFile
+        ? await this.fileRepo.save(
+            Object.assign(existingFile, {
+              episode:
+                req.episodeId != null
+                  ? ({ id: req.episodeId } as Episode)
+                  : null,
+              size: finalSize,
+              quality: req.fallbackQuality ?? '',
+            }),
+          )
+        : await this.fileRepo.save(
+            this.fileRepo.create({
+              media,
+              episode:
+                req.episodeId != null
+                  ? ({ id: req.episodeId } as Episode)
+                  : null,
+              relativePath,
+              size: finalSize,
+              quality: req.fallbackQuality ?? '',
+            }),
+          );
 
-      await this.mediaService.enrichMediaFileFromDisk(saved.id);
+      try {
+        await this.mediaService.enrichMediaFileFromDisk(saved.id);
+      } catch (e) {
+        this.logger.warn(
+          `Ingest[${req.sourceLabel}]: post-import enrichment failed — ${(e as Error).message}`,
+        );
+      }
       try {
         await this.subtitleScheduler.onMediaFileImported(
           media.id,
