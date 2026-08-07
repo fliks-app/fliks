@@ -22,15 +22,15 @@ class SetBulkDto {
 export class SettingsController {
   constructor(private readonly service: SettingsService) {}
 
-  /** Get all settings (admin reads; values may contain API keys — admin only) */
+  /** Get all settings (values may contain API keys — admin only) */
   @Get()
-  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   getAll() {
     return this.service.getAll();
   }
 
   @Get(':key')
-  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   getOne(@Param('key') key: string) {
     return this.service.get(key).then((value) => ({ key, value }));
   }

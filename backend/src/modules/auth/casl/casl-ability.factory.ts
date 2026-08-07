@@ -78,9 +78,8 @@ export class CaslAbilityFactory {
     if (perms.has('media.delete')) can(Action.Delete, Media);
     if (perms.has('media.grab')) can(Action.Grab, Media);
 
-    // --- read-only access to root folders & queue for users who can add/request media ---
+    // --- read-only queue access for users who can add/request media ---
     if (perms.has('media.create') || perms.has('requests.create')) {
-      can(Action.Read, 'Settings');
       can(Action.Read, DownloadClient);
     }
 

@@ -747,7 +747,6 @@ export class CastPlayerService {
     );
 
     // Build subtitle list from the parallel fetch (shared with the player).
-    await this.appSettings.ensureLoaded();
     const subtitleInfos: SubtitleInfo[] = buildSubtitleTracks(
       subsResult,
       opts.mediaFileId,

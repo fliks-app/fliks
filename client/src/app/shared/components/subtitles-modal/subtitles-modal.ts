@@ -137,11 +137,6 @@ export class SubtitlesModalComponent {
   private readonly streamingApi = inject(StreamingApiService);
   private readonly device = inject(DeviceService);
 
-  constructor() {
-    // Header subtitle chips honour the hide-burn-in app setting; load it once.
-    void this.appSettings.ensureLoaded();
-  }
-
   // ── Inputs ──
   readonly mediaId = input.required<number>();
   readonly episodeId = input<number | undefined>(undefined);

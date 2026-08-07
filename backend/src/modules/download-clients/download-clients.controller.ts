@@ -10,7 +10,7 @@ import {
   UseGuards,
   ParseIntPipe,
 } from '@nestjs/common';
-import { DownloadClientsService } from './download-clients.service';
+import { DownloadClientsService, redactPassword } from './download-clients.service';
 import { CreateDownloadClientDto } from './dto/create-download-client.dto';
 import { UpdateDownloadClientDto } from './dto/update-download-client.dto';
 import { TestDownloadClientDto } from './dto/test-download-client.dto';
@@ -96,8 +96,8 @@ export class DownloadClientsController {
 
   @Get(':id')
   @CheckPolicies((ability) => ability.can(Action.Read, DownloadClient))
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    return redactPassword(await this.service.findOne(id));
   }
 
   @Put(':id')

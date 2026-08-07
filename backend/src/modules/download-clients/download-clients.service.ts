@@ -75,6 +75,15 @@ export interface QueueQuery {
 const QUEUE_PAGE_SIZE_DEFAULT = 20;
 const QUEUE_PAGE_SIZE_MAX = 100;
 
+/** Strips the stored credential so it never reaches an HTTP response. */
+export function redactPassword(dc: DownloadClient): DownloadClient {
+  const { password: _password, ...settings } = (dc.settings ?? {}) as Record<
+    string,
+    unknown
+  >;
+  return { ...dc, settings };
+}
+
 const QB_STATE_MAP: Record<string, string> = {
   error: 'Error',
   missingFiles: 'Missing files',
@@ -131,11 +140,13 @@ export class DownloadClientsService {
       enabled: dto.enabled ?? true,
       priority: dto.priority ?? 1,
     });
-    return this.repo.save(row);
+    const saved = await this.repo.save(row);
+    return redactPassword(saved);
   }
 
-  findAll(): Promise<DownloadClient[]> {
-    return this.repo.find({ order: { priority: 'ASC', id: 'ASC' } });
+  async findAll(): Promise<DownloadClient[]> {
+    const rows = await this.repo.find({ order: { priority: 'ASC', id: 'ASC' } });
+    return rows.map(redactPassword);
   }
 
   async findOne(id: number): Promise<DownloadClient> {
@@ -152,10 +163,18 @@ export class DownloadClientsService {
     if (dto.name !== undefined) dc.name = dto.name;
     if (dto.implementation !== undefined)
       dc.implementation = dto.implementation;
-    if (dto.settings !== undefined) dc.settings = dto.settings;
+    if (dto.settings !== undefined) {
+      // Blank/absent password keeps the stored one instead of wiping it —
+      // the client never sends the real value back on read.
+      const incoming = dto.settings as Record<string, unknown>;
+      const existingPassword = (dc.settings as Record<string, unknown>)
+        ?.password;
+      dc.settings = { ...incoming, password: incoming.password || existingPassword };
+    }
     if (dto.enabled !== undefined) dc.enabled = dto.enabled;
     if (dto.priority !== undefined) dc.priority = dto.priority;
-    return this.repo.save(dc);
+    const saved = await this.repo.save(dc);
+    return redactPassword(saved);
   }
 
   async remove(id: number): Promise<void> {
