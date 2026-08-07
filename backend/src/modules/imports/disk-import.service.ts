@@ -33,10 +33,8 @@ import { MediaMetadataService } from '../media/media-service/media-metadata.serv
 import { NamingService } from '../scheduler/naming.service';
 import { SubtitleSchedulerService } from '../scheduler/subtitle-scheduler.service';
 import { LibrariesService } from '../libraries/libraries.service';
-import {
-  FileTransferService,
-  TransferMethod,
-} from '../../common/services/file-transfer.service';
+import { TransferMethod } from '../../common/services/file-transfer.service';
+import { LibraryIngestService } from '../../common/library-ingest/library-ingest.service';
 
 const VIDEO_EXTS = new Set([
   '.mkv',
@@ -85,10 +83,10 @@ export class DiskImportService {
     private readonly subtitleScheduler: SubtitleSchedulerService,
     private readonly naming: NamingService,
     private readonly libraries: LibrariesService,
-    private readonly fileTransfer: FileTransferService,
     @Inject(forwardRef(() => MediaMetadataService))
     private readonly metadata: MediaMetadataService,
     private readonly nfo: NfoMetadataService,
+    private readonly libraryIngest: LibraryIngestService,
   ) {}
 
   /**
@@ -454,7 +452,6 @@ export class DiskImportService {
     const errors: string[] = [];
 
     const formats = await this.naming.getFormats();
-    const companionExts = await this.fileTransfer.getCompanionExts();
 
     for (const entry of imports) {
       try {
@@ -468,9 +465,8 @@ export class DiskImportService {
         }
 
         // Verify the source still exists before we touch the DB.
-        let sourceStat: fs.Stats;
         try {
-          sourceStat = fs.statSync(entry.filePath);
+          fs.statSync(entry.filePath);
         } catch {
           errors.push(
             `${path.basename(entry.filePath)}: fichier source introuvable`,
@@ -518,151 +514,19 @@ export class DiskImportService {
           media.folderName = folderName;
         }
 
-        // Build destination filename + folder via the naming service.
-        const ext = path.extname(entry.filePath);
-        const sourceBase = path.basename(entry.filePath, ext);
-        let newBaseName: string;
-        let destDir: string;
-
-        if (media.type === MediaType.MOVIE) {
-          newBaseName = this.naming.applyMovieFormat(formats.movie, {
-            title: media.title,
-            originalTitle: media.originalTitle,
-            year: media.year,
-            quality: entry.quality,
-            tmdbId: media.tmdbId,
-          });
-          destDir = media.path!;
-        } else {
-          // Series: pull season + episode metadata from the matched Episode
-          // (the scan phase already created/linked it) so renaming stays
-          // consistent with the DB rather than re-parsing the filename.
-          let seasonNumber = 1;
-          let episodeNumber = 1;
-          let episodeTitle: string | undefined;
-          let airDate: string | undefined;
-          if (entry.episodeId) {
-            const ep = await this.episodeRepo.findOne({
-              where: { id: entry.episodeId },
-              relations: ['season'],
-            });
-            if (ep) {
-              episodeNumber = ep.episodeNumber;
-              seasonNumber = ep.season?.seasonNumber ?? 1;
-              episodeTitle = ep.title ?? undefined;
-              airDate = ep.airDate ?? undefined;
-            }
-          }
-          newBaseName = this.naming.applySeriesFormat(formats.series, {
-            seriesTitle: media.title,
-            season: seasonNumber,
-            episode: episodeNumber,
-            episodeTitle,
-            quality: entry.quality,
-            airDate,
-          });
-          const seasonFolder = this.naming.applySeasonFolderFormat(
-            formats.seasonFolder,
-            { season: seasonNumber },
-          );
-          destDir = path.join(media.path!, seasonFolder);
-        }
-
-        let destPath = path.join(destDir, newBaseName + ext);
-
-        // `relativePath` is stored relative to the MEDIA root (library.path +
-        // folderName), matching how the grab/rescan paths store it and how
-        // `enrichMediaFileFromDisk` resolves it. Computing it against the
-        // library root instead double-counts the media folder and leaves the
-        // file unresolvable on disk.
-        let relativePath = relativePathUnderMediaRoot(media.path!, destPath);
-        if (!relativePath) {
-          this.logger.error(
-            `Disk import: computed dest outside media folder — root=${media.path!} dest=${destPath}`,
-          );
-          errors.push(
-            `${path.basename(entry.filePath)}: destination en dehors du dossier du média`,
-          );
-          continue;
-        }
-        const collides = async (rel: string, abs: string) =>
-          fs.existsSync(abs) ||
-          !!(await this.fileRepo.findOne({
-            where: { media: { id: media.id }, relativePath: rel },
-          }));
-        if ((await collides(relativePath, destPath)) && !entry.force) {
-          if (!opts.uniquifyOnCollision) {
-            // Re-running the same import is a safe no-op.
-            continue;
-          }
-          // A different orphan file maps to a name already taken by this media
-          // (e.g. a second copy of the same quality). Append " (n)" so it is
-          // linked as an additional file instead of being silently skipped.
-          let n = 2;
-          let base: string;
-          let rel: string | null;
-          do {
-            base = `${newBaseName} (${n})`;
-            destPath = path.join(destDir, base + ext);
-            rel = relativePathUnderMediaRoot(media.path!, destPath);
-            n++;
-          } while (rel && (await collides(rel, destPath)) && n < 100);
-          if (!rel) continue;
-          newBaseName = base;
-          relativePath = rel;
-        }
-
-        // Filesystem write. mkdir + copy/move handled by FileTransferService.
-        await this.fileTransfer.transferFile(entry.filePath, destPath, method);
-        await this.fileTransfer.transferCompanions({
-          srcDir: path.dirname(entry.filePath),
-          destDir,
-          sourceBaseName: sourceBase,
-          newBaseName,
-          method,
-          allowedExts: companionExts,
-          logTag: `disk-import:${media.title}`,
+        // Destination path, filesystem write, MediaFile row and post-import
+        // enrichment all live in the shared ingest service.
+        const result = await this.libraryIngest.ingest({
+          mediaId: media.id,
+          files: [{ path: entry.filePath }],
+          transfer: method,
+          fallbackQuality: entry.quality,
+          sourceLabel: media.title,
+          episodeId: entry.episodeId,
+          force: entry.force,
+          uniquifyOnCollision: opts.uniquifyOnCollision,
         });
-
-        const finalSize = (() => {
-          try {
-            return fs.statSync(destPath).size;
-          } catch {
-            return sourceStat.size;
-          }
-        })();
-
-        const saved = await this.fileRepo.save(
-          this.fileRepo.create({
-            media,
-            episode:
-              entry.episodeId != null
-                ? ({ id: entry.episodeId } as Episode)
-                : null,
-            relativePath,
-            size: finalSize,
-            quality: entry.quality,
-          }),
-        );
-
-        await this.mediaService.enrichMediaFileFromDisk(saved.id);
-        try {
-          await this.subtitleScheduler.onMediaFileImported(
-            media.id,
-            saved.id,
-            entry.episodeId ?? undefined,
-          );
-        } catch (e) {
-          this.logger.warn(
-            `Disk import: post-import subtitle pipeline failed — ${(e as Error).message}`,
-          );
-        }
-
-        if (entry.episodeId) {
-          await this.episodeRepo.update(entry.episodeId, { hasFile: true });
-        }
-
-        imported++;
+        imported += result.imported.length;
       } catch (e) {
         errors.push(
           `${path.basename(entry.filePath)}: ${(e as Error).message}`,

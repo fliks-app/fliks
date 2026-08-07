@@ -22,6 +22,7 @@ import { SettingsModule } from '../settings/settings.module';
 import { LibrariesModule } from '../libraries/libraries.module';
 import { MediaModule } from '../media/media.module';
 import { FliksSchedulerModule } from '../scheduler/scheduler.module';
+import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { FliksSchedulerModule } from '../scheduler/scheduler.module';
     LibrariesModule,
     forwardRef(() => MediaModule),
     forwardRef(() => FliksSchedulerModule),
+    LibraryIngestModule,
   ],
   controllers: [ImportsController],
   providers: [
