@@ -154,6 +154,13 @@ export class SchedulerService implements OnModuleInit {
         `Marked ${stale.affected} stale command(s) as failed on startup`,
       );
     }
+
+    // Single subscriber for every acquisition-side trigger — see the five
+    // `media.acquisition.requested` emitters across media/download-clients/requests.
+    this.eventsService.onDomain((event) => {
+      if (event.type !== 'media.acquisition.requested') return;
+      void this.searchMissingForMedia(event.mediaIds);
+    });
   }
 
   // ---------------------------------------------------------------------------

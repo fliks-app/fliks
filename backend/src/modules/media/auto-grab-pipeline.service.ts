@@ -1,8 +1,8 @@
-import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media } from './entities/media.entity';
-import { RequestLifecycleService } from '../requests/request-lifecycle.service';
+import { EventsService } from '../scheduler/events.service';
 import { DownloadHistory } from './entities/download-history.entity';
 import { buildGrabHistoryRow } from './grab-history.util';
 import { Indexer } from '../indexers/entities/indexer.entity';
@@ -73,8 +73,7 @@ export class AutoGrabPipelineService {
     private readonly qbittorrent: QbittorrentService,
     private readonly naming: NamingService,
     private readonly qualityDefs: QualityDefinitionsService,
-    @Inject(forwardRef(() => RequestLifecycleService))
-    private readonly requestLifecycle: RequestLifecycleService,
+    private readonly events: EventsService,
   ) {}
 
   /**
@@ -374,15 +373,11 @@ export class AutoGrabPipelineService {
       this.log.log(
         `AutoGrab[${args.mediaType}]: grabbed "${args.pick.title}" for "${args.label}"`,
       );
-      // Flip linked APPROVED requests to PROCESSING. Failures don't
-      // abort the grab — best effort.
-      void this.requestLifecycle
-        .onReleaseGrabbed(args.media.id, args.seasonNumber)
-        .catch((err) =>
-          this.log.warn(
-            `request-lifecycle: failed to flip requests to PROCESSING for media#${args.media.id}: ${(err as Error).message}`,
-          ),
-        );
+      this.events.emitDomain({
+        type: 'acquisition.grabbed',
+        mediaId: args.media.id,
+        seasonNumber: args.seasonNumber,
+      });
       return true;
     } catch (e) {
       this.log.warn(

@@ -26,7 +26,6 @@ import {
 import { MetadataLanguageOverride } from '../../metadata-providers/metadata-settings-cache.service';
 import { MediaType } from '../../../common/enums';
 import { ImageService } from '../../images/image.service';
-import { SchedulerService } from '../../scheduler/scheduler.service';
 import { EventsService } from '../../scheduler/events.service';
 import { mapWithConcurrency } from '../../../common/utils/concurrency';
 import { buildMediaFieldsFromTmdb } from './tmdb-mapping.util';
@@ -52,8 +51,6 @@ export class MediaMetadataService {
     private readonly tmdb: TmdbProvider,
     private readonly providerRegistry: MetadataProviderRegistry,
     private readonly imageService: ImageService,
-    @Inject(forwardRef(() => SchedulerService))
-    private readonly scheduler: SchedulerService,
     private readonly events: EventsService,
   ) {}
 
@@ -116,7 +113,6 @@ export class MediaMetadataService {
       // drop): kick the auto-grab pipeline now instead of waiting up to 6 h
       // for the next scheduler tick. Mirrors the post-approval kick.
       if (insertedCount > 0) {
-        void this.scheduler.searchMissingForMedia([media.id]);
         this.events.emitDomain({
           type: 'media.acquisition.requested',
           mediaIds: [media.id],

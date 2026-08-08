@@ -28,7 +28,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { MediaService } from '../media/media.service';
 import { Media } from '../media/entities/media.entity';
 import { ProfilesService } from '../profiles/profiles.service';
-import { SchedulerService } from '../scheduler/scheduler.service';
+import { SettingsService } from '../settings/settings.service';
 import { EventsService } from '../scheduler/events.service';
 import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
 import { Action } from '../auth/casl/actions.enum';
@@ -64,7 +64,7 @@ export class RequestsService {
     private readonly notifications: NotificationsService,
     private readonly mediaService: MediaService,
     private readonly profilesService: ProfilesService,
-    private readonly scheduler: SchedulerService,
+    private readonly settings: SettingsService,
     private readonly caslAbilityFactory: CaslAbilityFactory,
     private readonly imageService: ImageService,
     private readonly tmdb: TmdbProvider,
@@ -73,6 +73,11 @@ export class RequestsService {
   ) {}
 
   private readonly logger = new Logger(RequestsService.name);
+
+  /** Admin-toggleable from the General settings page; an unset key reads as enabled. */
+  private async autoGrabOnApproval(): Promise<boolean> {
+    return (await this.settings.get('requests_auto_grab_on_approval')) !== 'false';
+  }
 
   /** Aligné sur PoliciesGuard / CaslAbilityFactory (manage:all → Manage sur tout). */
   private canManageRequests(user: User): boolean {
@@ -806,12 +811,13 @@ export class RequestsService {
         linked.media = media;
         await this.requestRepo.save(linked);
       }
-      void this.scheduler.searchMissingForMedia([media.id]);
-      this.events.emitDomain({
-        type: 'media.acquisition.requested',
-        mediaIds: [media.id],
-        reason: 'request-approved',
-      });
+      if (await this.autoGrabOnApproval()) {
+        this.events.emitDomain({
+          type: 'media.acquisition.requested',
+          mediaIds: [media.id],
+          reason: 'request-approved',
+        });
+      }
     }
 
     this.events.emitDomain({
