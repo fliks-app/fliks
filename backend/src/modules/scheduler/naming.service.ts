@@ -2,17 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const VIDEO_EXTS = new Set([
-  '.mkv',
-  '.mp4',
-  '.avi',
-  '.mov',
-  '.ts',
-  '.m2ts',
-  '.wmv',
-  '.flv',
-]);
+import { VIDEO_EXTS } from '../../common/constants/video-extensions';
 
 export interface NamingFormats {
   movie: string;

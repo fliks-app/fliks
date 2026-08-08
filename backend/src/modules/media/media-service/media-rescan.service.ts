@@ -32,23 +32,13 @@ import { MediaServersService } from '../../media-servers/media-servers.service';
 import { MediaMetadataService } from './media-metadata.service';
 import { clearMediaCache } from '../../../common/utils/media-cache.util';
 import { relativePathUnderMediaRoot } from '../../../common/utils/media-path.util';
+import { VIDEO_EXTS } from '../../../common/constants/video-extensions';
 
 type ProbeResult = Awaited<ReturnType<FfprobeService['detectMediaFileInfo']>>;
 
 @Injectable()
 export class MediaRescanService {
   private readonly log = new Logger(MediaRescanService.name);
-
-  private static readonly VIDEO_EXTS = new Set([
-    '.mkv',
-    '.mp4',
-    '.avi',
-    '.mov',
-    '.ts',
-    '.m2ts',
-    '.wmv',
-    '.flv',
-  ]);
 
   constructor(
     @InjectRepository(Media)
@@ -954,11 +944,7 @@ export class MediaRescanService {
         files.push(
           ...this.collectVideoFilesRecursive(fullPath, depth + 1, mediaId),
         );
-      } else if (
-        MediaRescanService.VIDEO_EXTS.has(
-          path.extname(entry.name).toLowerCase(),
-        )
-      ) {
+      } else if (VIDEO_EXTS.has(path.extname(entry.name).toLowerCase())) {
         files.push(fullPath);
       }
     }
