@@ -24,6 +24,7 @@ import { MediaServersModule } from '../media-servers/media-servers.module';
 import { MovieDownloadService } from './movie-download.service';
 import { EpisodeDownloadService } from './episode-download.service';
 import { AutoGrabPipelineService } from './auto-grab-pipeline.service';
+import { AcquisitionCandidatesService } from './acquisition-candidates.service';
 import { TorrentAutoMatcher } from './torrent-auto-matcher.service';
 import { NamingService } from '../scheduler/naming.service';
 import { MediaImportService } from './media-service/media-import.service';
@@ -79,6 +80,7 @@ import { StreamingModule } from '../streaming/streaming.module';
     MovieDownloadService,
     EpisodeDownloadService,
     AutoGrabPipelineService,
+    AcquisitionCandidatesService,
     TorrentAutoMatcher,
     NamingService,
   ],
@@ -86,6 +88,7 @@ import { StreamingModule } from '../streaming/streaming.module';
     MediaService,
     MediaMetadataService,
     AutoGrabPipelineService,
+    AcquisitionCandidatesService,
     TorrentAutoMatcher,
   ],
 })
