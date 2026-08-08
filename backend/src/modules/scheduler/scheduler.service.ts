@@ -14,7 +14,6 @@ import { CronExpressionParser } from 'cron-parser';
 import { Command } from './entities/command.entity';
 import { Media } from '../media/entities/media.entity';
 import { DownloadHistory } from '../media/entities/download-history.entity';
-import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { Indexer } from '../indexers/entities/indexer.entity';
 import { DownloadClient } from '../download-clients/entities/download-client.entity';
@@ -22,10 +21,7 @@ import { TorznabService } from '../indexers/torznab.service';
 import { QbittorrentService } from '../download-clients/qbittorrent.service';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import { MediaService } from '../media/media.service';
-import {
-  onDiskSql,
-  onDiskEpisodeNumbers,
-} from '../media/episode-coverage.util';
+import { onDiskEpisodeNumbers } from '../media/episode-coverage.util';
 import { MediaStatus, MediaType, MinimumAvailability } from '../../common/enums';
 import { ConfigService } from '@nestjs/config';
 import { CompletionService } from './completion.service';
@@ -41,10 +37,13 @@ import {
   AutoGrabPipelineService,
   AutoGrabScoringContext,
 } from '../media/auto-grab-pipeline.service';
+import {
+  AcquisitionCandidatesService,
+  SeasonPackTarget,
+} from '../media/acquisition-candidates.service';
 import { MarkersService } from '../markers/markers.service';
 import {
   ReleaseCandidate,
-  rankFromQualityString,
   releaseMatchesMedia,
   resolveSearchTitles,
 } from '../../common/release-scoring';
@@ -91,6 +90,7 @@ export class SchedulerService implements OnModuleInit {
     private readonly thumbnailService: ThumbnailService,
     private readonly markers: MarkersService,
     private readonly autoGrab: AutoGrabPipelineService,
+    private readonly candidates: AcquisitionCandidatesService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -478,40 +478,21 @@ export class SchedulerService implements OnModuleInit {
     qbitClient: DownloadClient,
     mediaIds?: number[],
   ): Promise<void> {
-    const qb = this.mediaRepo
-      .createQueryBuilder('m')
-      .leftJoinAndSelect('m.qualityProfile', 'qp')
-      .leftJoinAndSelect('m.languageProfile', 'lp')
-      .leftJoinAndSelect('m.files', 'f')
-      .where('m.monitored = true')
-      .andWhere('m.type = :type', { type: MediaType.MOVIE })
-      .andWhere('(f.id IS NULL OR qp."upgradeAllowed" = true)');
-    if (mediaIds?.length) {
-      qb.andWhere('m.id IN (:...mediaIds)', { mediaIds });
-    }
-    const allCandidates = await qb.getMany();
-    const candidates = allCandidates.filter((m) =>
-      this.autoGrab.shouldSearchMissing(m, m.files ?? []),
-    );
-    if (allCandidates.length !== candidates.length) {
-      this.log.log(
-        `SearchMissing[movies]: ${candidates.length}/${allCandidates.length} need a search (${allCandidates.length - candidates.length} at cutoff, unprofiled, or upgrades disabled)`,
-      );
-    }
+    const targets = await this.candidates.listMovieTargets(mediaIds);
 
-    this.logTargetedCandidateCount('movies', mediaIds, candidates.length);
-    if (!candidates.length) return;
+    this.logTargetedCandidateCount('movies', mediaIds, targets.length);
+    if (!targets.length) return;
 
     const today = new Date().toISOString().slice(0, 10);
     const scoring = await this.autoGrab.buildScoringContext(indexers);
 
-    for (let i = 0; i < candidates.length; i++) {
-      const media = candidates[i];
+    for (let i = 0; i < targets.length; i++) {
+      const { media, files } = targets[i];
       this.eventsService.emit({
         type: 'task.progress',
         command: 'SearchMissing',
         current: i,
-        total: candidates.length,
+        total: targets.length,
         message: media.title,
       });
 
@@ -535,7 +516,7 @@ export class SchedulerService implements OnModuleInit {
 
       await this.autoGrab.tryAutoGrab({
         media,
-        files: media.files ?? [],
+        files,
         releases,
         qbitClient,
         scoring,
@@ -554,8 +535,8 @@ export class SchedulerService implements OnModuleInit {
     this.eventsService.emit({
       type: 'task.progress',
       command: 'SearchMissing',
-      current: candidates.length,
-      total: candidates.length,
+      current: targets.length,
+      total: targets.length,
       message: 'SearchMissing',
     });
   }
@@ -565,120 +546,30 @@ export class SchedulerService implements OnModuleInit {
     qbitClient: DownloadClient,
     mediaIds?: number[],
   ): Promise<void> {
-    const today = new Date().toISOString().slice(0, 10);
     const scoring = await this.autoGrab.buildScoringContext(indexers);
 
-    const qb = this.episodeRepo
-      .createQueryBuilder('ep')
-      .innerJoin('ep.season', 'season')
-      .innerJoin('season.media', 'media')
-      .leftJoinAndSelect('media.qualityProfile', 'qp')
-      .leftJoinAndSelect('media.languageProfile', 'lp')
-      .where('media.monitored = true')
-      .andWhere('media.type = :type', { type: MediaType.SERIES })
-      .andWhere('season.monitored = true')
-      .andWhere('ep.monitored = true')
-      .andWhere('ep.airDate IS NOT NULL')
-      .andWhere('ep.airDate <= :today', { today })
-      // Missing → search when the content isn't on disk (coverage, so multi-
-      // episode shadowed episodes aren't re-searched). Upgrade → only episodes
-      // with their OWN file (hasFile); a shadowed episode upgrades via its owner.
-      .andWhere(
-        `(NOT ${onDiskSql('ep')} OR (ep.hasFile = true AND qp."upgradeAllowed" = true))`,
-      );
-    if (mediaIds?.length) {
-      qb.andWhere('media.id IN (:...mediaIds)', { mediaIds });
-    }
-    let episodes = await qb
-      .select([
-        'ep.id',
-        'ep.episodeNumber',
-        'ep.title',
-        'ep.airDate',
-        'ep.hasFile',
-      ])
-      .addSelect(['season.id', 'season.seasonNumber', 'season.mediaId'])
-      .addSelect([
-        'media.id',
-        'media.title',
-        'media.originalTitle',
-        'media.year',
-        'media.runtime',
-        'media.tvdbId',
-        'media.imdbId',
-        'media.alternativeTitles',
-      ])
-      // Profile rows are joined for the upgrade-cutoff WHERE clause AND
-      // hydrated on the media entity so AutoGrabPipeline.classifyForSearch
-      // doesn't read them as undefined and skip with "no profile".
-      .addSelect('qp')
-      .addSelect('lp')
-      .getMany();
+    const targets = await this.candidates.listEpisodeTargets(mediaIds);
 
-    // Batch-load the linked MediaFile quality for upgrade-candidate episodes
-    // so the cutoff comparison runs without an N+1.
-    const upgradeEpIds = episodes
-      .filter((e) => e.hasFile)
-      .map((e) => e.id);
-    const fileQualityByEpId = new Map<number, string>();
-    if (upgradeEpIds.length) {
-      const fileRows = await this.mediaFileRepo
-        .createQueryBuilder('f')
-        .select(['f.episodeId AS "episodeId"', 'f.quality AS "quality"'])
-        .where('f.episodeId IN (:...ids)', { ids: upgradeEpIds })
-        .getRawMany<{ episodeId: number; quality: string }>();
-      for (const row of fileRows) {
-        // Multiple files per ep: keep the best quality seen.
-        const prev = fileQualityByEpId.get(row.episodeId);
-        if (!prev) {
-          fileQualityByEpId.set(row.episodeId, row.quality);
-          continue;
-        }
-        const prevRank = rankFromQualityString(prev);
-        const curRank = rankFromQualityString(row.quality);
-        if (curRank > prevRank)
-          fileQualityByEpId.set(row.episodeId, row.quality);
-      }
-    }
-
-    const episodeFiles = (ep: Episode): { quality?: string | null }[] =>
-      ep.hasFile ? [{ quality: fileQualityByEpId.get(ep.id) ?? null }] : [];
-
-    const allEpisodes = episodes;
-    const filteredEpisodes = allEpisodes.filter((ep) => {
-      const media = (ep as unknown as { season: Season }).season
-        .media as Media;
-      return this.autoGrab.shouldSearchMissing(media, episodeFiles(ep));
-    });
-    if (allEpisodes.length !== filteredEpisodes.length) {
-      this.log.log(
-        `SearchMissing[episodes]: ${filteredEpisodes.length}/${allEpisodes.length} need a search (${allEpisodes.length - filteredEpisodes.length} at cutoff, unprofiled, or upgrades disabled)`,
-      );
-    }
-    episodes = filteredEpisodes;
-
-    this.logTargetedCandidateCount('episodes', mediaIds, episodes.length);
-    if (!episodes.length) return;
+    this.logTargetedCandidateCount('episodes', mediaIds, targets.length);
+    if (!targets.length) return;
 
     // Season-pack-first: a season missing more than one episode is better
     // served by one (usually far better seeded) pack than by scattered
     // per-episode grabs. Episodes a grabbed pack covers drop out of the
     // per-episode search below.
+    const packTargets = await this.candidates.groupIntoSeasonPacks(targets);
     const coveredByPack = await this.grabMissingSeasonPacks(
-      episodes,
+      packTargets,
       indexers,
       qbitClient,
       scoring,
-      fileQualityByEpId,
     );
     const toSearch = coveredByPack.size
-      ? episodes.filter((e) => !coveredByPack.has(e.id))
-      : episodes;
+      ? targets.filter((t) => !coveredByPack.has(t.episode.id))
+      : targets;
 
     for (let i = 0; i < toSearch.length; i++) {
-      const ep = toSearch[i];
-      const season = (ep as unknown as { season: Season }).season;
-      const media = (season as unknown as { media: Media }).media;
+      const { media, season, episode: ep, files } = toSearch[i];
       const epLabel = `S${String(season.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
 
       this.eventsService.emit({
@@ -688,10 +579,6 @@ export class SchedulerService implements OnModuleInit {
         total: toSearch.length,
         message: `${media.title} ${epLabel}`,
       });
-
-      const files = ep.hasFile
-        ? [{ quality: fileQualityByEpId.get(ep.id) ?? null }]
-        : [];
 
       const { searchTitle } = resolveSearchTitles(media);
       const batches = await Promise.allSettled(
@@ -747,51 +634,27 @@ export class SchedulerService implements OnModuleInit {
   }
 
   /**
-   * Season-pack-first pass for SearchMissing. Groups the missing episodes by
-   * season and, for any season missing more than one episode, tries to grab a
-   * single full-season pack instead of scattered per-episode releases — packs
-   * are usually far better seeded and import per-file. Returns the ids of the
-   * episodes a grabbed pack now covers so the caller skips their per-episode
-   * search. A season missing a single episode is left to the per-episode path:
-   * pulling a whole-season pack for one file wastes bandwidth and disk.
+   * Season-pack-first pass for SearchMissing. For each candidate pack, tries
+   * to grab a single full-season release instead of scattered per-episode
+   * releases — packs are usually far better seeded and import per-file.
+   * Returns the ids of the episodes a grabbed pack now covers so the caller
+   * skips their per-episode search.
    */
   private async grabMissingSeasonPacks(
-    episodes: Episode[],
+    packs: SeasonPackTarget[],
     indexers: Indexer[],
     qbitClient: DownloadClient,
     scoring: AutoGrabScoringContext,
-    fileQualityByEpId: Map<number, string>,
   ): Promise<Set<number>> {
     const covered = new Set<number>();
 
-    const groups = new Map<
-      number,
-      { season: Season; media: Media; eps: Episode[] }
-    >();
-    for (const ep of episodes) {
-      const season = (ep as unknown as { season: Season }).season;
-      const media = (season as unknown as { media: Media }).media;
-      const group = groups.get(season.id);
-      if (group) group.eps.push(ep);
-      else groups.set(season.id, { season, media, eps: [ep] });
-    }
-    const multi = [...groups.values()].filter((g) => g.eps.length >= 2);
-    if (!multi.length) return covered;
-
-    // Total episode count per season drives the pack's runtime for the size
-    // check — a pack covers the whole season, not just the missing episodes.
-    const counts = await this.episodeRepo
-      .createQueryBuilder('ep')
-      .select('ep.seasonId', 'seasonId')
-      .addSelect('COUNT(*)', 'cnt')
-      .where('ep.seasonId IN (:...ids)', { ids: multi.map((g) => g.season.id) })
-      .groupBy('ep.seasonId')
-      .getRawMany<{ seasonId: number; cnt: string }>();
-    const episodeCountBySeason = new Map(
-      counts.map((c) => [Number(c.seasonId), Number(c.cnt)]),
-    );
-
-    for (const { season, media, eps } of multi) {
+    for (const {
+      season,
+      media,
+      episodes: eps,
+      files,
+      totalEpisodeCount,
+    } of packs) {
       const seasonLabel = `S${String(season.seasonNumber).padStart(2, '0')}`;
 
       // A grabbed pack records a season-scoped history row (no episodeId). If
@@ -822,43 +685,20 @@ export class SchedulerService implements OnModuleInit {
       // Indexer `season=` filtering is unreliable (notably text-mode
       // backends), so keep only releases that parse as a full-season pack —
       // never a stray single episode that slipped into the result set.
-      const packs = packBatches
+      const packReleases = packBatches
         .flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
         .filter((r) => matchesSeasonPack(r.title, season.seasonNumber));
-      if (!packs.length) continue;
+      if (!packReleases.length) continue;
 
-      // Cutoff gate for the pack. The per-episode path hands each file's
-      // quality to classifyForSearch so an at-cutoff episode is skipped; the
-      // pack must do the same or it re-grabs whole seasons already at cutoff.
-      // A genuinely missing episode keeps the empty-files "missing" mode (grab
-      // regardless of upgrade settings); once every covered episode is on disk
-      // we pass the weakest existing quality so a season at/above cutoff
-      // resolves to 'skip' instead of an unbounded "missing" grab.
-      let files: { quality: string | null }[] = [];
-      if (eps.every((e) => e.hasFile)) {
-        let weakest: string | null = null;
-        let weakestRank = Number.POSITIVE_INFINITY;
-        for (const ep of eps) {
-          const q = fileQualityByEpId.get(ep.id) ?? null;
-          const r = rankFromQualityString(q);
-          if (r < weakestRank) {
-            weakestRank = r;
-            weakest = q;
-          }
-        }
-        files = [{ quality: weakest }];
-      }
-
-      const epCount = episodeCountBySeason.get(season.id) ?? eps.length;
       const grabbed = await this.autoGrab.tryAutoGrab({
         media,
         files,
-        releases: packs,
+        releases: packReleases,
         qbitClient,
         scoring,
         mediaType: 'series',
         label: `${media.title} ${seasonLabel} (pack)`,
-        runtimeMinutes: (media.runtime ?? 45) * epCount,
+        runtimeMinutes: (media.runtime ?? 45) * totalEpisodeCount,
         seasonNumber: season.seasonNumber,
         seasonId: season.id,
       });
