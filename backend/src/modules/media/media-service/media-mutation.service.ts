@@ -22,6 +22,7 @@ import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
 import { Library } from '../../libraries/entities/library.entity';
 import { MediaServersService } from '../../media-servers/media-servers.service';
+import { EventsService } from '../../scheduler/events.service';
 import { RequestLifecycleService } from '../../requests/request-lifecycle.service';
 import { MediaQueryService } from './media-query.service';
 import { MediaMetadataService } from './media-metadata.service';
@@ -47,6 +48,7 @@ export class MediaMutationService {
     private readonly metadata: MediaMetadataService,
     @Inject(forwardRef(() => RequestLifecycleService))
     private readonly requestLifecycle: RequestLifecycleService,
+    private readonly events: EventsService,
   ) {}
 
   async update(id: number, dto: UpdateMediaDto): Promise<Media> {
@@ -59,6 +61,11 @@ export class MediaMutationService {
     const saved = await this.mediaRepo.save(media);
     if (dto.monitored !== undefined) {
       await this.cascadeMonitoredToChildren([saved.id], dto.monitored);
+      this.events.emitDomain({
+        type: 'media.monitored.changed',
+        mediaId: saved.id,
+        monitored: dto.monitored,
+      });
     }
     await this.metadata.updateSearchVector(saved.id);
     await this.requestLifecycle.onMediaMonitorChange(saved, wasMonitored);
@@ -205,9 +212,17 @@ export class MediaMutationService {
     const media = await this.query.findOne(id);
     const title = media.title;
     const mediaPath = media.path;
+    const tmdbId = media.tmdbId;
+    const mediaType = media.type;
     const diskPath = this.resolveSafeMediaDir(media);
     await this.requestLifecycle.onMediaRemoved(media);
     await this.mediaRepo.remove(media);
+    this.events.emitDomain({
+      type: 'media.removed',
+      mediaId: id,
+      tmdbId: tmdbId ?? null,
+      mediaType,
+    });
     void this.mediaServers.dispatch('media.deleted', {
       title,
       path: mediaPath,
@@ -278,6 +293,12 @@ export class MediaMutationService {
         wasMonitored,
         saved.monitored,
       );
+      this.events.emitDomain({
+        type: 'media.season.monitored.changed',
+        mediaId: season.media.id,
+        seasonNumber: saved.seasonNumber,
+        monitored: saved.monitored,
+      });
     }
     return saved;
   }

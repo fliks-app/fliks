@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Subject, Observable, Subscription } from 'rxjs';
 import { randomUUID } from 'crypto';
 
@@ -186,6 +186,29 @@ export type SseEvent =
       mediaTitle: string;
     };
 
+// ---------------------------------------------------------------------------
+// Domain events — backend-to-backend, distinct from the SSE bus above.
+// ---------------------------------------------------------------------------
+
+/**
+ * Backend-to-backend events. Distinct from `SseEvent`, which is what browsers
+ * receive: a domain event describes something that happened in the domain, and
+ * its subscribers are other backend modules — eventually out-of-process plugins.
+ * In-process fan-out, at-most-once, no persistence, no replay, no retry. A
+ * subscriber that throws is caught and logged; it never reaches the emitter.
+ */
+export type DomainEvent =
+  | { type: 'media.imported'; mediaId: number; tmdbId: number | null; mediaType: string; libraryId: number | null; addedByUserId: number | null }
+  | { type: 'media.monitored.changed'; mediaId: number; monitored: boolean }
+  | { type: 'media.season.monitored.changed'; mediaId: number; seasonNumber: number; monitored: boolean }
+  | { type: 'media.removed'; mediaId: number; tmdbId: number | null; mediaType: string }
+  | { type: 'media.files.imported'; mediaId: number; seasonNumber?: number; episodeNumber?: number; source: 'download' | 'disk' }
+  | { type: 'media.acquisition.requested'; mediaIds: number[]; reason: string }
+  | { type: 'request.created'; requestId: number; mediaType: string; tmdbId: number; userId: number | null; kind: string; seasons: number[] | null }
+  | { type: 'request.approved'; requestId: number; mediaId: number | null; mediaType: string; tmdbId: number; seasons: number[] | null; approvedByUserId: number | null }
+  | { type: 'library.scan.completed'; libraryId: number; added: number; updated: number }
+  | { type: 'settings.changed'; key: string };
+
 /**
  * Wraps an `SseEvent` with its delivery audience.
  *   - `audience: null` + `connectionIds: null` → every SSE connection.
@@ -202,7 +225,9 @@ interface SseEnvelope {
 
 @Injectable()
 export class EventsService {
+  private readonly log = new Logger(EventsService.name);
   private readonly subject = new Subject<SseEnvelope>();
+  private readonly domainSubject = new Subject<DomainEvent>();
   private readonly connections = new Map<string, { userId: number }>();
 
   /** Broadcast to every connected client. */
@@ -272,5 +297,24 @@ export class EventsService {
   /** Backend-internal listener — used by services that react to other modules' events. */
   subscribe(handler: (event: SseEvent) => void): Subscription {
     return this.subject.subscribe((env) => handler(env.event));
+  }
+
+  /** Publish a domain event. Never throws: subscriber errors are swallowed by `onDomain`. */
+  emitDomain(event: DomainEvent): void {
+    this.domainSubject.next(event);
+  }
+
+  /** Subscribe to domain events. A throwing handler is logged, never propagated. */
+  onDomain(handler: (event: DomainEvent) => void): Subscription {
+    return this.domainSubject.subscribe((event) => {
+      try {
+        handler(event);
+      } catch (err) {
+        this.log.error(
+          `Domain event handler threw on "${event.type}": ${(err as Error).message}`,
+          err instanceof Error ? err.stack : undefined,
+        );
+      }
+    });
   }
 }

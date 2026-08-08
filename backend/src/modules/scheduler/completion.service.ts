@@ -1112,6 +1112,11 @@ export class CompletionService implements OnModuleInit {
       );
       // Fire-and-forget: a slow indexer search shouldn't hold up this cron tick.
       void this.scheduler.searchMissingForMedia(Array.from(mediaToResearch));
+      this.events.emitDomain({
+        type: 'media.acquisition.requested',
+        mediaIds: Array.from(mediaToResearch),
+        reason: 'stalled-cleanup',
+      });
     }
   }
 
