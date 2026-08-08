@@ -13,6 +13,7 @@ import { DownloadClient } from '../download-clients/entities/download-client.ent
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { SchedulerService } from './scheduler.service';
 import { CompletionService } from './completion.service';
+import { AcquisitionEventsService } from './acquisition-events.service';
 import { NamingService } from './naming.service';
 import { BackupService } from './backup.service';
 import { LogBufferService } from './log-buffer.service';
@@ -84,6 +85,7 @@ import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.
   providers: [
     SchedulerService,
     CompletionService,
+    AcquisitionEventsService,
     NamingService,
     BackupService,
     LogBufferService,
@@ -93,6 +95,7 @@ import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.
   exports: [
     SchedulerService,
     CompletionService,
+    AcquisitionEventsService,
     NamingService,
     LogBufferService,
     SubtitleSchedulerService,

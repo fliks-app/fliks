@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { DataSource } from 'typeorm';
 import { CompletionService } from './completion.service';
+import { AcquisitionEventsService } from './acquisition-events.service';
 import { NamingService } from './naming.service';
 import { DownloadHistory } from '../media/entities/download-history.entity';
 import { Media } from '../media/entities/media.entity';
@@ -42,11 +43,19 @@ function buildService(matchByHash: Set<string>) {
     historyMatcher: unknown;
     log: unknown;
     events: unknown;
+    acquisitionEvents: unknown;
   };
   wired.historyRepo = { update };
   wired.historyMatcher = matcher;
   wired.log = { warn: jest.fn(), log: jest.fn() };
   wired.events = { emit };
+  // `acquisitionEvents.publish` routes 'acquisition.queue.changed' straight
+  // through `events.emit` — wire it onto the same mock the tests assert on.
+  const acquisitionEvents = Object.create(
+    AcquisitionEventsService.prototype,
+  ) as AcquisitionEventsService;
+  (acquisitionEvents as unknown as { events: unknown }).events = { emit };
+  wired.acquisitionEvents = acquisitionEvents;
   return { service, update, emit };
 }
 
@@ -302,7 +311,13 @@ describe('CompletionService.cleanSeededTorrents', () => {
     wired.historyRepo = { createQueryBuilder: () => qb };
     wired.indexerRepo = { find: async () => [{ id: 5, settings }] };
     wired.log = { log: jest.fn(), error: jest.fn() };
-    wired.events = { emit: jest.fn() };
+    const emit = jest.fn();
+    wired.events = { emit };
+    const acquisitionEvents = Object.create(
+      AcquisitionEventsService.prototype,
+    ) as AcquisitionEventsService;
+    (acquisitionEvents as unknown as { events: unknown }).events = { emit };
+    wired.acquisitionEvents = acquisitionEvents;
     return { deleteTorrent, done: service.cleanSeededTorrents() };
   }
 
@@ -456,6 +471,21 @@ describe('CompletionService.processOne', () => {
       query: jest.fn().mockResolvedValue([]),
     } as unknown as DataSource);
 
+    // `AcquisitionEventsService` now owns the sseAudience/events/notifications/
+    // mediaServers fan-out `processOne` used to do inline — wire a bare
+    // instance over the same mocks, same approach as `libraryIngest` below.
+    const acquisitionEvents = Object.create(
+      AcquisitionEventsService.prototype,
+    ) as AcquisitionEventsService;
+    const acquisitionEventsWired = acquisitionEvents as unknown as Record<
+      string,
+      unknown
+    >;
+    acquisitionEventsWired.events = events;
+    acquisitionEventsWired.sseAudience = sseAudience;
+    acquisitionEventsWired.notifications = notifications;
+    acquisitionEventsWired.mediaServers = mediaServers;
+
     const wired = service as unknown as Record<string, unknown>;
     wired.mediaRepo = mediaRepo;
     wired.historyRepo = historyRepo;
@@ -466,8 +496,7 @@ describe('CompletionService.processOne', () => {
     wired.settings = settings;
     wired.sseAudience = sseAudience;
     wired.events = events;
-    wired.notifications = notifications;
-    wired.mediaServers = mediaServers;
+    wired.acquisitionEvents = acquisitionEvents;
     wired.markers = markers;
     wired.thumbnailService = thumbnailService;
     wired.dataSource = dataSource;
