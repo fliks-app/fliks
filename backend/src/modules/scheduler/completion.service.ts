@@ -47,7 +47,6 @@ import { TorrentAutoMatcher } from '../media/torrent-auto-matcher.service';
 import { buildGrabHistoryRow } from '../media/grab-history.util';
 import { parseReleaseQuality } from '../../common/release-parsing';
 import { MarkersService } from '../markers/markers.service';
-import { SchedulerService } from './scheduler.service';
 import { LibraryIngestService } from '../../common/library-ingest/library-ingest.service';
 import { VIDEO_EXTS } from '../../common/constants/video-extensions';
 
@@ -112,8 +111,6 @@ export class CompletionService implements OnModuleInit {
     private readonly autoMatcher: TorrentAutoMatcher,
     private readonly markers: MarkersService,
     private readonly sseAudience: SseAudienceService,
-    @Inject(forwardRef(() => SchedulerService))
-    private readonly scheduler: SchedulerService,
     @Inject(forwardRef(() => LibraryIngestService))
     private readonly libraryIngest: LibraryIngestService,
   ) {}
@@ -1110,8 +1107,6 @@ export class CompletionService implements OnModuleInit {
       this.log.log(
         `StalledCleanup: running SearchMissing for ${mediaToResearch.size} media(s)`,
       );
-      // Fire-and-forget: a slow indexer search shouldn't hold up this cron tick.
-      void this.scheduler.searchMissingForMedia(Array.from(mediaToResearch));
       this.events.emitDomain({
         type: 'media.acquisition.requested',
         mediaIds: Array.from(mediaToResearch),

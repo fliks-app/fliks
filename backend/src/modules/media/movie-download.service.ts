@@ -3,13 +3,11 @@ import {
   BadRequestException,
   NotFoundException,
   Logger,
-  Inject,
-  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media } from './entities/media.entity';
-import { RequestLifecycleService } from '../requests/request-lifecycle.service';
+import { EventsService } from '../scheduler/events.service';
 import { DownloadHistory } from './entities/download-history.entity';
 import { buildGrabHistoryRow } from './grab-history.util';
 import { Indexer } from '../indexers/entities/indexer.entity';
@@ -101,8 +99,7 @@ export class MovieDownloadService {
     private readonly notifications: NotificationsService,
     private readonly qualityDefs: QualityDefinitionsService,
     private readonly profiles: ProfilesService,
-    @Inject(forwardRef(() => RequestLifecycleService))
-    private readonly requestLifecycle: RequestLifecycleService,
+    private readonly events: EventsService,
   ) {}
 
   private allowedQualityIds(
@@ -351,15 +348,7 @@ export class MovieDownloadService {
       sourceTitle,
     });
 
-    // Flip any APPROVED request for this movie to PROCESSING (the auto-grab
-    // pipeline does this for its grabs; manual grabs route through here).
-    void this.requestLifecycle
-      .onReleaseGrabbed(mediaId)
-      .catch((err) =>
-        this.log.warn(
-          `request-lifecycle: failed to flip requests to PROCESSING for media#${mediaId}: ${(err as Error).message}`,
-        ),
-      );
+    this.events.emitDomain({ type: 'acquisition.grabbed', mediaId });
 
     return saved;
   }

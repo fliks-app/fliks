@@ -16,7 +16,6 @@ import { MediaService } from '../media/media.service';
 import { onDiskEpisodeNumbers } from '../media/episode-coverage.util';
 import { ProfilesService } from '../profiles/profiles.service';
 import { EventsService } from '../scheduler/events.service';
-import { SchedulerService } from '../scheduler/scheduler.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SettingsService } from '../settings/settings.service';
 import { User } from '../users/entities/user.entity';
@@ -37,9 +36,10 @@ import {
  *  - `onMediaImported`     — admin clicked Add or an approval imported
  *                            the row. Link & auto-approve compatible
  *                            open requests.
- *  - `onReleaseGrabbed`    — auto-grab pipeline pushed a release to
- *                            the download client. Flip APPROVED →
- *                            PROCESSING.
+ *  - `markInProgress`      — driven by the `acquisition.grabbed` domain
+ *                            event (auto-grab / manual grab pushed a
+ *                            release to the download client). Flip
+ *                            APPROVED → PROCESSING.
  *  - `onImportComplete`    — files landed on disk (via `EventsService`
  *                            subscription). Promote PROCESSING /
  *                            APPROVED → AVAILABLE for covered scopes.
@@ -64,8 +64,6 @@ export class RequestLifecycleService
     private readonly mediaService: MediaService,
     private readonly profiles: ProfilesService,
     private readonly events: EventsService,
-    @Inject(forwardRef(() => SchedulerService))
-    private readonly scheduler: SchedulerService,
     private readonly notifications: NotificationsService,
     private readonly settings: SettingsService,
   ) {}
@@ -95,6 +93,19 @@ export class RequestLifecycleService
         this.onImportComplete(event.mediaId).catch((err) => {
           this.log.warn(
             `onImportComplete failed for media#${event.mediaId}: ${(err as Error).message}`,
+          );
+        });
+      }),
+    );
+
+    // Auto-grab pipeline / manual grab pushed a release to the download
+    // client — flip matching APPROVED requests to PROCESSING.
+    this.subscriptions.add(
+      this.events.onDomain((event) => {
+        if (event.type !== 'acquisition.grabbed') return;
+        this.markInProgress(event.mediaId, event.seasonNumber).catch((err) => {
+          this.log.warn(
+            `markInProgress failed for media#${event.mediaId}: ${(err as Error).message}`,
           );
         });
       }),
@@ -168,7 +179,6 @@ export class RequestLifecycleService
     // wait up to 6 h for the next scheduled tick. Fire-and-forget;
     // failures (missing indexer, etc.) are logged inside the scheduler.
     if (touched.length && (await this.autoGrabOnApproval())) {
-      void this.scheduler.searchMissingForMedia([media.id]);
       this.events.emitDomain({
         type: 'media.acquisition.requested',
         mediaIds: [media.id],
@@ -182,12 +192,12 @@ export class RequestLifecycleService
   // ---------------------------------------------------------------------------
 
   /**
-   * Auto-grab pipeline sent a release to the download client. Flip
-   * matching `APPROVED` requests to `PROCESSING`. Per-season requests
-   * honour the season scope: only flip when the grabbed season is in
-   * the `seasons` array. Movies / whole-series flip on any grab.
+   * Driven by the `acquisition.grabbed` domain event. Flip matching
+   * `APPROVED` requests to `PROCESSING`. Per-season requests honour the
+   * season scope: only flip when the grabbed season is in the `seasons`
+   * array. Movies / whole-series flip on any grab.
    */
-  async onReleaseGrabbed(
+  async markInProgress(
     mediaId: number,
     seasonNumber?: number,
   ): Promise<void> {

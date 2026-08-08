@@ -204,6 +204,8 @@ export type DomainEvent =
   | { type: 'media.removed'; mediaId: number; tmdbId: number | null; mediaType: string }
   | { type: 'media.files.imported'; mediaId: number; seasonNumber?: number; episodeNumber?: number; source: 'download' | 'disk' }
   | { type: 'media.acquisition.requested'; mediaIds: number[]; reason: string }
+  // Release sent to the download client — flips matching approved requests to PROCESSING.
+  | { type: 'acquisition.grabbed'; mediaId: number; seasonNumber?: number }
   | { type: 'request.created'; requestId: number; mediaType: string; tmdbId: number; userId: number | null; kind: string; seasons: number[] | null }
   | { type: 'request.approved'; requestId: number; mediaId: number | null; mediaType: string; tmdbId: number; seasons: number[] | null; approvedByUserId: number | null }
   | { type: 'library.scan.completed'; libraryId: number; added: number; updated: number }

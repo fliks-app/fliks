@@ -3,13 +3,11 @@ import {
   BadRequestException,
   NotFoundException,
   Logger,
-  Inject,
-  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media } from './entities/media.entity';
-import { RequestLifecycleService } from '../requests/request-lifecycle.service';
+import { EventsService } from '../scheduler/events.service';
 import { Season } from './entities/season.entity';
 import { Episode } from './entities/episode.entity';
 import { DownloadHistory } from './entities/download-history.entity';
@@ -109,8 +107,7 @@ export class EpisodeDownloadService {
     private readonly notifications: NotificationsService,
     private readonly qualityDefs: QualityDefinitionsService,
     private readonly profiles: ProfilesService,
-    @Inject(forwardRef(() => RequestLifecycleService))
-    private readonly requestLifecycle: RequestLifecycleService,
+    private readonly events: EventsService,
   ) {}
 
   private allowedQualityIds(
@@ -380,13 +377,11 @@ export class EpisodeDownloadService {
       sourceTitle,
     });
 
-    void this.requestLifecycle
-      .onReleaseGrabbed(mediaId, season.seasonNumber)
-      .catch((err) =>
-        this.log.warn(
-          `request-lifecycle: failed to flip requests to PROCESSING for media#${mediaId}: ${(err as Error).message}`,
-        ),
-      );
+    this.events.emitDomain({
+      type: 'acquisition.grabbed',
+      mediaId,
+      seasonNumber: season.seasonNumber,
+    });
 
     return saved;
   }
@@ -669,13 +664,11 @@ export class EpisodeDownloadService {
         quality: parsed.quality.name,
         sourceTitle,
       });
-      void this.requestLifecycle
-        .onReleaseGrabbed(mediaId, season.seasonNumber)
-        .catch((err) =>
-          this.log.warn(
-            `request-lifecycle: failed to flip requests to PROCESSING for media#${mediaId}: ${(err as Error).message}`,
-          ),
-        );
+      this.events.emitDomain({
+        type: 'acquisition.grabbed',
+        mediaId,
+        seasonNumber: season.seasonNumber,
+      });
       return { grabbed: 1, errors: [] };
     }
 
@@ -773,13 +766,11 @@ export class EpisodeDownloadService {
         quality: bestPack.qualityName,
         sourceTitle: bestPack.title,
       });
-      void this.requestLifecycle
-        .onReleaseGrabbed(mediaId, season.seasonNumber)
-        .catch((err) =>
-          this.log.warn(
-            `request-lifecycle: failed to flip requests to PROCESSING for media#${mediaId}: ${(err as Error).message}`,
-          ),
-        );
+      this.events.emitDomain({
+        type: 'acquisition.grabbed',
+        mediaId,
+        seasonNumber: season.seasonNumber,
+      });
       return { grabbed: 1, errors: [] };
     }
 
@@ -901,13 +892,11 @@ export class EpisodeDownloadService {
     }
 
     if (grabbed > 0) {
-      void this.requestLifecycle
-        .onReleaseGrabbed(mediaId, season.seasonNumber)
-        .catch((err) =>
-          this.log.warn(
-            `request-lifecycle: failed to flip requests to PROCESSING for media#${mediaId}: ${(err as Error).message}`,
-          ),
-        );
+      this.events.emitDomain({
+        type: 'acquisition.grabbed',
+        mediaId,
+        seasonNumber: season.seasonNumber,
+      });
     }
 
     return { grabbed, errors };

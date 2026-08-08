@@ -18,7 +18,6 @@ describe('RequestLifecycleService onMediaRemoved (kind-aware)', () => {
       { subscribe: jest.fn() } as never,
       {} as never,
       {} as never,
-      {} as never,
     );
   });
 

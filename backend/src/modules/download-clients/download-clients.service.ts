@@ -22,7 +22,6 @@ import { UpdateDownloadClientDto } from './dto/update-download-client.dto';
 import { TestDownloadClientDto } from './dto/test-download-client.dto';
 import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
-import { SchedulerService } from '../scheduler/scheduler.service';
 import { EventsService } from '../scheduler/events.service';
 
 export interface QueueEntry extends QbittorrentTorrent {
@@ -129,8 +128,6 @@ export class DownloadClientsService {
     private readonly qbittorrent: QbittorrentService,
     private readonly historyMatcher: TorrentHistoryMatcher,
     private readonly blocklist: BlocklistService,
-    @Inject(forwardRef(() => SchedulerService))
-    private readonly scheduler: SchedulerService,
     private readonly events: EventsService,
   ) {}
 
@@ -240,7 +237,6 @@ export class DownloadClientsService {
     // Fire-and-forget: the scheduler decides whether anything is grabbed
     // (monitored + profiled + missing); the blocklist row excludes this release.
     if (entry?.mediaId) {
-      void this.scheduler.searchMissingForMedia([entry.mediaId]);
       this.events.emitDomain({
         type: 'media.acquisition.requested',
         mediaIds: [entry.mediaId],
