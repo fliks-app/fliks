@@ -19,13 +19,12 @@ import {
   QbittorrentTorrent,
 } from '../download-clients/qbittorrent.service';
 import { Indexer } from '../indexers/entities/indexer.entity';
-import { NotificationsService } from '../notifications/notifications.service';
 import { NamingService } from './naming.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
 import { EventsService } from './events.service';
 import { SseAudienceService } from './sse-audience.service';
+import { AcquisitionEventsService } from './acquisition-events.service';
 import { SettingsService } from '../settings/settings.service';
-import { MediaServersService } from '../media-servers/media-servers.service';
 import {
   ThumbnailService,
   buildSpriteLabel,
@@ -100,17 +99,16 @@ export class CompletionService implements OnModuleInit {
     @InjectRepository(Library)
     private readonly libraryRepo: Repository<Library>,
     private readonly qbittorrent: QbittorrentService,
-    private readonly notifications: NotificationsService,
     private readonly naming: NamingService,
     private readonly blocklist: BlocklistService,
     private readonly settings: SettingsService,
-    private readonly mediaServers: MediaServersService,
     private readonly events: EventsService,
     private readonly thumbnailService: ThumbnailService,
     private readonly historyMatcher: TorrentHistoryMatcher,
     private readonly autoMatcher: TorrentAutoMatcher,
     private readonly markers: MarkersService,
     private readonly sseAudience: SseAudienceService,
+    private readonly acquisitionEvents: AcquisitionEventsService,
     @Inject(forwardRef(() => LibraryIngestService))
     private readonly libraryIngest: LibraryIngestService,
   ) {}
@@ -416,16 +414,12 @@ export class CompletionService implements OnModuleInit {
           statusMessage: (e as Error).message,
         });
 
-        const failRecipients = await this.sseAudience.recipientsForMedia(
-          history.mediaId,
-        );
-        this.events.emitToUsers(failRecipients, {
-          type: 'import.failed',
+        await this.acquisitionEvents.publish({
+          type: 'acquisition.failed',
           mediaId: history.mediaId,
           title: history.sourceTitle,
-          error: (e as Error).message,
+          reason: (e as Error).message,
         });
-        this.events.emit({ type: 'queue.updated' });
 
         // Auto-blocklist the failed release so it won't be grabbed again
         try {
@@ -585,7 +579,7 @@ export class CompletionService implements OnModuleInit {
       );
     }
 
-    if (changed) this.events.emit({ type: 'queue.updated' });
+    if (changed) await this.acquisitionEvents.publish({ type: 'acquisition.queue.changed' });
   }
 
   private async processOne(
@@ -655,16 +649,12 @@ export class CompletionService implements OnModuleInit {
         }
       }
 
-      const failRecipients = await this.sseAudience.recipientsForMedia(
-        history.mediaId,
-      );
-      this.events.emitToUsers(failRecipients, {
-        type: 'import.failed',
+      await this.acquisitionEvents.publish({
+        type: 'acquisition.failed',
         mediaId: history.mediaId,
         title: history.sourceTitle,
-        error: statusMessage,
+        reason: statusMessage,
       });
-      this.events.emit({ type: 'queue.updated' });
       return;
     }
 
@@ -683,7 +673,7 @@ export class CompletionService implements OnModuleInit {
         status: 'failed',
         statusMessage,
       });
-      this.events.emit({ type: 'queue.updated' });
+      await this.acquisitionEvents.publish({ type: 'acquisition.queue.changed' });
       return;
     }
     this.log.log(
@@ -703,7 +693,7 @@ export class CompletionService implements OnModuleInit {
           status: 'failed',
           statusMessage,
         });
-        this.events.emit({ type: 'queue.updated' });
+        await this.acquisitionEvents.publish({ type: 'acquisition.queue.changed' });
         return;
       }
       resolvedLib = fallback;
@@ -771,7 +761,7 @@ export class CompletionService implements OnModuleInit {
         status: 'failed',
         statusMessage,
       });
-      this.events.emit({ type: 'queue.updated' });
+      await this.acquisitionEvents.publish({ type: 'acquisition.queue.changed' });
       return;
     }
 
@@ -815,14 +805,6 @@ export class CompletionService implements OnModuleInit {
       `Import[${history.sourceTitle}]: completed successfully (${importedFiles.length} file(s))`,
     );
 
-    void this.notifications.dispatch('download.complete', {
-      title: media.title,
-      quality: history.quality,
-      sourceTitle: history.sourceTitle,
-    });
-    const importRecipients = await this.sseAudience.recipientsForMedia(
-      media.id,
-    );
     // Single-season series imports carry the season so the client retires only
     // that season's live progress (other in-flight seasons keep advancing).
     let importedSeasonNumber: number | undefined;
@@ -846,18 +828,15 @@ export class CompletionService implements OnModuleInit {
       });
       importedEpisodeNumber = e?.episodeNumber;
     }
-    this.events.emitToUsers(importRecipients, {
-      type: 'import.complete',
+    await this.acquisitionEvents.publish({
+      type: 'acquisition.imported',
       mediaId: media.id,
       title: media.title,
       seasonNumber: importedSeasonNumber,
       episodeNumber: importedEpisodeNumber,
-    });
-    this.events.emit({ type: 'queue.updated' });
-
-    void this.mediaServers.dispatch('download.complete', {
-      title: media.title,
-      path: media.path,
+      quality: history.quality,
+      sourceTitle: history.sourceTitle,
+      mediaPath: media.path,
     });
 
     // Series only: kick off intro / outro marker detection for every
@@ -1262,7 +1241,7 @@ export class CompletionService implements OnModuleInit {
     }
 
     if (deleted > 0) {
-      this.events.emit({ type: 'queue.updated' });
+      await this.acquisitionEvents.publish({ type: 'acquisition.queue.changed' });
     }
   }
 }

@@ -7,7 +7,6 @@ import {
   Index,
 } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { Indexer } from '../../indexers/entities/indexer.entity';
 import { Media } from '../../media/entities/media.entity';
 import { User } from '../../users/entities/user.entity';
 
@@ -17,12 +16,10 @@ export class BlocklistEntry extends BaseEntity {
   @Column()
   sourceTitle: string;
 
-  @ManyToOne(() => Indexer, { nullable: true, onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'indexerId' })
-  indexer: Indexer | null;
-
-  @RelationId((b: BlocklistEntry) => b.indexer)
-  indexerId: number;
+  /** Not a relation: `indexers` becomes a plugin-owned table, and core may not
+   *  hold a foreign key into it. `indexerName` is what the UI renders. */
+  @Column({ type: 'int', nullable: true })
+  indexerId: number | null;
 
   @Column({ nullable: true })
   indexerName: string;

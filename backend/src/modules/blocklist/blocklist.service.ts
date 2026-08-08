@@ -27,7 +27,7 @@ export class BlocklistService {
     const row = this.repo.create({
       ...rest,
       indexerName,
-      indexer: indexerId ? ({ id: indexerId } as Indexer) : null,
+      indexerId: indexerId ?? null,
       media: mediaId ? ({ id: mediaId } as Media) : null,
       user: userId ? ({ id: userId } as User) : null,
     });
