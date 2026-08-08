@@ -1,11 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  BadRequestException,
-  Inject,
-  forwardRef,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Media } from '../entities/media.entity';

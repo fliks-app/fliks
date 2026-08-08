@@ -3,11 +3,13 @@ import {
   Inject,
   Injectable,
   Logger,
+  OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { existsSync } from 'fs';
 import { In } from 'typeorm';
+import { Subscription } from 'rxjs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CronExpressionParser } from 'cron-parser';
@@ -58,7 +60,8 @@ import { parseSeasonEpisode, matchesSeasonPack } from '../../common/release-pars
 const yieldLoop = () => new Promise<void>((r) => setTimeout(r, 50));
 
 @Injectable()
-export class SchedulerService implements OnModuleInit {
+export class SchedulerService implements OnModuleInit, OnModuleDestroy {
+  private readonly subscriptions = new Subscription();
   private readonly log = new Logger(SchedulerService.name);
 
   constructor(
@@ -157,10 +160,16 @@ export class SchedulerService implements OnModuleInit {
 
     // Single subscriber for every acquisition-side trigger — see the five
     // `media.acquisition.requested` emitters across media/download-clients/requests.
-    this.eventsService.onDomain((event) => {
-      if (event.type !== 'media.acquisition.requested') return;
-      void this.searchMissingForMedia(event.mediaIds);
-    });
+    this.subscriptions.add(
+      this.eventsService.onDomain((event) => {
+        if (event.type !== 'media.acquisition.requested') return;
+        void this.searchMissingForMedia(event.mediaIds);
+      }),
+    );
+  }
+
+  onModuleDestroy(): void {
+    this.subscriptions.unsubscribe();
   }
 
   // ---------------------------------------------------------------------------
