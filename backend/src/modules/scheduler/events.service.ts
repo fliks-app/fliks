@@ -306,16 +306,22 @@ export class EventsService {
     this.domainSubject.next(event);
   }
 
-  /** Subscribe to domain events. A throwing handler is logged, never propagated. */
-  onDomain(handler: (event: DomainEvent) => void): Subscription {
+  /** Subscribe to domain events. A handler that throws — or returns a rejected
+   *  promise — is logged, never propagated: one bad subscriber must not reach
+   *  the emitter, and an async one must not become an unhandled rejection. */
+  onDomain(
+    handler: (event: DomainEvent) => void | Promise<void>,
+  ): Subscription {
+    const fail = (event: DomainEvent, err: unknown) =>
+      this.log.error(
+        `Domain event handler threw on "${event.type}": ${(err as Error).message}`,
+        err instanceof Error ? err.stack : undefined,
+      );
     return this.domainSubject.subscribe((event) => {
       try {
-        handler(event);
+        void Promise.resolve(handler(event)).catch((err) => fail(event, err));
       } catch (err) {
-        this.log.error(
-          `Domain event handler threw on "${event.type}": ${(err as Error).message}`,
-          err instanceof Error ? err.stack : undefined,
-        );
+        fail(event, err);
       }
     });
   }
