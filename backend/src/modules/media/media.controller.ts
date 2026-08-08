@@ -451,6 +451,14 @@ export class MediaController {
           subtitleRemovedMissing: result.subtitleRemovedMissing,
           subtitleRemovedDuplicates: result.subtitleRemovedDuplicates,
         });
+        if (media.libraryId != null) {
+          this.eventsService.emitDomain({
+            type: 'library.scan.completed',
+            libraryId: media.libraryId,
+            added: result.added,
+            updated: result.updated,
+          });
+        }
       },
       (err) => {
         const message = (err as Error).message;

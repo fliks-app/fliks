@@ -31,6 +31,7 @@ import { User } from '../../users/entities/user.entity';
 import { Library } from '../../libraries/entities/library.entity';
 import { LibrariesService } from '../../libraries/libraries.service';
 import { NamingService } from '../../scheduler/naming.service';
+import { EventsService } from '../../scheduler/events.service';
 import { buildMediaFieldsFromTmdb } from './tmdb-mapping.util';
 import { MediaMetadataService } from './media-metadata.service';
 
@@ -57,6 +58,7 @@ export class MediaImportService {
     private readonly metadata: MediaMetadataService,
     @Inject(forwardRef(() => RequestLifecycleService))
     private readonly requestLifecycle: RequestLifecycleService,
+    private readonly events: EventsService,
   ) {}
 
   async importFromTmdb(
@@ -271,6 +273,14 @@ export class MediaImportService {
     await this.metadata.updateSearchVector(saved.id);
     const reloaded = await this.mediaRepo.findOne({ where: { id: saved.id } });
     if (!reloaded) throw new Error(`Media #${saved.id} not found after save`);
+    this.events.emitDomain({
+      type: 'media.imported',
+      mediaId: saved.id,
+      tmdbId: dto.tmdbId ?? null,
+      mediaType: dto.type,
+      libraryId: null,
+      addedByUserId: null,
+    });
     return reloaded;
   }
 
@@ -357,6 +367,14 @@ export class MediaImportService {
     this.metadata.downloadMediaImagesInBackground(saved.id, details);
     await this.metadata.updateSearchVector(saved.id);
     await this.requestLifecycle.onMediaImported(saved, addedByUserId ?? null);
+    this.events.emitDomain({
+      type: 'media.imported',
+      mediaId: saved.id,
+      tmdbId: details.tmdbId ?? null,
+      mediaType: MediaType.MOVIE,
+      libraryId: libraryId ?? null,
+      addedByUserId: addedByUserId ?? null,
+    });
     const reloaded = await this.mediaRepo.findOne({ where: { id: saved.id } });
     if (!reloaded) throw new Error(`Media #${saved.id} not found after save`);
     // Cast/crew + per-person enrichment is detail-page data the badge,
@@ -429,6 +447,14 @@ export class MediaImportService {
 
     await this.metadata.updateSearchVector(saved.id);
     await this.requestLifecycle.onMediaImported(saved, addedByUserId ?? null);
+    this.events.emitDomain({
+      type: 'media.imported',
+      mediaId: saved.id,
+      tmdbId: details.tmdbId ?? null,
+      mediaType: MediaType.SERIES,
+      libraryId: libraryId ?? null,
+      addedByUserId: addedByUserId ?? null,
+    });
     const reloaded = await this.mediaRepo.findOne({ where: { id: saved.id } });
     if (!reloaded) throw new Error(`Media #${saved.id} not found after save`);
     // See persistImportedMovie: cast/crew enrichment is deferred. Season and

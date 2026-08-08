@@ -2,12 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppSetting } from './entities/app-setting.entity';
+import { EventsService } from '../scheduler/events.service';
 
 @Injectable()
 export class SettingsService {
   constructor(
     @InjectRepository(AppSetting)
     private readonly repo: Repository<AppSetting>,
+    private readonly events: EventsService,
   ) {}
 
   private readonly changeListeners: Array<(key: string) => void> = [];
@@ -24,6 +26,7 @@ export class SettingsService {
         /* listener errors must not break writes */
       }
     }
+    this.events.emitDomain({ type: 'settings.changed', key });
   }
 
   async getAll(): Promise<Record<string, string | null>> {

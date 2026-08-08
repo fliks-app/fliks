@@ -77,6 +77,7 @@ describe('RequestsService delete requests', () => {
       {} as never,
       {} as never,
       libraries as never,
+      { emitDomain: jest.fn() } as never,
     );
   });
 

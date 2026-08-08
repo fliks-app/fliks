@@ -14,6 +14,7 @@ import { SubtitleSchedulerService } from '../../modules/scheduler/subtitle-sched
 import { MediaService } from '../../modules/media/media.service';
 import { FileTransferService, TransferMethod } from '../services/file-transfer.service';
 import { FfprobeService } from '../../modules/subtitles/ffprobe.service';
+import { EventsService } from '../../modules/scheduler/events.service';
 import { qualityFromResolution } from '../release-parsing';
 
 export interface IngestRequest {
@@ -72,6 +73,7 @@ export class LibraryIngestService {
     @Inject(forwardRef(() => SubtitleSchedulerService))
     private readonly subtitleScheduler: SubtitleSchedulerService,
     private readonly ffprobe: FfprobeService,
+    private readonly events: EventsService,
   ) {}
 
   async ingest(req: IngestRequest): Promise<IngestResult> {
@@ -111,8 +113,11 @@ export class LibraryIngestService {
       ? this.naming.extractReleaseGroup(req.releaseName)
       : undefined;
 
-    const imported: (IngestResult['imported'][number] & { destPath: string })[] =
-      [];
+    const imported: (IngestResult['imported'][number] & {
+      destPath: string;
+      seasonNumber?: number;
+      episodeNumber?: number;
+    })[] = [];
 
     for (const file of files) {
       const ext = path.extname(file.path);
@@ -318,6 +323,23 @@ export class LibraryIngestService {
         seasonId,
         sourcePath: file.path,
         destPath,
+        seasonNumber,
+        episodeNumber,
+      });
+    }
+
+    if (imported.length > 0) {
+      const single = imported.length === 1 ? imported[0] : undefined;
+      this.events.emitDomain({
+        type: 'media.files.imported',
+        mediaId: media.id,
+        ...(single?.seasonNumber != null
+          ? { seasonNumber: single.seasonNumber }
+          : {}),
+        ...(single?.episodeNumber != null
+          ? { episodeNumber: single.episodeNumber }
+          : {}),
+        source: req.releaseName ? 'download' : 'disk',
       });
     }
 

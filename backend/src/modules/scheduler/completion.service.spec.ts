@@ -419,7 +419,7 @@ describe('CompletionService.processOne', () => {
     // background task never touches episodeRepo/seasonRepo a second time.
     const settings = { get: jest.fn().mockResolvedValue('false') };
     const sseAudience = { recipientsForMedia: jest.fn().mockResolvedValue([]) };
-    const events = { emit: jest.fn(), emitToUsers: jest.fn() };
+    const events = { emit: jest.fn(), emitToUsers: jest.fn(), emitDomain: jest.fn() };
     const ffprobe = {
       detectMediaFileInfo: jest
         .fn()
@@ -486,6 +486,7 @@ describe('CompletionService.processOne', () => {
     ingestWired.subtitleScheduler = subtitleScheduler;
     ingestWired.ffprobe = ffprobe;
     ingestWired.logger = log;
+    ingestWired.events = events;
 
     const run = (
       historyRow: DownloadHistory,

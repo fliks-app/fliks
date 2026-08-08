@@ -169,6 +169,11 @@ export class RequestLifecycleService
     // failures (missing indexer, etc.) are logged inside the scheduler.
     if (touched.length && (await this.autoGrabOnApproval())) {
       void this.scheduler.searchMissingForMedia([media.id]);
+      this.events.emitDomain({
+        type: 'media.acquisition.requested',
+        mediaIds: [media.id],
+        reason: 'media-imported',
+      });
     }
   }
 

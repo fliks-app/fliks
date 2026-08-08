@@ -29,6 +29,7 @@ import { MediaService } from '../media/media.service';
 import { Media } from '../media/entities/media.entity';
 import { ProfilesService } from '../profiles/profiles.service';
 import { SchedulerService } from '../scheduler/scheduler.service';
+import { EventsService } from '../scheduler/events.service';
 import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
 import { Action } from '../auth/casl/actions.enum';
 import { ImageService } from '../images/image.service';
@@ -68,6 +69,7 @@ export class RequestsService {
     private readonly imageService: ImageService,
     private readonly tmdb: TmdbProvider,
     private readonly libraries: LibrariesService,
+    private readonly events: EventsService,
   ) {}
 
   private readonly logger = new Logger(RequestsService.name);
@@ -289,6 +291,27 @@ export class RequestsService {
     const row = this.requestRepo.create(partial);
     const saved = await this.requestRepo.save(row);
     this.projectEmbeddedUsers(saved);
+
+    this.events.emitDomain({
+      type: 'request.created',
+      requestId: saved.id,
+      mediaType: dto.mediaType,
+      tmdbId: dto.tmdbId,
+      userId: user.id,
+      kind: RequestKind.ADD,
+      seasons: dto.seasons ?? null,
+    });
+    if (autoApprove) {
+      this.events.emitDomain({
+        type: 'request.approved',
+        requestId: saved.id,
+        mediaId: media?.id ?? null,
+        mediaType: dto.mediaType,
+        tmdbId: dto.tmdbId,
+        seasons: dto.seasons ?? null,
+        approvedByUserId: user.id,
+      });
+    }
 
     const event = autoApprove ? 'request.approved' : 'request.created';
     void this.notifications.dispatch(event, {
@@ -784,8 +807,22 @@ export class RequestsService {
         await this.requestRepo.save(linked);
       }
       void this.scheduler.searchMissingForMedia([media.id]);
+      this.events.emitDomain({
+        type: 'media.acquisition.requested',
+        mediaIds: [media.id],
+        reason: 'request-approved',
+      });
     }
 
+    this.events.emitDomain({
+      type: 'request.approved',
+      requestId: row.id,
+      mediaId: media?.id ?? null,
+      mediaType: row.mediaType,
+      tmdbId: row.tmdbId,
+      seasons: row.seasons ?? null,
+      approvedByUserId: admin.id,
+    });
     void this.notifications.dispatch('request.approved', { title: row.title });
 
     return this.findResolvedRow(id);

@@ -61,6 +61,7 @@ function buildHarness() {
   wired.subtitleScheduler = subtitleScheduler;
   wired.ffprobe = ffprobe;
   wired.logger = logger;
+  wired.events = { emitDomain: jest.fn() };
 
   return {
     service,

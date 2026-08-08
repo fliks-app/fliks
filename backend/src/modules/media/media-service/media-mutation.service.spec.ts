@@ -84,6 +84,7 @@ describe('MediaMutationService monitoring cascade', () => {
       query as never,
       metadata as never,
       requestLifecycle as never,
+      { emitDomain: jest.fn() } as never,
     );
   });
 
@@ -184,6 +185,7 @@ describe('MediaMutationService remove disk cleanup', () => {
       query as never,
       {} as never,
       requestLifecycle as never,
+      { emitDomain: jest.fn() } as never,
     );
   });
 
