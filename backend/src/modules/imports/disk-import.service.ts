@@ -36,17 +36,7 @@ import { LibrariesService } from '../libraries/libraries.service';
 import { TransferMethod } from '../../common/services/file-transfer.service';
 import { LibraryIngestService } from '../../common/library-ingest/library-ingest.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
-
-const VIDEO_EXTS = new Set([
-  '.mkv',
-  '.mp4',
-  '.avi',
-  '.mov',
-  '.ts',
-  '.m2ts',
-  '.wmv',
-  '.flv',
-]);
+import { VIDEO_EXTS } from '../../common/constants/video-extensions';
 
 export interface ScanCandidate {
   filePath: string;

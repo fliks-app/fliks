@@ -49,6 +49,7 @@ import { parseReleaseQuality } from '../../common/release-parsing';
 import { MarkersService } from '../markers/markers.service';
 import { SchedulerService } from './scheduler.service';
 import { LibraryIngestService } from '../../common/library-ingest/library-ingest.service';
+import { VIDEO_EXTS } from '../../common/constants/video-extensions';
 
 /**
  * How long a `grabbed` or `importing` history row may stay without a
@@ -600,17 +601,6 @@ export class CompletionService implements OnModuleInit {
     seriesFolderFormat: string,
     libraries: Library[],
   ): Promise<void> {
-    const VIDEO_EXTS = [
-      '.mkv',
-      '.mp4',
-      '.avi',
-      '.mov',
-      '.ts',
-      '.m2ts',
-      '.wmv',
-      '.flv',
-    ];
-
     // Use qBittorrent API to get actual files of this torrent
     const videoFiles: { filePath: string; size: number }[] = [];
 
@@ -621,7 +611,7 @@ export class CompletionService implements OnModuleInit {
       );
       for (const f of torrentFiles) {
         const ext = path.extname(f.name).toLowerCase();
-        if (VIDEO_EXTS.includes(ext) && f.progress >= 1) {
+        if (VIDEO_EXTS.has(ext) && f.progress >= 1) {
           const filePath = path.join(torrent.save_path, f.name);
           videoFiles.push({ filePath, size: f.size });
         }
@@ -762,110 +752,20 @@ export class CompletionService implements OnModuleInit {
     media.folderName = folderName;
     if (resolvedLib) media.library = resolvedLib;
 
-    // For movies or single episode: import the largest file
-    // For series with multiple files: import each file as a separate episode
-    const isSeasonPack =
-      media.type === MediaType.SERIES && videoFiles.length > 1;
-    const filesToImport = isSeasonPack
-      ? videoFiles
-      : [videoFiles.reduce((a, b) => (a.size > b.size ? a : b))];
-
-    if (isSeasonPack) {
-      this.log.log(
-        `Import[${history.sourceTitle}]: season pack detected — ${filesToImport.length} episodes to import`,
-      );
-    }
-
-    // Resolve each file's episode (season packs carry one per file) before
-    // handing the batch to the shared ingest pipeline, which owns naming,
-    // the filesystem write and MediaFile persistence.
-    const resolved: {
-      path: string;
-      episodeId?: number;
-      size: number;
-      seasonId?: number;
-    }[] = [];
-    for (let idx = 0; idx < filesToImport.length; idx++) {
-      const videoFile = filesToImport[idx];
-      const filename = path.basename(
-        videoFile.filePath,
-        path.extname(videoFile.filePath),
-      );
-
-      let episodeId: number | undefined;
-      let seasonId: number | undefined;
-
-      if (media.type !== MediaType.MOVIE) {
-        // For season packs: parse from individual filename; for single ep: try filename then release name
-        const epNums =
-          this.naming.parseEpisodeNumbers(filename) ??
-          this.naming.parseEpisodeNumbers(history.sourceTitle);
-
-        if (isSeasonPack) {
-          this.log.log(
-            `Import[${history.sourceTitle}]: [${idx + 1}/${filesToImport.length}] "${filename}" → ${epNums ? `S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')}` : 'no episode parsed'}`,
-          );
-        }
-
-        if (epNums) {
-          const season = await this.seasonRepo.findOne({
-            where: { media: { id: media.id }, seasonNumber: epNums.season },
-          });
-          if (season) {
-            seasonId = season.id;
-            const episode = await this.episodeRepo.findOne({
-              where: {
-                season: { id: season.id },
-                episodeNumber: epNums.episode,
-              },
-            });
-            if (episode) {
-              episodeId = episode.id;
-              if (
-                epNums.episodeEnd != null &&
-                episode.endEpisodeNumber !== epNums.episodeEnd
-              ) {
-                episode.endEpisodeNumber = epNums.episodeEnd;
-                await this.episodeRepo.save(episode);
-              }
-            }
-          }
-        }
-      }
-
-      resolved.push({
-        path: videoFile.filePath,
-        episodeId,
-        size: videoFile.size,
-        seasonId,
-      });
-    }
-
-    // Keyed by source path, not by episode: a season pack whose season row
-    // exists but whose episode row doesn't still pins the season on the
-    // history row below.
-    const seasonByPath = new Map(resolved.map((r) => [r.path, r.seasonId]));
-
     const result = await this.libraryIngest.ingest({
       mediaId: media.id,
-      files: resolved.map((r) => ({
-        path: r.path,
-        episodeId: r.episodeId,
-        size: r.size,
-      })),
+      files: videoFiles.map((f) => ({ path: f.filePath, size: f.size })),
       transfer: 'copy',
       fallbackQuality: history.quality,
       releaseName: history.sourceTitle,
       sourceLabel: history.sourceTitle,
       force: true,
     });
-    const importedFiles = result.imported.map(
-      ({ file, episodeId, sourcePath }) => ({
-        savedFile: file,
-        episodeId,
-        seasonId: seasonByPath.get(sourcePath),
-      }),
-    );
+    const importedFiles = result.imported.map(({ file, episodeId, seasonId }) => ({
+      savedFile: file,
+      episodeId,
+      seasonId,
+    }));
 
     if (!importedFiles.length) {
       const statusMessage = `Import failed: no file could be placed under the library root for "${torrent.name}"`;

@@ -28,6 +28,7 @@ function buildHarness() {
     findOne: jest.fn().mockResolvedValue(null),
     update: jest.fn().mockResolvedValue(undefined),
   };
+  const seasonRepo = { findOne: jest.fn().mockResolvedValue(null) };
   const fileTransfer = {
     transferFile: jest.fn().mockResolvedValue(undefined),
     transferCompanions: jest.fn().mockResolvedValue(undefined),
@@ -53,6 +54,7 @@ function buildHarness() {
   wired.mediaRepo = mediaRepo;
   wired.fileRepo = fileRepo;
   wired.episodeRepo = episodeRepo;
+  wired.seasonRepo = seasonRepo;
   wired.naming = naming;
   wired.fileTransfer = fileTransfer;
   wired.mediaService = mediaService;
@@ -65,6 +67,7 @@ function buildHarness() {
     mediaRepo,
     fileRepo,
     episodeRepo,
+    seasonRepo,
     fileTransfer,
     mediaService,
     subtitleScheduler,

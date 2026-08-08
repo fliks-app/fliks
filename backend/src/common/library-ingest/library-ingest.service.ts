@@ -6,6 +6,7 @@ import * as path from 'path';
 import { Media } from '../../modules/media/entities/media.entity';
 import { MediaFile } from '../../modules/media/entities/media-file.entity';
 import { Episode } from '../../modules/media/entities/episode.entity';
+import { Season } from '../../modules/media/entities/season.entity';
 import { MediaType } from '../enums';
 import { relativePathUnderMediaRoot } from '../utils/media-path.util';
 import { NamingService } from '../../modules/scheduler/naming.service';
@@ -38,7 +39,12 @@ export interface IngestRequest {
 export interface IngestResult {
   /** `sourcePath` echoes the request entry, so a caller can map a landed file
    *  back to what it knows about it — a skipped file leaves no entry. */
-  imported: { file: MediaFile; episodeId?: number; sourcePath: string }[];
+  imported: {
+    file: MediaFile;
+    episodeId?: number;
+    seasonId?: number;
+    sourcePath: string;
+  }[];
 }
 
 /**
@@ -57,6 +63,8 @@ export class LibraryIngestService {
     private readonly fileRepo: Repository<MediaFile>,
     @InjectRepository(Episode)
     private readonly episodeRepo: Repository<Episode>,
+    @InjectRepository(Season)
+    private readonly seasonRepo: Repository<Season>,
     private readonly naming: NamingService,
     private readonly fileTransfer: FileTransferService,
     @Inject(forwardRef(() => MediaService))
@@ -81,6 +89,21 @@ export class LibraryIngestService {
         `Media #${req.mediaId} is not anchored to a library folder`,
       );
     }
+    if (!req.files.length) return { imported: [] };
+
+    // A series release carrying several video files is a season pack: every file
+    // is its own episode. Anything else keeps only the largest file (samples,
+    // proofs and extras ride along in the same folder). A single-file request is
+    // unaffected either way.
+    const isSeasonPack = media.type === MediaType.SERIES && req.files.length > 1;
+    const files = isSeasonPack
+      ? req.files
+      : [req.files.reduce((a, b) => ((a.size ?? 0) > (b.size ?? 0) ? a : b))];
+    if (isSeasonPack) {
+      this.logger.log(
+        `Ingest[${req.sourceLabel}]: season pack — ${files.length} episode(s) to import`,
+      );
+    }
 
     const formats = await this.naming.getFormats();
     const companionExts = await this.fileTransfer.getCompanionExts();
@@ -91,21 +114,64 @@ export class LibraryIngestService {
     const imported: (IngestResult['imported'][number] & { destPath: string })[] =
       [];
 
-    for (const file of req.files) {
+    for (const file of files) {
+      const ext = path.extname(file.path);
+      const sourceBase = path.basename(file.path, ext);
+
+      let episodeId = file.episodeId;
+      let seasonId: number | undefined;
       let seasonNumber: number | undefined;
       let episodeNumber: number | undefined;
       let episodeTitle: string | undefined;
       let airDate: string | undefined;
-      if (file.episodeId) {
-        const ep = await this.episodeRepo.findOne({
-          where: { id: file.episodeId },
-          relations: ['season'],
-        });
-        if (ep) {
-          episodeNumber = ep.episodeNumber;
-          seasonNumber = ep.season?.seasonNumber ?? 1;
-          episodeTitle = ep.title ?? undefined;
-          airDate = ep.airDate ?? undefined;
+
+      if (media.type !== MediaType.MOVIE) {
+        const epNums =
+          this.naming.parseEpisodeNumbers(sourceBase) ??
+          (req.releaseName ? this.naming.parseEpisodeNumbers(req.releaseName) : null);
+        seasonNumber = epNums?.season;
+        episodeNumber = epNums?.episode;
+
+        if (episodeId != null) {
+          // Caller already matched the episode: its row is authoritative.
+          const ep = await this.episodeRepo.findOne({
+            where: { id: episodeId },
+            relations: ['season'],
+          });
+          if (ep) {
+            episodeNumber = ep.episodeNumber;
+            seasonNumber = ep.season?.seasonNumber ?? 1;
+            seasonId = ep.season?.id;
+            episodeTitle = ep.title ?? undefined;
+            airDate = ep.airDate ?? undefined;
+          }
+        } else if (epNums) {
+          const season = await this.seasonRepo.findOne({
+            where: { media: { id: media.id }, seasonNumber: epNums.season },
+          });
+          if (season) {
+            seasonId = season.id;
+            const episode = await this.episodeRepo.findOne({
+              where: { season: { id: season.id }, episodeNumber: epNums.episode },
+            });
+            if (episode) {
+              episodeId = episode.id;
+              episodeTitle = episode.title ?? undefined;
+              airDate = episode.airDate ?? undefined;
+              if (
+                epNums.episodeEnd != null &&
+                episode.endEpisodeNumber !== epNums.episodeEnd
+              ) {
+                episode.endEpisodeNumber = epNums.episodeEnd;
+                await this.episodeRepo.save(episode);
+              }
+            }
+          }
+        }
+        if (isSeasonPack) {
+          this.logger.log(
+            `Ingest[${req.sourceLabel}]: "${sourceBase}" → ${epNums ? `S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')}` : 'no episode parsed'}`,
+          );
         }
       }
 
@@ -125,8 +191,6 @@ export class LibraryIngestService {
             )
           : (req.fallbackQuality ?? '');
 
-      const ext = path.extname(file.path);
-      const sourceBase = path.basename(file.path, ext);
       let newBaseName: string;
       let destDir: string;
 
@@ -227,7 +291,7 @@ export class LibraryIngestService {
       })();
 
       const payload = {
-        episode: file.episodeId != null ? ({ id: file.episodeId } as Episode) : null,
+        episode: episodeId != null ? ({ id: episodeId } as Episode) : null,
         size: finalSize,
         quality,
         ...(streamInfo ? { streamInfo } : {}),
@@ -244,13 +308,14 @@ export class LibraryIngestService {
             this.fileRepo.create({ media, relativePath, ...payload }),
           );
 
-      if (file.episodeId != null) {
-        await this.episodeRepo.update(file.episodeId, { hasFile: true });
+      if (episodeId != null) {
+        await this.episodeRepo.update(episodeId, { hasFile: true });
       }
 
       imported.push({
         file: saved,
-        episodeId: file.episodeId,
+        episodeId,
+        seasonId,
         sourcePath: file.path,
         destPath,
       });
@@ -283,9 +348,10 @@ export class LibraryIngestService {
     })();
 
     return {
-      imported: imported.map(({ file, episodeId, sourcePath }) => ({
+      imported: imported.map(({ file, episodeId, seasonId, sourcePath }) => ({
         file,
         episodeId,
+        seasonId,
         sourcePath,
       })),
     };

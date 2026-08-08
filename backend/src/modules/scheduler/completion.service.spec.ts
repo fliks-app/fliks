@@ -479,6 +479,7 @@ describe('CompletionService.processOne', () => {
     ingestWired.mediaRepo = mediaRepo;
     ingestWired.fileRepo = mediaFileRepo;
     ingestWired.episodeRepo = episodeRepo;
+    ingestWired.seasonRepo = seasonRepo;
     ingestWired.naming = naming;
     ingestWired.fileTransfer = fileTransfer;
     ingestWired.mediaService = mediaService;
@@ -533,11 +534,11 @@ describe('CompletionService.processOne', () => {
   }
 
   /** Wires the two-episode season-pack fixture shared by the "own episode per
-   *  file" and "history reconciliation" tests below. `episodeRepo.findOne` is
-   *  hit with two different query shapes now: `processOne`'s own pre-pass
-   *  looks up `{ season, episodeNumber }`, while `LibraryIngestService`
-   *  (sharing the same mock) re-fetches by `{ id }` for naming. Both must
-   *  resolve to the same two episodes. */
+   *  file" and "history reconciliation" tests below. `LibraryIngestService`
+   *  hits `episodeRepo.findOne` with two different query shapes depending on
+   *  whether the file arrives with a caller-resolved `episodeId` (`{ id }`)
+   *  or needs parsing from the filename (`{ season, episodeNumber }`). Both
+   *  must resolve to the same two episodes. */
   function wireSeasonPack(h: ReturnType<typeof buildProcessOneHarness>) {
     const episodesById: Record<number, Record<string, unknown>> = {
       601: {
