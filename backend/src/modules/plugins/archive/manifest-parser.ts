@@ -6,7 +6,8 @@ import type {
 } from '../../../common/plugin-contract';
 import { PluginScope } from '../../../common/plugin-contract';
 
-const BASE_KEYS = new Set([
+/** Legal top-level keys on a `data` manifest; reused by the data-tier validator. */
+export const BASE_KEYS = new Set([
   'id',
   'pluginApi',
   'name',

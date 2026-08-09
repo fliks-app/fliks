@@ -29,6 +29,7 @@ import { ImportsModule } from './modules/imports/imports.module';
 import { FilesystemModule } from './modules/filesystem/filesystem.module';
 import { SetupChecklistModule } from './modules/setup-checklist/setup-checklist.module';
 import { CountsModule } from './modules/counts/counts.module';
+import { PluginsModule } from './modules/plugins/plugins.module';
 import { CommonModule } from './common/common.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
@@ -105,6 +106,7 @@ import { join } from 'path';
     FilesystemModule,
     SetupChecklistModule,
     CountsModule,
+    PluginsModule,
   ],
 })
 export class AppModule {}
