@@ -1494,7 +1494,8 @@
       "subtitle_providers": "Proveedores de subtítulos",
       "subtitles": "Subtítulos",
       "schedulers": "Tareas programadas",
-      "streaming": "Streaming"
+      "streaming": "Streaming",
+      "plugins": "Plugins"
     },
     "streaming": {
       "title": "Streaming",
@@ -2252,6 +2253,64 @@
       "search_one": "Buscar este subtítulo",
       "search_one_ok": "Subtítulo {{lang}} descargado para «{{title}}»",
       "search_one_none": "No se encontró ningún subtítulo {{lang}} con una puntuación suficiente"
+    },
+    "plugins": {
+      "title": "Plugins",
+      "subtitle": "Install plugins to add indexers, jobs and interface pages to Fliks.",
+      "upload": "Install plugin…",
+      "load_error": "Unable to load the plugin list.",
+      "empty": "No plugin installed.",
+      "col_plugin": "Plugin",
+      "col_version": "Version",
+      "col_tier": "Tier",
+      "col_trust": "Trust",
+      "col_status": "Status",
+      "tier_data": "Data",
+      "tier_process": "Process",
+      "status_active": "Active",
+      "status_failed": "Failed",
+      "uninstall": "Uninstall",
+      "confirm_uninstall": "Uninstall \"{{name}}\"? Its files are removed immediately.",
+      "uninstalled": "Plugin uninstalled.",
+      "uninstall_error": "Unable to uninstall the plugin.",
+      "inspect_error": "Unable to read this archive.",
+      "installed": "Plugin installed.",
+      "install_failed_but_kept": "\"{{id}}\" was installed but could not start: {{reason}}",
+      "trust": {
+        "official": "Official",
+        "verified": "Verified — {{key}}",
+        "unverified": "Unverified",
+        "manual": "Imported manually"
+      },
+      "consent": {
+        "refused_title": "This plugin cannot be installed",
+        "title": "Install {{name}}?",
+        "identity": "{{id}} · v{{version}}",
+        "data_tier": "This plugin contains no program code. It cannot run anything on your server.",
+        "process_tier_title": "{{name}} runs code on your server.",
+        "process_tier_body": "It runs in its own process with restricted file access — it cannot read your server's secrets. It can reach your network, and it can add files to your media library. A signature confirms who published it. It does not confirm that the code is safe.",
+        "capabilities_title": "This plugin can",
+        "capability": {
+          "ui": "Add a \"{{value}}\" interface element",
+          "config": "Add a \"{{value}}\" settings page",
+          "scope": "Access: {{value}}",
+          "job": "Run a scheduled job: {{value}}",
+          "webhook": "Subscribe to server events"
+        },
+        "unverified_ack": "I understand this plugin's publisher is not verified, and I want to install it anyway.",
+        "confirm": "Install",
+        "refusal": {
+          "malformed": "This archive is not a valid Fliks plugin package.",
+          "too_large": "This archive is too large, or its contents don't match what it declares.",
+          "data_tier_field": "This plugin claims to be data-only, but its manifest declares program code. It was refused.",
+          "bad_signature": "This archive's signature is malformed.",
+          "unsigned_process": "This plugin runs code but is not signed. Signed process plugins are required.",
+          "hash_mismatch": "This archive changed after it was inspected. Upload it again.",
+          "file_set_mismatch": "This archive's files do not match its manifest.",
+          "tier_violation": "This archive's contents do not match its declared kind.",
+          "unknown": "This plugin could not be installed (code {{code}})."
+        }
+      }
     }
   },
   "roles": {

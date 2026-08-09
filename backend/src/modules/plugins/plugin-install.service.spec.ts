@@ -62,6 +62,7 @@ function fakePackageRepo() {
       rows.delete(row.pluginId);
       return row;
     }),
+    find: jest.fn(async () => [...rows.values()]),
   };
 }
 
@@ -137,6 +138,7 @@ describe('PluginInstallService', () => {
         expect.objectContaining({
           installable: true,
           id: manifest.id,
+          name: manifest.name,
           version: manifest.version,
           kind: 'data',
           signature: 'unverified',
@@ -323,6 +325,39 @@ describe('PluginInstallService', () => {
 
     it('is safe for a plugin whose row and files never existed', async () => {
       await expect(service.uninstall('fliks.never-installed')).resolves.toBeUndefined();
+    });
+  });
+
+  describe('listInstalled', () => {
+    it('lists every row regardless of status, with the failed one carrying its reason', async () => {
+      const { buffer: activeBuf, manifest: activeManifest } = signedDataArchive({ id: 'fliks.list-active' });
+      const activeStage = await service.inspectUpload(activeBuf);
+      await service.confirmImport({ stagingId: activeStage.stagingId!, sha256: activeStage.sha256! });
+
+      const { buffer: failedBuf, manifest: failedManifest } = signedDataArchive({
+        id: 'fliks.list-failed',
+        fliks: '>=99.0.0',
+      });
+      const failedStage = await service.inspectUpload(failedBuf);
+      await service.confirmImport({ stagingId: failedStage.stagingId!, sha256: failedStage.sha256! });
+
+      const list = await service.listInstalled();
+
+      expect(list).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            pluginId: activeManifest.id,
+            name: activeManifest.name,
+            status: 'active',
+            statusReason: null,
+          }),
+          expect.objectContaining({
+            pluginId: failedManifest.id,
+            status: 'failed',
+            statusReason: expect.stringContaining('incompatible-fliks'),
+          }),
+        ]),
+      );
     });
   });
 });

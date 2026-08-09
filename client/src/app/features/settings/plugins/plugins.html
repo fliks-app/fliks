@@ -1,0 +1,85 @@
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'settings.plugins.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.plugins.subtitle' | translate }}</p>
+    </div>
+    <button type="button" class="btn btn-primary self-start sm:self-auto" [disabled]="uploading()" (click)="pickFile()">
+      @if (uploading()) {
+        <span class="loading loading-spinner loading-sm"></span>
+      }
+      {{ 'settings.plugins.upload' | translate }}
+    </button>
+    <input #fileInput type="file" accept=".zip" class="hidden" (change)="onFilePicked($event)" />
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (listError()) {
+    <div role="alert" class="alert alert-error">{{ listError() }}</div>
+  } @else if (rows().length === 0) {
+    <p class="text-center py-12 text-base-content/50">{{ 'settings.plugins.empty' | translate }}</p>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table table-zebra table-sm">
+        <thead>
+          <tr>
+            <th>{{ 'settings.plugins.col_plugin' | translate }}</th>
+            <th>{{ 'settings.plugins.col_version' | translate }}</th>
+            <th>{{ 'settings.plugins.col_tier' | translate }}</th>
+            <th>{{ 'settings.plugins.col_trust' | translate }}</th>
+            <th>{{ 'settings.plugins.col_status' | translate }}</th>
+            <th class="text-end w-32"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.pluginId) {
+            <tr>
+              <td>
+                <div class="flex items-center gap-3">
+                  <span class="w-8 h-8 rounded bg-base-200 shrink-0 flex items-center justify-center overflow-hidden">
+                    <img [src]="logoUrl(row.pluginId)" (error)="hideBrokenLogo($event)" alt="" class="w-full h-full object-contain" />
+                  </span>
+                  <div class="min-w-0">
+                    <p class="font-medium truncate">{{ row.name }}</p>
+                    <p class="text-xs text-base-content/50 truncate">{{ row.pluginId }}</p>
+                  </div>
+                </div>
+              </td>
+              <td class="text-sm">{{ row.version }}</td>
+              <td>
+                <span class="badge badge-ghost badge-sm">
+                  {{ (row.kind === 'data' ? 'settings.plugins.tier_data' : 'settings.plugins.tier_process') | translate }}
+                </span>
+              </td>
+              <td>
+                <span class="badge badge-sm" [class]="trustBadgeFor(row.signature).cssClass">
+                  {{ trustBadgeFor(row.signature).labelKey | translate: trustBadgeFor(row.signature).params }}
+                </span>
+              </td>
+              <td>
+                @if (row.status === 'active') {
+                  <span class="badge badge-success badge-sm">{{ 'settings.plugins.status_active' | translate }}</span>
+                } @else {
+                  <span class="badge badge-error badge-sm">{{ 'settings.plugins.status_failed' | translate }}</span>
+                  @if (row.statusReason) {
+                    <p class="text-xs text-error/80 mt-1 max-w-[16rem]">{{ row.statusReason }}</p>
+                  }
+                }
+              </td>
+              <td class="text-end">
+                <button type="button" class="btn btn-ghost btn-xs text-error" (click)="uninstall(row)">
+                  {{ 'settings.plugins.uninstall' | translate }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>
+
+<app-plugin-install-consent #consentSheet (installed)="onInstalled($event)" />
