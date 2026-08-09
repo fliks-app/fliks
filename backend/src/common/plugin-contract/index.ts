@@ -5,4 +5,5 @@ export * from './principal';
 export * from './host-methods';
 export * from './plugin-methods';
 export * from './ui-contribution';
+export * from './indexer-descriptor';
 export * from './manifest';

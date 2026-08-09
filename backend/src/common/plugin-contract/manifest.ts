@@ -1,3 +1,4 @@
+import type { IndexerDescriptor } from './indexer-descriptor';
 import type { UiContribution, ConfigPage } from './ui-contribution';
 import type { PluginScope } from './principal';
 
@@ -25,9 +26,11 @@ export interface PluginRoute {
 }
 
 /**
- * Fields unchanged between tiers. `provides`, `events` and `i18n` carry
- * shapes owned by a pre-existing baseline schema not reproduced here
- * (e.g. `IndexerDescriptor`); kept structurally opaque rather than guessed.
+ * Fields unchanged between tiers. `events` and `i18n` carry shapes owned by
+ * a pre-existing baseline schema not reproduced here; kept structurally
+ * opaque rather than guessed. `provides.indexers` is typed, but the type is
+ * a statement of intent only: a manifest is untrusted JSON, so
+ * `PluginRegistryService` validates every entry before believing it.
  */
 interface PluginManifestBase {
   id: string;
@@ -41,7 +44,7 @@ interface PluginManifestBase {
   license: string;
   logo: string;
   homepage?: string;
-  provides?: Record<string, unknown>;
+  provides?: { indexers?: IndexerDescriptor[] };
   ui?: {
     contributions?: UiContribution[];
     configPages?: ConfigPage[];
