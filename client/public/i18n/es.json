@@ -2256,7 +2256,7 @@
     },
     "plugins": {
       "title": "Plugins",
-      "subtitle": "Install plugins to add indexers, jobs and interface pages to Fliks.",
+      "subtitle": "Instala plugins para ampliar lo que Fliks puede hacer.",
       "upload": "Install plugin…",
       "load_error": "Unable to load the plugin list.",
       "empty": "No plugin installed.",
