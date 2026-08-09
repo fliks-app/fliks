@@ -30,6 +30,17 @@ export type PluginRefusalCode =
   | 'PLUGIN_TIER_VIOLATION'
   | 'PLUGIN_BAD_MANIFEST'
   | 'PLUGIN_BAD_LOGO'
+  /** `data`-tier manifest field bans (see `PluginManifestBase` deltas) — each
+   *  names the process-only field it caught, so a refusal is attributable. */
+  | 'PLUGIN_DATA_HAS_FILES'
+  | 'PLUGIN_DATA_HAS_ROUTES'
+  | 'PLUGIN_DATA_HAS_DATABASE'
+  | 'PLUGIN_DATA_HAS_JOBS'
+  | 'PLUGIN_DATA_HAS_INGEST_ROOTS'
+  | 'PLUGIN_DATA_HAS_MEMORY_MB'
+  | 'PLUGIN_DATA_HAS_RUNTIME'
+  | 'PLUGIN_DATA_HAS_PERMISSIONS'
+  | 'PLUGIN_DATA_HAS_CHECKLIST'
   /** yauzl refused the archive and no more specific guard claimed it. Never
    *  report a specific cause we did not actually establish. */
   | 'PLUGIN_MALFORMED_ARCHIVE';
