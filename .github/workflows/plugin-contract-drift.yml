@@ -1,0 +1,64 @@
+# Fails when the plugin UI-contribution types drift between the backend
+# contract (source of truth) and the client mirror the plugin-UI renderer
+# reads. Emits declarations for each side with tsc --emitDeclarationOnly
+# --removeComments (so only the type SHAPE is compared, not doc-comment
+# wording) and diffs them. Not a required status check — that's a repo
+# setting, set separately if this proves stable. Both files are self-contained
+# (zero imports), so one toolchain compiles both and the client install is not
+# needed.
+name: Plugin contract drift
+
+on:
+  # Manual trigger: the paths filter below means a PR touching only this file
+  # never exercises the gate, so it has to be runnable on demand.
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/src/common/plugin-contract/**'
+      - 'client/src/app/core/plugin-ui/**'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/src/common/plugin-contract/**'
+      - 'client/src/app/core/plugin-ui/**'
+
+jobs:
+  check-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Emit declaration for the backend contract
+        working-directory: backend
+        run: |
+          mkdir -p /tmp/contract-diff/backend
+          ./node_modules/.bin/tsc --declaration --emitDeclarationOnly --removeComments \
+            --skipLibCheck --strict --outDir /tmp/contract-diff/backend \
+            src/common/plugin-contract/ui-contribution.ts
+
+      - name: Emit declaration for the client mirror
+        working-directory: backend
+        run: |
+          mkdir -p /tmp/contract-diff/client
+          ./node_modules/.bin/tsc --declaration --emitDeclarationOnly --removeComments \
+            --skipLibCheck --strict --outDir /tmp/contract-diff/client \
+            ../client/src/app/core/plugin-ui/contribution.types.ts
+
+      - name: Diff the two declaration outputs
+        run: |
+          if ! diff -u /tmp/contract-diff/backend/ui-contribution.d.ts \
+                       /tmp/contract-diff/client/contribution.types.d.ts; then
+            echo "::error::client/src/app/core/plugin-ui/contribution.types.ts has drifted from backend/src/common/plugin-contract/ui-contribution.ts. Update the mirror to match."
+            exit 1
+          fi
