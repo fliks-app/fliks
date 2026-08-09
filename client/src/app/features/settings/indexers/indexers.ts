@@ -17,6 +17,10 @@ import {
   IndexersApiService,
   IndexerRow,
 } from '../../../core/services/api/indexers-api.service';
+import {
+  PluginsApiService,
+  IndexerDescriptorRow,
+} from '../../../core/services/api/plugins-api.service';
 import { ProfilesService } from '../../../core/services/api/profiles.service';
 import { ToastService } from '../../../core/services/toast.service';
 
@@ -28,6 +32,7 @@ import { ToastService } from '../../../core/services/toast.service';
 })
 export class IndexersSettingsComponent implements OnInit {
   private readonly api = inject(IndexersApiService);
+  private readonly pluginsApi = inject(PluginsApiService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
@@ -53,6 +58,24 @@ export class IndexersSettingsComponent implements OnInit {
   readonly formSeedRatio = signal(1);
   readonly formMaxRetentionDays = signal<number | null>(null);
   readonly formUnknownLanguage = signal('');
+
+  /** `'torznab'` (manual URL, today's behavior) or a plugin-namespaced descriptor id. */
+  readonly formImplementation = signal('torznab');
+  /** Values for the selected descriptor's own `settings: FieldDef[]`, keyed by field key. */
+  readonly formDescriptorSettings = signal<Record<string, string | number | boolean | undefined>>({});
+  readonly descriptors = signal<IndexerDescriptorRow[]>([]);
+  readonly hasDescriptors = computed(() => this.descriptors().length > 0);
+  readonly selectedDescriptor = computed(
+    () => this.descriptors().find((d) => d.implementationId === this.formImplementation()) ?? null,
+  );
+  /** A stored implementation that names neither "torznab" nor a currently registered
+   *  descriptor — e.g. the plugin that declared it was uninstalled. Kept selectable
+   *  (disabled) so an incidental save doesn't silently relabel the row as torznab. */
+  readonly orphanedImplementation = computed(() => {
+    const impl = this.formImplementation();
+    if (impl === 'torznab' || this.selectedDescriptor()) return null;
+    return impl;
+  });
 
   readonly testLoading = signal(false);
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
@@ -171,6 +194,13 @@ export class IndexersSettingsComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
+    // Never blocks the indexer list on a plugin-registry hiccup — no descriptors
+    // just means the type selector degrades to today's manual-Torznab-only UI.
+    try {
+      this.descriptors.set(await this.pluginsApi.getIndexerDescriptors());
+    } catch {
+      this.descriptors.set([]);
+    }
   }
 
   openCreate() {
@@ -180,6 +210,8 @@ export class IndexersSettingsComponent implements OnInit {
     this.formRequestDelay.set(2);
     this.formEnabled.set(true);
     this.formEnableSearch.set(true);
+    this.formImplementation.set('torznab');
+    this.formDescriptorSettings.set({});
     this.formTorznabBase.set('');
     this.formTorznabKey.set('');
     this.formMinSeeders.set(0);
@@ -197,6 +229,7 @@ export class IndexersSettingsComponent implements OnInit {
     this.formRequestDelay.set(ix.requestDelay ?? 2);
     this.formEnabled.set(ix.enabled);
     this.formEnableSearch.set(ix.enableSearch);
+    this.formImplementation.set(ix.implementation);
     const s = ix.settings ?? {};
     this.formTorznabBase.set(String(s['baseUrl'] ?? ''));
     this.formTorznabKey.set('');
@@ -204,6 +237,13 @@ export class IndexersSettingsComponent implements OnInit {
     this.formSeedRatio.set(Number(s['seedRatio'] ?? 1));
     this.formMaxRetentionDays.set(s['maxRetentionDays'] != null ? Number(s['maxRetentionDays']) : null);
     this.formUnknownLanguage.set(String(s['unknownLanguageIsoCode'] ?? ''));
+    const descriptor = this.descriptors().find((d) => d.implementationId === ix.implementation);
+    const descriptorValues: Record<string, string | number | boolean | undefined> = {};
+    for (const field of descriptor?.settings ?? []) {
+      // Secret values are stripped from every read response — blank means "keep existing".
+      descriptorValues[field.key] = field.secret ? '' : String(s[field.key] ?? '');
+    }
+    this.formDescriptorSettings.set(descriptorValues);
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -212,10 +252,25 @@ export class IndexersSettingsComponent implements OnInit {
     this.editorDialog()?.nativeElement.close();
   }
 
+  /** Switching type starts the descriptor's settings fresh, seeded with any declared defaults. */
+  onImplementationChange(implementation: string) {
+    this.formImplementation.set(implementation);
+    const descriptor = this.descriptors().find((d) => d.implementationId === implementation);
+    const values: Record<string, string | number | boolean | undefined> = {};
+    for (const field of descriptor?.settings ?? []) {
+      values[field.key] = field.default ?? '';
+    }
+    this.formDescriptorSettings.set(values);
+  }
+
+  setDescriptorField(key: string, value: string | number | boolean) {
+    this.formDescriptorSettings.update((v) => ({ ...v, [key]: value }));
+  }
+
   async testConnection() {
     this.testResult.set(null);
-    const base = this.formTorznabBase().trim();
-    if (!base) {
+    const descriptor = this.selectedDescriptor();
+    if (!descriptor && !this.formTorznabBase().trim()) {
       this.testResult.set({
         ok: false,
         message: this.translate.instant('settings.indexers.base_url_required'),
@@ -224,13 +279,17 @@ export class IndexersSettingsComponent implements OnInit {
     }
     this.testLoading.set(true);
     try {
-      const r = await this.api.testConnection({
-        implementation: 'torznab',
-        settings: {
-          baseUrl: base.replace(/\/$/, ''),
-          apiKey: this.formTorznabKey().trim(),
-        },
-      });
+      const r = await this.api.testConnection(
+        descriptor
+          ? { implementation: descriptor.implementationId, settings: this.formDescriptorSettings() }
+          : {
+              implementation: 'torznab',
+              settings: {
+                baseUrl: this.formTorznabBase().trim().replace(/\/$/, ''),
+                apiKey: this.formTorznabKey().trim(),
+              },
+            },
+      );
       this.testResult.set(r);
     } catch {
       this.testResult.set({
@@ -242,27 +301,46 @@ export class IndexersSettingsComponent implements OnInit {
     }
   }
 
+  /** Acquisition settings common to every implementation. */
+  private buildCommonSettings(): Record<string, unknown> {
+    return {
+      minSeeders: this.formMinSeeders(),
+      seedRatio: this.formSeedRatio(),
+      maxRetentionDays: this.formMaxRetentionDays() || undefined,
+      unknownLanguageIsoCode: this.formUnknownLanguage() || undefined,
+    };
+  }
+
   async save() {
     const name = this.formName().trim();
     if (!name) return;
-    const base = this.formTorznabBase().trim();
-    if (!base) return;
+
+    const descriptor = this.selectedDescriptor();
+    // Falls back to the stored value (not "torznab") for an orphaned implementation —
+    // see orphanedImplementation — so an incidental save can't relabel the row.
+    const implementation = descriptor ? descriptor.implementationId : this.formImplementation();
+    const isManualTorznab = implementation === 'torznab';
+    if (isManualTorznab && !this.formTorznabBase().trim()) return;
+
+    const common = this.buildCommonSettings();
+    const settings: Record<string, unknown> = descriptor
+      ? { ...this.formDescriptorSettings(), ...common }
+      : isManualTorznab
+        ? {
+            baseUrl: this.formTorznabBase().trim().replace(/\/$/, ''),
+            apiKey: this.formTorznabKey().trim() || undefined,
+            ...common,
+          }
+        : common;
 
     const body = {
       name,
-      implementation: 'torznab' as const,
+      implementation,
       priority: this.formPriority(),
       requestDelay: this.formRequestDelay(),
       enabled: this.formEnabled(),
       enableSearch: this.formEnableSearch(),
-      settings: {
-        baseUrl: base.replace(/\/$/, ''),
-        apiKey: this.formTorznabKey().trim() || undefined,
-        minSeeders: this.formMinSeeders(),
-        seedRatio: this.formSeedRatio(),
-        maxRetentionDays: this.formMaxRetentionDays() || undefined,
-        unknownLanguageIsoCode: this.formUnknownLanguage() || undefined,
-      },
+      settings,
     };
 
     this.saving.set(true);

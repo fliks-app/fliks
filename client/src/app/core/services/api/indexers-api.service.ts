@@ -26,9 +26,10 @@ export interface IndexerRow {
   cooldown?: IndexerCooldown | null;
 }
 
+/** `implementation` is `"torznab"` (manual URL) or a plugin-namespaced descriptor id. */
 export interface CreateIndexerBody {
   name: string;
-  implementation: 'torznab';
+  implementation: string;
   settings?: Record<string, unknown>;
   enableRss?: boolean;
   enableSearch?: boolean;
@@ -38,7 +39,7 @@ export interface CreateIndexerBody {
 }
 
 export interface TestIndexerConnectionBody {
-  implementation: 'torznab';
+  implementation: string;
   settings: Record<string, unknown>;
 }
 

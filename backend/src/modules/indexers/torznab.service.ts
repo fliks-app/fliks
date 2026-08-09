@@ -218,13 +218,14 @@ export class TorznabService {
   /**
    * Call t=caps and persist the results on the indexer row.
    * Also resets capsSearchFallback so a reconfigured indexer gets a clean slate.
-   * Called by IndexersService after create/update.
+   * Called by IndexersService after create/update — runs regardless of
+   * enabled/enableSearch so a freshly (re)configured indexer always gets
+   * caps, even before an admin flips it on.
    */
   async refreshCaps(indexer: Indexer): Promise<void> {
-    const settings = indexer.settings as { baseUrl?: string; apiKey?: string };
-    const baseUrl = String(settings.baseUrl || '').replace(/\/$/, '');
-    const apiKey = String(settings.apiKey || '');
-    if (!baseUrl) return;
+    const target = this.resolveEndpoint(indexer);
+    if (!target) return;
+    const { baseUrl, apiKey } = target;
 
     let capsMovieSearch = false;
     let capsTvSearch = false;
@@ -266,9 +267,10 @@ export class TorznabService {
   }
 
   /**
-   * Whether this indexer can serve a search, and the endpoint to hit.
-   * Null means skipped — the reason is logged here so every search path
-   * reports it the same way.
+   * The endpoint to hit for this indexer, independent of any enabled/
+   * enableRss/enableSearch gate — each caller (refreshCaps, rssSearch,
+   * resolveSearchTarget) applies its own. Null means unresolvable — the
+   * reason is logged here so every caller reports it the same way.
    *
    * `implementation` is either the legacy plain `"torznab"` value (baseUrl
    * comes from the indexer's own settings) or a plugin-namespaced descriptor
@@ -276,17 +278,9 @@ export class TorznabService {
    * plugin isn't registered is skipped outright — it never falls through to
    * the plain-Torznab path with an empty baseUrl.
    */
-  private resolveSearchTarget(
+  private resolveEndpoint(
     indexer: Indexer,
   ): { baseUrl: string; apiKey: string } | null {
-    if (!indexer.enabled) {
-      this.log.debug(`[${indexer.name}] skipped — indexer disabled`);
-      return null;
-    }
-    if (!indexer.enableSearch) {
-      this.log.debug(`[${indexer.name}] skipped — search disabled`);
-      return null;
-    }
     const settings = indexer.settings as { baseUrl?: string; apiKey?: string };
     const implementation = indexer.implementation || '';
 
@@ -311,6 +305,21 @@ export class TorznabService {
       return null;
     }
     return { baseUrl, apiKey: String(settings.apiKey || '') };
+  }
+
+  /** Gates a search call on enabled/enableSearch, then resolves the endpoint. */
+  private resolveSearchTarget(
+    indexer: Indexer,
+  ): { baseUrl: string; apiKey: string } | null {
+    if (!indexer.enabled) {
+      this.log.debug(`[${indexer.name}] skipped — indexer disabled`);
+      return null;
+    }
+    if (!indexer.enableSearch) {
+      this.log.debug(`[${indexer.name}] skipped — search disabled`);
+      return null;
+    }
+    return this.resolveEndpoint(indexer);
   }
 
   /** Execute a Torznab search URL. Returns results and the Torznab error message if any. */
@@ -444,10 +453,9 @@ export class TorznabService {
   /** Fetch RSS feed (t=search with no query = recent releases) */
   async rssSearch(indexer: Indexer): Promise<ReleaseCandidate[]> {
     if (!indexer.enabled || !indexer.enableRss) return [];
-    const settings = indexer.settings as { baseUrl?: string; apiKey?: string };
-    const baseUrl = String(settings.baseUrl || '').replace(/\/$/, '');
-    const apiKey = String(settings.apiKey || '');
-    if (!baseUrl) return [];
+    const target = this.resolveEndpoint(indexer);
+    if (!target) return [];
+    const { baseUrl, apiKey } = target;
 
     const url = `${baseUrl}?t=search&q=&cat=2000&apikey=${encodeURIComponent(apiKey)}`;
     const start = Date.now();

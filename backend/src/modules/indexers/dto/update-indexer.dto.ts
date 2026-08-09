@@ -4,7 +4,6 @@ import {
   IsNumber,
   IsOptional,
   IsObject,
-  IsIn,
   Min,
 } from 'class-validator';
 
@@ -13,7 +12,9 @@ export class UpdateIndexerDto {
   @IsOptional()
   name?: string;
 
-  @IsIn(['torznab'])
+  /** `"torznab"` or a plugin-namespaced descriptor id — checked against the
+   *  registry in `IndexersService.assertKnownImplementation`, not here. */
+  @IsString()
   @IsOptional()
   implementation?: string;
 
