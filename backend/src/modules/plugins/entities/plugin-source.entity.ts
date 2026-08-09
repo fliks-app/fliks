@@ -4,6 +4,7 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 /** A configured catalog source (an admin-added URL); the official one is just the seeded first row. */
 @Entity('plugin_sources')
 export class PluginSource extends BaseEntity {
+  /** The `catalog.json` URL itself — not a directory. The signature is fetched from `${url}.sig`. */
   @Column()
   url: string;
 
