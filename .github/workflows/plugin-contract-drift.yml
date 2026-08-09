@@ -9,6 +9,9 @@
 name: Plugin contract drift
 
 on:
+  # Manual trigger: the paths filter below means a PR touching only this file
+  # never exercises the gate, so it has to be runnable on demand.
+  workflow_dispatch:
   pull_request:
     branches: [main]
     paths:
