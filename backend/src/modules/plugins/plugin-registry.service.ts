@@ -3,18 +3,38 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as net from 'net';
 import * as semver from 'semver';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { arePluginsDisabled, FLIKS_PLUGINS_DISABLED_ENV } from '../../common/constants/plugin-flags';
 import {
   PLUGIN_API_VERSION,
+  PLUGIN_WEBHOOK_EVENT_NAMES,
   buildIndexerImplementationId,
   INDEXER_ID_SEPARATOR,
   type PluginKind,
   type PluginManifest,
   type IndexerDescriptor,
+  type PluginWebhookEventName,
 } from '../../common/plugin-contract';
 import { OFFICIAL_KEYS, resolveTrust, readArchiveEntries, type TrustOutcome } from './archive';
+import { isInternalAddress } from './internal-address';
+import type { DomainEvent } from '../scheduler/events.service';
+
+const WEBHOOK_EVENT_NAMES: ReadonlySet<string> = new Set(PLUGIN_WEBHOOK_EVENT_NAMES);
+
+/**
+ * Fails to typecheck if the contract's webhook catalog and `DomainEvent`'s ever
+ * drift apart. `plugin-contract/` cannot import `DomainEvent` (island rule), so
+ * this file — which may import both — is where the two are asserted to agree.
+ */
+type AssertSameStringUnion<A extends string, B extends string> = [A] extends [B]
+  ? [B] extends [A]
+    ? unknown
+    : never
+  : never;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _webhookCatalogMatchesDomainEvents: AssertSameStringUnion<PluginWebhookEventName, DomainEvent['type']> = true;
 
 /** Same pattern as `UpdateCheckService`/`SystemController` — no shared version util exists yet. */
 const CURRENT_FLIKS_VERSION: string = (() => {
@@ -57,7 +77,11 @@ export type PluginRegistrationFailureReason =
   | 'incompatible-fliks'
   | 'unsupported-indexer-driver'
   | 'invalid-indexer-key'
-  | 'invalid-indexer-endpoint';
+  | 'invalid-indexer-endpoint'
+  | 'invalid-webhook-event'
+  | 'invalid-webhook-url'
+  | 'insecure-webhook-scheme'
+  | 'internal-webhook-host';
 
 export interface PluginRegistrationSuccess {
   ok: true;
@@ -85,6 +109,9 @@ export class PluginRegistryService implements OnModuleInit {
   private readonly registry = new Map<string, RegisteredPlugin>();
   /** Keyed by the namespaced id (`buildIndexerImplementationId`), rebuilt per plugin on every `register()`. */
   private readonly indexerDescriptors = new Map<string, { pluginId: string; descriptor: IndexerDescriptor }>();
+  /** Keyed by plugin id; entries are already validated (URL, scheme, event name) — the
+   *  dispatcher trusts this without re-checking any of that. */
+  private readonly webhookDeclarations = new Map<string, { event: PluginWebhookEventName; webhook: string }[]>();
 
   constructor(
     @InjectRepository(PluginPackage)
@@ -145,6 +172,13 @@ export class PluginRegistryService implements OnModuleInit {
     const descriptorCheck = this.validateIndexerDescriptors(manifest.provides?.indexers ?? []);
     if (!descriptorCheck.ok) return this.fail(pkg.pluginId, descriptorCheck.reason, descriptorCheck.detail);
 
+    // `events` is a `PluginManifestBase` field so it's structurally legal on `process` too, but
+    // the `unsupported-tier` bail above already refuses every process manifest before reaching
+    // here — so in practice this only ever runs for `data`, which is the only tier the webhook
+    // dispatcher fans out to.
+    const webhookCheck = this.validateWebhookDeclarations(manifest.events ?? []);
+    if (!webhookCheck.ok) return this.fail(pkg.pluginId, webhookCheck.reason, webhookCheck.detail);
+
     this.registry.set(pkg.pluginId, {
       pluginId: pkg.pluginId,
       version: pkg.version,
@@ -155,12 +189,14 @@ export class PluginRegistryService implements OnModuleInit {
       archive: pkg.archive,
     });
     this.replaceIndexerDescriptors(pkg.pluginId, descriptorCheck.descriptors);
+    this.replaceWebhookDeclarations(pkg.pluginId, webhookCheck.declarations);
     return { ok: true, pluginId: pkg.pluginId };
   }
 
   unregister(pluginId: string): void {
     this.registry.delete(pluginId);
     this.replaceIndexerDescriptors(pluginId, []);
+    this.replaceWebhookDeclarations(pluginId, []);
   }
 
   list(): RegisteredPlugin[] {
@@ -183,6 +219,23 @@ export class PluginRegistryService implements OnModuleInit {
       pluginId,
       ...descriptor,
     }));
+  }
+
+  /** Every registered webhook subscribed to `eventType` — the dispatcher's fan-out list. */
+  listWebhooksForEvent(eventType: string): { pluginId: string; webhook: string }[] {
+    const out: { pluginId: string; webhook: string }[] = [];
+    for (const [pluginId, declarations] of this.webhookDeclarations) {
+      for (const d of declarations) {
+        if (d.event === eventType) out.push({ pluginId, webhook: d.webhook });
+      }
+    }
+    return out;
+  }
+
+  /** Drops this plugin's previous webhooks (if any) and installs `declarations` in their place. */
+  private replaceWebhookDeclarations(pluginId: string, declarations: { event: PluginWebhookEventName; webhook: string }[]): void {
+    if (declarations.length === 0) this.webhookDeclarations.delete(pluginId);
+    else this.webhookDeclarations.set(pluginId, declarations);
   }
 
   /** Drops this plugin's previous descriptors (if any) and installs `descriptors` in their place. */
@@ -245,6 +298,45 @@ export class PluginRegistryService implements OnModuleInit {
       descriptors.push({ key, name, driverApi, endpoint, settings });
     }
     return { ok: true, descriptors };
+  }
+
+  /**
+   * `manifest.events` is untrusted JSON like `provides.indexers`, so each entry
+   * is read defensively. `event` must be a name from the webhook catalog; `webhook`
+   * must be an `https://` URL whose host, when it's an IP literal, isn't internal.
+   * A bare hostname is accepted here — DNS isn't resolved at install time, and
+   * resolving it wouldn't help anyway (it can repoint after the check); the
+   * dispatcher re-resolves and re-checks on every delivery instead.
+   */
+  private validateWebhookDeclarations(
+    raw: unknown[],
+  ):
+    | { ok: true; declarations: { event: PluginWebhookEventName; webhook: string }[] }
+    | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
+    const declarations: { event: PluginWebhookEventName; webhook: string }[] = [];
+    for (const entry of raw) {
+      const d = entry as { event?: unknown; webhook?: unknown } | null | undefined;
+      const event = typeof d?.event === 'string' ? d.event : '';
+      const webhook = typeof d?.webhook === 'string' ? d.webhook : '';
+
+      if (!WEBHOOK_EVENT_NAMES.has(event)) {
+        return { ok: false, reason: 'invalid-webhook-event', detail: `event "${event}" is not a recognised domain event` };
+      }
+      let url: URL;
+      try {
+        url = new URL(webhook);
+      } catch {
+        return { ok: false, reason: 'invalid-webhook-url', detail: `webhook "${webhook}" is not a valid URL` };
+      }
+      if (url.protocol !== 'https:') {
+        return { ok: false, reason: 'insecure-webhook-scheme', detail: `webhook "${webhook}" must use https, got "${url.protocol}"` };
+      }
+      if (net.isIP(url.hostname) !== 0 && isInternalAddress(url.hostname)) {
+        return { ok: false, reason: 'internal-webhook-host', detail: `webhook host "${url.hostname}" is an internal address` };
+      }
+      declarations.push({ event: event as PluginWebhookEventName, webhook });
+    }
+    return { ok: true, declarations };
   }
 
   private fail(pluginId: string, reason: PluginRegistrationFailureReason, detail: string): PluginRegistrationFailure {

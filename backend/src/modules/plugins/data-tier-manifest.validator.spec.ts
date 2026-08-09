@@ -26,7 +26,9 @@ describe('validateDataTierManifest()', () => {
           },
         ],
       },
-      events: [{ webhook: 'https://example.invalid/hook' }],
+      events: [
+        { event: 'media.imported', webhook: 'https://example.invalid/hook' },
+      ],
     });
     expect(validateDataTierManifest(manifest).ok).toBe(true);
   });
