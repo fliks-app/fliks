@@ -136,26 +136,88 @@
           />
         </label>
 
-        <label class="form-control w-full">
-          <span class="label-text">Torznab base URL</span>
-          <input
-            type="url"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="formTorznabBase()"
-            (ngModelChange)="formTorznabBase.set($event)"
-            placeholder="http://prowlarr:9696/1/api"
-          />
-        </label>
-        <label class="form-control w-full">
-          <span class="label-text">API key</span>
-          <input
-            type="password"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="formTorznabKey()"
-            (ngModelChange)="formTorznabKey.set($event)"
-            [placeholder]="editingId() !== null ? '••••••••' : ''"
-          />
-        </label>
+        @if (hasDescriptors()) {
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.indexers.field_type' | translate }}</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              [ngModel]="formImplementation()"
+              (ngModelChange)="onImplementationChange($event)"
+            >
+              <option value="torznab">{{ 'settings.indexers.type_torznab' | translate }}</option>
+              @for (d of descriptors(); track d.implementationId) {
+                <option [value]="d.implementationId">{{ d.name }}</option>
+              }
+              @if (orphanedImplementation(); as impl) {
+                <option [value]="impl" disabled>{{ impl }}</option>
+              }
+            </select>
+          </label>
+        }
+
+        @if (!selectedDescriptor()) {
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.indexers.field_torznab_base_url' | translate }}</span>
+            <input
+              type="url"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formTorznabBase()"
+              (ngModelChange)="formTorznabBase.set($event)"
+              placeholder="http://prowlarr:9696/1/api"
+            />
+          </label>
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'settings.indexers.field_api_key' | translate }}</span>
+            <input
+              type="password"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="formTorznabKey()"
+              (ngModelChange)="formTorznabKey.set($event)"
+              [placeholder]="editingId() !== null ? '••••••••' : ''"
+            />
+          </label>
+        } @else {
+          @for (field of selectedDescriptor()!.settings; track field.key) {
+            @if (field.type === 'toggle') {
+              <label class="label cursor-pointer justify-start gap-3">
+                <input
+                  type="checkbox"
+                  class="toggle toggle-sm"
+                  [ngModel]="!!formDescriptorSettings()[field.key]"
+                  (ngModelChange)="setDescriptorField(field.key, $event)"
+                />
+                <span class="label-text">{{ field.labelKey | translate }}</span>
+              </label>
+            } @else {
+              <label class="form-control w-full">
+                <span class="label-text">{{ field.labelKey | translate }}</span>
+                @if (field.type === 'select') {
+                  <select
+                    class="select select-bordered select-sm w-full"
+                    [ngModel]="formDescriptorSettings()[field.key] ?? ''"
+                    (ngModelChange)="setDescriptorField(field.key, $event)"
+                  >
+                    @for (opt of field.options ?? []; track opt.value) {
+                      <option [value]="opt.value">{{ opt.labelKey | translate }}</option>
+                    }
+                  </select>
+                } @else {
+                  <input
+                    [type]="field.secret ? 'password' : field.type"
+                    class="input input-bordered input-sm w-full"
+                    [ngModel]="formDescriptorSettings()[field.key] ?? ''"
+                    (ngModelChange)="setDescriptorField(field.key, field.type === 'number' ? +$event : $event)"
+                    [placeholder]="field.secret && editingId() !== null ? '••••••••' : (field.placeholder ?? '')"
+                    [required]="!!field.required"
+                  />
+                }
+                @if (field.hint) {
+                  <div class="label"><span class="label-text-alt text-base-content/50">{{ field.hint }}</span></div>
+                }
+              </label>
+            }
+          }
+        }
 
         <div class="flex flex-col gap-2 pt-2 border-t border-base-200">
           <div class="flex flex-wrap items-center gap-2">
@@ -163,7 +225,7 @@
               type="button"
               class="btn btn-outline btn-sm"
               (click)="testConnection()"
-              [disabled]="testLoading() || !formTorznabBase().trim()"
+              [disabled]="testLoading() || (!selectedDescriptor() && !formTorznabBase().trim())"
             >
               @if (testLoading()) {
                 <span class="loading loading-spinner loading-xs"></span>

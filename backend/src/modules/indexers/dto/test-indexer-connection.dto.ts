@@ -1,8 +1,10 @@
-import { IsObject, IsIn } from 'class-validator';
+import { IsObject, IsString } from 'class-validator';
 
 export class TestIndexerConnectionDto {
-  @IsIn(['torznab'])
-  implementation: 'torznab';
+  /** `"torznab"` (settings.baseUrl is used) or a registered descriptor id
+   *  (its endpoint is used instead) — resolved in `IndexersService`. */
+  @IsString()
+  implementation: string;
 
   @IsObject()
   settings: Record<string, unknown>;
