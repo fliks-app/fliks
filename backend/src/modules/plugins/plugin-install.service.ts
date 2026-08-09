@@ -6,7 +6,7 @@ import { createHash } from 'crypto';
 import { closeSync, cpSync, existsSync, fsyncSync, mkdirSync, openSync, renameSync, rmSync } from 'fs';
 import { dirname, join } from 'path';
 import * as semver from 'semver';
-import { PluginPackage, PluginPackageOrigin } from './entities/plugin-package.entity';
+import { PluginPackage, PluginPackageOrigin, PluginPackageStatus } from './entities/plugin-package.entity';
 import { PluginSource } from './entities/plugin-source.entity';
 import { PluginRegistryService, CURRENT_FLIKS_VERSION } from './plugin-registry.service';
 import { PluginStagingService } from './plugin-staging.service';
@@ -27,6 +27,8 @@ export interface PluginInspectReport {
   stagingId?: string;
   sha256?: string;
   id?: string;
+  /** The manifest's human-readable `name` — the consent sheet's copy ("{{name}} runs code…") reads this, never `id`. */
+  name?: string;
   version?: string;
   kind?: PluginKind;
   signature?: TrustOutcome;
@@ -42,6 +44,19 @@ export interface PluginInstallResult {
   status: 'active' | 'failed';
   reason?: string;
   detail?: string;
+}
+
+/** One row of the admin plugin list — sourced from `plugin_packages`, not the in-memory registry, so a `failed` row still shows up. */
+export interface PluginSummary {
+  pluginId: string;
+  name: string;
+  version: string;
+  kind: PluginKind;
+  origin: PluginPackageOrigin;
+  status: PluginPackageStatus;
+  statusReason: string | null;
+  signature: TrustOutcome;
+  verifiedByKeyId: string | null;
 }
 
 /** `${runtime dir}/installed/<id>@<version>/` — exported for uninstall's own recomputation and for tests. */
@@ -180,6 +195,22 @@ export class PluginInstallService {
     return this.promote(buffer, result, 'catalog');
   }
 
+  /** Every installed row, active or failed — the admin list reads the table directly for this reason. */
+  async listInstalled(): Promise<PluginSummary[]> {
+    const packages = await this.packageRepo.find();
+    return packages.map((pkg) => ({
+      pluginId: pkg.pluginId,
+      name: pkg.manifest.name,
+      version: pkg.version,
+      kind: pkg.manifest.kind,
+      origin: pkg.origin,
+      status: pkg.status,
+      statusReason: pkg.statusReason,
+      signature: pkg.signature,
+      verifiedByKeyId: pkg.verifiedByKeyId,
+    }));
+  }
+
   /** Safe to call for a plugin whose row, registry entry or directory is already gone. */
   async uninstall(pluginId: string): Promise<void> {
     this.registry.unregister(pluginId);
@@ -195,6 +226,7 @@ export class PluginInstallService {
       stagingId,
       sha256: result.sha256,
       id: result.id,
+      name: result.manifest.name,
       version: result.version,
       kind: result.kind,
       signature: result.signature,

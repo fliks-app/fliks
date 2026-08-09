@@ -1,0 +1,71 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-lg">
+    @if (report(); as r) {
+      @if (!r.installable) {
+        <h3 class="text-lg font-bold mb-2">{{ 'settings.plugins.consent.refused_title' | translate }}</h3>
+        <p class="text-sm text-base-content/70">{{ refusalMessage() }}</p>
+        <div class="modal-action">
+          <button type="button" class="btn" (click)="close()">{{ 'common.close' | translate }}</button>
+        </div>
+      } @else {
+        <h3 class="text-lg font-bold">{{ 'settings.plugins.consent.title' | translate: { name: r.name } }}</h3>
+        <p class="text-xs text-base-content/50 mb-3">{{ 'settings.plugins.consent.identity' | translate: { id: r.id, version: r.version } }}</p>
+
+        <span class="badge badge-sm mb-3" [class]="trust().cssClass">
+          {{ trust().labelKey | translate: trust().params }}
+        </span>
+
+        @if (r.kind === 'data') {
+          <p class="text-sm mb-4">{{ 'settings.plugins.consent.data_tier' | translate }}</p>
+        } @else {
+          <p class="text-sm font-semibold mb-1">{{ 'settings.plugins.consent.process_tier_title' | translate: { name: r.name } }}</p>
+          <p class="text-sm text-base-content/70 mb-4">{{ 'settings.plugins.consent.process_tier_body' | translate }}</p>
+        }
+
+        @if (r.capabilities?.length) {
+          <p class="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-2">
+            {{ 'settings.plugins.consent.capabilities_title' | translate }}
+          </p>
+          <ul class="list-disc list-inside text-sm mb-4 space-y-1">
+            @for (capability of r.capabilities; track capability) {
+              <li>{{ capabilityLabel(capability) }}</li>
+            }
+          </ul>
+        }
+
+        @if (requiresAck()) {
+          <label class="label cursor-pointer justify-start gap-3 mb-2">
+            <input
+              type="checkbox"
+              class="checkbox checkbox-sm"
+              [ngModel]="acknowledged()"
+              (ngModelChange)="acknowledged.set($event)"
+            />
+            <span class="label-text text-sm">{{ 'settings.plugins.consent.unverified_ack' | translate }}</span>
+          </label>
+        }
+
+        @if (error()) {
+          <div role="alert" class="alert alert-error text-sm py-2 mb-2">{{ error() }}</div>
+        }
+
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost" (click)="close()" [disabled]="confirming()">
+            {{ 'common.cancel' | translate }}
+          </button>
+          <button type="button" class="btn btn-primary" (click)="confirm()" [disabled]="!canConfirm()">
+            @if (confirming()) {
+              <span class="loading loading-spinner loading-sm"></span>
+            }
+            {{ 'settings.plugins.consent.confirm' | translate }}
+          </button>
+        </div>
+      }
+    }
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="close()" [attr.aria-label]="'common.close' | translate">
+      {{ 'common.close' | translate }}
+    </button>
+  </form>
+</dialog>

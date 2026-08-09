@@ -1504,7 +1504,8 @@
       "subtitle_providers": "Fournisseurs de sous-titres",
       "subtitles": "Sous-titres",
       "schedulers": "Tâches planifiées",
-      "streaming": "Streaming"
+      "streaming": "Streaming",
+      "plugins": "Plugins"
     },
     "streaming": {
       "title": "Streaming",
@@ -2279,6 +2280,64 @@
       "search_one": "Rechercher ce sous-titre",
       "search_one_ok": "Sous-titre {{lang}} téléchargé pour « {{title}} »",
       "search_one_none": "Aucun sous-titre {{lang}} trouvé avec un score suffisant"
+    },
+    "plugins": {
+      "title": "Plugins",
+      "subtitle": "Installez des plugins pour ajouter des indexeurs, des tâches et des pages à Fliks.",
+      "upload": "Installer un plugin…",
+      "load_error": "Impossible de charger la liste des plugins.",
+      "empty": "Aucun plugin installé.",
+      "col_plugin": "Plugin",
+      "col_version": "Version",
+      "col_tier": "Niveau",
+      "col_trust": "Confiance",
+      "col_status": "Statut",
+      "tier_data": "Données",
+      "tier_process": "Processus",
+      "status_active": "Actif",
+      "status_failed": "Échec",
+      "uninstall": "Désinstaller",
+      "confirm_uninstall": "Désinstaller « {{name}} » ? Ses fichiers sont supprimés immédiatement.",
+      "uninstalled": "Plugin désinstallé.",
+      "uninstall_error": "Impossible de désinstaller le plugin.",
+      "inspect_error": "Impossible de lire cette archive.",
+      "installed": "Plugin installé.",
+      "install_failed_but_kept": "« {{id}} » a été installé mais n'a pas pu démarrer : {{reason}}",
+      "trust": {
+        "official": "Officiel",
+        "verified": "Vérifié — {{key}}",
+        "unverified": "Non vérifié",
+        "manual": "Importé manuellement"
+      },
+      "consent": {
+        "refused_title": "Ce plugin ne peut pas être installé",
+        "title": "Installer {{name}} ?",
+        "identity": "{{id}} · v{{version}}",
+        "data_tier": "Ce plugin ne contient aucun code exécutable. Il ne peut rien exécuter sur votre serveur.",
+        "process_tier_title": "{{name}} exécute du code sur votre serveur.",
+        "process_tier_body": "Il s'exécute dans son propre processus avec un accès restreint aux fichiers — il ne peut pas lire les secrets de votre serveur. Il peut accéder au réseau et ajouter des fichiers à votre bibliothèque de médias. Une signature confirme qui l'a publié. Elle ne confirme pas que le code est sûr.",
+        "capabilities_title": "Ce plugin peut",
+        "capability": {
+          "ui": "Ajouter un élément d'interface « {{value}} »",
+          "config": "Ajouter une page de réglages « {{value}} »",
+          "scope": "Accès : {{value}}",
+          "job": "Exécuter une tâche planifiée : {{value}}",
+          "webhook": "S'abonner aux événements du serveur"
+        },
+        "unverified_ack": "Je comprends que l'éditeur de ce plugin n'est pas vérifié, et je veux quand même l'installer.",
+        "confirm": "Installer",
+        "refusal": {
+          "malformed": "Cette archive n'est pas un package de plugin Fliks valide.",
+          "too_large": "Cette archive est trop volumineuse, ou son contenu ne correspond pas à ce qu'elle déclare.",
+          "data_tier_field": "Ce plugin se déclare comme données uniquement, mais son manifeste déclare du code exécutable. Il a été refusé.",
+          "bad_signature": "La signature de cette archive est mal formée.",
+          "unsigned_process": "Ce plugin exécute du code mais n'est pas signé. Les plugins de type processus doivent être signés.",
+          "hash_mismatch": "Cette archive a changé après son inspection. Envoyez-la à nouveau.",
+          "file_set_mismatch": "Les fichiers de cette archive ne correspondent pas à son manifeste.",
+          "tier_violation": "Le contenu de cette archive ne correspond pas au niveau déclaré.",
+          "unknown": "Ce plugin n'a pas pu être installé (code {{code}})."
+        }
+      }
     }
   },
   "roles": {

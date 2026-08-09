@@ -1,14 +1,20 @@
-import { Controller, Delete, HttpCode, HttpStatus, Param, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, HttpStatus, Param, UseGuards } from '@nestjs/common';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
-import { PluginInstallService } from './plugin-install.service';
+import { PluginInstallService, PluginSummary } from './plugin-install.service';
 
 @Controller('plugins')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
 export class PluginsController {
   constructor(private readonly installService: PluginInstallService) {}
+
+  @Get()
+  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  async list(): Promise<PluginSummary[]> {
+    return this.installService.listInstalled();
+  }
 
   /** Row + registry entry + extracted directory. Safe on a plugin whose files or row are already gone. */
   @Delete(':pluginId')
