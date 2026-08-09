@@ -9,6 +9,7 @@
 
 /** The six slots a contribution can render into. */
 export type SlotId =
+  | 'deliberate-drift-do-not-merge'
   | 'nav.main'
   | 'nav.acquisition'
   | 'settings.page'
