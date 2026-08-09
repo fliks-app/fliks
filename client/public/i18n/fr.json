@@ -2283,7 +2283,7 @@
     },
     "plugins": {
       "title": "Plugins",
-      "subtitle": "Installez des plugins pour ajouter des indexeurs, des tâches et des pages à Fliks.",
+      "subtitle": "Installez des plugins pour étendre les possibilités de Fliks.",
       "upload": "Installer un plugin…",
       "load_error": "Impossible de charger la liste des plugins.",
       "empty": "Aucun plugin installé.",
