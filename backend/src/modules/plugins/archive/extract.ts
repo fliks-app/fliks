@@ -107,7 +107,7 @@ function hexEqual(a: string, b: string): boolean {
 }
 
 /** PNG by magic bytes; SVG must parse as XML rooted at `<svg>` with no script content. */
-function sniffLogo(name: string, content: Buffer): PluginRefusal | null {
+export function sniffLogo(name: string, content: Buffer): PluginRefusal | null {
   if (name === 'logo.png') {
     if (!content.subarray(0, PNG_MAGIC.length).equals(PNG_MAGIC)) {
       return refuse('PLUGIN_BAD_LOGO', 'logo.png does not start with the PNG magic bytes');
@@ -128,4 +128,41 @@ function sniffLogo(name: string, content: Buffer): PluginRefusal | null {
     return refuse('PLUGIN_BAD_LOGO', 'logo.svg contains a javascript: URI');
   }
   return null;
+}
+
+/** Read a subset of named entries out of an already-in-memory archive, ignoring the rest. */
+export async function readArchiveEntries(archive: Buffer, wanted: ReadonlySet<string>): Promise<Map<string, Buffer>> {
+  const zipfile = await yauzl.fromBufferPromise(archive, {
+    lazyEntries: true,
+    decodeStrings: true,
+    strictFileNames: true,
+    validateEntrySizes: true,
+  });
+  const found = new Map<string, Buffer>();
+  for await (const entry of zipfile.eachEntry()) {
+    if (!wanted.has(entry.fileName)) continue;
+    found.set(entry.fileName, await readEntry(zipfile, entry));
+    if (found.size === wanted.size) break;
+  }
+  return found;
+}
+
+export interface VerifiedLogo {
+  contentType: 'image/png' | 'image/svg+xml';
+  content: Buffer;
+}
+
+/**
+ * Serve-time logo read: classifies by magic bytes / XML shape, never by the
+ * entry's own name, and re-runs {@link sniffLogo}'s safety checks rather
+ * than trusting the install-time pass.
+ */
+export async function readVerifiedLogo(archive: Buffer): Promise<VerifiedLogo | null> {
+  const entries = await readArchiveEntries(archive, new Set(['logo.png', 'logo.svg']));
+  const content = entries.get('logo.png') ?? entries.get('logo.svg');
+  if (!content) return null;
+  if (content.subarray(0, PNG_MAGIC.length).equals(PNG_MAGIC)) {
+    return sniffLogo('logo.png', content) ? null : { contentType: 'image/png', content };
+  }
+  return sniffLogo('logo.svg', content) ? null : { contentType: 'image/svg+xml', content };
 }

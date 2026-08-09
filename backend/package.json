@@ -68,6 +68,7 @@
     "@types/node": "^22.10.7",
     "@types/passport-jwt": "^4.0.1",
     "@types/pg": "^8.20.0",
+    "@types/semver": "^7.8.0",
     "@types/supertest": "^6.0.2",
     "@types/yauzl": "^3.4.0",
     "eslint": "^9.18.0",
