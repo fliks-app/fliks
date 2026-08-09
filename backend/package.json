@@ -49,8 +49,10 @@
     "pg": "^8.20.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "semver": "^7.8.5",
     "sharp": "^0.35.3",
-    "typeorm": "^0.3.28"
+    "typeorm": "^0.3.28",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -67,6 +69,7 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/pg": "^8.20.0",
     "@types/supertest": "^6.0.2",
+    "@types/yauzl": "^3.4.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
