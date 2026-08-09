@@ -7,9 +7,10 @@ import { IndexerThrottle } from './indexer-throttle.service';
 import { IndexersService } from './indexers.service';
 import { IndexersController } from './indexers.controller';
 import { AuthModule } from '../auth/auth.module';
+import { PluginsModule } from '../plugins/plugins.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Indexer, IndexerStat]), AuthModule],
+  imports: [TypeOrmModule.forFeature([Indexer, IndexerStat]), AuthModule, PluginsModule],
   controllers: [IndexersController],
   providers: [TorznabService, IndexerThrottle, IndexersService],
   exports: [TypeOrmModule, TorznabService],

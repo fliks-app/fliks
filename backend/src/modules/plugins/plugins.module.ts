@@ -5,11 +5,12 @@ import { PluginSource } from './entities/plugin-source.entity';
 import { PluginRegistration } from './entities/plugin-registration.entity';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginLogoController } from './plugin-logo.controller';
+import { PluginIndexerDescriptorsController } from './plugin-indexer-descriptors.controller';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [TypeOrmModule.forFeature([PluginPackage, PluginSource, PluginRegistration]), AuthModule],
-  controllers: [PluginLogoController],
+  controllers: [PluginLogoController, PluginIndexerDescriptorsController],
   providers: [PluginRegistryService],
   exports: [TypeOrmModule, PluginRegistryService],
 })
