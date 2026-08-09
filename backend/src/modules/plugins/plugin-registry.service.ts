@@ -36,8 +36,9 @@ type AssertSameStringUnion<A extends string, B extends string> = [A] extends [B]
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _webhookCatalogMatchesDomainEvents: AssertSameStringUnion<PluginWebhookEventName, DomainEvent['type']> = true;
 
-/** Same pattern as `UpdateCheckService`/`SystemController` — no shared version util exists yet. */
-const CURRENT_FLIKS_VERSION: string = (() => {
+/** Same pattern as `UpdateCheckService`/`SystemController` — no shared version util exists yet.
+ *  Exported so the catalog client checks compatibility against this exact value, never a second read. */
+export const CURRENT_FLIKS_VERSION: string = (() => {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8')) as { version?: string };
     return pkg.version ?? '0.0.0';
