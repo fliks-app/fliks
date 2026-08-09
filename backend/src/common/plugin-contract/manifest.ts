@@ -3,6 +3,42 @@ import type { UiContribution, ConfigPage } from './ui-contribution';
 import type { PluginScope } from './principal';
 
 /**
+ * Domain event names a `data` plugin's webhook may subscribe to. Mirrors
+ * `DomainEvent['type']` in `modules/scheduler/events.service.ts` verbatim: this
+ * island may not import from the rest of the backend (see the module doc below),
+ * so the catalog is restated here and `PluginRegistryService` asserts the two
+ * stay in sync.
+ */
+export const PLUGIN_WEBHOOK_EVENT_NAMES = [
+  'media.imported',
+  'media.monitored.changed',
+  'media.season.monitored.changed',
+  'media.removed',
+  'media.files.imported',
+  'media.acquisition.requested',
+  'acquisition.grabbed',
+  'request.created',
+  'request.approved',
+  'library.scan.completed',
+  'settings.changed',
+] as const;
+
+export type PluginWebhookEventName = (typeof PLUGIN_WEBHOOK_EVENT_NAMES)[number];
+
+/**
+ * One `events[]` entry: POST the event to `webhook` when `event` fires. Both
+ * fields are optional at the type level — a manifest is untrusted JSON, so
+ * `PluginRegistryService` validates every entry before believing it (same
+ * posture as `provides.indexers`).
+ */
+export interface PluginWebhookDeclaration {
+  event: PluginWebhookEventName;
+  /** An absolute https URL. Validated again at registration and at every
+   *  dispatch: a manifest is untrusted JSON and DNS can move under it. */
+  webhook: string;
+}
+
+/**
  * `data` ships JSON descriptors and executes nothing; `process` ships one
  * bundled JS file that core spawns as a child process. The baseline's
  * third tier, `bundled`, is deleted: in-repo code is just core now.
@@ -50,7 +86,7 @@ interface PluginManifestBase {
     configPages?: ConfigPage[];
   };
   /** `data`-tier outbound notifications only. */
-  events?: { webhook?: string }[];
+  events?: PluginWebhookDeclaration[];
   i18n?: Record<string, Record<string, string>>;
 }
 
