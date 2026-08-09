@@ -38,4 +38,8 @@ export class PluginPackage extends BaseEntity {
   /** `failed` on a P4 activation failure; the row (and archive) stand regardless. */
   @Column({ type: 'enum', enum: PLUGIN_PACKAGE_STATUSES, default: 'active' })
   status: PluginPackageStatus;
+
+  /** `PluginRegistrationFailure.reason: detail` when `status` is `failed`; null otherwise. */
+  @Column({ type: 'text', nullable: true })
+  statusReason: string | null;
 }
