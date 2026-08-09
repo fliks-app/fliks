@@ -6,7 +6,15 @@ import { createPublicKey, verify as verifyDetached } from 'crypto';
  * key: populate with `OFFICIAL_KEYS.set('<keyId>', Buffer.from('<base64>', 'base64'))`.
  * An empty store must never resolve a signature to `official` — see {@link resolveTrust}.
  */
-export const OFFICIAL_KEYS: ReadonlyMap<string, Buffer> = new Map();
+export const OFFICIAL_KEYS: ReadonlyMap<string, Buffer> = new Map([
+  // fliks-app/fliks-plugin-catalog signs its catalog and every first-party
+  // plugin with this key. Never remove a published key: old signatures must
+  // stay verifiable, which is what makes rotation safe.
+  [
+    'release-2026',
+    Buffer.from('Cj0i8YENJdTuC0I0pPPZbNuzo4tgIcpMnCjlb8rtaKs=', 'base64'),
+  ],
+]);
 
 export type TrustOutcome = 'official' | `verified-${string}` | 'unverified' | 'unsigned';
 
