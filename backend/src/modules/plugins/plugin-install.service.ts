@@ -7,6 +7,7 @@ import { closeSync, existsSync, fsyncSync, openSync, rmSync } from 'fs';
 import * as semver from 'semver';
 import { PluginPackage, PluginPackageOrigin, PluginPackageStatus } from './entities/plugin-package.entity';
 import { PluginSource } from './entities/plugin-source.entity';
+import { PluginRegistration } from './entities/plugin-registration.entity';
 import { PluginRegistryService, CURRENT_FLIKS_VERSION } from './plugin-registry.service';
 import { PluginStagingService } from './plugin-staging.service';
 import { PluginDatabaseService } from './plugin-database.service';
@@ -112,6 +113,8 @@ export class PluginInstallService {
   constructor(
     @InjectRepository(PluginPackage)
     private readonly packageRepo: Repository<PluginPackage>,
+    @InjectRepository(PluginRegistration)
+    private readonly registrationRepo: Repository<PluginRegistration>,
     private readonly registry: PluginRegistryService,
     private readonly staging: PluginStagingService,
     private readonly pluginDb: PluginDatabaseService,
@@ -201,6 +204,9 @@ export class PluginInstallService {
   /** Safe to call for a plugin whose row, registry entry or directory is already gone. */
   async uninstall(pluginId: string): Promise<void> {
     await this.registry.forget(pluginId);
+    // The registration row carries the consented `scopes` and `ingestRoots`: leaving it behind
+    // would let a reinstall silently inherit grants instead of asking for them again.
+    await this.registrationRepo.delete({ pluginId });
     const pkg = await this.packageRepo.findOne({ where: { pluginId } });
     if (!pkg) return;
     if (pkg.manifest.kind === 'process') {

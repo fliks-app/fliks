@@ -7,7 +7,7 @@ import { PluginInstallException } from './plugin-install.exception';
 import { PluginStagingService } from './plugin-staging.service';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginDatabaseService } from './plugin-database.service';
-import { fakeRegistrationRepo, fakeProcessService } from './plugin-registry.test-helpers';
+import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService } from './plugin-registry.test-helpers';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { PluginSource } from './entities/plugin-source.entity';
 import { buildZip, ZipEntrySpec } from './archive/zip-builder';
@@ -133,6 +133,7 @@ async function expectInstallError(promise: Promise<unknown>, status: number, cod
 
 describe('PluginInstallService', () => {
   let repo: ReturnType<typeof fakePackageRepo>;
+  let registrationRepo: ReturnType<typeof fakeRegistrationRepo>;
   let registry: PluginRegistryService;
   let staging: PluginStagingService;
   let pluginDb: ReturnType<typeof fakePluginDb>;
@@ -147,10 +148,24 @@ describe('PluginInstallService', () => {
     rmSync(stagingRoot(), { recursive: true, force: true });
     rmSync(join(getPluginsRuntimeDir(), 'installed'), { recursive: true, force: true });
     repo = fakePackageRepo();
-    registry = new PluginRegistryService(repo as never, fakeRegistrationRepo() as never, fakeProcessService() as never);
+    // One instance shared by both: the registry writes the registration row and uninstall
+    // deletes it, so two separate fakes would make either assertion vacuous.
+    registrationRepo = fakeRegistrationRepo();
+    registry = new PluginRegistryService(
+      repo as never,
+      registrationRepo as never,
+      fakeProcessService() as never,
+      fakePluginJobsService() as never,
+    );
     staging = new PluginStagingService();
     pluginDb = fakePluginDb();
-    service = new PluginInstallService(repo as never, registry, staging, pluginDb as unknown as PluginDatabaseService);
+    service = new PluginInstallService(
+      repo as never,
+      registrationRepo as never,
+      registry,
+      staging,
+      pluginDb as unknown as PluginDatabaseService,
+    );
   });
 
   afterEach(() => {
@@ -404,6 +419,23 @@ describe('PluginInstallService', () => {
       expect(existsSync(installedPluginDir(manifest.id, manifest.version))).toBe(false);
 
       await expect(service.uninstall(manifest.id)).resolves.toBeUndefined();
+    });
+
+    it('deletes the registration row, so a reinstall cannot inherit consented scopes and ingestRoots', async () => {
+      const files = { 'plugin.js': 'a'.repeat(64), 'logo.png': 'b'.repeat(64) };
+      const manifest = minimalProcessManifest(files, { id: 'fliks.grantleak', fliks: COMPATIBLE_RANGE });
+      registrationRepo.rows.set(manifest.id, {
+        pluginId: manifest.id,
+        ingestRoots: ['/downloads'],
+        scopes: ['media:read'],
+        enabled: true,
+        manifest,
+      } as never);
+
+      await service.uninstall(manifest.id);
+
+      expect(registrationRepo.delete).toHaveBeenCalledWith({ pluginId: manifest.id });
+      expect(registrationRepo.rows.has(manifest.id)).toBe(false);
     });
 
     it('deprovisions a process-tier package before removing its row; skips it for a data-tier one', async () => {

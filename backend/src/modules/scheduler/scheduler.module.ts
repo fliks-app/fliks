@@ -42,6 +42,7 @@ import { ProfilesModule } from '../profiles/profiles.module';
 import { MarkersModule } from '../markers/markers.module';
 import { Library } from '../libraries/entities/library.entity';
 import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.module';
+import { PluginsModule } from '../plugins/plugins.module';
 
 @Module({
   imports: [
@@ -81,6 +82,10 @@ import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.
     MarkersModule,
     forwardRef(() => LibraryIngestModule),
     LogBufferModule,
+    // Already reachable transitively via IndexersModule -> PluginsModule (see
+    // LogBufferModule's own doc comment); imported directly here so SchedulerService can
+    // inject PluginJobsService for the merged job listing.
+    PluginsModule,
   ],
   controllers: [CommandsController, SystemController, LivenessController],
   providers: [

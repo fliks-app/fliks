@@ -4,9 +4,11 @@ import { Repository } from 'typeorm';
 import * as net from 'net';
 import * as semver from 'semver';
 import { pathToRegexp, type Keys } from 'path-to-regexp';
+import { CronExpressionParser } from 'cron-parser';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { PluginRegistration } from './entities/plugin-registration.entity';
 import { PluginProcessService } from './plugin-process.service';
+import { PluginJobsService } from './plugin-jobs.service';
 import { CURRENT_FLIKS_VERSION } from './plugin-version';
 import type { SupervisorState } from './supervisor/plugin-supervisor';
 import { arePluginsDisabled, FLIKS_PLUGINS_DISABLED_ENV } from '../../common/constants/plugin-flags';
@@ -21,6 +23,7 @@ import {
   type IndexerDescriptor,
   type PluginWebhookEventName,
   type PluginRoute,
+  type PluginJob,
 } from '../../common/plugin-contract';
 import { OFFICIAL_KEYS, resolveTrust, readArchiveEntries, type TrustOutcome } from './archive';
 import { isInternalAddress } from './internal-address';
@@ -28,6 +31,8 @@ import type { DomainEvent } from '../scheduler/events.service';
 import { PluginRouteTable, type ResolvedPluginRoute } from './proxy/plugin-route-table';
 import { parseDeclaredPolicy } from './proxy/policy-vocabulary';
 import { parseObjectGuard } from './proxy/plugin-object-guards.service';
+import { PLUGIN_PERMISSION_NAME_PATTERN, pluginPermissionSubject } from '../../common/constants/plugin-permissions';
+import { CORE_SCHEDULER_JOB_NAMES } from '../../common/constants/core-scheduler-jobs';
 
 const WEBHOOK_EVENT_NAMES: ReadonlySet<string> = new Set(PLUGIN_WEBHOOK_EVENT_NAMES);
 
@@ -51,6 +56,11 @@ const SUPPORTED_INDEXER_DRIVER_APIS: ReadonlySet<string> = new Set(['torznab']);
 
 /** A manifest route's `method` must be one of these, compared case-insensitively. */
 const KNOWN_HTTP_METHODS: ReadonlySet<string> = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
+
+/** Shared so a plugin with nothing declared doesn't cost an allocation per lookup. */
+const EMPTY_SUBJECT_SET: ReadonlySet<string> = new Set();
+
+const CORE_JOB_NAME_SET: ReadonlySet<string> = new Set(CORE_SCHEDULER_JOB_NAMES);
 
 function isAbsoluteHttpUrl(value: string): boolean {
   try {
@@ -89,6 +99,12 @@ export type PluginRegistrationFailureReason =
   | 'invalid-route-policy'
   | 'invalid-route-object-guard'
   | 'duplicate-route'
+  | 'invalid-permission'
+  | 'invalid-job-name'
+  | 'invalid-job-cron'
+  | 'invalid-job-triggerable'
+  | 'invalid-job-label'
+  | 'job-name-conflict'
   | 'disabled'
   | 'tampered'
   | 'db-provision-failed'
@@ -136,6 +152,9 @@ export class PluginRegistryService implements OnModuleInit {
   private readonly webhookDeclarations = new Map<string, { event: PluginWebhookEventName; webhook: string }[]>();
   /** Keyed by plugin id; compiled once per `register()` from already-validated routes. */
   private readonly routeTables = new Map<string, PluginRouteTable>();
+  /** Keyed by plugin id; namespaced (`plugin:<id>:<name>`) CASL subjects this plugin declared.
+   *  Lifecycle mirrors `routeTables`, not `indexerDescriptors`: kept across `unregister()`, dropped on `forget()`. */
+  private readonly declaredPermissions = new Map<string, ReadonlySet<string>>();
 
   constructor(
     @InjectRepository(PluginPackage)
@@ -143,6 +162,7 @@ export class PluginRegistryService implements OnModuleInit {
     @InjectRepository(PluginRegistration)
     private readonly registrationRepo: Repository<PluginRegistration>,
     private readonly processService: PluginProcessService,
+    private readonly pluginJobs: PluginJobsService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -200,16 +220,33 @@ export class PluginRegistryService implements OnModuleInit {
     const webhookCheck = this.validateWebhookDeclarations(manifest.events ?? []);
     if (!webhookCheck.ok) return this.fail(pkg.pluginId, webhookCheck.reason, webhookCheck.detail);
 
+    let declaredSubjects: ReadonlySet<string> = EMPTY_SUBJECT_SET;
     if (manifest.kind === 'process') {
-      const routesCheck = this.validateRoutes(manifest.routes);
+      const permissionsCheck = this.validatePermissions(pkg.pluginId, manifest.permissions ?? []);
+      if (!permissionsCheck.ok) return this.fail(pkg.pluginId, permissionsCheck.reason, permissionsCheck.detail);
+      declaredSubjects = permissionsCheck.subjects;
+
+      const jobsCheck = this.validateJobs(manifest.jobs ?? []);
+      if (!jobsCheck.ok) return this.fail(pkg.pluginId, jobsCheck.reason, jobsCheck.detail);
+
+      const routesCheck = this.validateRoutes(manifest.routes, declaredSubjects);
       if (!routesCheck.ok) return this.fail(pkg.pluginId, routesCheck.reason, routesCheck.detail);
 
       // Installed before running: what a plugin declares stays true while its process is
       // down, so a request to one of its routes can answer 503 instead of a bare Forbidden.
       this.replaceRouteTable(pkg.pluginId, manifest.routes);
+      this.replaceDeclaredPermissions(pkg.pluginId, declaredSubjects);
 
       const activation = await this.activateProcess(pkg, manifest);
       if (!activation.ok) return activation;
+
+      // Only now that the process is actually up — a cron for a plugin that failed to
+      // spawn would fire into a "not running" no-op forever.
+      this.pluginJobs.replaceFor(pkg.pluginId, jobsCheck.jobs);
+    } else {
+      // A tier switch on upgrade (process -> data, same plugin id) must not leave the
+      // previous registration's crons or permission set behind.
+      this.pluginJobs.dropFor(pkg.pluginId);
     }
 
     this.registry.set(pkg.pluginId, {
@@ -224,6 +261,7 @@ export class PluginRegistryService implements OnModuleInit {
     this.replaceIndexerDescriptors(pkg.pluginId, descriptorCheck.descriptors);
     this.replaceWebhookDeclarations(pkg.pluginId, manifest.kind === 'data' ? webhookCheck.declarations : []);
     this.replaceRouteTable(pkg.pluginId, manifest.kind === 'process' ? manifest.routes : []);
+    this.replaceDeclaredPermissions(pkg.pluginId, manifest.kind === 'process' ? declaredSubjects : EMPTY_SUBJECT_SET);
     return { ok: true, pluginId: pkg.pluginId };
   }
 
@@ -231,12 +269,14 @@ export class PluginRegistryService implements OnModuleInit {
   async forget(pluginId: string): Promise<void> {
     await this.unregister(pluginId);
     this.replaceRouteTable(pluginId, []);
+    this.replaceDeclaredPermissions(pluginId, EMPTY_SUBJECT_SET);
   }
 
-  /** Withdraws what the plugin offers and stops its process, but keeps its declared routes:
-   *  a stopped plugin is unavailable, not forbidden. */
+  /** Withdraws what the plugin offers and stops its process, but keeps its declared routes and
+   *  permission set: a stopped plugin is unavailable, not forbidden. Its cron still stops here, though. */
   async unregister(pluginId: string): Promise<void> {
     await this.processService.stopFor(pluginId);
+    this.pluginJobs.dropFor(pluginId);
     this.registry.delete(pluginId);
     this.replaceIndexerDescriptors(pluginId, []);
     this.replaceWebhookDeclarations(pluginId, []);
@@ -326,6 +366,12 @@ export class PluginRegistryService implements OnModuleInit {
     return this.routeTables.get(pluginId)?.resolve(method, path) ?? null;
   }
 
+  /** The namespaced CASL subjects this plugin declared — empty if unregistered, `data`, or none declared.
+   *  `PluginRouteGuard` scopes every check to exactly this, so a route never authorizes against another plugin's subject. */
+  declaredPermissionsFor(pluginId: string): ReadonlySet<string> {
+    return this.declaredPermissions.get(pluginId) ?? EMPTY_SUBJECT_SET;
+  }
+
   /** Every registered webhook subscribed to `eventType` — the dispatcher's fan-out list. */
   listWebhooksForEvent(eventType: string): { pluginId: string; webhook: string }[] {
     const out: { pluginId: string; webhook: string }[] = [];
@@ -351,6 +397,12 @@ export class PluginRegistryService implements OnModuleInit {
     for (const descriptor of descriptors) {
       this.indexerDescriptors.set(buildIndexerImplementationId(pluginId, descriptor.key), { pluginId, descriptor });
     }
+  }
+
+  /** Drops this plugin's previous declared-permission set (if any) and installs `subjects` in its place. */
+  private replaceDeclaredPermissions(pluginId: string, subjects: ReadonlySet<string>): void {
+    if (subjects.size === 0) this.declaredPermissions.delete(pluginId);
+    else this.declaredPermissions.set(pluginId, subjects);
   }
 
   /** Drops this plugin's previous route table (if any) and compiles `routes` into a fresh one. */
@@ -450,9 +502,85 @@ export class PluginRegistryService implements OnModuleInit {
     return { ok: true, declarations };
   }
 
+  /**
+   * `manifest.permissions` is untrusted JSON like `provides.indexers`, so each entry is read
+   * defensively. `PLUGIN_PERMISSION_NAME_PATTERN`'s charset alone rejects every reserved-looking
+   * or foreign-plugin-shaped name — no `: . * space` or uppercase survives it. The namespace
+   * prefix itself always comes from `pkg.pluginId`, never from the manifest, so a name can
+   * never widen into another plugin's subject or a core one.
+   */
+  private validatePermissions(
+    pluginId: string,
+    raw: unknown[],
+  ): { ok: true; subjects: ReadonlySet<string> } | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
+    const subjects = new Set<string>();
+    const seen = new Set<string>();
+    for (const entry of raw) {
+      const name = typeof entry === 'string' ? entry : '';
+      if (!PLUGIN_PERMISSION_NAME_PATTERN.test(name)) {
+        return { ok: false, reason: 'invalid-permission', detail: `permission ${JSON.stringify(name)} is not a legal permission name` };
+      }
+      if (seen.has(name)) {
+        return { ok: false, reason: 'invalid-permission', detail: `duplicate permission "${name}"` };
+      }
+      seen.add(name);
+      subjects.add(pluginPermissionSubject(pluginId, name));
+    }
+    return { ok: true, subjects };
+  }
+
+  /**
+   * `manifest.jobs` is untrusted JSON like `provides.indexers`. Each violation class gets its own
+   * reason. `CORE_JOB_NAME_SET` mirrors `SchedulerService.SCHEDULERS`'s names — a plugin job can
+   * never shadow one, since the merged admin listing and manual trigger would become ambiguous.
+   */
+  private validateJobs(
+    raw: unknown[],
+  ): { ok: true; jobs: PluginJob[] } | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
+    const jobs: PluginJob[] = [];
+    const seen = new Set<string>();
+    for (const entry of raw) {
+      const j = (entry ?? {}) as Partial<PluginJob>;
+      const name = typeof j.name === 'string' ? j.name : '';
+      const cron = typeof j.cron === 'string' ? j.cron : '';
+      const triggerable = j.triggerable;
+      const labelKey = typeof j.labelKey === 'string' ? j.labelKey : '';
+
+      if (!name || seen.has(name)) {
+        return {
+          ok: false,
+          reason: 'invalid-job-name',
+          detail: !name ? 'job name must not be empty' : `duplicate job name "${name}"`,
+        };
+      }
+      seen.add(name);
+      if (CORE_JOB_NAME_SET.has(name)) {
+        return { ok: false, reason: 'job-name-conflict', detail: `job "${name}" collides with a core scheduler job` };
+      }
+      try {
+        CronExpressionParser.parse(cron);
+      } catch (err) {
+        return {
+          ok: false,
+          reason: 'invalid-job-cron',
+          detail: `job "${name}" has an invalid cron expression "${cron}": ${(err as Error).message}`,
+        };
+      }
+      if (typeof triggerable !== 'boolean') {
+        return { ok: false, reason: 'invalid-job-triggerable', detail: `job "${name}" has a non-boolean "triggerable"` };
+      }
+      if (!labelKey) {
+        return { ok: false, reason: 'invalid-job-label', detail: `job "${name}" has an empty "labelKey"` };
+      }
+      jobs.push({ name, cron, triggerable, labelKey });
+    }
+    return { ok: true, jobs };
+  }
+
   /** The deep, semantic route check `manifest-parser.ts` defers (its field-type check already ran). */
   private validateRoutes(
     routes: PluginRoute[],
+    declaredSubjects: ReadonlySet<string>,
   ): { ok: true } | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
     const seen = new Set<string>();
     for (const route of routes) {
@@ -469,7 +597,7 @@ export class PluginRegistryService implements OnModuleInit {
       } catch (err) {
         return { ok: false, reason: 'invalid-route-path', detail: `route path "${route.path}" is invalid: ${(err as Error).message}` };
       }
-      if (!parseDeclaredPolicy(route.policy)) {
+      if (!parseDeclaredPolicy(route.policy, declaredSubjects)) {
         return { ok: false, reason: 'invalid-route-policy', detail: `route policy "${route.policy}" is not a recognised action:subject pair` };
       }
       if (route.objectGuard !== undefined) {
@@ -496,7 +624,12 @@ export class PluginRegistryService implements OnModuleInit {
     this.registry.delete(pluginId);
     this.replaceIndexerDescriptors(pluginId, []);
     this.replaceWebhookDeclarations(pluginId, []);
-    if (!INSTALLED_BUT_NOT_RUNNING.has(reason)) this.replaceRouteTable(pluginId, []);
+    // No failure reason leaves a process running, so its cron never should either.
+    this.pluginJobs.dropFor(pluginId);
+    if (!INSTALLED_BUT_NOT_RUNNING.has(reason)) {
+      this.replaceRouteTable(pluginId, []);
+      this.replaceDeclaredPermissions(pluginId, EMPTY_SUBJECT_SET);
+    }
     return { ok: false, pluginId, reason, detail };
   }
 

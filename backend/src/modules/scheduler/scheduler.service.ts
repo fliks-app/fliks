@@ -50,6 +50,8 @@ import {
   resolveSearchTitles,
 } from '../../common/release-scoring';
 import { parseSeasonEpisode, matchesSeasonPack } from '../../common/release-parsing';
+import { CORE_SCHEDULER_JOB_NAMES } from '../../common/constants/core-scheduler-jobs';
+import { PluginJobsService } from '../plugins/plugin-jobs.service';
 
 // Note: scoring/profile/blocklist/quality-definition wiring lives in
 // AutoGrabPipelineService. This file only orchestrates the high-level
@@ -94,14 +96,17 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     private readonly markers: MarkersService,
     private readonly autoGrab: AutoGrabPipelineService,
     private readonly candidates: AcquisitionCandidatesService,
+    private readonly pluginJobs: PluginJobsService,
   ) {}
 
   // ---------------------------------------------------------------------------
   // Scheduler definitions
   // ---------------------------------------------------------------------------
 
+  // `name` is typed against `CORE_SCHEDULER_JOB_NAMES` so adding a job here without mirroring
+  // its name there (needed so a plugin job can be refused for colliding with it) fails to typecheck.
   private static readonly SCHEDULERS: {
-    name: string;
+    name: (typeof CORE_SCHEDULER_JOB_NAMES)[number];
     cron: string;
     triggerable: boolean;
   }[] = [
@@ -209,6 +214,8 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       lastRun: Date | null;
       lastStatus: string | null;
       nextRun: Date;
+      /** `null` for a core job; the owning plugin's id for one it declared. */
+      pluginId: string | null;
     }[]
   > {
     const names = SchedulerService.SCHEDULERS.map((s) => s.name);
@@ -224,7 +231,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
 
     const lastByName = new Map(lastCommands.map((c) => [c.name, c]));
 
-    return SchedulerService.SCHEDULERS.map((s) => {
+    const core = SchedulerService.SCHEDULERS.map((s) => {
       const last = lastByName.get(s.name);
       const interval = CronExpressionParser.parse(s.cron);
       return {
@@ -234,8 +241,22 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
         lastRun: last?.startedOn ?? null,
         lastStatus: last?.status ?? null,
         nextRun: interval.next().toDate(),
+        pluginId: null,
       };
     });
+
+    // Plugin jobs have no `Command` history — core owns that audit trail, a plugin's run does not.
+    const plugins = this.pluginJobs.listDeclared().map(({ pluginId, job }) => ({
+      name: job.name,
+      cron: job.cron,
+      triggerable: job.triggerable,
+      lastRun: null,
+      lastStatus: null,
+      nextRun: CronExpressionParser.parse(job.cron).next().toDate(),
+      pluginId,
+    }));
+
+    return [...core, ...plugins];
   }
 
   /**

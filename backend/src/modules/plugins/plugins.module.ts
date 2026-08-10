@@ -6,6 +6,7 @@ import { PluginRegistration } from './entities/plugin-registration.entity';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginWebhookDispatcherService } from './plugin-webhook-dispatcher.service';
 import { PluginProcessService } from './plugin-process.service';
+import { PluginJobsService } from './plugin-jobs.service';
 import { PluginProcessEventDispatcherService } from './plugin-process-event-dispatcher.service';
 import { PluginCatalogClientService } from './plugin-catalog-client.service';
 import { PluginStagingService } from './plugin-staging.service';
@@ -16,6 +17,7 @@ import { PluginIndexerDescriptorsController } from './plugin-indexer-descriptors
 import { PluginSourcesController } from './plugin-sources.controller';
 import { PluginImportController } from './plugin-import.controller';
 import { PluginsController } from './plugins.controller';
+import { PluginUiController } from './plugin-ui.controller';
 import { PluginObjectGuardsService } from './proxy/plugin-object-guards.service';
 import { PluginRouteGuard } from './proxy/plugin-route.guard';
 import { PluginProxyController } from './proxy/plugin-proxy.controller';
@@ -40,6 +42,7 @@ import { LibrariesModule } from '../libraries/libraries.module';
     PluginSourcesController,
     PluginImportController,
     PluginsController,
+    PluginUiController,
     // Last: its `*splat` wildcard must never shadow the concrete routes above.
     PluginProxyController,
   ],
@@ -47,6 +50,7 @@ import { LibrariesModule } from '../libraries/libraries.module';
     PluginRegistryService,
     PluginWebhookDispatcherService,
     PluginProcessService,
+    PluginJobsService,
     PluginProcessEventDispatcherService,
     PluginCatalogClientService,
     PluginStagingService,
@@ -55,6 +59,6 @@ import { LibrariesModule } from '../libraries/libraries.module';
     PluginObjectGuardsService,
     PluginRouteGuard,
   ],
-  exports: [TypeOrmModule, PluginRegistryService, PluginDatabaseService],
+  exports: [TypeOrmModule, PluginRegistryService, PluginDatabaseService, PluginJobsService],
 })
 export class PluginsModule {}

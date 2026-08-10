@@ -8,6 +8,7 @@ export function fakeRegistrationRepo(): {
   findOne: jest.Mock;
   create: jest.Mock;
   save: jest.Mock;
+  delete: jest.Mock;
 } {
   const rows = new Map<string, PluginRegistration>();
   let nextId = 1;
@@ -21,6 +22,10 @@ export function fakeRegistrationRepo(): {
     save: jest.fn(async (row: PluginRegistration) => {
       rows.set(row.pluginId, row);
       return row;
+    }),
+    delete: jest.fn(async ({ pluginId }: { pluginId: string }) => {
+      const existed = rows.delete(pluginId);
+      return { affected: existed ? 1 : 0 };
     }),
   };
 }
@@ -42,5 +47,23 @@ export function fakeProcessService(startForResult: PluginProcessStartResult = { 
     restart: jest.fn(async () => undefined),
     stopAll: jest.fn(async () => undefined),
     emitToAll: jest.fn(),
+  };
+}
+
+/** A no-op stand-in for `PluginJobsService` — tests that care about cron lifecycle construct
+ *  a real one (see `plugin-registry.service.jobs.spec.ts`) instead of using this. */
+export function fakePluginJobsService(): {
+  replaceFor: jest.Mock;
+  dropFor: jest.Mock;
+  listDeclared: jest.Mock;
+  declaredJob: jest.Mock;
+  trigger: jest.Mock;
+} {
+  return {
+    replaceFor: jest.fn(),
+    dropFor: jest.fn(),
+    listDeclared: jest.fn(() => []),
+    declaredJob: jest.fn(() => undefined),
+    trigger: jest.fn(() => ({ ok: true })),
   };
 }

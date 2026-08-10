@@ -1,7 +1,7 @@
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { minimalProcessManifest } from './archive/test-manifests';
-import { fakeRegistrationRepo, fakeProcessService } from './plugin-registry.test-helpers';
+import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService } from './plugin-registry.test-helpers';
 import type { PluginManifest, PluginRoute } from '../../common/plugin-contract';
 import type { PluginProcessStartResult } from './plugin-process.service';
 
@@ -35,6 +35,7 @@ function makeService(startResult?: PluginProcessStartResult): PluginRegistryServ
     repoMock() as never,
     fakeRegistrationRepo() as never,
     fakeProcessService(startResult) as never,
+    fakePluginJobsService() as never,
   );
 }
 
