@@ -4,7 +4,6 @@ import { Media } from './entities/media.entity';
 import { Season } from './entities/season.entity';
 import { Episode } from './entities/episode.entity';
 import { MediaFile } from './entities/media-file.entity';
-import { DownloadHistory } from './entities/download-history.entity';
 import { MediaMetadata } from './entities/media-metadata.entity';
 import { Person } from './entities/person.entity';
 import { MediaCast } from './entities/media-cast.entity';
@@ -15,17 +14,10 @@ import { MediaController } from './media.controller';
 import { AuthModule } from '../auth/auth.module';
 import { MetadataProvidersModule } from '../metadata-providers/metadata-providers.module';
 import { ProfilesModule } from '../profiles/profiles.module';
-import { IndexersModule } from '../../plugins/download/indexers/indexers.module';
-import { DownloadClientsModule } from '../../plugins/download/download-clients/download-clients.module';
-import { BlocklistModule } from '../blocklist/blocklist.module';
-import { NotificationsModule } from '../notifications/notifications.module';
 import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { MediaServersModule } from '../media-servers/media-servers.module';
-import { MovieDownloadService } from './movie-download.service';
-import { EpisodeDownloadService } from './episode-download.service';
 import { AutoGrabPipelineService } from './auto-grab-pipeline.service';
 import { AcquisitionCandidatesService } from './acquisition-candidates.service';
-import { TorrentAutoMatcher } from './torrent-auto-matcher.service';
 import { NamingService } from '../scheduler/naming.service';
 import { MediaImportService } from './media-service/media-import.service';
 import { MediaMetadataService } from './media-service/media-metadata.service';
@@ -46,7 +38,6 @@ import { StreamingModule } from '../streaming/streaming.module';
       Season,
       Episode,
       MediaFile,
-      DownloadHistory,
       MediaMetadata,
       Person,
       MediaCast,
@@ -56,10 +47,6 @@ import { StreamingModule } from '../streaming/streaming.module';
     AuthModule,
     MetadataProvidersModule,
     ProfilesModule,
-    IndexersModule,
-    DownloadClientsModule,
-    BlocklistModule,
-    NotificationsModule,
     SubtitlesModule,
     MediaServersModule,
     forwardRef(() => FliksSchedulerModule),
@@ -77,11 +64,8 @@ import { StreamingModule } from '../streaming/streaming.module';
     MediaRelatedService,
     MediaMutationService,
     MediaRescanService,
-    MovieDownloadService,
-    EpisodeDownloadService,
     AutoGrabPipelineService,
     AcquisitionCandidatesService,
-    TorrentAutoMatcher,
     NamingService,
   ],
   exports: [
@@ -89,7 +73,6 @@ import { StreamingModule } from '../streaming/streaming.module';
     MediaMetadataService,
     AutoGrabPipelineService,
     AcquisitionCandidatesService,
-    TorrentAutoMatcher,
   ],
 })
 export class MediaModule {}

@@ -8,6 +8,7 @@ import { ProfilesModule } from './modules/profiles/profiles.module';
 import { MetadataProvidersModule } from './modules/metadata-providers/metadata-providers.module';
 import { IndexersModule } from './plugins/download/indexers/indexers.module';
 import { DownloadClientsModule } from './plugins/download/download-clients/download-clients.module';
+import { GrabModule } from './plugins/download/grab.module';
 import { RequestsModule } from './modules/requests/requests.module';
 import { FliksSchedulerModule } from './modules/scheduler/scheduler.module';
 import { EventsModule } from './modules/scheduler/events.module';
@@ -87,6 +88,7 @@ import { join } from 'path';
     MetadataProvidersModule,
     IndexersModule,
     DownloadClientsModule,
+    GrabModule,
     RequestsModule,
     FliksSchedulerModule,
     CleanupProfilesModule,

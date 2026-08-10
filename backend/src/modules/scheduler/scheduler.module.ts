@@ -5,7 +5,7 @@ import { Command } from './entities/command.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
-import { DownloadHistory } from '../media/entities/download-history.entity';
+import { DownloadHistory } from '../../plugins/download/entities/download-history.entity';
 import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { Indexer } from '../../plugins/download/indexers/entities/indexer.entity';
@@ -13,6 +13,8 @@ import { DownloadClient } from '../../plugins/download/download-clients/entities
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { SchedulerService } from './scheduler.service';
 import { CompletionService } from './completion.service';
+import { TorrentAutoMatcher } from '../../plugins/download/torrent-auto-matcher.service';
+import { AutoGrabExecutorService } from '../../plugins/download/auto-grab-pipeline.service';
 import { AcquisitionEventsService } from './acquisition-events.service';
 import { NamingService } from './naming.service';
 import { BackupService } from './backup.service';
@@ -96,6 +98,8 @@ import { PluginsModule } from '../plugins/plugins.module';
     BackupService,
     UpdateCheckService,
     SubtitleSchedulerService,
+    TorrentAutoMatcher,
+    AutoGrabExecutorService,
   ],
   exports: [
     SchedulerService,

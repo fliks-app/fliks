@@ -6,17 +6,17 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Media } from './entities/media.entity';
-import { EventsService } from '../scheduler/events.service';
-import { Season } from './entities/season.entity';
-import { Episode } from './entities/episode.entity';
+import { Media } from '../../modules/media/entities/media.entity';
+import { EventsService } from '../../modules/scheduler/events.service';
+import { Season } from '../../modules/media/entities/season.entity';
+import { Episode } from '../../modules/media/entities/episode.entity';
 import { DownloadHistory } from './entities/download-history.entity';
 import { buildGrabHistoryRow } from './grab-history.util';
-import { onDiskEpisodeNumbers } from './episode-coverage.util';
-import { Indexer } from '../../plugins/download/indexers/entities/indexer.entity';
-import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
-import { TorznabService } from '../../plugins/download/indexers/torznab.service';
-import { QbittorrentService } from '../../plugins/download/download-clients/qbittorrent.service';
+import { onDiskEpisodeNumbers } from '../../modules/media/episode-coverage.util';
+import { Indexer } from './indexers/entities/indexer.entity';
+import { DownloadClient } from './download-clients/entities/download-client.entity';
+import { TorznabService } from './indexers/torznab.service';
+import { QbittorrentService } from './download-clients/qbittorrent.service';
 import {
   parseReleaseLanguage,
   parseReleaseQuality,
@@ -25,13 +25,13 @@ import {
   resolveUnknownLanguage,
 } from '../../common/release-parsing';
 import { maxAllowedRank } from '../../common/constants/app-qualities';
-import { CustomFormatsService } from '../profiles/custom-formats.service';
-import { ProfilesService } from '../profiles/profiles.service';
-import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
-import { BlocklistService } from '../blocklist/blocklist.service';
-import { NotificationsService } from '../notifications/notifications.service';
+import { CustomFormatsService } from '../../modules/profiles/custom-formats.service';
+import { ProfilesService } from '../../modules/profiles/profiles.service';
+import { QualityDefinitionsService } from '../../modules/profiles/quality-definitions.service';
+import { BlocklistService } from '../../modules/blocklist/blocklist.service';
+import { NotificationsService } from '../../modules/notifications/notifications.service';
 import { MediaType } from '../../common/enums';
-import { QualityProfileItem } from '../profiles/entities/quality-profile.entity';
+import { QualityProfileItem } from '../../modules/profiles/entities/quality-profile.entity';
 
 import { GrabMovieDto } from './dto/grab-movie.dto';
 import {

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { DownloadHistory } from '../media/entities/download-history.entity';
+import { DownloadHistory } from '../../plugins/download/entities/download-history.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
 import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
 import { Media } from '../media/entities/media.entity';

@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Media } from './entities/media.entity';
-import { Season } from './entities/season.entity';
-import { Episode } from './entities/episode.entity';
+import { Media } from '../../modules/media/entities/media.entity';
+import { Season } from '../../modules/media/entities/season.entity';
+import { Episode } from '../../modules/media/entities/episode.entity';
 import { MediaType } from '../../common/enums';
 import {
   ExtractedRelease,
