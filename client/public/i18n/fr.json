@@ -2341,6 +2341,58 @@
           "tier_violation": "Le contenu de cette archive ne correspond pas au niveau déclaré.",
           "unknown": "Ce plugin n'a pas pu être installé (code {{code}})."
         }
+      },
+      "sources": {
+        "title": "Sources",
+        "subtitle": "Ajoutez l'URL d'un catalogue pour parcourir et installer des plugins depuis celui-ci.",
+        "manage_button": "Gérer les sources",
+        "load_error": "Impossible de charger la liste des sources.",
+        "empty": "Aucune source configurée pour le moment.",
+        "col_url": "URL",
+        "col_key": "Clé",
+        "col_plugins": "Plugins",
+        "col_last_refresh": "Dernière actualisation",
+        "col_enabled": "Activée",
+        "pinned_key": "Clé épinglée",
+        "official_key": "Clé officielle",
+        "never_refreshed": "Jamais actualisée",
+        "refresh": "Actualiser",
+        "refresh_ok": "Catalogue actualisé.",
+        "refresh_error": "Échec de l'actualisation : {{detail}}",
+        "delete": "Supprimer",
+        "confirm_delete": "Supprimer la source « {{url}} » ? Son catalogue en cache est également supprimé.",
+        "deleted": "Source supprimée.",
+        "delete_error": "Impossible de supprimer cette source.",
+        "added": "Source ajoutée.",
+        "update_error": "Impossible de mettre à jour cette source.",
+        "form": {
+          "url_placeholder": "https://exemple.com/catalog.json",
+          "key_placeholder": "Clé publique épinglée (facultatif, base64)",
+          "enabled_label": "Activée",
+          "add": "Ajouter la source"
+        },
+        "errors": {
+          "url_https": "L'URL de la source doit commencer par https://.",
+          "url_duplicate": "Une source avec cette URL existe déjà.",
+          "key_invalid": "La clé publique doit être encodée en base64 et faire exactement 32 octets une fois décodée.",
+          "generic": "Impossible d'ajouter cette source."
+        }
+      },
+      "catalogue": {
+        "title": "Catalogue",
+        "subtitle": "Plugins proposés par vos sources configurées.",
+        "browse_button": "Rechercher un plugin",
+        "back": "Retour aux plugins",
+        "load_error": "Impossible de charger le catalogue.",
+        "empty_no_sources": "Aucune source configurée — ajoutez-en une ci-dessus pour parcourir les plugins.",
+        "empty_no_catalog": "Aucun catalogue en cache pour le moment — actualisez une source ci-dessus.",
+        "by": "Par {{author}}",
+        "installed": "Installé",
+        "install": "Installer v{{version}}",
+        "no_installable": "Aucune version installable",
+        "hidden_versions": "{{count}} version(s) masquée(s) — nécessite Fliks {{version}}+",
+        "hidden_versions_no_upgrade": "{{count}} version(s) masquée(s)",
+        "inspect_error": "Impossible de récupérer ce plugin."
       }
     }
   },

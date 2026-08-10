@@ -157,15 +157,23 @@ export class PluginInstallService {
       throw new PluginInstallException(HttpStatus.UNPROCESSABLE_ENTITY, result.code, result.detail);
     }
 
+    // Origin is recorded at stage time, not trusted from the request: a manual upload and a
+    // catalog inspect both land here, and only the staging directory itself says which one it was.
+    const origin = this.staging.originFor(dto.stagingId);
     try {
-      return await this.promote(buffer, result, 'manual');
+      return await this.promote(buffer, result, origin);
     } finally {
       this.staging.discard(dto.stagingId);
     }
   }
 
-  /** A1 (fetch) + A2 (checksum vs the signed catalog document, before any guard runs), then the same pipeline. */
-  async installFromCatalog(source: PluginSource, pluginId: string, version: string): Promise<PluginInstallResult> {
+  /**
+   * A1 (fetch) + A2 (checksum vs the signed catalog document, before any guard runs), then the
+   * same V1-V7 guards as a manual upload, then staging — never promotion. The consent sheet is
+   * the only place an *Unverified* plugin gets acknowledged, so a catalog source goes through it
+   * too: `POST /plugins/import/confirm` finishes the install, exactly like a manual upload does.
+   */
+  async inspectFromCatalog(source: PluginSource, pluginId: string, version: string): Promise<PluginInspectReport> {
     const entry = findInstallableVersion(source.cachedCatalog, pluginId, version);
     const info = entry && catalogArchiveInfo(entry);
     if (!info) {
@@ -188,11 +196,10 @@ export class PluginInstallService {
     }
 
     const result = await inspect(buffer);
-    if (!result.ok) {
-      throw new PluginInstallException(HttpStatus.UNPROCESSABLE_ENTITY, result.code, result.detail);
-    }
+    if (!result.ok) return { installable: false, refusalCode: result.code, detail: result.detail };
 
-    return this.promote(buffer, result, 'catalog');
+    const { stagingId } = this.staging.stage(buffer, 'catalog');
+    return this.buildReport(result, stagingId);
   }
 
   /** Every installed row, active or failed — the admin list reads the table directly for this reason. */

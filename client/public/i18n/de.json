@@ -2314,6 +2314,58 @@
           "tier_violation": "This archive's contents do not match its declared kind.",
           "unknown": "This plugin could not be installed (code {{code}})."
         }
+      },
+      "sources": {
+        "title": "Quellen",
+        "subtitle": "Fügen Sie eine Katalog-URL hinzu, um Plugins daraus zu durchsuchen und zu installieren.",
+        "manage_button": "Quellen verwalten",
+        "load_error": "Die Quellenliste konnte nicht geladen werden.",
+        "empty": "Noch keine Quellen konfiguriert.",
+        "col_url": "URL",
+        "col_key": "Schlüssel",
+        "col_plugins": "Plugins",
+        "col_last_refresh": "Letzte Aktualisierung",
+        "col_enabled": "Aktiviert",
+        "pinned_key": "Angehefteter Schlüssel",
+        "official_key": "Offizieller Schlüssel",
+        "never_refreshed": "Nie aktualisiert",
+        "refresh": "Aktualisieren",
+        "refresh_ok": "Katalog aktualisiert.",
+        "refresh_error": "Aktualisierung fehlgeschlagen: {{detail}}",
+        "delete": "Löschen",
+        "confirm_delete": "Quelle „{{url}}“ entfernen? Der zwischengespeicherte Katalog wird ebenfalls gelöscht.",
+        "deleted": "Quelle entfernt.",
+        "delete_error": "Diese Quelle konnte nicht entfernt werden.",
+        "added": "Quelle hinzugefügt.",
+        "update_error": "Diese Quelle konnte nicht aktualisiert werden.",
+        "form": {
+          "url_placeholder": "https://beispiel.com/catalog.json",
+          "key_placeholder": "Angehefteter öffentlicher Schlüssel (optional, base64)",
+          "enabled_label": "Aktiviert",
+          "add": "Quelle hinzufügen"
+        },
+        "errors": {
+          "url_https": "Die Quell-URL muss mit https:// beginnen.",
+          "url_duplicate": "Eine Quelle mit dieser URL existiert bereits.",
+          "key_invalid": "Der öffentliche Schlüssel muss base64-kodiert sein und genau 32 Bytes ergeben.",
+          "generic": "Diese Quelle konnte nicht hinzugefügt werden."
+        }
+      },
+      "catalogue": {
+        "title": "Katalog",
+        "subtitle": "Plugins, die von Ihren konfigurierten Quellen angeboten werden.",
+        "browse_button": "Plugin suchen",
+        "back": "Zurück zu den Plugins",
+        "load_error": "Der Katalog konnte nicht geladen werden.",
+        "empty_no_sources": "Keine Quellen konfiguriert — fügen Sie oben eine hinzu, um Plugins zu durchsuchen.",
+        "empty_no_catalog": "Noch kein zwischengespeicherter Katalog — aktualisieren Sie oben eine Quelle.",
+        "by": "Von {{author}}",
+        "installed": "Installiert",
+        "install": "v{{version}} installieren",
+        "no_installable": "Keine installierbare Version",
+        "hidden_versions": "{{count}} Version(en) ausgeblendet — erfordert Fliks {{version}}+",
+        "hidden_versions_no_upgrade": "{{count}} Version(en) ausgeblendet",
+        "inspect_error": "Dieses Plugin konnte nicht abgerufen werden."
       }
     }
   },

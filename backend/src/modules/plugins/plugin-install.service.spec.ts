@@ -247,7 +247,7 @@ describe('PluginInstallService', () => {
     });
   });
 
-  describe('installFromCatalog', () => {
+  describe('inspectFromCatalog', () => {
     it('refuses before any guard runs when the fetched archive disagrees with the signed catalog checksum', async () => {
       const { buffer } = signedDataArchive({ id: 'fliks.catalog-mismatch' });
       axios.defaults.adapter = adapterFor({ 'plugin.zip': buffer });
@@ -269,13 +269,13 @@ describe('PluginInstallService', () => {
       });
 
       await expectInstallError(
-        service.installFromCatalog(source, 'fliks.catalog-mismatch', '1.0.0'),
+        service.inspectFromCatalog(source, 'fliks.catalog-mismatch', '1.0.0'),
         422,
         'PLUGIN_CHECKSUM_MISMATCH',
       );
     });
 
-    it('installs a version whose checksum matches the signed catalog entry', async () => {
+    it('stages, but does not promote, a version whose checksum matches the signed catalog entry', async () => {
       const { buffer, manifest } = signedDataArchive({ id: 'fliks.catalog-happy', version: '2.0.0' });
       const sha256 = createHash('sha256').update(buffer).digest('hex');
       axios.defaults.adapter = adapterFor({ 'plugin.zip': buffer });
@@ -290,20 +290,49 @@ describe('PluginInstallService', () => {
         ],
       });
 
-      const result = await service.installFromCatalog(source, manifest.id, manifest.version);
+      const report = await service.inspectFromCatalog(source, manifest.id, manifest.version);
 
-      expect(result).toEqual({ pluginId: manifest.id, version: manifest.version, status: 'active' });
-      expect(registry.get(manifest.id)).toBeDefined();
+      expect(report).toEqual(
+        expect.objectContaining({ installable: true, id: manifest.id, version: manifest.version, stagingId: expect.any(String), sha256 }),
+      );
+      expect(existsSync(stagedArchivePath(report.stagingId!))).toBe(true);
+      expect(registry.get(manifest.id)).toBeUndefined();
     });
 
     it('refuses an id/version that is not on the source catalog', async () => {
       const source = fakeSource({ plugins: [] });
 
       await expectInstallError(
-        service.installFromCatalog(source, 'fliks.unknown', '1.0.0'),
+        service.inspectFromCatalog(source, 'fliks.unknown', '1.0.0'),
         404,
         'PLUGIN_CATALOG_VERSION_NOT_FOUND',
       );
+    });
+
+    it('the two-step flow (inspect then confirm) promotes exactly once, recording the catalog origin', async () => {
+      const { buffer, manifest } = signedDataArchive({ id: 'fliks.catalog-two-step' });
+      const sha256 = createHash('sha256').update(buffer).digest('hex');
+      axios.defaults.adapter = adapterFor({ 'plugin.zip': buffer });
+      const source = fakeSource({
+        plugins: [
+          {
+            id: manifest.id,
+            installable: [
+              { version: manifest.version, pluginApi: PLUGIN_API_VERSION, fliks: COMPATIBLE_RANGE, zipUrl: 'https://cdn.example.com/plugin.zip', sha256 },
+            ],
+          },
+        ],
+      });
+
+      const report = await service.inspectFromCatalog(source, manifest.id, manifest.version);
+      expect(registry.get(manifest.id)).toBeUndefined();
+
+      const result = await service.confirmImport({ stagingId: report.stagingId!, sha256: report.sha256! });
+
+      expect(result).toEqual({ pluginId: manifest.id, version: manifest.version, status: 'active' });
+      expect(repo.rows.get(manifest.id)).toEqual(expect.objectContaining({ origin: 'catalog', status: 'active' }));
+      expect(registry.get(manifest.id)).toBeDefined();
+      expect(existsSync(join(stagingRoot(), report.stagingId!))).toBe(false);
     });
   });
 

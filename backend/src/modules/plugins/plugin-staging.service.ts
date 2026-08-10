@@ -5,11 +5,13 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { join } from 'path';
 import { getPluginsRuntimeDir } from '../../common/constants/paths';
 import { PluginInstallException } from './plugin-install.exception';
+import type { PluginPackageOrigin } from './entities/plugin-package.entity';
 
 /** `plans/plugin-system.plan.md`, "Staging disk-fill" guard. */
 export const MAX_CONCURRENT_STAGED_IMPORTS = 5;
 const STAGING_MAX_AGE_MS = 60 * 60 * 1000;
 const ARCHIVE_FILENAME = 'archive.zip';
+const ORIGIN_FILENAME = 'origin.txt';
 
 /**
  * Holds a manually-uploaded archive on disk between `inspect` and `confirm`,
@@ -29,7 +31,7 @@ export class PluginStagingService {
   }
 
   /** Idempotent on content: identical bytes reuse the existing directory and never count twice against the cap. */
-  stage(buffer: Buffer): { stagingId: string; sha256: string } {
+  stage(buffer: Buffer, origin: PluginPackageOrigin = 'manual'): { stagingId: string; sha256: string } {
     const sha256 = createHash('sha256').update(buffer).digest('hex');
     const stagingId = sha256.slice(0, 32);
     const archivePath = join(this.dirFor(stagingId), ARCHIVE_FILENAME);
@@ -45,6 +47,7 @@ export class PluginStagingService {
 
     mkdirSync(this.dirFor(stagingId), { recursive: true, mode: 0o700 });
     writeFileSync(archivePath, buffer, { mode: 0o600 });
+    writeFileSync(join(this.dirFor(stagingId), ORIGIN_FILENAME), origin, { mode: 0o600 });
     return { stagingId, sha256 };
   }
 
@@ -55,6 +58,16 @@ export class PluginStagingService {
       throw new PluginInstallException(HttpStatus.NOT_FOUND, 'PLUGIN_STAGING_NOT_FOUND', `no staged upload "${stagingId}"`);
     }
     return readFileSync(archivePath);
+  }
+
+  /** How the staged bytes arrived — recorded by `stage()`, never client-supplied. Defaults to `manual` for a directory staged before this file existed. */
+  originFor(stagingId: string): PluginPackageOrigin {
+    try {
+      const raw = readFileSync(join(this.dirFor(stagingId), ORIGIN_FILENAME), 'utf8').trim();
+      return raw === 'catalog' ? 'catalog' : 'manual';
+    } catch {
+      return 'manual';
+    }
   }
 
   discard(stagingId: string): void {

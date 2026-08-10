@@ -2341,6 +2341,58 @@
           "tier_violation": "This archive's contents do not match its declared kind.",
           "unknown": "This plugin could not be installed (code {{code}})."
         }
+      },
+      "sources": {
+        "title": "Sources",
+        "subtitle": "Add a catalog URL to browse and install plugins from it.",
+        "manage_button": "Manage sources",
+        "load_error": "Unable to load the source list.",
+        "empty": "No sources configured yet.",
+        "col_url": "URL",
+        "col_key": "Key",
+        "col_plugins": "Plugins",
+        "col_last_refresh": "Last refresh",
+        "col_enabled": "Enabled",
+        "pinned_key": "Pinned key",
+        "official_key": "Official key",
+        "never_refreshed": "Never refreshed",
+        "refresh": "Refresh",
+        "refresh_ok": "Catalog refreshed.",
+        "refresh_error": "Refresh failed: {{detail}}",
+        "delete": "Delete",
+        "confirm_delete": "Remove source \"{{url}}\"? Its cached catalog is discarded too.",
+        "deleted": "Source removed.",
+        "delete_error": "Unable to remove this source.",
+        "added": "Source added.",
+        "update_error": "Unable to update this source.",
+        "form": {
+          "url_placeholder": "https://example.com/catalog.json",
+          "key_placeholder": "Pinned public key (optional, base64)",
+          "enabled_label": "Enabled",
+          "add": "Add source"
+        },
+        "errors": {
+          "url_https": "The source URL must start with https://.",
+          "url_duplicate": "A source with this URL already exists.",
+          "key_invalid": "The public key must be base64-encoded and decode to exactly 32 bytes.",
+          "generic": "Unable to add this source."
+        }
+      },
+      "catalogue": {
+        "title": "Catalogue",
+        "subtitle": "Plugins offered by your configured sources.",
+        "browse_button": "Search for a plugin",
+        "back": "Back to plugins",
+        "load_error": "Unable to load the catalogue.",
+        "empty_no_sources": "No sources configured — add one above to browse plugins.",
+        "empty_no_catalog": "No cached catalog yet — refresh a source above.",
+        "by": "By {{author}}",
+        "installed": "Installed",
+        "install": "Install v{{version}}",
+        "no_installable": "No installable version",
+        "hidden_versions": "{{count}} version(s) hidden — requires Fliks {{version}}+",
+        "hidden_versions_no_upgrade": "{{count}} version(s) hidden",
+        "inspect_error": "Unable to fetch this plugin."
       }
     }
   },

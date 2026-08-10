@@ -4,13 +4,31 @@
       <h1 class="text-2xl font-bold">{{ 'settings.plugins.title' | translate }}</h1>
       <p class="text-sm text-base-content/60 mt-1">{{ 'settings.plugins.subtitle' | translate }}</p>
     </div>
-    <button type="button" class="btn btn-primary self-start sm:self-auto" [disabled]="uploading()" (click)="pickFile()">
-      @if (uploading()) {
-        <span class="loading loading-spinner loading-sm"></span>
-      }
-      {{ 'settings.plugins.upload' | translate }}
-    </button>
-    <input #fileInput type="file" accept=".zip" class="hidden" (change)="onFilePicked($event)" />
+    <div class="flex items-center gap-2 self-start sm:self-auto">
+      <a routerLink="/admin/settings/plugin-catalogue" class="btn btn-primary">
+        {{ 'settings.plugins.catalogue.browse_button' | translate }}
+      </a>
+      <app-dropdown-menu placement="bottom-end">
+        <button
+          trigger
+          type="button"
+          class="btn btn-ghost btn-circle"
+          [attr.aria-label]="'common.more' | translate"
+        >
+          <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+        </button>
+        <button type="button" class="dropdown-item text-white" (click)="openSources()">
+          {{ 'settings.plugins.sources.manage_button' | translate }}
+        </button>
+        <button type="button" class="dropdown-item text-white" [disabled]="uploading()" (click)="pickFile()">
+          @if (uploading()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'settings.plugins.upload' | translate }}
+        </button>
+      </app-dropdown-menu>
+    </div>
+    <input #fileInput type="file" accept=".fkplugin,.zip" class="hidden" (change)="onFilePicked($event)" />
   </div>
 
   @if (loading()) {
@@ -80,6 +98,8 @@
       </table>
     </div>
   }
+
+  <app-plugin-sources #sourcesDialog />
 </div>
 
 <app-plugin-install-consent #consentSheet (installed)="onInstalled($event)" />

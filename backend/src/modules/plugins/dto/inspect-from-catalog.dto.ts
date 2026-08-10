@@ -1,6 +1,6 @@
 import { IsNotEmpty, IsString } from 'class-validator';
 
-export class InstallFromCatalogDto {
+export class InspectFromCatalogDto {
   @IsString()
   @IsNotEmpty()
   pluginId: string;
