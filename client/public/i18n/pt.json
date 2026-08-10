@@ -2314,6 +2314,58 @@
           "tier_violation": "This archive's contents do not match its declared kind.",
           "unknown": "This plugin could not be installed (code {{code}})."
         }
+      },
+      "sources": {
+        "title": "Fontes",
+        "subtitle": "Adicione o URL de um catálogo para explorar e instalar plugins a partir dele.",
+        "manage_button": "Gerir fontes",
+        "load_error": "Não foi possível carregar a lista de fontes.",
+        "empty": "Ainda não há fontes configuradas.",
+        "col_url": "URL",
+        "col_key": "Chave",
+        "col_plugins": "Plugins",
+        "col_last_refresh": "Última atualização",
+        "col_enabled": "Ativada",
+        "pinned_key": "Chave fixada",
+        "official_key": "Chave oficial",
+        "never_refreshed": "Nunca atualizada",
+        "refresh": "Atualizar",
+        "refresh_ok": "Catálogo atualizado.",
+        "refresh_error": "Falha na atualização: {{detail}}",
+        "delete": "Eliminar",
+        "confirm_delete": "Remover a fonte «{{url}}»? O catálogo em cache também é descartado.",
+        "deleted": "Fonte removida.",
+        "delete_error": "Não foi possível remover esta fonte.",
+        "added": "Fonte adicionada.",
+        "update_error": "Não foi possível atualizar esta fonte.",
+        "form": {
+          "url_placeholder": "https://exemplo.com/catalog.json",
+          "key_placeholder": "Chave pública fixada (opcional, base64)",
+          "enabled_label": "Ativada",
+          "add": "Adicionar fonte"
+        },
+        "errors": {
+          "url_https": "O URL da fonte deve começar com https://.",
+          "url_duplicate": "Já existe uma fonte com este URL.",
+          "key_invalid": "A chave pública deve estar codificada em base64 e resultar em exatamente 32 bytes.",
+          "generic": "Não foi possível adicionar esta fonte."
+        }
+      },
+      "catalogue": {
+        "title": "Catálogo",
+        "subtitle": "Plugins oferecidos pelas suas fontes configuradas.",
+        "browse_button": "Procurar um plugin",
+        "back": "Voltar aos plugins",
+        "load_error": "Não foi possível carregar o catálogo.",
+        "empty_no_sources": "Nenhuma fonte configurada — adicione uma acima para explorar plugins.",
+        "empty_no_catalog": "Ainda não há catálogo em cache — atualize uma fonte acima.",
+        "by": "Por {{author}}",
+        "installed": "Instalado",
+        "install": "Instalar v{{version}}",
+        "no_installable": "Sem versão instalável",
+        "hidden_versions": "{{count}} versão(ões) oculta(s) — requer Fliks {{version}}+",
+        "hidden_versions_no_upgrade": "{{count}} versão(ões) oculta(s)",
+        "inspect_error": "Não foi possível obter este plugin."
       }
     }
   },

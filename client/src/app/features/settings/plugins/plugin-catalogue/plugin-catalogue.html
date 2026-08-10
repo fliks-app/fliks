@@ -1,0 +1,64 @@
+<div class="flex flex-col gap-4">
+  <div>
+    <h2 class="text-lg font-bold">{{ 'settings.plugins.catalogue.title' | translate }}</h2>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'settings.plugins.catalogue.subtitle' | translate }}</p>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-10">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (loadError()) {
+    <div role="alert" class="alert alert-error">{{ loadError() }}</div>
+  } @else if (!hasAnySource()) {
+    <p class="text-center py-8 text-base-content/50">{{ 'settings.plugins.catalogue.empty_no_sources' | translate }}</p>
+  } @else if (rows().length === 0) {
+    <p class="text-center py-8 text-base-content/50">{{ 'settings.plugins.catalogue.empty_no_catalog' | translate }}</p>
+  } @else {
+    <div class="grid gap-3 sm:grid-cols-2">
+      @for (row of rows(); track row.sourceId + ':' + row.plugin.id) {
+        <div class="border border-base-200 rounded-lg p-4 flex flex-col gap-2">
+          <div class="flex items-start gap-3">
+            @if (row.plugin.logo) {
+              <img [src]="row.plugin.logo" (error)="hideBrokenLogo($event)" alt="" class="w-10 h-10 rounded object-contain bg-base-200 shrink-0" />
+            }
+            <div class="min-w-0 flex-1">
+              <p class="font-medium truncate">{{ row.plugin.name }}</p>
+              <p class="text-xs text-base-content/50 truncate">{{ 'settings.plugins.catalogue.by' | translate: { author: row.plugin.author } }}</p>
+            </div>
+            @if (isInstalled(row.plugin.id)) {
+              <span class="badge badge-success badge-sm shrink-0">{{ 'settings.plugins.catalogue.installed' | translate }}</span>
+            }
+          </div>
+
+          <p class="text-sm text-base-content/70 line-clamp-2">{{ row.plugin.description }}</p>
+
+          <div class="flex flex-wrap items-center gap-1 text-xs text-base-content/50">
+            @for (version of row.plugin.installable; track version.version) {
+              <span class="badge badge-ghost badge-xs">v{{ version.version }}</span>
+            }
+            @if (row.plugin.hidden) {
+              <span>{{ hiddenLabel(row) }}</span>
+            }
+          </div>
+
+          <div class="mt-auto pt-2 flex items-center justify-between">
+            <span class="text-xs text-base-content/40 truncate">{{ row.sourceUrl }}</span>
+            @if (!isInstalled(row.plugin.id)) {
+              @if (row.latestVersion) {
+                <button type="button" class="btn btn-primary btn-xs shrink-0" [disabled]="isInspecting(row)" (click)="installLatest(row)">
+                  @if (isInspecting(row)) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  }
+                  {{ 'settings.plugins.catalogue.install' | translate: { version: row.latestVersion } }}
+                </button>
+              } @else {
+                <span class="text-xs text-base-content/40 shrink-0">{{ 'settings.plugins.catalogue.no_installable' | translate }}</span>
+              }
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

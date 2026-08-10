@@ -413,6 +413,7 @@ export const routes: Routes = [
           { path: 'notifications', loadComponent: () => import('./features/settings/notifications/notifications').then((m) => m.NotificationsSettingsComponent) },
           { path: 'media-servers', loadComponent: () => import('./features/settings/media-servers/media-servers').then((m) => m.MediaServersSettingsComponent) },
           { path: 'plugins', loadComponent: () => import('./features/settings/plugins/plugins').then((m) => m.PluginsSettingsComponent) },
+          { path: 'plugin-catalogue', loadComponent: () => import('./features/settings/plugins/plugin-catalogue/plugin-catalogue-page').then((m) => m.PluginCataloguePageComponent) },
           { path: 'data-imports', loadComponent: () => import('./features/settings/data-imports/data-imports').then((m) => m.DataImportsSettingsComponent) },
           { path: 'libraries', loadComponent: () => import('./features/settings/libraries/libraries').then((m) => m.LibrariesSettingsComponent) },
           {

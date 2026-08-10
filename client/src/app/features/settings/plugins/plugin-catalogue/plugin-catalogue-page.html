@@ -1,0 +1,10 @@
+<div class="flex flex-col gap-6">
+  <a routerLink="/admin/settings/plugins" class="btn btn-ghost btn-sm gap-1 w-fit">
+    <svg lucideChevronLeft class="h-4 w-4"></svg>
+    {{ 'settings.plugins.catalogue.back' | translate }}
+  </a>
+
+  <app-plugin-catalogue [installedIds]="installedIds()" (install)="onInspected($event)" />
+</div>
+
+<app-plugin-install-consent #consentSheet (installed)="onInstalled($event)" />

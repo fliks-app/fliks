@@ -61,6 +61,18 @@ describe('PluginStagingService', () => {
     }
   });
 
+  it('defaults to a manual origin and records a catalog origin when given one', () => {
+    const manual = service.stage(Buffer.from('manual archive'));
+    const catalog = service.stage(Buffer.from('catalog archive'), 'catalog');
+
+    expect(service.originFor(manual.stagingId)).toBe('manual');
+    expect(service.originFor(catalog.stagingId)).toBe('catalog');
+  });
+
+  it('reports manual for a staging id whose directory has no recorded origin', () => {
+    expect(service.originFor('0'.repeat(32))).toBe('manual');
+  });
+
   it('discard removes a staged directory', () => {
     const { stagingId } = service.stage(Buffer.from('to be discarded'));
     service.discard(stagingId);

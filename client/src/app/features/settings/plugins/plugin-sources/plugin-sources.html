@@ -1,0 +1,141 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-3xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+    <div class="px-5 sm:px-6 pt-4 pb-3 border-b border-base-200 flex justify-between items-center shrink-0 bg-base-100">
+      <div>
+        <h2 class="text-lg font-bold">{{ 'settings.plugins.sources.title' | translate }}</h2>
+        <p class="text-sm text-base-content/60 mt-1">{{ 'settings.plugins.sources.subtitle' | translate }}</p>
+      </div>
+      <button
+        type="button"
+        class="btn btn-sm btn-ghost btn-circle"
+        (click)="close()"
+        [attr.aria-label]="'common.close' | translate"
+      >
+        <svg lucideX class="h-5 w-5"></svg>
+      </button>
+    </div>
+
+    <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+  @if (loading()) {
+    <div class="flex justify-center py-10">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (listError()) {
+    <div role="alert" class="alert alert-error">{{ listError() }}</div>
+  } @else {
+    @if (sources().length === 0) {
+      <p class="text-center py-8 text-base-content/50">{{ 'settings.plugins.sources.empty' | translate }}</p>
+    } @else {
+      <div class="overflow-x-auto rounded-lg border border-base-200">
+        <table class="table table-zebra table-sm">
+          <thead>
+            <tr>
+              <th>{{ 'settings.plugins.sources.col_url' | translate }}</th>
+              <th>{{ 'settings.plugins.sources.col_key' | translate }}</th>
+              <th>{{ 'settings.plugins.sources.col_plugins' | translate }}</th>
+              <th>{{ 'settings.plugins.sources.col_last_refresh' | translate }}</th>
+              <th>{{ 'settings.plugins.sources.col_enabled' | translate }}</th>
+              <th class="text-end w-40"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (source of sources(); track source.id) {
+              <tr>
+                <td class="max-w-[20rem] truncate text-sm" [title]="source.url">{{ source.url }}</td>
+                <td>
+                  @if (source.hasPinnedKey) {
+                    <span class="badge badge-ghost badge-sm">{{ 'settings.plugins.sources.pinned_key' | translate }}</span>
+                  } @else {
+                    <span class="badge badge-ghost badge-sm">{{ 'settings.plugins.sources.official_key' | translate }}</span>
+                  }
+                </td>
+                <td class="text-sm">{{ source.pluginCount }}</td>
+                <td class="text-sm">
+                  @if (source.lastRefreshedAt) {
+                    {{ source.lastRefreshedAt | date: 'short' }}
+                  } @else {
+                    <span class="text-base-content/50">{{ 'settings.plugins.sources.never_refreshed' | translate }}</span>
+                  }
+                  @if (source.lastRefreshError) {
+                    <p class="text-xs text-error/80 mt-1 max-w-[14rem]">{{ source.lastRefreshError }}</p>
+                  }
+                </td>
+                <td>
+                  <input
+                    type="checkbox"
+                    class="toggle toggle-sm"
+                    [ngModel]="source.enabled"
+                    [disabled]="savingId() === source.id"
+                    (ngModelChange)="toggleEnabled(source)"
+                  />
+                </td>
+                <td class="text-end whitespace-nowrap">
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs"
+                    [disabled]="refreshingId() === source.id"
+                    (click)="refresh(source)"
+                  >
+                    @if (refreshingId() === source.id) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                    }
+                    {{ 'settings.plugins.sources.refresh' | translate }}
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-xs text-error" (click)="remove(source)">
+                    {{ 'settings.plugins.sources.delete' | translate }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  }
+
+  <form class="flex flex-col sm:flex-row gap-2 sm:items-start pt-2" (ngSubmit)="submitCreate()">
+    <input
+      type="url"
+      required
+      class="input input-sm input-bordered flex-1"
+      [placeholder]="'settings.plugins.sources.form.url_placeholder' | translate"
+      [ngModel]="formUrl()"
+      (ngModelChange)="formUrl.set($event)"
+      name="sourceUrl"
+    />
+    <input
+      type="text"
+      class="input input-sm input-bordered flex-1"
+      [placeholder]="'settings.plugins.sources.form.key_placeholder' | translate"
+      [ngModel]="formPublicKey()"
+      (ngModelChange)="formPublicKey.set($event)"
+      name="sourceKey"
+    />
+    <label class="label cursor-pointer gap-2 shrink-0">
+      <input
+        type="checkbox"
+        class="toggle toggle-sm"
+        [ngModel]="formEnabled()"
+        (ngModelChange)="formEnabled.set($event)"
+        name="sourceEnabled"
+      />
+      <span class="label-text text-sm">{{ 'settings.plugins.sources.form.enabled_label' | translate }}</span>
+    </label>
+    <button type="submit" class="btn btn-sm btn-primary shrink-0" [disabled]="creating() || !formUrl().trim()">
+      @if (creating()) {
+        <span class="loading loading-spinner loading-xs"></span>
+      }
+      {{ 'settings.plugins.sources.form.add' | translate }}
+    </button>
+  </form>
+  @if (createError()) {
+    <div role="alert" class="alert alert-error text-sm py-2">{{ createError() }}</div>
+  }
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="close()" [attr.aria-label]="'common.close' | translate">
+      {{ 'common.close' | translate }}
+    </button>
+  </form>
+</dialog>

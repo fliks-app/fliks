@@ -49,6 +49,14 @@ describe('parseCatalogDocument()', () => {
     const doc = document({ versions: [version({ fliks: 'not-a-range' })] });
     expect(parseCatalogDocument(Buffer.from(JSON.stringify(doc), 'utf8'))).toBeNull();
   });
+
+  it('accepts a plugin entry with a string logo and rejects a non-string one', () => {
+    const withLogo = document({ logo: 'https://example.com/logo.png' });
+    expect(parseCatalogDocument(Buffer.from(JSON.stringify(withLogo), 'utf8'))).toEqual(withLogo);
+
+    const badLogo = document({ logo: 42 as unknown as string });
+    expect(parseCatalogDocument(Buffer.from(JSON.stringify(badLogo), 'utf8'))).toBeNull();
+  });
 });
 
 describe('filterCatalog()', () => {
@@ -108,5 +116,13 @@ describe('filterCatalog()', () => {
     const result = filterCatalog(doc, PLUGIN_API_VERSION, '2.0.1');
     expect(result.plugins[0].installable).toEqual([ok]);
     expect(result.plugins[0].hidden).toEqual({ count: 1, minFliksVersion: '5.0.0' });
+  });
+
+  it('carries an optional logo URL through unchanged, and omits it when absent', () => {
+    const withLogo = filterCatalog(document({ logo: 'https://example.com/logo.png' }), PLUGIN_API_VERSION, '2.0.1');
+    expect(withLogo.plugins[0].logo).toBe('https://example.com/logo.png');
+
+    const withoutLogo = filterCatalog(document(), PLUGIN_API_VERSION, '2.0.1');
+    expect(withoutLogo.plugins[0].logo).toBeUndefined();
   });
 });

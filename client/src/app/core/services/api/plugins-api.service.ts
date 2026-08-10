@@ -46,6 +46,50 @@ export interface PluginInstallResult {
   detail?: string;
 }
 
+/** Mirrors backend `PluginSourceSummary` (`plugin-sources.controller.ts`) — never the raw `publicKey` bytes. */
+export interface PluginSourceRow {
+  id: number;
+  url: string;
+  enabled: boolean;
+  hasPinnedKey: boolean;
+  lastRefreshedAt: string | null;
+  lastRefreshError: string | null;
+  pluginCount: number;
+}
+
+export type CatalogRefreshResult = { ok: true } | { ok: false; reason: string; detail: string };
+
+/** Mirrors backend `CatalogVersionEntry` (`catalog/catalog.ts`) — `zipUrl`/`sha256` pass through unread. */
+export interface CatalogVersionEntry {
+  version: string;
+  pluginApi: number;
+  fliks: string;
+  [key: string]: unknown;
+}
+
+export interface CatalogHiddenSummary {
+  count: number;
+  minFliksVersion: string | null;
+}
+
+/** Mirrors backend `FilteredCatalogEntry`. */
+export interface CatalogPluginEntry {
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  kind: PluginKind;
+  logo?: string;
+  installable: CatalogVersionEntry[];
+  hidden: CatalogHiddenSummary | null;
+}
+
+export interface PluginSourceCatalog {
+  cachedCatalog: { plugins: CatalogPluginEntry[] } | null;
+  lastRefreshedAt: string | null;
+  lastRefreshError: string | null;
+}
+
 /** One tracker a `data` plugin declares, exposed under its namespaced implementation id. */
 export interface IndexerDescriptorRow {
   implementationId: string;
@@ -87,6 +131,36 @@ export class PluginsApiService {
   getIndexerDescriptors() {
     return firstValueFrom(
       this.http.get<IndexerDescriptorRow[]>('/api/plugins/indexer-descriptors'),
+    );
+  }
+
+  listSources() {
+    return firstValueFrom(this.http.get<PluginSourceRow[]>('/api/plugins/sources'));
+  }
+
+  createSource(dto: { url: string; publicKey?: string; enabled?: boolean }) {
+    return firstValueFrom(this.http.post<PluginSourceRow>('/api/plugins/sources', dto));
+  }
+
+  updateSource(id: number, dto: { url?: string; publicKey?: string | null; enabled?: boolean }) {
+    return firstValueFrom(this.http.put<PluginSourceRow>(`/api/plugins/sources/${id}`, dto));
+  }
+
+  deleteSource(id: number) {
+    return firstValueFrom(this.http.delete<void>(`/api/plugins/sources/${id}`));
+  }
+
+  refreshSource(id: number) {
+    return firstValueFrom(this.http.post<CatalogRefreshResult>(`/api/plugins/sources/${id}/refresh`, {}));
+  }
+
+  getSourceCatalog(id: number) {
+    return firstValueFrom(this.http.get<PluginSourceCatalog>(`/api/plugins/sources/${id}/catalog`));
+  }
+
+  inspectFromCatalog(sourceId: number, pluginId: string, version: string) {
+    return firstValueFrom(
+      this.http.post<PluginInspectReport>(`/api/plugins/sources/${sourceId}/inspect`, { pluginId, version }),
     );
   }
 

@@ -21,6 +21,8 @@ export interface CatalogPluginEntry {
   description: string;
   author: string;
   kind: PluginKind;
+  /** Absolute URL to a logo image — opaque, display-only, never fetched server-side. */
+  logo?: string;
   versions: CatalogVersionEntry[];
 }
 
@@ -52,6 +54,7 @@ function isPluginEntry(v: unknown): v is CatalogPluginEntry {
     typeof v.description === 'string' &&
     typeof v.author === 'string' &&
     (v.kind === 'data' || v.kind === 'process') &&
+    (v.logo === undefined || typeof v.logo === 'string') &&
     Array.isArray(v.versions) &&
     v.versions.length > 0 &&
     v.versions.every(isVersionEntry)
@@ -93,6 +96,7 @@ export interface FilteredCatalogEntry {
   description: string;
   author: string;
   kind: PluginKind;
+  logo?: string;
   /** Only versions installable on this core build. A caller iterating this list can
    *  never accidentally offer an incompatible version — there is no boolean to miss. */
   installable: CatalogVersionEntry[];
@@ -143,6 +147,7 @@ export function filterCatalog(document: CatalogDocument, pluginApiVersion: numbe
         description: entry.description,
         author: entry.author,
         kind: entry.kind,
+        logo: entry.logo,
         installable,
         hidden: summarizeHidden(hidden, fliksVersion),
       };

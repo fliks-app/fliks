@@ -7,9 +7,12 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { LucideEllipsisVertical } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import {
   PluginsApiService,
   PluginSummary,
@@ -17,11 +20,12 @@ import {
   PluginInstallResult,
 } from '../../../core/services/api/plugins-api.service';
 import { PluginInstallConsentComponent } from './plugin-install-consent/plugin-install-consent';
+import { PluginSourcesComponent } from './plugin-sources/plugin-sources';
 import { trustBadgeFor } from './plugin-trust';
 
 @Component({
   selector: 'app-plugins-settings',
-  imports: [TranslateModule, PluginInstallConsentComponent],
+  imports: [RouterLink, LucideEllipsisVertical, TranslateModule, DropdownMenuComponent, PluginInstallConsentComponent, PluginSourcesComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugins.html',
 })
@@ -33,6 +37,7 @@ export class PluginsSettingsComponent implements OnInit {
 
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
   private readonly consentSheet = viewChild<PluginInstallConsentComponent>('consentSheet');
+  private readonly sourcesDialog = viewChild<PluginSourcesComponent>('sourcesDialog');
 
   readonly rows = signal<PluginSummary[]>([]);
   readonly loading = signal(true);
@@ -87,6 +92,10 @@ export class PluginsSettingsComponent implements OnInit {
     } finally {
       this.uploading.set(false);
     }
+  }
+
+  openSources(): void {
+    this.sourcesDialog()?.open();
   }
 
   async onInstalled(result: PluginInstallResult): Promise<void> {
