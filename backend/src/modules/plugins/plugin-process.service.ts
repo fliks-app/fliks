@@ -109,6 +109,13 @@ export class PluginProcessService implements OnApplicationShutdown {
     return supervisor.getStatusMessage() || supervisor.getStderrTail();
   }
 
+  /** Passthrough so the HTTP proxy never touches a supervisor directly. */
+  callPlugin<T = unknown>(pluginId: string, method: string, params: unknown, timeoutMs: number): Promise<T> {
+    const supervisor = this.running.get(pluginId)?.supervisor;
+    if (!supervisor) return Promise.reject(new Error(`plugin "${pluginId}" is not running`));
+    return supervisor.callPlugin<T>(method, params, timeoutMs);
+  }
+
   /** Swaps in a fresh supervisor rather than reusing the tripped one, so the rotated password stays "once per spawn". */
   async restart(pluginId: string): Promise<void> {
     const entry = this.running.get(pluginId);

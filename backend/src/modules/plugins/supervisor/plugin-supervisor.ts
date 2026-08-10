@@ -170,6 +170,15 @@ export class PluginSupervisor implements OnApplicationShutdown {
     return { coreSockPath: this.coreSockPath, pluginSockPath: this.pluginSockPath };
   }
 
+  /** Thin public wrapper around the private RPC channel, for the HTTP proxy. Rejects
+   *  immediately rather than queuing when the plugin isn't `ready` to answer a call. */
+  callPlugin<T = unknown>(method: string, params: unknown, timeoutMs: number): Promise<T> {
+    if (this.state !== 'ready' || !this.pluginChannel) {
+      return Promise.reject(new Error(`plugin "${this.opts.id}" is not ready (state: ${this.state})`));
+    }
+    return this.pluginChannel.call<T>(method, params, timeoutMs);
+  }
+
   onStateChange(cb: (s: SupervisorState) => void): () => void {
     this.stateListeners.push(cb);
     return () => {
