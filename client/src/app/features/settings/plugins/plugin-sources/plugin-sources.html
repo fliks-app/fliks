@@ -1,5 +1,5 @@
 <dialog #dialog class="modal">
-  <div class="modal-box max-w-3xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+  <div class="modal-box max-w-5xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
     <div class="px-5 sm:px-6 pt-4 pb-3 border-b border-base-200 flex justify-between items-center shrink-0 bg-base-100">
       <div>
         <h2 class="text-lg font-bold">{{ 'settings.plugins.sources.title' | translate }}</h2>
@@ -44,9 +44,9 @@
                 <td class="max-w-[20rem] truncate text-sm" [title]="source.url">{{ source.url }}</td>
                 <td>
                   @if (source.hasPinnedKey) {
-                    <span class="badge badge-ghost badge-sm">{{ 'settings.plugins.sources.pinned_key' | translate }}</span>
+                    <span class="badge badge-ghost badge-sm whitespace-nowrap">{{ 'settings.plugins.sources.pinned_key' | translate }}</span>
                   } @else {
-                    <span class="badge badge-ghost badge-sm">{{ 'settings.plugins.sources.official_key' | translate }}</span>
+                    <span class="badge badge-ghost badge-sm whitespace-nowrap">{{ 'settings.plugins.sources.official_key' | translate }}</span>
                   }
                 </td>
                 <td class="text-sm">{{ source.pluginCount }}</td>
