@@ -16,7 +16,7 @@ import { CompletionService } from './completion.service';
 import { AcquisitionEventsService } from './acquisition-events.service';
 import { NamingService } from './naming.service';
 import { BackupService } from './backup.service';
-import { LogBufferService } from './log-buffer.service';
+import { LogBufferModule } from './log-buffer.module';
 import { UpdateCheckService } from './update-check.service';
 import { CommandsController } from './commands.controller';
 import { SystemController } from './system.controller';
@@ -80,6 +80,7 @@ import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.
     ProfilesModule,
     MarkersModule,
     forwardRef(() => LibraryIngestModule),
+    LogBufferModule,
   ],
   controllers: [CommandsController, SystemController, LivenessController],
   providers: [
@@ -88,7 +89,6 @@ import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.
     AcquisitionEventsService,
     NamingService,
     BackupService,
-    LogBufferService,
     UpdateCheckService,
     SubtitleSchedulerService,
   ],
@@ -97,7 +97,7 @@ import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.
     CompletionService,
     AcquisitionEventsService,
     NamingService,
-    LogBufferService,
+    LogBufferModule,
     SubtitleSchedulerService,
   ],
 })

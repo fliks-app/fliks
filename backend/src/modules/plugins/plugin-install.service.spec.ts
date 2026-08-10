@@ -7,6 +7,7 @@ import { PluginInstallException } from './plugin-install.exception';
 import { PluginStagingService } from './plugin-staging.service';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginDatabaseService } from './plugin-database.service';
+import { fakeRegistrationRepo, fakeProcessService } from './plugin-registry.test-helpers';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { PluginSource } from './entities/plugin-source.entity';
 import { buildZip, ZipEntrySpec } from './archive/zip-builder';
@@ -146,7 +147,7 @@ describe('PluginInstallService', () => {
     rmSync(stagingRoot(), { recursive: true, force: true });
     rmSync(join(getPluginsRuntimeDir(), 'installed'), { recursive: true, force: true });
     repo = fakePackageRepo();
-    registry = new PluginRegistryService(repo as never);
+    registry = new PluginRegistryService(repo as never, fakeRegistrationRepo() as never, fakeProcessService() as never);
     staging = new PluginStagingService();
     pluginDb = fakePluginDb();
     service = new PluginInstallService(repo as never, registry, staging, pluginDb as unknown as PluginDatabaseService);
@@ -365,17 +366,16 @@ describe('PluginInstallService', () => {
   });
 
   describe('process-tier database provisioning', () => {
-    it('provisions before promoting; registration still fails for lack of a supervisor', async () => {
+    it('provisions before promoting, then activates via the (faked) process service', async () => {
       const { buffer, manifest } = signedProcessArchive({ id: 'fliks.provisionhappy' });
       const { stagingId, sha256 } = await service.inspectUpload(buffer);
 
       const result = await service.confirmImport({ stagingId: stagingId!, sha256: sha256! });
 
       expect(pluginDb.provision).toHaveBeenCalledWith(expect.objectContaining({ id: manifest.id }));
-      expect(result).toEqual(
-        expect.objectContaining({ pluginId: manifest.id, version: manifest.version, status: 'failed', reason: 'unsupported-tier' }),
-      );
+      expect(result).toEqual({ pluginId: manifest.id, version: manifest.version, status: 'active' });
       expect(existsSync(installedPluginDir(manifest.id, manifest.version))).toBe(true);
+      expect(registry.get(manifest.id)).toBeDefined();
     });
 
     it('purges the staged extraction and never promotes when provisioning fails', async () => {

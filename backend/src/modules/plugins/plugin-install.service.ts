@@ -3,8 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
 import { createHash } from 'crypto';
-import { closeSync, cpSync, existsSync, fsyncSync, mkdirSync, openSync, renameSync, rmSync } from 'fs';
-import { dirname, join } from 'path';
+import { closeSync, existsSync, fsyncSync, openSync, rmSync } from 'fs';
 import * as semver from 'semver';
 import { PluginPackage, PluginPackageOrigin, PluginPackageStatus } from './entities/plugin-package.entity';
 import { PluginSource } from './entities/plugin-source.entity';
@@ -12,13 +11,14 @@ import { PluginRegistryService, CURRENT_FLIKS_VERSION } from './plugin-registry.
 import { PluginStagingService } from './plugin-staging.service';
 import { PluginDatabaseService } from './plugin-database.service';
 import { PluginInstallException } from './plugin-install.exception';
-import { getPluginsRuntimeDir } from '../../common/constants/paths';
+import { installedPluginDir, promoteDir } from './plugin-paths';
 import { unsignedProcessAllowlist } from '../../common/constants/plugin-flags';
 import { inspect, InspectSuccess, extractToStaging, MAX_ARCHIVE_COMPRESSED_BYTES, type PluginRefusalCode } from './archive';
 import type { TrustOutcome } from './archive/trust-store';
 import type { CatalogVersionEntry, FilteredCatalog, FilteredCatalogEntry } from './catalog/catalog';
 import { PLUGIN_API_VERSION, type PluginKind, type PluginManifest } from '../../common/plugin-contract';
 import type { ConfirmImportDto } from './dto/confirm-import.dto';
+import type { SupervisorState } from './supervisor/plugin-supervisor';
 
 const ARCHIVE_FETCH_TIMEOUT_MS = 30_000;
 
@@ -59,12 +59,12 @@ export interface PluginSummary {
   statusReason: string | null;
   signature: TrustOutcome;
   verifiedByKeyId: string | null;
+  /** `process` only — `null`/`''` for `data`, which has no supervisor. */
+  processState: SupervisorState | null;
+  statusMessage: string;
 }
 
-/** `${runtime dir}/installed/<id>@<version>/` — exported for uninstall's own recomputation and for tests. */
-export function installedPluginDir(pluginId: string, version: string): string {
-  return join(getPluginsRuntimeDir(), 'installed', `${pluginId}@${version}`);
-}
+export { installedPluginDir, promoteDir };
 
 function fsyncPath(path: string): void {
   const fd = openSync(path, 'r');
@@ -72,19 +72,6 @@ function fsyncPath(path: string): void {
     fsyncSync(fd);
   } finally {
     closeSync(fd);
-  }
-}
-
-/** Same-filesystem rename when possible; copy+remove is the only option across devices. */
-function promoteDir(srcDir: string, destDir: string): void {
-  mkdirSync(dirname(destDir), { recursive: true });
-  rmSync(destDir, { recursive: true, force: true });
-  try {
-    renameSync(srcDir, destDir);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'EXDEV') throw err;
-    cpSync(srcDir, destDir, { recursive: true });
-    rmSync(srcDir, { recursive: true, force: true });
   }
 }
 
@@ -112,11 +99,11 @@ function findInstallableVersion(
 }
 
 /**
- * Orchestrates the install/update/uninstall pipeline for the `data` tier
+ * Orchestrates the install/update/uninstall pipeline for both tiers
  * (`plans/plugin-system.plan.md`, "Install pipeline, end to end"). `process`
  * archives flow through the same guards and the same promotion — only
- * `PluginRegistryService.register()` tells them apart, refusing to activate
- * one for lack of a supervisor. That refusal does not roll back the install.
+ * `PluginRegistryService.register()` tells them apart, provisioning a schema
+ * and spawning a supervisor. A spawn failure does not roll back the install.
  */
 @Injectable()
 export class PluginInstallService {
@@ -208,7 +195,49 @@ export class PluginInstallService {
   /** Every installed row, active or failed — the admin list reads the table directly for this reason. */
   async listInstalled(): Promise<PluginSummary[]> {
     const packages = await this.packageRepo.find();
-    return packages.map((pkg) => ({
+    return packages.map((pkg) => this.toSummary(pkg));
+  }
+
+  /** Safe to call for a plugin whose row, registry entry or directory is already gone. */
+  async uninstall(pluginId: string): Promise<void> {
+    await this.registry.unregister(pluginId);
+    const pkg = await this.packageRepo.findOne({ where: { pluginId } });
+    if (!pkg) return;
+    if (pkg.manifest.kind === 'process') {
+      await this.pluginDb.deprovision(pluginId);
+    }
+    await this.packageRepo.remove(pkg);
+    rmSync(installedPluginDir(pkg.pluginId, pkg.version), { recursive: true, force: true });
+  }
+
+  /** Persists the enabled flag on `plugin_registrations` and starts or stops the process to match. */
+  async setEnabled(pluginId: string, enabled: boolean): Promise<PluginSummary> {
+    const pkg = await this.findInstalledProcessPlugin(pluginId);
+    const result = await this.registry.setEnabled(pkg, enabled);
+    pkg.status = result.ok ? 'active' : 'failed';
+    pkg.statusReason = result.ok ? null : `${result.reason}: ${result.detail}`;
+    await this.packageRepo.save(pkg);
+    return this.toSummary(pkg);
+  }
+
+  /** Clears a tripped circuit breaker and respawns. */
+  async restart(pluginId: string): Promise<void> {
+    await this.findInstalledProcessPlugin(pluginId);
+    await this.registry.restartProcess(pluginId);
+  }
+
+  private async findInstalledProcessPlugin(pluginId: string): Promise<PluginPackage> {
+    const pkg = await this.packageRepo.findOne({ where: { pluginId } });
+    if (!pkg) throw new PluginInstallException(HttpStatus.NOT_FOUND, 'PLUGIN_NOT_FOUND', `plugin "${pluginId}" is not installed`);
+    if (pkg.manifest.kind !== 'process') {
+      throw new PluginInstallException(HttpStatus.BAD_REQUEST, 'PLUGIN_NOT_PROCESS_TIER', `plugin "${pluginId}" is not a process-tier plugin`);
+    }
+    return pkg;
+  }
+
+  private toSummary(pkg: PluginPackage): PluginSummary {
+    const isProcess = pkg.manifest.kind === 'process';
+    return {
       pluginId: pkg.pluginId,
       name: pkg.manifest.name,
       version: pkg.version,
@@ -218,19 +247,9 @@ export class PluginInstallService {
       statusReason: pkg.statusReason,
       signature: pkg.signature,
       verifiedByKeyId: pkg.verifiedByKeyId,
-    }));
-  }
-
-  /** Safe to call for a plugin whose row, registry entry or directory is already gone. */
-  async uninstall(pluginId: string): Promise<void> {
-    this.registry.unregister(pluginId);
-    const pkg = await this.packageRepo.findOne({ where: { pluginId } });
-    if (!pkg) return;
-    if (pkg.manifest.kind === 'process') {
-      await this.pluginDb.deprovision(pluginId);
-    }
-    await this.packageRepo.remove(pkg);
-    rmSync(installedPluginDir(pkg.pluginId, pkg.version), { recursive: true, force: true });
+      processState: isProcess ? this.registry.processStateOf(pkg.pluginId) : null,
+      statusMessage: isProcess ? this.registry.processStatusMessageOf(pkg.pluginId) : '',
+    };
   }
 
   private buildReport(result: InspectSuccess, stagingId: string): PluginInspectReport {

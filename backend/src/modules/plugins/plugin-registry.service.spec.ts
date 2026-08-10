@@ -5,8 +5,10 @@ import { generateTestKeypair, signManifestBase64 } from './archive/ed25519-test-
 import { minimalDataManifest, minimalProcessManifest } from './archive/test-manifests';
 import { svgLogo, pngLogo } from './archive/test-fixtures';
 import { OFFICIAL_KEYS } from './archive/trust-store';
+import { fakeRegistrationRepo, fakeProcessService } from './plugin-registry.test-helpers';
 import { FLIKS_PLUGINS_DISABLED_ENV } from '../../common/constants/plugin-flags';
-import type { PluginManifest } from '../../common/plugin-contract';
+import type { PluginManifest, ProcessPluginManifest } from '../../common/plugin-contract';
+import type { PluginProcessStartResult } from './plugin-process.service';
 
 /** A `fliks` range every test can rely on matching this repo's own `package.json` version. */
 const COMPATIBLE_RANGE = '>=1.0.0 <3.0.0';
@@ -43,6 +45,15 @@ function repoMock(rows: PluginPackage[] = []) {
   return { find: jest.fn().mockResolvedValue(rows) };
 }
 
+/** Every registry test but boot-load exercises `register()` directly, so the process side is always faked here. */
+function makeService(rows: PluginPackage[] = [], processResult: PluginProcessStartResult = { ok: true }) {
+  const repo = repoMock(rows);
+  const registrationRepo = fakeRegistrationRepo();
+  const processService = fakeProcessService(processResult);
+  const service = new PluginRegistryService(repo as never, registrationRepo as never, processService as never);
+  return { service, repo, registrationRepo, processService };
+}
+
 describe('PluginRegistryService — boot load', () => {
   const originalEnv = process.env[FLIKS_PLUGINS_DISABLED_ENV];
 
@@ -53,8 +64,7 @@ describe('PluginRegistryService — boot load', () => {
 
   it('L0: FLIKS_PLUGINS_DISABLED=1 registers nothing and never queries the repository', async () => {
     process.env[FLIKS_PLUGINS_DISABLED_ENV] = '1';
-    const repo = repoMock([makePackage(minimalDataManifest({ fliks: COMPATIBLE_RANGE }))]);
-    const service = new PluginRegistryService(repo as never);
+    const { service, repo } = makeService([makePackage(minimalDataManifest({ fliks: COMPATIBLE_RANGE }))]);
 
     await service.onModuleInit();
 
@@ -65,12 +75,30 @@ describe('PluginRegistryService — boot load', () => {
   it('boot continues past a failing package and still registers a later valid one', async () => {
     const bad = minimalDataManifest({ id: 'fliks.bad-plugin', fliks: '>=99.0.0' });
     const good = minimalDataManifest({ id: 'fliks.good-plugin', fliks: COMPATIBLE_RANGE });
-    const repo = repoMock([makePackage(bad), makePackage(good)]);
-    const service = new PluginRegistryService(repo as never);
+    const { service } = makeService([makePackage(bad), makePackage(good)]);
 
     await service.onModuleInit();
 
     expect(service.get(bad.id)).toBeUndefined();
+    expect(service.get(good.id)).toBeDefined();
+    expect(service.list()).toHaveLength(1);
+  });
+
+  it('a process-tier plugin whose spawn fails does not take boot down, and a later valid plugin still loads', async () => {
+    const failing = minimalProcessManifest(
+      { 'plugin.js': 'a'.repeat(64), 'logo.png': 'b'.repeat(64) },
+      { id: 'fliks.spawnfails', fliks: COMPATIBLE_RANGE },
+    );
+    const good = minimalDataManifest({ id: 'fliks.good-plugin', fliks: COMPATIBLE_RANGE });
+    const { service } = makeService([makePackage(failing), makePackage(good)], {
+      ok: false,
+      reason: 'spawn-failed',
+      detail: 'never reached ready',
+    });
+
+    await service.onModuleInit();
+
+    expect(service.get(failing.id)).toBeUndefined();
     expect(service.get(good.id)).toBeDefined();
     expect(service.list()).toHaveLength(1);
   });
@@ -84,7 +112,7 @@ describe('PluginRegistryService.register()', () => {
   it('registers a valid data-tier package and is idempotent', async () => {
     const manifest = minimalDataManifest({ fliks: COMPATIBLE_RANGE });
     const pkg = makePackage(manifest);
-    const service = new PluginRegistryService(repoMock() as never);
+    const { service } = makeService();
 
     const first = await service.register(pkg);
     const second = await service.register(pkg);
@@ -102,7 +130,7 @@ describe('PluginRegistryService.register()', () => {
     const sig = signManifestBase64(privateKey, manifestBytes);
     const archive = archiveFor(manifest, [{ name: 'plugin.json.sig', content: Buffer.from(sig, 'utf8') }]);
     const pkg = makePackage(manifest, { archive, signature: 'official', verifiedByKeyId: 'revoked-key' });
-    const service = new PluginRegistryService(repoMock() as never);
+    const { service } = makeService();
 
     const result = await service.register(pkg);
 
@@ -123,7 +151,7 @@ describe('PluginRegistryService.register()', () => {
     const sig = signManifestBase64(privateKey, manifestBytes);
     const archive = archiveFor(manifest, [{ name: 'plugin.json.sig', content: Buffer.from(sig, 'utf8') }]);
     const pkg = makePackage(manifest, { archive, signature: 'official', verifiedByKeyId: 'release-2026' });
-    const service = new PluginRegistryService(repoMock() as never);
+    const { service } = makeService();
 
     const result = await service.register(pkg);
 
@@ -133,7 +161,7 @@ describe('PluginRegistryService.register()', () => {
   it('L4: does not register when pluginApi differs from PLUGIN_API_VERSION, with its own reason', async () => {
     const manifest = minimalDataManifest({ fliks: COMPATIBLE_RANGE, pluginApi: 99 });
     const pkg = makePackage(manifest);
-    const service = new PluginRegistryService(repoMock() as never);
+    const { service } = makeService();
 
     const result = await service.register(pkg);
 
@@ -148,7 +176,7 @@ describe('PluginRegistryService.register()', () => {
   it('L4: does not register when the fliks range excludes the running version, with its own reason', async () => {
     const manifest = minimalDataManifest({ fliks: '>=99.0.0' });
     const pkg = makePackage(manifest);
-    const service = new PluginRegistryService(repoMock() as never);
+    const { service } = makeService();
 
     const result = await service.register(pkg);
 
@@ -160,23 +188,74 @@ describe('PluginRegistryService.register()', () => {
     });
   });
 
-  it('refuses a process-tier package as not supported yet', async () => {
-    const pluginJs = Buffer.from('module.exports = {};', 'utf8');
-    const manifest = minimalProcessManifest(
-      { 'plugin.js': 'a'.repeat(64), 'logo.png': 'b'.repeat(64) },
-      { fliks: COMPATIBLE_RANGE },
-    );
-    const archive = archiveFor(manifest, [{ name: 'plugin.js', content: pluginJs }]);
-    const pkg = makePackage(manifest, { archive });
-    const service = new PluginRegistryService(repoMock() as never);
+  describe('process tier', () => {
+    function processPackage(overrides: Partial<ProcessPluginManifest> = {}) {
+      const pluginJs = Buffer.from('module.exports = {};', 'utf8');
+      const manifest = minimalProcessManifest(
+        { 'plugin.js': 'a'.repeat(64), 'logo.png': 'b'.repeat(64) },
+        { fliks: COMPATIBLE_RANGE, ...overrides },
+      );
+      const archive = archiveFor(manifest, [{ name: 'plugin.js', content: pluginJs }]);
+      return makePackage(manifest, { archive });
+    }
 
-    const result = await service.register(pkg);
+    it('registers and spawns a valid process-tier package, seeding its registration row', async () => {
+      const pkg = processPackage({ id: 'fliks.processhappy' });
+      const { service, registrationRepo, processService } = makeService();
 
-    expect(result).toEqual({
-      ok: false,
-      pluginId: manifest.id,
-      reason: 'unsupported-tier',
-      detail: expect.any(String),
+      const result = await service.register(pkg);
+
+      expect(result).toEqual({ ok: true, pluginId: pkg.pluginId });
+      expect(processService.startFor).toHaveBeenCalledWith(pkg);
+      expect(service.get(pkg.pluginId)).toBeDefined();
+      const row = registrationRepo.rows.get(pkg.pluginId);
+      expect(row).toEqual(
+        expect.objectContaining({ pluginId: pkg.pluginId, enabled: true, ingestRoots: [], scopes: ['media:read'] }),
+      );
+    });
+
+    it('refreshes the cached manifest on a second registration without resetting admin-edited fields', async () => {
+      const pkg = processPackage({ id: 'fliks.processreload' });
+      const { service, registrationRepo } = makeService();
+      await service.register(pkg);
+      registrationRepo.rows.get(pkg.pluginId)!.enabled = false;
+      registrationRepo.rows.get(pkg.pluginId)!.ingestRoots = ['/media/custom'];
+
+      const second = await service.register(pkg);
+
+      expect(second).toEqual({ ok: false, pluginId: pkg.pluginId, reason: 'disabled', detail: expect.any(String) });
+      const row = registrationRepo.rows.get(pkg.pluginId);
+      expect(row?.ingestRoots).toEqual(['/media/custom']);
+      expect(row?.manifest).toEqual(pkg.manifest);
+    });
+
+    it('a disabled registration refuses with "disabled" and never calls startFor', async () => {
+      const pkg = processPackage({ id: 'fliks.processdisabled' });
+      const { service, registrationRepo, processService } = makeService();
+      await service.register(pkg);
+      registrationRepo.rows.get(pkg.pluginId)!.enabled = false;
+      processService.startFor.mockClear();
+
+      const result = await service.register(pkg);
+
+      expect(result).toEqual({ ok: false, pluginId: pkg.pluginId, reason: 'disabled', detail: expect.any(String) });
+      expect(processService.startFor).not.toHaveBeenCalled();
+      expect(service.get(pkg.pluginId)).toBeUndefined();
+    });
+
+    it('propagates a spawn failure reason and registers nothing', async () => {
+      const pkg = processPackage({ id: 'fliks.processspawnfail' });
+      const { service } = makeService([], { ok: false, reason: 'spawn-failed', detail: 'stderr tail here' });
+
+      const result = await service.register(pkg);
+
+      expect(result).toEqual({
+        ok: false,
+        pluginId: pkg.pluginId,
+        reason: 'spawn-failed',
+        detail: 'stderr tail here',
+      });
+      expect(service.get(pkg.pluginId)).toBeUndefined();
     });
   });
 });
