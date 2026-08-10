@@ -2,8 +2,6 @@ import axios from 'axios';
 import { TorznabService } from './torznab.service';
 import { IndexerThrottle } from './indexer-throttle.service';
 import { Indexer } from './entities/indexer.entity';
-import { PluginRegistryService } from '../plugins/plugin-registry.service';
-import { buildIndexerImplementationId, type IndexerDescriptor } from '../../common/plugin-contract';
 
 const indexer = (over: Partial<Indexer> = {}): Indexer =>
   ({
@@ -25,22 +23,18 @@ const indexer = (over: Partial<Indexer> = {}): Indexer =>
 /** No `<item>`/`<error>` — a valid, empty Torznab response. */
 const emptyTorznabBody = '<?xml version="1.0"?><rss><channel></channel></rss>';
 
-function makeService(getIndexerDescriptor: jest.Mock = jest.fn().mockReturnValue(undefined)): TorznabService {
+function makeService(): TorznabService {
   const statRepo = { create: jest.fn((x: unknown) => x), save: jest.fn().mockResolvedValue(undefined) };
   const indexerRepo = { update: jest.fn().mockResolvedValue(undefined) };
-  const registry = { getIndexerDescriptor } as unknown as PluginRegistryService;
-  return new TorznabService(statRepo as never, indexerRepo as never, new IndexerThrottle(), registry);
+  return new TorznabService(statRepo as never, indexerRepo as never, new IndexerThrottle());
 }
 
 /** Same as makeService, but also hands back the indexerRepo mock so callers
  *  can assert refreshCaps actually completed rather than early-returning. */
-function makeServiceWithMocks(
-  getIndexerDescriptor: jest.Mock = jest.fn().mockReturnValue(undefined),
-): { service: TorznabService; indexerRepo: { update: jest.Mock } } {
+function makeServiceWithMocks(): { service: TorznabService; indexerRepo: { update: jest.Mock } } {
   const statRepo = { create: jest.fn((x: unknown) => x), save: jest.fn().mockResolvedValue(undefined) };
   const indexerRepo = { update: jest.fn().mockResolvedValue(undefined) };
-  const registry = { getIndexerDescriptor } as unknown as PluginRegistryService;
-  const service = new TorznabService(statRepo as never, indexerRepo as never, new IndexerThrottle(), registry);
+  const service = new TorznabService(statRepo as never, indexerRepo as never, new IndexerThrottle());
   return { service, indexerRepo };
 }
 
@@ -76,39 +70,6 @@ describe('TorznabService — search target resolution', () => {
     expect(requestedUrls[0].startsWith('https://legacy.tld/api?')).toBe(true);
     expect(requestedUrls[0]).toContain('apikey=legacy-key');
   });
-
-  it('resolves an indexer naming a registered descriptor to the descriptor endpoint, with the user apiKey', async () => {
-    const descriptor: IndexerDescriptor = {
-      key: 'mytracker',
-      name: 'My Tracker',
-      driverApi: 'torznab',
-      endpoint: 'https://tracker.example/api',
-      settings: [],
-    };
-    const implementation = buildIndexerImplementationId('fliks.test-plugin', 'mytracker');
-    const getIndexerDescriptor = jest.fn((id: string) => (id === implementation ? descriptor : undefined));
-    const service = makeService(getIndexerDescriptor);
-    const ix = indexer({ implementation, settings: { apiKey: 'user-key' } });
-
-    const results = await service.searchMovie(ix, 'Some Movie');
-
-    expect(results).toEqual([]);
-    expect(getIndexerDescriptor).toHaveBeenCalledWith(implementation);
-    expect(requestedUrls).toHaveLength(1);
-    expect(requestedUrls[0].startsWith('https://tracker.example/api?')).toBe(true);
-    expect(requestedUrls[0]).toContain('apikey=user-key');
-  });
-
-  it('skips an indexer naming an unregistered descriptor, never falling through to raw torznab', async () => {
-    const implementation = buildIndexerImplementationId('fliks.uninstalled-plugin', 'sometracker');
-    const service = makeService();
-    const ix = indexer({ implementation, settings: { apiKey: 'user-key' } });
-
-    const results = await service.searchMovie(ix, 'Some Movie');
-
-    expect(results).toEqual([]);
-    expect(requestedUrls).toHaveLength(0);
-  });
 });
 
 describe('TorznabService — refreshCaps endpoint resolution', () => {
@@ -125,27 +86,6 @@ describe('TorznabService — refreshCaps endpoint resolution', () => {
 
   afterEach(() => {
     axios.defaults.adapter = originalAdapter;
-  });
-
-  it('resolves a descriptor-backed indexer to the descriptor endpoint', async () => {
-    const descriptor: IndexerDescriptor = {
-      key: 'mytracker',
-      name: 'My Tracker',
-      driverApi: 'torznab',
-      endpoint: 'https://tracker.example/api',
-      settings: [],
-    };
-    const implementation = buildIndexerImplementationId('fliks.test-plugin', 'mytracker');
-    const getIndexerDescriptor = jest.fn((id: string) => (id === implementation ? descriptor : undefined));
-    const { service, indexerRepo } = makeServiceWithMocks(getIndexerDescriptor);
-    const ix = indexer({ implementation, settings: { apiKey: 'user-key' } });
-
-    await service.refreshCaps(ix);
-
-    expect(requestedUrls).toHaveLength(1);
-    expect(requestedUrls[0].startsWith('https://tracker.example/api?t=caps')).toBe(true);
-    expect(requestedUrls[0]).toContain('apikey=user-key');
-    expect(indexerRepo.update).toHaveBeenCalledWith(ix.id, expect.objectContaining({ capsSearchFallback: false }));
   });
 
   it('still resolves a plain-torznab indexer from its own settings.baseUrl', async () => {
@@ -191,27 +131,6 @@ describe('TorznabService — rssSearch endpoint resolution', () => {
 
   afterEach(() => {
     axios.defaults.adapter = originalAdapter;
-  });
-
-  it('resolves a descriptor-backed indexer to the descriptor endpoint', async () => {
-    const descriptor: IndexerDescriptor = {
-      key: 'mytracker',
-      name: 'My Tracker',
-      driverApi: 'torznab',
-      endpoint: 'https://tracker.example/api',
-      settings: [],
-    };
-    const implementation = buildIndexerImplementationId('fliks.test-plugin', 'mytracker');
-    const getIndexerDescriptor = jest.fn((id: string) => (id === implementation ? descriptor : undefined));
-    const { service } = makeServiceWithMocks(getIndexerDescriptor);
-    const ix = indexer({ implementation, settings: { apiKey: 'user-key' } });
-
-    const results = await service.rssSearch(ix);
-
-    expect(results).toEqual([]);
-    expect(requestedUrls).toHaveLength(1);
-    expect(requestedUrls[0].startsWith('https://tracker.example/api?t=search')).toBe(true);
-    expect(requestedUrls[0]).toContain('apikey=user-key');
   });
 
   it('still resolves a plain-torznab indexer from its own settings.baseUrl', async () => {

@@ -12,8 +12,7 @@ export class UpdateIndexerDto {
   @IsOptional()
   name?: string;
 
-  /** `"torznab"` or a plugin-namespaced descriptor id — checked against the
-   *  registry in `IndexersService.assertKnownImplementation`, not here. */
+  /** Checked against the known implementations in `IndexersService.assertKnownImplementation`, not here. */
   @IsString()
   @IsOptional()
   implementation?: string;

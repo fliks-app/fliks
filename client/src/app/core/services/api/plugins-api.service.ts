@@ -1,7 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import type { FieldDef } from '../../plugin-ui/contribution.types';
 
 export type PluginKind = 'data' | 'process';
 /** Mirrors backend `TrustOutcome` (`archive/trust-store.ts`). */
@@ -90,17 +89,6 @@ export interface PluginSourceCatalog {
   lastRefreshError: string | null;
 }
 
-/** One tracker a `data` plugin declares, exposed under its namespaced implementation id. */
-export interface IndexerDescriptorRow {
-  implementationId: string;
-  pluginId: string;
-  key: string;
-  name: string;
-  driverApi: string;
-  endpoint: string;
-  settings: FieldDef[];
-}
-
 @Injectable({ providedIn: 'root' })
 export class PluginsApiService {
   private readonly http = inject(HttpClient);
@@ -125,13 +113,6 @@ export class PluginsApiService {
 
   uninstall(pluginId: string) {
     return firstValueFrom(this.http.delete<void>(`/api/plugins/${pluginId}`));
-  }
-
-  /** Every indexer descriptor currently on offer, for the "add indexer" type selector. */
-  getIndexerDescriptors() {
-    return firstValueFrom(
-      this.http.get<IndexerDescriptorRow[]>('/api/plugins/indexer-descriptors'),
-    );
   }
 
   listSources() {

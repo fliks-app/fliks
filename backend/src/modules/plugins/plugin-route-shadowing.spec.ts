@@ -4,7 +4,6 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import { PluginsController } from './plugins.controller';
 import { PluginLogoController } from './plugin-logo.controller';
-import { PluginIndexerDescriptorsController } from './plugin-indexer-descriptors.controller';
 import { PluginSourcesController } from './plugin-sources.controller';
 import { PluginImportController } from './plugin-import.controller';
 import { PluginProxyController } from './proxy/plugin-proxy.controller';
@@ -37,7 +36,6 @@ describe('plugins/* route shadowing', () => {
     };
     registry = {
       get: jest.fn().mockReturnValue(undefined),
-      listIndexerDescriptors: jest.fn().mockReturnValue([]),
       processStateOf: jest.fn().mockReturnValue(null),
       processStatusMessageOf: jest.fn().mockReturnValue(''),
     };
@@ -48,7 +46,6 @@ describe('plugins/* route shadowing', () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [
         PluginLogoController,
-        PluginIndexerDescriptorsController,
         PluginSourcesController,
         PluginImportController,
         PluginsController,

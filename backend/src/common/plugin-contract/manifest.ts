@@ -1,4 +1,3 @@
-import type { IndexerDescriptor } from './indexer-descriptor';
 import type { UiContribution, ConfigPage } from './ui-contribution';
 import type { PluginScope } from './principal';
 
@@ -28,8 +27,7 @@ export type PluginWebhookEventName = (typeof PLUGIN_WEBHOOK_EVENT_NAMES)[number]
 /**
  * One `events[]` entry: POST the event to `webhook` when `event` fires. Both
  * fields are optional at the type level — a manifest is untrusted JSON, so
- * `PluginRegistryService` validates every entry before believing it (same
- * posture as `provides.indexers`).
+ * `PluginRegistryService` validates every entry before believing it.
  */
 export interface PluginWebhookDeclaration {
   event: PluginWebhookEventName;
@@ -64,9 +62,7 @@ export interface PluginRoute {
 /**
  * Fields unchanged between tiers. `events` and `i18n` carry shapes owned by
  * a pre-existing baseline schema not reproduced here; kept structurally
- * opaque rather than guessed. `provides.indexers` is typed, but the type is
- * a statement of intent only: a manifest is untrusted JSON, so
- * `PluginRegistryService` validates every entry before believing it.
+ * opaque rather than guessed.
  */
 interface PluginManifestBase {
   id: string;
@@ -80,7 +76,6 @@ interface PluginManifestBase {
   license: string;
   logo: string;
   homepage?: string;
-  provides?: { indexers?: IndexerDescriptor[] };
   ui?: {
     contributions?: UiContribution[];
     configPages?: ConfigPage[];

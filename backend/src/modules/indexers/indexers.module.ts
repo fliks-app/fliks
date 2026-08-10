@@ -10,6 +10,8 @@ import { AuthModule } from '../auth/auth.module';
 import { PluginsModule } from '../plugins/plugins.module';
 
 @Module({
+  // PluginsModule: unused by this module's own providers, but log-buffer.module.ts
+  // documents a module-graph cycle that routes around this exact edge.
   imports: [TypeOrmModule.forFeature([Indexer, IndexerStat]), AuthModule, PluginsModule],
   controllers: [IndexersController],
   providers: [TorznabService, IndexerThrottle, IndexersService],

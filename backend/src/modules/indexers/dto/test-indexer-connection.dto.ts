@@ -1,8 +1,7 @@
 import { IsObject, IsString } from 'class-validator';
 
 export class TestIndexerConnectionDto {
-  /** `"torznab"` (settings.baseUrl is used) or a registered descriptor id
-   *  (its endpoint is used instead) — resolved in `IndexersService`. */
+  /** `"torznab"` is the only value core resolves — settings.baseUrl is used. */
   @IsString()
   implementation: string;
 

@@ -15,12 +15,9 @@ import { arePluginsDisabled, FLIKS_PLUGINS_DISABLED_ENV } from '../../common/con
 import {
   PLUGIN_API_VERSION,
   PLUGIN_WEBHOOK_EVENT_NAMES,
-  buildIndexerImplementationId,
-  INDEXER_ID_SEPARATOR,
   type PluginKind,
   type PluginManifest,
   type ProcessPluginManifest,
-  type IndexerDescriptor,
   type PluginWebhookEventName,
   type PluginRoute,
   type PluginJob,
@@ -51,9 +48,6 @@ const _webhookCatalogMatchesDomainEvents: AssertSameStringUnion<PluginWebhookEve
 
 export { CURRENT_FLIKS_VERSION };
 
-/** The only `driverApi` core knows how to run a search through today. */
-const SUPPORTED_INDEXER_DRIVER_APIS: ReadonlySet<string> = new Set(['torznab']);
-
 /** A manifest route's `method` must be one of these, compared case-insensitively. */
 const KNOWN_HTTP_METHODS: ReadonlySet<string> = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
 
@@ -61,15 +55,6 @@ const KNOWN_HTTP_METHODS: ReadonlySet<string> = new Set(['GET', 'POST', 'PUT', '
 const EMPTY_SUBJECT_SET: ReadonlySet<string> = new Set();
 
 const CORE_JOB_NAME_SET: ReadonlySet<string> = new Set(CORE_SCHEDULER_JOB_NAMES);
-
-function isAbsoluteHttpUrl(value: string): boolean {
-  try {
-    const u = new URL(value);
-    return u.protocol === 'http:' || u.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
 
 export interface RegisteredPlugin {
   pluginId: string;
@@ -87,9 +72,6 @@ export type PluginRegistrationFailureReason =
   | 'untrusted'
   | 'incompatible-api'
   | 'incompatible-fliks'
-  | 'unsupported-indexer-driver'
-  | 'invalid-indexer-key'
-  | 'invalid-indexer-endpoint'
   | 'invalid-webhook-event'
   | 'invalid-webhook-url'
   | 'insecure-webhook-scheme'
@@ -145,15 +127,13 @@ export type PluginRegistrationResult = PluginRegistrationSuccess | PluginRegistr
 export class PluginRegistryService implements OnModuleInit {
   private readonly logger = new Logger(PluginRegistryService.name);
   private readonly registry = new Map<string, RegisteredPlugin>();
-  /** Keyed by the namespaced id (`buildIndexerImplementationId`), rebuilt per plugin on every `register()`. */
-  private readonly indexerDescriptors = new Map<string, { pluginId: string; descriptor: IndexerDescriptor }>();
   /** Keyed by plugin id; entries are already validated (URL, scheme, event name) — the
    *  dispatcher trusts this without re-checking any of that. */
   private readonly webhookDeclarations = new Map<string, { event: PluginWebhookEventName; webhook: string }[]>();
   /** Keyed by plugin id; compiled once per `register()` from already-validated routes. */
   private readonly routeTables = new Map<string, PluginRouteTable>();
   /** Keyed by plugin id; namespaced (`plugin:<id>:<name>`) CASL subjects this plugin declared.
-   *  Lifecycle mirrors `routeTables`, not `indexerDescriptors`: kept across `unregister()`, dropped on `forget()`. */
+   *  Lifecycle mirrors `routeTables`, not `webhookDeclarations`: kept across `unregister()`, dropped on `forget()`. */
   private readonly declaredPermissions = new Map<string, ReadonlySet<string>>();
 
   constructor(
@@ -212,9 +192,6 @@ export class PluginRegistryService implements OnModuleInit {
       );
     }
 
-    const descriptorCheck = this.validateIndexerDescriptors(manifest.provides?.indexers ?? []);
-    if (!descriptorCheck.ok) return this.fail(pkg.pluginId, descriptorCheck.reason, descriptorCheck.detail);
-
     // Structurally legal on `process` too, but only `data` fans out over HTTP —
     // `process` gets domain events pushed over its own socket instead.
     const webhookCheck = this.validateWebhookDeclarations(manifest.events ?? []);
@@ -258,7 +235,6 @@ export class PluginRegistryService implements OnModuleInit {
       verifiedByKeyId: pkg.verifiedByKeyId,
       archive: pkg.archive,
     });
-    this.replaceIndexerDescriptors(pkg.pluginId, descriptorCheck.descriptors);
     this.replaceWebhookDeclarations(pkg.pluginId, manifest.kind === 'data' ? webhookCheck.declarations : []);
     this.replaceRouteTable(pkg.pluginId, manifest.kind === 'process' ? manifest.routes : []);
     this.replaceDeclaredPermissions(pkg.pluginId, manifest.kind === 'process' ? declaredSubjects : EMPTY_SUBJECT_SET);
@@ -278,7 +254,6 @@ export class PluginRegistryService implements OnModuleInit {
     await this.processService.stopFor(pluginId);
     this.pluginJobs.dropFor(pluginId);
     this.registry.delete(pluginId);
-    this.replaceIndexerDescriptors(pluginId, []);
     this.replaceWebhookDeclarations(pluginId, []);
   }
 
@@ -346,20 +321,6 @@ export class PluginRegistryService implements OnModuleInit {
     return this.registry.get(pluginId);
   }
 
-  /** The descriptor behind a namespaced `Indexer.implementation`, if that plugin is currently registered. */
-  getIndexerDescriptor(implementationId: string): IndexerDescriptor | undefined {
-    return this.indexerDescriptors.get(implementationId)?.descriptor;
-  }
-
-  /** Every indexer descriptor currently on offer, for the discovery route. */
-  listIndexerDescriptors(): ({ implementationId: string; pluginId: string } & IndexerDescriptor)[] {
-    return [...this.indexerDescriptors.entries()].map(([implementationId, { pluginId, descriptor }]) => ({
-      implementationId,
-      pluginId,
-      ...descriptor,
-    }));
-  }
-
   /** The declared route matching this method+path for a registered `process` plugin, or
    *  `null` — no table (unregistered / `data` kind) and no match both refuse identically. */
   resolveRoute(pluginId: string, method: string, path: string): ResolvedPluginRoute | null {
@@ -389,16 +350,6 @@ export class PluginRegistryService implements OnModuleInit {
     else this.webhookDeclarations.set(pluginId, declarations);
   }
 
-  /** Drops this plugin's previous descriptors (if any) and installs `descriptors` in their place. */
-  private replaceIndexerDescriptors(pluginId: string, descriptors: IndexerDescriptor[]): void {
-    for (const [id, entry] of this.indexerDescriptors) {
-      if (entry.pluginId === pluginId) this.indexerDescriptors.delete(id);
-    }
-    for (const descriptor of descriptors) {
-      this.indexerDescriptors.set(buildIndexerImplementationId(pluginId, descriptor.key), { pluginId, descriptor });
-    }
-  }
-
   /** Drops this plugin's previous declared-permission set (if any) and installs `subjects` in its place. */
   private replaceDeclaredPermissions(pluginId: string, subjects: ReadonlySet<string>): void {
     if (subjects.size === 0) this.declaredPermissions.delete(pluginId);
@@ -412,59 +363,7 @@ export class PluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * `manifest.provides.indexers` is untrusted JSON (`unknown[]` at the type
-   * level — see `manifest.ts`), so each entry is read defensively rather
-   * than trusted as an `IndexerDescriptor`. Each violation gets its own
-   * reason so a refusal is attributable, mirroring
-   * `validateDataTierManifest`'s one-code-per-key style.
-   */
-  private validateIndexerDescriptors(
-    raw: unknown[],
-  ):
-    | { ok: true; descriptors: IndexerDescriptor[] }
-    | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
-    const descriptors: IndexerDescriptor[] = [];
-    const seenKeys = new Set<string>();
-    for (const entry of raw) {
-      const d = (entry ?? {}) as Partial<IndexerDescriptor>;
-      const key = typeof d.key === 'string' ? d.key : '';
-      const driverApi = typeof d.driverApi === 'string' ? d.driverApi : '';
-      const endpoint = typeof d.endpoint === 'string' ? d.endpoint : '';
-      const name = typeof d.name === 'string' ? d.name : '';
-      const settings = Array.isArray(d.settings) ? d.settings : [];
-
-      if (!SUPPORTED_INDEXER_DRIVER_APIS.has(driverApi)) {
-        return {
-          ok: false,
-          reason: 'unsupported-indexer-driver',
-          detail: `descriptor "${key}" needs driverApi "${driverApi}", which core does not support (supported: ${[...SUPPORTED_INDEXER_DRIVER_APIS].join(', ')})`,
-        };
-      }
-      if (!key || key.includes(INDEXER_ID_SEPARATOR)) {
-        return {
-          ok: false,
-          reason: 'invalid-indexer-key',
-          detail: `indexer key "${key}" is empty or contains "${INDEXER_ID_SEPARATOR}"`,
-        };
-      }
-      if (seenKeys.has(key)) {
-        return { ok: false, reason: 'invalid-indexer-key', detail: `duplicate indexer key "${key}"` };
-      }
-      seenKeys.add(key);
-      if (!isAbsoluteHttpUrl(endpoint)) {
-        return {
-          ok: false,
-          reason: 'invalid-indexer-endpoint',
-          detail: `descriptor "${key}" has an invalid endpoint "${endpoint}"`,
-        };
-      }
-      descriptors.push({ key, name, driverApi, endpoint, settings });
-    }
-    return { ok: true, descriptors };
-  }
-
-  /**
-   * `manifest.events` is untrusted JSON like `provides.indexers`, so each entry
+   * `manifest.events` is untrusted JSON, so each entry
    * is read defensively. `event` must be a name from the webhook catalog; `webhook`
    * must be an `https://` URL whose host, when it's an IP literal, isn't internal.
    * A bare hostname is accepted here — DNS isn't resolved at install time, and
@@ -503,7 +402,7 @@ export class PluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * `manifest.permissions` is untrusted JSON like `provides.indexers`, so each entry is read
+   * `manifest.permissions` is untrusted JSON, so each entry is read
    * defensively. `PLUGIN_PERMISSION_NAME_PATTERN`'s charset alone rejects every reserved-looking
    * or foreign-plugin-shaped name — no `: . * space` or uppercase survives it. The namespace
    * prefix itself always comes from `pkg.pluginId`, never from the manifest, so a name can
@@ -530,7 +429,7 @@ export class PluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * `manifest.jobs` is untrusted JSON like `provides.indexers`. Each violation class gets its own
+   * `manifest.jobs` is untrusted JSON. Each violation class gets its own
    * reason. `CORE_JOB_NAME_SET` mirrors `SchedulerService.SCHEDULERS`'s names — a plugin job can
    * never shadow one, since the merged admin listing and manual trigger would become ambiguous.
    */
@@ -622,7 +521,6 @@ export class PluginRegistryService implements OnModuleInit {
   /** Every failure path funnels here, so a failing re-registration can never leave a stale entry active. */
   private fail(pluginId: string, reason: PluginRegistrationFailureReason, detail: string): PluginRegistrationFailure {
     this.registry.delete(pluginId);
-    this.replaceIndexerDescriptors(pluginId, []);
     this.replaceWebhookDeclarations(pluginId, []);
     // No failure reason leaves a process running, so its cron never should either.
     this.pluginJobs.dropFor(pluginId);

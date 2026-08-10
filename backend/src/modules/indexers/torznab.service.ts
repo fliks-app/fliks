@@ -7,8 +7,6 @@ import { IndexerStat } from './entities/indexer-stat.entity';
 import { IndexerThrottle } from './indexer-throttle.service';
 import { decodeHtmlEntities } from '../../common/utils/decode-html-entities';
 import { ReleaseCandidate } from '../../common/release-scoring';
-import { parseIndexerImplementationId } from '../../common/plugin-contract';
-import { PluginRegistryService } from '../plugins/plugin-registry.service';
 
 const decodeXmlEntities = decodeHtmlEntities;
 
@@ -166,7 +164,6 @@ export class TorznabService {
     @InjectRepository(Indexer)
     private readonly indexerRepo: Repository<Indexer>,
     private readonly throttle: IndexerThrottle,
-    private readonly pluginRegistry: PluginRegistryService,
   ) {}
 
   /** Drop indexers currently serving a failure / Retry-After cooldown from a
@@ -271,29 +268,12 @@ export class TorznabService {
    * enableRss/enableSearch gate — each caller (refreshCaps, rssSearch,
    * resolveSearchTarget) applies its own. Null means unresolvable — the
    * reason is logged here so every caller reports it the same way.
-   *
-   * `implementation` is either the legacy plain `"torznab"` value (baseUrl
-   * comes from the indexer's own settings) or a plugin-namespaced descriptor
-   * id (baseUrl comes from the registered descriptor). A namespaced id whose
-   * plugin isn't registered is skipped outright — it never falls through to
-   * the plain-Torznab path with an empty baseUrl.
    */
   private resolveEndpoint(
     indexer: Indexer,
   ): { baseUrl: string; apiKey: string } | null {
     const settings = indexer.settings as { baseUrl?: string; apiKey?: string };
     const implementation = indexer.implementation || '';
-
-    if (parseIndexerImplementationId(implementation)) {
-      const descriptor = this.pluginRegistry.getIndexerDescriptor(implementation);
-      if (!descriptor) {
-        this.log.warn(
-          `[${indexer.name}] skipped — descriptor "${implementation}" is not registered (plugin missing or refused at boot)`,
-        );
-        return null;
-      }
-      return { baseUrl: descriptor.endpoint.replace(/\/$/, ''), apiKey: String(settings.apiKey || '') };
-    }
 
     if (!implementation.toLowerCase().includes('torznab')) {
       this.log.debug(`[${indexer.name}] skipped — implementation "${indexer.implementation}" is not Torznab`);
