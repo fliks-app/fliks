@@ -2261,7 +2261,7 @@
     "plugins": {
       "title": "Plugins",
       "subtitle": "Installiere Plugins, um den Funktionsumfang von Fliks zu erweitern.",
-      "upload": "Aus einer Zip-Datei installieren",
+      "upload": "Plugin importieren",
       "load_error": "Unable to load the plugin list.",
       "empty": "No plugin installed.",
       "col_plugin": "Plugin",
