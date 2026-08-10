@@ -17,7 +17,7 @@ export type SlotId =
  * Closed `when` vocabulary, evaluated with `.every()`. A leading "!"
  * negates any entry; an unknown predicate evaluates false (fail closed).
  */
-export type WhenPredicate =
+export type WhenPredicateName =
   | 'isAdmin'
   | `hasPermission:${string}`
   | 'mediaType:movie'
@@ -29,12 +29,17 @@ export type WhenPredicate =
   | 'isTv'
   | 'isTouch';
 
+/** A predicate, optionally negated. Negating an unknown predicate is still unknown, so still false. */
+export type WhenPredicate = WhenPredicateName | `!${WhenPredicateName}`;
+
 /** One `ui.contributions[]` entry — a nav item, action or menu row. */
 export interface UiContribution {
   id: string;
   slot: SlotId;
   weight: number;
   labelKey: string;
+  /** A shorter label for compact surfaces such as the phone dock; falls back to `labelKey`. */
+  shortLabelKey?: string;
   icon?: string;
   tone?: 'default' | 'danger';
   badge?: string;
