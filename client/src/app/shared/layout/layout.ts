@@ -45,21 +45,16 @@ import { BackgroundComponent } from '../components/background/background';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { BackgroundService } from '../../core/services/background.service';
 import { SearchStateService } from '../../core/services/search-state.service';
+import { NavContributionsService, DOCK_PINNED_IDS, MOBILE_HIDDEN_IDS, type ResolvedNavItem } from '../../core/plugin-ui/nav-contributions.service';
+import { NavIconComponent } from './nav-icon';
 import {
   LucideMenu,
   LucideChevronLeft,
-  LucideHome,
   LucideSearch,
-  LucideClipboardList,
-  LucideDownload,
-  LucideCalendar,
   LucideCast,
-  LucideHistory,
   LucideEllipsisVertical,
   LucidePin,
   LucideRocket,
-  LucideListVideo,
-  LucideUserRound,
 } from '@lucide/angular';
 
 
@@ -67,9 +62,7 @@ import {
   selector: 'app-layout',
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, TranslateModule,
-    LucideMenu, LucideChevronLeft, LucideHome, LucideSearch,
-    LucideClipboardList, LucideDownload, LucideCalendar, LucideCast,
-    LucideHistory, LucideEllipsisVertical, LucidePin, LucideRocket, LucideListVideo, LucideUserRound,
+    LucideMenu, LucideChevronLeft, LucideSearch, LucideCast, LucideEllipsisVertical, LucidePin, LucideRocket,
     CastOverlayComponent,
     CardActionsPanelComponent,
     AddToPlaylistModalComponent,
@@ -77,6 +70,7 @@ import {
     UserMenuComponent,
     AppUpdateModalComponent,
     LucideIconComponent,
+    NavIconComponent,
     TvRowDirective,
     BackgroundComponent,
     ResolveUrlPipe,
@@ -211,6 +205,34 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly queueCount = signal(0);
   readonly pendingRequestCount = signal(0);
 
+  private readonly navContrib = inject(NavContributionsService);
+  /** `nav.main` items before/after the library block, and `nav.acquisition` —
+   *  the sidebar, the phone dock and the more-sheet all read these same lists. */
+  readonly mainItemsBeforeLibraries = this.navContrib.mainItemsBeforeLibraries;
+  readonly mainItemsAfterLibraries = this.navContrib.mainItemsAfterLibraries;
+  readonly acquisitionItems = this.navContrib.acquisitionItems;
+  readonly dockHome = computed(() => this.mainItemsBeforeLibraries().find((i) => i.id === 'core.home'));
+  readonly dockDownloads = computed(() => this.mainItemsAfterLibraries().find((i) => i.id === 'core.downloads'));
+  readonly dockRequests = computed(() => this.acquisitionItems().find((i) => i.id === 'core.requests'));
+  /** Everything not pinned to the dock's primary row — the more-sheet's content,
+   *  so a plugin item always reaches at least one native-phone surface. */
+  readonly sheetMainItems = computed(() =>
+    [...this.mainItemsBeforeLibraries(), ...this.mainItemsAfterLibraries()].filter(
+      (i) => !DOCK_PINNED_IDS.includes(i.id) && !MOBILE_HIDDEN_IDS.includes(i.id),
+    ),
+  );
+  readonly sheetAcquisitionItems = computed(() =>
+    this.acquisitionItems().filter((i) => !DOCK_PINNED_IDS.includes(i.id)),
+  );
+
+  /** Looks up a contribution's badge count by its declared key — the only
+   *  keys core's own items use today; a plugin badge stays at 0 until the
+   *  counts endpoint grows a matching field. */
+  badgeCountFor(item: ResolvedNavItem): number {
+    if (item.badgeKey === 'queueActive') return this.queueCount();
+    if (item.badgeKey === 'pendingRequests') return this.pendingRequestCount();
+    return 0;
+  }
 
   /** Refresh counts when relevant SSE events arrive */
   private readonly sseEffect = effect(() => {

@@ -184,25 +184,31 @@
          Tablets and TV use the drawer/sidebar instead. -->
     @if (isNative && device.isPhone() && !keyboardOpen()) {
       <div class="dock z-40 dock-with-fab-cradle">
-        <a routerLink="/" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: true }"
-           (click)="resetNavHistory()">
-          <svg lucideHome class="h-5 w-5"></svg>
-          <span class="dock-label truncate max-w-full">{{ 'nav.home' | translate }}</span>
-        </a>
-        <a routerLink="/downloads" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: false }"
-           (click)="resetNavHistory()">
-          <svg lucideDownload class="h-5 w-5"></svg>
-          <span class="dock-label truncate max-w-full">{{ 'nav.downloads' | translate }}</span>
-        </a>
+        @if (dockHome(); as item) {
+          <a [routerLink]="item.route" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: item.exact }"
+             (click)="resetNavHistory()">
+            <app-nav-icon [name]="item.icon" class="h-5 w-5" />
+            <span class="dock-label truncate max-w-full">{{ (item.shortLabelKey ?? item.labelKey) | translate }}</span>
+          </a>
+        }
+        @if (dockDownloads(); as item) {
+          <a [routerLink]="item.route" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: item.exact }"
+             (click)="resetNavHistory()">
+            <app-nav-icon [name]="item.icon" class="h-5 w-5" />
+            <span class="dock-label truncate max-w-full">{{ (item.shortLabelKey ?? item.labelKey) | translate }}</span>
+          </a>
+        }
         <!-- Empty cell that holds the centre slot in the flex chain so the
              4 nav items distribute evenly across 5 columns. The FAB sits
              outside the dock to keep .dock's position:fixed intact. -->
         <span aria-hidden="true" class="invisible"></span>
-        <a routerLink="/requests" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: false }"
-           (click)="resetNavHistory()">
-          <svg lucideClipboardList class="h-5 w-5"></svg>
-          <span class="dock-label truncate max-w-full">{{ 'nav.requests' | translate }}</span>
-        </a>
+        @if (dockRequests(); as item) {
+          <a [routerLink]="item.route" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: item.exact }"
+             (click)="resetNavHistory()">
+            <app-nav-icon [name]="item.icon" class="h-5 w-5" />
+            <span class="dock-label truncate max-w-full">{{ (item.shortLabelKey ?? item.labelKey) | translate }}</span>
+          </a>
+        }
         <button (click)="toggleBottomMenu()" [class.dock-active]="bottomMenuOpen()"
                 class="[&.dock-active]:before:hidden [&.dock-active]:after:hidden">
           <svg lucideEllipsisVertical class="h-5 w-5"></svg>
@@ -243,35 +249,32 @@
                   </a>
                 </li>
               }
-              <li>
-                <a routerLink="/playlists" routerLinkActive="active" (click)="resetNavHistory()">
-                  <svg lucideListVideo class="h-5 w-5"></svg>
-                  {{ 'nav.playlists' | translate }}
-                </a>
-              </li>
-              <li>
-                <a routerLink="/activity" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
-                  <span class="flex items-center gap-2">
-                    <svg lucideDownload class="h-5 w-5"></svg>
-                    {{ 'nav.activity' | translate }}
-                  </span>
-                  @if (queueCount() > 0) {
-                    <span class="badge badge-sm badge-primary">{{ queueCount() }}</span>
-                  }
-                </a>
-              </li>
-              <li>
-                <a routerLink="/history" routerLinkActive="active" (click)="resetNavHistory()">
-                  <svg lucideHistory class="h-5 w-5"></svg>
-                  {{ 'nav.history' | translate }}
-                </a>
-              </li>
-              <li>
-                <a routerLink="/calendar" routerLinkActive="active" (click)="resetNavHistory()">
-                  <svg lucideCalendar class="h-5 w-5"></svg>
-                  {{ 'nav.calendar' | translate }}
-                </a>
-              </li>
+              @for (item of sheetMainItems(); track item.id) {
+                <li>
+                  <a [routerLink]="item.route" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: item.exact }" class="justify-between" (click)="resetNavHistory()">
+                    <span class="flex items-center gap-2">
+                      <app-nav-icon [name]="item.icon" class="h-5 w-5" />
+                      {{ item.labelKey | translate }}
+                    </span>
+                    @if (item.badgeKey && badgeCountFor(item) > 0) {
+                      <span class="badge badge-sm" [class]="item.badgeClass">{{ badgeCountFor(item) }}</span>
+                    }
+                  </a>
+                </li>
+              }
+              @for (item of sheetAcquisitionItems(); track item.id) {
+                <li>
+                  <a [routerLink]="item.route" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
+                    <span class="flex items-center gap-2">
+                      <app-nav-icon [name]="item.icon" class="h-5 w-5" />
+                      {{ item.labelKey | translate }}
+                    </span>
+                    @if (item.badgeKey && badgeCountFor(item) > 0) {
+                      <span class="badge badge-sm" [class]="item.badgeClass">{{ badgeCountFor(item) }}</span>
+                    }
+                  </a>
+                </li>
+              }
             </ul>
           </div>
         }
@@ -326,23 +329,16 @@
       </div>
 
       <ul class="menu p-4 flex-1 gap-0.5 min-w-64">
-        <li>
-          <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
-            <svg lucideHome class="h-5 w-5"></svg>
-            {{ 'nav.home' | translate }}
-          </a>
-        </li>
-        <li>
-          <a routerLink="/search" routerLinkActive="active">
-            <svg lucideSearch class="h-5 w-5"></svg>
-            {{ 'search.title' | translate }}
-          </a>
-        </li>
-        @if (!tv.isTv() && auth.user()?.id) {
+        @for (item of mainItemsBeforeLibraries(); track item.id) {
           <li>
-            <a [routerLink]="['/profile', auth.user()!.id]" routerLinkActive="active">
-              <svg lucideUserRound class="h-5 w-5"></svg>
-              {{ 'nav.my_profile' | translate }}
+            <a [routerLink]="item.route" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: item.exact }" class="justify-between">
+              <span class="flex items-center gap-2">
+                <app-nav-icon [name]="item.icon" class="h-5 w-5" />
+                {{ item.labelKey | translate }}
+              </span>
+              @if (item.badgeKey && badgeCountFor(item) > 0) {
+                <span class="badge badge-sm" [class]="item.badgeClass">{{ badgeCountFor(item) }}</span>
+              }
             </a>
           </li>
         }
@@ -361,55 +357,33 @@
             </a>
           </li>
         }
-        <li>
-          <a routerLink="/playlists" routerLinkActive="active">
-            <svg lucideListVideo class="h-5 w-5"></svg>
-            {{ 'nav.playlists' | translate }}
-          </a>
-        </li>
-        @if (!tv.isTv()) {
+        @for (item of mainItemsAfterLibraries(); track item.id) {
           <li>
-            <a routerLink="/downloads" routerLinkActive="active">
-              <svg lucideDownload class="h-5 w-5"></svg>
-              {{ 'downloads.title' | translate }}
+            <a [routerLink]="item.route" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: item.exact }" class="justify-between">
+              <span class="flex items-center gap-2">
+                <app-nav-icon [name]="item.icon" class="h-5 w-5" />
+                {{ item.labelKey | translate }}
+              </span>
+              @if (item.badgeKey && badgeCountFor(item) > 0) {
+                <span class="badge badge-sm" [class]="item.badgeClass">{{ badgeCountFor(item) }}</span>
+              }
             </a>
           </li>
         }
-        <li>
-          <a routerLink="/history" routerLinkActive="active">
-            <svg lucideHistory class="h-5 w-5"></svg>
-            {{ 'nav.history' | translate }}
-          </a>
-        </li>
         <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_downloads' | translate }}</li>
-        <li>
-          <a routerLink="/requests" routerLinkActive="active" class="justify-between">
-            <span class="flex items-center gap-2">
-              <svg lucideClipboardList class="h-5 w-5"></svg>
-              {{ 'nav.requests' | translate }}
-            </span>
-            @if (pendingRequestCount() > 0) {
-              <span class="badge badge-sm badge-warning">{{ pendingRequestCount() }}</span>
-            }
-          </a>
-        </li>
-        <li>
-          <a routerLink="/activity" routerLinkActive="active" class="justify-between">
-            <span class="flex items-center gap-2">
-              <svg lucideDownload class="h-5 w-5"></svg>
-              {{ 'nav.activity' | translate }}
-            </span>
-            @if (queueCount() > 0) {
-              <span class="badge badge-sm badge-primary">{{ queueCount() }}</span>
-            }
-          </a>
-        </li>
-        <li>
-          <a routerLink="/calendar" routerLinkActive="active">
-            <svg lucideCalendar class="h-5 w-5"></svg>
-            {{ 'nav.calendar' | translate }}
-          </a>
-        </li>
+        @for (item of acquisitionItems(); track item.id) {
+          <li>
+            <a [routerLink]="item.route" routerLinkActive="active" class="justify-between">
+              <span class="flex items-center gap-2">
+                <app-nav-icon [name]="item.icon" class="h-5 w-5" />
+                {{ item.labelKey | translate }}
+              </span>
+              @if (item.badgeKey && badgeCountFor(item) > 0) {
+                <span class="badge badge-sm" [class]="item.badgeClass">{{ badgeCountFor(item) }}</span>
+              }
+            </a>
+          </li>
+        }
       </ul>
 
     </aside>
