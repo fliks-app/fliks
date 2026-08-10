@@ -15,6 +15,7 @@ import { FormsModule } from '@angular/forms';
 import {
   LucideCaptions,
   LucideCheck,
+  LucideCircle,
   LucideClipboardList,
   LucideDownload,
   LucideEllipsisVertical,
@@ -39,6 +40,7 @@ import { PlayerSettingsService } from '../../../core/services/player-settings.se
 import { TrackManagerService } from '../../../core/services/track-manager.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { TvService } from '../../../core/services/tv.service';
+import { DeviceService } from '../../../core/services/device.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
@@ -56,6 +58,25 @@ import { ClampToggleDirective } from '../../directives/clamp-toggle.directive';
 import { TvRowDirective } from '../../directives/tv-row.directive';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { NgTemplateOutlet } from '@angular/common';
+import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
+import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-evaluator';
+import type { MediaType } from '../../../core/enums/media-type.enum';
+import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
+import { CORE_MEDIA_ACTIONS } from './core-media-actions';
+import type { UiContribution } from '../../../core/plugin-ui/contribution.types';
+
+/** One `media.actions` contribution resolved to something the template can
+ *  render directly — visibility, handler and icon fallback already decided. */
+export interface ResolvedMediaAction {
+  id: string;
+  labelKey: string;
+  icon: string;
+  tone: 'default' | 'danger';
+  confirmKey?: string;
+  actionId?: string;
+  route?: string;
+  handler: (() => void) | null;
+}
 
 export interface MediaInfoHeaderFile {
   id: number;
@@ -108,7 +129,7 @@ interface AudioTrack {
     TvSelectDirective,
     NgTemplateOutlet,
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
-    LucideCaptions, LucideCheck, LucideClipboardList, LucideDownload,
+    LucideCaptions, LucideCheck, LucideCircle, LucideClipboardList, LucideDownload,
     LucideEllipsisVertical, LucideEye, LucideEyeOff,
     LucideFilm, LucideFolder, LucideHeart, LucideListChecks, LucideListPlus, LucidePlay, LucideRotateCcw, LucideScanLine,
     LucideSearch, LucideSettings, LucideTrash2, LucideUserPlus,
@@ -123,9 +144,11 @@ export class MediaInfoHeaderComponent {
   private readonly trackManager = inject(TrackManagerService);
   readonly navbar = inject(NavbarService);
   readonly tv = inject(TvService);
+  private readonly device = inject(DeviceService);
   readonly auth = inject(AuthService);
   private readonly playable = inject(PlayableMediaService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly pluginUi = inject(PluginUiRegistryService);
 
   // ── Inputs: content ──
   readonly title = input.required<string>();
@@ -535,12 +558,140 @@ export class MediaInfoHeaderComponent {
     return `${(bytes / 1_073_741_824).toFixed(2)} GB`;
   }
 
-
-
   navigateToGenre(genre: string) {
     const library = this.libraryName();
     if (!library) return;
     void this.router.navigate(['/libraries', library], { queryParams: { genre } });
   }
 
+  // ── media.actions: the kebab menu, rendered from the contribution registry ──
+
+  private readonly mediaActionsContext = computed<WhenContext>(() => ({
+    isAdmin: this.isAdmin(),
+    hasPermission: (p: string) => this.auth.hasPermission(p),
+    mediaType: this.mediaType() as MediaType,
+    hasFiles: !!this.selectedFileId(),
+    isMonitored: this.monitored(),
+    hasQualityProfile: !!this.qualityProfileName(),
+    isEpisode: !!this.episodeId(),
+    isTv: this.tv.isTv(),
+    isTouch: this.device.isTouch(),
+  }));
+
+  /**
+   * Visibility rules the closed `when` vocabulary can't express — an OR, or a
+   * fact that isn't a permission (a sharing preference, in-flight request
+   * state). `when` already gated everything it can; this only narrows
+   * further, and only for the three ids that need it.
+   */
+  private readonly extraGuards: Record<string, () => boolean> = {
+    'core.recommend': () => !this.auth.sharingDisabled(),
+    'core.request_media': () => {
+      const needsFile = this.mediaType() === 'movie' || !!this.episodeId();
+      return !this.userHasOpenWholeRequest() && (!needsFile || !this.selectedFileId());
+    },
+    'core.edit_subtitles': () => this.mediaType() === 'movie' || !!this.episodeId(),
+    // Already `requests.create && !media.delete && !<pending>` — pending is
+    // per-title async state fetched by the parent, not a permission.
+    'core.request_deletion': () => this.canRequestDeletion(),
+  };
+
+  private readonly actionHandlers: MediaActionHandlers = {
+    'media.recommend': () => this.recommend.emit(),
+    'media.toggle-series-watched': () => this.onToggleWatched(),
+    'media.open-tracking': () => this.openTracking.emit(),
+    'media.request': () => this.requestMedia.emit(),
+    'media.grab-best': () => this.grabBest.emit(),
+    'media.search-releases': () => this.loadReleases.emit(),
+    'media.edit-profiles': () => this.openProfiles.emit(),
+    'media.edit-library': () => this.openLibrary.emit(),
+    'media.edit-subtitles': () => this.editSubtitles.emit(),
+    'media.refresh-metadata': () => this.refreshMetadata.emit(),
+    'media.analyze': () => this.openAnalyze.emit(),
+    'media.toggle-monitored': () => this.toggleMonitored.emit(),
+    'media.delete': () => this.deleteMedia.emit(),
+    'media.request-deletion': () => this.requestDeletion.emit(),
+  };
+
+  /** Core's list merged with the registry's plugin contributions, sorted by
+   *  weight then id, `when`-filtered, with the action resolved to a handler.
+   *  An unknown actionId or action.kind drops the row rather than rendering
+   *  a broken one. */
+  readonly menuItems = computed<ResolvedMediaAction[]>(() => {
+    const merged = [...CORE_MEDIA_ACTIONS, ...this.pluginUi.contributionsFor('media.actions')]
+      .sort((a, b) => a.weight - b.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const ctx = this.mediaActionsContext();
+    const items: ResolvedMediaAction[] = [];
+    for (const c of merged) {
+      if (!evaluateWhen(c.when, ctx)) continue;
+      // Reusing a core actionId reuses core's gating too: a plugin may narrow one of
+      // core's own actions, never widen it to someone core would hide it from.
+      if (!this.passesCoreGateFor(c, ctx)) continue;
+      if (!(this.extraGuards[c.id]?.() ?? true)) continue;
+      const base = {
+        id: c.id,
+        labelKey: c.labelKey,
+        icon: c.icon ?? 'circle',
+        tone: c.tone ?? ('default' as const),
+        confirmKey: c.confirmKey,
+      };
+      if (c.action.kind === 'route') {
+        items.push({ ...base, route: c.action.path, handler: null });
+      } else if (c.action.kind === 'action') {
+        const handler = resolveMediaAction(c.action.actionId, this.actionHandlers);
+        if (!handler) continue;
+        items.push({ ...base, actionId: c.action.actionId, handler });
+      }
+      // else: unrecognised action kind — nothing rather than a broken row.
+    }
+    return items;
+  });
+
+  /** A contribution pointing at a core actionId must also clear that core item's own
+   *  `when` and extra guard, whoever declared it. */
+  private passesCoreGateFor(c: UiContribution, ctx: WhenContext): boolean {
+    if (c.action.kind !== 'action') return true;
+    const core = CORE_MEDIA_ACTIONS.find((a) => a.action.kind === 'action' && a.action.actionId === (c.action as { actionId: string }).actionId);
+    if (!core || core.id === c.id) return true;
+    return evaluateWhen(core.when, ctx) && (this.extraGuards[core.id]?.() ?? true);
+  }
+
+  /** A couple of rows swap their label by live state (watched, monitored) —
+   *  cosmetic, so the swap lives here rather than in the static contribution. */
+  displayLabelKey(item: ResolvedMediaAction): string {
+    if (item.actionId === 'media.toggle-series-watched') {
+      return this.watched() ? 'media_detail.mark_series_unwatched' : 'media_detail.mark_series_watched';
+    }
+    if (item.actionId === 'media.toggle-monitored') {
+      return this.monitored() ? 'media_detail.unmonitor' : 'media_detail.monitor';
+    }
+    return item.labelKey;
+  }
+
+  /** Same idea as {@link displayLabelKey}, for the one row whose icon shape
+   *  (not just tint) follows live state. */
+  displayIcon(item: ResolvedMediaAction): string {
+    if (item.actionId === 'media.toggle-monitored') {
+      return this.monitored() ? 'eye-off' : 'eye';
+    }
+    return item.icon;
+  }
+
+  /** Mid-request spinner, per actionId — matches the pre-refactor markup 1:1
+   *  (search-releases and request-deletion never had one; grab-best did). */
+  isItemBusy(item: ResolvedMediaAction): boolean {
+    if (item.actionId === 'media.grab-best') return this.grabBusy() === 'best';
+    if (item.actionId === 'media.search-releases') return this.releasesLoading();
+    if (item.actionId === 'media.delete') return this.deleteLoading();
+    return false;
+  }
+
+  /** Disabled state, per actionId — matches the pre-refactor markup 1:1
+   *  (search-releases and request-deletion were never disabled). */
+  isItemDisabled(item: ResolvedMediaAction): boolean {
+    if (item.actionId === 'media.grab-best') return this.grabBusy() !== null;
+    if (item.actionId === 'media.toggle-monitored') return this.monitoredLoading();
+    if (item.actionId === 'media.delete') return this.deleteLoading();
+    return false;
+  }
 }
