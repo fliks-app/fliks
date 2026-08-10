@@ -3,7 +3,7 @@ import axios, { AxiosInstance } from 'axios';
 import * as crypto from 'crypto';
 import FormData from 'form-data';
 import { DownloadClient } from './entities/download-client.entity';
-import { decodeHtmlEntities } from '../../common/utils/decode-html-entities';
+import { decodeHtmlEntities } from '../../../common/utils/decode-html-entities';
 
 /**
  * Pull the BitTorrent info-hash out of a magnet URI. Magnets carry the

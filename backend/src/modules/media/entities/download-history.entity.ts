@@ -3,8 +3,8 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 import { Media } from './media.entity';
 import { Episode } from './episode.entity';
 import { Season } from './season.entity';
-import { Indexer } from '../../indexers/entities/indexer.entity';
-import { DownloadClient } from '../../download-clients/entities/download-client.entity';
+import { Indexer } from '../../../plugins/download/indexers/entities/indexer.entity';
+import { DownloadClient } from '../../../plugins/download/download-clients/entities/download-client.entity';
 
 /** Canonical lifecycle of a {@link DownloadHistory} row. */
 export const DOWNLOAD_HISTORY_STATUSES = [

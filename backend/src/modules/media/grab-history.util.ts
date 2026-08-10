@@ -3,8 +3,8 @@ import { DownloadHistory, GrabSource } from './entities/download-history.entity'
 import { Media } from './entities/media.entity';
 import { Episode } from './entities/episode.entity';
 import { Season } from './entities/season.entity';
-import { Indexer } from '../indexers/entities/indexer.entity';
-import { DownloadClient } from '../download-clients/entities/download-client.entity';
+import { Indexer } from '../../plugins/download/indexers/entities/indexer.entity';
+import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
 import { decodeHtmlEntities } from '../../common/utils/decode-html-entities';
 
 /**

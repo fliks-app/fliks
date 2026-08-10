@@ -2,24 +2,24 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { DownloadClient } from './entities/download-client.entity';
-import { DownloadHistory } from '../media/entities/download-history.entity';
-import { Media } from '../media/entities/media.entity';
-import { StalledCheck } from '../scheduler/entities/stalled-check.entity';
-import { CleanupProfile } from '../cleanup-profiles/entities/cleanup-profile.entity';
-import { StalledCleanupProfileKey } from '../../common/constants/stalled-cleanup-profiles';
+import { DownloadHistory } from '../../../modules/media/entities/download-history.entity';
+import { Media } from '../../../modules/media/entities/media.entity';
+import { StalledCheck } from '../../../modules/scheduler/entities/stalled-check.entity';
+import { CleanupProfile } from '../../../modules/cleanup-profiles/entities/cleanup-profile.entity';
+import { StalledCleanupProfileKey } from '../../../common/constants/stalled-cleanup-profiles';
 import {
   countStalledStrikes,
   STALL_ELIGIBLE_STATES,
-} from '../scheduler/utils/stalled-progress.util';
+} from '../../../modules/scheduler/utils/stalled-progress.util';
 import { QbittorrentService, QbittorrentTorrent } from './qbittorrent.service';
 import { CreateDownloadClientDto } from './dto/create-download-client.dto';
 import { UpdateDownloadClientDto } from './dto/update-download-client.dto';
 import { TestDownloadClientDto } from './dto/test-download-client.dto';
-import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
-import { BlocklistService } from '../blocklist/blocklist.service';
-import { EventsService } from '../scheduler/events.service';
-import { redactSecretFields, mergeSecretFields } from '../../common/utils/secret-fields.util';
-import { FieldDef } from '../../common/plugin-contract/ui-contribution';
+import { TorrentHistoryMatcher } from '../../../modules/media/torrent-history-matcher.service';
+import { BlocklistService } from '../../../modules/blocklist/blocklist.service';
+import { EventsService } from '../../../modules/scheduler/events.service';
+import { redactSecretFields, mergeSecretFields } from '../../../common/utils/secret-fields.util';
+import { FieldDef } from '../../../common/plugin-contract/ui-contribution';
 
 /** qBittorrent is the only implementation today; its one credential is `password`. */
 const QBITTORRENT_FIELDS: FieldDef[] = [

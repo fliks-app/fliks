@@ -1,6 +1,6 @@
 import { CountsService } from './counts.service';
 import type { User } from '../users/entities/user.entity';
-import { DownloadClient } from '../download-clients/entities/download-client.entity';
+import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
 import { Media } from '../media/entities/media.entity';
 import { Action } from '../auth/casl/actions.enum';
