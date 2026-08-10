@@ -18,6 +18,7 @@ import { TranslationProvider } from '../../subtitles/entities/translation-provid
 import { Library } from '../../libraries/entities/library.entity';
 import { Playlist } from '../../playlists/entities/playlist.entity';
 import { Action } from './actions.enum';
+import { isPluginPermissionSubject } from '../../../common/constants/plugin-permissions';
 
 type Subjects =
   | InferSubjects<
@@ -35,7 +36,9 @@ type Subjects =
       | typeof Playlist
     >
   | 'Settings'
-  | 'all';
+  | 'all'
+  /** A namespaced plugin subject (`plugin:<id>:<name>`) — see `common/constants/plugin-permissions`. */
+  | `plugin:${string}`;
 
 export type AppAbility = MongoAbility<[Action, Subjects]>;
 
@@ -51,6 +54,12 @@ export class CaslAbilityFactory {
     }
 
     const perms = new Set(user.permissions);
+
+    // Self-contained: `PluginRouteGuard` re-checks the subject against that same plugin's
+    // declared set, so granting it here needs no live plugin registry at all.
+    for (const perm of perms) {
+      if (isPluginPermissionSubject(perm)) can(Action.Manage, perm as `plugin:${string}`);
+    }
 
     // Every authenticated user can read/update themselves
     can(Action.Read, User, { id: user.id } as any);

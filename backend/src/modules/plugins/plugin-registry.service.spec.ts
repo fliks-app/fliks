@@ -5,7 +5,7 @@ import { generateTestKeypair, signManifestBase64 } from './archive/ed25519-test-
 import { minimalDataManifest, minimalProcessManifest } from './archive/test-manifests';
 import { svgLogo, pngLogo } from './archive/test-fixtures';
 import { OFFICIAL_KEYS } from './archive/trust-store';
-import { fakeRegistrationRepo, fakeProcessService } from './plugin-registry.test-helpers';
+import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService } from './plugin-registry.test-helpers';
 import { FLIKS_PLUGINS_DISABLED_ENV } from '../../common/constants/plugin-flags';
 import type { PluginManifest, ProcessPluginManifest } from '../../common/plugin-contract';
 import type { PluginProcessStartResult } from './plugin-process.service';
@@ -50,8 +50,9 @@ function makeService(rows: PluginPackage[] = [], processResult: PluginProcessSta
   const repo = repoMock(rows);
   const registrationRepo = fakeRegistrationRepo();
   const processService = fakeProcessService(processResult);
-  const service = new PluginRegistryService(repo as never, registrationRepo as never, processService as never);
-  return { service, repo, registrationRepo, processService };
+  const pluginJobs = fakePluginJobsService();
+  const service = new PluginRegistryService(repo as never, registrationRepo as never, processService as never, pluginJobs as never);
+  return { service, repo, registrationRepo, processService, pluginJobs };
 }
 
 describe('PluginRegistryService — boot load', () => {

@@ -1,7 +1,7 @@
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { minimalDataManifest } from './archive/test-manifests';
-import { fakeRegistrationRepo, fakeProcessService } from './plugin-registry.test-helpers';
+import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService } from './plugin-registry.test-helpers';
 import { buildIndexerImplementationId, type IndexerDescriptor, type PluginManifest } from '../../common/plugin-contract';
 
 /** A `fliks` range every test can rely on matching this repo's own `package.json` version. */
@@ -30,7 +30,12 @@ function repoMock(): { find: jest.Mock } {
 }
 
 function makeService(): PluginRegistryService {
-  return new PluginRegistryService(repoMock() as never, fakeRegistrationRepo() as never, fakeProcessService() as never);
+  return new PluginRegistryService(
+    repoMock() as never,
+    fakeRegistrationRepo() as never,
+    fakeProcessService() as never,
+    fakePluginJobsService() as never,
+  );
 }
 
 function indexerDescriptor(overrides: Partial<IndexerDescriptor> = {}): IndexerDescriptor {

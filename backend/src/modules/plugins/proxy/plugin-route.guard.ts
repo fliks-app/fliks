@@ -46,7 +46,8 @@ export class PluginRouteGuard implements CanActivate {
     if (!req.user) return false;
 
     const ability = this.caslAbilityFactory.createForUser(req.user);
-    if (!checkDeclaredPolicy(resolved.route.policy, ability)) return false;
+    const declaredSubjects = this.registry.declaredPermissionsFor(pluginId);
+    if (!checkDeclaredPolicy(resolved.route.policy, ability, declaredSubjects)) return false;
 
     if (resolved.route.objectGuard) {
       const parsedGuard = parseObjectGuard(resolved.route.objectGuard);

@@ -33,7 +33,10 @@ function fakeContext(req: PluginRouteRequest): ExecutionContext {
 
 describe('PluginRouteGuard', () => {
   function makeGuard(resolvedRoute: unknown, canReturns = true) {
-    const registry = { resolveRoute: jest.fn().mockReturnValue(resolvedRoute) };
+    const registry = {
+      resolveRoute: jest.fn().mockReturnValue(resolvedRoute),
+      declaredPermissionsFor: jest.fn().mockReturnValue(new Set<string>()),
+    };
     const objectGuards = { check: jest.fn().mockResolvedValue(true) };
     const caslAbilityFactory = { createForUser: jest.fn().mockReturnValue({ can: jest.fn().mockReturnValue(canReturns) }) };
     const guard = new PluginRouteGuard(registry as never, objectGuards as never, caslAbilityFactory as never);

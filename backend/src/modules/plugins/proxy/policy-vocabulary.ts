@@ -17,8 +17,8 @@ type PolicySubject = Parameters<AppAbility['can']>[1];
 
 const ACTIONS: ReadonlySet<string> = new Set(Object.values(Action));
 
-/** Closed, case-sensitive subject vocabulary. A plugin-declared subject (`PermissionRegistry`,
- *  3.5c) is deliberately absent — it must fail `parseDeclaredPolicy`, not fall through here. */
+/** Closed, case-sensitive core subject vocabulary. A namespaced plugin subject
+ *  (`plugin:<id>:<name>`) is never in here — it is only ever accepted via `declaredSubjects`. */
 const DECLARED_POLICY_SUBJECTS = new Map<string, PolicySubject>([
   ['User', User],
   ['Media', Media],
@@ -40,21 +40,31 @@ export interface DeclaredPolicy {
   subject: PolicySubject;
 }
 
-/** `"<action>:<Subject>"`, both halves from the closed vocabularies above — a manifest is
- *  untrusted text, so a plugin-declared or wrong-case subject returns `null`, not a guess. */
-export function parseDeclaredPolicy(policy: string): DeclaredPolicy | null {
-  const parts = policy.split(':');
-  if (parts.length !== 2) return null;
-  const [action, subjectName] = parts;
+/**
+ * `"<action>:<Subject>"` — only the first colon separates them, since a namespaced plugin
+ * subject (`plugin:<id>:<name>`) carries two more of its own. `declaredSubjects` is always
+ * built by the caller for the one plugin whose route this is, so a subject namespaced under
+ * a *different* plugin id is never a member and fails closed here, same as an unknown one.
+ */
+export function parseDeclaredPolicy(policy: string, declaredSubjects?: ReadonlySet<string>): DeclaredPolicy | null {
+  const sep = policy.indexOf(':');
+  if (sep === -1) return null;
+  const action = policy.slice(0, sep);
+  const subjectName = policy.slice(sep + 1);
   if (!ACTIONS.has(action)) return null;
-  const subject = DECLARED_POLICY_SUBJECTS.get(subjectName);
-  if (subject === undefined) return null;
-  return { action: action as Action, subject };
+
+  const coreSubject = DECLARED_POLICY_SUBJECTS.get(subjectName);
+  if (coreSubject !== undefined) return { action: action as Action, subject: coreSubject };
+
+  if (declaredSubjects?.has(subjectName)) {
+    return { action: action as Action, subject: subjectName as PolicySubject };
+  }
+  return null;
 }
 
 /** Fail closed: an unparseable policy is denied, never treated as "no policy declared". */
-export function checkDeclaredPolicy(policy: string, ability: AppAbility): boolean {
-  const parsed = parseDeclaredPolicy(policy);
+export function checkDeclaredPolicy(policy: string, ability: AppAbility, declaredSubjects?: ReadonlySet<string>): boolean {
+  const parsed = parseDeclaredPolicy(policy, declaredSubjects);
   if (!parsed) return false;
   return ability.can(parsed.action, parsed.subject);
 }
