@@ -24,6 +24,12 @@ export const MAX_SIGNATURE_BYTES = 256;
 export const MAX_PLUGIN_JS_BYTES = 8 * 1024 * 1024;
 export const MAX_LOGO_BYTES = 64 * 1024;
 
+/** Mirrors the published catalog's `schema/plugin.schema.v0.json` — core must not be laxer than the catalog. */
+export const PLUGIN_ID_PATTERN = /^[a-z][a-z0-9]*(\.[a-z0-9]+)*$/;
+
+/** 63 (Postgres NAMEDATALEN) minus `plugin_`, past which two ids collide onto one schema. */
+export const MAX_PLUGIN_ID_LENGTH = 56;
+
 /** Raw byte length of an Ed25519 signature — fixed regardless of message size. */
 export const ED25519_SIGNATURE_LENGTH = 64;
 

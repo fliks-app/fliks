@@ -10,8 +10,10 @@ import { PluginPackage, PluginPackageOrigin, PluginPackageStatus } from './entit
 import { PluginSource } from './entities/plugin-source.entity';
 import { PluginRegistryService, CURRENT_FLIKS_VERSION } from './plugin-registry.service';
 import { PluginStagingService } from './plugin-staging.service';
+import { PluginDatabaseService } from './plugin-database.service';
 import { PluginInstallException } from './plugin-install.exception';
 import { getPluginsRuntimeDir } from '../../common/constants/paths';
+import { unsignedProcessAllowlist } from '../../common/constants/plugin-flags';
 import { inspect, InspectSuccess, extractToStaging, MAX_ARCHIVE_COMPRESSED_BYTES, type PluginRefusalCode } from './archive';
 import type { TrustOutcome } from './archive/trust-store';
 import type { CatalogVersionEntry, FilteredCatalog, FilteredCatalogEntry } from './catalog/catalog';
@@ -125,11 +127,12 @@ export class PluginInstallService {
     private readonly packageRepo: Repository<PluginPackage>,
     private readonly registry: PluginRegistryService,
     private readonly staging: PluginStagingService,
+    private readonly pluginDb: PluginDatabaseService,
   ) {}
 
   /** V1-V7 in memory, then stages the raw bytes. Nothing is activated. */
   async inspectUpload(buffer: Buffer): Promise<PluginInspectReport> {
-    const result = await inspect(buffer);
+    const result = await inspect(buffer, { unsignedProcessAllowlist: unsignedProcessAllowlist() });
     if (!result.ok) return { installable: false, refusalCode: result.code, detail: result.detail };
 
     const { stagingId } = this.staging.stage(buffer);
@@ -152,7 +155,7 @@ export class PluginInstallService {
       );
     }
 
-    const result = await inspect(buffer);
+    const result = await inspect(buffer, { unsignedProcessAllowlist: unsignedProcessAllowlist() });
     if (!result.ok) {
       throw new PluginInstallException(HttpStatus.UNPROCESSABLE_ENTITY, result.code, result.detail);
     }
@@ -195,7 +198,7 @@ export class PluginInstallService {
       );
     }
 
-    const result = await inspect(buffer);
+    const result = await inspect(buffer, { unsignedProcessAllowlist: unsignedProcessAllowlist() });
     if (!result.ok) return { installable: false, refusalCode: result.code, detail: result.detail };
 
     const { stagingId } = this.staging.stage(buffer, 'catalog');
@@ -223,6 +226,9 @@ export class PluginInstallService {
     this.registry.unregister(pluginId);
     const pkg = await this.packageRepo.findOne({ where: { pluginId } });
     if (!pkg) return;
+    if (pkg.manifest.kind === 'process') {
+      await this.pluginDb.deprovision(pluginId);
+    }
     await this.packageRepo.remove(pkg);
     rmSync(installedPluginDir(pkg.pluginId, pkg.version), { recursive: true, force: true });
   }
@@ -249,6 +255,16 @@ export class PluginInstallService {
     const extracted = await extractToStaging(buffer, manifest);
     if (!extracted.ok) {
       throw new PluginInstallException(HttpStatus.UNPROCESSABLE_ENTITY, extracted.code, extracted.detail);
+    }
+
+    // P1 before P2: idempotent, so a retry after a later failure just reuses the role.
+    if (manifest.kind === 'process') {
+      try {
+        await this.pluginDb.provision(manifest);
+      } catch (err) {
+        rmSync(extracted.dir, { recursive: true, force: true });
+        throw err;
+      }
     }
 
     const existing = await this.packageRepo.findOne({ where: { pluginId: manifest.id } });

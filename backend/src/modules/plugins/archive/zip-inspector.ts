@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import * as semver from 'semver';
 import * as yauzl from 'yauzl';
 import type { PluginKind, PluginManifest } from '../../../common/plugin-contract';
 import { parseManifest } from './manifest-parser';
@@ -10,7 +11,9 @@ import {
   MAX_ARCHIVE_COMPRESSED_BYTES,
   MAX_ARCHIVE_ENTRIES,
   MAX_ENTRY_RATIO,
+  MAX_PLUGIN_ID_LENGTH,
   MAX_TOTAL_UNCOMPRESSED_BYTES,
+  PLUGIN_ID_PATTERN,
   PROCESS_ONLY_ENTRY_NAMES,
   maxUncompressedBytesFor,
 } from './limits';
@@ -221,6 +224,12 @@ export async function inspect(buffer: Buffer, options: InspectOptions = {}): Pro
   const manifest = parseManifest(manifestBytes);
   if (!manifest) {
     return refuse('PLUGIN_BAD_MANIFEST', 'plugin.json failed structural validation');
+  }
+  if (manifest.id.length > MAX_PLUGIN_ID_LENGTH || !PLUGIN_ID_PATTERN.test(manifest.id)) {
+    return refuse('PLUGIN_BAD_ID', `id ${JSON.stringify(manifest.id)} is not a legal plugin id`);
+  }
+  if (semver.valid(manifest.version) === null) {
+    return refuse('PLUGIN_BAD_VERSION', `version ${JSON.stringify(manifest.version)} is not valid semver`);
   }
   const hasPluginJs = entryBuffers.has('plugin.js');
   if (manifest.kind === 'data' && hasPluginJs) {

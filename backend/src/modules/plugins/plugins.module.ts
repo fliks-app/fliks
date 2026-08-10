@@ -8,6 +8,7 @@ import { PluginWebhookDispatcherService } from './plugin-webhook-dispatcher.serv
 import { PluginCatalogClientService } from './plugin-catalog-client.service';
 import { PluginStagingService } from './plugin-staging.service';
 import { PluginInstallService } from './plugin-install.service';
+import { PluginDatabaseService } from './plugin-database.service';
 import { PluginLogoController } from './plugin-logo.controller';
 import { PluginIndexerDescriptorsController } from './plugin-indexer-descriptors.controller';
 import { PluginSourcesController } from './plugin-sources.controller';
@@ -31,7 +32,8 @@ import { EventsModule } from '../scheduler/events.module';
     PluginCatalogClientService,
     PluginStagingService,
     PluginInstallService,
+    PluginDatabaseService,
   ],
-  exports: [TypeOrmModule, PluginRegistryService],
+  exports: [TypeOrmModule, PluginRegistryService, PluginDatabaseService],
 })
 export class PluginsModule {}
