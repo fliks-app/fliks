@@ -15,10 +15,10 @@ import { IndexersService } from './indexers.service';
 import { CreateIndexerDto } from './dto/create-indexer.dto';
 import { UpdateIndexerDto } from './dto/update-indexer.dto';
 import { TestIndexerConnectionDto } from './dto/test-indexer-connection.dto';
-import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
-import { PoliciesGuard } from '../auth/casl/policies.guard';
-import { CheckPolicies } from '../auth/casl/check-policies.decorator';
-import { Action } from '../auth/casl/actions.enum';
+import { JwtOrApiKeyGuard } from '../../../modules/auth/guards/jwt-or-api-key.guard';
+import { PoliciesGuard } from '../../../modules/auth/casl/policies.guard';
+import { CheckPolicies } from '../../../modules/auth/casl/check-policies.decorator';
+import { Action } from '../../../modules/auth/casl/actions.enum';
 import { Indexer } from './entities/indexer.entity';
 import { IndexerStat } from './entities/indexer-stat.entity';
 

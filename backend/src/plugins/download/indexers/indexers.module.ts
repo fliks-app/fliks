@@ -6,8 +6,8 @@ import { TorznabService } from './torznab.service';
 import { IndexerThrottle } from './indexer-throttle.service';
 import { IndexersService } from './indexers.service';
 import { IndexersController } from './indexers.controller';
-import { AuthModule } from '../auth/auth.module';
-import { PluginsModule } from '../plugins/plugins.module';
+import { AuthModule } from '../../../modules/auth/auth.module';
+import { PluginsModule } from '../../../modules/plugins/plugins.module';
 
 @Module({
   // PluginsModule: unused by this module's own providers, but log-buffer.module.ts

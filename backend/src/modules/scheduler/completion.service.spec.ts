@@ -8,7 +8,7 @@ import { NamingService } from './naming.service';
 import { DownloadHistory } from '../media/entities/download-history.entity';
 import { Media } from '../media/entities/media.entity';
 import { Library } from '../libraries/entities/library.entity';
-import { QbittorrentTorrent } from '../download-clients/qbittorrent.service';
+import { QbittorrentTorrent } from '../../plugins/download/download-clients/qbittorrent.service';
 import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
 import { FileTransferService } from '../../common/services/file-transfer.service';
 import { LibraryIngestService } from '../../common/library-ingest/library-ingest.service';

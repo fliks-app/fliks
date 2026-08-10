@@ -32,4 +32,46 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  {
+    // Core must not import plugins/download/; ignores list is the known
+    // pre-fence importers still crossing it — new code must not join them.
+    files: ['src/**/*.ts'],
+    ignores: [
+      'src/plugins/download/**',
+      'src/app.module.ts',
+      'src/modules/media/media.module.ts',
+      'src/modules/media/movie-download.service.ts',
+      'src/modules/media/episode-download.service.ts',
+      'src/modules/media/auto-grab-pipeline.service.ts',
+      'src/modules/media/grab-history.util.ts',
+      'src/modules/media/entities/download-history.entity.ts',
+      'src/modules/scheduler/scheduler.module.ts',
+      'src/modules/scheduler/scheduler.service.ts',
+      'src/modules/scheduler/system.controller.ts',
+      'src/modules/scheduler/completion.service.ts',
+      'src/modules/scheduler/completion.service.spec.ts',
+      'src/modules/blocklist/blocklist.module.ts',
+      'src/modules/blocklist/blocklist.service.ts',
+      'src/modules/auth/casl/casl-ability.factory.ts',
+      'src/modules/setup-checklist/setup-checklist.module.ts',
+      'src/modules/setup-checklist/setup-checklist.service.ts',
+      'src/modules/plugins/proxy/policy-vocabulary.ts',
+        'src/modules/counts/counts.service.ts',
+      'src/modules/counts/counts.service.spec.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/plugins/download/**'],
+              message:
+                'Core does not import plugins/download/ — inject the capability instead. Known pre-fence importers are allowlisted in eslint.config.mjs.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

@@ -5,8 +5,8 @@ import axios, { AxiosError } from 'axios';
 import { Indexer } from './entities/indexer.entity';
 import { IndexerStat } from './entities/indexer-stat.entity';
 import { IndexerThrottle } from './indexer-throttle.service';
-import { decodeHtmlEntities } from '../../common/utils/decode-html-entities';
-import { ReleaseCandidate } from '../../common/release-scoring';
+import { decodeHtmlEntities } from '../../../common/utils/decode-html-entities';
+import { ReleaseCandidate } from '../../../common/release-scoring';
 
 const decodeXmlEntities = decodeHtmlEntities;
 

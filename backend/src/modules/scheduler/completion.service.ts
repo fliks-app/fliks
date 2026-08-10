@@ -13,12 +13,12 @@ import { Media } from '../media/entities/media.entity';
 import { DownloadHistory } from '../media/entities/download-history.entity';
 import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
-import { DownloadClient } from '../download-clients/entities/download-client.entity';
+import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
 import {
   QbittorrentService,
   QbittorrentTorrent,
-} from '../download-clients/qbittorrent.service';
-import { Indexer } from '../indexers/entities/indexer.entity';
+} from '../../plugins/download/download-clients/qbittorrent.service';
+import { Indexer } from '../../plugins/download/indexers/entities/indexer.entity';
 import { NamingService } from './naming.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
 import { EventsService } from './events.service';
@@ -586,7 +586,7 @@ export class CompletionService implements OnModuleInit {
     history: DownloadHistory,
     torrent: QbittorrentTorrent & {
       _clientId?: number;
-      _client?: import('../download-clients/entities/download-client.entity').DownloadClient;
+      _client?: import('../../plugins/download/download-clients/entities/download-client.entity').DownloadClient;
     },
     movieFolderFormat: string,
     seriesFolderFormat: string,

@@ -14,10 +14,10 @@ import { DownloadClientsService, redactPassword } from './download-clients.servi
 import { CreateDownloadClientDto } from './dto/create-download-client.dto';
 import { UpdateDownloadClientDto } from './dto/update-download-client.dto';
 import { TestDownloadClientDto } from './dto/test-download-client.dto';
-import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
-import { PoliciesGuard } from '../auth/casl/policies.guard';
-import { CheckPolicies } from '../auth/casl/check-policies.decorator';
-import { Action } from '../auth/casl/actions.enum';
+import { JwtOrApiKeyGuard } from '../../../modules/auth/guards/jwt-or-api-key.guard';
+import { PoliciesGuard } from '../../../modules/auth/casl/policies.guard';
+import { CheckPolicies } from '../../../modules/auth/casl/check-policies.decorator';
+import { Action } from '../../../modules/auth/casl/actions.enum';
 import { DownloadClient } from './entities/download-client.entity';
 
 @Controller('download-clients')

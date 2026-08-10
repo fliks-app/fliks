@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { DownloadHistory } from '../media/entities/download-history.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
-import { DownloadClient } from '../download-clients/entities/download-client.entity';
+import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
 import { Media } from '../media/entities/media.entity';
 import { User } from '../users/entities/user.entity';
 import { RequestStatus } from '../../common/enums';
