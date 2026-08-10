@@ -81,7 +81,7 @@ describe('PluginUiController', () => {
   it('includes a data plugin unconditionally — it has no process to be unhealthy', () => {
     const { controller } = makeController([dataPlugin('fliks.a')]);
     const result = controller.list();
-    expect(result).toEqual([{ pluginId: 'fliks.a', contributions: [], configPages: [], i18n: {} }]);
+    expect(result).toEqual([{ pluginId: 'fliks.a', name: expect.any(String), contributions: [], configPages: [], i18n: {} }]);
   });
 
   it('passes the manifest i18n dicts through so the client can merge them under core keys', () => {

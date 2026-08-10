@@ -5,6 +5,8 @@ import type { ConfigPage, UiContribution } from '../../common/plugin-contract';
 
 export interface PluginUiEntry {
   pluginId: string;
+  /** The manifest's human-readable name — labels the plugin's own settings section. */
+  name: string;
   contributions: UiContribution[];
   configPages: ConfigPage[];
   /** Flat `"a.b.c"` dicts per locale; the client merges them under core's own keys. */
@@ -29,6 +31,7 @@ export class PluginUiController {
       .filter((plugin) => plugin.kind === 'data' || this.registry.processStateOf(plugin.pluginId) === 'ready')
       .map((plugin) => ({
         pluginId: plugin.pluginId,
+        name: plugin.manifest.name,
         contributions: plugin.manifest.ui?.contributions ?? [],
         configPages: plugin.manifest.ui?.configPages ?? [],
         i18n: plugin.manifest.i18n ?? {},

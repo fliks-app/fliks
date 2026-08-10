@@ -7,6 +7,8 @@ import type { ConfigPage, UiContribution } from './contribution.types';
  */
 export interface PluginUiEntry {
   pluginId: string;
+  /** The plugin's manifest display name; absent on a backend that hasn't shipped it yet. */
+  name?: string;
   contributions: UiContribution[];
   configPages: ConfigPage[];
   /** Translations to merge into ngx-translate so `labelKey` resolves. */

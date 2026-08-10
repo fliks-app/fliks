@@ -380,7 +380,7 @@ export const routes: Routes = [
     path: 'admin',
     loadComponent: () =>
       import('./features/admin/admin-shell').then((m) => m.AdminShellComponent),
-    canActivate: [serverConfigGuard, authGuard, passwordChangeGuard, adminGuard],
+    canActivate: [serverConfigGuard, authGuard, passwordChangeGuard, adminGuard, noTvGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'statistics' },
       { path: 'statistics', loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.DashboardComponent) },

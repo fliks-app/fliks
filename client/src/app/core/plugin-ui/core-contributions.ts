@@ -30,3 +30,86 @@ export const CORE_NAV_CONTRIBUTIONS: readonly UiContribution[] = [
  *  weight-300 and weight-2000 core items — this is where a plugin's
  *  `nav.main` item at weight 1000-1999 would land, visually after them. */
 export const LIBRARIES_BLOCK_WEIGHT = 1000;
+
+/** One `menu-title` group in the admin settings sidebar. */
+export interface CoreSettingsSection {
+  labelKey: string;
+  items: readonly UiContribution[];
+}
+
+/**
+ * Core's own admin settings links as `settings.page` contributions, grouped
+ * into the 8 sections the sidebar has always had. A plugin never joins one
+ * of these — it gets a section of its own instead (see the admin feature's
+ * `SettingsSectionsService`) — so weight only orders core items against
+ * each other; the 100-spacing is kept anyway for a future core item to slot
+ * into, on the same convention as `CORE_NAV_CONTRIBUTIONS`.
+ */
+export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
+  {
+    labelKey: 'admin.section_system',
+    items: [
+      { id: 'core.statistics', slot: 'settings.page', weight: 100, labelKey: 'nav.statistics', icon: 'bar-chart-3', action: { kind: 'route', path: '/admin/statistics' } },
+      { id: 'core.system', slot: 'settings.page', weight: 200, labelKey: 'nav.system', icon: 'layout-grid', action: { kind: 'route', path: '/admin/system' } },
+      { id: 'core.streams', slot: 'settings.page', weight: 300, labelKey: 'system.tab_streams', icon: 'play', action: { kind: 'route', path: '/admin/streams' } },
+    ],
+  },
+  {
+    labelKey: 'admin.section_settings',
+    items: [
+      { id: 'core.general', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.general', action: { kind: 'route', path: '/admin/settings/general' } },
+      { id: 'core.libraries', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.libraries', action: { kind: 'route', path: '/admin/settings/libraries' } },
+      { id: 'core.naming', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.naming', action: { kind: 'route', path: '/admin/settings/naming' } },
+    ],
+  },
+  {
+    labelKey: 'admin.section_media',
+    items: [
+      { id: 'core.quality_profiles', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.quality_profiles', action: { kind: 'route', path: '/admin/settings/quality-profiles' } },
+      { id: 'core.language_profiles', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.language_profiles', action: { kind: 'route', path: '/admin/settings/language-profiles' } },
+      { id: 'core.quality_definitions', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.quality_definitions', action: { kind: 'route', path: '/admin/settings/quality-definitions' } },
+      { id: 'core.custom_formats', slot: 'settings.page', weight: 400, labelKey: 'settings.nav.custom_formats', action: { kind: 'route', path: '/admin/settings/custom-formats' } },
+      { id: 'core.delay_profiles', slot: 'settings.page', weight: 500, labelKey: 'settings.nav.delay_profiles', action: { kind: 'route', path: '/admin/settings/delay-profiles' } },
+      { id: 'core.cleanup_profiles', slot: 'settings.page', weight: 600, labelKey: 'settings.nav.cleanup_profiles', action: { kind: 'route', path: '/admin/settings/cleanup-profiles' } },
+    ],
+  },
+  {
+    labelKey: 'admin.section_indexers',
+    items: [
+      { id: 'core.indexers', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.indexers', action: { kind: 'route', path: '/admin/settings/indexers' } },
+      { id: 'core.download_clients', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.download_clients', action: { kind: 'route', path: '/admin/settings/download-clients' } },
+      { id: 'core.blocklist', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.blocklist', action: { kind: 'route', path: '/admin/settings/blocklist' } },
+    ],
+  },
+  {
+    labelKey: 'admin.section_subtitles',
+    items: [
+      { id: 'core.subtitles', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.subtitles', action: { kind: 'route', path: '/admin/settings/subtitles' } },
+      { id: 'core.subtitle_providers', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.subtitle_providers', action: { kind: 'route', path: '/admin/settings/subtitle-providers' } },
+    ],
+  },
+  {
+    labelKey: 'admin.section_integrations',
+    items: [
+      { id: 'core.media_servers', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.media_servers', action: { kind: 'route', path: '/admin/settings/media-servers' } },
+      { id: 'core.data_imports', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.data_imports', action: { kind: 'route', path: '/admin/settings/data-imports' } },
+      { id: 'core.notifications', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.notifications', action: { kind: 'route', path: '/admin/settings/notifications' } },
+    ],
+  },
+  {
+    labelKey: 'admin.section_users',
+    items: [
+      { id: 'core.users', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.users', action: { kind: 'route', path: '/admin/settings/users' } },
+      { id: 'core.roles', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.roles', action: { kind: 'route', path: '/admin/settings/roles' } },
+      { id: 'core.auto_approval', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.auto_approval', action: { kind: 'route', path: '/admin/settings/auto-approval' } },
+    ],
+  },
+  {
+    labelKey: 'admin.section_advanced',
+    items: [
+      { id: 'core.schedulers', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.schedulers', action: { kind: 'route', path: '/admin/settings/schedulers' } },
+      { id: 'core.streaming', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.streaming', action: { kind: 'route', path: '/admin/settings/streaming' } },
+      { id: 'core.plugins', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.plugins', action: { kind: 'route', path: '/admin/settings/plugins' } },
+    ],
+  },
+];

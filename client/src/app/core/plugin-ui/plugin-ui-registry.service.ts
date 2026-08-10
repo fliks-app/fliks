@@ -64,6 +64,12 @@ export class PluginUiRegistryService {
     return this.entries.some((e) => e.pluginId === pluginId);
   }
 
+  /** Raw per-plugin entries — needed where a slot's contributions must stay
+   *  grouped by the plugin that declared them (settings.page's per-plugin sections). */
+  pluginEntries(): readonly PluginUiEntry[] {
+    return this.entries;
+  }
+
   configPage(pluginId: string, pageId: string): ConfigPage | undefined {
     return this.entries.find((e) => e.pluginId === pluginId)?.configPages?.find((p) => p.id === pageId);
   }
