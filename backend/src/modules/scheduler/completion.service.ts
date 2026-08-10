@@ -10,7 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, LessThan, Repository } from 'typeorm';
 import * as path from 'path';
 import { Media } from '../media/entities/media.entity';
-import { DownloadHistory } from '../media/entities/download-history.entity';
+import { DownloadHistory } from '../../plugins/download/entities/download-history.entity';
 import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
@@ -41,9 +41,9 @@ import {
   TorrentHistoryMatcher,
   normaliseTorrentName,
   outranksForTorrent,
-} from '../media/torrent-history-matcher.service';
-import { TorrentAutoMatcher } from '../media/torrent-auto-matcher.service';
-import { buildGrabHistoryRow } from '../media/grab-history.util';
+} from '../../plugins/download/torrent-history-matcher.service';
+import { TorrentAutoMatcher } from '../../plugins/download/torrent-auto-matcher.service';
+import { buildGrabHistoryRow } from '../../plugins/download/grab-history.util';
 import { parseReleaseQuality } from '../../common/release-parsing';
 import { MarkersService } from '../markers/markers.service';
 import { LibraryIngestService } from '../../common/library-ingest/library-ingest.service';

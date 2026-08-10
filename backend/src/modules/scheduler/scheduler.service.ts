@@ -15,7 +15,7 @@ import { Repository } from 'typeorm';
 import { CronExpressionParser } from 'cron-parser';
 import { Command } from './entities/command.entity';
 import { Media } from '../media/entities/media.entity';
-import { DownloadHistory } from '../media/entities/download-history.entity';
+import { DownloadHistory } from '../../plugins/download/entities/download-history.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { Indexer } from '../../plugins/download/indexers/entities/indexer.entity';
 import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
@@ -39,6 +39,7 @@ import {
   AutoGrabPipelineService,
   AutoGrabScoringContext,
 } from '../media/auto-grab-pipeline.service';
+import { AutoGrabExecutorService } from '../../plugins/download/auto-grab-pipeline.service';
 import {
   AcquisitionCandidatesService,
   SeasonPackTarget,
@@ -53,10 +54,10 @@ import { parseSeasonEpisode, matchesSeasonPack } from '../../common/release-pars
 import { CORE_SCHEDULER_JOB_NAMES } from '../../common/constants/core-scheduler-jobs';
 import { PluginJobsService } from '../plugins/plugin-jobs.service';
 
-// Note: scoring/profile/blocklist/quality-definition wiring lives in
-// AutoGrabPipelineService. This file only orchestrates the high-level
+// Note: profile/blocklist/quality-definition wiring lives in
+// AutoGrabExecutorService. This file only orchestrates the high-level
 // scheduler tasks (cron loops, candidate queries) and delegates each
-// grab attempt to `this.autoGrab.tryAutoGrab(...)`.
+// grab attempt to `this.autoGrabExec.tryAutoGrab(...)`.
 
 /** Yield the event loop so HTTP requests aren't starved by bulk tasks. */
 const yieldLoop = () => new Promise<void>((r) => setTimeout(r, 50));
@@ -95,6 +96,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     private readonly thumbnailService: ThumbnailService,
     private readonly markers: MarkersService,
     private readonly autoGrab: AutoGrabPipelineService,
+    private readonly autoGrabExec: AutoGrabExecutorService,
     private readonly candidates: AcquisitionCandidatesService,
     private readonly pluginJobs: PluginJobsService,
   ) {}
@@ -551,7 +553,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
           releaseMatchesMedia(r.title, media, { requireYearInTitle: true }),
         );
 
-      await this.autoGrab.tryAutoGrab({
+      await this.autoGrabExec.tryAutoGrab({
         media,
         files,
         releases,
@@ -633,7 +635,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
         r.status === 'fulfilled' ? r.value : [],
       );
 
-      await this.autoGrab.tryAutoGrab({
+      await this.autoGrabExec.tryAutoGrab({
         media,
         files,
         releases,
@@ -727,7 +729,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
         .filter((r) => matchesSeasonPack(r.title, season.seasonNumber));
       if (!packReleases.length) continue;
 
-      const grabbed = await this.autoGrab.tryAutoGrab({
+      const grabbed = await this.autoGrabExec.tryAutoGrab({
         media,
         files,
         releases: packReleases,
@@ -1342,7 +1344,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
 
   /** RSS auto-grab wrapper — fills in fields shared by every release in
    *  the feed loop (source-title dedup) and forwards the rest to
-   *  {@link AutoGrabPipelineService.tryAutoGrab}. */
+   *  {@link AutoGrabExecutorService.tryAutoGrab}. */
   private async grabRssRelease(args: {
     media: Media;
     files: { quality?: string | null }[];
@@ -1359,7 +1361,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     /** Extra grab-dedup logic on top of the same-source-title check. */
     extraPendingCheck?: () => Promise<boolean>;
   }): Promise<boolean> {
-    return this.autoGrab.tryAutoGrab({
+    return this.autoGrabExec.tryAutoGrab({
       media: args.media,
       files: args.files,
       releases: [args.release],

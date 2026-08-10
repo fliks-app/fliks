@@ -39,12 +39,7 @@ export default tseslint.config(
     ignores: [
       'src/plugins/download/**',
       'src/app.module.ts',
-      'src/modules/media/media.module.ts',
-      'src/modules/media/movie-download.service.ts',
-      'src/modules/media/episode-download.service.ts',
       'src/modules/media/auto-grab-pipeline.service.ts',
-      'src/modules/media/grab-history.util.ts',
-      'src/modules/media/entities/download-history.entity.ts',
       'src/modules/scheduler/scheduler.module.ts',
       'src/modules/scheduler/scheduler.service.ts',
       'src/modules/scheduler/system.controller.ts',
@@ -56,7 +51,8 @@ export default tseslint.config(
       'src/modules/setup-checklist/setup-checklist.module.ts',
       'src/modules/setup-checklist/setup-checklist.service.ts',
       'src/modules/plugins/proxy/policy-vocabulary.ts',
-        'src/modules/counts/counts.service.ts',
+      'src/modules/counts/counts.module.ts',
+      'src/modules/counts/counts.service.ts',
       'src/modules/counts/counts.service.spec.ts',
     ],
     rules: {

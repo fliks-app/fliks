@@ -1,10 +1,10 @@
 import { Entity, Column, ManyToOne, JoinColumn, RelationId } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { Media } from './media.entity';
-import { Episode } from './episode.entity';
-import { Season } from './season.entity';
-import { Indexer } from '../../../plugins/download/indexers/entities/indexer.entity';
-import { DownloadClient } from '../../../plugins/download/download-clients/entities/download-client.entity';
+import { Media } from '../../../modules/media/entities/media.entity';
+import { Episode } from '../../../modules/media/entities/episode.entity';
+import { Season } from '../../../modules/media/entities/season.entity';
+import { Indexer } from '../indexers/entities/indexer.entity';
+import { DownloadClient } from '../download-clients/entities/download-client.entity';
 
 /** Canonical lifecycle of a {@link DownloadHistory} row. */
 export const DOWNLOAD_HISTORY_STATUSES = [

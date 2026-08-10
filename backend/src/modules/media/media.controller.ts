@@ -19,15 +19,12 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { MediaService } from './media.service';
-import { MovieDownloadService } from './movie-download.service';
-import { EpisodeDownloadService } from './episode-download.service';
 import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
 import { SearchMediaDto } from './dto/search-media.dto';
 import { AnalyzeMediaDto } from './dto/analyze-media.dto';
 import { ImportTmdbDto } from './dto/import-tmdb.dto';
 import { ImportMediaDto } from './dto/import-media.dto';
-import { GrabMovieDto } from './dto/grab-movie.dto';
 import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
 import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
@@ -58,8 +55,6 @@ export class MediaController {
 
   constructor(
     private readonly mediaService: MediaService,
-    private readonly movieDownload: MovieDownloadService,
-    private readonly episodeDownload: EpisodeDownloadService,
     private readonly subtitlesService: SubtitlesService,
     private readonly subtitleOcr: SubtitleOcrService,
     private readonly subtitleTranslation: SubtitleTranslationService,
@@ -203,102 +198,6 @@ export class MediaController {
   ) {
     await this.assertMediaAccessible(id, user);
     return this.mediaService.getTrackingStatus(id);
-  }
-
-  @Get(':id/releases')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async movieReleases(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: User,
-    @Query('q') customQuery?: string,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    return this.movieDownload.searchMovieReleases(id, customQuery);
-  }
-
-  @Post(':id/grab')
-  @CheckPolicies((ability) => ability.can(Action.Grab, Media))
-  async grabMovie(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: User,
-    @Body() dto: GrabMovieDto,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    return this.movieDownload.grabMovie(id, dto ?? {});
-  }
-
-  @Get(':id/upgrade-releases')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async upgradeReleases(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: User,
-    @Query('q') customQuery?: string,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    return this.movieDownload.searchUpgradeReleases(id, customQuery);
-  }
-
-  @Post(':id/upgrade')
-  @CheckPolicies((ability) => ability.can(Action.Grab, Media))
-  async grabUpgrade(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: User,
-    @Body() dto: GrabMovieDto,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    return this.movieDownload.grabUpgrade(id, dto ?? {});
-  }
-
-  @Get(':id/seasons/:seasonId/releases')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async seasonReleases(
-    @Param('id', ParseIntPipe) id: number,
-    @Param('seasonId', ParseIntPipe) seasonId: number,
-    @CurrentUser() user: User,
-    @Query('q') customQuery?: string,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    return this.episodeDownload.searchSeasonReleases(id, seasonId, customQuery);
-  }
-
-  @Post(':id/seasons/:seasonId/grab')
-  @CheckPolicies((ability) => ability.can(Action.Grab, Media))
-  async grabSeason(
-    @Param('id', ParseIntPipe) id: number,
-    @Param('seasonId', ParseIntPipe) seasonId: number,
-    @CurrentUser() user: User,
-    @Body() dto: GrabMovieDto,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    return this.episodeDownload.grabSeason(id, seasonId, dto ?? {});
-  }
-
-  @Get(':id/episodes/:episodeId/releases')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async episodeReleases(
-    @Param('id', ParseIntPipe) id: number,
-    @Param('episodeId', ParseIntPipe) episodeId: number,
-    @CurrentUser() user: User,
-    @Query('q') customQuery?: string,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    return this.episodeDownload.searchEpisodeReleases(
-      id,
-      episodeId,
-      customQuery,
-    );
-  }
-
-  @Post(':id/episodes/:episodeId/grab')
-  @CheckPolicies((ability) => ability.can(Action.Grab, Media))
-  async grabEpisode(
-    @Param('id', ParseIntPipe) id: number,
-    @Param('episodeId', ParseIntPipe) episodeId: number,
-    @CurrentUser() user: User,
-    @Body() dto: GrabMovieDto,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    return this.episodeDownload.grabEpisode(id, episodeId, dto ?? {});
   }
 
   @Delete(':id/files/:fileId')

@@ -6,7 +6,7 @@ import { join } from 'path';
 import { getPluginsSocketDir } from '../../../common/constants/paths';
 import type { OnApplicationShutdown } from '@nestjs/common';
 import { LogBufferService } from '../../scheduler/log-buffer.service';
-import { CURRENT_FLIKS_VERSION } from '../plugin-registry.service';
+import { CURRENT_FLIKS_VERSION } from '../plugin-version';
 import { PLUGIN_API_VERSION, type Note } from '../../../common/plugin-contract';
 import { RpcChannel } from './rpc-channel';
 import { NoteRingBuffer } from './note-ring-buffer';

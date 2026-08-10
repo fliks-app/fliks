@@ -7,12 +7,9 @@ import { IndexerThrottle } from './indexer-throttle.service';
 import { IndexersService } from './indexers.service';
 import { IndexersController } from './indexers.controller';
 import { AuthModule } from '../../../modules/auth/auth.module';
-import { PluginsModule } from '../../../modules/plugins/plugins.module';
 
 @Module({
-  // PluginsModule: unused by this module's own providers, but log-buffer.module.ts
-  // documents a module-graph cycle that routes around this exact edge.
-  imports: [TypeOrmModule.forFeature([Indexer, IndexerStat]), AuthModule, PluginsModule],
+  imports: [TypeOrmModule.forFeature([Indexer, IndexerStat]), AuthModule],
   controllers: [IndexersController],
   providers: [TorznabService, IndexerThrottle, IndexersService],
   exports: [TypeOrmModule, TorznabService],
