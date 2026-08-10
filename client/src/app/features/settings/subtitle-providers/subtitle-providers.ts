@@ -22,6 +22,8 @@ import {
   TranslationProviderRow,
   TranslationEngine,
 } from '../../../core/services/api/translation-providers-api.service';
+import { SchemaFormComponent, SchemaFormValue } from '../../../shared/components/schema-form/schema-form';
+import { FieldDef } from '../../../core/plugin-ui/contribution.types';
 
 const DEFAULT_TRANSLATION_MODEL = 'gemini-2.0-flash';
 
@@ -40,9 +42,20 @@ const TRANSLATION_ENGINES: { value: TranslationEngine; label: string }[] = [
   { value: 'libretranslate', label: 'LibreTranslate' },
 ];
 
-const PROVIDER_TYPES = [
-  { value: 'opensubtitles', label: 'OpenSubtitles', fields: ['username', 'password'] },
-  { value: 'subdl', label: 'Subdl', fields: ['apiKey'] },
+const PROVIDER_TYPES: { value: string; label: string; fields: FieldDef[] }[] = [
+  {
+    value: 'opensubtitles',
+    label: 'OpenSubtitles',
+    fields: [
+      { key: 'username', type: 'text', labelKey: 'settings.subtitle_providers.field_username' },
+      { key: 'password', type: 'password', labelKey: 'settings.subtitle_providers.field_password' },
+    ],
+  },
+  {
+    value: 'subdl',
+    label: 'Subdl',
+    fields: [{ key: 'apiKey', type: 'text', labelKey: 'settings.subtitle_providers.field_api_key' }],
+  },
   { value: 'subsynchro', label: 'Subsynchro', fields: [] },
   { value: 'supersubtitles', label: 'Supersubtitles', fields: [] },
   { value: 'yify', label: 'YIFY (yts-subs.com)', fields: [] },
@@ -51,7 +64,7 @@ const PROVIDER_TYPES = [
 
 @Component({
   selector: 'app-subtitle-providers-settings',
-  imports: [FormsModule, TranslateModule],
+  imports: [FormsModule, TranslateModule, SchemaFormComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitle-providers.html',
 })
@@ -80,10 +93,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly formType = signal('opensubtitles');
   readonly formPriority = signal(25);
   readonly formEnabled = signal(true);
-  readonly formApiKey = signal('');
-  readonly formUsername = signal('');
-  readonly formPassword = signal('');
-  readonly formBaseUrl = signal('');
+  readonly formDynamicValue = signal<SchemaFormValue>({});
 
   readonly testLoading = signal(false);
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
@@ -342,7 +352,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     return `${seconds}s`;
   }
 
-  currentFields(): string[] {
+  currentFields(): FieldDef[] {
     return PROVIDER_TYPES.find((t) => t.value === this.formType())?.fields ?? [];
   }
 
@@ -364,10 +374,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.formName.set(this.providerLabel('opensubtitles'));
     this.formPriority.set(25);
     this.formEnabled.set(true);
-    this.formApiKey.set('');
-    this.formUsername.set('');
-    this.formPassword.set('');
-    this.formBaseUrl.set('');
+    this.formDynamicValue.set({});
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -379,10 +386,11 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.formPriority.set(row.priority);
     this.formEnabled.set(row.enabled);
     const s = row.settings ?? {};
-    this.formApiKey.set(String(s['apiKey'] ?? ''));
-    this.formUsername.set(String(s['username'] ?? ''));
-    this.formPassword.set(String(s['password'] ?? ''));
-    this.formBaseUrl.set(String(s['baseUrl'] ?? ''));
+    this.formDynamicValue.set({
+      apiKey: String(s['apiKey'] ?? ''),
+      username: String(s['username'] ?? ''),
+      password: String(s['password'] ?? ''),
+    });
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -392,12 +400,12 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   }
 
   private buildSettings(): Record<string, unknown> {
+    const raw = this.formDynamicValue();
     const settings: Record<string, unknown> = {};
-    const fields = this.currentFields();
-    if (fields.includes('apiKey')) settings['apiKey'] = this.formApiKey().trim();
-    if (fields.includes('username')) settings['username'] = this.formUsername().trim();
-    if (fields.includes('password')) settings['password'] = this.formPassword().trim();
-    if (fields.includes('baseUrl')) settings['baseUrl'] = this.formBaseUrl().trim();
+    for (const field of this.currentFields()) {
+      const v = raw[field.key];
+      settings[field.key] = typeof v === 'string' ? v.trim() : v ?? '';
+    }
     return settings;
   }
 

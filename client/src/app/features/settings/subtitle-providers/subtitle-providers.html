@@ -190,37 +190,7 @@
           </select>
         </label>
 
-        @if (currentFields().includes('apiKey')) {
-          <label class="form-control w-full">
-            <span class="label-text">API Key</span>
-            <input type="text" class="input input-bordered input-sm w-full font-mono"
-              [ngModel]="formApiKey()" (ngModelChange)="formApiKey.set($event)" />
-          </label>
-        }
-
-        @if (currentFields().includes('username')) {
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'settings.subtitle_providers.field_username' | translate }}</span>
-            <input type="text" class="input input-bordered input-sm w-full"
-              [ngModel]="formUsername()" (ngModelChange)="formUsername.set($event)" />
-          </label>
-        }
-
-        @if (currentFields().includes('password')) {
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'settings.subtitle_providers.field_password' | translate }}</span>
-            <input type="password" class="input input-bordered input-sm w-full"
-              [ngModel]="formPassword()" (ngModelChange)="formPassword.set($event)" />
-          </label>
-        }
-
-        @if (currentFields().includes('baseUrl')) {
-          <label class="form-control w-full">
-            <span class="label-text">Base URL</span>
-            <input type="text" class="input input-bordered input-sm w-full"
-              [ngModel]="formBaseUrl()" (ngModelChange)="formBaseUrl.set($event)" />
-          </label>
-        }
+        <app-schema-form [fields]="currentFields()" [(value)]="formDynamicValue" />
 
         <div class="flex gap-4">
           <label class="form-control w-28">
