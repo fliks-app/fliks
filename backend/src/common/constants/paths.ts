@@ -50,3 +50,12 @@ export function getPluginsRuntimeDir(): string {
   );
   return cachedPluginsRuntimeDir;
 }
+
+/**
+ * Sockets and pid files, kept out of the directory that holds plugin content so
+ * a sweep of installed files can never touch a live channel. `fliks-rt` is the
+ * name the plugin plan gives it.
+ */
+export function getPluginsSocketDir(): string {
+  return path.join(getPluginsRuntimeDir(), 'fliks-rt');
+}
