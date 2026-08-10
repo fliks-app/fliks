@@ -13,6 +13,7 @@ import {
   LucideTrash2,
   LucideListPlus,
   LucideUserPlus,
+  LucideCircle,
 } from '@lucide/angular';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
 import { PopoverMenuComponent } from '../popover-menu';
@@ -38,6 +39,7 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
     LucideTrash2,
     LucideListPlus,
     LucideUserPlus,
+    LucideCircle,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './card-actions-panel.html',
