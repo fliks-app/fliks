@@ -7,6 +7,8 @@ export interface PluginUiEntry {
   pluginId: string;
   contributions: UiContribution[];
   configPages: ConfigPage[];
+  /** Flat `"a.b.c"` dicts per locale; the client merges them under core's own keys. */
+  i18n: Record<string, Record<string, string>>;
 }
 
 /**
@@ -29,6 +31,7 @@ export class PluginUiController {
         pluginId: plugin.pluginId,
         contributions: plugin.manifest.ui?.contributions ?? [],
         configPages: plugin.manifest.ui?.configPages ?? [],
+        i18n: plugin.manifest.i18n ?? {},
       }));
   }
 }

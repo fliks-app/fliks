@@ -2513,5 +2513,11 @@
     "install": "Installa",
     "open_release": "Vedi la versione",
     "error": "Aggiornamento fallito"
+  },
+  "plugin_view": {
+    "unavailable_title": "Questa pagina non è disponibile",
+    "unknown_plugin": "Il plugin a cui appartiene questa pagina non è installato.",
+    "unknown_view": "Questo plugin non ha una pagina con questo nome.",
+    "unsupported_kind": "Questa pagina non è ancora supportata dalla tua versione di Fliks."
   }
 }

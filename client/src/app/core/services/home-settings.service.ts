@@ -1,4 +1,5 @@
 import { Injectable, signal } from '@angular/core';
+import { mergeOrdered } from '../plugin-ui/merge-ordered';
 
 /** Stable identity of a home zone. Built-ins are fixed; per-library
  *  "recently added" zones are keyed by their library id. */
@@ -139,41 +140,26 @@ export class HomeSettingsService {
       available.add(`${LIBRARY_RECENT_PREFIX}${lib.id}` as HomeSectionKey);
     }
 
-    const seen = new Set<HomeSectionKey>();
-    const merged: HomeSectionPref[] = [];
-    for (const pref of this.settings().order) {
-      if (available.has(pref.key) && !seen.has(pref.key)) {
-        merged.push(pref);
-        seen.add(pref.key);
-      }
-    }
     // Saved layouts predating this zone get it on top, not appended at the
-    // bottom (new users already get it first via DEFAULTS).
-    if (!seen.has('received-recommendations')) {
-      merged.unshift({ key: 'received-recommendations', visible: true });
-      seen.add('received-recommendations');
-    }
-    for (const key of BUILTIN_ORDER) {
-      if (!seen.has(key)) {
-        merged.push({ key, visible: true });
-        seen.add(key);
-      }
+    // bottom (new users already get it first via DEFAULTS) — so it's kept
+    // out of the generic merge's canonical-order append and handled after.
+    const otherBuiltins = DEFAULTS.order.filter((p) => p.key !== 'received-recommendations');
+    let merged = mergeOrdered(this.settings().order, otherBuiltins, available, (p) => p.key);
+    if (!merged.some((p) => p.key === 'received-recommendations')) {
+      merged = [{ key: 'received-recommendations', visible: true }, ...merged];
     }
     // Permission-gated built-in: only offered when the user can use requests.
     // With no saved preference it defaults visible, slotted just above
     // "recently-added"; a saved order (handled above) wins.
-    if (opts.requests && !seen.has('requests-recent')) {
+    if (opts.requests && !merged.some((p) => p.key === 'requests-recent')) {
       const pref: HomeSectionPref = { key: 'requests-recent', visible: true };
       const at = merged.findIndex((p) => p.key === 'recently-added');
-      if (at >= 0) merged.splice(at, 0, pref);
-      else merged.push(pref);
-      seen.add('requests-recent');
+      merged = at >= 0 ? [...merged.slice(0, at), pref, ...merged.slice(at)] : [...merged, pref];
     }
     for (const lib of libraries) {
       const key = `${LIBRARY_RECENT_PREFIX}${lib.id}` as HomeSectionKey;
-      if (!seen.has(key)) {
-        merged.push({ key, visible: false });
-        seen.add(key);
+      if (!merged.some((p) => p.key === key)) {
+        merged = [...merged, { key, visible: false }];
       }
     }
 

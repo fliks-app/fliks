@@ -37,16 +37,25 @@ import { AuthService } from './core/services/auth.service';
 import { ServerConfigService } from './core/services/server-config.service';
 import { SessionStoreService } from './core/services/session-store.service';
 import { translateBrowserLoaderFactory } from './utils/translate-loader';
+import { PluginUiRegistryService } from './core/plugin-ui/plugin-ui-registry.service';
+import { PluginI18nService } from './core/plugin-ui/plugin-i18n.service';
 
 /** Read the persisted server URL, sessions and credentials before bootstrap:
  *  guards, interceptors and the first /auth/me all depend on them. Resolves
- *  even on a storage failure, or the app would never leave its splash screen. */
+ *  even on a storage failure, or the app would never leave its splash screen.
+ *  The plugin UI registry loads last — it needs the session for the
+ *  authenticated request, and it fails open internally so it can never
+ *  delay this past its own short timeout. */
 export function loadPersistedState(): Promise<unknown> {
   const serverConfig = inject(ServerConfigService);
   const sessions = inject(SessionStoreService);
   const auth = inject(AuthService);
+  const pluginUi = inject(PluginUiRegistryService);
+  const pluginI18n = inject(PluginI18nService);
   return Promise.all([serverConfig.load(), sessions.load()])
     .then(() => void auth.loadPersistedSession())
+    .then(() => pluginUi.load())
+    .then(() => pluginI18n.init())
     .catch(() => undefined);
 }
 

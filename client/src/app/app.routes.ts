@@ -5,6 +5,7 @@ import { serverConfigGuard } from './core/guards/server-config.guard';
 import { passwordChangeGuard } from './core/guards/password-change.guard';
 import { noTvGuard } from './core/guards/no-tv.guard';
 import { desktopGuard } from './core/guards/desktop.guard';
+import { pluginViewGuard } from './core/guards/plugin-view.guard';
 import { ProfileContextService } from './features/profile/profile-context.service';
 
 export const routes: Routes = [
@@ -276,6 +277,12 @@ export const routes: Routes = [
           ),
         data: { titleKey: 'pending_requests.title' },
       },
+      {
+        path: 'plugins/:pluginId/:view',
+        canActivate: [pluginViewGuard],
+        loadComponent: () =>
+          import('./features/plugin-view/plugin-view').then((m) => m.PluginViewComponent),
+      },
     ],
   },
   // Account settings — own layout with sidebar
@@ -414,6 +421,11 @@ export const routes: Routes = [
           { path: 'media-servers', loadComponent: () => import('./features/settings/media-servers/media-servers').then((m) => m.MediaServersSettingsComponent) },
           { path: 'plugins', loadComponent: () => import('./features/settings/plugins/plugins').then((m) => m.PluginsSettingsComponent) },
           { path: 'plugin-catalogue', loadComponent: () => import('./features/settings/plugins/plugin-catalogue/plugin-catalogue-page').then((m) => m.PluginCataloguePageComponent) },
+          {
+            path: 'plugins/:pluginId/:view',
+            canActivate: [pluginViewGuard],
+            loadComponent: () => import('./features/plugin-view/plugin-view').then((m) => m.PluginViewComponent),
+          },
           { path: 'data-imports', loadComponent: () => import('./features/settings/data-imports/data-imports').then((m) => m.DataImportsSettingsComponent) },
           { path: 'libraries', loadComponent: () => import('./features/settings/libraries/libraries').then((m) => m.LibrariesSettingsComponent) },
           {
