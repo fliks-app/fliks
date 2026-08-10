@@ -1,0 +1,49 @@
+<div class="flex flex-col gap-4">
+  @for (field of fields(); track field.key) {
+    @switch (fieldKind(field)) {
+      @case ('input') {
+        <div class="flex flex-col gap-1">
+          <app-input-field
+            [type]="inputType(field)"
+            [label]="field.labelKey | translate"
+            [hint]="field.hint ?? ''"
+            [placeholder]="field.placeholder ?? ''"
+            [disabled]="disabled()"
+            [value]="fieldValue(field)"
+            (valueChange)="setValue(field, $event)"
+          />
+          @if (isInvalid(field)) {
+            <p class="text-error text-xs">{{ 'common.field_required' | translate }}</p>
+          }
+        </div>
+      }
+      @case ('toggle') {
+        <app-toggle-field
+          [label]="field.labelKey | translate"
+          [hint]="field.hint ?? ''"
+          [disabled]="disabled()"
+          [value]="fieldBool(field)"
+          (valueChange)="setBool(field, $event)"
+        />
+      }
+      @case ('select') {
+        <div class="flex flex-col gap-1">
+          <app-select-field
+            [label]="field.labelKey | translate"
+            [hint]="field.hint ?? ''"
+            [disabled]="disabled()"
+            [value]="fieldValue(field)"
+            (valueChange)="setValue(field, $event)"
+          >
+            @for (opt of field.options ?? []; track opt.value) {
+              <option [value]="opt.value">{{ opt.labelKey | translate }}</option>
+            }
+          </app-select-field>
+          @if (isInvalid(field)) {
+            <p class="text-error text-xs">{{ 'common.field_required' | translate }}</p>
+          }
+        </div>
+      }
+    }
+  }
+</div>

@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { SubtitleProviderService } from './subtitle-provider.service';
+import { SubtitleProviderService, redactProviderSecrets } from './subtitle-provider.service';
 import { CreateSubtitleProviderDto } from './dto/create-subtitle-provider.dto';
 import { UpdateSubtitleProviderDto } from './dto/update-subtitle-provider.dto';
 import { TestSubtitleProviderDto } from './dto/test-subtitle-provider.dto';
@@ -46,29 +46,31 @@ export class SubtitlesController {
 
   @Post()
   @CheckPolicies((ability) => ability.can(Action.Create, SubtitleProvider))
-  create(@Body() dto: CreateSubtitleProviderDto) {
-    return this.providerService.create(dto);
+  async create(@Body() dto: CreateSubtitleProviderDto) {
+    return redactProviderSecrets(await this.providerService.create(dto));
   }
 
+  // Every route that returns a provider redacts here, not in the service: the service's
+  // own reads are what authenticate against the provider and need the real credential.
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, SubtitleProvider))
-  findAll() {
-    return this.providerService.findAll();
+  async findAll() {
+    return (await this.providerService.findAll()).map(redactProviderSecrets);
   }
 
   @Get(':id')
   @CheckPolicies((ability) => ability.can(Action.Read, SubtitleProvider))
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.providerService.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    return redactProviderSecrets(await this.providerService.findOne(id));
   }
 
   @Put(':id')
   @CheckPolicies((ability) => ability.can(Action.Update, SubtitleProvider))
-  update(
+  async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateSubtitleProviderDto,
   ) {
-    return this.providerService.update(id, dto);
+    return redactProviderSecrets(await this.providerService.update(id, dto));
   }
 
   @Delete(':id')

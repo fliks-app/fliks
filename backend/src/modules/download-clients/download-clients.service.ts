@@ -18,6 +18,13 @@ import { TestDownloadClientDto } from './dto/test-download-client.dto';
 import { TorrentHistoryMatcher } from '../media/torrent-history-matcher.service';
 import { BlocklistService } from '../blocklist/blocklist.service';
 import { EventsService } from '../scheduler/events.service';
+import { redactSecretFields, mergeSecretFields } from '../../common/utils/secret-fields.util';
+import { FieldDef } from '../../common/plugin-contract/ui-contribution';
+
+/** qBittorrent is the only implementation today; its one credential is `password`. */
+const QBITTORRENT_FIELDS: FieldDef[] = [
+  { key: 'password', type: 'password', labelKey: 'x', secret: true },
+];
 
 export interface QueueEntry extends QbittorrentTorrent {
   clientId: number;
@@ -77,11 +84,7 @@ const QUEUE_PAGE_SIZE_MAX = 100;
 
 /** Strips the stored credential so it never reaches an HTTP response. */
 export function redactPassword(dc: DownloadClient): DownloadClient {
-  const { password: _password, ...settings } = (dc.settings ?? {}) as Record<
-    string,
-    unknown
-  >;
-  return { ...dc, settings };
+  return { ...dc, settings: redactSecretFields(dc.settings, QBITTORRENT_FIELDS) };
 }
 
 const QB_STATE_MAP: Record<string, string> = {
@@ -164,12 +167,7 @@ export class DownloadClientsService {
     if (dto.implementation !== undefined)
       dc.implementation = dto.implementation;
     if (dto.settings !== undefined) {
-      // Blank/absent password keeps the stored one instead of wiping it —
-      // the client never sends the real value back on read.
-      const incoming = dto.settings as Record<string, unknown>;
-      const existingPassword = (dc.settings as Record<string, unknown>)
-        ?.password;
-      dc.settings = { ...incoming, password: incoming.password || existingPassword };
+      dc.settings = mergeSecretFields(dc.settings, dto.settings, QBITTORRENT_FIELDS);
     }
     if (dto.enabled !== undefined) dc.enabled = dto.enabled;
     if (dto.priority !== undefined) dc.priority = dto.priority;
