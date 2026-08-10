@@ -2540,5 +2540,11 @@
     "install": "Install",
     "open_release": "View release",
     "error": "Update failed"
+  },
+  "plugin_view": {
+    "unavailable_title": "This page isn't available",
+    "unknown_plugin": "The plugin this page belongs to isn't installed.",
+    "unknown_view": "This plugin doesn't have a page by that name.",
+    "unsupported_kind": "This page isn't supported by your version of Fliks yet."
   }
 }

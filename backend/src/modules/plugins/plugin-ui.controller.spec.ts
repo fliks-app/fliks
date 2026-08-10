@@ -81,7 +81,18 @@ describe('PluginUiController', () => {
   it('includes a data plugin unconditionally — it has no process to be unhealthy', () => {
     const { controller } = makeController([dataPlugin('fliks.a')]);
     const result = controller.list();
-    expect(result).toEqual([{ pluginId: 'fliks.a', contributions: [], configPages: [] }]);
+    expect(result).toEqual([{ pluginId: 'fliks.a', contributions: [], configPages: [], i18n: {} }]);
+  });
+
+  it('passes the manifest i18n dicts through so the client can merge them under core keys', () => {
+    const plugin = dataPlugin('fliks.a');
+    plugin.manifest.i18n = { en: { 'fliks.a.label': 'Label' }, fr: { 'fliks.a.label': 'Libellé' } };
+    const { controller } = makeController([plugin]);
+
+    expect(controller.list()[0].i18n).toEqual({
+      en: { 'fliks.a.label': 'Label' },
+      fr: { 'fliks.a.label': 'Libellé' },
+    });
   });
 
   it('includes a process plugin whose process is ready, with its contributions', () => {
