@@ -1,99 +1,167 @@
 import {
-  Component,
   ChangeDetectionStrategy,
+  Component,
   DestroyRef,
   ElementRef,
   computed,
   signal,
   inject,
-  OnInit,
   viewChild,
 } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { LucideSnowflake, LucideX } from '@lucide/angular';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
+import { LucideSnowflake } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { ConfirmationService } from '../../../core/services/confirmation.service';
-import {
-  IndexersApiService,
-  IndexerRow,
-} from '../../../core/services/api/indexers-api.service';
 import { ProfilesService } from '../../../core/services/api/profiles.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { ProviderListComponent } from '../../../shared/components/provider-list/provider-list';
+import {
+  ProviderDraft,
+  ProviderImplementation,
+  ProviderInstance,
+  ProviderListLabels,
+  ProviderTestResult,
+} from '../../../shared/components/provider-list/provider-list.types';
+
+/** Live throttle state — mirrors `IndexersApiService`'s row shape, which the generic renderer passes through untouched. */
+interface IndexerCooldown {
+  reason: 'rate-limit' | 'failures';
+  remainingMs: number;
+  until: string;
+  failureCount?: number;
+  detail?: string;
+}
+
+const LABELS: ProviderListLabels = {
+  newLabelKey: 'settings.indexers.new',
+  colNameKey: 'settings.indexers.col_name',
+  colImplementationKey: 'settings.indexers.field_type',
+  colPriorityKey: 'settings.indexers.col_priority',
+  colEnabledKey: 'settings.indexers.col_enabled',
+  actionsKey: 'settings.indexers.actions',
+  editKey: 'settings.indexers.edit',
+  deleteKey: 'settings.indexers.delete',
+  saveKey: 'settings.indexers.save',
+  cancelKey: 'settings.indexers.cancel',
+  createTitleKey: 'settings.indexers.editor_create',
+  editTitleKey: 'settings.indexers.editor_edit',
+  fieldNameKey: 'settings.indexers.field_name',
+  fieldImplementationKey: 'settings.indexers.field_type',
+  fieldPriorityKey: 'settings.indexers.field_priority',
+  fieldEnabledKey: 'settings.indexers.field_enabled',
+  emptyKey: 'settings.indexers.empty',
+  loadErrorKey: 'settings.indexers.load_error',
+  confirmDeleteKey: 'settings.indexers.confirm_delete',
+  deleteErrorKey: 'settings.indexers.delete_error',
+  testConnectionKey: 'settings.indexers.test_connection',
+};
 
 @Component({
   selector: 'app-indexers-settings',
-  imports: [FormsModule, LucideSnowflake, LucideX, TranslateModule],
+  imports: [TranslateModule, LucideSnowflake, ProviderListComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './indexers.html',
 })
-export class IndexersSettingsComponent implements OnInit {
-  private readonly api = inject(IndexersApiService);
+export class IndexersSettingsComponent {
+  private readonly http = inject(HttpClient);
   private readonly profilesApi = inject(ProfilesService);
   private readonly translate = inject(TranslateService);
-  private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly providerList = viewChild<ProviderListComponent>('pl');
   private readonly statsDialog = viewChild<ElementRef<HTMLDialogElement>>('statsDialog');
+  private readonly cooldownDialog = viewChild<ElementRef<HTMLDialogElement>>('cooldownDialog');
 
-  readonly rows = signal<IndexerRow[]>([]);
-  readonly loading = signal(true);
-  readonly listError = signal('');
-  readonly saving = signal(false);
+  readonly listUrl = '/api/indexers';
+  readonly labels = LABELS;
 
-  readonly editingId = signal<number | null>(null);
-
-  readonly formName = signal('');
-  readonly formPriority = signal(25);
-  readonly formRequestDelay = signal(2);
-  readonly formEnabled = signal(true);
-  readonly formEnableSearch = signal(true);
-  readonly formTorznabBase = signal('');
-  readonly formTorznabKey = signal('');
-  readonly formMinSeeders = signal(0);
-  readonly formSeedRatio = signal(1);
-  readonly formMaxRetentionDays = signal<number | null>(null);
-  readonly formUnknownLanguage = signal('');
-
-  readonly testLoading = signal(false);
-  readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
   readonly statsLoading = signal(false);
   readonly statsData = signal<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>([]);
   readonly statsIndexerName = signal('');
   readonly languages = signal<{ id: number; name: string; isoCode: string }[]>([]);
 
-  // ── Cooldowns ──
-  private readonly cooldownDialog =
-    viewChild<ElementRef<HTMLDialogElement>>('cooldownDialog');
+  readonly cooldownRow = signal<ProviderInstance | null>(null);
+  readonly resettingCooldown = signal(false);
   /** Ticks so countdowns tick down and expired windows drop without a refetch. */
   private readonly now = signal(Date.now());
-  readonly cooldownRow = signal<IndexerRow | null>(null);
-  readonly resettingCooldown = signal(false);
 
-  /** Rows whose window is still open, recomputed against the local clock. */
-  readonly cooledDown = computed(() => {
-    const now = this.now();
-    return this.rows().filter(
-      (ix) => ix.cooldown && Date.parse(ix.cooldown.until) > now,
-    );
-  });
-  readonly hasCooldowns = computed(() => this.cooledDown().length > 0);
+  readonly implementations = computed<ProviderImplementation[]>(() => [
+    {
+      implementation: 'torznab',
+      labelKey: 'settings.indexers.type_torznab',
+      fields: [
+        {
+          key: 'baseUrl',
+          type: 'url',
+          labelKey: 'settings.indexers.field_torznab_base_url',
+          placeholder: 'http://prowlarr:9696/1/api',
+          required: true,
+        },
+        { key: 'apiKey', type: 'password', labelKey: 'settings.indexers.field_api_key', secret: true },
+        {
+          key: 'requestDelay',
+          type: 'number',
+          labelKey: 'settings.indexers.field_request_delay',
+          default: 2,
+          topLevel: true,
+          hint: this.translate.instant('settings.indexers.request_delay_hint'),
+        },
+        { key: 'minSeeders', type: 'number', labelKey: 'settings.indexers.field_min_seeders', default: 0 },
+        {
+          key: 'seedRatio',
+          type: 'number',
+          labelKey: 'settings.indexers.field_seed_ratio',
+          default: 1,
+          hint: this.translate.instant('settings.indexers.seed_ratio_hint'),
+        },
+        {
+          key: 'maxRetentionDays',
+          type: 'number',
+          labelKey: 'settings.indexers.field_max_retention',
+          hint: this.translate.instant('settings.indexers.max_retention_hint'),
+        },
+        { key: 'enableSearch', type: 'toggle', labelKey: 'settings.indexers.field_enable_search', default: true, topLevel: true },
+        {
+          key: 'unknownLanguageIsoCode',
+          type: 'select',
+          labelKey: 'settings.indexers.field_unknown_language',
+          hint: this.translate.instant('settings.indexers.unknown_language_hint'),
+          options: [
+            { value: '', labelKey: this.translate.instant('settings.indexers.unknown_language_none') },
+            ...this.languages().map((l) => ({ value: l.isoCode, labelKey: `${l.name} (${l.isoCode})` })),
+          ],
+        },
+      ],
+    },
+  ]);
 
   constructor() {
+    void this.profilesApi.getLanguageDefinitions().then((langs) => this.languages.set(langs));
     const timer = setInterval(() => this.now.set(Date.now()), 5_000);
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
   }
 
-  isCooledDown(ix: IndexerRow): boolean {
-    return !!ix.cooldown && Date.parse(ix.cooldown.until) > this.now();
+  cooldownOf(ix: ProviderInstance): IndexerCooldown | null | undefined {
+    return ix['cooldown'] as IndexerCooldown | null | undefined;
+  }
+
+  isCooledDown(ix: ProviderInstance): boolean {
+    const c = this.cooldownOf(ix);
+    return !!c && Date.parse(c.until) > this.now();
+  }
+
+  hasCooldowns(rows: readonly ProviderInstance[]): boolean {
+    return rows.some((r) => this.isCooledDown(r));
+  }
+
+  cooledDownCount(rows: readonly ProviderInstance[]): number {
+    return rows.filter((r) => this.isCooledDown(r)).length;
   }
 
   /** Remaining window as `1 h 05 min`, `4 min 12 s`, `38 s`. */
-  cooldownRemaining(ix: IndexerRow): string {
-    if (!ix.cooldown) return '';
-    const total = Math.max(
-      0,
-      Math.round((Date.parse(ix.cooldown.until) - this.now()) / 1000),
-    );
+  cooldownRemaining(ix: ProviderInstance): string {
+    const c = this.cooldownOf(ix);
+    if (!c) return '';
+    const total = Math.max(0, Math.round((Date.parse(c.until) - this.now()) / 1000));
     const h = Math.floor(total / 3600);
     const m = Math.floor((total % 3600) / 60);
     const s = total % 60;
@@ -102,11 +170,12 @@ export class IndexersSettingsComponent implements OnInit {
     return `${s} s`;
   }
 
-  cooldownExpiresAt(ix: IndexerRow): string {
-    return ix.cooldown ? new Date(ix.cooldown.until).toLocaleTimeString() : '';
+  cooldownExpiresAt(ix: ProviderInstance): string {
+    const c = this.cooldownOf(ix);
+    return c ? new Date(c.until).toLocaleTimeString() : '';
   }
 
-  openCooldown(ix: IndexerRow) {
+  openCooldown(ix: ProviderInstance) {
     this.cooldownRow.set(ix);
     this.cooldownDialog()?.nativeElement.showModal();
   }
@@ -115,19 +184,13 @@ export class IndexersSettingsComponent implements OnInit {
     this.cooldownDialog()?.nativeElement.close();
   }
 
-  async resetCooldown(ix: IndexerRow) {
+  async resetCooldown(ix: ProviderInstance) {
     this.resettingCooldown.set(true);
     try {
-      await this.api.clearCooldown(ix.id);
+      await firstValueFrom(this.http.delete(`/api/indexers/${ix.id}/cooldown`));
       this.closeCooldown();
-      await this.reloadAll();
-      this.toast.success(
-        this.translate.instant('settings.indexers.cooldown_reset_done', {
-          name: ix.name,
-        }),
-      );
-    } catch {
-      // handled by global error interceptor
+      await this.providerList()?.reload();
+      this.toast.success(this.translate.instant('settings.indexers.cooldown_reset_done', { name: ix.name }));
     } finally {
       this.resettingCooldown.set(false);
     }
@@ -136,155 +199,26 @@ export class IndexersSettingsComponent implements OnInit {
   async resetAllCooldowns() {
     this.resettingCooldown.set(true);
     try {
-      const { cleared } = await this.api.clearAllCooldowns();
-      await this.reloadAll();
-      this.toast.success(
-        this.translate.instant('settings.indexers.cooldown_reset_all_done', {
-          count: cleared,
-        }),
-      );
-    } catch {
-      // handled by global error interceptor
+      const { cleared } = await firstValueFrom(this.http.delete<{ cleared: number }>('/api/indexers/cooldowns'));
+      await this.providerList()?.reload();
+      this.toast.success(this.translate.instant('settings.indexers.cooldown_reset_all_done', { count: cleared }));
     } finally {
       this.resettingCooldown.set(false);
     }
   }
 
-  ngOnInit() {
-    this.reloadAll();
-  }
-
-  async reloadAll() {
-    this.loading.set(true);
-    this.listError.set('');
-    try {
-      const [list, langs] = await Promise.all([
-        this.api.list(),
-        this.profilesApi.getLanguageDefinitions(),
-      ]);
-      this.rows.set(list);
-      this.languages.set(langs);
-    } catch {
-      this.listError.set(
-        this.translate.instant('settings.indexers.load_error'),
-      );
-    } finally {
-      this.loading.set(false);
-    }
-  }
-
-  openCreate() {
-    this.editingId.set(null);
-    this.formName.set('');
-    this.formPriority.set(25);
-    this.formRequestDelay.set(2);
-    this.formEnabled.set(true);
-    this.formEnableSearch.set(true);
-    this.formTorznabBase.set('');
-    this.formTorznabKey.set('');
-    this.formMinSeeders.set(0);
-    this.formSeedRatio.set(1);
-    this.formMaxRetentionDays.set(null);
-    this.formUnknownLanguage.set('');
-    this.testResult.set(null);
-    this.editorDialog()?.nativeElement.showModal();
-  }
-
-  openEdit(ix: IndexerRow) {
-    this.editingId.set(ix.id);
-    this.formName.set(ix.name);
-    this.formPriority.set(ix.priority);
-    this.formRequestDelay.set(ix.requestDelay ?? 2);
-    this.formEnabled.set(ix.enabled);
-    this.formEnableSearch.set(ix.enableSearch);
-    const s = ix.settings ?? {};
-    this.formTorznabBase.set(String(s['baseUrl'] ?? ''));
-    this.formTorznabKey.set('');
-    this.formMinSeeders.set(Number(s['minSeeders'] ?? 0));
-    this.formSeedRatio.set(Number(s['seedRatio'] ?? 1));
-    this.formMaxRetentionDays.set(s['maxRetentionDays'] != null ? Number(s['maxRetentionDays']) : null);
-    this.formUnknownLanguage.set(String(s['unknownLanguageIsoCode'] ?? ''));
-    this.testResult.set(null);
-    this.editorDialog()?.nativeElement.showModal();
-  }
-
-  closeEditor() {
-    this.editorDialog()?.nativeElement.close();
-  }
-
-  async testConnection() {
-    this.testResult.set(null);
-    const base = this.formTorznabBase().trim();
-    if (!base) {
-      this.testResult.set({
-        ok: false,
-        message: this.translate.instant('settings.indexers.base_url_required'),
-      });
-      return;
-    }
-    this.testLoading.set(true);
-    try {
-      const r = await this.api.testConnection({
-        implementation: 'torznab',
-        settings: {
-          baseUrl: base.replace(/\/$/, ''),
-          apiKey: this.formTorznabKey().trim(),
-        },
-      });
-      this.testResult.set(r);
-    } catch {
-      this.testResult.set({
-        ok: false,
-        message: this.translate.instant('settings.indexers.test_network_error'),
-      });
-    } finally {
-      this.testLoading.set(false);
-    }
-  }
-
-  async save() {
-    const name = this.formName().trim();
-    if (!name) return;
-    const base = this.formTorznabBase().trim();
-    if (!base) return;
-
-    const body = {
-      name,
-      implementation: 'torznab' as const,
-      priority: this.formPriority(),
-      requestDelay: this.formRequestDelay(),
-      enabled: this.formEnabled(),
-      enableSearch: this.formEnableSearch(),
-      settings: {
-        baseUrl: base.replace(/\/$/, ''),
-        apiKey: this.formTorznabKey().trim() || undefined,
-        minSeeders: this.formMinSeeders(),
-        seedRatio: this.formSeedRatio(),
-        maxRetentionDays: this.formMaxRetentionDays() || undefined,
-        unknownLanguageIsoCode: this.formUnknownLanguage() || undefined,
-      },
-    };
-
-    this.saving.set(true);
-    const id = this.editingId();
-    try {
-      await (id == null ? this.api.create(body) : this.api.update(id, body));
-      this.closeEditor();
-      await this.reloadAll();
-    } catch {
-      // handled by global error interceptor
-    } finally {
-      this.saving.set(false);
-    }
-  }
-
-  async openStats(ix: IndexerRow) {
+  async openStats(ix: ProviderInstance) {
     this.statsIndexerName.set(ix.name);
     this.statsLoading.set(true);
     this.statsDialog()?.nativeElement.showModal();
     try {
-      const data = await this.api.getStats(ix.id);
-      this.statsData.set(data);
+      this.statsData.set(
+        await firstValueFrom(
+          this.http.get<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>(
+            `/api/indexers/${ix.id}/stats`,
+          ),
+        ),
+      );
     } finally {
       this.statsLoading.set(false);
     }
@@ -294,22 +228,32 @@ export class IndexersSettingsComponent implements OnInit {
     this.statsDialog()?.nativeElement.close();
   }
 
-  async deleteRow(ix: IndexerRow) {
-    const msg = this.translate.instant('settings.indexers.confirm_delete', {
-      name: ix.name,
-    });
-    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: msg, variant: 'danger' })) return;
+  readonly testConnection = async (draft: ProviderDraft): Promise<ProviderTestResult> => {
+    const base = String(draft.settings['baseUrl'] ?? '').trim();
+    if (!base) return { ok: false, message: this.translate.instant('settings.indexers.base_url_required') };
     try {
-      await this.api.remove(ix.id);
-      await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      void this.confirmation.alert({
-        title: this.translate.instant('common.error'),
-        message: httpErr.error?.message ??
-          this.translate.instant('settings.indexers.delete_error'),
-        variant: 'danger',
-      });
+      return await firstValueFrom(
+        this.http.post<ProviderTestResult>('/api/indexers/test-connection', {
+          implementation: 'torznab',
+          settings: {
+            ...draft.settings,
+            baseUrl: base.replace(/\/$/, ''),
+            apiKey: String(draft.settings['apiKey'] ?? '').trim(),
+          },
+        }),
+      );
+    } catch {
+      return { ok: false, message: this.translate.instant('settings.indexers.test_network_error') };
     }
-  }
+  };
+
+  /** Mirrors the original hand-rolled save(): trims/strips the URL and drops falsy optional fields. */
+  readonly beforeSave = (body: Record<string, unknown>): Record<string, unknown> => {
+    const settings = { ...(body['settings'] as Record<string, unknown>) };
+    if (typeof settings['baseUrl'] === 'string') settings['baseUrl'] = settings['baseUrl'].trim().replace(/\/$/, '');
+    if (typeof settings['apiKey'] === 'string') settings['apiKey'] = settings['apiKey'].trim();
+    if (!settings['maxRetentionDays']) delete settings['maxRetentionDays'];
+    if (!settings['unknownLanguageIsoCode']) delete settings['unknownLanguageIsoCode'];
+    return { ...body, settings };
+  };
 }

@@ -1,0 +1,46 @@
+<div class="flex flex-col gap-4">
+  <h2 class="card-title text-lg">{{ titleKey() | translate }}</h2>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (listError()) {
+    <div role="alert" class="alert alert-error">{{ listError() }}</div>
+  } @else if (rows().length === 0) {
+    <p class="text-center py-12 text-base-content/50">{{ emptyKey() | translate }}</p>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table table-zebra table-sm">
+        <thead>
+          <tr>
+            @for (col of columns(); track col.key) {
+              <th>{{ col.labelKey | translate }}</th>
+            }
+            @if (rowActions().length) {
+              <th class="text-end">{{ 'common.actions' | translate }}</th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.id) {
+            <tr>
+              @for (col of columns(); track col.key) {
+                <td>{{ row[col.key] }}</td>
+              }
+              @if (rowActions().length) {
+                <td class="text-end">
+                  @for (item of visibleActions(row); track item.action.labelKey) {
+                    <button type="button" class="btn btn-ghost btn-xs" (click)="item.run()" [disabled]="busy() === (row.id + ':' + (item.action.kind === 'proxy' ? item.action.path : ''))">
+                      {{ item.action.labelKey | translate }}
+                    </button>
+                  }
+                </td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

@@ -7,23 +7,26 @@ import {
   OnInit,
   viewChild,
 } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
-import { ToastService } from '../../../core/services/toast.service';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
-import {
-  SubtitleProvidersApiService,
-  SubtitleProviderRow,
-  ProviderRateLimit,
-} from '../../../core/services/api/subtitle-providers-api.service';
+import { SubtitleProvidersApiService, ProviderRateLimit } from '../../../core/services/api/subtitle-providers-api.service';
 import {
   TranslationProvidersApiService,
   TranslationProviderRow,
   TranslationEngine,
 } from '../../../core/services/api/translation-providers-api.service';
-import { SchemaFormComponent, SchemaFormValue } from '../../../shared/components/schema-form/schema-form';
-import { FieldDef } from '../../../core/plugin-ui/contribution.types';
+import { ProviderListComponent } from '../../../shared/components/provider-list/provider-list';
+import {
+  ProviderDraft,
+  ProviderImplementation,
+  ProviderInstance,
+  ProviderListLabels,
+  ProviderTestResult,
+} from '../../../shared/components/provider-list/provider-list.types';
 
 const DEFAULT_TRANSLATION_MODEL = 'gemini-2.0-flash';
 
@@ -42,61 +45,70 @@ const TRANSLATION_ENGINES: { value: TranslationEngine; label: string }[] = [
   { value: 'libretranslate', label: 'LibreTranslate' },
 ];
 
-const PROVIDER_TYPES: { value: string; label: string; fields: FieldDef[] }[] = [
+const IMPLEMENTATIONS: ProviderImplementation[] = [
   {
-    value: 'opensubtitles',
-    label: 'OpenSubtitles',
+    implementation: 'opensubtitles',
+    labelKey: 'settings.subtitle_providers.type_opensubtitles',
     fields: [
       { key: 'username', type: 'text', labelKey: 'settings.subtitle_providers.field_username' },
       { key: 'password', type: 'password', labelKey: 'settings.subtitle_providers.field_password' },
     ],
   },
   {
-    value: 'subdl',
-    label: 'Subdl',
+    implementation: 'subdl',
+    labelKey: 'settings.subtitle_providers.type_subdl',
     fields: [{ key: 'apiKey', type: 'text', labelKey: 'settings.subtitle_providers.field_api_key' }],
   },
-  { value: 'subsynchro', label: 'Subsynchro', fields: [] },
-  { value: 'supersubtitles', label: 'Supersubtitles', fields: [] },
-  { value: 'yify', label: 'YIFY (yts-subs.com)', fields: [] },
-  { value: 'gestdown', label: 'Gestdown (Addic7ed mirror)', fields: [] },
+  { implementation: 'subsynchro', labelKey: 'settings.subtitle_providers.type_subsynchro', fields: [] },
+  { implementation: 'supersubtitles', labelKey: 'settings.subtitle_providers.type_supersubtitles', fields: [] },
+  { implementation: 'yify', labelKey: 'settings.subtitle_providers.type_yify', fields: [] },
+  { implementation: 'gestdown', labelKey: 'settings.subtitle_providers.type_gestdown', fields: [] },
 ];
+
+const LABELS: ProviderListLabels = {
+  newLabelKey: 'settings.subtitle_providers.new',
+  colNameKey: 'settings.subtitle_providers.col_name',
+  colImplementationKey: 'settings.subtitle_providers.col_type',
+  colPriorityKey: 'settings.subtitle_providers.col_priority',
+  colEnabledKey: 'settings.subtitle_providers.col_enabled',
+  actionsKey: 'settings.subtitle_providers.actions',
+  editKey: 'settings.subtitle_providers.edit',
+  deleteKey: 'settings.subtitle_providers.delete',
+  saveKey: 'settings.subtitle_providers.save',
+  cancelKey: 'settings.subtitle_providers.cancel',
+  createTitleKey: 'settings.subtitle_providers.editor_create_title',
+  editTitleKey: 'settings.subtitle_providers.editor_edit_title',
+  fieldNameKey: 'settings.subtitle_providers.field_name',
+  fieldImplementationKey: 'settings.subtitle_providers.field_type',
+  fieldPriorityKey: 'settings.subtitle_providers.field_priority',
+  fieldEnabledKey: 'settings.subtitle_providers.field_enabled',
+  emptyKey: 'settings.subtitle_providers.empty',
+  loadErrorKey: 'settings.subtitle_providers.load_error',
+  confirmDeleteKey: 'settings.subtitle_providers.confirm_delete',
+  deleteErrorKey: 'settings.subtitle_providers.delete_error',
+  testConnectionKey: 'settings.subtitle_providers.test',
+};
 
 @Component({
   selector: 'app-subtitle-providers-settings',
-  imports: [FormsModule, TranslateModule, SchemaFormComponent],
+  imports: [FormsModule, TranslateModule, ProviderListComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitle-providers.html',
 })
 export class SubtitleProvidersSettingsComponent implements OnInit {
+  private readonly http = inject(HttpClient);
   private readonly api = inject(SubtitleProvidersApiService);
   private readonly translationApi = inject(TranslationProvidersApiService);
   private readonly settingsApi = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
-  private readonly toast = inject(ToastService);
 
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
-  private readonly statsDialog = viewChild<ElementRef<HTMLDialogElement>>('statsDialog');
   private readonly translationEditorDialog = viewChild<ElementRef<HTMLDialogElement>>('translationEditorDialog');
+  private readonly statsDialog = viewChild<ElementRef<HTMLDialogElement>>('statsDialog');
 
-  readonly providerTypes = PROVIDER_TYPES;
-  readonly rows = signal<SubtitleProviderRow[]>([]);
-  readonly loading = signal(true);
-  readonly listError = signal('');
-
-  readonly saving = signal(false);
-
-  readonly editingId = signal<number | null>(null);
-
-  readonly formName = signal('');
-  readonly formType = signal('opensubtitles');
-  readonly formPriority = signal(25);
-  readonly formEnabled = signal(true);
-  readonly formDynamicValue = signal<SchemaFormValue>({});
-
-  readonly testLoading = signal(false);
-  readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
+  readonly listUrl = '/api/subtitles/providers';
+  readonly implementations = IMPLEMENTATIONS;
+  readonly labels = LABELS;
 
   readonly rateLimits = signal<Map<string, ProviderRateLimit>>(new Map());
 
@@ -129,9 +141,17 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly trTestResult = signal<{ ok: boolean; message: string } | null>(null);
 
   ngOnInit() {
-    this.reloadAll();
     void this.loadTranslationSettings();
     void this.reloadTranslationProviders();
+  }
+
+  async loadRateLimits() {
+    try {
+      const limits = await this.api.getRateLimits();
+      this.rateLimits.set(new Map(limits.map((l) => [l.providerType, l])));
+    } catch {
+      // handled by global error interceptor
+    }
   }
 
   private async loadTranslationSettings() {
@@ -317,25 +337,29 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     }
   }
 
-  async reloadAll() {
-    this.loading.set(true);
-    this.listError.set('');
+  getRateLimit(type: string): ProviderRateLimit | undefined {
+    return this.rateLimits().get(type);
+  }
+
+  async openStats(row: ProviderInstance) {
+    this.statsProviderName.set(row.name);
+    this.statsLoading.set(true);
+    this.statsDialog()?.nativeElement.showModal();
     try {
-      const [rows, limits] = await Promise.all([
-        this.api.list(),
-        this.api.getRateLimits(),
-      ]);
-      this.rows.set(rows);
-      this.rateLimits.set(new Map(limits.map((l) => [l.providerType, l])));
-    } catch {
-      this.listError.set(this.translate.instant('settings.subtitle_providers.load_error'));
+      this.statsData.set(
+        await firstValueFrom(
+          this.http.get<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>(
+            `/api/subtitles/providers/${row.id}/stats`,
+          ),
+        ),
+      );
     } finally {
-      this.loading.set(false);
+      this.statsLoading.set(false);
     }
   }
 
-  getRateLimit(type: string): ProviderRateLimit | undefined {
-    return this.rateLimits().get(type);
+  closeStats() {
+    this.statsDialog()?.nativeElement.close();
   }
 
   formatDelay(seconds: number): string {
@@ -352,136 +376,38 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     return `${seconds}s`;
   }
 
-  currentFields(): FieldDef[] {
-    return PROVIDER_TYPES.find((t) => t.value === this.formType())?.fields ?? [];
+  private trimSettings(settings: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(settings)) out[k] = typeof v === 'string' ? v.trim() : v;
+    return out;
   }
 
-  providerLabel(type: string): string {
-    return PROVIDER_TYPES.find((t) => t.value === type)?.label ?? type;
-  }
+  readonly beforeSave = (body: Record<string, unknown>): Record<string, unknown> => ({
+    ...body,
+    settings: this.trimSettings(body['settings'] as Record<string, unknown>),
+  });
 
-  onTypeChange(type: string) {
-    this.formType.set(type);
-    // Auto-fill name with provider label when creating
-    if (this.editingId() === null) {
-      this.formName.set(this.providerLabel(type));
-    }
-  }
-
-  openCreate() {
-    this.editingId.set(null);
-    this.formType.set('opensubtitles');
-    this.formName.set(this.providerLabel('opensubtitles'));
-    this.formPriority.set(25);
-    this.formEnabled.set(true);
-    this.formDynamicValue.set({});
-    this.testResult.set(null);
-    this.editorDialog()?.nativeElement.showModal();
-  }
-
-  openEdit(row: SubtitleProviderRow) {
-    this.editingId.set(row.id);
-    this.formName.set(row.name);
-    this.formType.set(row.type);
-    this.formPriority.set(row.priority);
-    this.formEnabled.set(row.enabled);
-    const s = row.settings ?? {};
-    this.formDynamicValue.set({
-      apiKey: String(s['apiKey'] ?? ''),
-      username: String(s['username'] ?? ''),
-      password: String(s['password'] ?? ''),
-    });
-    this.testResult.set(null);
-    this.editorDialog()?.nativeElement.showModal();
-  }
-
-  closeEditor() {
-    this.editorDialog()?.nativeElement.close();
-  }
-
-  private buildSettings(): Record<string, unknown> {
-    const raw = this.formDynamicValue();
-    const settings: Record<string, unknown> = {};
-    for (const field of this.currentFields()) {
-      const v = raw[field.key];
-      settings[field.key] = typeof v === 'string' ? v.trim() : v ?? '';
-    }
-    return settings;
-  }
-
-  async testConnection() {
-    this.testResult.set(null);
-    this.testLoading.set(true);
+  readonly testConnection = async (draft: ProviderDraft): Promise<ProviderTestResult> => {
     try {
-      const ok = await this.api.testConnection({
-        type: this.formType(),
-        settings: this.buildSettings(),
-      });
-      this.testResult.set({
+      const ok = await firstValueFrom(
+        this.http.post<boolean>('/api/subtitles/providers/test-connection', {
+          type: draft.implementation,
+          settings: this.trimSettings(draft.settings),
+        }),
+      );
+      return {
         ok,
-        message: ok
-          ? this.translate.instant('settings.subtitle_providers.test_success')
-          : this.translate.instant('settings.subtitle_providers.test_failed'),
-      });
+        message: this.translate.instant(
+          ok ? 'settings.subtitle_providers.test_success' : 'settings.subtitle_providers.test_failed',
+        ),
+      };
     } catch {
-      this.testResult.set({
-        ok: false,
-        message: this.translate.instant('settings.subtitle_providers.test_network_error'),
-      });
-    } finally {
-      this.testLoading.set(false);
+      return { ok: false, message: this.translate.instant('settings.subtitle_providers.test_network_error') };
     }
-  }
+  };
 
-  async save() {
-    const name = this.formName().trim();
-    if (!name) return;
-    const body = {
-      name,
-      type: this.formType(),
-      priority: this.formPriority(),
-      enabled: this.formEnabled(),
-      settings: this.buildSettings(),
-    };
-
-    this.saving.set(true);
-    const id = this.editingId();
-    try {
-      await (id == null ? this.api.create(body) : this.api.update(id, body));
-      this.closeEditor();
-      await this.reloadAll();
-    } catch {
-      // handled by global error interceptor
-    } finally {
-      this.saving.set(false);
-    }
-  }
-
-  async openStats(row: SubtitleProviderRow) {
-    this.statsProviderName.set(row.name);
-    this.statsLoading.set(true);
-    this.statsDialog()?.nativeElement.showModal();
-    try {
-      const data = await this.api.getStats(row.id);
-      this.statsData.set(data);
-    } finally {
-      this.statsLoading.set(false);
-    }
-  }
-
-  closeStats() {
-    this.statsDialog()?.nativeElement.close();
-  }
-
-  async deleteRow(row: SubtitleProviderRow) {
-    const msg = this.translate.instant('settings.subtitle_providers.confirm_delete', { name: row.name });
-    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: msg, variant: 'danger' })) return;
-    try {
-      await this.api.remove(row.id);
-      await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? this.translate.instant('settings.subtitle_providers.delete_error'), variant: 'danger' });
-    }
+  /** `row['type']` — `ProviderInstance` is generic; subtitle providers key their driver as `type`, not `implementation`. */
+  implementationOf(row: ProviderInstance): string {
+    return String(row['type'] ?? '');
   }
 }

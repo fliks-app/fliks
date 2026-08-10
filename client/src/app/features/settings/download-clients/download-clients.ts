@@ -1,201 +1,81 @@
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
+import { TranslateService } from '@ngx-translate/core';
+import { ProviderListComponent } from '../../../shared/components/provider-list/provider-list';
 import {
-  Component,
-  ChangeDetectionStrategy,
-  ElementRef,
-  signal,
-  inject,
-  OnInit,
-  viewChild,
-} from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { LucideX } from '@lucide/angular';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { ConfirmationService } from '../../../core/services/confirmation.service';
-import {
-  DownloadClientsApiService,
-  DownloadClientRow,
-} from '../../../core/services/api/download-clients-api.service';
+  ProviderDraft,
+  ProviderImplementation,
+  ProviderListLabels,
+  ProviderTestResult,
+} from '../../../shared/components/provider-list/provider-list.types';
+
+const IMPLEMENTATIONS: ProviderImplementation[] = [
+  {
+    implementation: 'qbittorrent',
+    labelKey: 'settings.download_clients.type_qbittorrent',
+    fields: [
+      { key: 'host', type: 'text', labelKey: 'settings.download_clients.field_host', default: 'localhost' },
+      { key: 'port', type: 'number', labelKey: 'settings.download_clients.field_port', default: 8080 },
+      { key: 'username', type: 'text', labelKey: 'settings.download_clients.field_username' },
+      { key: 'password', type: 'password', labelKey: 'settings.download_clients.field_password', secret: true },
+      { key: 'useSsl', type: 'toggle', labelKey: 'settings.download_clients.field_ssl' },
+      { key: 'category', type: 'text', labelKey: 'settings.download_clients.field_category', default: 'fliks' },
+      { key: 'movieCategory', type: 'text', labelKey: 'settings.download_clients.field_movie_category' },
+      { key: 'seriesCategory', type: 'text', labelKey: 'settings.download_clients.field_series_category' },
+    ],
+  },
+];
+
+const LABELS: ProviderListLabels = {
+  newLabelKey: 'settings.download_clients.new',
+  colNameKey: 'settings.download_clients.col_name',
+  colImplementationKey: 'settings.download_clients.col_type',
+  colPriorityKey: 'settings.download_clients.col_priority',
+  colEnabledKey: 'settings.download_clients.col_enabled',
+  actionsKey: 'settings.download_clients.actions',
+  editKey: 'settings.download_clients.edit',
+  deleteKey: 'settings.download_clients.delete',
+  saveKey: 'settings.download_clients.save',
+  cancelKey: 'settings.download_clients.cancel',
+  createTitleKey: 'settings.download_clients.editor_create',
+  editTitleKey: 'settings.download_clients.editor_edit',
+  fieldNameKey: 'settings.download_clients.field_name',
+  fieldImplementationKey: 'settings.download_clients.field_type',
+  fieldPriorityKey: 'settings.download_clients.field_priority',
+  fieldEnabledKey: 'settings.download_clients.field_enabled',
+  emptyKey: 'settings.download_clients.empty',
+  loadErrorKey: 'settings.download_clients.load_error',
+  confirmDeleteKey: 'settings.download_clients.confirm_delete',
+  deleteErrorKey: 'settings.download_clients.delete_error',
+  testConnectionKey: 'settings.download_clients.test_connection',
+};
 
 @Component({
   selector: 'app-download-clients-settings',
-  imports: [FormsModule, LucideX, TranslateModule],
+  imports: [ProviderListComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './download-clients.html',
 })
-export class DownloadClientsSettingsComponent implements OnInit {
-  private readonly api = inject(DownloadClientsApiService);
+export class DownloadClientsSettingsComponent {
+  private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
-  private readonly confirmation = inject(ConfirmationService);
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
-  readonly rows = signal<DownloadClientRow[]>([]);
-  readonly loading = signal(true);
-  readonly listError = signal('');
-  readonly saving = signal(false);
+  readonly listUrl = '/api/download-clients';
+  readonly implementations = IMPLEMENTATIONS;
+  readonly labels = LABELS;
+  readonly defaultPriority = 1;
 
-  readonly editingId = signal<number | null>(null);
-
-  readonly formName = signal('');
-  readonly formType = signal<'qbittorrent'>('qbittorrent');
-  readonly formHost = signal('localhost');
-  readonly formPort = signal(8080);
-  readonly formUsername = signal('');
-  readonly formPassword = signal('');
-  readonly formUseSsl = signal(false);
-  readonly formCategory = signal('fliks');
-  readonly formMovieCategory = signal('');
-  readonly formSeriesCategory = signal('');
-  readonly formPriority = signal(1);
-  readonly formEnabled = signal(true);
-
-  readonly testLoading = signal(false);
-  readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
-
-  ngOnInit() {
-    this.reloadAll();
-  }
-
-  async reloadAll() {
-    this.loading.set(true);
-    this.listError.set('');
+  readonly testConnection = async (draft: ProviderDraft): Promise<ProviderTestResult> => {
     try {
-      const list = await this.api.list();
-      this.rows.set(list);
-    } catch {
-      this.listError.set(
-        this.translate.instant('settings.download_clients.load_error'),
-      );
-    } finally {
-      this.loading.set(false);
-    }
-  }
-
-  openCreate() {
-    this.editingId.set(null);
-    this.formName.set('');
-    this.formType.set('qbittorrent');
-    this.formHost.set('localhost');
-    this.formPort.set(8080);
-    this.formUsername.set('');
-    this.formPassword.set('');
-    this.formUseSsl.set(false);
-    this.formCategory.set('fliks');
-    this.formMovieCategory.set('');
-    this.formSeriesCategory.set('');
-    this.formPriority.set(1);
-    this.formEnabled.set(true);
-    this.testResult.set(null);
-    this.editorDialog()?.nativeElement.showModal();
-  }
-
-  openEdit(dc: DownloadClientRow) {
-    this.editingId.set(dc.id);
-    this.formName.set(dc.name);
-    this.formType.set('qbittorrent');
-    this.formHost.set(dc.settings.host ?? 'localhost');
-    this.formPort.set(dc.settings.port ?? 8080);
-    this.formUsername.set(dc.settings.username ?? '');
-    this.formPassword.set('');
-    this.formUseSsl.set(dc.settings.useSsl ?? false);
-    this.formCategory.set(dc.settings.category ?? 'fliks');
-    this.formMovieCategory.set(dc.settings.movieCategory ?? '');
-    this.formSeriesCategory.set(dc.settings.seriesCategory ?? '');
-    this.formPriority.set(dc.priority);
-    this.formEnabled.set(dc.enabled);
-    this.testResult.set(null);
-    this.editorDialog()?.nativeElement.showModal();
-  }
-
-  closeEditor() {
-    this.editorDialog()?.nativeElement.close();
-  }
-
-  private buildBody() {
-    return {
-      name: this.formName().trim(),
-      implementation: this.formType(),
-      settings: {
-        host: this.formHost().trim(),
-        port: this.formPort(),
-        username: this.formUsername().trim() || undefined,
-        password: this.formPassword() || undefined,
-        useSsl: this.formUseSsl(),
-        category: this.formCategory().trim() || undefined,
-        movieCategory: this.formMovieCategory().trim() || undefined,
-        seriesCategory: this.formSeriesCategory().trim() || undefined,
-      },
-      priority: this.formPriority(),
-      enabled: this.formEnabled(),
-    };
-  }
-
-  async testConnection() {
-    this.testResult.set(null);
-    this.testLoading.set(true);
-    const body = {
-      implementation: this.formType(),
-      settings: {
-        host: this.formHost().trim(),
-        port: this.formPort(),
-        username: this.formUsername().trim() || undefined,
-        password: this.formPassword() || undefined,
-        useSsl: this.formUseSsl(),
-        category: this.formCategory().trim() || undefined,
-      },
-    };
-    try {
-      const r = await this.api.testConnection(body);
-      this.testResult.set(r);
-    } catch {
-      this.testResult.set({
-        ok: false,
-        message: this.translate.instant('settings.download_clients.test_error'),
-      });
-    } finally {
-      this.testLoading.set(false);
-    }
-  }
-
-  async save() {
-    const name = this.formName().trim();
-    if (!name) return;
-    this.saving.set(true);
-    const id = this.editingId();
-    try {
-      await (id == null
-        ? this.api.create(this.buildBody())
-        : this.api.update(id, this.buildBody()));
-      this.closeEditor();
-      await this.reloadAll();
-    } catch {
-      // handled by global error interceptor
-    } finally {
-      this.saving.set(false);
-    }
-  }
-
-  async deleteRow(dc: DownloadClientRow) {
-    if (
-      !await this.confirmation.confirm({
-        title: this.translate.instant('common.confirm'),
-        message: this.translate.instant('settings.download_clients.confirm_delete', {
-          name: dc.name,
+      return await firstValueFrom(
+        this.http.post<ProviderTestResult>('/api/download-clients/test-connection', {
+          implementation: draft.implementation,
+          settings: draft.settings,
         }),
-        variant: 'danger',
-      })
-    )
-      return;
-    try {
-      await this.api.remove(dc.id);
-      await this.reloadAll();
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      void this.confirmation.alert({
-        title: this.translate.instant('common.error'),
-        message: httpErr.error?.message ??
-          this.translate.instant('settings.download_clients.delete_error'),
-        variant: 'danger',
-      });
+      );
+    } catch {
+      return { ok: false, message: this.translate.instant('settings.download_clients.test_error') };
     }
-  }
+  };
 }

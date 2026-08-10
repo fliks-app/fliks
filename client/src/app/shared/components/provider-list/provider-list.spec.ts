@@ -1,0 +1,152 @@
+import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { HttpClient } from '@angular/common/http';
+import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
+import { of } from 'rxjs';
+import { vi } from 'vitest';
+import { ProviderListComponent } from './provider-list';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { ProviderImplementation, ProviderListLabels } from './provider-list.types';
+
+beforeAll(() => {
+  if (!HTMLDialogElement.prototype.showModal) {
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      this.setAttribute('open', '');
+    };
+  }
+  if (!HTMLDialogElement.prototype.close) {
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.removeAttribute('open');
+    };
+  }
+});
+
+const LABELS: ProviderListLabels = {
+  newLabelKey: 'x.new',
+  colNameKey: 'x.col_name',
+  colImplementationKey: 'x.col_impl',
+  colPriorityKey: 'x.col_priority',
+  colEnabledKey: 'x.col_enabled',
+  actionsKey: 'x.actions',
+  editKey: 'x.edit',
+  deleteKey: 'x.delete',
+  saveKey: 'x.save',
+  cancelKey: 'x.cancel',
+  createTitleKey: 'x.create',
+  editTitleKey: 'x.edit_title',
+  fieldNameKey: 'x.field_name',
+  fieldImplementationKey: 'x.field_impl',
+  fieldPriorityKey: 'x.field_priority',
+  fieldEnabledKey: 'x.field_enabled',
+  emptyKey: 'x.empty',
+  loadErrorKey: 'x.load_error',
+  confirmDeleteKey: 'x.confirm_delete',
+  deleteErrorKey: 'x.delete_error',
+};
+
+const IMPLS: ProviderImplementation[] = [
+  {
+    implementation: 'demo',
+    labelKey: 'x.impl_demo',
+    fields: [
+      { key: 'url', type: 'url', labelKey: 'x.field_url', required: true },
+      { key: 'apiKey', type: 'password', labelKey: 'x.field_api_key', secret: true },
+      { key: 'delay', type: 'number', labelKey: 'x.field_delay', default: 2, topLevel: true },
+    ],
+  },
+];
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+interface FakeHttp {
+  get: (...a: any[]) => unknown;
+  post?: (...a: any[]) => unknown;
+  put?: (...a: any[]) => unknown;
+  delete?: (...a: any[]) => unknown;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+async function createComponent(http: FakeHttp, opts: Partial<{ implementations: ProviderImplementation[] }> = {}) {
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideTranslateService({
+        lang: 'en',
+        loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+      }),
+      { provide: HttpClient, useValue: http as unknown as HttpClient },
+      { provide: ConfirmationService, useValue: { confirm: () => Promise.resolve(true), alert: () => Promise.resolve() } },
+    ],
+  });
+  const fixture = TestBed.createComponent(ProviderListComponent);
+  fixture.componentRef.setInput('titleKey', 'x.title');
+  fixture.componentRef.setInput('listUrl', '/api/x');
+  fixture.componentRef.setInput('implementations', opts.implementations ?? IMPLS);
+  fixture.componentRef.setInput('labels', LABELS);
+  fixture.detectChanges();
+  await fixture.whenStable();
+  return fixture;
+}
+
+describe('ProviderListComponent — characterisation', () => {
+  it('loads rows from the declared route', async () => {
+    const fixture = await createComponent({ get: () => of([{ id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]) });
+    expect(fixture.componentInstance.rows()).toHaveLength(1);
+  });
+
+  it('renders a translated message when the list fails', async () => {
+    const fixture = await createComponent({ get: () => { throw new Error('boom'); } });
+    expect(fixture.componentInstance.listError()).not.toBe('');
+  });
+
+  it('renders a translated message for an unknown implementation rather than a blank form', async () => {
+    const fixture = await createComponent({ get: () => of([]) });
+    expect(fixture.componentInstance.implementationLabel('ghost')).not.toBe('');
+    expect(fixture.componentInstance.implementationLabel('ghost')).not.toBe('ghost');
+  });
+
+  it('never re-sends a secret left untouched, and hoists a topLevel field out of settings', async () => {
+    const post = vi.fn((_url: string, _body: unknown) => of({}));
+    const fixture = await createComponent({ get: () => of([]), post });
+    fixture.componentInstance.openCreate();
+    fixture.componentInstance.draftName.set('New');
+    fixture.componentInstance.draftValue.update((v) => ({ ...v, url: 'http://x' }));
+
+    await fixture.componentInstance.save();
+
+    expect(post).toHaveBeenCalledTimes(1);
+    const [, body] = post.mock.calls[0] as [string, Record<string, unknown>];
+    expect(body['delay']).toBe(2);
+    expect((body['settings'] as Record<string, unknown>)['delay']).toBeUndefined();
+    expect((body['settings'] as Record<string, unknown>)['apiKey']).toBeUndefined();
+  });
+
+  it('does not save while a required field is blank', async () => {
+    const post = vi.fn((_url: string, _body: unknown) => of({}));
+    const fixture = await createComponent({ get: () => of([]), post });
+    fixture.componentInstance.openCreate();
+    fixture.componentInstance.draftName.set('New');
+    await fixture.componentInstance.save();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('runs testConnection against the draft, not a saved row', async () => {
+    const run = vi.fn(() => Promise.resolve({ ok: true, message: 'ok' }));
+    const fixture = await createComponent({ get: () => of([]) });
+    fixture.componentRef.setInput('testConnection', run);
+    fixture.detectChanges();
+    fixture.componentInstance.openCreate();
+    fixture.componentInstance.draftValue.update((v) => ({ ...v, url: 'http://x' }));
+
+    await fixture.componentInstance.runTestConnection();
+
+    expect(run).toHaveBeenCalledWith({ implementation: 'demo', settings: { url: 'http://x', apiKey: '' } });
+    expect(fixture.componentInstance.testResult()).toEqual({ ok: true, message: 'ok' });
+  });
+
+  it('deletes after confirmation and reloads', async () => {
+    const del = vi.fn(() => of(undefined));
+    const fixture = await createComponent({ get: () => of([]), delete: del });
+    await fixture.componentInstance.deleteRow({ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1 });
+    expect(del).toHaveBeenCalledWith('/api/x/7');
+  });
+});

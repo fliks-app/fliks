@@ -1,0 +1,141 @@
+<div class="flex flex-col gap-4">
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+    <h2 class="card-title text-lg">{{ titleKey() | translate }}</h2>
+    <button type="button" class="btn btn-primary btn-sm shrink-0 self-start" (click)="openCreate()">
+      {{ labels().newLabelKey | translate }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (listError()) {
+    <div role="alert" class="alert alert-error">{{ listError() }}</div>
+  } @else if (rows().length === 0) {
+    <p class="text-center py-12 text-base-content/50">{{ labels().emptyKey | translate }}</p>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table table-zebra table-sm">
+        <thead>
+          <tr>
+            <th>{{ labels().colNameKey | translate }}</th>
+            <th>{{ labels().colImplementationKey | translate }}</th>
+            @if (showPriority()) { <th class="text-end">{{ labels().colPriorityKey | translate }}</th> }
+            <th class="text-center">{{ labels().colEnabledKey | translate }}</th>
+            @if (rowExtraStatus()) { <th></th> }
+            <th class="text-end w-40">{{ labels().actionsKey | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.id) {
+            <tr>
+              <td class="font-medium">{{ row.name }}</td>
+              <td class="text-sm">{{ implementationLabel(row[implementationKey()] + '') }}</td>
+              @if (showPriority()) { <td class="text-end tabular-nums">{{ row.priority }}</td> }
+              <td class="text-center">
+                @if (row.enabled) {
+                  <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
+                } @else {
+                  <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
+                }
+              </td>
+              @if (rowExtraStatus(); as tpl) {
+                <td><ng-container *ngTemplateOutlet="tpl; context: { $implicit: row }" /></td>
+              }
+              <td class="text-end">
+                @if (rowExtraActions(); as tpl) {
+                  <ng-container *ngTemplateOutlet="tpl; context: { $implicit: row }" />
+                }
+                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(row)">
+                  {{ labels().editKey | translate }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(row)">
+                  {{ labels().deleteKey | translate }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>
+
+<dialog #editorDialog class="modal">
+  <div class="modal-box max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+    <div class="px-5 sm:px-6 pt-4 pb-3 border-b border-base-200 flex justify-between items-start gap-3 shrink-0 bg-base-100">
+      <h2 class="text-lg font-bold leading-tight">
+        {{ (editingId() === null ? labels().createTitleKey : labels().editTitleKey) | translate }}
+      </h2>
+    </div>
+    <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+      <app-input-field
+        [label]="labels().fieldNameKey | translate"
+        [value]="draftName()"
+        (valueChange)="draftName.set($event)"
+      />
+
+      @if (implementations().length > 1) {
+        <app-select-field [label]="labels().fieldImplementationKey | translate" [value]="draftImplementation()" (valueChange)="onImplementationChange($event)">
+          @for (impl of implementations(); track impl.implementation) {
+            <option [value]="impl.implementation">{{ impl.labelKey | translate }}</option>
+          }
+        </app-select-field>
+      }
+
+      @if (currentImplementation(); as impl) {
+        <app-schema-form [fields]="impl.fields" [(value)]="draftValue" />
+      } @else if (draftImplementation()) {
+        <p class="text-sm text-warning">{{ 'provider_list.unknown_implementation' | translate }}</p>
+      }
+
+      @if (testConnection()) {
+        <div class="flex flex-col gap-2 pt-2 border-t border-base-200">
+          <button
+            type="button"
+            class="btn btn-outline btn-sm w-fit"
+            (click)="runTestConnection()"
+            [disabled]="testLoading() || requiredFieldMissing()"
+          >
+            @if (testLoading()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ (labels().testConnectionKey ?? 'provider_list.test_connection') | translate }}
+          </button>
+          @if (testResult(); as tr) {
+            <div role="alert" class="alert text-sm py-2" [class.alert-success]="tr.ok" [class.alert-error]="!tr.ok">
+              {{ tr.message }}
+            </div>
+          }
+        </div>
+      }
+
+      <div class="grid grid-cols-2 gap-3">
+        @if (showPriority()) {
+          <app-input-field
+            [type]="'number'"
+            [label]="labels().fieldPriorityKey | translate"
+            [value]="draftPriority() + ''"
+            (valueChange)="draftPriority.set(+$event)"
+          />
+        }
+      </div>
+      <app-toggle-field [label]="labels().fieldEnabledKey | translate" [value]="draftEnabled()" (valueChange)="draftEnabled.set($event)" />
+    </div>
+    <div class="modal-action shrink-0 px-5 sm:px-6 pb-4 pt-2 border-t border-base-200 bg-base-100">
+      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+        {{ labels().cancelKey | translate }}
+      </button>
+      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+        @if (saving()) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
+        {{ labels().saveKey | translate }}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">close</button>
+  </form>
+</dialog>
