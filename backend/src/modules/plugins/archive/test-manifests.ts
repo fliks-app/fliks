@@ -3,7 +3,7 @@ import type { DataPluginManifest, ProcessPluginManifest } from '../../../common/
 /** Minimal, structurally-valid `data` manifest — spread `overrides` to break one field at a time. */
 export function minimalDataManifest(overrides: Partial<DataPluginManifest> = {}): DataPluginManifest {
   return {
-    id: 'fliks.test-plugin',
+    id: 'fliks.testplugin',
     pluginApi: 0,
     name: 'Test plugin',
     version: '1.0.0',
@@ -23,7 +23,7 @@ export function minimalProcessManifest(
   overrides: Partial<ProcessPluginManifest> = {},
 ): ProcessPluginManifest {
   return {
-    id: 'fliks.test-process-plugin',
+    id: 'fliks.testprocessplugin',
     pluginApi: 0,
     name: 'Test process plugin',
     version: '1.0.0',

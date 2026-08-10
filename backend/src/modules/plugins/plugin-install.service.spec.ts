@@ -6,15 +6,16 @@ import { PluginInstallService, installedPluginDir } from './plugin-install.servi
 import { PluginInstallException } from './plugin-install.exception';
 import { PluginStagingService } from './plugin-staging.service';
 import { PluginRegistryService } from './plugin-registry.service';
+import { PluginDatabaseService } from './plugin-database.service';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { PluginSource } from './entities/plugin-source.entity';
 import { buildZip, ZipEntrySpec } from './archive/zip-builder';
 import { generateTestKeypair, signManifestBase64 } from './archive/ed25519-test-keys';
-import { minimalDataManifest } from './archive/test-manifests';
-import { svgLogo } from './archive/test-fixtures';
+import { minimalDataManifest, minimalProcessManifest } from './archive/test-manifests';
+import { pngLogo, sha256Hex, svgLogo } from './archive/test-fixtures';
 import { getPluginsRuntimeDir } from '../../common/constants/paths';
 import { PLUGIN_API_VERSION } from '../../common/plugin-contract';
-import type { DataPluginManifest } from '../../common/plugin-contract';
+import type { DataPluginManifest, ProcessPluginManifest } from '../../common/plugin-contract';
 
 /** A `fliks` range every test can rely on matching this repo's own `package.json` version. */
 const COMPATIBLE_RANGE = '>=1.0.0 <3.0.0';
@@ -30,6 +31,31 @@ function signedDataArchive(overrides: Partial<DataPluginManifest> = {}): { buffe
     { name: 'logo.svg', content: svgLogo() },
   ]);
   return { buffer, manifest };
+}
+
+function signedProcessArchive(overrides: Partial<ProcessPluginManifest> = {}): { buffer: Buffer; manifest: ProcessPluginManifest } {
+  const pluginJs = Buffer.from('module.exports = {};', 'utf8');
+  const logo = pngLogo();
+  const files = { 'plugin.js': sha256Hex(pluginJs), 'logo.png': sha256Hex(logo) };
+  const manifest = minimalProcessManifest(files, { fliks: COMPATIBLE_RANGE, ...overrides });
+  const manifestBytes = Buffer.from(JSON.stringify(manifest), 'utf8');
+  const { privateKey } = generateTestKeypair();
+  const sig = signManifestBase64(privateKey, manifestBytes);
+  const buffer = buildZip([
+    { name: 'plugin.json', content: manifestBytes },
+    { name: 'plugin.json.sig', content: Buffer.from(sig, 'utf8') },
+    { name: 'plugin.js', content: pluginJs },
+    { name: 'logo.png', content: logo },
+  ]);
+  return { buffer, manifest };
+}
+
+function fakePluginDb() {
+  return {
+    provision: jest.fn(async () => undefined),
+    rotatePassword: jest.fn(async () => null),
+    deprovision: jest.fn(async () => undefined),
+  };
 }
 
 function tamperedZip(): Buffer {
@@ -108,6 +134,7 @@ describe('PluginInstallService', () => {
   let repo: ReturnType<typeof fakePackageRepo>;
   let registry: PluginRegistryService;
   let staging: PluginStagingService;
+  let pluginDb: ReturnType<typeof fakePluginDb>;
   let service: PluginInstallService;
   const originalAdapter = axios.defaults.adapter;
 
@@ -121,7 +148,8 @@ describe('PluginInstallService', () => {
     repo = fakePackageRepo();
     registry = new PluginRegistryService(repo as never);
     staging = new PluginStagingService();
-    service = new PluginInstallService(repo as never, registry, staging);
+    pluginDb = fakePluginDb();
+    service = new PluginInstallService(repo as never, registry, staging, pluginDb as unknown as PluginDatabaseService);
   });
 
   afterEach(() => {
@@ -130,7 +158,7 @@ describe('PluginInstallService', () => {
 
   describe('inspectUpload', () => {
     it('reports a valid signed data archive as installable, with its id/version/trust, and stages it', async () => {
-      const { buffer, manifest } = signedDataArchive({ id: 'fliks.inspect-happy' });
+      const { buffer, manifest } = signedDataArchive({ id: 'fliks.inspecthappy' });
 
       const report = await service.inspectUpload(buffer);
 
@@ -162,7 +190,7 @@ describe('PluginInstallService', () => {
 
   describe('confirmImport', () => {
     it('refuses with a distinct conflict code when the claimed hash no longer matches the staged bytes', async () => {
-      const { buffer } = signedDataArchive({ id: 'fliks.confirm-stale' });
+      const { buffer } = signedDataArchive({ id: 'fliks.confirmstale' });
       const { stagingId } = await service.inspectUpload(buffer);
 
       await expectInstallError(
@@ -181,7 +209,7 @@ describe('PluginInstallService', () => {
     });
 
     it('re-runs the guards against a fresh read: a directory modified after inspect is caught even when the claimed hash matches the tampered bytes', async () => {
-      const { buffer } = signedDataArchive({ id: 'fliks.confirm-tamper' });
+      const { buffer } = signedDataArchive({ id: 'fliks.confirmtamper' });
       const { stagingId } = await service.inspectUpload(buffer);
 
       const tampered = tamperedZip();
@@ -198,7 +226,7 @@ describe('PluginInstallService', () => {
     });
 
     it('promotes on success: a plugin_packages row exists and the registry has the plugin', async () => {
-      const { buffer, manifest } = signedDataArchive({ id: 'fliks.confirm-promote' });
+      const { buffer, manifest } = signedDataArchive({ id: 'fliks.confirmpromote' });
       const { stagingId, sha256 } = await service.inspectUpload(buffer);
 
       const result = await service.confirmImport({ stagingId: stagingId!, sha256: sha256! });
@@ -210,7 +238,7 @@ describe('PluginInstallService', () => {
     });
 
     it('discards the staging directory after a successful confirm', async () => {
-      const { buffer } = signedDataArchive({ id: 'fliks.confirm-discard' });
+      const { buffer } = signedDataArchive({ id: 'fliks.confirmdiscard' });
       const { stagingId, sha256 } = await service.inspectUpload(buffer);
 
       await service.confirmImport({ stagingId: stagingId!, sha256: sha256! });
@@ -219,7 +247,7 @@ describe('PluginInstallService', () => {
     });
 
     it('leaves a failed activation standing: the row is present with its reason, and nothing is registered', async () => {
-      const { buffer, manifest } = signedDataArchive({ id: 'fliks.confirm-incompatible', fliks: '>=99.0.0' });
+      const { buffer, manifest } = signedDataArchive({ id: 'fliks.confirmincompatible', fliks: '>=99.0.0' });
       const { stagingId, sha256 } = await service.inspectUpload(buffer);
 
       const result = await service.confirmImport({ stagingId: stagingId!, sha256: sha256! });
@@ -249,12 +277,12 @@ describe('PluginInstallService', () => {
 
   describe('inspectFromCatalog', () => {
     it('refuses before any guard runs when the fetched archive disagrees with the signed catalog checksum', async () => {
-      const { buffer } = signedDataArchive({ id: 'fliks.catalog-mismatch' });
+      const { buffer } = signedDataArchive({ id: 'fliks.catalogmismatch' });
       axios.defaults.adapter = adapterFor({ 'plugin.zip': buffer });
       const source = fakeSource({
         plugins: [
           {
-            id: 'fliks.catalog-mismatch',
+            id: 'fliks.catalogmismatch',
             installable: [
               {
                 version: '1.0.0',
@@ -269,14 +297,14 @@ describe('PluginInstallService', () => {
       });
 
       await expectInstallError(
-        service.inspectFromCatalog(source, 'fliks.catalog-mismatch', '1.0.0'),
+        service.inspectFromCatalog(source, 'fliks.catalogmismatch', '1.0.0'),
         422,
         'PLUGIN_CHECKSUM_MISMATCH',
       );
     });
 
     it('stages, but does not promote, a version whose checksum matches the signed catalog entry', async () => {
-      const { buffer, manifest } = signedDataArchive({ id: 'fliks.catalog-happy', version: '2.0.0' });
+      const { buffer, manifest } = signedDataArchive({ id: 'fliks.cataloghappy', version: '2.0.0' });
       const sha256 = createHash('sha256').update(buffer).digest('hex');
       axios.defaults.adapter = adapterFor({ 'plugin.zip': buffer });
       const source = fakeSource({
@@ -310,7 +338,7 @@ describe('PluginInstallService', () => {
     });
 
     it('the two-step flow (inspect then confirm) promotes exactly once, recording the catalog origin', async () => {
-      const { buffer, manifest } = signedDataArchive({ id: 'fliks.catalog-two-step' });
+      const { buffer, manifest } = signedDataArchive({ id: 'fliks.catalogtwostep' });
       const sha256 = createHash('sha256').update(buffer).digest('hex');
       axios.defaults.adapter = adapterFor({ 'plugin.zip': buffer });
       const source = fakeSource({
@@ -336,9 +364,35 @@ describe('PluginInstallService', () => {
     });
   });
 
+  describe('process-tier database provisioning', () => {
+    it('provisions before promoting; registration still fails for lack of a supervisor', async () => {
+      const { buffer, manifest } = signedProcessArchive({ id: 'fliks.provisionhappy' });
+      const { stagingId, sha256 } = await service.inspectUpload(buffer);
+
+      const result = await service.confirmImport({ stagingId: stagingId!, sha256: sha256! });
+
+      expect(pluginDb.provision).toHaveBeenCalledWith(expect.objectContaining({ id: manifest.id }));
+      expect(result).toEqual(
+        expect.objectContaining({ pluginId: manifest.id, version: manifest.version, status: 'failed', reason: 'unsupported-tier' }),
+      );
+      expect(existsSync(installedPluginDir(manifest.id, manifest.version))).toBe(true);
+    });
+
+    it('purges the staged extraction and never promotes when provisioning fails', async () => {
+      const { buffer, manifest } = signedProcessArchive({ id: 'fliks.provisionfails' });
+      const { stagingId, sha256 } = await service.inspectUpload(buffer);
+      pluginDb.provision.mockRejectedValueOnce(new Error('db unreachable'));
+
+      await expect(service.confirmImport({ stagingId: stagingId!, sha256: sha256! })).rejects.toThrow('db unreachable');
+
+      expect(existsSync(installedPluginDir(manifest.id, manifest.version))).toBe(false);
+      expect(repo.rows.has(manifest.id)).toBe(false);
+    });
+  });
+
   describe('uninstall', () => {
     it('removes the row, the registry entry and the directory; calling it twice is not an error', async () => {
-      const { buffer, manifest } = signedDataArchive({ id: 'fliks.uninstall-me' });
+      const { buffer, manifest } = signedDataArchive({ id: 'fliks.uninstallme' });
       const { stagingId, sha256 } = await service.inspectUpload(buffer);
       await service.confirmImport({ stagingId: stagingId!, sha256: sha256! });
       expect(registry.get(manifest.id)).toBeDefined();
@@ -352,19 +406,34 @@ describe('PluginInstallService', () => {
       await expect(service.uninstall(manifest.id)).resolves.toBeUndefined();
     });
 
+    it('deprovisions a process-tier package before removing its row; skips it for a data-tier one', async () => {
+      const { buffer: procBuf, manifest: procManifest } = signedProcessArchive({ id: 'fliks.uninstallprocess' });
+      const procStage = await service.inspectUpload(procBuf);
+      await service.confirmImport({ stagingId: procStage.stagingId!, sha256: procStage.sha256! });
+      const { buffer: dataBuf, manifest: dataManifest } = signedDataArchive({ id: 'fliks.uninstalldata' });
+      const dataStage = await service.inspectUpload(dataBuf);
+      await service.confirmImport({ stagingId: dataStage.stagingId!, sha256: dataStage.sha256! });
+
+      await service.uninstall(procManifest.id);
+      await service.uninstall(dataManifest.id);
+
+      expect(pluginDb.deprovision).toHaveBeenCalledTimes(1);
+      expect(pluginDb.deprovision).toHaveBeenCalledWith(procManifest.id);
+    });
+
     it('is safe for a plugin whose row and files never existed', async () => {
-      await expect(service.uninstall('fliks.never-installed')).resolves.toBeUndefined();
+      await expect(service.uninstall('fliks.neverinstalled')).resolves.toBeUndefined();
     });
   });
 
   describe('listInstalled', () => {
     it('lists every row regardless of status, with the failed one carrying its reason', async () => {
-      const { buffer: activeBuf, manifest: activeManifest } = signedDataArchive({ id: 'fliks.list-active' });
+      const { buffer: activeBuf, manifest: activeManifest } = signedDataArchive({ id: 'fliks.listactive' });
       const activeStage = await service.inspectUpload(activeBuf);
       await service.confirmImport({ stagingId: activeStage.stagingId!, sha256: activeStage.sha256! });
 
       const { buffer: failedBuf, manifest: failedManifest } = signedDataArchive({
-        id: 'fliks.list-failed',
+        id: 'fliks.listfailed',
         fliks: '>=99.0.0',
       });
       const failedStage = await service.inspectUpload(failedBuf);

@@ -9,3 +9,14 @@ export const FLIKS_PLUGINS_DISABLED_ENV = 'FLIKS_PLUGINS_DISABLED';
 export function arePluginsDisabled(): boolean {
   return process.env[FLIKS_PLUGINS_DISABLED_ENV] === '1';
 }
+
+/** The only way a `process` plugin may ship unsigned — for local development against the production signing key. */
+export const FLIKS_UNSIGNED_PLUGINS_ENV = 'FLIKS_UNSIGNED_PLUGINS';
+
+/** Comma-separated `FLIKS_UNSIGNED_PLUGINS` ids, trimmed, empties dropped. */
+export function unsignedProcessAllowlist(): string[] {
+  return (process.env[FLIKS_UNSIGNED_PLUGINS_ENV] ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
+}

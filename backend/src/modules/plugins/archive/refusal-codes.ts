@@ -29,6 +29,10 @@ export type PluginRefusalCode =
   | 'PLUGIN_FILE_SET_MISMATCH'
   | 'PLUGIN_TIER_VIOLATION'
   | 'PLUGIN_BAD_MANIFEST'
+  /** `id`/`version` are SQL identifiers and filesystem path segments downstream —
+   *  validated once here so every later consumer can trust them unchecked. */
+  | 'PLUGIN_BAD_ID'
+  | 'PLUGIN_BAD_VERSION'
   | 'PLUGIN_BAD_LOGO'
   /** `data`-tier manifest field bans (see `PluginManifestBase` deltas) — each
    *  names the process-only field it caught, so a refusal is attributable. */

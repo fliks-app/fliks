@@ -307,6 +307,24 @@ describe('inspect() — guards', () => {
     await expectRefusal(buffer, 'PLUGIN_BAD_SIGNATURE');
   });
 
+  it('PLUGIN_BAD_ID: an id the published catalog schema would also refuse', async () => {
+    const manifest = minimalDataManifest({ id: 'fliks.Test-Plugin' });
+    const buffer = buildZip([{ name: 'plugin.json', content: Buffer.from(JSON.stringify(manifest)) }]);
+    await expectRefusal(buffer, 'PLUGIN_BAD_ID');
+  });
+
+  it('PLUGIN_BAD_ID: an id past the 56-char cap', async () => {
+    const manifest = minimalDataManifest({ id: `fliks.${'a'.repeat(56)}` });
+    const buffer = buildZip([{ name: 'plugin.json', content: Buffer.from(JSON.stringify(manifest)) }]);
+    await expectRefusal(buffer, 'PLUGIN_BAD_ID');
+  });
+
+  it('PLUGIN_BAD_VERSION: a version that is not valid semver', async () => {
+    const manifest = minimalDataManifest({ version: 'not-a-version' });
+    const buffer = buildZip([{ name: 'plugin.json', content: Buffer.from(JSON.stringify(manifest)) }]);
+    await expectRefusal(buffer, 'PLUGIN_BAD_VERSION');
+  });
+
   it('PLUGIN_UNSIGNED: a process-tier archive with no plugin.json.sig entry', async () => {
     const pluginJs = Buffer.from('module.exports = {};');
     const logo = pngLogo();
@@ -317,6 +335,41 @@ describe('inspect() — guards', () => {
       { name: 'logo.png', content: logo },
     ]);
     await expectRefusal(buffer, 'PLUGIN_UNSIGNED');
+  });
+
+  it('unsignedProcessAllowlist: an unsigned process archive is accepted when its id is on the list', async () => {
+    const pluginJs = Buffer.from('module.exports = {};');
+    const logo = pngLogo();
+    const manifest = minimalProcessManifest(
+      { 'plugin.js': sha256Hex(pluginJs), 'logo.png': sha256Hex(logo) },
+      { id: 'fliks.allowedunsigned' },
+    );
+    const buffer = buildZip([
+      { name: 'plugin.json', content: Buffer.from(JSON.stringify(manifest)) },
+      { name: 'plugin.js', content: pluginJs },
+      { name: 'logo.png', content: logo },
+    ]);
+
+    const result = await inspect(buffer, { unsignedProcessAllowlist: ['fliks.allowedunsigned'] });
+    expect(result.ok).toBe(true);
+  });
+
+  it('unsignedProcessAllowlist: an unsigned process archive is still refused when its id is not on the list', async () => {
+    const pluginJs = Buffer.from('module.exports = {};');
+    const logo = pngLogo();
+    const manifest = minimalProcessManifest(
+      { 'plugin.js': sha256Hex(pluginJs), 'logo.png': sha256Hex(logo) },
+      { id: 'fliks.notallowed' },
+    );
+    const buffer = buildZip([
+      { name: 'plugin.json', content: Buffer.from(JSON.stringify(manifest)) },
+      { name: 'plugin.js', content: pluginJs },
+      { name: 'logo.png', content: logo },
+    ]);
+
+    const result = await inspect(buffer, { unsignedProcessAllowlist: ['fliks.allowedunsigned'] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('PLUGIN_UNSIGNED');
   });
 
   it('PLUGIN_TIER_VIOLATION: a data-tier archive carrying plugin.js', async () => {
