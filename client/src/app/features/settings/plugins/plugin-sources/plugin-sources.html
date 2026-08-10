@@ -44,9 +44,9 @@
                 <td class="max-w-[20rem] truncate text-sm" [title]="source.url">{{ source.url }}</td>
                 <td>
                   @if (source.hasPinnedKey) {
-                    <span class="badge badge-ghost badge-sm">{{ 'settings.plugins.sources.pinned_key' | translate }}</span>
+                    <span class="badge badge-ghost badge-sm whitespace-nowrap">{{ 'settings.plugins.sources.pinned_key' | translate }}</span>
                   } @else {
-                    <span class="badge badge-ghost badge-sm">{{ 'settings.plugins.sources.official_key' | translate }}</span>
+                    <span class="badge badge-ghost badge-sm whitespace-nowrap">{{ 'settings.plugins.sources.official_key' | translate }}</span>
                   }
                 </td>
                 <td class="text-sm">{{ source.pluginCount }}</td>
