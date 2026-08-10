@@ -2261,7 +2261,7 @@
     "plugins": {
       "title": "Plugins",
       "subtitle": "Installa plugin per ampliare ciò che Fliks può fare.",
-      "upload": "Install plugin…",
+      "upload": "Installa da uno zip…",
       "load_error": "Unable to load the plugin list.",
       "empty": "No plugin installed.",
       "col_plugin": "Plugin",
