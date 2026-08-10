@@ -13,19 +13,8 @@ describe('validateDataTierManifest()', () => {
     expect(validateDataTierManifest(minimalDataManifest()).ok).toBe(true);
   });
 
-  it('accepts a data manifest using provides.* and events[].webhook', () => {
+  it('accepts a data manifest using events[].webhook', () => {
     const manifest = minimalDataManifest({
-      provides: {
-        indexers: [
-          {
-            key: 'example',
-            name: 'Example Tracker',
-            driverApi: 'torznab',
-            endpoint: 'https://tracker.invalid/api',
-            settings: [],
-          },
-        ],
-      },
       events: [
         { event: 'media.imported', webhook: 'https://example.invalid/hook' },
       ],

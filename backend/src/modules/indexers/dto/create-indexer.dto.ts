@@ -11,8 +11,7 @@ export class CreateIndexerDto {
   @IsString()
   name: string;
 
-  /** `"torznab"` or a plugin-namespaced descriptor id — checked against the
-   *  registry in `IndexersService.assertKnownImplementation`, not here. */
+  /** Checked against the known implementations in `IndexersService.assertKnownImplementation`, not here. */
   @IsString()
   implementation: string;
 

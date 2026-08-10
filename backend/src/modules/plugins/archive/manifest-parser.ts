@@ -18,7 +18,6 @@ export const BASE_KEYS = new Set([
   'license',
   'logo',
   'homepage',
-  'provides',
   'ui',
   'events',
   'i18n',

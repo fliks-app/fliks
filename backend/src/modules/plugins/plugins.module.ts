@@ -13,7 +13,6 @@ import { PluginStagingService } from './plugin-staging.service';
 import { PluginInstallService } from './plugin-install.service';
 import { PluginDatabaseService } from './plugin-database.service';
 import { PluginLogoController } from './plugin-logo.controller';
-import { PluginIndexerDescriptorsController } from './plugin-indexer-descriptors.controller';
 import { PluginSourcesController } from './plugin-sources.controller';
 import { PluginImportController } from './plugin-import.controller';
 import { PluginsController } from './plugins.controller';
@@ -38,7 +37,6 @@ import { LibrariesModule } from '../libraries/libraries.module';
   ],
   controllers: [
     PluginLogoController,
-    PluginIndexerDescriptorsController,
     PluginSourcesController,
     PluginImportController,
     PluginsController,

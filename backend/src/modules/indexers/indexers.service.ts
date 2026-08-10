@@ -11,19 +11,11 @@ import { UpdateIndexerDto } from './dto/update-indexer.dto';
 import { TorznabService } from './torznab.service';
 import { IndexerThrottle } from './indexer-throttle.service';
 import { TestIndexerConnectionDto } from './dto/test-indexer-connection.dto';
-import { PluginRegistryService } from '../plugins/plugin-registry.service';
 
 /** Strips the stored API key so it never reaches an HTTP response. */
-/** Strip credentials before an indexer leaves the API. `apiKey` is the wire
- *  credential for every driver; a descriptor may name further secret fields,
- *  and those are only knowable from the plugin that declared them. */
-export function redactApiKey(
-  ix: Indexer,
-  extraSecretKeys: readonly string[] = [],
-): Indexer {
+export function redactApiKey(ix: Indexer): Indexer {
   const settings = { ...((ix.settings ?? {}) as Record<string, unknown>) };
   delete settings.apiKey;
-  for (const key of extraSecretKeys) delete settings[key];
   return { ...ix, settings };
 }
 
@@ -45,33 +37,22 @@ export class IndexersService {
     private readonly indexerRepo: Repository<Indexer>,
     private readonly torznab: TorznabService,
     private readonly throttle: IndexerThrottle,
-    private readonly pluginRegistry: PluginRegistryService,
   ) {}
 
-  /**
-   * `implementation` is either the legacy free-form `"torznab"` value or a
-   * plugin-namespaced descriptor id — checked against the registry here
-   * (not a `class-validator` decorator) because the check needs live plugin
-   * state. Throws, naming the value, when neither matches.
-   */
+  /** `"torznab"` is the only implementation core knows how to run. Throws, naming
+   *  the value, otherwise — not a `class-validator` decorator, so update() can
+   *  reuse it too. */
   private assertKnownImplementation(implementation: string): void {
-    if (implementation === 'torznab') return;
-    if (this.pluginRegistry.getIndexerDescriptor(implementation)) return;
-    throw new BadRequestException(
-      `Unknown indexer implementation "${implementation}"`,
-    );
+    if (implementation !== 'torznab') {
+      throw new BadRequestException(
+        `Unknown indexer implementation "${implementation}"`,
+      );
+    }
   }
 
   async testConnection(
     dto: TestIndexerConnectionDto,
   ): Promise<{ ok: boolean; message: string }> {
-    const apiKey = String(dto.settings?.apiKey ?? '').trim();
-    const descriptor = this.pluginRegistry.getIndexerDescriptor(
-      dto.implementation,
-    );
-    if (descriptor) {
-      return this.torznab.testConnection(descriptor.endpoint, apiKey);
-    }
     if (dto.implementation !== 'torznab') {
       return {
         ok: false,
@@ -79,6 +60,7 @@ export class IndexersService {
       };
     }
     const baseUrl = String(dto.settings?.baseUrl ?? '').trim();
+    const apiKey = String(dto.settings?.apiKey ?? '').trim();
     return this.torznab.testConnection(baseUrl, apiKey);
   }
 
@@ -113,18 +95,8 @@ export class IndexersService {
     return this.redact(saved);
   }
 
-  /** Redaction that also covers a descriptor's own `secret` fields. Public so
-   *  no caller has to remember the registry lookup and reach for the bare
-   *  helper instead. */
   redact(ix: Indexer): Indexer {
-    return redactApiKey(ix, this.descriptorSecretKeys(ix.implementation));
-  }
-
-  private descriptorSecretKeys(implementation: string): string[] {
-    const descriptor = this.pluginRegistry.getIndexerDescriptor(implementation);
-    return (descriptor?.settings ?? [])
-      .filter((f) => f.secret)
-      .map((f) => f.key);
+    return redactApiKey(ix);
   }
 
   async findAll(): Promise<IndexerWithCooldown[]> {
