@@ -15,6 +15,7 @@ import { SchedulerService } from './scheduler.service';
 import { CompletionService } from './completion.service';
 import { TorrentAutoMatcher } from '../../plugins/download/torrent-auto-matcher.service';
 import { AutoGrabExecutorService } from '../../plugins/download/auto-grab-pipeline.service';
+import { AcquisitionSchedulerService } from '../../plugins/download/acquisition-scheduler.service';
 import { AcquisitionEventsService } from './acquisition-events.service';
 import { NamingService } from './naming.service';
 import { BackupService } from './backup.service';
@@ -100,6 +101,7 @@ import { PluginsModule } from '../plugins/plugins.module';
     SubtitleSchedulerService,
     TorrentAutoMatcher,
     AutoGrabExecutorService,
+    AcquisitionSchedulerService,
   ],
   exports: [
     SchedulerService,
