@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as net from 'net';
 import * as semver from 'semver';
+import { pathToRegexp, type Keys } from 'path-to-regexp';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { PluginRegistration } from './entities/plugin-registration.entity';
 import { PluginProcessService } from './plugin-process.service';
@@ -19,10 +20,14 @@ import {
   type ProcessPluginManifest,
   type IndexerDescriptor,
   type PluginWebhookEventName,
+  type PluginRoute,
 } from '../../common/plugin-contract';
 import { OFFICIAL_KEYS, resolveTrust, readArchiveEntries, type TrustOutcome } from './archive';
 import { isInternalAddress } from './internal-address';
 import type { DomainEvent } from '../scheduler/events.service';
+import { PluginRouteTable, type ResolvedPluginRoute } from './proxy/plugin-route-table';
+import { parseDeclaredPolicy } from './proxy/policy-vocabulary';
+import { parseObjectGuard } from './proxy/plugin-object-guards.service';
 
 const WEBHOOK_EVENT_NAMES: ReadonlySet<string> = new Set(PLUGIN_WEBHOOK_EVENT_NAMES);
 
@@ -43,6 +48,9 @@ export { CURRENT_FLIKS_VERSION };
 
 /** The only `driverApi` core knows how to run a search through today. */
 const SUPPORTED_INDEXER_DRIVER_APIS: ReadonlySet<string> = new Set(['torznab']);
+
+/** A manifest route's `method` must be one of these, compared case-insensitively. */
+const KNOWN_HTTP_METHODS: ReadonlySet<string> = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
 
 function isAbsoluteHttpUrl(value: string): boolean {
   try {
@@ -76,10 +84,27 @@ export type PluginRegistrationFailureReason =
   | 'invalid-webhook-url'
   | 'insecure-webhook-scheme'
   | 'internal-webhook-host'
+  | 'invalid-route-method'
+  | 'invalid-route-path'
+  | 'invalid-route-policy'
+  | 'invalid-route-object-guard'
+  | 'duplicate-route'
   | 'disabled'
   | 'tampered'
   | 'db-provision-failed'
   | 'spawn-failed';
+
+/**
+ * Failures where the plugin is installed and its manifest is sound — only its process
+ * isn't up. Its declared routes stay resolvable so they answer 503 rather than 403,
+ * which is the difference between "unavailable" and "you may not".
+ */
+const INSTALLED_BUT_NOT_RUNNING: ReadonlySet<PluginRegistrationFailureReason> = new Set([
+  'disabled',
+  'tampered',
+  'db-provision-failed',
+  'spawn-failed',
+]);
 
 export interface PluginRegistrationSuccess {
   ok: true;
@@ -109,6 +134,8 @@ export class PluginRegistryService implements OnModuleInit {
   /** Keyed by plugin id; entries are already validated (URL, scheme, event name) — the
    *  dispatcher trusts this without re-checking any of that. */
   private readonly webhookDeclarations = new Map<string, { event: PluginWebhookEventName; webhook: string }[]>();
+  /** Keyed by plugin id; compiled once per `register()` from already-validated routes. */
+  private readonly routeTables = new Map<string, PluginRouteTable>();
 
   constructor(
     @InjectRepository(PluginPackage)
@@ -174,6 +201,13 @@ export class PluginRegistryService implements OnModuleInit {
     if (!webhookCheck.ok) return this.fail(pkg.pluginId, webhookCheck.reason, webhookCheck.detail);
 
     if (manifest.kind === 'process') {
+      const routesCheck = this.validateRoutes(manifest.routes);
+      if (!routesCheck.ok) return this.fail(pkg.pluginId, routesCheck.reason, routesCheck.detail);
+
+      // Installed before running: what a plugin declares stays true while its process is
+      // down, so a request to one of its routes can answer 503 instead of a bare Forbidden.
+      this.replaceRouteTable(pkg.pluginId, manifest.routes);
+
       const activation = await this.activateProcess(pkg, manifest);
       if (!activation.ok) return activation;
     }
@@ -189,9 +223,18 @@ export class PluginRegistryService implements OnModuleInit {
     });
     this.replaceIndexerDescriptors(pkg.pluginId, descriptorCheck.descriptors);
     this.replaceWebhookDeclarations(pkg.pluginId, manifest.kind === 'data' ? webhookCheck.declarations : []);
+    this.replaceRouteTable(pkg.pluginId, manifest.kind === 'process' ? manifest.routes : []);
     return { ok: true, pluginId: pkg.pluginId };
   }
 
+  /** Uninstall: nothing the plugin declared is true any more, its routes included. */
+  async forget(pluginId: string): Promise<void> {
+    await this.unregister(pluginId);
+    this.replaceRouteTable(pluginId, []);
+  }
+
+  /** Withdraws what the plugin offers and stops its process, but keeps its declared routes:
+   *  a stopped plugin is unavailable, not forbidden. */
   async unregister(pluginId: string): Promise<void> {
     await this.processService.stopFor(pluginId);
     this.registry.delete(pluginId);
@@ -277,6 +320,12 @@ export class PluginRegistryService implements OnModuleInit {
     }));
   }
 
+  /** The declared route matching this method+path for a registered `process` plugin, or
+   *  `null` — no table (unregistered / `data` kind) and no match both refuse identically. */
+  resolveRoute(pluginId: string, method: string, path: string): ResolvedPluginRoute | null {
+    return this.routeTables.get(pluginId)?.resolve(method, path) ?? null;
+  }
+
   /** Every registered webhook subscribed to `eventType` — the dispatcher's fan-out list. */
   listWebhooksForEvent(eventType: string): { pluginId: string; webhook: string }[] {
     const out: { pluginId: string; webhook: string }[] = [];
@@ -302,6 +351,12 @@ export class PluginRegistryService implements OnModuleInit {
     for (const descriptor of descriptors) {
       this.indexerDescriptors.set(buildIndexerImplementationId(pluginId, descriptor.key), { pluginId, descriptor });
     }
+  }
+
+  /** Drops this plugin's previous route table (if any) and compiles `routes` into a fresh one. */
+  private replaceRouteTable(pluginId: string, routes: PluginRoute[]): void {
+    if (routes.length === 0) this.routeTables.delete(pluginId);
+    else this.routeTables.set(pluginId, new PluginRouteTable(routes));
   }
 
   /**
@@ -395,11 +450,53 @@ export class PluginRegistryService implements OnModuleInit {
     return { ok: true, declarations };
   }
 
+  /** The deep, semantic route check `manifest-parser.ts` defers (its field-type check already ran). */
+  private validateRoutes(
+    routes: PluginRoute[],
+  ): { ok: true } | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
+    const seen = new Set<string>();
+    for (const route of routes) {
+      const method = route.method.toUpperCase();
+      if (!KNOWN_HTTP_METHODS.has(method)) {
+        return { ok: false, reason: 'invalid-route-method', detail: `route method "${route.method}" is not a known HTTP verb` };
+      }
+      if (!route.path.startsWith('/')) {
+        return { ok: false, reason: 'invalid-route-path', detail: `route path "${route.path}" must start with "/"` };
+      }
+      let keys: Keys;
+      try {
+        keys = pathToRegexp(route.path).keys;
+      } catch (err) {
+        return { ok: false, reason: 'invalid-route-path', detail: `route path "${route.path}" is invalid: ${(err as Error).message}` };
+      }
+      if (!parseDeclaredPolicy(route.policy)) {
+        return { ok: false, reason: 'invalid-route-policy', detail: `route policy "${route.policy}" is not a recognised action:subject pair` };
+      }
+      if (route.objectGuard !== undefined) {
+        const parsedGuard = parseObjectGuard(route.objectGuard);
+        if (!parsedGuard || !keys.some((k) => k.name === parsedGuard.paramName)) {
+          return {
+            ok: false,
+            reason: 'invalid-route-object-guard',
+            detail: `route objectGuard "${route.objectGuard}" on path "${route.path}" does not resolve to a known guard and param`,
+          };
+        }
+      }
+      const dedupeKey = `${method} ${route.path}`;
+      if (seen.has(dedupeKey)) {
+        return { ok: false, reason: 'duplicate-route', detail: `duplicate route "${dedupeKey}"` };
+      }
+      seen.add(dedupeKey);
+    }
+    return { ok: true };
+  }
+
   /** Every failure path funnels here, so a failing re-registration can never leave a stale entry active. */
   private fail(pluginId: string, reason: PluginRegistrationFailureReason, detail: string): PluginRegistrationFailure {
     this.registry.delete(pluginId);
     this.replaceIndexerDescriptors(pluginId, []);
     this.replaceWebhookDeclarations(pluginId, []);
+    if (!INSTALLED_BUT_NOT_RUNNING.has(reason)) this.replaceRouteTable(pluginId, []);
     return { ok: false, pluginId, reason, detail };
   }
 

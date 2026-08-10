@@ -200,7 +200,7 @@ export class PluginInstallService {
 
   /** Safe to call for a plugin whose row, registry entry or directory is already gone. */
   async uninstall(pluginId: string): Promise<void> {
-    await this.registry.unregister(pluginId);
+    await this.registry.forget(pluginId);
     const pkg = await this.packageRepo.findOne({ where: { pluginId } });
     if (!pkg) return;
     if (pkg.manifest.kind === 'process') {

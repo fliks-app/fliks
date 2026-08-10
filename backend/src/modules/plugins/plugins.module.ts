@@ -16,10 +16,14 @@ import { PluginIndexerDescriptorsController } from './plugin-indexer-descriptors
 import { PluginSourcesController } from './plugin-sources.controller';
 import { PluginImportController } from './plugin-import.controller';
 import { PluginsController } from './plugins.controller';
+import { PluginObjectGuardsService } from './proxy/plugin-object-guards.service';
+import { PluginRouteGuard } from './proxy/plugin-route.guard';
+import { PluginProxyController } from './proxy/plugin-proxy.controller';
 import { AuthModule } from '../auth/auth.module';
 import { EventsModule } from '../scheduler/events.module';
 import { LogBufferModule } from '../scheduler/log-buffer.module';
 import { SettingsModule } from '../settings/settings.module';
+import { LibrariesModule } from '../libraries/libraries.module';
 
 @Module({
   imports: [
@@ -28,6 +32,7 @@ import { SettingsModule } from '../settings/settings.module';
     EventsModule,
     LogBufferModule,
     SettingsModule,
+    LibrariesModule,
   ],
   controllers: [
     PluginLogoController,
@@ -35,6 +40,8 @@ import { SettingsModule } from '../settings/settings.module';
     PluginSourcesController,
     PluginImportController,
     PluginsController,
+    // Last: its `*splat` wildcard must never shadow the concrete routes above.
+    PluginProxyController,
   ],
   providers: [
     PluginRegistryService,
@@ -45,6 +52,8 @@ import { SettingsModule } from '../settings/settings.module';
     PluginStagingService,
     PluginInstallService,
     PluginDatabaseService,
+    PluginObjectGuardsService,
+    PluginRouteGuard,
   ],
   exports: [TypeOrmModule, PluginRegistryService, PluginDatabaseService],
 })
