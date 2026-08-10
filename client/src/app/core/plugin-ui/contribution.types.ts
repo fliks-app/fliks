@@ -69,9 +69,43 @@ export interface FieldDef {
 }
 
 /** One `ui.configPages[]` entry — a form-backed settings page under `plugin.<id>.`. */
-export interface ConfigPage {
+/**
+ * A page a plugin contributes, discriminated on `kind`. `form` is the default and the only
+ * one that works with the process stopped; `providers` and `table` read the plugin's own
+ * routes and therefore need it running.
+ */
+export type ConfigPage = FormConfigPage | ProvidersConfigPage | TableConfigPage;
+
+interface ConfigPageBase {
   id: string;
   labelKey: string;
   icon?: string;
+}
+
+/** Rendered by `<app-schema-form>` over `app_settings`; omitting `kind` means this one. */
+export interface FormConfigPage extends ConfigPageBase {
+  kind?: 'form';
   fields: FieldDef[];
+}
+
+/** One proxied route lists instances, another lists the implementations and their fields. */
+export interface ProvidersConfigPage extends ConfigPageBase {
+  kind: 'providers';
+  list: string;
+  implementations: string;
+  actions?: { id: string; labelKey: string; route: string; scope: 'row' | 'list' }[];
+  reorderable?: boolean;
+}
+
+/** Read-mostly: declared columns and declared row actions, never a general grid. */
+export interface TableConfigPage extends ConfigPageBase {
+  kind: 'table';
+  list: string;
+  columns: { key: string; labelKey: string }[];
+  rowActions?: (
+    | { kind: 'route'; labelKey: string; path: string }
+    | { kind: 'action'; labelKey: string; actionId: string }
+    | { kind: 'proxy'; labelKey: string; method: 'POST' | 'DELETE'; path: string; confirmKey?: string }
+  )[];
+  defaultSortKey?: string;
 }

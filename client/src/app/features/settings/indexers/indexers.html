@@ -1,406 +1,144 @@
 <div class="flex flex-col gap-6">
   <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-    <div>
-      <h1 class="text-2xl font-bold">{{ 'settings.indexers.title' | translate }}</h1>
-      <p class="text-sm text-base-content/60 mt-1">
-        {{ 'settings.indexers.subtitle' | translate }}
-      </p>
+    <p class="text-sm text-base-content/60">{{ 'settings.indexers.subtitle' | translate }}</p>
+    @if (hasCooldowns(pl.rows())) {
+      <button type="button" class="btn btn-ghost self-start sm:self-auto" [disabled]="resettingCooldown()" (click)="resetAllCooldowns()">
+        @if (resettingCooldown()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ 'settings.indexers.cooldown_reset_all' | translate: { count: cooledDownCount(pl.rows()) } }}
+      </button>
+    }
+  </div>
+
+  <app-provider-list
+    #pl
+    titleKey="settings.indexers.title"
+    [listUrl]="listUrl"
+    [implementations]="implementations()"
+    [labels]="labels"
+    [defaultPriority]="25"
+    [testConnection]="testConnection"
+    [beforeSave]="beforeSave"
+    [rowExtraStatus]="cooldownStatusTpl"
+    [rowExtraActions]="rowActionsTpl"
+  />
+
+  <ng-template #cooldownStatusTpl let-ix>
+    @if (isCooledDown(ix)) {
+      <button
+        type="button"
+        class="badge badge-warning badge-sm gap-1 tabular-nums"
+        (click)="openCooldown(ix)"
+        [attr.title]="'settings.indexers.cooldown_badge_title' | translate"
+      >
+        <svg lucideSnowflake class="h-3 w-3" aria-hidden="true"></svg>
+        {{ cooldownRemaining(ix) }}
+      </button>
+    } @else {
+      <span class="text-base-content/30">—</span>
+    }
+  </ng-template>
+
+  <ng-template #rowActionsTpl let-ix>
+    @if (isCooledDown(ix)) {
+      <button type="button" class="btn btn-ghost btn-xs text-warning" [disabled]="resettingCooldown()" (click)="resetCooldown(ix)">
+        {{ 'settings.indexers.cooldown_reset' | translate }}
+      </button>
+    }
+    <button type="button" class="btn btn-ghost btn-xs" (click)="openStats(ix)">
+      {{ 'settings.indexers.stats' | translate }}
+    </button>
+  </ng-template>
+</div>
+
+<dialog #statsDialog class="modal">
+  <div class="modal-box max-w-2xl">
+    <h2 class="text-lg font-bold">{{ statsIndexerName() }} — {{ 'settings.indexers.stats_title' | translate }}</h2>
+    @if (statsLoading()) {
+      <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+    } @else if (statsData().length === 0) {
+      <p class="text-center py-8 text-base-content/50">{{ 'settings.indexers.stats_empty' | translate }}</p>
+    } @else {
+      <div class="overflow-x-auto mt-4 rounded-lg border border-base-200">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>{{ 'settings.indexers.stats_date' | translate }}</th>
+              <th class="text-right">{{ 'settings.indexers.stats_queries' | translate }}</th>
+              <th class="text-right">{{ 'settings.indexers.stats_avg_time' | translate }}</th>
+              <th class="text-right">{{ 'settings.indexers.stats_results' | translate }}</th>
+              <th class="text-right">{{ 'settings.indexers.stats_errors' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of statsData(); track row.date) {
+              <tr>
+                <td class="tabular-nums">{{ row.date }}</td>
+                <td class="text-right tabular-nums">{{ row.queries }}</td>
+                <td class="text-right tabular-nums">{{ row.avgResponseMs }}ms</td>
+                <td class="text-right tabular-nums">{{ row.totalResults }}</td>
+                <td class="text-right tabular-nums" [class.text-error]="row.errors > 0">{{ row.errors }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="closeStats()">{{ 'common.close' | translate }}</button>
     </div>
-    <div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-      @if (hasCooldowns()) {
-        <button
-          type="button"
-          class="btn btn-ghost"
-          [disabled]="resettingCooldown()"
-          (click)="resetAllCooldowns()"
-        >
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeStats()">close</button>
+  </form>
+</dialog>
+
+<dialog #cooldownDialog class="modal">
+  <div class="modal-box max-w-md">
+    @if (cooldownRow(); as ix) {
+      <h2 class="text-lg font-bold flex items-center gap-2">
+        <svg lucideSnowflake class="h-5 w-5 text-warning" aria-hidden="true"></svg>
+        {{ 'settings.indexers.cooldown_title' | translate: { name: ix.name } }}
+      </h2>
+
+      <p class="mt-3 text-sm text-base-content/70">
+        @if (cooldownOf(ix)?.reason === 'rate-limit') {
+          {{ 'settings.indexers.cooldown_reason_rate_limit' | translate }}
+        } @else {
+          {{ 'settings.indexers.cooldown_reason_failures' | translate: { count: cooldownOf(ix)?.failureCount ?? 1 } }}
+        }
+      </p>
+
+      <dl class="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+        <dt class="text-base-content/60">{{ 'settings.indexers.cooldown_remaining' | translate }}</dt>
+        <dd class="tabular-nums font-medium">{{ cooldownRemaining(ix) }}</dd>
+        <dt class="text-base-content/60">{{ 'settings.indexers.cooldown_expires_at' | translate }}</dt>
+        <dd class="tabular-nums font-medium">{{ cooldownExpiresAt(ix) }}</dd>
+        @if (cooldownOf(ix)?.detail) {
+          <dt class="text-base-content/60">{{ 'settings.indexers.cooldown_detail' | translate }}</dt>
+          <dd class="font-mono text-xs break-all">{{ cooldownOf(ix)?.detail }}</dd>
+        }
+      </dl>
+
+      <p class="mt-4 text-xs text-base-content/50">
+        {{ 'settings.indexers.cooldown_reset_hint' | translate }}
+      </p>
+
+      <div class="modal-action">
+        <button type="button" class="btn btn-ghost" (click)="closeCooldown()">
+          {{ 'common.close' | translate }}
+        </button>
+        <button type="button" class="btn btn-warning" [disabled]="resettingCooldown()" (click)="resetCooldown(ix)">
           @if (resettingCooldown()) {
             <span class="loading loading-spinner loading-xs"></span>
           }
-          {{ 'settings.indexers.cooldown_reset_all' | translate: { count: cooledDown().length } }}
+          {{ 'settings.indexers.cooldown_reset' | translate }}
         </button>
-      }
-      <button type="button" class="btn btn-primary" (click)="openCreate()">
-        {{ 'settings.indexers.new' | translate }}
-      </button>
-    </div>
+      </div>
+    }
   </div>
-
-  @if (loading()) {
-    <div class="flex justify-center py-16">
-      <span class="loading loading-spinner loading-lg"></span>
-    </div>
-  } @else if (listError()) {
-    <div role="alert" class="alert alert-error">{{ listError() }}</div>
-  } @else if (rows().length === 0) {
-    <p class="text-center py-12 text-base-content/50">
-      {{ 'settings.indexers.empty' | translate }}
-    </p>
-  } @else {
-    <div class="overflow-x-auto rounded-lg border border-base-200">
-      <table class="table table-zebra table-sm">
-        <thead>
-          <tr>
-            <th>{{ 'settings.indexers.col_name' | translate }}</th>
-            <th>{{ 'settings.indexers.col_priority' | translate }}</th>
-            <th>{{ 'settings.indexers.col_enabled' | translate }}</th>
-            <th>{{ 'settings.indexers.col_status' | translate }}</th>
-            <th class="text-end w-40">{{ 'settings.indexers.actions' | translate }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (ix of rows(); track ix.id) {
-            <tr>
-              <td class="font-medium">{{ ix.name }}</td>
-              <td class="tabular-nums">{{ ix.priority }}</td>
-              <td>
-                @if (ix.enabled) {
-                  <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
-                } @else {
-                  <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
-                }
-              </td>
-              <td>
-                @if (isCooledDown(ix)) {
-                  <button
-                    type="button"
-                    class="badge badge-warning badge-sm gap-1 tabular-nums"
-                    (click)="openCooldown(ix)"
-                    [attr.title]="'settings.indexers.cooldown_badge_title' | translate"
-                  >
-                    <svg lucideSnowflake class="h-3 w-3" aria-hidden="true"></svg>
-                    {{ cooldownRemaining(ix) }}
-                  </button>
-                } @else {
-                  <span class="text-base-content/30">—</span>
-                }
-              </td>
-              <td class="text-end">
-                @if (isCooledDown(ix)) {
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs text-warning"
-                    [disabled]="resettingCooldown()"
-                    (click)="resetCooldown(ix)"
-                  >
-                    {{ 'settings.indexers.cooldown_reset' | translate }}
-                  </button>
-                }
-                <button type="button" class="btn btn-ghost btn-xs" (click)="openStats(ix)">
-                  {{ 'settings.indexers.stats' | translate }}
-                </button>
-                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(ix)">
-                  {{ 'settings.indexers.edit' | translate }}
-                </button>
-                <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(ix)">
-                  {{ 'settings.indexers.delete' | translate }}
-                </button>
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  }
-</div>
-
-  <dialog #editorDialog class="modal">
-    <div class="modal-box max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
-      <div
-        class="px-5 sm:px-6 pt-4 pb-3 border-b border-base-200 flex justify-between items-start gap-3 shrink-0 bg-base-100"
-      >
-        <h2 class="text-lg font-bold leading-tight">
-          @if (editingId() === null) {
-            {{ 'settings.indexers.editor_create' | translate }}
-          } @else {
-            {{ 'settings.indexers.editor_edit' | translate }}
-          }
-        </h2>
-        <button
-          type="button"
-          class="btn btn-sm btn-ghost btn-circle shrink-0"
-          (click)="closeEditor()"
-          [attr.aria-label]="'common.close' | translate"
-        >
-          <svg lucideX class="h-5 w-5"></svg>
-        </button>
-      </div>
-      <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.indexers.field_name' | translate }}</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="formName()"
-            (ngModelChange)="formName.set($event)"
-          />
-        </label>
-
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.indexers.field_torznab_base_url' | translate }}</span>
-          <input
-            type="url"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="formTorznabBase()"
-            (ngModelChange)="formTorznabBase.set($event)"
-            placeholder="http://prowlarr:9696/1/api"
-          />
-        </label>
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.indexers.field_api_key' | translate }}</span>
-          <input
-            type="password"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="formTorznabKey()"
-            (ngModelChange)="formTorznabKey.set($event)"
-            [placeholder]="editingId() !== null ? '••••••••' : ''"
-          />
-        </label>
-
-        <div class="flex flex-col gap-2 pt-2 border-t border-base-200">
-          <div class="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              class="btn btn-outline btn-sm"
-              (click)="testConnection()"
-              [disabled]="testLoading() || !formTorznabBase().trim()"
-            >
-              @if (testLoading()) {
-                <span class="loading loading-spinner loading-xs"></span>
-              }
-              {{ 'settings.indexers.test_connection' | translate }}
-            </button>
-          </div>
-          @if (testResult(); as tr) {
-            <div
-              role="alert"
-              class="alert text-sm py-2"
-              [class.alert-success]="tr.ok"
-              [class.alert-error]="!tr.ok"
-            >
-              {{ tr.message }}
-            </div>
-          }
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'settings.indexers.field_priority' | translate }}</span>
-            <input
-              type="number"
-              class="input input-bordered input-sm w-full"
-              [ngModel]="formPriority()"
-              (ngModelChange)="formPriority.set(+$event)"
-              min="0"
-            />
-          </label>
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'settings.indexers.field_min_seeders' | translate }}</span>
-            <input
-              type="number"
-              class="input input-bordered input-sm w-full"
-              [ngModel]="formMinSeeders()"
-              (ngModelChange)="formMinSeeders.set(+$event)"
-              min="0"
-            />
-          </label>
-        </div>
-        <div class="grid grid-cols-1 gap-3">
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'settings.indexers.field_request_delay' | translate }}</span>
-            <input
-              type="number"
-              class="input input-bordered input-sm w-full"
-              [ngModel]="formRequestDelay()"
-              (ngModelChange)="formRequestDelay.set(+$event)"
-              min="0"
-            />
-            <div class="label">
-              <span class="label-text-alt text-base-content/50">{{ 'settings.indexers.request_delay_hint' | translate }}</span>
-            </div>
-          </label>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'settings.indexers.field_seed_ratio' | translate }}</span>
-            <input
-              type="number"
-              class="input input-bordered input-sm w-full"
-              [ngModel]="formSeedRatio()"
-              (ngModelChange)="formSeedRatio.set(+$event)"
-              min="0"
-              step="0.1"
-            />
-            <div class="label">
-              <span class="label-text-alt text-base-content/50">{{ 'settings.indexers.seed_ratio_hint' | translate }}</span>
-            </div>
-          </label>
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'settings.indexers.field_max_retention' | translate }}</span>
-            <input
-              type="number"
-              class="input input-bordered input-sm w-full"
-              [ngModel]="formMaxRetentionDays()"
-              (ngModelChange)="formMaxRetentionDays.set($event ? +$event : null)"
-              min="0"
-            />
-            <div class="label">
-              <span class="label-text-alt text-base-content/50">{{ 'settings.indexers.max_retention_hint' | translate }}</span>
-            </div>
-          </label>
-        </div>
-        <label class="label cursor-pointer justify-start gap-3">
-          <input
-            type="checkbox"
-            class="toggle toggle-sm"
-            [ngModel]="formEnabled()"
-            (ngModelChange)="formEnabled.set($event)"
-          />
-          <span class="label-text">{{ 'settings.indexers.field_enabled' | translate }}</span>
-        </label>
-        <label class="label cursor-pointer justify-start gap-3">
-          <input
-            type="checkbox"
-            class="toggle toggle-sm"
-            [ngModel]="formEnableSearch()"
-            (ngModelChange)="formEnableSearch.set($event)"
-          />
-          <span class="label-text">{{ 'settings.indexers.field_enable_search' | translate }}</span>
-        </label>
-
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.indexers.field_unknown_language' | translate }}</span>
-          <select
-            class="select select-bordered select-sm w-full"
-            [ngModel]="formUnknownLanguage()"
-            (ngModelChange)="formUnknownLanguage.set($event)"
-          >
-            <option value="">{{ 'settings.indexers.unknown_language_none' | translate }}</option>
-            @for (l of languages(); track l.isoCode) {
-              <option [value]="l.isoCode">{{ l.name }} ({{ l.isoCode }})</option>
-            }
-          </select>
-          <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.indexers.unknown_language_hint' | translate }}</span>
-          </div>
-        </label>
-
-
-      </div>
-      <div class="modal-action shrink-0 px-5 sm:px-6 pb-4 pt-2 border-t border-base-200 bg-base-100">
-        <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
-          {{ 'settings.indexers.cancel' | translate }}
-        </button>
-        <button
-          type="button"
-          class="btn btn-primary"
-          (click)="save()"
-          [disabled]="saving()"
-        >
-          @if (saving()) {
-            <span class="loading loading-spinner loading-sm"></span>
-          }
-          {{ 'settings.indexers.save' | translate }}
-        </button>
-      </div>
-    </div>
-    <form method="dialog" class="modal-backdrop">
-      <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">close</button>
-    </form>
-  </dialog>
-
-  <dialog #statsDialog class="modal">
-    <div class="modal-box max-w-2xl">
-      <h2 class="text-lg font-bold">{{ statsIndexerName() }} — {{ 'settings.indexers.stats_title' | translate }}</h2>
-      @if (statsLoading()) {
-        <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
-      } @else if (statsData().length === 0) {
-        <p class="text-center py-8 text-base-content/50">{{ 'settings.indexers.stats_empty' | translate }}</p>
-      } @else {
-        <div class="overflow-x-auto mt-4 rounded-lg border border-base-200">
-          <table class="table table-sm">
-            <thead>
-              <tr>
-                <th>{{ 'settings.indexers.stats_date' | translate }}</th>
-                <th class="text-right">{{ 'settings.indexers.stats_queries' | translate }}</th>
-                <th class="text-right">{{ 'settings.indexers.stats_avg_time' | translate }}</th>
-                <th class="text-right">{{ 'settings.indexers.stats_results' | translate }}</th>
-                <th class="text-right">{{ 'settings.indexers.stats_errors' | translate }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (row of statsData(); track row.date) {
-                <tr>
-                  <td class="tabular-nums">{{ row.date }}</td>
-                  <td class="text-right tabular-nums">{{ row.queries }}</td>
-                  <td class="text-right tabular-nums">{{ row.avgResponseMs }}ms</td>
-                  <td class="text-right tabular-nums">{{ row.totalResults }}</td>
-                  <td class="text-right tabular-nums" [class.text-error]="row.errors > 0">{{ row.errors }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      }
-      <div class="modal-action">
-        <button type="button" class="btn btn-ghost" (click)="closeStats()">{{ 'common.close' | translate }}</button>
-      </div>
-    </div>
-    <form method="dialog" class="modal-backdrop">
-      <button type="button" (click)="closeStats()">close</button>
-    </form>
-  </dialog>
-
-  <dialog #cooldownDialog class="modal">
-    <div class="modal-box max-w-md">
-      @if (cooldownRow(); as ix) {
-        <h2 class="text-lg font-bold flex items-center gap-2">
-          <svg lucideSnowflake class="h-5 w-5 text-warning" aria-hidden="true"></svg>
-          {{ 'settings.indexers.cooldown_title' | translate: { name: ix.name } }}
-        </h2>
-
-        <p class="mt-3 text-sm text-base-content/70">
-          @if (ix.cooldown?.reason === 'rate-limit') {
-            {{ 'settings.indexers.cooldown_reason_rate_limit' | translate }}
-          } @else {
-            {{ 'settings.indexers.cooldown_reason_failures' | translate: { count: ix.cooldown?.failureCount ?? 1 } }}
-          }
-        </p>
-
-        <dl class="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-          <dt class="text-base-content/60">{{ 'settings.indexers.cooldown_remaining' | translate }}</dt>
-          <dd class="tabular-nums font-medium">{{ cooldownRemaining(ix) }}</dd>
-          <dt class="text-base-content/60">{{ 'settings.indexers.cooldown_expires_at' | translate }}</dt>
-          <dd class="tabular-nums font-medium">{{ cooldownExpiresAt(ix) }}</dd>
-          @if (ix.cooldown?.detail) {
-            <dt class="text-base-content/60">{{ 'settings.indexers.cooldown_detail' | translate }}</dt>
-            <dd class="font-mono text-xs break-all">{{ ix.cooldown?.detail }}</dd>
-          }
-        </dl>
-
-        <p class="mt-4 text-xs text-base-content/50">
-          {{ 'settings.indexers.cooldown_reset_hint' | translate }}
-        </p>
-
-        <div class="modal-action">
-          <button type="button" class="btn btn-ghost" (click)="closeCooldown()">
-            {{ 'common.close' | translate }}
-          </button>
-          <button
-            type="button"
-            class="btn btn-warning"
-            [disabled]="resettingCooldown()"
-            (click)="resetCooldown(ix)"
-          >
-            @if (resettingCooldown()) {
-              <span class="loading loading-spinner loading-xs"></span>
-            }
-            {{ 'settings.indexers.cooldown_reset' | translate }}
-          </button>
-        </div>
-      }
-    </div>
-    <form method="dialog" class="modal-backdrop">
-      <button type="button" (click)="closeCooldown()">close</button>
-    </form>
-  </dialog>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeCooldown()">close</button>
+  </form>
+</dialog>
