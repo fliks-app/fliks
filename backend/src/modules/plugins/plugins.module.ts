@@ -5,6 +5,8 @@ import { PluginSource } from './entities/plugin-source.entity';
 import { PluginRegistration } from './entities/plugin-registration.entity';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginWebhookDispatcherService } from './plugin-webhook-dispatcher.service';
+import { PluginProcessService } from './plugin-process.service';
+import { PluginProcessEventDispatcherService } from './plugin-process-event-dispatcher.service';
 import { PluginCatalogClientService } from './plugin-catalog-client.service';
 import { PluginStagingService } from './plugin-staging.service';
 import { PluginInstallService } from './plugin-install.service';
@@ -16,9 +18,17 @@ import { PluginImportController } from './plugin-import.controller';
 import { PluginsController } from './plugins.controller';
 import { AuthModule } from '../auth/auth.module';
 import { EventsModule } from '../scheduler/events.module';
+import { LogBufferModule } from '../scheduler/log-buffer.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([PluginPackage, PluginSource, PluginRegistration]), AuthModule, EventsModule],
+  imports: [
+    TypeOrmModule.forFeature([PluginPackage, PluginSource, PluginRegistration]),
+    AuthModule,
+    EventsModule,
+    LogBufferModule,
+    SettingsModule,
+  ],
   controllers: [
     PluginLogoController,
     PluginIndexerDescriptorsController,
@@ -29,6 +39,8 @@ import { EventsModule } from '../scheduler/events.module';
   providers: [
     PluginRegistryService,
     PluginWebhookDispatcherService,
+    PluginProcessService,
+    PluginProcessEventDispatcherService,
     PluginCatalogClientService,
     PluginStagingService,
     PluginInstallService,

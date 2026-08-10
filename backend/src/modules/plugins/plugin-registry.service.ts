@@ -1,11 +1,13 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as fs from 'fs';
-import * as path from 'path';
 import * as net from 'net';
 import * as semver from 'semver';
 import { PluginPackage } from './entities/plugin-package.entity';
+import { PluginRegistration } from './entities/plugin-registration.entity';
+import { PluginProcessService } from './plugin-process.service';
+import { CURRENT_FLIKS_VERSION } from './plugin-version';
+import type { SupervisorState } from './supervisor/plugin-supervisor';
 import { arePluginsDisabled, FLIKS_PLUGINS_DISABLED_ENV } from '../../common/constants/plugin-flags';
 import {
   PLUGIN_API_VERSION,
@@ -14,6 +16,7 @@ import {
   INDEXER_ID_SEPARATOR,
   type PluginKind,
   type PluginManifest,
+  type ProcessPluginManifest,
   type IndexerDescriptor,
   type PluginWebhookEventName,
 } from '../../common/plugin-contract';
@@ -36,16 +39,7 @@ type AssertSameStringUnion<A extends string, B extends string> = [A] extends [B]
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _webhookCatalogMatchesDomainEvents: AssertSameStringUnion<PluginWebhookEventName, DomainEvent['type']> = true;
 
-/** Same pattern as `UpdateCheckService`/`SystemController` — no shared version util exists yet.
- *  Exported so the catalog client checks compatibility against this exact value, never a second read. */
-export const CURRENT_FLIKS_VERSION: string = (() => {
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8')) as { version?: string };
-    return pkg.version ?? '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-})();
+export { CURRENT_FLIKS_VERSION };
 
 /** The only `driverApi` core knows how to run a search through today. */
 const SUPPORTED_INDEXER_DRIVER_APIS: ReadonlySet<string> = new Set(['torznab']);
@@ -72,7 +66,6 @@ export interface RegisteredPlugin {
 }
 
 export type PluginRegistrationFailureReason =
-  | 'unsupported-tier'
   | 'untrusted'
   | 'incompatible-api'
   | 'incompatible-fliks'
@@ -82,7 +75,11 @@ export type PluginRegistrationFailureReason =
   | 'invalid-webhook-event'
   | 'invalid-webhook-url'
   | 'insecure-webhook-scheme'
-  | 'internal-webhook-host';
+  | 'internal-webhook-host'
+  | 'disabled'
+  | 'tampered'
+  | 'db-provision-failed'
+  | 'spawn-failed';
 
 export interface PluginRegistrationSuccess {
   ok: true;
@@ -99,10 +96,9 @@ export type PluginRegistrationResult = PluginRegistrationSuccess | PluginRegistr
 /**
  * In-memory installed-plugin set — the only thing the rest of core asks about
  * plugins. Populated at boot (L0-L4 of `plans/plugin-system.plan.md`'s load
- * table) and by `register()`, the hot-reload entry point a future installer
- * calls for a `data` plugin (P4a). L1/L3 — `state.json` and re-hashing
- * `plugin.js` from the fd that will be loaded — belong to the process-tier
- * supervisor, which does not exist yet.
+ * table) and by `register()`, the hot-reload entry point the installer calls
+ * for both tiers (P4a). L1 (`state.json` quarantine) still has no home; L3
+ * (re-hashing `plugin.js` from the loaded fd) is `PluginProcessService`'s.
  */
 @Injectable()
 export class PluginRegistryService implements OnModuleInit {
@@ -117,6 +113,9 @@ export class PluginRegistryService implements OnModuleInit {
   constructor(
     @InjectRepository(PluginPackage)
     private readonly packageRepo: Repository<PluginPackage>,
+    @InjectRepository(PluginRegistration)
+    private readonly registrationRepo: Repository<PluginRegistration>,
+    private readonly processService: PluginProcessService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -144,16 +143,12 @@ export class PluginRegistryService implements OnModuleInit {
   async register(pkg: PluginPackage): Promise<PluginRegistrationResult> {
     const manifest = pkg.manifest;
 
-    if (manifest.kind === 'process') {
-      return this.fail(pkg.pluginId, 'unsupported-tier', 'process-tier plugins are not supported yet (no supervisor)');
-    }
-
-    // L1 (state.json quarantine) slots in here, ahead of the signature re-check — supervisor-owned.
+    // L1 (state.json quarantine) slots in here, ahead of the signature re-check — still has no owner.
     // L2
     const trust = await this.reverifyTrust(pkg);
     if (!trust.ok) return this.fail(pkg.pluginId, 'untrusted', trust.detail);
 
-    // L3 (re-hash plugin.js from the loaded fd) slots in here, process-tier only — supervisor-owned.
+    // L3 (re-hash plugin.js from the loaded fd) happens inside `PluginProcessService.startFor`, below.
     // L4
     if (manifest.pluginApi !== PLUGIN_API_VERSION) {
       return this.fail(
@@ -173,12 +168,15 @@ export class PluginRegistryService implements OnModuleInit {
     const descriptorCheck = this.validateIndexerDescriptors(manifest.provides?.indexers ?? []);
     if (!descriptorCheck.ok) return this.fail(pkg.pluginId, descriptorCheck.reason, descriptorCheck.detail);
 
-    // `events` is a `PluginManifestBase` field so it's structurally legal on `process` too, but
-    // the `unsupported-tier` bail above already refuses every process manifest before reaching
-    // here — so in practice this only ever runs for `data`, which is the only tier the webhook
-    // dispatcher fans out to.
+    // Structurally legal on `process` too, but only `data` fans out over HTTP —
+    // `process` gets domain events pushed over its own socket instead.
     const webhookCheck = this.validateWebhookDeclarations(manifest.events ?? []);
     if (!webhookCheck.ok) return this.fail(pkg.pluginId, webhookCheck.reason, webhookCheck.detail);
+
+    if (manifest.kind === 'process') {
+      const activation = await this.activateProcess(pkg, manifest);
+      if (!activation.ok) return activation;
+    }
 
     this.registry.set(pkg.pluginId, {
       pluginId: pkg.pluginId,
@@ -190,14 +188,71 @@ export class PluginRegistryService implements OnModuleInit {
       archive: pkg.archive,
     });
     this.replaceIndexerDescriptors(pkg.pluginId, descriptorCheck.descriptors);
-    this.replaceWebhookDeclarations(pkg.pluginId, webhookCheck.declarations);
+    this.replaceWebhookDeclarations(pkg.pluginId, manifest.kind === 'data' ? webhookCheck.declarations : []);
     return { ok: true, pluginId: pkg.pluginId };
   }
 
-  unregister(pluginId: string): void {
+  async unregister(pluginId: string): Promise<void> {
+    await this.processService.stopFor(pluginId);
     this.registry.delete(pluginId);
     this.replaceIndexerDescriptors(pluginId, []);
     this.replaceWebhookDeclarations(pluginId, []);
+  }
+
+  /** Persists the admin's enabled/disabled choice and starts or stops the process to match it. */
+  async setEnabled(pkg: PluginPackage, enabled: boolean): Promise<PluginRegistrationResult> {
+    const registration = await this.registrationRepo.findOne({ where: { pluginId: pkg.pluginId } });
+    if (!registration) throw new NotFoundException(`plugin "${pkg.pluginId}" has no registration row`);
+    registration.enabled = enabled;
+    await this.registrationRepo.save(registration);
+
+    if (!enabled) {
+      await this.unregister(pkg.pluginId);
+      return this.fail(pkg.pluginId, 'disabled', `plugin "${pkg.pluginId}" is disabled`);
+    }
+    return this.register(pkg);
+  }
+
+  /** Clears a tripped circuit breaker by swapping in a freshly-provisioned supervisor. */
+  async restartProcess(pluginId: string): Promise<void> {
+    await this.processService.restart(pluginId);
+  }
+
+  processStateOf(pluginId: string): SupervisorState | null {
+    return this.processService.stateOf(pluginId);
+  }
+
+  processStatusMessageOf(pluginId: string): string {
+    return this.processService.statusMessageOf(pluginId);
+  }
+
+  /** Loads or creates the `plugin_registrations` row (seeding it only on create),
+   *  refreshes its cached manifest, then spawns unless the admin disabled it. */
+  private async activateProcess(
+    pkg: PluginPackage,
+    manifest: ProcessPluginManifest,
+  ): Promise<{ ok: true } | PluginRegistrationFailure> {
+    let registration = await this.registrationRepo.findOne({ where: { pluginId: pkg.pluginId } });
+    if (!registration) {
+      registration = this.registrationRepo.create({
+        pluginId: pkg.pluginId,
+        ingestRoots: manifest.ingestRoots,
+        scopes: manifest.scopes,
+        enabled: true,
+        manifest,
+      });
+    } else {
+      registration.manifest = manifest;
+    }
+    await this.registrationRepo.save(registration);
+
+    if (!registration.enabled) {
+      return this.fail(pkg.pluginId, 'disabled', `plugin "${pkg.pluginId}" is disabled`);
+    }
+
+    const result = await this.processService.startFor(pkg);
+    if (!result.ok) return this.fail(pkg.pluginId, result.reason, result.detail);
+    return { ok: true };
   }
 
   list(): RegisteredPlugin[] {
@@ -340,7 +395,11 @@ export class PluginRegistryService implements OnModuleInit {
     return { ok: true, declarations };
   }
 
+  /** Every failure path funnels here, so a failing re-registration can never leave a stale entry active. */
   private fail(pluginId: string, reason: PluginRegistrationFailureReason, detail: string): PluginRegistrationFailure {
+    this.registry.delete(pluginId);
+    this.replaceIndexerDescriptors(pluginId, []);
+    this.replaceWebhookDeclarations(pluginId, []);
     return { ok: false, pluginId, reason, detail };
   }
 

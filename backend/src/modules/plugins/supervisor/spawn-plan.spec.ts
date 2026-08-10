@@ -1,5 +1,13 @@
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { PLUGIN_API_VERSION } from '../../../common/plugin-contract';
-import { buildSpawnPlan, resolvePermissionFlag, shouldDropPrivileges } from './spawn-plan';
+import {
+  buildSpawnPlan,
+  prepareDirForDroppedChild,
+  resolvePermissionFlag,
+  shouldDropPrivileges,
+} from './spawn-plan';
 
 const EXPECTED_ENV_KEYS = [
   'PATH',
@@ -109,5 +117,51 @@ describe('buildSpawnPlan', () => {
     const plan = buildSpawnPlan(baseInput);
     expect(plan.options.cwd).toBe(`${baseInput.dir}/data`);
     expect(plan.options.stdio).toEqual(['ignore', 'pipe', 'pipe']);
+  });
+});
+
+describe('prepareDirForDroppedChild', () => {
+  // The real drop target is uid 65534, which needs root to chown to; passing our own
+  // uid keeps the chown legal so the mode contract is testable at any uid.
+  const uid = process.getuid!();
+  const gid = process.getgid!();
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'spawn-plan-perm-'));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const mode = (p: string) => statSync(p).mode & 0o777;
+
+  it('opens the code dir and its files to the child while keeping them unwritable', () => {
+    // Exactly what extraction leaves behind: 0700 dir, 0600 files.
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    writeFileSync(join(dir, 'plugin.js'), 'x', { mode: 0o600 });
+    writeFileSync(join(dir, 'logo.svg'), '<svg/>', { mode: 0o600 });
+
+    prepareDirForDroppedChild(dir, uid, gid);
+
+    expect(mode(dir)).toBe(0o755);
+    expect(mode(join(dir, 'plugin.js'))).toBe(0o644);
+    expect(mode(join(dir, 'logo.svg'))).toBe(0o644);
+  });
+
+  it('hands the scratch dir to the child and nothing else', () => {
+    prepareDirForDroppedChild(dir, uid, gid);
+
+    const data = statSync(join(dir, 'data'));
+    expect(data.isDirectory()).toBe(true);
+    expect(data.uid).toBe(uid);
+    expect(mode(join(dir, 'data'))).toBe(0o700);
+  });
+
+  it('is idempotent across restarts', () => {
+    writeFileSync(join(dir, 'plugin.js'), 'x', { mode: 0o600 });
+    prepareDirForDroppedChild(dir, uid, gid);
+    prepareDirForDroppedChild(dir, uid, gid);
+
+    expect(mode(join(dir, 'plugin.js'))).toBe(0o644);
+    expect(mode(join(dir, 'data'))).toBe(0o700);
   });
 });

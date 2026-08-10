@@ -1,6 +1,7 @@
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { minimalDataManifest, minimalProcessManifest } from './archive/test-manifests';
+import { fakeRegistrationRepo, fakeProcessService } from './plugin-registry.test-helpers';
 import type { PluginManifest, PluginWebhookDeclaration } from '../../common/plugin-contract';
 
 /** A `fliks` range every test can rely on matching this repo's own `package.json` version. */
@@ -28,6 +29,10 @@ function repoMock(): { find: jest.Mock } {
   return { find: jest.fn().mockResolvedValue([]) };
 }
 
+function makeService(): PluginRegistryService {
+  return new PluginRegistryService(repoMock() as never, fakeRegistrationRepo() as never, fakeProcessService() as never);
+}
+
 function webhookDeclaration(overrides: Partial<PluginWebhookDeclaration> = {}): PluginWebhookDeclaration {
   return { event: 'media.imported', webhook: 'https://hooks.example.com/fliks', ...overrides };
 }
@@ -38,7 +43,7 @@ describe('PluginRegistryService — webhooks', () => {
       fliks: COMPATIBLE_RANGE,
       events: [webhookDeclaration({ webhook: 'http://hooks.example.com/fliks' })],
     });
-    const service = new PluginRegistryService(repoMock() as never);
+    const service = makeService();
 
     const result = await service.register(makePackage(manifest));
 
@@ -59,7 +64,7 @@ describe('PluginRegistryService — webhooks', () => {
       fliks: COMPATIBLE_RANGE,
       events: [webhookDeclaration({ webhook })],
     });
-    const service = new PluginRegistryService(repoMock() as never);
+    const service = makeService();
 
     const result = await service.register(makePackage(manifest));
 
@@ -76,7 +81,7 @@ describe('PluginRegistryService — webhooks', () => {
       fliks: COMPATIBLE_RANGE,
       events: [webhookDeclaration({ webhook: 'not-a-url' })],
     });
-    const service = new PluginRegistryService(repoMock() as never);
+    const service = makeService();
 
     const result = await service.register(makePackage(manifest));
 
@@ -93,7 +98,7 @@ describe('PluginRegistryService — webhooks', () => {
       fliks: COMPATIBLE_RANGE,
       events: [{ event: 'media.deleted-forever', webhook: 'https://hooks.example.com/fliks' } as unknown as PluginWebhookDeclaration],
     });
-    const service = new PluginRegistryService(repoMock() as never);
+    const service = makeService();
 
     const result = await service.register(makePackage(manifest));
 
@@ -110,7 +115,7 @@ describe('PluginRegistryService — webhooks', () => {
       fliks: COMPATIBLE_RANGE,
       events: [webhookDeclaration()],
     });
-    const service = new PluginRegistryService(repoMock() as never);
+    const service = makeService();
 
     const result = await service.register(makePackage(manifest));
 
@@ -122,30 +127,38 @@ describe('PluginRegistryService — webhooks', () => {
 
   it('drops a plugin webhooks on unregister', async () => {
     const manifest = minimalDataManifest({ fliks: COMPATIBLE_RANGE, events: [webhookDeclaration()] });
-    const service = new PluginRegistryService(repoMock() as never);
+    const service = makeService();
     await service.register(makePackage(manifest));
     expect(service.listWebhooksForEvent('media.imported')).toHaveLength(1);
 
-    service.unregister(manifest.id);
+    await service.unregister(manifest.id);
 
     expect(service.listWebhooksForEvent('media.imported')).toEqual([]);
   });
 
-  it('refuses a process-tier manifest declaring a webhook (process is not a supported tier yet)', async () => {
+  it('still validates a webhook on a process-tier manifest but never fans it out over HTTP', async () => {
+    // `events[].webhook` is a data-tier capability: a process plugin is handed the same
+    // events over its own socket, so registering it here would double every delivery.
     const manifest = minimalProcessManifest(
       { 'plugin.js': 'a'.repeat(64), 'logo.png': 'b'.repeat(64) },
       { fliks: COMPATIBLE_RANGE, events: [webhookDeclaration()] },
     );
-    const service = new PluginRegistryService(repoMock() as never);
+    const service = makeService();
 
     const result = await service.register(makePackage(manifest));
 
-    expect(result).toEqual({
-      ok: false,
-      pluginId: manifest.id,
-      reason: 'unsupported-tier',
-      detail: expect.any(String),
-    });
+    expect(result).toEqual({ ok: true, pluginId: manifest.id });
     expect(service.listWebhooksForEvent('media.imported')).toEqual([]);
+  });
+
+  it('refuses a process-tier manifest whose webhook is malformed rather than ignoring it', async () => {
+    const manifest = minimalProcessManifest(
+      { 'plugin.js': 'a'.repeat(64), 'logo.png': 'b'.repeat(64) },
+      { fliks: COMPATIBLE_RANGE, events: [{ event: 'media.imported', webhook: 'http://insecure.example.com/x' }] },
+    );
+
+    const result = await makeService().register(makePackage(manifest));
+
+    expect(result).toMatchObject({ ok: false, reason: 'insecure-webhook-scheme' });
   });
 });

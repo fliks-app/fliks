@@ -1,6 +1,7 @@
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { minimalDataManifest } from './archive/test-manifests';
+import { fakeRegistrationRepo, fakeProcessService } from './plugin-registry.test-helpers';
 import { buildIndexerImplementationId, type IndexerDescriptor, type PluginManifest } from '../../common/plugin-contract';
 
 /** A `fliks` range every test can rely on matching this repo's own `package.json` version. */
@@ -28,6 +29,10 @@ function repoMock(): { find: jest.Mock } {
   return { find: jest.fn().mockResolvedValue([]) };
 }
 
+function makeService(): PluginRegistryService {
+  return new PluginRegistryService(repoMock() as never, fakeRegistrationRepo() as never, fakeProcessService() as never);
+}
+
 function indexerDescriptor(overrides: Partial<IndexerDescriptor> = {}): IndexerDescriptor {
   return {
     key: 'mytracker',
@@ -45,7 +50,7 @@ describe('PluginRegistryService — indexer descriptors', () => {
       fliks: COMPATIBLE_RANGE,
       provides: { indexers: [indexerDescriptor({ driverApi: 'newznab' })] },
     });
-    const service = new PluginRegistryService(repoMock() as never);
+    const service = makeService();
 
     const result = await service.register(makePackage(manifest));
 
@@ -63,7 +68,7 @@ describe('PluginRegistryService — indexer descriptors', () => {
       fliks: COMPATIBLE_RANGE,
       provides: { indexers: [indexerDescriptor({ key: 'dup' }), indexerDescriptor({ key: 'dup' })] },
     });
-    const service = new PluginRegistryService(repoMock() as never);
+    const service = makeService();
 
     const result = await service.register(makePackage(manifest));
 
@@ -80,7 +85,7 @@ describe('PluginRegistryService — indexer descriptors', () => {
       fliks: COMPATIBLE_RANGE,
       provides: { indexers: [indexerDescriptor({ key: 'my.tracker' })] },
     });
-    const service = new PluginRegistryService(repoMock() as never);
+    const service = makeService();
 
     const result = await service.register(makePackage(manifest));
 
@@ -97,7 +102,7 @@ describe('PluginRegistryService — indexer descriptors', () => {
       fliks: COMPATIBLE_RANGE,
       provides: { indexers: [indexerDescriptor({ endpoint: 'not-a-url' })] },
     });
-    const service = new PluginRegistryService(repoMock() as never);
+    const service = makeService();
 
     const result = await service.register(makePackage(manifest));
 
@@ -114,7 +119,7 @@ describe('PluginRegistryService — indexer descriptors', () => {
       fliks: COMPATIBLE_RANGE,
       provides: { indexers: [indexerDescriptor()] },
     });
-    const service = new PluginRegistryService(repoMock() as never);
+    const service = makeService();
 
     const result = await service.register(makePackage(manifest));
 
@@ -131,12 +136,12 @@ describe('PluginRegistryService — indexer descriptors', () => {
       fliks: COMPATIBLE_RANGE,
       provides: { indexers: [indexerDescriptor()] },
     });
-    const service = new PluginRegistryService(repoMock() as never);
+    const service = makeService();
     await service.register(makePackage(manifest));
     const implementationId = buildIndexerImplementationId(manifest.id, 'mytracker');
     expect(service.getIndexerDescriptor(implementationId)).toBeDefined();
 
-    service.unregister(manifest.id);
+    await service.unregister(manifest.id);
 
     expect(service.getIndexerDescriptor(implementationId)).toBeUndefined();
     expect(service.listIndexerDescriptors()).toEqual([]);

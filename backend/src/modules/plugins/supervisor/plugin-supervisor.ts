@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'child_process';
 import { createServer, type Server, type Socket } from 'net';
 import { randomBytes } from 'crypto';
-import { chmodSync, mkdirSync, unlinkSync } from 'fs';
+import { chmodSync, chownSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { getPluginsSocketDir } from '../../../common/constants/paths';
 import type { OnApplicationShutdown } from '@nestjs/common';
@@ -10,7 +10,13 @@ import { CURRENT_FLIKS_VERSION } from '../plugin-registry.service';
 import { PLUGIN_API_VERSION, type Note } from '../../../common/plugin-contract';
 import { RpcChannel } from './rpc-channel';
 import { NoteRingBuffer } from './note-ring-buffer';
-import { buildSpawnPlan } from './spawn-plan';
+import {
+  buildSpawnPlan,
+  prepareDirForDroppedChild,
+  shouldDropPrivileges,
+  PLUGIN_CHILD_UID,
+  PLUGIN_CHILD_GID,
+} from './spawn-plan';
 import { writePidFile, removePidFile } from './pid-file';
 
 export type SupervisorState =
@@ -63,11 +69,13 @@ export interface PluginSupervisorOptions {
   logCapBytesPerMinute?: number;
 }
 
-function listenAndChmod(server: Server, path: string): Promise<void> {
+/** 0600 keeps a second plugin out; the chown is what lets the dropped child in at all. */
+function listenAndRestrict(server: Server, path: string, dropTo: { uid: number; gid: number } | null): Promise<void> {
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(path, () => {
       chmodSync(path, 0o600);
+      if (dropTo) chownSync(path, dropTo.uid, dropTo.gid);
       resolve();
     });
   });
@@ -167,6 +175,13 @@ export class PluginSupervisor implements OnApplicationShutdown {
     return () => {
       this.stateListeners = this.stateListeners.filter((l) => l !== cb);
     };
+  }
+
+  /** Non-null only when the child will run as another uid, which is the only case needing a chown. */
+  private dropTarget(): { uid: number; gid: number } | null {
+    return shouldDropPrivileges(process.platform, process.getuid?.bind(process))
+      ? { uid: PLUGIN_CHILD_UID, gid: PLUGIN_CHILD_GID }
+      : null;
   }
 
   private setState(s: SupervisorState): void {
@@ -274,9 +289,10 @@ export class PluginSupervisor implements OnApplicationShutdown {
       }
       this.onPluginConnected(s);
     });
+    const dropTo = this.dropTarget();
     await Promise.all([
-      listenAndChmod(this.coreServer, this.coreSockPath),
-      listenAndChmod(this.pluginServer, this.pluginSockPath),
+      listenAndRestrict(this.coreServer, this.coreSockPath, dropTo),
+      listenAndRestrict(this.pluginServer, this.pluginSockPath, dropTo),
     ]);
   }
 
@@ -307,7 +323,9 @@ export class PluginSupervisor implements OnApplicationShutdown {
     this.lastExitSignal = null;
 
     this.setState('starting');
-    mkdirSync(join(this.opts.dir, 'data'), { recursive: true });
+    const dropTo = this.dropTarget();
+    if (dropTo) prepareDirForDroppedChild(this.opts.dir, dropTo.uid, dropTo.gid);
+    else mkdirSync(join(this.opts.dir, 'data'), { recursive: true });
     this.token = randomBytes(32).toString('hex');
 
     const plan = buildSpawnPlan({

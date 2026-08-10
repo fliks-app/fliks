@@ -1,5 +1,11 @@
 import { spawnSync, type SpawnOptions } from 'child_process';
+import { chmodSync, chownSync, mkdirSync, readdirSync } from 'fs';
+import { join } from 'path';
 import { PLUGIN_API_VERSION } from '../../../common/plugin-contract';
+
+/** The unprivileged identity a plugin child drops to when core runs as root. */
+export const PLUGIN_CHILD_UID = 65534;
+export const PLUGIN_CHILD_GID = 65534;
 
 let cachedPermissionFlag: string | null = null;
 
@@ -17,6 +23,23 @@ export function resolvePermissionFlag(): string {
 /** Root is an opportunistic bonus (Decision 25) — the drop only happens when it's true. */
 export function shouldDropPrivileges(platform: NodeJS.Platform, getuid?: () => number): boolean {
   return platform !== 'win32' && typeof getuid === 'function' && getuid() === 0;
+}
+
+/**
+ * A dropped child must reach its own code and its scratch dir through the kernel,
+ * not just through `--allow-fs-*`: extraction writes 0600 root-owned files into a
+ * 0700 directory. Code stays root-owned and read-only to the child; only `data/`
+ * changes hands.
+ */
+export function prepareDirForDroppedChild(dir: string, uid = PLUGIN_CHILD_UID, gid = PLUGIN_CHILD_GID): void {
+  const dataDir = join(dir, 'data');
+  mkdirSync(dataDir, { recursive: true });
+  chmodSync(dir, 0o755);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isFile()) chmodSync(join(dir, entry.name), 0o644);
+  }
+  chownSync(dataDir, uid, gid);
+  chmodSync(dataDir, 0o700);
 }
 
 export interface SpawnPlanInput {
@@ -84,7 +107,7 @@ export function buildSpawnPlan(input: SpawnPlanInput): SpawnPlan {
     detached: false,
     windowsHide: true,
     env,
-    ...(root ? { uid: 65534, gid: 65534 } : {}),
+    ...(root ? { uid: PLUGIN_CHILD_UID, gid: PLUGIN_CHILD_GID } : {}),
   };
 
   const expectedCmdline = [process.execPath, ...nodeArgv];
