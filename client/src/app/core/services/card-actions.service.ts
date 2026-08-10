@@ -11,17 +11,11 @@ export interface CardAction {
   /** Pre-translated label (used when no `labelKey` is provided). */
   label?: string;
   /**
-   * Lucide icon name for the leading glyph. Resolved by the panel component
-   * against a curated whitelist. Unknown names render no icon.
+   * Lucide icon name for the leading glyph — a `card.actions` contribution
+   * can carry any name. Resolved by the panel component against a curated
+   * whitelist; unrecognised names fall back to a generic glyph, never blank.
    */
-  icon?:
-    | 'play'
-    | 'external-link'
-    | 'eye'
-    | 'eye-off'
-    | 'trash-2'
-    | 'list-plus'
-    | 'user-plus';
+  icon?: string;
   /** Optional tone applied to label + icon. */
   tone?: 'default' | 'danger';
   /** Action invoked when the user activates this row. */

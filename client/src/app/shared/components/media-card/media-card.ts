@@ -16,6 +16,11 @@ import { AuthService } from '../../../core/services/auth.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
 import { NavbarService } from '../../../core/services/navbar.service';
+import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
+import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-evaluator';
+import type { UiContribution } from '../../../core/plugin-ui/contribution.types';
+import { resolveCardAction, type CardActionHandlers } from '../../../core/plugin-ui/card-action-registry';
+import { CORE_CARD_ACTIONS } from './core-card-actions';
 
 export type MediaCardAspect = 'portrait' | 'landscape';
 
@@ -48,6 +53,7 @@ export class MediaCardComponent {
   private readonly auth = inject(AuthService);
   private readonly playableMedia = inject(PlayableMediaService);
   private readonly navbar = inject(NavbarService);
+  private readonly pluginUi = inject(PluginUiRegistryService);
   protected readonly device = inject(DeviceService);
   protected readonly isNative = Capacitor.isNativePlatform();
   /** Hover overlay (play button) only makes sense on a real pointer device. */
@@ -127,9 +133,14 @@ export class MediaCardComponent {
    * change, otherwise the click does nothing.
    */
   readonly interactiveWatched = input(false);
-  /** Extra context-menu actions injected by the parent (e.g. "mark watched"
-   *  on recommendation cards). Appended after the built-in actions, before the
-   *  danger "remove" entry. Pure menu actions — no inline indicator. */
+  /**
+   * Escape hatch for a caller-owned action the `card.actions` registry can't
+   * express (e.g. home's recommendation-row "mark watched", which drops the
+   * item from a page-local list — not a card concern). Spliced between the
+   * watched toggle and Remove, matching where core reserves weights 600-800.
+   * Every other pre-registry caller migrated to a contribution; this one
+   * lives in `features/home/home.html`, outside this refactor's ownership.
+   */
   readonly extraActions = input<CardAction[]>([]);
   /** Library media id used for the "add to playlist" action when the card is
    *  fed by individual inputs rather than `[media]` (continue-watching,
@@ -353,88 +364,117 @@ export class MediaCardComponent {
     }, false);
   }
 
+  // ── card.actions: the contextual panel, rendered from the contribution registry ──
+
+  private readonly cardActionsContext = computed<WhenContext>(() => ({
+    isAdmin: this.auth.hasPermission('settings.access'),
+    hasPermission: (p: string) => this.auth.hasPermission(p),
+    mediaType: this.media()?.type,
+    hasFiles: this._playable(),
+    isMonitored: this.media()?.monitored,
+    hasQualityProfile: !!this.media()?.qualityProfile,
+    isEpisode: this.playlistEpisodeId() != null,
+    isTv: this.tv.isTv(),
+    isTouch: this.device.isTouch(),
+  }));
+
+  /**
+   * Visibility rules the closed `when` vocabulary can't express — this domain has
+   * almost none of it (no "has a link", "is playable" or "is dismissable"
+   * predicate), so nearly every core id is gated here rather than in `when`.
+   */
+  private readonly extraGuards: Record<string, () => boolean> = {
+    'core.play': () => {
+      const hasLink = !!this._link();
+      return (this.clickIntent() === 'play' && hasLink) || (this.clickIntent() !== 'play' && this._playable());
+    },
+    'core.open': () => !!this._link(),
+    'core.add_to_playlist': () => this.media()?.id != null || this.playlistMediaId() != null || this.playlistEpisodeId() != null,
+    'core.recommend': () => {
+      const mediaId = this.media()?.id ?? this.playlistMediaId();
+      return mediaId != null && !this.auth.sharingDisabled();
+    },
+    'core.toggle_watched': () => this.interactiveWatched(),
+    'core.remove': () => this.dismissable(),
+  };
+
+  private readonly actionHandlers: CardActionHandlers = {
+    'card.play': () => (this.clickIntent() === 'play' ? this.onCardClick() : this.onPlayClick(new Event('synthetic'))),
+    'card.open': () => this.openDetail(),
+    'card.add-to-playlist': () => {
+      const episodeId = this.playlistEpisodeId();
+      const mediaId = this.media()?.id ?? this.playlistMediaId();
+      this.addToPlaylist.open(episodeId != null ? { episodeId } : { mediaId: mediaId! });
+    },
+    'card.recommend': () => {
+      const mediaId = this.media()?.id ?? this.playlistMediaId();
+      this.recommend.open({ mediaId: mediaId!, episodeId: this.playlistEpisodeId() ?? undefined });
+    },
+    'card.toggle-watched': () => this.watchedToggled.emit(this.status() !== 'watched'),
+    'card.remove': () => this.dismissed.emit(),
+  };
+
   /**
    * Actions exposed via the contextual panel (TV menu button / mobile long-press).
-   * The set is derived from the same flags that drive the inline buttons so a
-   * card always advertises only what it can actually do.
+   * Core's list merged with the registry's plugin contributions, sorted by weight
+   * then id, `when`/guard-filtered, with the action resolved to a handler. An
+   * unknown actionId or action.kind drops the row rather than rendering a broken
+   * one. `extraActions` — the one caller-owned escape hatch left — splices in at
+   * the point core reserves for it: after the watched toggle, before Remove.
    */
   protected readonly cardActions = computed((): CardAction[] => {
-    const actions: CardAction[] = [];
-    const isPlayIntent = this.clickIntent() === 'play';
-    const hasLink = !!this._link();
+    const ctx = this.cardActionsContext();
+    const watched = this.status() === 'watched';
+    const merged = [...CORE_CARD_ACTIONS, ...this.pluginUi.contributionsFor('card.actions')]
+      .sort((a, b) => a.weight - b.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
-    // Order is uniform across every row: Play first when available, then
-    // Open detail. Continue Watching's tap-plays behaviour collapses Play
-    // onto onCardClick; other rows route Play through onPlayClick.
-    if (isPlayIntent && hasLink) {
-      actions.push({
-        labelKey: 'media_card.action_play',
-        icon: 'play',
-        run: () => this.onCardClick(),
-      });
-    } else if (!isPlayIntent && this._playable()) {
-      actions.push({
-        labelKey: 'media_card.action_play',
-        icon: 'play',
-        run: () => this.onPlayClick(new Event('synthetic')),
-      });
-    }
+    const resolved: { weight: number; action: CardAction }[] = [];
+    for (const c of merged) {
+      if (!evaluateWhen(c.when, ctx)) continue;
+      // Reusing a core actionId reuses core's gating too: a plugin may narrow one of
+      // core's own actions, never widen it to someone core would hide it from.
+      if (!this.passesCoreGateFor(c, ctx)) continue;
+      if (!(this.extraGuards[c.id]?.() ?? true)) continue;
 
-    if (hasLink) {
-      actions.push({
-        labelKey: 'media_card.action_open',
-        icon: 'external-link',
-        run: () => this.openDetail(),
-      });
-    }
-    // Library media can be added to a playlist from any card, listed above
-    // "mark watched". Gated on a real media id so TMDB/discover previews (no
-    // library id) don't offer it.
-    const mediaId = this.media()?.id ?? this.playlistMediaId();
-    const episodeId = this.playlistEpisodeId();
-    if (episodeId != null || mediaId != null) {
-      actions.push({
-        labelKey: 'playlists.add_to_playlist',
-        icon: 'list-plus',
-        run: () =>
-          this.addToPlaylist.open(
-            episodeId != null ? { episodeId } : { mediaId: mediaId! },
-          ),
-      });
-      // Recommend to a member sits next to "add to playlist". Needs the parent
-      // mediaId (the API keys recommendations to the title), and is hidden on TV
-      // like the rest of the social surface.
-      if (mediaId != null && !this.tv.isTv() && !this.auth.sharingDisabled()) {
-        actions.push({
-          labelKey: 'recommend.menu_item',
-          icon: 'user-plus',
-          run: () =>
-            this.recommend.open({
-              mediaId,
-              episodeId: episodeId ?? undefined,
-            }),
-        });
+      let run: (() => void) | null = null;
+      if (c.action.kind === 'route') {
+        const path = c.action.path;
+        run = () => void this.router.navigate([path]);
+      } else if (c.action.kind === 'action') {
+        run = resolveCardAction(c.action.actionId, this.actionHandlers);
       }
-    }
-    if (this.interactiveWatched()) {
-      const watched = this.status() === 'watched';
-      actions.push({
-        labelKey: watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched',
-        icon: watched ? 'eye-off' : 'eye',
-        run: () => this.watchedToggled.emit(!watched),
+      if (!run) continue; // unknown actionId, or an unrecognised action.kind
+
+      const isToggle = c.action.kind === 'action' && c.action.actionId === 'card.toggle-watched';
+      resolved.push({
+        weight: c.weight,
+        action: {
+          labelKey: isToggle ? (watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched') : c.labelKey,
+          icon: isToggle ? (watched ? 'eye-off' : 'eye') : c.icon,
+          tone: c.tone ?? 'default',
+          run,
+        },
       });
     }
-    actions.push(...this.extraActions());
-    if (this.dismissable()) {
-      actions.push({
-        labelKey: 'media_card.remove_from_list',
-        icon: 'trash-2',
-        tone: 'danger',
-        run: () => this.dismissed.emit(),
-      });
+
+    const extra = this.extraActions();
+    const actions = resolved.map((r) => r.action);
+    if (extra.length) {
+      const insertAt = resolved.findIndex((r) => r.weight >= 900);
+      if (insertAt === -1) actions.push(...extra);
+      else actions.splice(insertAt, 0, ...extra);
     }
     return actions;
   });
+
+  /** A contribution pointing at a core actionId must also clear that core item's own
+   *  `when` and extra guard, whoever declared it. */
+  private passesCoreGateFor(c: UiContribution, ctx: WhenContext): boolean {
+    if (c.action.kind !== 'action') return true;
+    const core = CORE_CARD_ACTIONS.find((a) => a.action.kind === 'action' && a.action.actionId === (c.action as { actionId: string }).actionId);
+    if (!core || core.id === c.id) return true;
+    return evaluateWhen(core.when, ctx) && (this.extraGuards[core.id]?.() ?? true);
+  }
 
   /**
    * Resolved top-right status. Falls back to an auto-detected `'missing'`
