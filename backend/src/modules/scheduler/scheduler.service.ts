@@ -1,8 +1,10 @@
 import {
+  BadRequestException,
   Inject,
   Injectable,
   Logger,
   OnModuleInit,
+  Optional,
   forwardRef,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -30,9 +32,29 @@ import { MarkersService } from '../markers/markers.service';
 import { CORE_SCHEDULER_JOB_NAMES } from '../../common/constants/core-scheduler-jobs';
 import { PluginJobsService } from '../plugins/plugin-jobs.service';
 import { AcquisitionSchedulerService } from '../../plugins/download/acquisition-scheduler.service';
+import { isDownloadBundleEnabled } from '../../common/constants/plugin-flags';
 
 /** Yield the event loop so HTTP requests aren't starved by bulk tasks. */
 const yieldLoop = () => new Promise<void>((r) => setTimeout(r, 50));
+
+/** Core jobs that need the download bundle (`plugins/download/`) to run — see FLIKS_BUNDLES. */
+const DOWNLOAD_BUNDLE_JOB_NAMES: ReadonlySet<string> = new Set([
+  'SearchMissing',
+  'RssSync',
+  'ImportCompleted',
+  'CleanStalled',
+  'CleanSeeded',
+]);
+
+/** False for a download-bundle job once the bundle is off, so it drops out of the
+ *  scheduler listing and can no longer be triggered. `bundleEnabled` defaults to a
+ *  fresh env read, and is otherwise a plain parameter for `it.each`-style testing. */
+export function isJobAvailable(
+  name: string,
+  bundleEnabled = isDownloadBundleEnabled(),
+): boolean {
+  return bundleEnabled || !DOWNLOAD_BUNDLE_JOB_NAMES.has(name);
+}
 
 @Injectable()
 export class SchedulerService implements OnModuleInit {
@@ -48,15 +70,17 @@ export class SchedulerService implements OnModuleInit {
     private readonly tmdb: TmdbProvider,
     private readonly mediaService: MediaService,
     private readonly config: ConfigService,
+    @Optional()
     @Inject(forwardRef(() => CompletionService))
-    private readonly completion: CompletionService,
+    private readonly completion: CompletionService | undefined,
     private readonly eventsService: EventsService,
     private readonly subtitleScheduler: SubtitleSchedulerService,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly thumbnailService: ThumbnailService,
     private readonly markers: MarkersService,
-    private readonly acquisitionScheduler: AcquisitionSchedulerService,
+    @Optional()
+    private readonly acquisitionScheduler: AcquisitionSchedulerService | undefined,
     private readonly pluginJobs: PluginJobsService,
   ) {}
 
@@ -131,8 +155,10 @@ export class SchedulerService implements OnModuleInit {
 
   @Cron(CronExpression.EVERY_6_HOURS)
   async searchMissing(): Promise<void> {
+    const scheduler = this.acquisitionScheduler;
+    if (!scheduler) return;
     return this.runCommand('SearchMissing', 'scheduled', () =>
-      this.acquisitionScheduler.searchMissing(),
+      scheduler.searchMissing(),
     );
   }
 
@@ -147,9 +173,9 @@ export class SchedulerService implements OnModuleInit {
   /** RSS sync every 15 minutes */
   @Cron('*/15 * * * *')
   async rssSync(): Promise<void> {
-    return this.runCommand('RssSync', 'scheduled', () =>
-      this.acquisitionScheduler.rssSync(),
-    );
+    const scheduler = this.acquisitionScheduler;
+    if (!scheduler) return;
+    return this.runCommand('RssSync', 'scheduled', () => scheduler.rssSync());
   }
 
   // ---------------------------------------------------------------------------
@@ -168,7 +194,10 @@ export class SchedulerService implements OnModuleInit {
       pluginId: string | null;
     }[]
   > {
-    const names = SchedulerService.SCHEDULERS.map((s) => s.name);
+    const available = SchedulerService.SCHEDULERS.filter((s) =>
+      isJobAvailable(s.name),
+    );
+    const names = available.map((s) => s.name);
 
     // Get last command per scheduler name in one query
     const lastCommands = await this.commandRepo
@@ -181,7 +210,7 @@ export class SchedulerService implements OnModuleInit {
 
     const lastByName = new Map(lastCommands.map((c) => [c.name, c]));
 
-    const core = SchedulerService.SCHEDULERS.map((s) => {
+    const core = available.map((s) => {
       const last = lastByName.get(s.name);
       const interval = CronExpressionParser.parse(s.cron);
       return {
@@ -211,9 +240,9 @@ export class SchedulerService implements OnModuleInit {
 
   async triggerCommand(name: string): Promise<Command> {
     const known = [
-      ...SchedulerService.SCHEDULERS.filter((s) => s.triggerable).map(
-        (s) => s.name,
-      ),
+      ...SchedulerService.SCHEDULERS.filter(
+        (s) => s.triggerable && isJobAvailable(s.name),
+      ).map((s) => s.name),
       'RescanAll',
       'RefreshMissingMetadata',
       'RescanMissingFiles',
@@ -223,7 +252,11 @@ export class SchedulerService implements OnModuleInit {
       'DetectMissingMarkers',
     ];
     if (!known.includes(name)) {
-      throw new Error(`Unknown command: ${name}. Valid: ${known.join(', ')}`);
+      // A caller-input error (unknown name, or a job the download bundle just
+      // dropped) — not a server fault, so 400 rather than an unhandled throw.
+      throw new BadRequestException(
+        `Unknown command: ${name}. Valid: ${known.join(', ')}`,
+      );
     }
 
     const cmd = await this.commandRepo.save(
@@ -315,15 +348,15 @@ export class SchedulerService implements OnModuleInit {
         const mediaIds = Array.isArray(body['mediaIds'])
           ? (body['mediaIds'] as number[])
           : undefined;
-        await this.acquisitionScheduler.searchMissing(mediaIds);
+        await this.acquisitionScheduler?.searchMissing(mediaIds);
       } else if (name === 'RefreshMetadata') await this.doRefreshMetadata();
-      else if (name === 'RssSync') await this.acquisitionScheduler.rssSync();
+      else if (name === 'RssSync') await this.acquisitionScheduler?.rssSync();
       else if (name === 'ImportCompleted')
-        await this.completion.processCompleted();
+        await this.completion?.processCompleted();
       else if (name === 'CleanStalled')
-        await this.completion.cleanStalledTorrents();
+        await this.completion?.cleanStalledTorrents();
       else if (name === 'CleanSeeded')
-        await this.completion.cleanSeededTorrents();
+        await this.completion?.cleanSeededTorrents();
       else if (name === 'SubtitleSearch')
         await this.subtitleScheduler.searchMissingSubtitles();
       else if (name === 'SubtitleUpgrade')
