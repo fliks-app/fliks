@@ -6,9 +6,9 @@ import {
   RelationId,
   Index,
 } from 'typeorm';
-import { BaseEntity } from '../../../common/entities/base.entity';
-import { Media } from '../../media/entities/media.entity';
-import { User } from '../../users/entities/user.entity';
+import { BaseEntity } from '../../../../common/entities/base.entity';
+import { Media } from '../../../../modules/media/entities/media.entity';
+import { User } from '../../../../modules/users/entities/user.entity';
 
 @Entity('blocklist')
 @Index('UQ_blocklist_sourceTitle_lower', { synchronize: false })

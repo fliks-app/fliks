@@ -12,14 +12,13 @@
 export type Principal = { kind: 'delegated'; userId: number } | { kind: 'system' };
 
 /**
- * The eight scopes a `process` manifest can request, one per method
+ * The seven scopes a `process` manifest can request, one per method
  * group, consented once at install.
  */
 export type PluginScope =
   | 'media:read'
   | 'acquisition:candidates'
   | 'releases:score'
-  | 'blocklist:write'
   | 'requests:progress'
   | 'ingest:write'
   | 'events:emit'

@@ -110,7 +110,6 @@ interface Harness {
   seasonRepo: ReturnType<typeof fakeRepo>;
   episodeRepo: ReturnType<typeof fakeRepo>;
   mediaFileRepo: ReturnType<typeof fakeRepo>;
-  blocklistEntryRepo: ReturnType<typeof fakeRepo>;
   pluginRegistrationRepo: ReturnType<typeof fakeRepo>;
   autoGrab: { classifyForSearch: jest.Mock };
   acquisitionCandidates: {
@@ -121,7 +120,6 @@ interface Harness {
   profiles: { resolveAllowedForMedia: jest.Mock };
   qualityDefs: { getSizeLimitsMap: jest.Mock };
   customFormats: { scoreRelease: jest.Mock };
-  blocklist: { create: jest.Mock; isBlocked: jest.Mock };
   requestLifecycle: { markInProgress: jest.Mock };
   libraryIngestService: { ingest: jest.Mock };
   notifications: { dispatch: jest.Mock };
@@ -142,7 +140,6 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
   const seasonRepo = fakeRepo();
   const episodeRepo = fakeRepo();
   const mediaFileRepo = fakeRepo();
-  const blocklistEntryRepo = fakeRepo();
   const pluginRegistrationRepo = fakeRepo();
   const autoGrab = { classifyForSearch: jest.fn() };
   const acquisitionCandidates = {
@@ -159,10 +156,6 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
     getSizeLimitsMap: jest.fn().mockResolvedValue(new Map()),
   };
   const customFormats = { scoreRelease: jest.fn().mockResolvedValue(0) };
-  const blocklist = {
-    create: jest.fn(),
-    isBlocked: jest.fn().mockResolvedValue(false),
-  };
   const requestLifecycle = {
     markInProgress: jest.fn().mockResolvedValue(undefined),
   };
@@ -183,7 +176,7 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
   const sseAudience = { recipientsForMedia: jest.fn().mockResolvedValue([9]) };
   const countsCache = new PluginCountsCacheService();
 
-  // Fakes stand in for 21 constructor params — a plain unit test of the class,
+  // Fakes stand in for 19 constructor params — a plain unit test of the class,
   // not a DI-resolved instance (the DI graph itself is proven by the boot check).
   // eslint-disable-next-line @typescript-eslint/no-unsafe-call
   const host = new (FliksHostImpl as any)(
@@ -192,14 +185,12 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
     seasonRepo,
     episodeRepo,
     mediaFileRepo,
-    blocklistEntryRepo,
     pluginRegistrationRepo,
     autoGrab,
     acquisitionCandidates,
     profiles,
     qualityDefs,
     customFormats,
-    blocklist,
     requestLifecycle,
     libraryIngestService,
     notifications,
@@ -217,14 +208,12 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
     seasonRepo,
     episodeRepo,
     mediaFileRepo,
-    blocklistEntryRepo,
     pluginRegistrationRepo,
     autoGrab,
     acquisitionCandidates,
     profiles,
     qualityDefs,
     customFormats,
-    blocklist,
     requestLifecycle,
     libraryIngestService,
     notifications,
@@ -687,6 +676,7 @@ describe('FliksHostImpl', () => {
             leechers: 2,
             publishDate: new Date().toISOString(),
             sourceRef: 'indexer-a',
+            blocked: false,
           },
         ],
       });
@@ -722,6 +712,7 @@ describe('FliksHostImpl', () => {
             publishDate: new Date().toISOString(),
             sourceRef: 'indexer-a',
             minSeeders: 50,
+            blocked: false,
           },
         ],
       });
@@ -753,6 +744,7 @@ describe('FliksHostImpl', () => {
             leechers: 2,
             publishDate: new Date().toISOString(),
             sourceRef: 'indexer-a',
+            blocked: false,
           },
         ],
       });
@@ -763,6 +755,55 @@ describe('FliksHostImpl', () => {
       expect(result[0].languageName).toBe(
         getAppLanguageById(result[0].languageId!)?.name,
       );
+      expectJsonSafe(result);
+    });
+
+    it('honours the caller-supplied blocked flag instead of querying a blocklist core no longer owns — the unblocked release survives, the blocked one does not', async () => {
+      const h = makeHarness();
+      h.mediaRepo.findOne.mockResolvedValue(makeMedia({ runtime: 120 }));
+      h.profiles.resolveAllowedForMedia.mockReturnValue({
+        allowed: new Set([9]),
+        allowedLangs: new Set(),
+      });
+
+      const result = await h.host['releases.score']({
+        mediaId: 1,
+        releases: [
+          {
+            id: 'blocked-one',
+            title: 'A Movie 2020 1080p WEB-DL',
+            size: 4_000_000_000,
+            seeders: 10,
+            leechers: 2,
+            publishDate: new Date().toISOString(),
+            sourceRef: 'indexer-a',
+            blocked: true,
+          },
+          {
+            id: 'clean-one',
+            title: 'A Movie 2020 1080p WEB-DL',
+            size: 4_000_000_000,
+            seeders: 10,
+            leechers: 2,
+            publishDate: new Date().toISOString(),
+            sourceRef: 'indexer-b',
+            blocked: false,
+          },
+        ],
+      });
+
+      const blocked = result.find((r) => r.id === 'blocked-one')!;
+      const clean = result.find((r) => r.id === 'clean-one')!;
+      expect(blocked.blocklisted).toBe(true);
+      expect(blocked.rejections.some((r) => r.code === 'BLOCKLISTED')).toBe(
+        true,
+      );
+      expect(clean.blocklisted).toBe(false);
+      expect(clean.rejections.some((r) => r.code === 'BLOCKLISTED')).toBe(
+        false,
+      );
+      // Sort rule #2 (not-blocklisted first): the clean release ranks ahead.
+      expect(result[0].id).toBe('clean-one');
       expectJsonSafe(result);
     });
   });
@@ -826,57 +867,7 @@ describe('FliksHostImpl', () => {
   });
 
   // ===========================================================================
-  // B1 — blocklist.add
-  // ===========================================================================
-
-  describe('blocklist.add', () => {
-    it('creates a row and returns its id', async () => {
-      const h = makeHarness();
-      h.blocklist.create.mockResolvedValue({ id: 77 });
-      const result = await h.host['blocklist.add']({
-        idempotencyKey: 'k1',
-        sourceTitle: 'Some.Release',
-        note: 'blocked',
-      });
-      expect(result).toEqual({ id: 77 });
-      expectJsonSafe(result);
-    });
-
-    it('treats a duplicate sourceTitle as an idempotent success, not an error', async () => {
-      const h = makeHarness();
-      h.blocklist.create.mockRejectedValue({ code: '23505' });
-      h.blocklistEntryRepo.createQueryBuilder.mockReturnValue(
-        fakeQueryBuilder([], { id: 5 }),
-      );
-      const result = await h.host['blocklist.add']({
-        idempotencyKey: 'k1',
-        sourceTitle: 'Some.Release',
-        note: 'blocked',
-      });
-      expect(result).toEqual({ id: 5 });
-    });
-  });
-
-  // ===========================================================================
-  // B2 — blocklist.check
-  // ===========================================================================
-
-  describe('blocklist.check', () => {
-    it('reports which titles are blocked', async () => {
-      const h = makeHarness();
-      h.blocklist.isBlocked.mockImplementation((t: string) =>
-        Promise.resolve(t === 'Blocked.Release'),
-      );
-      const result = await h.host['blocklist.check']({
-        titles: ['Blocked.Release', 'Clean.Release'],
-      });
-      expect(result).toEqual({ blocked: ['Blocked.Release'] });
-      expectJsonSafe(result);
-    });
-  });
-
-  // ===========================================================================
-  // B3 — requests.markInProgress
+  // B1 — requests.markInProgress
   // ===========================================================================
 
   describe('requests.markInProgress', () => {

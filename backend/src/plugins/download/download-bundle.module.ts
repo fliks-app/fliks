@@ -15,7 +15,7 @@ import { DownloadClient } from './download-clients/entities/download-client.enti
 import { QbittorrentService } from './download-clients/qbittorrent.service';
 import { MediaModule } from '../../modules/media/media.module';
 import { ProfilesModule } from '../../modules/profiles/profiles.module';
-import { BlocklistModule } from '../../modules/blocklist/blocklist.module';
+import { BlocklistModule } from './blocklist/blocklist.module';
 import { SettingsModule } from '../../modules/settings/settings.module';
 import { StreamingModule } from '../../modules/streaming/streaming.module';
 import { MarkersModule } from '../../modules/markers/markers.module';

@@ -589,7 +589,9 @@ export interface ReleaseScorerDeps {
     title: string,
     meta: { freeleech?: boolean; downloadVolumeFactor?: number },
   ): Promise<number>;
-  isBlocked(title: string): Promise<boolean>;
+  /** `indexerId` rides along so a caller keyed by per-release index (rather
+   *  than by title, which two releases may share) can disambiguate. */
+  isBlocked(title: string, indexerId: number): Promise<boolean>;
 }
 
 /**
@@ -628,7 +630,7 @@ export async function scoreAndSortReleases(
           freeleech: r.freeleech,
           downloadVolumeFactor: r.downloadVolumeFactor,
         }),
-        deps.isBlocked(r.title),
+        deps.isBlocked(r.title, r.indexerId),
       ]);
       const rejections = computeRejections({
         qualityId: parsed.quality.id,

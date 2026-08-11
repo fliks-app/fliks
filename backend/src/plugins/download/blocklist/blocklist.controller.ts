@@ -11,10 +11,10 @@ import {
 } from '@nestjs/common';
 import { BlocklistService } from './blocklist.service';
 import { CreateBlocklistEntryDto } from './dto/create-blocklist-entry.dto';
-import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
-import { PoliciesGuard } from '../auth/casl/policies.guard';
-import { CheckPolicies } from '../auth/casl/check-policies.decorator';
-import { Action } from '../auth/casl/actions.enum';
+import { JwtOrApiKeyGuard } from '../../../modules/auth/guards/jwt-or-api-key.guard';
+import { PoliciesGuard } from '../../../modules/auth/casl/policies.guard';
+import { CheckPolicies } from '../../../modules/auth/casl/check-policies.decorator';
+import { Action } from '../../../modules/auth/casl/actions.enum';
 
 @Controller('blocklist')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)

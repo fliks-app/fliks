@@ -43,7 +43,6 @@ const PLUGIN_SCOPES: ReadonlySet<string> = new Set<PluginScope>([
   'media:read',
   'acquisition:candidates',
   'releases:score',
-  'blocklist:write',
   'requests:progress',
   'ingest:write',
   'events:emit',

@@ -39,8 +39,6 @@ export default tseslint.config(
     ignores: [
       'src/plugins/download/**',
       'src/app.module.ts',
-      'src/modules/blocklist/blocklist.module.ts',
-      'src/modules/blocklist/blocklist.service.ts',
       // Test-only: both construct the bundle's publisher to prove core's own
       // path produces the same effects. They leave when the bundle does.
       'src/modules/plugins/host/fliks-host.service.spec.ts',
@@ -69,6 +67,10 @@ export default tseslint.config(
     ignores: [
       'src/plugins/download/acquisition-scheduler.service.ts',
       'src/plugins/download/auto-grab-pipeline.service.ts',
+      'src/plugins/download/blocklist/blocklist.controller.ts',
+      'src/plugins/download/blocklist/blocklist.module.ts',
+      'src/plugins/download/blocklist/blocklist.service.ts',
+      'src/plugins/download/blocklist/entities/blocklist-entry.entity.ts',
       'src/plugins/download/completion.service.spec.ts',
       'src/plugins/download/acquisition-events.service.ts',
       'src/plugins/download/completion.service.ts',

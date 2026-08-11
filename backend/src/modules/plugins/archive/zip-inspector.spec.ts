@@ -5,6 +5,7 @@ import { generateTestKeypair, signManifestBase64 } from './ed25519-test-keys';
 import { minimalDataManifest, minimalProcessManifest } from './test-manifests';
 import { pngLogo, sha256Hex, svgLogo } from './test-fixtures';
 import { PluginRefusalCode } from './refusal-codes';
+import type { ProcessPluginManifest } from '../../../common/plugin-contract';
 
 /** Sign a manifest object and return its raw bytes + a `plugin.json.sig` entry spec. */
 function signedManifestEntries(manifest: unknown): { manifestBytes: Buffer; entries: ZipEntrySpec[] } {
@@ -295,6 +296,19 @@ describe('inspect() — guards', () => {
   it('PLUGIN_BAD_MANIFEST: an unknown top-level key', async () => {
     const manifest = { ...minimalDataManifest(), evil: true };
     const buffer = buildZip([{ name: 'plugin.json', content: Buffer.from(JSON.stringify(manifest)) }]);
+    await expectRefusal(buffer, 'PLUGIN_BAD_MANIFEST');
+  });
+
+  it('PLUGIN_BAD_MANIFEST: a scope retired from the vocabulary (blocklist:write, once core owned the table) is refused, not silently accepted', async () => {
+    // Cast past the type system on purpose — a real attacker's manifest.json
+    // isn't type-checked either, and the runtime validator must refuse it too.
+    const scopes = [
+      'blocklist:write',
+    ] as unknown as ProcessPluginManifest['scopes'];
+    const manifest = minimalProcessManifest({}, { scopes });
+    const buffer = buildZip([
+      { name: 'plugin.json', content: Buffer.from(JSON.stringify(manifest)) },
+    ]);
     await expectRefusal(buffer, 'PLUGIN_BAD_MANIFEST');
   });
 

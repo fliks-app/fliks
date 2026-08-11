@@ -1,5 +1,5 @@
 /**
- * The 17 methods a `process` plugin calls on core, grouped A-E as the
+ * The 15 methods a `process` plugin calls on core, grouped A-E as the
  * plan groups them. Every payload/return shape is restated structurally
  * here rather than imported, even where it mirrors an entity — this
  * directory has no dependency on `backend/src` outside itself.
@@ -167,6 +167,8 @@ export interface PluginHostApi {
       sourceRef: string;
       minSeeders?: number;
       unknownLanguageIsoCode?: string;
+      /** Only the plugin can know — it owns the blocklist table. */
+      blocked: boolean;
     }[];
   }) => Promise<ScoredRelease[]>;
 
@@ -192,21 +194,7 @@ export interface PluginHostApi {
   /** Orphan reconcile. The FK makes this a belt, not the braces. */
   'media.exists': (p: { mediaIds: number[] }) => Promise<number[]>;
 
-  // Group B — write acquisition state (3)
-
-  'blocklist.add': (p: {
-    idempotencyKey: string;
-    sourceTitle: string;
-    quality?: string;
-    mediaId?: number;
-    indexerName?: string;
-    downloadUrl?: string;
-    note: string;
-  }) => Promise<{ id: number }>;
-
-  'blocklist.check': (p: {
-    titles: string[];
-  }) => Promise<{ blocked: string[] }>;
+  // Group B — write acquisition state (1)
 
   'requests.markInProgress': (p: {
     idempotencyKey: string;
@@ -234,7 +222,7 @@ export interface PluginHostApi {
   }>;
 
   // Group D — events and outbound (5)
-  // (Section header in the plan says "(4)"; the 17-method total only
+  // (Section header in the plan says "(4)"; the 15-method total only
   // reconciles with the 5 methods listed below, D1-D5.)
 
   /** Batched. Core resolves the SSE audience via SseAudienceService.recipientsForMedia. */

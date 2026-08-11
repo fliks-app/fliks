@@ -15,7 +15,7 @@ import { CreateDownloadClientDto } from './dto/create-download-client.dto';
 import { UpdateDownloadClientDto } from './dto/update-download-client.dto';
 import { TestDownloadClientDto } from './dto/test-download-client.dto';
 import { TorrentHistoryMatcher } from '../torrent-history-matcher.service';
-import { BlocklistService } from '../../../modules/blocklist/blocklist.service';
+import { BlocklistService } from '../blocklist/blocklist.service';
 import { EventsService } from '../../../modules/scheduler/events.service';
 import { SettingsService } from '../../../modules/settings/settings.service';
 import { redactSecretFields, mergeSecretFields } from '../../../common/utils/secret-fields.util';

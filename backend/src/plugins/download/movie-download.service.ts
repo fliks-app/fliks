@@ -17,7 +17,7 @@ import { QbittorrentService } from './download-clients/qbittorrent.service';
 import { CustomFormatsService } from '../../modules/profiles/custom-formats.service';
 import { ProfilesService } from '../../modules/profiles/profiles.service';
 import { QualityDefinitionsService } from '../../modules/profiles/quality-definitions.service';
-import { BlocklistService } from '../../modules/blocklist/blocklist.service';
+import { BlocklistService } from './blocklist/blocklist.service';
 import { InProcessPluginHostClient } from '../../modules/plugins/host/in-process-plugin-host-client';
 import { MediaType } from '../../common/enums';
 import { GrabMovieDto } from './dto/grab-movie.dto';
