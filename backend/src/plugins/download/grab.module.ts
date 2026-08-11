@@ -13,7 +13,6 @@ import { LibrariesModule } from '../../modules/libraries/libraries.module';
 import { MediaModule } from '../../modules/media/media.module';
 import { PluginHostModule } from '../../modules/plugins/host/plugin-host.module';
 import { GrabController } from './grab.controller';
-import { BlocklistController } from './blocklist/blocklist.controller';
 import { MovieDownloadService } from './movie-download.service';
 import { EpisodeDownloadService } from './episode-download.service';
 
@@ -29,7 +28,7 @@ import { EpisodeDownloadService } from './episode-download.service';
     MediaModule,
     PluginHostModule,
   ],
-  controllers: [GrabController, BlocklistController],
+  controllers: [GrabController],
   providers: [MovieDownloadService, EpisodeDownloadService],
 })
 export class GrabModule {}
