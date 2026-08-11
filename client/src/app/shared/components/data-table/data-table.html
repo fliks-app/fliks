@@ -1,5 +1,24 @@
 <div class="flex flex-col gap-4">
-  <h2 class="card-title text-lg">{{ titleKey() | translate }}</h2>
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+    <h2 class="card-title text-lg">{{ titleKey() | translate }}</h2>
+    @if (listActions().length) {
+      <div class="flex gap-2 shrink-0">
+        @for (action of listActions(); track action.path) {
+          <button
+            type="button"
+            class="btn btn-outline btn-sm"
+            (click)="runListAction(action)"
+            [disabled]="listActionBusy() === action.path"
+          >
+            @if (listActionBusy() === action.path) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ action.labelKey | translate }}
+          </button>
+        }
+      </div>
+    }
+  </div>
 
   @if (loading()) {
     <div class="flex justify-center py-16">
@@ -26,7 +45,14 @@
           @for (row of rows(); track row.id) {
             <tr>
               @for (col of columns(); track col.key) {
-                <td>{{ row[col.key] }}</td>
+                <td>
+                  @switch (col.format) {
+                    @case ('date') { {{ cellDate(row[col.key]) | localeDate }} }
+                    @case ('bytes') { {{ cellBytes(row[col.key]) }} }
+                    @case ('percent') { {{ cellPercent(row[col.key]) }} }
+                    @default { {{ row[col.key] }} }
+                  }
+                </td>
               }
               @if (rowActions().length) {
                 <td class="text-end">
@@ -42,5 +68,8 @@
         </tbody>
       </table>
     </div>
+    @if (paged() && totalPages() > 1) {
+      <app-pagination class="pt-2" [current]="page()" [total]="totalPages()" (pageChange)="goToPage($event)" />
+    }
   }
 </div>

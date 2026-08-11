@@ -2319,7 +2319,9 @@
     "delete_error": "Löschen nicht möglich.",
     "unknown_implementation": "Unbekannter Anbietertyp — seine Einstellungen können hier nicht bearbeitet werden.",
     "test_connection": "Verbindung testen",
-    "test_network_error": "Der Server konnte für den Test nicht erreicht werden."
+    "test_network_error": "Der Server konnte für den Test nicht erreicht werden.",
+    "move_up": "Nach oben",
+    "move_down": "Nach unten"
   },
   "data_table": {
     "load_error": "Liste konnte nicht geladen werden.",

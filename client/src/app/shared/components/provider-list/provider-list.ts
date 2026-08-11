@@ -15,6 +15,7 @@ import { HttpClient } from '@angular/common/http';
 import { NgTemplateOutlet } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { LucideArrowUp, LucideArrowDown } from '@lucide/angular';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { InputFieldComponent } from '../forms/input-field/input-field';
 import { ToggleFieldComponent } from '../forms/toggle-field/toggle-field';
@@ -24,6 +25,7 @@ import {
   ProviderDraft,
   ProviderImplementation,
   ProviderInstance,
+  ProviderListAction,
   ProviderListLabels,
   ProviderTestResult,
 } from './provider-list.types';
@@ -37,7 +39,16 @@ import {
  */
 @Component({
   selector: 'app-provider-list',
-  imports: [TranslateModule, NgTemplateOutlet, InputFieldComponent, ToggleFieldComponent, SelectFieldComponent, SchemaFormComponent],
+  imports: [
+    TranslateModule,
+    NgTemplateOutlet,
+    InputFieldComponent,
+    ToggleFieldComponent,
+    SelectFieldComponent,
+    SchemaFormComponent,
+    LucideArrowUp,
+    LucideArrowDown,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './provider-list.html',
 })
@@ -57,6 +68,10 @@ export class ProviderListComponent implements OnInit {
   readonly showPriority = input(true);
   readonly defaultPriority = input(0);
   readonly defaultEnabled = input(true);
+  /** Sorts rows by priority and adds move-up/down swaps — priority is meaningless to reorder otherwise. */
+  readonly reorderable = input(false);
+  /** Rendered once above the rows (the plan's `actions[].scope: 'list'`), distinct from per-row actions. */
+  readonly listActions = input<readonly ProviderListAction[]>([]);
   /** Matches subtitle-providers' current UX: renaming the draft to the driver's label while creating. */
   readonly autoFillNameFromImplementation = input(false);
   /** Runs against the unsaved draft (before create/update) — the plan's motivating row action. */
@@ -83,6 +98,13 @@ export class ProviderListComponent implements OnInit {
 
   readonly testLoading = signal(false);
   readonly testResult = signal<ProviderTestResult | null>(null);
+
+  readonly listActionBusy = signal<string | null>(null);
+
+  /** Display order: priority ascending when `reorderable`, otherwise the server's own order. */
+  readonly orderedRows = computed(() =>
+    this.reorderable() ? [...this.rows()].sort((a, b) => a.priority - b.priority) : this.rows(),
+  );
 
   readonly currentImplementation = computed(
     () => this.implementations().find((i) => i.implementation === this.draftImplementation()) ?? null,
@@ -245,6 +267,32 @@ export class ProviderListComponent implements OnInit {
         message: httpErr.error?.message ?? this.translate.instant(l.deleteErrorKey),
         variant: 'danger',
       });
+    }
+  }
+
+  /** Swaps this row's priority with its neighbour in display order and persists both. */
+  async moveRow(row: ProviderInstance, direction: -1 | 1): Promise<void> {
+    const ordered = this.orderedRows();
+    const idx = ordered.findIndex((r) => r.id === row.id);
+    const swapIdx = idx + direction;
+    if (idx < 0 || swapIdx < 0 || swapIdx >= ordered.length) return;
+    const other = ordered[swapIdx];
+    try {
+      await firstValueFrom(this.http.put(`${this.listUrl()}/${row.id}`, { ...row, priority: other.priority }));
+      await firstValueFrom(this.http.put(`${this.listUrl()}/${other.id}`, { ...other, priority: row.priority }));
+      await this.reload();
+    } catch {
+      // handled by the global error interceptor
+    }
+  }
+
+  async runListAction(action: ProviderListAction): Promise<void> {
+    this.listActionBusy.set(action.labelKey);
+    try {
+      await action.run();
+      await this.reload();
+    } finally {
+      this.listActionBusy.set(null);
     }
   }
 }

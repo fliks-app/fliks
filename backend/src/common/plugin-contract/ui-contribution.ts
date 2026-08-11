@@ -63,6 +63,9 @@ export interface FieldDef {
   secret?: boolean;
   default?: string | number | boolean;
   options?: { value: string; labelKey: string }[];
+  /** Written to a column on the row itself rather than into its `settings` bag.
+   *  Without this a declared field silently stops persisting an entity column. */
+  topLevel?: boolean;
 }
 
 /** One `ui.configPages[]` entry — a form-backed settings page under `plugin.<id>.`. */
@@ -92,17 +95,40 @@ export interface ProvidersConfigPage extends ConfigPageBase {
   implementations: string;
   actions?: { id: string; labelKey: string; route: string; scope: 'row' | 'list' }[];
   reorderable?: boolean;
+  /** Priority is not a universal provider concept; hide the column when the
+   *  resource has none. */
+  showPriority?: boolean;
+  defaultPriority?: number;
+  /** Overrides the generic provider-list wording, so a page reads in its own
+   *  domain's terms rather than "New provider". */
+  labels?: {
+    newKey?: string;
+    emptyKey?: string;
+    testKey?: string;
+    deleteConfirmKey?: string;
+  };
 }
 
 /** Read-mostly: declared columns and declared row actions, never a general grid. */
 export interface TableConfigPage extends ConfigPageBase {
   kind: 'table';
   list: string;
-  columns: { key: string; labelKey: string }[];
+  columns: { key: string; labelKey: string; format?: 'date' | 'bytes' | 'percent' }[];
   rowActions?: (
     | { kind: 'route'; labelKey: string; path: string }
     | { kind: 'action'; labelKey: string; actionId: string }
     | { kind: 'proxy'; labelKey: string; method: 'POST' | 'DELETE'; path: string; confirmKey?: string }
   )[];
   defaultSortKey?: string;
+  /** `list` answers `{data,total,page,pageSize}` rather than a bare array — a
+   *  paged resource renders empty against an array-only reader. */
+  paged?: boolean;
+  pageSize?: number;
+  /** List-scope actions (clear-all and the like), distinct from `rowActions`. */
+  listActions?: {
+    labelKey: string;
+    method: 'POST' | 'DELETE';
+    path: string;
+    confirmKey?: string;
+  }[];
 }

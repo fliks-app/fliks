@@ -1,10 +1,13 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, input, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
+import { formatBytes } from '../../utils/download-format';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
-import { RowAction, TableColumn, TableRow } from './data-table.types';
+import { PaginationComponent } from '../pagination/pagination';
+import { CellValue, ListAction, PagedResult, RowAction, TableColumn, TableRow } from './data-table.types';
 
 /**
  * The `table` view kind from the plugin plan: declared columns, declared row
@@ -13,7 +16,7 @@ import { RowAction, TableColumn, TableRow } from './data-table.types';
  */
 @Component({
   selector: 'app-data-table',
-  imports: [TranslateModule],
+  imports: [TranslateModule, LocaleDatePipe, PaginationComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './data-table.html',
 })
@@ -27,17 +30,27 @@ export class DataTableComponent implements OnInit {
   readonly listUrl = input.required<string>();
   readonly columns = input.required<readonly TableColumn[]>();
   readonly rowActions = input<readonly RowAction[]>([]);
+  /** List-scope actions (the plan's `listActions[]`) — rendered once, next to the title. */
+  readonly listActions = input<readonly ListAction[]>([]);
   /** Applied once after load; there is no header-click re-sort. */
   readonly defaultSortKey = input<string | null>(null);
   readonly loadErrorKey = input('data_table.load_error');
   readonly emptyKey = input('data_table.empty');
   /** Resolves a core `actionId`; undefined = unknown = the button must not render (fail closed). */
   readonly resolveAction = input<(actionId: string, row: TableRow) => (() => void) | undefined>(() => undefined);
+  /** `list` answers `{data,total,page,pageSize}` rather than a bare array. */
+  readonly paged = input(false);
+  readonly pageSize = input(20);
 
   readonly rows = signal<TableRow[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
   readonly busy = signal<string | null>(null);
+  readonly listActionBusy = signal<string | null>(null);
+
+  readonly page = signal(1);
+  readonly total = signal(0);
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize())));
 
   ngOnInit(): void {
     void this.loadRows();
@@ -47,13 +60,39 @@ export class DataTableComponent implements OnInit {
     this.loading.set(true);
     this.listError.set('');
     try {
-      const data = await firstValueFrom(this.http.get<TableRow[]>(this.listUrl()));
-      this.rows.set(this.applyDefaultSort(Array.isArray(data) ? data : []));
+      if (this.paged()) {
+        const params = new HttpParams().set('page', this.page()).set('pageSize', this.pageSize());
+        const res = await firstValueFrom(this.http.get<PagedResult<TableRow>>(this.listUrl(), { params }));
+        this.rows.set(this.applyDefaultSort(Array.isArray(res?.data) ? res.data : []));
+        this.total.set(res?.total ?? 0);
+      } else {
+        const data = await firstValueFrom(this.http.get<TableRow[]>(this.listUrl()));
+        this.rows.set(this.applyDefaultSort(Array.isArray(data) ? data : []));
+      }
     } catch {
       this.listError.set(this.translate.instant(this.loadErrorKey()));
     } finally {
       this.loading.set(false);
     }
+  }
+
+  async goToPage(page: number): Promise<void> {
+    if (page < 1 || page > this.totalPages()) return;
+    this.page.set(page);
+    await this.loadRows();
+  }
+
+  /** `LocaleDatePipe` doesn't accept a boolean — no declared column is ever meant to be one. */
+  cellDate(value: CellValue): string | number | null {
+    return typeof value === 'boolean' ? null : value ?? null;
+  }
+
+  cellBytes(value: CellValue): string {
+    return typeof value === 'number' ? formatBytes(value) : String(value ?? '');
+  }
+
+  cellPercent(value: CellValue): string {
+    return typeof value === 'number' ? `${Math.round(value)}%` : String(value ?? '');
   }
 
   private applyDefaultSort(rows: TableRow[]): TableRow[] {
@@ -89,23 +128,39 @@ export class DataTableComponent implements OnInit {
     row: TableRow,
     action: { kind: 'proxy'; method: 'POST' | 'DELETE'; path: string; confirmKey?: string },
   ): Promise<void> {
-    if (action.confirmKey) {
-      const ok = await this.confirmation.confirm({
-        title: this.translate.instant('common.confirm'),
-        message: this.translate.instant(action.confirmKey),
-        variant: 'danger',
-      });
-      if (!ok) return;
-    }
-    const busyKey = `${row.id}:${action.path}`;
-    this.busy.set(busyKey);
+    this.busy.set(`${row.id}:${action.path}`);
     try {
-      await firstValueFrom(action.method === 'POST' ? this.http.post(action.path, {}) : this.http.delete(action.path));
-      await this.loadRows();
+      if (await this.runHttpAction(action.method, action.path, action.confirmKey)) await this.loadRows();
     } catch {
       // handled by the global error interceptor
     } finally {
       this.busy.set(null);
     }
+  }
+
+  /** Runs a `listActions[]` entry — same confirm+call contract as a row's `proxy` action, unscoped to a row. */
+  async runListAction(action: ListAction): Promise<void> {
+    this.listActionBusy.set(action.path);
+    try {
+      if (await this.runHttpAction(action.method, action.path, action.confirmKey)) await this.loadRows();
+    } catch {
+      // handled by the global error interceptor
+    } finally {
+      this.listActionBusy.set(null);
+    }
+  }
+
+  /** Returns false without calling anything when the user declines the confirm — not an error. */
+  private async runHttpAction(method: 'POST' | 'DELETE', path: string, confirmKey?: string): Promise<boolean> {
+    if (confirmKey) {
+      const ok = await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: this.translate.instant(confirmKey),
+        variant: 'danger',
+      });
+      if (!ok) return false;
+    }
+    await firstValueFrom(method === 'POST' ? this.http.post(path, {}) : this.http.delete(path));
+    return true;
   }
 }

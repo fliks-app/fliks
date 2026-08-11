@@ -6,7 +6,7 @@ import { of } from 'rxjs';
 import { vi } from 'vitest';
 import { ProviderListComponent } from './provider-list';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
-import { ProviderImplementation, ProviderListLabels } from './provider-list.types';
+import { ProviderImplementation, ProviderListAction, ProviderListLabels } from './provider-list.types';
 
 beforeAll(() => {
   if (!HTMLDialogElement.prototype.showModal) {
@@ -65,7 +65,14 @@ interface FakeHttp {
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-async function createComponent(http: FakeHttp, opts: Partial<{ implementations: ProviderImplementation[] }> = {}) {
+async function createComponent(
+  http: FakeHttp,
+  opts: Partial<{
+    implementations: ProviderImplementation[];
+    reorderable: boolean;
+    listActions: ProviderListAction[];
+  }> = {},
+) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -82,8 +89,12 @@ async function createComponent(http: FakeHttp, opts: Partial<{ implementations: 
   fixture.componentRef.setInput('listUrl', '/api/x');
   fixture.componentRef.setInput('implementations', opts.implementations ?? IMPLS);
   fixture.componentRef.setInput('labels', LABELS);
+  if (opts.reorderable) fixture.componentRef.setInput('reorderable', opts.reorderable);
+  if (opts.listActions) fixture.componentRef.setInput('listActions', opts.listActions);
   fixture.detectChanges();
   await fixture.whenStable();
+  await new Promise((r) => setTimeout(r, 0));
+  fixture.detectChanges();
   return fixture;
 }
 
@@ -148,5 +159,47 @@ describe('ProviderListComponent — characterisation', () => {
     const fixture = await createComponent({ get: () => of([]), delete: del });
     await fixture.componentInstance.deleteRow({ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1 });
     expect(del).toHaveBeenCalledWith('/api/x/7');
+  });
+
+  it('VERDICT: editing seeds a topLevel field from the row itself, not from settings', async () => {
+    const fixture = await createComponent({
+      get: () =>
+        of([{ id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, delay: 9, settings: { delay: 999 } }]),
+    });
+    fixture.componentInstance.openEdit(fixture.componentInstance.rows()[0]);
+    expect(fixture.componentInstance.draftValue()['delay']).toBe(9);
+  });
+
+  it('sorts rows by priority and swaps two rows on move, persisting both priorities', async () => {
+    const put = vi.fn(() => of({}));
+    const fixture = await createComponent(
+      {
+        get: () =>
+          of([
+            { id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 20, settings: {} },
+            { id: 2, name: 'B', implementation: 'demo', enabled: true, priority: 10, settings: {} },
+          ]),
+        put,
+      },
+      { reorderable: true },
+    );
+    // Priority-sorted: B (10) then A (20).
+    expect(fixture.componentInstance.orderedRows().map((r) => r.id)).toEqual([2, 1]);
+
+    await fixture.componentInstance.moveRow(fixture.componentInstance.orderedRows()[1], -1);
+    expect(put).toHaveBeenCalledWith('/api/x/1', expect.objectContaining({ priority: 10 }));
+    expect(put).toHaveBeenCalledWith('/api/x/2', expect.objectContaining({ priority: 20 }));
+  });
+
+  it('renders a listAction once above the rows, and running it reloads', async () => {
+    const get = vi.fn(() => of([{ id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const run = vi.fn(() => Promise.resolve());
+    const fixture = await createComponent({ get }, { listActions: [{ labelKey: 'x.sync', run }] });
+    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+    expect(buttons.filter((b) => b.textContent?.includes('x.sync'))).toHaveLength(1);
+
+    await fixture.componentInstance.runListAction({ labelKey: 'x.sync', run });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledTimes(2);
   });
 });
