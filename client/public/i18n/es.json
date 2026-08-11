@@ -2319,7 +2319,9 @@
     "delete_error": "No se pudo eliminar.",
     "unknown_implementation": "Tipo de proveedor desconocido: no se puede editar su configuración aquí.",
     "test_connection": "Probar conexión",
-    "test_network_error": "No se pudo contactar con el servidor para la prueba."
+    "test_network_error": "No se pudo contactar con el servidor para la prueba.",
+    "move_up": "Subir",
+    "move_down": "Bajar"
   },
   "data_table": {
     "load_error": "No se pudo cargar la lista.",

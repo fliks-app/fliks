@@ -14,16 +14,11 @@ export interface ProviderInstance {
   [extra: string]: unknown;
 }
 
-/** A field stored as a sibling of `settings` on the wire instead of nested in it. */
-export interface ProviderFieldDef extends FieldDef {
-  topLevel?: boolean;
-}
-
 /** One driver a provider instance can be created against — the plan's `ProvidersView.implementations[]` entry. */
 export interface ProviderImplementation {
   implementation: string;
   labelKey: string;
-  fields: ProviderFieldDef[];
+  fields: FieldDef[];
 }
 
 export interface ProviderTestResult {
@@ -35,6 +30,13 @@ export interface ProviderTestResult {
 export interface ProviderDraft {
   implementation: string;
   settings: Record<string, unknown>;
+}
+
+/** A list-scope action (the plan's `ProvidersConfigPage.actions[].scope: 'list'`) — rendered
+ *  once above the rows, not per row. `run` owns the request; the component only reloads after. */
+export interface ProviderListAction {
+  labelKey: string;
+  run: () => Promise<void>;
 }
 
 export interface ProviderListLabels {

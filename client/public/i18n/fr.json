@@ -2346,7 +2346,9 @@
     "delete_error": "Impossible de supprimer.",
     "unknown_implementation": "Type de fournisseur inconnu — impossible d'en modifier les paramètres ici.",
     "test_connection": "Tester la connexion",
-    "test_network_error": "Impossible de contacter le serveur pour le test."
+    "test_network_error": "Impossible de contacter le serveur pour le test.",
+    "move_up": "Monter",
+    "move_down": "Descendre"
   },
   "data_table": {
     "load_error": "Impossible de charger la liste.",

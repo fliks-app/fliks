@@ -1,9 +1,24 @@
 <div class="flex flex-col gap-4">
   <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
     <h2 class="card-title text-lg">{{ titleKey() | translate }}</h2>
-    <button type="button" class="btn btn-primary btn-sm shrink-0 self-start" (click)="openCreate()">
-      {{ labels().newLabelKey | translate }}
-    </button>
+    <div class="flex gap-2 shrink-0 self-start">
+      @for (action of listActions(); track action.labelKey) {
+        <button
+          type="button"
+          class="btn btn-outline btn-sm"
+          (click)="runListAction(action)"
+          [disabled]="listActionBusy() === action.labelKey"
+        >
+          @if (listActionBusy() === action.labelKey) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ action.labelKey | translate }}
+        </button>
+      }
+      <button type="button" class="btn btn-primary btn-sm" (click)="openCreate()">
+        {{ labels().newLabelKey | translate }}
+      </button>
+    </div>
   </div>
 
   @if (loading()) {
@@ -28,7 +43,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (row of rows(); track row.id) {
+          @for (row of orderedRows(); track row.id; let i = $index) {
             <tr>
               <td class="font-medium">{{ row.name }}</td>
               <td class="text-sm">{{ implementationLabel(row[implementationKey()] + '') }}</td>
@@ -44,6 +59,16 @@
                 <td><ng-container *ngTemplateOutlet="tpl; context: { $implicit: row }" /></td>
               }
               <td class="text-end">
+                @if (reorderable()) {
+                  <button type="button" class="btn btn-ghost btn-xs btn-square" [disabled]="i === 0"
+                          (click)="moveRow(row, -1)" [attr.aria-label]="'provider_list.move_up' | translate">
+                    <svg lucideArrowUp class="h-4 w-4"></svg>
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-xs btn-square" [disabled]="i === orderedRows().length - 1"
+                          (click)="moveRow(row, 1)" [attr.aria-label]="'provider_list.move_down' | translate">
+                    <svg lucideArrowDown class="h-4 w-4"></svg>
+                  </button>
+                }
                 @if (rowExtraActions(); as tpl) {
                   <ng-container *ngTemplateOutlet="tpl; context: { $implicit: row }" />
                 }

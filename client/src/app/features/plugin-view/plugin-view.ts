@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -9,8 +9,15 @@ import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry
 import { SettingsApiService } from '../../core/services/api/settings-api.service';
 import { SchemaFormComponent, SchemaFormValue } from '../../shared/components/schema-form/schema-form';
 import { ProviderListComponent } from '../../shared/components/provider-list/provider-list';
-import { ProviderDraft, ProviderImplementation, ProviderListLabels, ProviderTestResult } from '../../shared/components/provider-list/provider-list.types';
+import {
+  ProviderDraft,
+  ProviderImplementation,
+  ProviderListAction,
+  ProviderListLabels,
+  ProviderTestResult,
+} from '../../shared/components/provider-list/provider-list.types';
 import { DataTableComponent } from '../../shared/components/data-table/data-table';
+import type { TableRow } from '../../shared/components/data-table/data-table.types';
 import type { FormConfigPage } from '../../core/plugin-ui/contribution.types';
 import { AnyConfigPage, ProvidersView, TableView, isFormView, isProvidersView, isTableView } from './view-kinds.types';
 
@@ -42,12 +49,8 @@ const PLUGIN_PROVIDER_LABELS: ProviderListLabels = {
 };
 
 /**
- * Resolves `plugins/:pluginId/:view` and the admin settings-page form to a
- * contribution, then renders it with the matching core renderer. `ConfigPage`
- * has no `kind` yet (a gap in `core/plugin-ui/` this PR reports rather than
- * fixes), so every resolved page is treated as `form` unless it structurally
- * carries `kind: 'providers' | 'table'` — true today for none, and for any
- * plugin once that gap closes.
+ * Resolves `plugins/:pluginId/:view` to a declared `ConfigPage` and renders
+ * it with the matching renderer for its `kind` — `form` when absent.
  */
 @Component({
   selector: 'app-plugin-view',
@@ -61,6 +64,7 @@ export class PluginViewComponent {
   private readonly http = inject(HttpClient);
   private readonly settingsApi = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
+  private readonly router = inject(Router);
 
   // Angular reuses this component across param changes on the same route
   // config (same wildcard path, different pluginId/view) — read reactively.
@@ -99,7 +103,6 @@ export class PluginViewComponent {
 
   // --- `providers` kind: the driver list is itself a proxied route ---
   readonly resolvedImplementations = signal<ProviderImplementation[] | null>(null);
-  readonly providerLabels = PLUGIN_PROVIDER_LABELS;
 
   constructor() {
     effect(() => {
@@ -149,7 +152,8 @@ export class PluginViewComponent {
     }
   }
 
-  /** The plan's motivating row action — a proxied route, run against the unsaved draft. */
+  /** The plan's motivating row action — a proxied route, run against the unsaved draft.
+   *  Only the first `scope: 'row'` entry is wired; additional ones are dropped. */
   providerTestConnection(view: ProvidersView): ((draft: ProviderDraft) => Promise<ProviderTestResult>) | null {
     const action = view.actions?.find((a) => a.scope === 'row');
     if (!action) return null;
@@ -161,4 +165,42 @@ export class PluginViewComponent {
       }
     };
   }
+
+  /** `actions[].scope: 'list'` — rendered once above the rows, POSTed with no draft. */
+  providerListActions(view: ProvidersView): ProviderListAction[] {
+    return (view.actions ?? [])
+      .filter((a) => a.scope === 'list')
+      .map((a) => ({
+        labelKey: a.labelKey,
+        run: async () => {
+          await firstValueFrom(this.http.post(a.route, {}));
+        },
+      }));
+  }
+
+  /** Merges a page's own wording over the generic provider-list chrome. */
+  providerLabels(view: ProvidersView): ProviderListLabels {
+    const l = view.labels;
+    return {
+      ...PLUGIN_PROVIDER_LABELS,
+      ...(l?.newKey ? { newLabelKey: l.newKey } : {}),
+      ...(l?.emptyKey ? { emptyKey: l.emptyKey } : {}),
+      ...(l?.testKey ? { testConnectionKey: l.testKey } : {}),
+      ...(l?.deleteConfirmKey ? { confirmDeleteKey: l.deleteConfirmKey } : {}),
+    };
+  }
+
+  /** Closed catalogue of `table` row actionIds core resolves — today just jumping to a row's
+   *  own media page via its `mediaId`/`mediaType` columns; anything else renders no button. */
+  tableResolveAction = (actionId: string, row: TableRow): (() => void) | undefined => {
+    if (actionId !== 'table.open-media') return undefined;
+    const id = row['mediaId'];
+    const type = row['mediaType'];
+    // Both columns or no button: guessing the type sends a series to a movie page.
+    if (id == null || (type !== 'series' && type !== 'movie')) return undefined;
+    const base = type === 'series' ? '/series' : '/movies';
+    return () => {
+      void this.router.navigateByUrl(`${base}/${id}`);
+    };
+  };
 }

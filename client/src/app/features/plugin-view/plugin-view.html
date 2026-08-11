@@ -20,7 +20,11 @@
           [titleKey]="view.labelKey"
           [listUrl]="view.list"
           [implementations]="impls"
-          [labels]="providerLabels"
+          [labels]="providerLabels(view)"
+          [showPriority]="view.showPriority ?? true"
+          [defaultPriority]="view.defaultPriority ?? 0"
+          [reorderable]="view.reorderable ?? false"
+          [listActions]="providerListActions(view)"
           [testConnection]="providerTestConnection(view)"
         />
       } @else {
@@ -29,7 +33,17 @@
         </div>
       }
     } @else if (tableView(); as view) {
-      <app-data-table [titleKey]="view.labelKey" [listUrl]="view.list" [columns]="view.columns" [rowActions]="view.rowActions ?? []" [defaultSortKey]="view.defaultSortKey ?? null" />
+      <app-data-table
+        [titleKey]="view.labelKey"
+        [listUrl]="view.list"
+        [columns]="view.columns"
+        [rowActions]="view.rowActions ?? []"
+        [listActions]="view.listActions ?? []"
+        [defaultSortKey]="view.defaultSortKey ?? null"
+        [paged]="view.paged ?? false"
+        [pageSize]="view.pageSize ?? 20"
+        [resolveAction]="tableResolveAction"
+      />
     } @else if (formPage(); as page) {
       @if (formLoading()) {
         <div class="flex justify-center py-16">

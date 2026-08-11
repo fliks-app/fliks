@@ -2346,7 +2346,9 @@
     "delete_error": "Unable to delete.",
     "unknown_implementation": "Unknown provider type — its settings can't be edited here.",
     "test_connection": "Test connection",
-    "test_network_error": "Unable to reach the server for the test."
+    "test_network_error": "Unable to reach the server for the test.",
+    "move_up": "Move up",
+    "move_down": "Move down"
   },
   "data_table": {
     "load_error": "Unable to load the list.",
