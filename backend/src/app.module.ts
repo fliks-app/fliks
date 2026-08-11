@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, type Type } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './modules/auth/auth.module';
@@ -6,10 +6,6 @@ import { UsersModule } from './modules/users/users.module';
 import { MediaModule } from './modules/media/media.module';
 import { ProfilesModule } from './modules/profiles/profiles.module';
 import { MetadataProvidersModule } from './modules/metadata-providers/metadata-providers.module';
-import { IndexersModule } from './plugins/download/indexers/indexers.module';
-import { DownloadClientsModule } from './plugins/download/download-clients/download-clients.module';
-import { GrabModule } from './plugins/download/grab.module';
-import { DownloadBundleModule } from './plugins/download/download-bundle.module';
 import { RequestsModule } from './modules/requests/requests.module';
 import { FliksSchedulerModule } from './modules/scheduler/scheduler.module';
 import { EventsModule } from './modules/scheduler/events.module';
@@ -34,6 +30,27 @@ import { CommonModule } from './common/common.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { isDownloadBundleEnabled } from './common/constants/plugin-flags';
+
+/**
+ * The one in-repo bundle today. Loaded through `require` on purpose: a static
+ * import runs the module's `TypeOrmModule.forFeature(...)` at import time, which
+ * registers its entities with `autoLoadEntities` whether or not the module is
+ * ever mounted — so `FLIKS_BUNDLES=` would still leave core carrying its tables.
+ * These four lines go away with the directory when the bundle ships as an
+ * archive the registry mounts at runtime.
+ */
+function downloadBundleModules(): Type<unknown>[] {
+  if (!isDownloadBundleEnabled()) return [];
+  /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-require-imports */
+  return [
+    require('./plugins/download/indexers/indexers.module').IndexersModule,
+    require('./plugins/download/download-clients/download-clients.module')
+      .DownloadClientsModule,
+    require('./plugins/download/grab.module').GrabModule,
+    require('./plugins/download/download-bundle.module').DownloadBundleModule,
+  ];
+  /* eslint-enable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-require-imports */
+}
 
 @Module({
   imports: [
@@ -86,11 +103,7 @@ import { isDownloadBundleEnabled } from './common/constants/plugin-flags';
     PersonsModule,
     ProfilesModule,
     MetadataProvidersModule,
-    IndexersModule,
-    DownloadClientsModule,
-    // The one in-repo bundle today; FLIKS_BUNDLES=<empty> drops its controller,
-    // grab routes and scheduled jobs entirely rather than exposing them disabled.
-    ...(isDownloadBundleEnabled() ? [GrabModule, DownloadBundleModule] : []),
+    ...downloadBundleModules(),
     RequestsModule,
     FliksSchedulerModule,
     LibrariesModule,
