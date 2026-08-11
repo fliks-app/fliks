@@ -1,7 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Subscription } from 'rxjs';
+import { Command } from '../../modules/scheduler/entities/command.entity';
+import { runAuditedCommand } from '../../modules/scheduler/command-audit.util';
 import { Media } from '../../modules/media/entities/media.entity';
 import {
   AutoGrabPipelineService,
@@ -37,8 +40,8 @@ import { AutoGrabExecutorService } from './auto-grab-pipeline.service';
 
 /**
  * SearchMissing / RssSync cron bodies and the per-candidate indexer fan-out.
- * Triggered by `SchedulerService`, which owns the `@Cron` decorators, the
- * Command audit trail and the manual-trigger dispatch.
+ * Owns its own `@Cron` decorators and their `Command` audit row; the manual
+ * trigger runs through `ScheduledJobRegistry` instead, without either row.
  */
 @Injectable()
 export class AcquisitionSchedulerService implements OnModuleInit {
@@ -56,6 +59,8 @@ export class AcquisitionSchedulerService implements OnModuleInit {
     private readonly clientRepo: Repository<DownloadClient>,
     @InjectRepository(DelayProfile)
     private readonly delayProfileRepo: Repository<DelayProfile>,
+    @InjectRepository(Command)
+    private readonly commandRepo: Repository<Command>,
     private readonly torznab: TorznabService,
     private readonly qbittorrent: QbittorrentService,
     private readonly autoGrab: AutoGrabPipelineService,
@@ -63,6 +68,30 @@ export class AcquisitionSchedulerService implements OnModuleInit {
     private readonly candidates: AcquisitionCandidatesService,
     private readonly eventsService: EventsService,
   ) {}
+
+  @Cron(CronExpression.EVERY_6_HOURS)
+  async searchMissingCron(): Promise<void> {
+    return runAuditedCommand(
+      this.commandRepo,
+      this.eventsService,
+      'SearchMissing',
+      'scheduled',
+      () => this.searchMissing(),
+      this.log,
+    );
+  }
+
+  @Cron('*/15 * * * *')
+  async rssSyncCron(): Promise<void> {
+    return runAuditedCommand(
+      this.commandRepo,
+      this.eventsService,
+      'RssSync',
+      'scheduled',
+      () => this.rssSync(),
+      this.log,
+    );
+  }
 
   onModuleInit(): void {
     // Single subscriber for every acquisition-side trigger — see the five

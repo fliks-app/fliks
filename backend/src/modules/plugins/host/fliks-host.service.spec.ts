@@ -3,10 +3,23 @@ import * as os from 'os';
 import * as path from 'path';
 import { FliksHostImpl } from './fliks-host.service';
 import { PluginCountsCacheService } from './plugin-counts-cache.service';
-import { MediaType } from '../../../common/enums';
+import {
+  MediaStatus,
+  MediaType,
+  MinimumAvailability,
+} from '../../../common/enums';
+import { getAppQualityById } from '../../../common/constants/app-qualities';
+import { getAppLanguageById } from '../../../common/constants/app-languages';
 import type { Media } from '../../media/entities/media.entity';
 import type { Season } from '../../media/entities/season.entity';
 import type { Episode } from '../../media/entities/episode.entity';
+// Cross-boundary read for the equivalence proof only, per the task brief —
+// this copy is deleted once `plugins/download/` converts to the host method.
+import { AcquisitionEventsService } from '../../scheduler/acquisition-events.service';
+import type { EventsService } from '../../scheduler/events.service';
+import type { SseAudienceService } from '../../scheduler/sse-audience.service';
+import type { NotificationsService } from '../../notifications/notifications.service';
+import type { MediaServersService } from '../../media-servers/media-servers.service';
 
 /** Round-trips `value` through JSON and asserts nothing was lost or mutated —
  *  the property that matters once the transport becomes a socket (Phase 10.4).
@@ -125,7 +138,7 @@ interface Harness {
   countsCache: PluginCountsCacheService;
 }
 
-function makeHarness(pluginId = 'test.plugin'): Harness {
+function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
   const mediaRepo = fakeRepo();
   const seasonRepo = fakeRepo();
   const episodeRepo = fakeRepo();
@@ -384,6 +397,147 @@ describe('FliksHostImpl', () => {
       });
       expect(h.acquisitionCandidates.listEpisodeTargets).not.toHaveBeenCalled();
     });
+
+    describe('movie availability gate — agrees with AcquisitionSchedulerService.isAvailable on every row', () => {
+      // Expected column is hand-derived from reading the current
+      // `AcquisitionSchedulerService.isAvailable`/`addDaysIso` source directly
+      // (backend/src/plugins/download/acquisition-scheduler.service.ts) — not
+      // from this file's own `FliksHostImpl.isAvailable`. A cross-import of
+      // the real class is blocked by the "core does not import
+      // plugins/download/" ESLint fence, so this table is the arms-length
+      // substitute for calling the live method.
+      const today = '2024-06-01';
+
+      const rows: [string, Record<string, unknown>, boolean][] = [
+        [
+          'announced, no dates at all',
+          { minimumAvailability: MinimumAvailability.ANNOUNCED },
+          true,
+        ],
+        [
+          'announced with a future release date',
+          {
+            minimumAvailability: MinimumAvailability.ANNOUNCED,
+            releaseDate: '2030-01-01',
+          },
+          true,
+        ],
+        [
+          'in cinemas, date in the past',
+          {
+            minimumAvailability: MinimumAvailability.IN_CINEMAS,
+            inCinemas: '2024-01-01',
+          },
+          true,
+        ],
+        [
+          'in cinemas, date in the future',
+          {
+            minimumAvailability: MinimumAvailability.IN_CINEMAS,
+            inCinemas: '2030-01-01',
+          },
+          false,
+        ],
+        [
+          'in cinemas, no date at all',
+          {
+            minimumAvailability: MinimumAvailability.IN_CINEMAS,
+            inCinemas: null,
+          },
+          false,
+        ],
+        [
+          'released via digital date in the past',
+          {
+            minimumAvailability: MinimumAvailability.RELEASED,
+            digitalRelease: '2024-01-01',
+            status: MediaStatus.ANNOUNCED,
+          },
+          true,
+        ],
+        [
+          'released via physical date in the past, no digital date',
+          {
+            minimumAvailability: MinimumAvailability.RELEASED,
+            physicalRelease: '2024-01-01',
+            status: MediaStatus.ANNOUNCED,
+          },
+          true,
+        ],
+        [
+          'released via in-cinemas + 90 days, no digital/physical date',
+          {
+            minimumAvailability: MinimumAvailability.RELEASED,
+            inCinemas: '2024-01-01',
+            status: MediaStatus.ANNOUNCED,
+          },
+          true,
+        ],
+        [
+          'released, in-cinemas grace not yet elapsed, no other date',
+          {
+            minimumAvailability: MinimumAvailability.RELEASED,
+            inCinemas: '2024-05-01',
+            status: MediaStatus.ANNOUNCED,
+          },
+          false,
+        ],
+        [
+          'released via status fallback, every date null',
+          {
+            minimumAvailability: MinimumAvailability.RELEASED,
+            status: MediaStatus.RELEASED,
+          },
+          true,
+        ],
+        [
+          'released, every date null, status not released',
+          {
+            minimumAvailability: MinimumAvailability.RELEASED,
+            status: MediaStatus.ANNOUNCED,
+          },
+          false,
+        ],
+        [
+          'released far in the past via releaseDate, status TBA',
+          {
+            minimumAvailability: MinimumAvailability.RELEASED,
+            releaseDate: '1990-01-01',
+            status: MediaStatus.TBA,
+          },
+          true,
+        ],
+        [
+          'released, explicit null release date, no other date, status continuing',
+          {
+            minimumAvailability: MinimumAvailability.RELEASED,
+            releaseDate: null,
+            status: MediaStatus.CONTINUING,
+          },
+          false,
+        ],
+      ];
+
+      it.each(rows)('%s', async (_label, overrides, wantAvailable) => {
+        const media = makeMedia({ id: 1, ...overrides });
+
+        const h = makeHarness();
+        h.acquisitionCandidates.listMovieTargets.mockResolvedValue([
+          { media, files: [] },
+        ]);
+        h.autoGrab.classifyForSearch.mockReturnValue({
+          mode: 'missing',
+          minRankExclusive: 0,
+          maxRankInclusive: 100,
+        });
+        const result = await h.host['acquisition.candidates']({
+          availableOn: today,
+          limit: 10,
+        });
+
+        expect(result.items.length).toBe(wantAvailable ? 1 : 0);
+      });
+    });
   });
 
   // ===========================================================================
@@ -581,6 +735,38 @@ describe('FliksHostImpl', () => {
       expect(
         result[0].rejections.find((r) => r.code === 'MIN_SEEDERS')?.detail,
       ).toMatch(/actual=10/);
+      expectJsonSafe(result);
+    });
+
+    it('carries qualityName/languageName from the static registry alongside their ids — a plugin cannot render a label from an id alone', async () => {
+      const h = makeHarness();
+      h.mediaRepo.findOne.mockResolvedValue(makeMedia({ runtime: 120 }));
+      h.profiles.resolveAllowedForMedia.mockReturnValue({
+        allowed: new Set([16]),
+        allowedLangs: new Set(),
+      });
+
+      const result = await h.host['releases.score']({
+        mediaId: 1,
+        releases: [
+          {
+            id: 'r1',
+            title: 'A Movie 2020 1080p WEB-DL FRENCH',
+            size: 4_000_000_000,
+            seeders: 10,
+            leechers: 2,
+            publishDate: new Date().toISOString(),
+            sourceRef: 'indexer-a',
+          },
+        ],
+      });
+
+      expect(result[0].qualityName).toBe(
+        getAppQualityById(result[0].qualityId)?.name,
+      );
+      expect(result[0].languageName).toBe(
+        getAppLanguageById(result[0].languageId!)?.name,
+      );
       expectJsonSafe(result);
     });
   });
@@ -836,6 +1022,37 @@ describe('FliksHostImpl', () => {
         }),
       ).rejects.toThrow(/ingestRoots/);
     });
+
+    it('refuses a host bound to no plugin identity, without reading a row', async () => {
+      const h = makeHarness(null);
+      await expect(
+        h.host['library.ingest']({
+          idempotencyKey: 'k1',
+          mediaId: 1,
+          paths: [sourceFile],
+          transfer: 'copy',
+          sourceLabel: 'Release.Name',
+        }),
+      ).rejects.toThrow(/ingestRoots/);
+      expect(h.pluginRegistrationRepo.findOne).not.toHaveBeenCalled();
+      expect(h.libraryIngestService.ingest).not.toHaveBeenCalled();
+    });
+
+    it('fences a plugin to the roots its registration granted', async () => {
+      const h = makeHarness('some.installed.plugin');
+      h.pluginRegistrationRepo.findOne.mockResolvedValue({
+        ingestRoots: [path.join(tmpRoot, 'elsewhere')],
+      });
+      await expect(
+        h.host['library.ingest']({
+          idempotencyKey: 'k1',
+          mediaId: 1,
+          paths: [sourceFile],
+          transfer: 'copy',
+          sourceLabel: 'Release.Name',
+        }),
+      ).rejects.toThrow(/outside every configured ingest root/);
+    });
   });
 
   // ===========================================================================
@@ -843,48 +1060,133 @@ describe('FliksHostImpl', () => {
   // ===========================================================================
 
   describe('events.publish', () => {
-    it('routes acquisition.grabbed to the domain bus and a queue refresh', async () => {
+    it('emits only the domain event for acquisition.grabbed — no direct call site emits queue.updated', async () => {
       const h = makeHarness();
       await h.host['events.publish']([
-        {
-          type: 'acquisition.grabbed',
-          mediaId: 1,
-          sourceTitle: 'x',
-          quality: '1080p',
-        },
+        { type: 'acquisition.grabbed', mediaId: 1, seasonNumber: 4 },
       ]);
       expect(h.events.emitDomain).toHaveBeenCalledWith({
         type: 'acquisition.grabbed',
         mediaId: 1,
-        seasonNumber: undefined,
+        seasonNumber: 4,
       });
-      expect(h.events.emit).toHaveBeenCalledWith({ type: 'queue.updated' });
+      expect(h.events.emit).not.toHaveBeenCalled();
     });
 
-    it('resolves the SSE audience for acquisition.imported / acquisition.failed', async () => {
+    it('matches AcquisitionEventsService exactly for acquisition.imported: same notification, SSE payload, queue refresh and media-server dispatch', async () => {
       const h = makeHarness();
-      h.mediaRepo.findOne.mockResolvedValue(
-        makeMedia({ title: 'Imported Title' }),
-      );
-      await h.host['events.publish']([
-        { type: 'acquisition.imported', mediaId: 1 },
-      ]);
-      expect(h.sseAudience.recipientsForMedia).toHaveBeenCalledWith(1);
-      expect(h.events.emitToUsers).toHaveBeenCalledWith(
-        [9],
-        expect.objectContaining({
-          type: 'import.complete',
-          title: 'Imported Title',
-        }),
+      const media = makeMedia({
+        title: 'Imported Title',
+        path: '/lib/Imported Title (2020)',
+      });
+      h.mediaRepo.findOne.mockResolvedValue(media);
+      const real = new AcquisitionEventsService(
+        h.events as unknown as EventsService,
+        h.sseAudience as unknown as SseAudienceService,
+        h.notifications as unknown as NotificationsService,
+        h.mediaServers as unknown as MediaServersService,
       );
 
+      await real.publish({
+        type: 'acquisition.imported',
+        mediaId: 1,
+        title: media.title,
+        seasonNumber: 2,
+        episodeNumber: 3,
+        quality: '1080p',
+        sourceTitle: 'Release.Name',
+        mediaPath: (media as unknown as { path: string }).path,
+      });
+      const wantNotify: unknown = h.notifications.dispatch.mock.calls.at(-1);
+      const wantSse: unknown = h.events.emitToUsers.mock.calls.at(-1);
+      const wantQueue: unknown = h.events.emit.mock.calls.at(-1);
+      const wantServers: unknown = h.mediaServers.dispatch.mock.calls.at(-1);
+      h.notifications.dispatch.mockClear();
+      h.events.emitToUsers.mockClear();
+      h.events.emit.mockClear();
+      h.mediaServers.dispatch.mockClear();
+
       await h.host['events.publish']([
-        { type: 'acquisition.failed', mediaId: 1, reason: 'boom' },
+        {
+          type: 'acquisition.imported',
+          mediaId: 1,
+          seasonNumber: 2,
+          episodeNumber: 3,
+          quality: '1080p',
+          sourceTitle: 'Release.Name',
+        },
       ]);
-      expect(h.events.emitToUsers).toHaveBeenCalledWith(
-        [9],
-        expect.objectContaining({ type: 'import.failed', error: 'boom' }),
+      expect(h.notifications.dispatch.mock.calls.at(-1)).toEqual(wantNotify);
+      expect(h.events.emitToUsers.mock.calls.at(-1)).toEqual(wantSse);
+      expect(h.events.emit.mock.calls.at(-1)).toEqual(wantQueue);
+      expect(h.mediaServers.dispatch.mock.calls.at(-1)).toEqual(wantServers);
+    });
+
+    it('matches AcquisitionEventsService exactly for acquisition.failed, using the caller-supplied release title rather than media.title', async () => {
+      const h = makeHarness();
+      const real = new AcquisitionEventsService(
+        h.events as unknown as EventsService,
+        h.sseAudience as unknown as SseAudienceService,
+        h.notifications as unknown as NotificationsService,
+        h.mediaServers as unknown as MediaServersService,
       );
+
+      await real.publish({
+        type: 'acquisition.failed',
+        mediaId: 1,
+        title: 'Release.Name.Failed',
+        reason: 'boom',
+      });
+      const wantSse: unknown = h.events.emitToUsers.mock.calls.at(-1);
+      const wantQueue: unknown = h.events.emit.mock.calls.at(-1);
+      h.events.emitToUsers.mockClear();
+      h.events.emit.mockClear();
+
+      // media.title deliberately differs from the release title — proves the
+      // host method never re-derives it from mediaId.
+      h.mediaRepo.findOne.mockResolvedValue(
+        makeMedia({ title: 'Some Different Media Title' }),
+      );
+      await h.host['events.publish']([
+        {
+          type: 'acquisition.failed',
+          mediaId: 1,
+          title: 'Release.Name.Failed',
+          reason: 'boom',
+        },
+      ]);
+      expect(h.events.emitToUsers.mock.calls.at(-1)).toEqual(wantSse);
+      expect(h.events.emit.mock.calls.at(-1)).toEqual(wantQueue);
+    });
+
+    it('matches AcquisitionEventsService exactly for the new acquisition.stalled.removed variant', async () => {
+      const h = makeHarness();
+      const real = new AcquisitionEventsService(
+        h.events as unknown as EventsService,
+        h.sseAudience as unknown as SseAudienceService,
+        h.notifications as unknown as NotificationsService,
+        h.mediaServers as unknown as MediaServersService,
+      );
+
+      await real.publish({
+        type: 'acquisition.stalled.removed',
+        mediaId: 1,
+        title: 'Stalled.Release',
+      });
+      const wantSse: unknown = h.events.emitToUsers.mock.calls.at(-1);
+      const wantQueue: unknown = h.events.emit.mock.calls.at(-1);
+      h.events.emitToUsers.mockClear();
+      h.events.emit.mockClear();
+
+      await h.host['events.publish']([
+        {
+          type: 'acquisition.stalled.removed',
+          mediaId: 1,
+          title: 'Stalled.Release',
+        },
+      ]);
+      expect(h.events.emitToUsers.mock.calls.at(-1)).toEqual(wantSse);
+      expect(h.events.emit.mock.calls.at(-1)).toEqual(wantQueue);
     });
 
     it('handles queue.changed and the batched acquisition.progress variant', async () => {
@@ -949,21 +1251,21 @@ describe('FliksHostImpl', () => {
 
   describe('events.emitOwn', () => {
     it('force-prefixes the type with the bound plugin id for a broadcast', async () => {
-      const h = makeHarness('fliks.download');
+      const h = makeHarness('acme.tool');
       await h.host['events.emitOwn']({
         type: 'sync.finished',
         payload: { n: 3 },
         audience: 'all',
       });
       expect(h.events.emitRaw).toHaveBeenCalledWith(
-        'plugin.fliks.download.sync.finished',
+        'plugin.acme.tool.sync.finished',
         { n: 3 },
         null,
       );
     });
 
     it('resolves a media-scoped audience instead of broadcasting', async () => {
-      const h = makeHarness('fliks.download');
+      const h = makeHarness('acme.tool');
       await h.host['events.emitOwn']({
         type: 'x',
         payload: null,
@@ -971,7 +1273,7 @@ describe('FliksHostImpl', () => {
       });
       expect(h.sseAudience.recipientsForMedia).toHaveBeenCalledWith(1);
       expect(h.events.emitRaw).toHaveBeenCalledWith(
-        'plugin.fliks.download.x',
+        'plugin.acme.tool.x',
         null,
         [9],
       );
@@ -1027,9 +1329,9 @@ describe('FliksHostImpl', () => {
 
   describe('config.get', () => {
     it('reads only under the plugin.<id>. prefix and strips it back off', async () => {
-      const h = makeHarness('fliks.download');
+      const h = makeHarness('acme.tool');
       h.settings.getAll.mockResolvedValue({
-        'plugin.fliks.download.rssSyncInterval': '15',
+        'plugin.acme.tool.rssSyncInterval': '15',
         'plugin.other.plugin.secret': 'nope',
         naming_movie_format: 'x',
       });
@@ -1039,9 +1341,9 @@ describe('FliksHostImpl', () => {
     });
 
     it('reads individually requested keys', async () => {
-      const h = makeHarness('fliks.download');
+      const h = makeHarness('acme.tool');
       h.settings.get.mockImplementation((k: string) =>
-        Promise.resolve(k === 'plugin.fliks.download.foo' ? 'bar' : null),
+        Promise.resolve(k === 'plugin.acme.tool.foo' ? 'bar' : null),
       );
       const result = await h.host['config.get']({ keys: ['foo', 'missing'] });
       expect(result).toEqual({ foo: 'bar' });
@@ -1055,10 +1357,10 @@ describe('FliksHostImpl', () => {
 
   describe('config.set', () => {
     it('writes under the derived prefix, never a bare key', async () => {
-      const h = makeHarness('fliks.download');
+      const h = makeHarness('acme.tool');
       await h.host['config.set']({ key: 'foo', value: 'bar' });
       expect(h.settings.set).toHaveBeenCalledWith(
-        'plugin.fliks.download.foo',
+        'plugin.acme.tool.foo',
         'bar',
       );
     });

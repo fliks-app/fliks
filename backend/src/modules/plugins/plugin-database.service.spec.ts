@@ -95,7 +95,7 @@ function hasBareSemicolon(sql: string): boolean {
 
 describe('pluginDbIdentifier', () => {
   it('maps a dotted id to the role/schema name', () => {
-    expect(pluginDbIdentifier('fliks.download')).toBe('plugin_fliks_download');
+    expect(pluginDbIdentifier('acme.tool')).toBe('plugin_acme_tool');
     expect(pluginDbIdentifier('fliks')).toBe('plugin_fliks');
   });
 
@@ -105,22 +105,22 @@ describe('pluginDbIdentifier', () => {
   });
 
   const badIds = [
-    'fliks.download; DROP TABLE media',
-    'fliks."; DROP',
-    '"fliks"',
+    'acme.tool; DROP TABLE media',
+    'acme."; DROP',
+    '"acme"',
     '../../etc/passwd',
-    'fliks..download',
-    '.fliks',
-    'fliks.',
-    'Fliks.Download',
-    'fliks_download',
-    'fliks-download',
-    '1fliks',
+    'acme..tool',
+    '.acme',
+    'acme.',
+    'Acme.Tool',
+    'acme_tool',
+    'acme-tool',
+    '1acme',
     '',
     'a'.repeat(57),
-    'fliks.download\nDROP',
-    'fliks.dow nload',
-    'flіks.download', // Cyrillic 'і' (U+0456), a homoglyph for latin 'i'
+    'acme.tool\nDROP',
+    'acme.to ol',
+    'аcme.tool', // Cyrillic 'а' (U+0430), a homoglyph for latin 'a'
   ];
 
   it.each(badIds)('rejects %j — and provision() never touches the database for it', async (id) => {
@@ -159,11 +159,11 @@ describe('PluginDatabaseService.provision', () => {
     const recorder = makeRecorder();
     const dataSource = fakeDataSource(recorder, {
       roleExists: false,
-      schemaOwner: 'plugin_fliks_download',
+      schemaOwner: 'plugin_acme_tool',
       baseTables: ['media', 'episodes'],
     });
     const manifest = minimalProcessManifest({}, {
-      id: 'fliks.download',
+      id: 'acme.tool',
       database: { schema: true, coreRefs: ['media', 'episodes'] },
     });
 
@@ -194,22 +194,22 @@ describe('PluginDatabaseService.provision', () => {
     expect(sql[1]).toBe(probe);
     expect(recorder.queries[1].parameters).toEqual(['episodes']);
     expect(sql[2]).toBe('SELECT 1 FROM pg_roles WHERE rolname = $1');
-    expect(recorder.queries[2].parameters).toEqual(['plugin_fliks_download']);
-    expect(sql[3]).toMatch(/^CREATE ROLE "plugin_fliks_download" LOGIN PASSWORD '[0-9a-f]{48}'$/);
-    expect(sql[4]).toBe('CREATE SCHEMA IF NOT EXISTS "plugin_fliks_download" AUTHORIZATION "plugin_fliks_download"');
+    expect(recorder.queries[2].parameters).toEqual(['plugin_acme_tool']);
+    expect(sql[3]).toMatch(/^CREATE ROLE "plugin_acme_tool" LOGIN PASSWORD '[0-9a-f]{48}'$/);
+    expect(sql[4]).toBe('CREATE SCHEMA IF NOT EXISTS "plugin_acme_tool" AUTHORIZATION "plugin_acme_tool"');
     expect(sql[5]).toBe('SELECT pg_get_userbyid(nspowner) AS owner FROM pg_namespace WHERE nspname = $1');
-    expect(recorder.queries[5].parameters).toEqual(['plugin_fliks_download']);
-    expect(sql[6]).toBe('GRANT USAGE ON SCHEMA public TO "plugin_fliks_download"');
-    expect(sql[7]).toBe('REVOKE REFERENCES ON ALL TABLES IN SCHEMA public FROM "plugin_fliks_download"');
-    expect(sql[8]).toBe('GRANT REFERENCES (id) ON public."media" TO "plugin_fliks_download"');
-    expect(sql[9]).toBe('GRANT REFERENCES (id) ON public."episodes" TO "plugin_fliks_download"');
+    expect(recorder.queries[5].parameters).toEqual(['plugin_acme_tool']);
+    expect(sql[6]).toBe('GRANT USAGE ON SCHEMA public TO "plugin_acme_tool"');
+    expect(sql[7]).toBe('REVOKE REFERENCES ON ALL TABLES IN SCHEMA public FROM "plugin_acme_tool"');
+    expect(sql[8]).toBe('GRANT REFERENCES (id) ON public."media" TO "plugin_acme_tool"');
+    expect(sql[9]).toBe('GRANT REFERENCES (id) ON public."episodes" TO "plugin_acme_tool"');
     // Positions 6/7 (usage/revoke) precede 8/9 (grants) in `recorder.queries`, which is push order == execution order.
   });
 
   it('skips CREATE ROLE when pg_roles already reports the role', async () => {
     const recorder = makeRecorder();
-    const dataSource = fakeDataSource(recorder, { roleExists: true, schemaOwner: 'plugin_fliks_download', baseTables: [] });
-    const manifest = minimalProcessManifest({}, { id: 'fliks.download', database: { schema: true, coreRefs: [] } });
+    const dataSource = fakeDataSource(recorder, { roleExists: true, schemaOwner: 'plugin_acme_tool', baseTables: [] });
+    const manifest = minimalProcessManifest({}, { id: 'acme.tool', database: { schema: true, coreRefs: [] } });
 
     await service(dataSource).provision(manifest);
 
@@ -233,10 +233,10 @@ describe('PluginDatabaseService.provision', () => {
     const recorder = makeRecorder();
     const dataSource = fakeDataSource(
       recorder,
-      { roleExists: true, schemaOwner: 'plugin_fliks_download', baseTables: [] },
+      { roleExists: true, schemaOwner: 'plugin_acme_tool', baseTables: [] },
       true,
     );
-    const manifest = minimalProcessManifest({}, { id: 'fliks.download', database: { schema: true, coreRefs: [] } });
+    const manifest = minimalProcessManifest({}, { id: 'acme.tool', database: { schema: true, coreRefs: [] } });
 
     await expect(service(dataSource).provision(manifest)).rejects.toThrow('COMMIT failed at the server');
     expect(recorder.events).not.toContain('rollbackTransaction');
@@ -280,14 +280,14 @@ describe('PluginDatabaseService.provision', () => {
   it('every passing-case statement has no bare semicolon, and every DDL statement carries the expected quoted identifier', async () => {
     const provisionRecorder = makeRecorder();
     await service(
-      fakeDataSource(provisionRecorder, { roleExists: false, schemaOwner: 'plugin_fliks_download', baseTables: ['media', 'episodes'] }),
-    ).provision(minimalProcessManifest({}, { id: 'fliks.download', database: { schema: true, coreRefs: ['media', 'episodes'] } }));
+      fakeDataSource(provisionRecorder, { roleExists: false, schemaOwner: 'plugin_acme_tool', baseTables: ['media', 'episodes'] }),
+    ).provision(minimalProcessManifest({}, { id: 'acme.tool', database: { schema: true, coreRefs: ['media', 'episodes'] } }));
 
     const rotateRecorder = makeRecorder();
-    await service(fakeDataSource(rotateRecorder, { roleExists: true })).rotatePassword('fliks.download');
+    await service(fakeDataSource(rotateRecorder, { roleExists: true })).rotatePassword('acme.tool');
 
     const deprovisionRecorder = makeRecorder();
-    await service(fakeDataSource(deprovisionRecorder, { roleExists: true })).deprovision('fliks.download');
+    await service(fakeDataSource(deprovisionRecorder, { roleExists: true })).deprovision('acme.tool');
 
     const allSql = [...provisionRecorder.queries, ...rotateRecorder.queries, ...deprovisionRecorder.queries].map((q) => q.sql);
     for (const sql of allSql) {
@@ -296,7 +296,7 @@ describe('PluginDatabaseService.provision', () => {
     const ddl = allSql.filter((sql) => /^(CREATE|GRANT|REVOKE|ALTER|DROP)/i.test(sql.trim()));
     expect(ddl.length).toBeGreaterThan(0);
     for (const sql of ddl) {
-      expect(sql).toContain('"plugin_fliks_download"');
+      expect(sql).toContain('"plugin_acme_tool"');
     }
   });
 });
@@ -306,17 +306,17 @@ describe('PluginDatabaseService.rotatePassword', () => {
     const recorder = makeRecorder();
     const dataSource = fakeDataSource(recorder, { roleExists: false });
 
-    await expect(service(dataSource).rotatePassword('fliks.download')).resolves.toBeNull();
+    await expect(service(dataSource).rotatePassword('acme.tool')).resolves.toBeNull();
     expect(recorder.queries).toHaveLength(1);
     expect(recorder.queries[0].sql).toContain('pg_roles');
   });
 
   it('returns a DSN pinning search_path to the plugin schema alone, with a fresh 48-hex password each call', async () => {
     const dsnPattern =
-      /^postgresql:\/\/plugin_fliks_download:[0-9a-f]{48}@localhost:5432\/fliks\?options=-c%20search_path%3Dplugin_fliks_download$/;
+      /^postgresql:\/\/plugin_acme_tool:[0-9a-f]{48}@localhost:5432\/fliks\?options=-c%20search_path%3Dplugin_acme_tool$/;
 
-    const first = await service(fakeDataSource(makeRecorder(), { roleExists: true })).rotatePassword('fliks.download');
-    const second = await service(fakeDataSource(makeRecorder(), { roleExists: true })).rotatePassword('fliks.download');
+    const first = await service(fakeDataSource(makeRecorder(), { roleExists: true })).rotatePassword('acme.tool');
+    const second = await service(fakeDataSource(makeRecorder(), { roleExists: true })).rotatePassword('acme.tool');
 
     expect(first).toMatch(dsnPattern);
     expect(second).toMatch(dsnPattern);
@@ -326,23 +326,23 @@ describe('PluginDatabaseService.rotatePassword', () => {
   it('reads host/port/database from ConfigService with app.module.ts defaults', async () => {
     const config = fakeConfig({ DB_HOST: 'db.internal', DB_PORT: 5433, DB_NAME: 'fliks_test' });
 
-    const dsn = await service(fakeDataSource(makeRecorder(), { roleExists: true }), config).rotatePassword('fliks.download');
+    const dsn = await service(fakeDataSource(makeRecorder(), { roleExists: true }), config).rotatePassword('acme.tool');
 
-    expect(dsn).toMatch(/^postgresql:\/\/plugin_fliks_download:[0-9a-f]{48}@db\.internal:5433\/fliks_test\?/);
+    expect(dsn).toMatch(/^postgresql:\/\/plugin_acme_tool:[0-9a-f]{48}@db\.internal:5433\/fliks_test\?/);
   });
 });
 
 describe('PluginDatabaseService.deprovision', () => {
   it('drops owned objects, the schema and the role, in that order, when the role exists', async () => {
     const recorder = makeRecorder();
-    await service(fakeDataSource(recorder, { roleExists: true })).deprovision('fliks.download');
+    await service(fakeDataSource(recorder, { roleExists: true })).deprovision('acme.tool');
 
     const sql = recorder.queries.map((q) => normalizeSql(q.sql));
     expect(sql).toEqual([
       'SELECT 1 FROM pg_roles WHERE rolname = $1',
-      'DROP OWNED BY "plugin_fliks_download"',
-      'DROP SCHEMA IF EXISTS "plugin_fliks_download" CASCADE',
-      'DROP ROLE IF EXISTS "plugin_fliks_download"',
+      'DROP OWNED BY "plugin_acme_tool"',
+      'DROP SCHEMA IF EXISTS "plugin_acme_tool" CASCADE',
+      'DROP ROLE IF EXISTS "plugin_acme_tool"',
     ]);
   });
 
@@ -356,13 +356,13 @@ describe('PluginDatabaseService.deprovision', () => {
 
   it('is a no-op that throws nothing when the role never existed', async () => {
     const recorder = makeRecorder();
-    await expect(service(fakeDataSource(recorder, { roleExists: false })).deprovision('fliks.download')).resolves.toBeUndefined();
+    await expect(service(fakeDataSource(recorder, { roleExists: false })).deprovision('acme.tool')).resolves.toBeUndefined();
 
     const sql = recorder.queries.map((q) => normalizeSql(q.sql));
     expect(sql).toEqual([
       'SELECT 1 FROM pg_roles WHERE rolname = $1',
-      'DROP SCHEMA IF EXISTS "plugin_fliks_download" CASCADE',
-      'DROP ROLE IF EXISTS "plugin_fliks_download"',
+      'DROP SCHEMA IF EXISTS "plugin_acme_tool" CASCADE',
+      'DROP ROLE IF EXISTS "plugin_acme_tool"',
     ]);
   });
 });

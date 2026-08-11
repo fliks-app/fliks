@@ -1,10 +1,4 @@
-import {
-  forwardRef,
-  Inject,
-  Injectable,
-  Logger,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, LessThan, Repository } from 'typeorm';
@@ -107,7 +101,6 @@ export class CompletionService implements OnModuleInit {
     private readonly autoMatcher: TorrentAutoMatcher,
     private readonly markers: MarkersService,
     private readonly acquisitionEvents: AcquisitionEventsService,
-    @Inject(forwardRef(() => LibraryIngestService))
     private readonly libraryIngest: LibraryIngestService,
   ) {}
 

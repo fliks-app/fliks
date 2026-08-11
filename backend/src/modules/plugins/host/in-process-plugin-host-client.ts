@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import type { Subscription } from 'rxjs';
 import type { PluginHostApi } from '../../../common/plugin-contract';
+import {
+  EventsService,
+  type DomainEvent,
+} from '../../scheduler/events.service';
 import { FliksHostImpl } from './fliks-host.service';
 
 /**
@@ -10,7 +15,20 @@ import { FliksHostImpl } from './fliks-host.service';
  */
 @Injectable()
 export class InProcessPluginHostClient implements PluginHostApi {
-  constructor(private readonly host: FliksHostImpl) {}
+  constructor(
+    private readonly host: FliksHostImpl,
+    private readonly events: EventsService,
+  ) {}
+
+  /**
+   * The in-process counterpart of the supervisor's `event` Note to a spawned
+   * plugin: every domain event, no filtering, fire-and-forget. `onDomain`
+   * already isolates a throwing/rejecting handler from the emitter, so a bad
+   * plugin subscriber can never break core's publish path.
+   */
+  onEvent(handler: (event: DomainEvent) => void | Promise<void>): Subscription {
+    return this.events.onDomain(handler);
+  }
 
   'media.acquisitionContext': PluginHostApi['media.acquisitionContext'] = (p) =>
     this.host['media.acquisitionContext'](p);

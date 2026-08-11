@@ -5,18 +5,10 @@ import { Command } from './entities/command.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
-import { DownloadHistory } from '../../plugins/download/entities/download-history.entity';
-import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { Indexer } from '../../plugins/download/indexers/entities/indexer.entity';
 import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
-import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { SchedulerService } from './scheduler.service';
-import { CompletionService } from '../../plugins/download/completion.service';
-import { TorrentAutoMatcher } from '../../plugins/download/torrent-auto-matcher.service';
-import { AutoGrabExecutorService } from '../../plugins/download/auto-grab-pipeline.service';
-import { AcquisitionSchedulerService } from '../../plugins/download/acquisition-scheduler.service';
-import { AcquisitionEventsService } from './acquisition-events.service';
 import { NamingService } from './naming.service';
 import { BackupService } from './backup.service';
 import { LogBufferModule } from './log-buffer.module';
@@ -30,28 +22,16 @@ import { MetadataProvidersModule } from '../metadata-providers/metadata-provider
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MediaModule } from '../media/media.module';
 import { AuthModule } from '../auth/auth.module';
-import { BlocklistModule } from '../blocklist/blocklist.module';
-import { DelayProfile } from '../profiles/entities/delay-profile.entity';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { SettingsModule } from '../settings/settings.module';
 import { MediaServersModule } from '../media-servers/media-servers.module';
 import { StreamingModule } from '../streaming/streaming.module';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
-import { StalledCheck } from './entities/stalled-check.entity';
-import { CleanupProfilesModule } from '../cleanup-profiles/cleanup-profiles.module';
-import { LibrariesModule } from '../libraries/libraries.module';
-import { ProfilesModule } from '../profiles/profiles.module';
 import { MarkersModule } from '../markers/markers.module';
 import { Library } from '../libraries/entities/library.entity';
-import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.module';
 import { PluginsModule } from '../plugins/plugins.module';
-import { isDownloadBundleEnabled } from '../../common/constants/plugin-flags';
-
-// SchedulerService keeps these behind @Optional() — see FLIKS_BUNDLES.
-const downloadBundleProviders = isDownloadBundleEnabled()
-  ? [CompletionService, TorrentAutoMatcher, AutoGrabExecutorService, AcquisitionSchedulerService]
-  : [];
+import { ScheduledJobRegistryModule } from './scheduled-job-registry.module';
 
 @Module({
   imports: [
@@ -61,54 +41,42 @@ const downloadBundleProviders = isDownloadBundleEnabled()
       FliksRequest,
       Media,
       MediaFile,
-      DownloadHistory,
-      Season,
       Episode,
       Indexer,
       DownloadClient,
-      DelayProfile,
-      QualityProfile,
       SubtitleFile,
-      StalledCheck,
       Library,
     ]),
     IndexersModule,
-    // forwardRef: DownloadClientsModule now imports this module back for
-    // SchedulerService (block-torrent re-search).
+    // forwardRef: SystemController's client health-check needs DownloadClientsModule,
+    // which imports BlocklistModule — unrelated to the acquisition bundle.
     forwardRef(() => DownloadClientsModule),
     MetadataProvidersModule,
     NotificationsModule,
     forwardRef(() => MediaModule),
     AuthModule,
-    BlocklistModule,
     SubtitlesModule,
     SettingsModule,
     MediaServersModule,
     StreamingModule,
-    CleanupProfilesModule,
-    LibrariesModule,
-    ProfilesModule,
     MarkersModule,
-    forwardRef(() => LibraryIngestModule),
     LogBufferModule,
     // Already reachable transitively via IndexersModule -> PluginsModule (see
     // LogBufferModule's own doc comment); imported directly here so SchedulerService can
     // inject PluginJobsService for the merged job listing.
     PluginsModule,
+    ScheduledJobRegistryModule,
   ],
   controllers: [CommandsController, SystemController, LivenessController],
   providers: [
     SchedulerService,
-    AcquisitionEventsService,
     NamingService,
     BackupService,
     UpdateCheckService,
     SubtitleSchedulerService,
-    ...downloadBundleProviders,
   ],
   exports: [
     SchedulerService,
-    AcquisitionEventsService,
     NamingService,
     LogBufferModule,
     SubtitleSchedulerService,

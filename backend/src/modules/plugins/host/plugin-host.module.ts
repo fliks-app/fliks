@@ -18,10 +18,7 @@ import { SettingsModule } from '../../settings/settings.module';
 import { FliksHostImpl } from './fliks-host.service';
 import { InProcessPluginHostClient } from './in-process-plugin-host-client';
 import { PluginCountsCacheService } from './plugin-counts-cache.service';
-import {
-  DEFAULT_HOST_PLUGIN_ID,
-  PLUGIN_HOST_PLUGIN_ID,
-} from './plugin-host.constants';
+import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
 
 /**
  * Wires `FliksHostImpl` — core's implementation of the 17 plugin-facing host
@@ -50,7 +47,7 @@ import {
     SettingsModule,
   ],
   providers: [
-    { provide: PLUGIN_HOST_PLUGIN_ID, useValue: DEFAULT_HOST_PLUGIN_ID },
+    { provide: PLUGIN_HOST_PLUGIN_ID, useValue: null },
     FliksHostImpl,
     InProcessPluginHostClient,
     PluginCountsCacheService,

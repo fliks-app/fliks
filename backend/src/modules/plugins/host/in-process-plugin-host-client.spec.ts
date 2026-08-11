@@ -1,6 +1,7 @@
 import { InProcessPluginHostClient } from './in-process-plugin-host-client';
 import type { FliksHostImpl } from './fliks-host.service';
 import type { PluginHostApi } from '../../../common/plugin-contract';
+import { EventsService } from '../../scheduler/events.service';
 
 /** The 17 dotted method names `host-methods.ts` declares. */
 const PLUGIN_METHOD_NAMES: (keyof PluginHostApi)[] = [
@@ -39,7 +40,7 @@ describe('InProcessPluginHostClient', () => {
 
   it('forwards every one of the 17 contract methods to the host, unchanged', async () => {
     const host = fakeHost();
-    const client = new InProcessPluginHostClient(host);
+    const client = new InProcessPluginHostClient(host, new EventsService());
     const clientCalls = client as unknown as Record<
       string,
       (p: unknown) => Promise<unknown>
@@ -56,10 +57,63 @@ describe('InProcessPluginHostClient', () => {
 
   it('does no transformation of its own — it is a pure pass-through, not a second implementation', async () => {
     const host = fakeHost();
-    const client = new InProcessPluginHostClient(host);
+    const client = new InProcessPluginHostClient(host, new EventsService());
     const payload = { mediaId: 1, seasonId: 2 };
     await client['media.acquisitionContext'](payload);
     expect(host['media.acquisitionContext']).toHaveBeenCalledTimes(1);
     expect(host['media.acquisitionContext']).toHaveBeenCalledWith(payload);
+  });
+
+  describe('onEvent — the in-process push channel', () => {
+    it('delivers a domain event to every subscriber, and isolates a throwing handler from the emitter and from its sibling subscribers', () => {
+      const events = new EventsService();
+      const client = new InProcessPluginHostClient(fakeHost(), events);
+      const seen: string[] = [];
+
+      client.onEvent(() => {
+        throw new Error('plugin handler blew up');
+      });
+      client.onEvent((event) => {
+        seen.push(event.type);
+      });
+
+      expect(() =>
+        events.emitDomain({ type: 'settings.changed', key: 'foo' }),
+      ).not.toThrow();
+      expect(seen).toEqual(['settings.changed']);
+    });
+
+    it('isolates a rejected async handler the same way', async () => {
+      const events = new EventsService();
+      const client = new InProcessPluginHostClient(fakeHost(), events);
+      const seen: string[] = [];
+
+      client.onEvent(() =>
+        Promise.reject(new Error('async plugin handler blew up')),
+      );
+      client.onEvent((event) => {
+        seen.push(event.type);
+      });
+
+      events.emitDomain({ type: 'settings.changed', key: 'foo' });
+      // Let the rejected microtask surface before asserting nothing escaped.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(seen).toEqual(['settings.changed']);
+    });
+
+    it('stops delivering once unsubscribed', () => {
+      const events = new EventsService();
+      const client = new InProcessPluginHostClient(fakeHost(), events);
+      const seen: string[] = [];
+
+      const subscription = client.onEvent((event) => {
+        seen.push(event.type);
+      });
+      subscription.unsubscribe();
+      events.emitDomain({ type: 'settings.changed', key: 'foo' });
+
+      expect(seen).toEqual([]);
+    });
   });
 });
