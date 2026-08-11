@@ -35,18 +35,29 @@ export interface AcquisitionTarget {
   expectedTitles: string[];
   searchTitle: string;
   season?: { id: number; number: number; episodeCount: number };
-  episode?: { id: number; number: number; endNumber: number | null; airDate: string | null };
+  episode?: {
+    id: number;
+    number: number;
+    endNumber: number | null;
+    airDate: string | null;
+  };
 }
 
-/** The verdict on one candidate release, already sorted by relevance. */
+/**
+ * The verdict on one candidate release, already sorted by relevance.
+ * `qualityName`/`languageName` ride alongside their ids because the id
+ * registries are static in-core constants a plugin may not vendor.
+ */
 export interface ScoredRelease {
   id: string;
   qualityId: number;
+  qualityName: string;
   rank: number;
   allowed: boolean;
   customFormatScore: number;
   blocklisted: boolean;
   languageId: number | null;
+  languageName: string | null;
   languageAllowed: boolean;
   isFullSeason: boolean;
   sizeDeviation: number;
@@ -61,8 +72,6 @@ export type AcquisitionEvent =
       mediaId: number;
       seasonNumber?: number;
       episodeNumber?: number;
-      sourceTitle: string;
-      quality: string;
     }
   | {
       type: 'acquisition.progress';
@@ -72,9 +81,27 @@ export type AcquisitionEvent =
       etaSeconds: number | null;
       state: string;
     }
-  | { type: 'acquisition.imported'; mediaId: number; seasonNumber?: number; episodeNumber?: number }
-  | { type: 'acquisition.failed'; mediaId: number; reason: string }
-  | { type: 'acquisition.queue.changed' };
+  | {
+      type: 'acquisition.imported';
+      mediaId: number;
+      seasonNumber?: number;
+      episodeNumber?: number;
+      /** Not derivable from `mediaId` — the download attempt's own facts. */
+      quality: string;
+      sourceTitle: string;
+    }
+  | {
+      type: 'acquisition.failed';
+      mediaId: number;
+      title: string;
+      reason: string;
+    }
+  | { type: 'acquisition.queue.changed' }
+  | {
+      type: 'acquisition.stalled.removed';
+      mediaId: number | null;
+      title: string;
+    };
 
 /**
  * The full core-side surface, keyed by dotted method name. A `process`
@@ -112,7 +139,13 @@ export interface PluginHostApi {
       episodeNumber?: number;
       isFullSeason: boolean;
       decision: 'grab' | 'skip';
-      skipReason?: 'on-disk' | 'not-monitored' | 'unmatched' | 'too-fresh' | 'not-available' | 'unprofiled';
+      skipReason?:
+        | 'on-disk'
+        | 'not-monitored'
+        | 'unmatched'
+        | 'too-fresh'
+        | 'not-available'
+        | 'unprofiled';
     }[]
   >;
 
@@ -151,7 +184,12 @@ export interface PluginHostApi {
         seasonNumber?: number;
         episodeNumber?: number;
         episodeTitle?: string;
-        stalledCleanupProfile: { key: string; samples: number; intervalMinutes: number; autoRestart: boolean } | null;
+        stalledCleanupProfile: {
+          key: string;
+          samples: number;
+          intervalMinutes: number;
+          autoRestart: boolean;
+        } | null;
       }
     >
   >;
@@ -171,7 +209,9 @@ export interface PluginHostApi {
     note: string;
   }) => Promise<{ id: number }>;
 
-  'blocklist.check': (p: { titles: string[] }) => Promise<{ blocked: string[] }>;
+  'blocklist.check': (p: {
+    titles: string[];
+  }) => Promise<{ blocked: string[] }>;
 
   'requests.markInProgress': (p: {
     idempotencyKey: string;

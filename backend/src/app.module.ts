@@ -9,6 +9,7 @@ import { MetadataProvidersModule } from './modules/metadata-providers/metadata-p
 import { IndexersModule } from './plugins/download/indexers/indexers.module';
 import { DownloadClientsModule } from './plugins/download/download-clients/download-clients.module';
 import { GrabModule } from './plugins/download/grab.module';
+import { DownloadBundleModule } from './plugins/download/download-bundle.module';
 import { RequestsModule } from './modules/requests/requests.module';
 import { FliksSchedulerModule } from './modules/scheduler/scheduler.module';
 import { EventsModule } from './modules/scheduler/events.module';
@@ -31,7 +32,6 @@ import { FilesystemModule } from './modules/filesystem/filesystem.module';
 import { SetupChecklistModule } from './modules/setup-checklist/setup-checklist.module';
 import { CountsModule } from './modules/counts/counts.module';
 import { PluginsModule } from './modules/plugins/plugins.module';
-import { PluginHostModule } from './modules/plugins/host/plugin-host.module';
 import { CommonModule } from './common/common.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
@@ -90,9 +90,9 @@ import { isDownloadBundleEnabled } from './common/constants/plugin-flags';
     MetadataProvidersModule,
     IndexersModule,
     DownloadClientsModule,
-    // The one in-repo bundle today; FLIKS_BUNDLES=<empty> drops its controller
-    // and grab routes entirely rather than exposing them disabled.
-    ...(isDownloadBundleEnabled() ? [GrabModule] : []),
+    // The one in-repo bundle today; FLIKS_BUNDLES=<empty> drops its controller,
+    // grab routes and scheduled jobs entirely rather than exposing them disabled.
+    ...(isDownloadBundleEnabled() ? [GrabModule, DownloadBundleModule] : []),
     RequestsModule,
     FliksSchedulerModule,
     CleanupProfilesModule,
@@ -115,7 +115,6 @@ import { isDownloadBundleEnabled } from './common/constants/plugin-flags';
     PluginsModule,
     // Independent of the download bundle — the plugin-facing host methods
     // are core code and must resolve with FLIKS_BUNDLES=.
-    PluginHostModule,
   ],
 })
 export class AppModule {}

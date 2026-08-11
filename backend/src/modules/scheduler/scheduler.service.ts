@@ -1,11 +1,8 @@
 import {
   BadRequestException,
-  Inject,
   Injectable,
   Logger,
   OnModuleInit,
-  Optional,
-  forwardRef,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { existsSync } from 'fs';
@@ -20,7 +17,6 @@ import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import { MediaService } from '../media/media.service';
 import { MediaType } from '../../common/enums';
 import { ConfigService } from '@nestjs/config';
-import { CompletionService } from '../../plugins/download/completion.service';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { EventsService } from './events.service';
 import { MediaFile } from '../media/entities/media-file.entity';
@@ -29,32 +25,13 @@ import {
   buildSpriteLabel,
 } from '../streaming/thumbnail.service';
 import { MarkersService } from '../markers/markers.service';
-import { CORE_SCHEDULER_JOB_NAMES } from '../../common/constants/core-scheduler-jobs';
+import { CoreSchedulerJobName } from '../../common/constants/core-scheduler-jobs';
 import { PluginJobsService } from '../plugins/plugin-jobs.service';
-import { AcquisitionSchedulerService } from '../../plugins/download/acquisition-scheduler.service';
-import { isDownloadBundleEnabled } from '../../common/constants/plugin-flags';
+import { ScheduledJobRegistry } from './scheduled-job-registry.service';
+import { runAuditedCommand } from './command-audit.util';
 
 /** Yield the event loop so HTTP requests aren't starved by bulk tasks. */
 const yieldLoop = () => new Promise<void>((r) => setTimeout(r, 50));
-
-/** Core jobs that need the download bundle (`plugins/download/`) to run — see FLIKS_BUNDLES. */
-const DOWNLOAD_BUNDLE_JOB_NAMES: ReadonlySet<string> = new Set([
-  'SearchMissing',
-  'RssSync',
-  'ImportCompleted',
-  'CleanStalled',
-  'CleanSeeded',
-]);
-
-/** False for a download-bundle job once the bundle is off, so it drops out of the
- *  scheduler listing and can no longer be triggered. `bundleEnabled` defaults to a
- *  fresh env read, and is otherwise a plain parameter for `it.each`-style testing. */
-export function isJobAvailable(
-  name: string,
-  bundleEnabled = isDownloadBundleEnabled(),
-): boolean {
-  return bundleEnabled || !DOWNLOAD_BUNDLE_JOB_NAMES.has(name);
-}
 
 @Injectable()
 export class SchedulerService implements OnModuleInit {
@@ -70,59 +47,32 @@ export class SchedulerService implements OnModuleInit {
     private readonly tmdb: TmdbProvider,
     private readonly mediaService: MediaService,
     private readonly config: ConfigService,
-    @Optional()
-    @Inject(forwardRef(() => CompletionService))
-    private readonly completion: CompletionService | undefined,
     private readonly eventsService: EventsService,
     private readonly subtitleScheduler: SubtitleSchedulerService,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly thumbnailService: ThumbnailService,
     private readonly markers: MarkersService,
-    @Optional()
-    private readonly acquisitionScheduler: AcquisitionSchedulerService | undefined,
     private readonly pluginJobs: PluginJobsService,
+    private readonly jobRegistry: ScheduledJobRegistry,
   ) {}
 
   // ---------------------------------------------------------------------------
   // Scheduler definitions
   // ---------------------------------------------------------------------------
 
-  // `name` is typed against `CORE_SCHEDULER_JOB_NAMES` so adding a job here without mirroring
+  // `name` is typed against `CoreSchedulerJobName` so adding a job here without mirroring
   // its name there (needed so a plugin job can be refused for colliding with it) fails to typecheck.
+  // The download bundle's five jobs aren't listed here — they come from `jobRegistry` instead,
+  // present only when the bundle registered them, which is what makes the listing 3-vs-8.
   private static readonly SCHEDULERS: {
-    name: (typeof CORE_SCHEDULER_JOB_NAMES)[number];
+    name: CoreSchedulerJobName;
     cron: string;
     triggerable: boolean;
   }[] = [
     {
-      name: 'SearchMissing',
-      cron: CronExpression.EVERY_6_HOURS,
-      triggerable: true,
-    },
-    {
       name: 'RefreshMetadata',
       cron: CronExpression.EVERY_DAY_AT_4AM,
-      triggerable: true,
-    },
-    {
-      name: 'RssSync',
-      cron: '*/15 * * * *',
-      triggerable: true,
-    },
-    {
-      name: 'ImportCompleted',
-      cron: CronExpression.EVERY_MINUTE,
-      triggerable: true,
-    },
-    {
-      name: 'CleanStalled',
-      cron: CronExpression.EVERY_5_MINUTES,
-      triggerable: true,
-    },
-    {
-      name: 'CleanSeeded',
-      cron: CronExpression.EVERY_5_MINUTES,
       triggerable: true,
     },
     {
@@ -153,29 +103,12 @@ export class SchedulerService implements OnModuleInit {
   // Scheduled jobs
   // ---------------------------------------------------------------------------
 
-  @Cron(CronExpression.EVERY_6_HOURS)
-  async searchMissing(): Promise<void> {
-    const scheduler = this.acquisitionScheduler;
-    if (!scheduler) return;
-    return this.runCommand('SearchMissing', 'scheduled', () =>
-      scheduler.searchMissing(),
-    );
-  }
-
   /** Refresh metadata for all media once a day */
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
   async refreshMetadata(): Promise<void> {
     return this.runCommand('RefreshMetadata', 'scheduled', () =>
       this.doRefreshMetadata(),
     );
-  }
-
-  /** RSS sync every 15 minutes */
-  @Cron('*/15 * * * *')
-  async rssSync(): Promise<void> {
-    const scheduler = this.acquisitionScheduler;
-    if (!scheduler) return;
-    return this.runCommand('RssSync', 'scheduled', () => scheduler.rssSync());
   }
 
   // ---------------------------------------------------------------------------
@@ -194,9 +127,12 @@ export class SchedulerService implements OnModuleInit {
       pluginId: string | null;
     }[]
   > {
-    const available = SchedulerService.SCHEDULERS.filter((s) =>
-      isJobAvailable(s.name),
-    );
+    // The download bundle's five jobs, when it's loaded, merge in here exactly like
+    // core's own three — `jobRegistry` is empty (not filtered) when the bundle is off.
+    const available = [
+      ...SchedulerService.SCHEDULERS,
+      ...this.jobRegistry.list(),
+    ];
     const names = available.map((s) => s.name);
 
     // Get last command per scheduler name in one query
@@ -240,9 +176,13 @@ export class SchedulerService implements OnModuleInit {
 
   async triggerCommand(name: string): Promise<Command> {
     const known = [
-      ...SchedulerService.SCHEDULERS.filter(
-        (s) => s.triggerable && isJobAvailable(s.name),
-      ).map((s) => s.name),
+      ...SchedulerService.SCHEDULERS.filter((s) => s.triggerable).map(
+        (s) => s.name,
+      ),
+      ...this.jobRegistry
+        .list()
+        .filter((j) => j.triggerable)
+        .map((j) => j.name),
       'RescanAll',
       'RefreshMissingMetadata',
       'RescanMissingFiles',
@@ -309,54 +249,26 @@ export class SchedulerService implements OnModuleInit {
     trigger: string,
     fn: () => Promise<void>,
   ): Promise<void> {
-    const cmd = await this.commandRepo.save(
-      this.commandRepo.create({
-        name,
-        status: 'running',
-        trigger,
-        startedOn: new Date(),
-      }),
+    return runAuditedCommand(
+      this.commandRepo,
+      this.eventsService,
+      name,
+      trigger,
+      fn,
+      this.log,
     );
-    this.eventsService.emit({ type: 'command.started', name });
-    try {
-      await fn();
-      cmd.status = 'completed';
-    } catch (e) {
-      this.log.error(`Command ${name} error: ${(e as Error).message}`);
-      cmd.status = 'failed';
-    } finally {
-      cmd.endedOn = new Date();
-      await this.commandRepo.save(cmd);
-      this.eventsService.emit({
-        type: 'command.completed',
-        name,
-        status: cmd.status,
-      });
-    }
   }
 
   private async dispatchCommand(name: string, cmdId: number): Promise<void> {
-    const cmd = await this.commandRepo.findOne({ where: { id: cmdId } });
-    const body = cmd?.body ?? {};
     await this.commandRepo.update(cmdId, {
       status: 'running',
       startedOn: new Date(),
     });
     this.eventsService.emit({ type: 'command.started', name });
     try {
-      if (name === 'SearchMissing') {
-        const mediaIds = Array.isArray(body['mediaIds'])
-          ? (body['mediaIds'] as number[])
-          : undefined;
-        await this.acquisitionScheduler?.searchMissing(mediaIds);
-      } else if (name === 'RefreshMetadata') await this.doRefreshMetadata();
-      else if (name === 'RssSync') await this.acquisitionScheduler?.rssSync();
-      else if (name === 'ImportCompleted')
-        await this.completion?.processCompleted();
-      else if (name === 'CleanStalled')
-        await this.completion?.cleanStalledTorrents();
-      else if (name === 'CleanSeeded')
-        await this.completion?.cleanSeededTorrents();
+      const registered = this.jobRegistry.get(name);
+      if (registered) await registered.run();
+      else if (name === 'RefreshMetadata') await this.doRefreshMetadata();
       else if (name === 'SubtitleSearch')
         await this.subtitleScheduler.searchMissingSubtitles();
       else if (name === 'SubtitleUpgrade')

@@ -38,8 +38,9 @@ export type AcquisitionEvent =
 /**
  * Fan-out for acquisition-side events: resolves the SSE audience, emits the
  * client event, and dispatches to notifications / external media servers.
- * The single seam a download plugin will publish through — it cannot resolve
- * an audience or reach a media server itself.
+ * The single seam the download bundle publishes through — it cannot resolve
+ * an audience or reach a media server itself. Provided by the download
+ * bundle's own module, not `FliksSchedulerModule` — core doesn't inject it.
  */
 @Injectable()
 export class AcquisitionEventsService {

@@ -9,7 +9,11 @@ import type {
   MediaKind,
   PluginHostApi,
 } from '../../../common/plugin-contract';
-import { MediaType } from '../../../common/enums';
+import {
+  MediaStatus,
+  MediaType,
+  MinimumAvailability,
+} from '../../../common/enums';
 import { Media } from '../../media/entities/media.entity';
 import { Season } from '../../media/entities/season.entity';
 import { Episode } from '../../media/entities/episode.entity';
@@ -93,7 +97,7 @@ function isUniqueViolation(e: unknown): boolean {
 @Injectable()
 export class FliksHostImpl implements PluginHostApi {
   constructor(
-    @Inject(PLUGIN_HOST_PLUGIN_ID) private readonly pluginId: string,
+    @Inject(PLUGIN_HOST_PLUGIN_ID) private readonly pluginId: string | null,
     @InjectRepository(Media) private readonly mediaRepo: Repository<Media>,
     @InjectRepository(Season) private readonly seasonRepo: Repository<Season>,
     @InjectRepository(Episode)
@@ -256,8 +260,7 @@ export class FliksHostImpl implements PluginHostApi {
         p.mediaIds,
       );
       for (const t of movieTargets) {
-        if (t.media.releaseDate && t.media.releaseDate > p.availableOn)
-          continue;
+        if (!this.isAvailable(t.media, p.availableOn)) continue;
         const target = this.buildFromMovieTarget(t);
         if (target) targets.push(target);
       }
@@ -494,11 +497,13 @@ export class FliksHostImpl implements PluginHostApi {
     return scored.map((row) => ({
       id: row.id,
       qualityId: row.qualityId,
+      qualityName: row.qualityName,
       rank: row.rank,
       allowed: row.allowed,
       customFormatScore: row.customFormatScore,
       blocklisted: row.blocklisted,
       languageId: row.languageId,
+      languageName: row.languageName,
       languageAllowed: row.languageAllowed,
       isFullSeason: row.isFullSeason,
       sizeDeviation: row.sizeDeviation ?? 0,
@@ -675,18 +680,7 @@ export class FliksHostImpl implements PluginHostApi {
     seasonNumber?: number;
     episodeNumber?: number;
   }> {
-    const registration = await this.pluginRegistrationRepo.findOne({
-      where: { pluginId: this.pluginId },
-    });
-    const roots = registration?.ingestRoots ?? [];
-    if (!roots.length) {
-      throw new Error(
-        `library.ingest: no ingestRoots configured for plugin "${this.pluginId}"`,
-      );
-    }
-    const files = p.paths.map((raw) => ({
-      path: this.resolveUnderIngestRoot(raw, roots),
-    }));
+    const files = await this.resolveAgainstGrantedRoots(p.paths);
 
     // `force`/`uniquifyOnCollision` are left false: a retried call resolves
     // the same destination and is a safe no-op, which is the idempotency
@@ -738,6 +732,27 @@ export class FliksHostImpl implements PluginHostApi {
   }
 
   /** `realpath`s `rawPath` and refuses it unless it resolves inside one of `roots`. */
+  /** A plugin may only ingest under the `ingestRoots` it declared and the admin
+   *  consented to; no identity and no row both mean no grant, never an open one. */
+  private async resolveAgainstGrantedRoots(
+    paths: string[],
+  ): Promise<{ path: string }[]> {
+    const registration = this.pluginId
+      ? await this.pluginRegistrationRepo.findOne({
+          where: { pluginId: this.pluginId },
+        })
+      : null;
+    const roots = registration?.ingestRoots ?? [];
+    if (!roots.length) {
+      throw new Error(
+        `library.ingest: no ingestRoots configured for plugin "${this.pluginId}"`,
+      );
+    }
+    return paths.map((raw) => ({
+      path: this.resolveUnderIngestRoot(raw, roots),
+    }));
+  }
+
   private resolveUnderIngestRoot(rawPath: string, roots: string[]): string {
     const real = fs.realpathSync(rawPath);
     for (const root of roots) {
@@ -767,16 +782,22 @@ export class FliksHostImpl implements PluginHostApi {
   private async publishOne(event: AcquisitionEvent): Promise<void> {
     switch (event.type) {
       case 'acquisition.grabbed':
+        // No `queue.updated` here: every direct grab call site emits only the
+        // domain event, and the sidebar badge doesn't move on a grab.
         this.events.emitDomain({
           type: 'acquisition.grabbed',
           mediaId: event.mediaId,
           seasonNumber: event.seasonNumber,
         });
-        this.events.emit({ type: 'queue.updated' });
         return;
       case 'acquisition.imported': {
         const media = await this.mediaRepo.findOne({
           where: { id: event.mediaId },
+        });
+        void this.notifications.dispatch('download.complete', {
+          title: media?.title ?? '',
+          quality: event.quality,
+          sourceTitle: event.sourceTitle,
         });
         const recipients = await this.sseAudience.recipientsForMedia(
           event.mediaId,
@@ -789,19 +810,22 @@ export class FliksHostImpl implements PluginHostApi {
           episodeNumber: event.episodeNumber,
         });
         this.events.emit({ type: 'queue.updated' });
+        void this.mediaServers.dispatch('download.complete', {
+          title: media?.title ?? '',
+          path: media?.path ?? null,
+        });
         return;
       }
       case 'acquisition.failed': {
-        const media = await this.mediaRepo.findOne({
-          where: { id: event.mediaId },
-        });
+        // `event.title` is the caller's release title, never re-derived from
+        // `media.title` — every real call site means the release, not the media.
         const recipients = await this.sseAudience.recipientsForMedia(
           event.mediaId,
         );
         this.events.emitToUsers(recipients, {
           type: 'import.failed',
           mediaId: event.mediaId,
-          title: media?.title ?? '',
+          title: event.title,
           error: event.reason,
         });
         this.events.emit({ type: 'queue.updated' });
@@ -810,6 +834,17 @@ export class FliksHostImpl implements PluginHostApi {
       case 'acquisition.queue.changed':
         this.events.emit({ type: 'queue.updated' });
         return;
+      case 'acquisition.stalled.removed': {
+        const recipients = await this.sseAudience.recipientsForMedia(
+          event.mediaId,
+        );
+        this.events.emitToUsers(recipients, {
+          type: 'stalled.removed',
+          title: event.title,
+        });
+        this.events.emit({ type: 'queue.updated' });
+        return;
+      }
       case 'acquisition.progress':
         await this.pushProgress({
           mediaId: event.mediaId,
@@ -1121,5 +1156,33 @@ export class FliksHostImpl implements PluginHostApi {
       }
     }
     return [{ quality: weakest }];
+  }
+
+  /** Mirrors `AcquisitionSchedulerService.isAvailable` exactly — the full
+   *  minimum-availability state machine, not just `releaseDate`, or a movie
+   *  a plugin fetches through this method would get searched too early. */
+  private isAvailable(media: Media, today: string): boolean {
+    switch (media.minimumAvailability) {
+      case MinimumAvailability.ANNOUNCED:
+        return true;
+      case MinimumAvailability.IN_CINEMAS:
+        return !!(media.inCinemas && media.inCinemas <= today);
+      case MinimumAvailability.RELEASED:
+        if (media.digitalRelease && media.digitalRelease <= today) return true;
+        if (media.physicalRelease && media.physicalRelease <= today)
+          return true;
+        if (media.inCinemas && this.addDaysIso(media.inCinemas, 90) <= today)
+          return true;
+        if (media.releaseDate && media.releaseDate <= today) return true;
+        return media.status === MediaStatus.RELEASED;
+      default:
+        return true;
+    }
+  }
+
+  private addDaysIso(isoDate: string, days: number): string {
+    const d = new Date(isoDate);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
   }
 }

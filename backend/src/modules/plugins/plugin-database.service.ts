@@ -11,7 +11,7 @@ const CORE_REF_PATTERN = /^[a-z_][a-z0-9_]*$/;
 const MAX_CORE_REF_LENGTH = 63;
 const HEX_PASSWORD_PATTERN = /^[0-9a-f]{48}$/;
 
-/** `fliks.download` -> `plugin_fliks_download`. Role name and schema name are the same string. */
+/** `acme.tool` -> `plugin_acme_tool`. Role name and schema name are the same string. */
 export function pluginDbIdentifier(pluginId: string): string {
   if (!PLUGIN_ID_PATTERN.test(pluginId) || pluginId.length > MAX_PLUGIN_ID_LENGTH) {
     throw new Error(`"${pluginId}" is not a legal plugin id`);
