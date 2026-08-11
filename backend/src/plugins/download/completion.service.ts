@@ -9,43 +9,42 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, LessThan, Repository } from 'typeorm';
 import * as path from 'path';
-import { Media } from '../media/entities/media.entity';
-import { DownloadHistory } from '../../plugins/download/entities/download-history.entity';
-import { Season } from '../media/entities/season.entity';
-import { Episode } from '../media/entities/episode.entity';
-import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
+import { Media } from '../../modules/media/entities/media.entity';
+import { DownloadHistory } from './entities/download-history.entity';
+import { Season } from '../../modules/media/entities/season.entity';
+import { Episode } from '../../modules/media/entities/episode.entity';
+import { DownloadClient } from './download-clients/entities/download-client.entity';
 import {
   QbittorrentService,
   QbittorrentTorrent,
-} from '../../plugins/download/download-clients/qbittorrent.service';
-import { Indexer } from '../../plugins/download/indexers/entities/indexer.entity';
-import { NamingService } from './naming.service';
-import { BlocklistService } from '../blocklist/blocklist.service';
-import { EventsService } from './events.service';
-import { SseAudienceService } from './sse-audience.service';
-import { AcquisitionEventsService } from './acquisition-events.service';
-import { SettingsService } from '../settings/settings.service';
+} from './download-clients/qbittorrent.service';
+import { Indexer } from './indexers/entities/indexer.entity';
+import { NamingService } from '../../modules/scheduler/naming.service';
+import { BlocklistService } from '../../modules/blocklist/blocklist.service';
+import { EventsService } from '../../modules/scheduler/events.service';
+import { AcquisitionEventsService } from '../../modules/scheduler/acquisition-events.service';
+import { SettingsService } from '../../modules/settings/settings.service';
 import {
   ThumbnailService,
   buildSpriteLabel,
-} from '../streaming/thumbnail.service';
+} from '../../modules/streaming/thumbnail.service';
 import { MediaType } from '../../common/enums';
-import { StalledCheck } from './entities/stalled-check.entity';
+import { StalledCheck } from '../../modules/scheduler/entities/stalled-check.entity';
 import {
   countStalledStrikes,
   STALL_ELIGIBLE_STATES,
-} from './utils/stalled-progress.util';
-import { CleanupProfile } from '../cleanup-profiles/entities/cleanup-profile.entity';
-import { Library } from '../libraries/entities/library.entity';
+} from '../../modules/scheduler/utils/stalled-progress.util';
+import { CleanupProfile } from '../../modules/cleanup-profiles/entities/cleanup-profile.entity';
+import { Library } from '../../modules/libraries/entities/library.entity';
 import {
   TorrentHistoryMatcher,
   normaliseTorrentName,
   outranksForTorrent,
-} from '../../plugins/download/torrent-history-matcher.service';
-import { TorrentAutoMatcher } from '../../plugins/download/torrent-auto-matcher.service';
-import { buildGrabHistoryRow } from '../../plugins/download/grab-history.util';
+} from './torrent-history-matcher.service';
+import { TorrentAutoMatcher } from './torrent-auto-matcher.service';
+import { buildGrabHistoryRow } from './grab-history.util';
 import { parseReleaseQuality } from '../../common/release-parsing';
-import { MarkersService } from '../markers/markers.service';
+import { MarkersService } from '../../modules/markers/markers.service';
 import { LibraryIngestService } from '../../common/library-ingest/library-ingest.service';
 import { VIDEO_EXTS } from '../../common/constants/video-extensions';
 
@@ -107,7 +106,6 @@ export class CompletionService implements OnModuleInit {
     private readonly historyMatcher: TorrentHistoryMatcher,
     private readonly autoMatcher: TorrentAutoMatcher,
     private readonly markers: MarkersService,
-    private readonly sseAudience: SseAudienceService,
     private readonly acquisitionEvents: AcquisitionEventsService,
     @Inject(forwardRef(() => LibraryIngestService))
     private readonly libraryIngest: LibraryIngestService,
@@ -444,7 +442,7 @@ export class CompletionService implements OnModuleInit {
    * Push a `download.progress` SSE for every in-flight torrent to that media's
    * request audience. Reuses the same hash-first matcher as the queue endpoint;
    * resolves the season/episode scope so a series renders per-season progress.
-   * Recipients are cached per tick so a multi-episode show resolves once.
+   * Recipient resolution is core's job — this only publishes the domain fact.
    */
   private async emitDownloadProgress(
     allTorrents: ReadonlyArray<QbittorrentTorrent>,
@@ -457,18 +455,11 @@ export class CompletionService implements OnModuleInit {
     });
     if (!rows.length) return;
 
-    const recipientsByMedia = new Map<number, number[]>();
     for (const t of downloading) {
       const match = await this.historyMatcher.matchAndHeal(t, rows);
       if (!match?.media) continue;
-      let recipients = recipientsByMedia.get(match.mediaId);
-      if (!recipients) {
-        recipients = await this.sseAudience.recipientsForMedia(match.mediaId);
-        recipientsByMedia.set(match.mediaId, recipients);
-      }
-      if (!recipients.length) continue;
-      this.events.emitToUsers(recipients, {
-        type: 'download.progress',
+      await this.acquisitionEvents.publish({
+        type: 'acquisition.progress',
         mediaId: match.mediaId,
         mediaType: match.media.type as 'movie' | 'series',
         seasonNumber: match.season?.seasonNumber,
@@ -586,7 +577,7 @@ export class CompletionService implements OnModuleInit {
     history: DownloadHistory,
     torrent: QbittorrentTorrent & {
       _clientId?: number;
-      _client?: import('../../plugins/download/download-clients/entities/download-client.entity').DownloadClient;
+      _client?: DownloadClient;
     },
     movieFolderFormat: string,
     seriesFolderFormat: string,
@@ -1048,14 +1039,11 @@ export class CompletionService implements OnModuleInit {
 
         await this.stalledCheckRepo.delete({ torrentHash: t.hash });
 
-        const stalledRecipients = await this.sseAudience.recipientsForMedia(
-          history.mediaId ?? null,
-        );
-        this.events.emitToUsers(stalledRecipients, {
-          type: 'stalled.removed',
+        await this.acquisitionEvents.publish({
+          type: 'acquisition.stalled.removed',
+          mediaId: history.mediaId ?? null,
           title: history.sourceTitle ?? t.name,
         });
-        this.events.emit({ type: 'queue.updated' });
 
         await this.blocklist.createFromHistory(
           history,

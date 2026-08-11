@@ -18,7 +18,7 @@ import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import { MediaService } from '../media/media.service';
 import { MediaType } from '../../common/enums';
 import { ConfigService } from '@nestjs/config';
-import { CompletionService } from './completion.service';
+import { CompletionService } from '../../plugins/download/completion.service';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { EventsService } from './events.service';
 import { MediaFile } from '../media/entities/media-file.entity';

@@ -43,8 +43,6 @@ export default tseslint.config(
       'src/modules/scheduler/scheduler.module.ts',
       'src/modules/scheduler/scheduler.service.ts',
       'src/modules/scheduler/system.controller.ts',
-      'src/modules/scheduler/completion.service.ts',
-      'src/modules/scheduler/completion.service.spec.ts',
       'src/modules/blocklist/blocklist.module.ts',
       'src/modules/blocklist/blocklist.service.ts',
       'src/modules/auth/casl/casl-ability.factory.ts',

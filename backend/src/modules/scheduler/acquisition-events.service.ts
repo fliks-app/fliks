@@ -16,7 +16,24 @@ export type AcquisitionEvent =
       mediaPath: string | null;
     }
   | { type: 'acquisition.failed'; mediaId: number; title: string; reason: string }
-  | { type: 'acquisition.queue.changed' };
+  | { type: 'acquisition.queue.changed' }
+  | {
+      type: 'acquisition.progress';
+      mediaId: number;
+      mediaType: 'movie' | 'series';
+      seasonNumber?: number;
+      episodeNumber?: number;
+      hash?: string;
+      progress: number;
+      dlspeed: number;
+      eta: number;
+      state: string;
+    }
+  | {
+      type: 'acquisition.stalled.removed';
+      mediaId: number | null;
+      title: string;
+    };
 
 /**
  * Fan-out for acquisition-side events: resolves the SSE audience, emits the
@@ -74,6 +91,36 @@ export class AcquisitionEventsService {
       case 'acquisition.queue.changed':
         this.events.emit({ type: 'queue.updated' });
         return;
+      case 'acquisition.progress': {
+        const recipients = await this.sseAudience.recipientsForMedia(
+          event.mediaId,
+        );
+        if (!recipients.length) return;
+        this.events.emitToUsers(recipients, {
+          type: 'download.progress',
+          mediaId: event.mediaId,
+          mediaType: event.mediaType,
+          seasonNumber: event.seasonNumber,
+          episodeNumber: event.episodeNumber,
+          hash: event.hash,
+          progress: event.progress,
+          dlspeed: event.dlspeed,
+          eta: event.eta,
+          state: event.state,
+        });
+        return;
+      }
+      case 'acquisition.stalled.removed': {
+        const recipients = await this.sseAudience.recipientsForMedia(
+          event.mediaId,
+        );
+        this.events.emitToUsers(recipients, {
+          type: 'stalled.removed',
+          title: event.title,
+        });
+        this.events.emit({ type: 'queue.updated' });
+        return;
+      }
     }
   }
 }

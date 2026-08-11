@@ -12,7 +12,7 @@ import { Indexer } from '../../plugins/download/indexers/entities/indexer.entity
 import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { SchedulerService } from './scheduler.service';
-import { CompletionService } from './completion.service';
+import { CompletionService } from '../../plugins/download/completion.service';
 import { TorrentAutoMatcher } from '../../plugins/download/torrent-auto-matcher.service';
 import { AutoGrabExecutorService } from '../../plugins/download/auto-grab-pipeline.service';
 import { AcquisitionSchedulerService } from '../../plugins/download/acquisition-scheduler.service';
