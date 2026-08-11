@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
-import { DownloadHistory } from '../../plugins/download/entities/download-history.entity';
+import { Repository } from 'typeorm';
 import { FliksRequest } from '../requests/entities/request.entity';
 import { Media } from '../media/entities/media.entity';
 import { User } from '../users/entities/user.entity';
@@ -13,6 +12,7 @@ import {
 import { Action } from '../auth/casl/actions.enum';
 import { MediaService } from '../media/media.service';
 import { LibrariesService } from '../libraries/libraries.service';
+import { PluginCountsCacheService } from '../plugins/host/plugin-counts-cache.service';
 
 export interface SidebarCounts {
   queueActive: number;
@@ -20,58 +20,43 @@ export interface SidebarCounts {
   mediaByLibrary: Record<number, number>;
 }
 
-/**
- * Aggregated badge counts for the app shell, in one round-trip. Every count
- * is a plain DB aggregate — in particular the queue count reads the download
- * history instead of fanning out to the live download clients, which is what
- * makes this endpoint cheap enough to refresh on every SSE event.
- */
+/** Aggregated badge counts for the app shell, in one round-trip. `queueActive`
+ *  is whatever an acquisition plugin last pushed via `counts.set` — 0 with
+ *  none installed or connected, never a query against its own tables. */
 @Injectable()
 export class CountsService {
   constructor(
-    @InjectRepository(DownloadHistory)
-    private readonly historyRepo: Repository<DownloadHistory>,
     @InjectRepository(FliksRequest)
     private readonly requestRepo: Repository<FliksRequest>,
     private readonly caslAbilityFactory: CaslAbilityFactory,
     private readonly mediaService: MediaService,
     private readonly libraries: LibrariesService,
+    private readonly pluginCounts: PluginCountsCacheService,
   ) {}
 
   async getCounts(user: User): Promise<SidebarCounts> {
     const ability = this.caslAbilityFactory.createForUser(user);
-    const [queueActive, pendingRequests, mediaByLibrary] = await Promise.all([
-      this.countActiveQueue(ability),
+    const [pendingRequests, mediaByLibrary] = await Promise.all([
       this.countPendingRequests(user, ability),
       this.countMediaByLibrary(user, ability),
     ]);
-    return { queueActive, pendingRequests, mediaByLibrary };
+    return {
+      queueActive: this.readActiveQueue(ability),
+      pendingRequests,
+      mediaByLibrary,
+    };
   }
 
-  /**
-   * Downloads still doing work, from the history table. `grabbed` and
-   * `importing` are the states the queue badge counts; `warning`, `failed`
-   * and `completed` are excluded from the badge.
-   *
-   * Known drift vs the live queue, accepted in exchange for skipping the
-   * client fan-out (the badge links to the queue page, where truth lives):
-   * - client-side error states (tracker error, missing files) and torrents
-   *   removed from the client stay counted until the orphan reaper flips
-   *   the row to `failed` (~30 min grace);
-   * - a row stuck in `importing` by a mid-import crash is counted until it
-   *   reaches a terminal status;
-   * - torrents living in the download client without a history row
-   *   (added outside the app) are not counted at all.
-   */
-  private async countActiveQueue(ability: AppAbility): Promise<number> {
+  /** Same audience as the queue itself: settings managers, plus the users the
+   *  client seeds progress for. Unset means 0, never a stale last-seen value. */
+  private readActiveQueue(ability: AppAbility): number {
     if (
       !ability.can(Action.Manage, 'Settings') &&
       !ability.can(Action.Track, Media)
-    )
+    ) {
       return 0;
-    return this.historyRepo.count({
-      where: { status: In(['grabbed', 'importing']) },
-    });
+    }
+    return this.pluginCounts.get('queueActive');
   }
 
   /** Same scoping as RequestsService.findAll: managers count everything,

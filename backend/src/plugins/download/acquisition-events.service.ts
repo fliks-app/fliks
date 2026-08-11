@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { EventsService } from './events.service';
-import { SseAudienceService } from './sse-audience.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { MediaServersService } from '../media-servers/media-servers.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
+import { EventsService } from '../../modules/scheduler/events.service';
+import { SseAudienceService } from '../../modules/scheduler/sse-audience.service';
+import { NotificationsService } from '../../modules/notifications/notifications.service';
+import { MediaServersService } from '../../modules/media-servers/media-servers.service';
 import { DownloadProgressState } from '../../common/constants/download-progress-state';
+import { DownloadHistory } from './entities/download-history.entity';
+import { PluginCountsCacheService } from '../../modules/plugins/host/plugin-counts-cache.service';
 
 export type AcquisitionEvent =
   | {
@@ -50,9 +54,20 @@ export class AcquisitionEventsService {
     private readonly sseAudience: SseAudienceService,
     private readonly notifications: NotificationsService,
     private readonly mediaServers: MediaServersService,
+    @InjectRepository(DownloadHistory)
+    private readonly historyRepo: Repository<DownloadHistory>,
+    private readonly countsCache: PluginCountsCacheService,
   ) {}
 
   async publish(event: AcquisitionEvent): Promise<void> {
+    // Every variant but a progress tick can move a row in/out of grabbed/importing,
+    // so the pushed badge count is refreshed on all of them rather than tracked per-branch.
+    if (event.type !== 'acquisition.progress') {
+      const queueActive = await this.historyRepo.count({
+        where: { status: In(['grabbed', 'importing']) },
+      });
+      this.countsCache.set('queueActive', queueActive);
+    }
     switch (event.type) {
       case 'acquisition.imported': {
         void this.notifications.dispatch('download.complete', {

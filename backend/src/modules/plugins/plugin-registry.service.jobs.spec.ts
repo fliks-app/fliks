@@ -3,7 +3,7 @@ import { PluginRegistryService } from './plugin-registry.service';
 import { PluginJobsService } from './plugin-jobs.service';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { minimalProcessManifest } from './archive/test-manifests';
-import { fakeRegistrationRepo, fakeProcessService } from './plugin-registry.test-helpers';
+import { fakeRegistrationRepo, fakeProcessService, fakeScheduledJobRegistry } from './plugin-registry.test-helpers';
 import { CORE_SCHEDULER_JOB_NAMES } from '../../common/constants/core-scheduler-jobs';
 import type { PluginJob, PluginManifest } from '../../common/plugin-contract';
 import type { PluginProcessStartResult } from './plugin-process.service';
@@ -55,16 +55,18 @@ afterEach(() => {
 
 /** Real `SchedulerRegistry` + real `PluginJobsService` — only `PluginProcessService` is faked —
  *  so "a cron is deregistered" is proven against the actual registry, not a mock of it. */
-function makeService(startResult?: PluginProcessStartResult) {
+function makeService(startResult?: PluginProcessStartResult, publishedJobNames: readonly string[] = []) {
   const registry = new SchedulerRegistry();
   liveRegistries.push(registry);
   const processService = fakeProcessService(startResult);
   const pluginJobs = new PluginJobsService(registry, processService as never);
+  const scheduledJobs = fakeScheduledJobRegistry(publishedJobNames);
   const service = new PluginRegistryService(
     { find: jest.fn().mockResolvedValue([]) } as never,
     fakeRegistrationRepo() as never,
     processService as never,
     pluginJobs,
+    scheduledJobs as never,
   );
   return { service, registry, pluginJobs };
 }
@@ -98,6 +100,18 @@ describe('PluginRegistryService — jobs registration', () => {
       pluginId: 'fliks.jobtest',
       reason: 'job-name-conflict',
       detail: expect.stringContaining(coreName),
+    });
+  });
+
+  it('refuses a job name already published by a ScheduledJobRegistry publisher (e.g. the download bundle)', async () => {
+    const manifest = processManifest('fliks.jobtest', [job({ name: 'SearchMissing' })]);
+    const { service } = makeService(undefined, ['SearchMissing']);
+    const result = await service.register(makePackage(manifest));
+    expect(result).toEqual({
+      ok: false,
+      pluginId: 'fliks.jobtest',
+      reason: 'job-name-conflict',
+      detail: expect.stringContaining('SearchMissing'),
     });
   });
 

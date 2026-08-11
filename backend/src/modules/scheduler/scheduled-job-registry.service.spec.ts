@@ -38,4 +38,12 @@ describe('ScheduledJobRegistry', () => {
     expect(registry.list()).toHaveLength(1);
     expect(registry.get('SearchMissing')).toBe(replacement);
   });
+
+  it('refuses a job named like a core scheduler job, fails closed, and still registers the rest of the batch', () => {
+    const registry = new ScheduledJobRegistry();
+    const core = { ...job('SearchMissing'), name: 'RefreshMetadata' };
+    registry.register([core, job('RssSync')]);
+    expect(registry.get('RefreshMetadata')).toBeUndefined();
+    expect(registry.list().map((j) => j.name)).toEqual(['RssSync']);
+  });
 });

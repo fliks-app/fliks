@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DownloadClient } from './entities/download-client.entity';
 import { DownloadHistory } from '../entities/download-history.entity';
-import { StalledCheck } from '../../../modules/scheduler/entities/stalled-check.entity';
+import { StalledCheck } from '../entities/stalled-check.entity';
 import { CleanupProfile } from '../../../modules/cleanup-profiles/entities/cleanup-profile.entity';
 import { QbittorrentService } from './qbittorrent.service';
 import { DownloadClientsService } from './download-clients.service';

@@ -67,3 +67,11 @@ export function fakePluginJobsService(): {
     trigger: jest.fn(() => ({ ok: true })),
   };
 }
+
+/** Stands in for `ScheduledJobRegistry` — `names` seeds what a registry publisher
+ *  (e.g. the download bundle) already holds, for the job-name-collision check. */
+export function fakeScheduledJobRegistry(names: readonly string[] = []): { list: jest.Mock } {
+  return {
+    list: jest.fn(() => names.map((name) => ({ name, cron: '* * * * *', triggerable: true, run: jest.fn() }))),
+  };
+}

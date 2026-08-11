@@ -41,8 +41,10 @@ export default tseslint.config(
       'src/app.module.ts',
       'src/modules/blocklist/blocklist.module.ts',
       'src/modules/blocklist/blocklist.service.ts',
-      'src/modules/counts/counts.module.ts',
-      'src/modules/counts/counts.service.ts',
+      // Test-only: both construct the bundle's publisher to prove core's own
+      // path produces the same effects. They leave when the bundle does.
+      'src/modules/plugins/host/fliks-host.service.spec.ts',
+      'src/modules/counts/counts.service.spec.ts',
     ],
     rules: {
       'no-restricted-imports': [
@@ -68,6 +70,7 @@ export default tseslint.config(
       'src/plugins/download/acquisition-scheduler.service.ts',
       'src/plugins/download/auto-grab-pipeline.service.ts',
       'src/plugins/download/completion.service.spec.ts',
+      'src/plugins/download/acquisition-events.service.ts',
       'src/plugins/download/completion.service.ts',
       'src/plugins/download/download-bundle.module.ts',
       'src/plugins/download/download-clients/download-clients.controller.ts',

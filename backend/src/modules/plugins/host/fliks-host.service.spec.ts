@@ -15,7 +15,7 @@ import type { Season } from '../../media/entities/season.entity';
 import type { Episode } from '../../media/entities/episode.entity';
 // Cross-boundary read for the equivalence proof only, per the task brief —
 // this copy is deleted once `plugins/download/` converts to the host method.
-import { AcquisitionEventsService } from '../../scheduler/acquisition-events.service';
+import { AcquisitionEventsService } from '../../../plugins/download/acquisition-events.service';
 import type { EventsService } from '../../scheduler/events.service';
 import type { SseAudienceService } from '../../scheduler/sse-audience.service';
 import type { NotificationsService } from '../../notifications/notifications.service';
@@ -1085,6 +1085,12 @@ describe('FliksHostImpl', () => {
         h.sseAudience as unknown as SseAudienceService,
         h.notifications as unknown as NotificationsService,
         h.mediaServers as unknown as MediaServersService,
+        {
+          count: jest.fn().mockResolvedValue(0),
+        } as unknown as ConstructorParameters<
+          typeof AcquisitionEventsService
+        >[4],
+        h.countsCache,
       );
 
       await real.publish({
@@ -1129,6 +1135,12 @@ describe('FliksHostImpl', () => {
         h.sseAudience as unknown as SseAudienceService,
         h.notifications as unknown as NotificationsService,
         h.mediaServers as unknown as MediaServersService,
+        {
+          count: jest.fn().mockResolvedValue(0),
+        } as unknown as ConstructorParameters<
+          typeof AcquisitionEventsService
+        >[4],
+        h.countsCache,
       );
 
       await real.publish({
@@ -1166,6 +1178,12 @@ describe('FliksHostImpl', () => {
         h.sseAudience as unknown as SseAudienceService,
         h.notifications as unknown as NotificationsService,
         h.mediaServers as unknown as MediaServersService,
+        {
+          count: jest.fn().mockResolvedValue(0),
+        } as unknown as ConstructorParameters<
+          typeof AcquisitionEventsService
+        >[4],
+        h.countsCache,
       );
 
       await real.publish({
