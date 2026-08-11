@@ -247,6 +247,13 @@ export class EventsService {
     this.subject.next({ audience: userIds, connectionIds: null, event });
   }
 
+  /** Escape hatch for a type outside the closed `SseEvent` union — namespaced
+   *  plugin events (`plugin.<id>.<type>`). `audience: null` broadcasts. */
+  emitRaw(type: string, payload: unknown, audience: number[] | null): void {
+    const event = { type, payload } as unknown as SseEvent;
+    this.subject.next({ audience, connectionIds: null, event });
+  }
+
   /** Deliver only to one SSE connection (multi-device remote control). */
   emitToConnection(connectionId: string, event: SseEvent): void {
     if (!this.connections.has(connectionId)) return;

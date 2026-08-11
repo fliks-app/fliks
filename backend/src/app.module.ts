@@ -31,6 +31,7 @@ import { FilesystemModule } from './modules/filesystem/filesystem.module';
 import { SetupChecklistModule } from './modules/setup-checklist/setup-checklist.module';
 import { CountsModule } from './modules/counts/counts.module';
 import { PluginsModule } from './modules/plugins/plugins.module';
+import { PluginHostModule } from './modules/plugins/host/plugin-host.module';
 import { CommonModule } from './common/common.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
@@ -112,6 +113,9 @@ import { isDownloadBundleEnabled } from './common/constants/plugin-flags';
     SetupChecklistModule,
     CountsModule,
     PluginsModule,
+    // Independent of the download bundle — the plugin-facing host methods
+    // are core code and must resolve with FLIKS_BUNDLES=.
+    PluginHostModule,
   ],
 })
 export class AppModule {}
