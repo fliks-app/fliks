@@ -7,7 +7,6 @@ import {
 } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { MediaType } from '../../../common/enums/media-type.enum';
-import type { StalledCleanupProfileKey } from '../../../common/constants/stalled-cleanup-profiles';
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
 
@@ -45,9 +44,6 @@ export class Library extends BaseEntity {
    *  inherit the global setting). ISO 3166-1 code. */
   @Column({ type: 'varchar', length: 8, nullable: true, default: null })
   metadataRegion: string | null;
-
-  @Column({ type: 'varchar', length: 16, nullable: true, default: null })
-  stalledCleanupProfile: StalledCleanupProfileKey | null;
 
   @ManyToOne(() => QualityProfile, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'defaultQualityProfileId' })

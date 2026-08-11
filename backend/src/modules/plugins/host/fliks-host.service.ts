@@ -41,7 +41,6 @@ import { SettingsService } from '../../settings/settings.service';
 import { EventsService } from '../../scheduler/events.service';
 import { SseAudienceService } from '../../scheduler/sse-audience.service';
 import { PluginRegistration } from '../entities/plugin-registration.entity';
-import { CleanupProfile } from '../../cleanup-profiles/entities/cleanup-profile.entity';
 import {
   maxResolutionFromQualityStrings,
   rankFromQualityString,
@@ -109,8 +108,6 @@ export class FliksHostImpl implements PluginHostApi {
     private readonly blocklistEntryRepo: Repository<BlocklistEntry>,
     @InjectRepository(PluginRegistration)
     private readonly pluginRegistrationRepo: Repository<PluginRegistration>,
-    @InjectRepository(CleanupProfile)
-    private readonly cleanupProfileRepo: Repository<CleanupProfile>,
     private readonly autoGrab: AutoGrabPipelineService,
     private readonly acquisitionCandidates: AcquisitionCandidatesService,
     private readonly profiles: ProfilesService,
@@ -539,7 +536,7 @@ export class FliksHostImpl implements PluginHostApi {
 
     if (mediaIds.length) {
       const rows = await this.mediaRepo.find({ where: { id: In(mediaIds) } });
-      for (const m of rows) out[`media:${m.id}`] = await this.mediaLabel(m);
+      for (const m of rows) out[`media:${m.id}`] = this.mediaLabel(m);
     }
     if (seasonIds.length) {
       const rows = await this.seasonRepo.find({
@@ -547,7 +544,7 @@ export class FliksHostImpl implements PluginHostApi {
         relations: ['media'],
       });
       for (const s of rows) {
-        const label = await this.mediaLabel(s.media);
+        const label = this.mediaLabel(s.media);
         out[`season:${s.id}`] = { ...label, seasonNumber: s.seasonNumber };
       }
     }
@@ -557,7 +554,7 @@ export class FliksHostImpl implements PluginHostApi {
         relations: ['season', 'season.media'],
       });
       for (const e of rows) {
-        const label = await this.mediaLabel(e.season.media);
+        const label = this.mediaLabel(e.season.media);
         out[`episode:${e.id}`] = {
           ...label,
           seasonNumber: e.season.seasonNumber,
@@ -569,24 +566,11 @@ export class FliksHostImpl implements PluginHostApi {
     return out;
   }
 
-  private async mediaLabel(media: Media): Promise<MediaResolveEntry> {
-    const kind: MediaKind = media.type === MediaType.MOVIE ? 'movie' : 'series';
-    const key = media.library?.stalledCleanupProfile;
-    const profile = key
-      ? await this.cleanupProfileRepo.findOne({ where: { key } })
-      : null;
+  private mediaLabel(media: Media): MediaResolveEntry {
     return {
       title: media.title,
-      kind,
+      kind: media.type === MediaType.MOVIE ? 'movie' : 'series',
       libraryId: media.libraryId ?? 0,
-      stalledCleanupProfile: profile
-        ? {
-            key: profile.key,
-            samples: profile.samples,
-            intervalMinutes: profile.intervalMinutes,
-            autoRestart: profile.autoRestart,
-          }
-        : null,
     };
   }
 

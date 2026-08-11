@@ -10,7 +10,7 @@ function makeService() {
   };
   const historyRepo = {};
   const stalledCheckRepo = {};
-  const cleanupProfileRepo = {};
+  const settings = {};
   const qbittorrent = {};
   const historyMatcher = {};
   const blocklist = {};
@@ -19,7 +19,7 @@ function makeService() {
     repo as never,
     historyRepo as never,
     stalledCheckRepo as never,
-    cleanupProfileRepo as never,
+    settings as never,
     qbittorrent as never,
     historyMatcher as never,
     blocklist as never,

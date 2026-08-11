@@ -3,8 +3,6 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
 
-export type StalledCleanupProfileKey = 'fast' | 'medium' | 'slow';
-
 /** Lightweight library projection for non-admin users (sidebar, route resolution). */
 export interface LibrarySummary {
   id: number;
@@ -31,7 +29,6 @@ export interface Library {
   preferredProvider: string | null;
   metadataLanguage: string | null;
   metadataRegion: string | null;
-  stalledCleanupProfile: StalledCleanupProfileKey | null;
   defaultQualityProfileId: number | null;
   defaultLanguageProfileId: number | null;
   isDefaultForMovies: boolean;
@@ -50,7 +47,6 @@ export interface CreateLibraryBody {
   preferredProvider?: string | null;
   metadataLanguage?: string | null;
   metadataRegion?: string | null;
-  stalledCleanupProfile?: StalledCleanupProfileKey | null;
   defaultQualityProfileId?: number | null;
   defaultLanguageProfileId?: number | null;
   isDefaultForMovies?: boolean;

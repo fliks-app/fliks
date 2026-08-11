@@ -41,11 +41,6 @@
                   @if (lib.preferredProvider) {
                     <span class="badge badge-primary badge-sm">{{ lib.preferredProvider | uppercase }}</span>
                   }
-                  @if (lib.stalledCleanupProfile) {
-                    <span class="badge badge-warning badge-sm">
-                      {{ 'settings.cleanup_profiles.profile_' + lib.stalledCleanupProfile | translate }}
-                    </span>
-                  }
                 </div>
                 @if (lib.path) {
                   <p class="text-xs text-base-content/60 mt-2">
@@ -141,16 +136,6 @@
           [ngModel]="formProvider()" (ngModelChange)="formProvider.set($event || null)">
           @for (opt of providerOptions; track opt.value) {
             <option [ngValue]="opt.value">{{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}</option>
-          }
-        </select>
-      </label>
-
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.libraries.stalled_cleanup' | translate }}</span>
-        <select class="select select-bordered select-sm w-full"
-          [ngModel]="formCleanup()" (ngModelChange)="formCleanup.set($event)">
-          @for (opt of cleanupOptions; track opt.value) {
-            <option [ngValue]="opt.value">{{ opt.labelKey | translate }}</option>
           }
         </select>
       </label>

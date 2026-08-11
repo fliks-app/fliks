@@ -29,7 +29,7 @@ import {
   countStalledStrikes,
   STALL_ELIGIBLE_STATES,
 } from './stalled-progress.util';
-import { CleanupProfile } from '../../modules/cleanup-profiles/entities/cleanup-profile.entity';
+import { getStallConfig, StallConfig } from './stall-config.util';
 import { Library } from '../../modules/libraries/entities/library.entity';
 import {
   TorrentHistoryMatcher,
@@ -88,8 +88,6 @@ export class CompletionService implements OnModuleInit {
     private readonly indexerRepo: Repository<Indexer>,
     @InjectRepository(StalledCheck)
     private readonly stalledCheckRepo: Repository<StalledCheck>,
-    @InjectRepository(CleanupProfile)
-    private readonly cleanupProfileRepo: Repository<CleanupProfile>,
     @InjectRepository(Library)
     private readonly libraryRepo: Repository<Library>,
     private readonly qbittorrent: QbittorrentService,
@@ -930,41 +928,28 @@ export class CompletionService implements OnModuleInit {
   // ---------------------------------------------------------------------------
 
   /**
-   * Per-library stalled-download cleanup.
-   *
-   * For every active downloading torrent that can be traced back to a library
-   * with a cleanup profile (fast/medium/slow), we snapshot the `downloaded` byte
-   * counter at the profile's interval. When the last N snapshots show no
+   * Global stalled-download cleanup, gated by {@link getStallConfig}. For
+   * every active downloading torrent, we snapshot the `downloaded` byte
+   * counter at the configured interval. When the last N snapshots show no
    * meaningful progress, the download is considered stalled and is removed
    * + blocklisted.
    *
    * Whether a new search is triggered depends on:
-   *   - the profile's `autoRestart` flag,
+   *   - the `autoRestart` setting,
    *   - the grab source (`auto`|`manual`), and
-   *   - the global `cleanup_restart_manual_grabs` setting.
+   *   - the `includeManualGrabs` setting.
    */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async cleanStalledTorrents(): Promise<void> {
     // Housekeeping first — discard ancient snapshots regardless of anything else.
     await this.pruneOldStalledChecks();
 
-    const profiles = await this.cleanupProfileRepo.find();
-    const profileByKey = new Map(profiles.map((p) => [p.key, p]));
-
-    // Skip early if no library has a cleanup profile assigned.
-    const allLibraries = await this.libraryRepo.find();
-    const librariesWithProfile = allLibraries.filter(
-      (l) => l.stalledCleanupProfile != null,
-    );
-    if (!librariesWithProfile.length) return;
-    const libraryById = new Map(librariesWithProfile.map((l) => [l.id, l]));
+    const stallConfig = await getStallConfig(this.settings);
+    if (!stallConfig) return;
 
     const clients = await this.clientRepo.find({ where: { enabled: true } });
     const qbitClients = clients.filter((c) => this.qbittorrent.supports(c));
     if (!qbitClients.length) return;
-
-    const allowManualRestart =
-      (await this.settings.get('cleanup_restart_manual_grabs')) === 'true';
 
     // Candidate histories for the torrent↔history match, loaded once for all
     // clients. `completed` rows are excluded — a finished import is no longer
@@ -1004,19 +989,12 @@ export class CompletionService implements OnModuleInit {
       for (const t of downloading) {
         const history = await this.historyMatcher.matchAndHeal(t, histories);
         if (!history) continue; // Untracked torrent — not our business.
-        const media = history.media; // library is eager-loaded with the media
-        if (!media?.libraryId) continue;
-        const library = libraryById.get(media.libraryId);
-        if (!library?.stalledCleanupProfile) continue;
 
-        const profile = profileByKey.get(library.stalledCleanupProfile);
-        if (!profile) continue;
-
-        const stalled = await this.evaluateStalled(t, profile, now);
+        const stalled = await this.evaluateStalled(t, stallConfig, now);
         if (!stalled) continue;
 
         this.log.warn(
-          `StalledCleanup: "${t.name}" stalled (profile=${profile.key}, samples=${profile.samples}, interval=${profile.intervalMinutes}m)`,
+          `StalledCleanup: "${t.name}" stalled (samples=${stallConfig.samples}, interval=${stallConfig.intervalMinutes}m)`,
         );
 
         // Remove torrent from qBittorrent (files too). If deletion fails we
@@ -1041,16 +1019,16 @@ export class CompletionService implements OnModuleInit {
 
         await this.blocklist.createFromHistory(
           history,
-          `Auto-blocklist: stalled torrent (profile=${profile.key})`,
+          'Auto-blocklist: stalled torrent',
         );
 
         history.status = 'failed';
-        history.statusMessage = `Stalled — removed by ${profile.key} cleanup profile`;
+        history.statusMessage = 'Stalled — removed by stalled-download cleanup';
         await this.historyRepo.save(history);
 
         const shouldRestart =
-          profile.autoRestart &&
-          (history.grabSource === 'auto' || allowManualRestart);
+          stallConfig.autoRestart &&
+          (history.grabSource === 'auto' || stallConfig.includeManualGrabs);
         if (shouldRestart && history.mediaId) {
           mediaToResearch.add(history.mediaId);
           this.log.log(
@@ -1058,7 +1036,7 @@ export class CompletionService implements OnModuleInit {
           );
         } else if (!shouldRestart) {
           this.log.log(
-            `StalledCleanup: "${history.sourceTitle ?? t.name}" blocklisted — no auto-restart (autoRestart=${profile.autoRestart}, grabSource=${history.grabSource})`,
+            `StalledCleanup: "${history.sourceTitle ?? t.name}" blocklisted — no auto-restart (autoRestart=${stallConfig.autoRestart}, grabSource=${history.grabSource})`,
           );
         }
       }
@@ -1078,12 +1056,12 @@ export class CompletionService implements OnModuleInit {
 
   /**
    * Records a snapshot if the interval has elapsed, then checks whether the
-   * last `profile.samples` snapshots form an unbroken no-progress run (each
-   * step within the tolerance of `stalled-progress.util`).
+   * last `samples` snapshots form an unbroken no-progress run (each step
+   * within the tolerance of `stalled-progress.util`).
    */
   private async evaluateStalled(
     torrent: QbittorrentTorrent,
-    profile: CleanupProfile,
+    config: Pick<StallConfig, 'samples' | 'intervalMinutes'>,
     now: number,
   ): Promise<boolean> {
     const hash = torrent.hash;
@@ -1094,7 +1072,7 @@ export class CompletionService implements OnModuleInit {
       order: { checkedAt: 'DESC' },
     });
 
-    const intervalMs = profile.intervalMinutes * 60_000;
+    const intervalMs = config.intervalMinutes * 60_000;
     const shouldSnapshot =
       !latest || now - latest.checkedAt.getTime() >= intervalMs;
 
@@ -1110,15 +1088,15 @@ export class CompletionService implements OnModuleInit {
     const recent = await this.stalledCheckRepo.find({
       where: { torrentHash: hash },
       order: { checkedAt: 'DESC' },
-      take: profile.samples,
+      take: config.samples,
     });
 
-    if (recent.length < profile.samples) return false;
+    if (recent.length < config.samples) return false;
     // `recent` is DESC by checkedAt — exactly the order the strike counter
     // expects. Tolerant comparison: a stalled torrent keeps receiving a
     // trickle of wasted bytes from churning peers, so strict byte equality
     // would never fire.
-    return countStalledStrikes(recent) >= profile.samples;
+    return countStalledStrikes(recent) >= config.samples;
   }
 
   /**

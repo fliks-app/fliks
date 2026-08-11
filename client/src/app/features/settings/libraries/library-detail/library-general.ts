@@ -1,7 +1,6 @@
 import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
-import { StalledCleanupProfileKey } from '../../../../core/services/api/libraries-api.service';
 import { METADATA_PROVIDER_OPTIONS_LIBRARY } from '../../../../core/constants/metadata-providers';
 import {
   METADATA_LANGUAGE_OPTIONS,
@@ -50,12 +49,6 @@ export class LibraryGeneralComponent {
   readonly providerOptions = METADATA_PROVIDER_OPTIONS_LIBRARY;
   readonly metadataLanguageOptions = METADATA_LANGUAGE_OPTIONS;
   readonly metadataRegionOptions = METADATA_REGION_OPTIONS;
-  readonly cleanupOptions: { value: StalledCleanupProfileKey | null; labelKey: string }[] = [
-    { value: null, labelKey: 'settings.cleanup_profiles.none' },
-    { value: 'fast', labelKey: 'settings.cleanup_profiles.profile_fast' },
-    { value: 'medium', labelKey: 'settings.cleanup_profiles.profile_medium' },
-    { value: 'slow', labelKey: 'settings.cleanup_profiles.profile_slow' },
-  ];
 
   save() {
     void this.state.save();

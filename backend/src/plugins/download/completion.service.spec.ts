@@ -390,6 +390,31 @@ describe('CompletionService.cleanSeededTorrents', () => {
   });
 });
 
+describe('CompletionService.cleanStalledTorrents — default off', () => {
+  /** Same bare-prototype approach as the other describe blocks — only the
+   *  collaborators the early-return path touches need wiring. */
+  it('returns before querying any client when the stall sample count is unset', async () => {
+    const service = Object.create(
+      CompletionService.prototype,
+    ) as CompletionService;
+    const wired = service as unknown as Record<string, unknown>;
+    const clientRepo = { find: jest.fn() };
+    const deleteTorrent = jest.fn();
+    wired.stalledCheckRepo = { delete: jest.fn().mockResolvedValue(undefined) };
+    wired.settings = { get: jest.fn().mockResolvedValue(null) };
+    wired.clientRepo = clientRepo;
+    wired.qbittorrent = { supports: jest.fn(), deleteTorrent };
+    wired.log = { warn: jest.fn(), log: jest.fn(), error: jest.fn() };
+
+    await service.cleanStalledTorrents();
+
+    // Never reaches the client fetch, let alone a delete — proves an unset
+    // sample count is a hard stop, not a fall-through to a default profile.
+    expect(clientRepo.find).not.toHaveBeenCalled();
+    expect(deleteTorrent).not.toHaveBeenCalled();
+  });
+});
+
 describe('CompletionService.processOne', () => {
   // Same 5 tokens `naming.getFormats()` returns when no admin override exists —
   // pinning real strings, not the defaults, is the point of these tests.

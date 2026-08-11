@@ -2,7 +2,6 @@ import { Injectable, inject, signal } from '@angular/core';
 import {
   Library,
   LibrariesApiService,
-  StalledCleanupProfileKey,
 } from '../../../../core/services/api/libraries-api.service';
 import { UserRow } from '../../../../core/services/api/users-api.service';
 import {
@@ -36,7 +35,6 @@ export class LibraryDetailState {
   readonly formProvider = signal<string | null>(null);
   readonly formMetadataLanguage = signal<string | null>(null);
   readonly formMetadataRegion = signal<string | null>(null);
-  readonly formCleanup = signal<StalledCleanupProfileKey | null>(null);
   readonly formQualityProfileId = signal<number | null>(null);
   readonly formLanguageProfileId = signal<number | null>(null);
   readonly formDefaultMovies = signal(false);
@@ -55,7 +53,6 @@ export class LibraryDetailState {
     this.formProvider.set(lib.preferredProvider);
     this.formMetadataLanguage.set(lib.metadataLanguage);
     this.formMetadataRegion.set(lib.metadataRegion);
-    this.formCleanup.set(lib.stalledCleanupProfile);
     this.formQualityProfileId.set(lib.defaultQualityProfileId);
     this.formLanguageProfileId.set(lib.defaultLanguageProfileId);
     this.formDefaultMovies.set(lib.isDefaultForMovies);
@@ -100,7 +97,6 @@ export class LibraryDetailState {
         preferredProvider: this.formProvider(),
         metadataLanguage: this.formMetadataLanguage(),
         metadataRegion: this.formMetadataRegion(),
-        stalledCleanupProfile: this.formCleanup(),
         defaultQualityProfileId: this.formQualityProfileId(),
         defaultLanguageProfileId: this.formLanguageProfileId(),
         isDefaultForMovies: this.formDefaultMovies(),
