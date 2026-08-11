@@ -96,7 +96,16 @@ export interface ProvidersConfigPage extends ConfigPageBase {
   kind: 'providers';
   list: string;
   implementations: string;
-  actions?: { id: string; labelKey: string; route: string; scope: 'row' | 'list' }[];
+  /** `method` is explicit: encoding it into `route` left the caller POSTing to a
+   *  string that contained the verb. */
+  actions?: {
+    id: string;
+    labelKey: string;
+    method: 'GET' | 'POST' | 'DELETE';
+    route: string;
+    scope: 'row' | 'list';
+    confirmKey?: string;
+  }[];
   reorderable?: boolean;
   /** Priority is not a universal provider concept; hide the column when the
    *  resource has none. */

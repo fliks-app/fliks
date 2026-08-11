@@ -81,6 +81,8 @@ describe('PluginViewComponent', () => {
   });
 
   it('renders the providers renderer once the implementations route resolves, and lists rows from the declared route', async () => {
+    // Manifest paths are declared relative to the plugin, exactly as a real manifest ships them —
+    // if the component ever requests these verbatim instead of proxying them, `http.expectOne` below fails.
     const { fixture, http } = createComponent(
       { pluginId: 'fliks.a', view: 'providers' },
       {
@@ -89,8 +91,8 @@ describe('PluginViewComponent', () => {
           kind: 'providers',
           id: 'x',
           labelKey: 'x.title',
-          list: '/api/plugins/fliks.a/providers',
-          implementations: '/api/plugins/fliks.a/implementations',
+          list: '/providers',
+          implementations: '/implementations',
         }),
       },
     );
@@ -108,7 +110,7 @@ describe('PluginViewComponent', () => {
     http.verify();
   });
 
-  it('renders a translated message rather than a blank page when the implementations route fails', async () => {
+  it('renders a translated warning (not a blank page, not a silently empty form) when the implementations route fails', async () => {
     const { fixture, http } = createComponent(
       { pluginId: 'fliks.a', view: 'providers' },
       {
@@ -117,8 +119,8 @@ describe('PluginViewComponent', () => {
           kind: 'providers',
           id: 'x',
           labelKey: 'x.title',
-          list: '/api/plugins/fliks.a/providers',
-          implementations: '/api/plugins/fliks.a/implementations',
+          list: '/providers',
+          implementations: '/implementations',
         }),
       },
     );
@@ -128,7 +130,37 @@ describe('PluginViewComponent', () => {
     // Falls back to an empty implementations list — the provider renderer still mounts and fetches its own list.
     http.expectOne({ url: '/api/plugins/fliks.a/providers', method: 'GET' }).flush([]);
     await settle(fixture);
-    expect(fixture.nativeElement.textContent).not.toBe('');
+    expect(fixture.componentInstance.implementationsLoadError()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('plugin_view.implementations_load_error');
+    http.verify();
+  });
+
+  it('runs a `scope: \'row\'` provider action with its declared method against the proxied route', async () => {
+    const { fixture, http } = createComponent(
+      { pluginId: 'fliks.a', view: 'providers' },
+      {
+        hasPlugin: () => true,
+        configPage: () => ({
+          kind: 'providers',
+          id: 'x',
+          labelKey: 'x.title',
+          list: '/providers',
+          implementations: '/implementations',
+          actions: [{ id: 'test', labelKey: 'x.test', method: 'DELETE', route: '/providers/reset', scope: 'row' }],
+        }),
+      },
+    );
+    fixture.detectChanges();
+    http.expectOne({ url: '/api/plugins/fliks.a/implementations', method: 'GET' }).flush([]);
+    await settle(fixture);
+    http.expectOne({ url: '/api/plugins/fliks.a/providers', method: 'GET' }).flush([]);
+    await settle(fixture);
+
+    const run = fixture.componentInstance.providerTestConnection(fixture.componentInstance.providersView()!);
+    const resultPromise = run!({ implementation: 'demo', settings: {} });
+    // A method other than POST proves `action.method` drives the call, not a hardcoded verb.
+    http.expectOne({ url: '/api/plugins/fliks.a/providers/reset', method: 'DELETE' }).flush({ ok: true, message: 'ok' });
+    expect(await resultPromise).toEqual({ ok: true, message: 'ok' });
     http.verify();
   });
 
@@ -141,7 +173,7 @@ describe('PluginViewComponent', () => {
           kind: 'table',
           id: 'x',
           labelKey: 'x.title',
-          list: '/api/plugins/fliks.a/queue',
+          list: '/queue',
           columns: [{ key: 'name', labelKey: 'x.col_name' }],
           rowActions: [{ kind: 'action', labelKey: 'x.doit', actionId: 'core.unknown' }],
         }),
@@ -167,7 +199,7 @@ describe('PluginViewComponent', () => {
           kind: 'table',
           id: 'x',
           labelKey: 'x.title',
-          list: '/api/plugins/fliks.a/queue',
+          list: '/queue',
           columns: [{ key: 'name', labelKey: 'x.col_name' }],
           rowActions: [{ kind: 'action', labelKey: 'x.open', actionId: 'table.open-media' }],
         }),
@@ -187,7 +219,52 @@ describe('PluginViewComponent', () => {
     http.verify();
   });
 
-  it('renders a `scope: \'list\'` provider action once, outside the rows, and running it POSTs then reloads', async () => {
+  it('a table `proxy` row action hits the proxied route with its declared method; a `route` row action navigates in-app unprefixed', async () => {
+    const { fixture, http, navigateByUrl } = createComponent(
+      { pluginId: 'fliks.a', view: 'queue' },
+      {
+        hasPlugin: () => true,
+        configPage: () => ({
+          kind: 'table',
+          id: 'x',
+          labelKey: 'x.title',
+          list: '/queue',
+          columns: [{ key: 'name', labelKey: 'x.col_name' }],
+          rowActions: [
+            { kind: 'proxy', labelKey: 'x.remove', method: 'DELETE', path: '/queue/1' },
+            { kind: 'route', labelKey: 'x.details', path: '/plugins/fliks.a/details' },
+          ],
+          listActions: [{ labelKey: 'x.clear', method: 'DELETE', path: '/queue' }],
+        }),
+      },
+    );
+    fixture.detectChanges();
+    http.expectOne({ url: '/api/plugins/fliks.a/queue', method: 'GET' }).flush([{ id: 1, name: 'Torrent A' }]);
+    await settle(fixture);
+
+    // Checked first, before the row (and its buttons) is removed by the proxy delete below.
+    const routeButtons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+    routeButtons.find((b) => b.textContent?.includes('x.details'))!.click();
+    // An in-app Angular route is never plugin-relative — it must reach the router verbatim.
+    expect(navigateByUrl).toHaveBeenCalledWith('/plugins/fliks.a/details');
+
+    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+    buttons.find((b) => b.textContent?.includes('x.remove'))!.click();
+    http.expectOne({ url: '/api/plugins/fliks.a/queue/1', method: 'DELETE' }).flush({});
+    await settle(fixture);
+    http.expectOne({ url: '/api/plugins/fliks.a/queue', method: 'GET' }).flush([]);
+    await settle(fixture);
+
+    const clearButtons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+    clearButtons.find((b) => b.textContent?.includes('x.clear'))!.click();
+    http.expectOne({ url: '/api/plugins/fliks.a/queue', method: 'DELETE' }).flush({});
+    await settle(fixture);
+    http.expectOne({ url: '/api/plugins/fliks.a/queue', method: 'GET' }).flush([]);
+    await settle(fixture);
+    http.verify();
+  });
+
+  it('renders a `scope: \'list\'` provider action once, outside the rows, and running it against its declared method reloads', async () => {
     const { fixture, http } = createComponent(
       { pluginId: 'fliks.a', view: 'providers' },
       {
@@ -196,9 +273,9 @@ describe('PluginViewComponent', () => {
           kind: 'providers',
           id: 'x',
           labelKey: 'x.title',
-          list: '/api/plugins/fliks.a/providers',
-          implementations: '/api/plugins/fliks.a/implementations',
-          actions: [{ id: 'sync', labelKey: 'x.sync_all', route: '/api/plugins/fliks.a/sync', scope: 'list' }],
+          list: '/providers',
+          implementations: '/implementations',
+          actions: [{ id: 'sync', labelKey: 'x.sync_all', method: 'POST', route: '/sync', scope: 'list' }],
         }),
       },
     );
