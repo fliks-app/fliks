@@ -1,5 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { MediaType } from '../enums/media-type.enum';
+import { DownloadProgressState } from '../enums/download-progress-state.enum';
 import { DownloadClientsApiService } from './api/download-clients-api.service';
 import { foldLeaves } from '../../shared/utils/download-format';
 
@@ -11,7 +12,7 @@ export type LeafKey = number | 'PACK' | `hash:${string}`;
 /** One in-flight torrent contributing to a media's download progress. */
 export interface DownloadLeaf {
   percent: number; // 0–100
-  state: string; // raw qBittorrent state
+  state: DownloadProgressState;
   weight?: number; // torrent size in bytes; set from the queue seed, absent on SSE
 }
 
@@ -28,7 +29,7 @@ export interface MediaDownloadProgress {
   mediaId: number;
   mediaType: MediaType;
   percent: number | null; // active-weighted mean; null when nothing is active
-  state: string; // dominant raw state across all leaves
+  state: DownloadProgressState; // dominant state across all leaves
   dlspeed: number;
   eta: number;
   seasons?: Map<number, SeasonProgress>;
@@ -44,7 +45,7 @@ export interface DownloadProgressEvent {
   progress: number; // 0–1
   dlspeed: number;
   eta: number;
-  state: string;
+  state: DownloadProgressState;
 }
 
 function leafKey(episodeNumber?: number, hash?: string): LeafKey {
@@ -53,9 +54,10 @@ function leafKey(episodeNumber?: number, hash?: string): LeafKey {
   return 'PACK';
 }
 
-/** Fold every season leaf into the media-level state + percent. */
+/** Fold every season leaf into the media-level state + percent. Callers only
+ *  reach here with at least one leaf, so `f.state` is never the empty sentinel. */
 function rollupSeasons(seasons: Map<number, SeasonProgress>): {
-  state: string;
+  state: DownloadProgressState;
   percent: number | null;
 } {
   const leaves: DownloadLeaf[] = [];
@@ -63,7 +65,7 @@ function rollupSeasons(seasons: Map<number, SeasonProgress>): {
     for (const l of sp.leaves.values()) leaves.push(l);
   }
   const f = foldLeaves(leaves);
-  return { state: f.state, percent: f.percent };
+  return { state: f.state || 'active', percent: f.percent };
 }
 
 /**
@@ -131,7 +133,7 @@ export class DownloadProgressService {
         mediaId: e.mediaId,
         mediaType: e.mediaType,
         percent: f.percent,
-        state: f.state,
+        state: f.state || 'active',
         dlspeed: e.dlspeed,
         eta: e.eta,
       });
@@ -199,11 +201,9 @@ export class DownloadProgressService {
       for (const it of res.items) {
         if (it.mediaId == null || it.progress >= 1) continue;
         const percent = Math.round(it.progress * 100);
-        const leaf: DownloadLeaf = {
-          percent,
-          state: it.state,
-          weight: it.size,
-        };
+        // The queue snapshot has no closed state of its own; the next SSE
+        // tick corrects this within ~1s.
+        const leaf: DownloadLeaf = { percent, state: 'active', weight: it.size };
         if (it.mediaType === 'series' && it.seasonNumber != null) {
           const cur = map.get(it.mediaId);
           const seasons = new Map(cur?.seasons ?? []);
@@ -226,7 +226,7 @@ export class DownloadProgressService {
             mediaId: it.mediaId,
             mediaType: it.mediaType ?? 'movie',
             percent: f.percent,
-            state: f.state,
+            state: f.state || 'active',
             dlspeed: it.dlspeed,
             eta: it.eta,
           });

@@ -1,5 +1,6 @@
 import { Module, OnModuleInit } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { CronExpression } from '@nestjs/schedule';
 import { Media } from '../../modules/media/entities/media.entity';
 import { Season } from '../../modules/media/entities/season.entity';
@@ -9,6 +10,9 @@ import { Library } from '../../modules/libraries/entities/library.entity';
 import { Command } from '../../modules/scheduler/entities/command.entity';
 import { IndexersModule } from './indexers/indexers.module';
 import { DownloadClientsModule } from './download-clients/download-clients.module';
+import { Indexer } from './indexers/entities/indexer.entity';
+import { DownloadClient } from './download-clients/entities/download-client.entity';
+import { QbittorrentService } from './download-clients/qbittorrent.service';
 import { MediaModule } from '../../modules/media/media.module';
 import { ProfilesModule } from '../../modules/profiles/profiles.module';
 import { BlocklistModule } from '../../modules/blocklist/blocklist.module';
@@ -21,6 +25,8 @@ import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.
 import { PluginHostModule } from '../../modules/plugins/host/plugin-host.module';
 import { ScheduledJobRegistryModule } from '../../modules/scheduler/scheduled-job-registry.module';
 import { ScheduledJobRegistry } from '../../modules/scheduler/scheduled-job-registry.service';
+import { ChecklistItemRegistryModule } from '../../modules/setup-checklist/checklist-item-registry.module';
+import { ChecklistItemRegistry } from '../../modules/setup-checklist/checklist-item-registry.service';
 import { NamingService } from '../../modules/scheduler/naming.service';
 import { CompletionService } from './completion.service';
 import { AcquisitionSchedulerService } from './acquisition-scheduler.service';
@@ -59,6 +65,7 @@ import { AcquisitionEventsService } from '../../modules/scheduler/acquisition-ev
     LibraryIngestModule,
     PluginHostModule,
     ScheduledJobRegistryModule,
+    ChecklistItemRegistryModule,
   ],
   providers: [
     NamingService,
@@ -72,8 +79,14 @@ import { AcquisitionEventsService } from '../../modules/scheduler/acquisition-ev
 export class DownloadBundleModule implements OnModuleInit {
   constructor(
     private readonly registry: ScheduledJobRegistry,
+    private readonly checklistItems: ChecklistItemRegistry,
     private readonly completion: CompletionService,
     private readonly acquisitionScheduler: AcquisitionSchedulerService,
+    @InjectRepository(Indexer)
+    private readonly indexerRepo: Repository<Indexer>,
+    @InjectRepository(DownloadClient)
+    private readonly downloadClientRepo: Repository<DownloadClient>,
+    private readonly qbittorrent: QbittorrentService,
   ) {}
 
   /** Cron strings mirror the `@Cron` decorators on the services below — this
@@ -109,6 +122,24 @@ export class DownloadBundleModule implements OnModuleInit {
         cron: CronExpression.EVERY_5_MINUTES,
         triggerable: true,
         run: () => this.completion.cleanSeededTorrents(),
+      },
+    ]);
+
+    this.checklistItems.register([
+      {
+        key: 'indexer',
+        severity: 'required',
+        route: ['/admin', 'settings', 'indexers'],
+        check: async () =>
+          (await this.indexerRepo.count({ where: { enabled: true } })) > 0,
+      },
+      {
+        key: 'download-client',
+        severity: 'required',
+        route: ['/admin', 'settings', 'download-clients'],
+        check: async () =>
+          (await this.downloadClientRepo.count({ where: { enabled: true } })) >
+          0,
       },
     ]);
   }

@@ -5,6 +5,7 @@ import { ServerConfigService } from './server-config.service';
 import { AuthService } from './auth.service';
 import { DownloadProgressService } from './download-progress.service';
 import { MediaType } from '../enums/media-type.enum';
+import { DownloadProgressState } from '../enums/download-progress-state.enum';
 import { invalidatePrefix } from '../interceptors/cache.interceptor';
 
 export interface SseEvent {
@@ -165,7 +166,7 @@ export class SseService implements OnDestroy {
           progress: Number(event['progress']),
           dlspeed: Number(event['dlspeed'] ?? 0),
           eta: Number(event['eta'] ?? 0),
-          state: String(event['state'] ?? ''),
+          state: (event['state'] as DownloadProgressState | undefined) ?? 'active',
         });
         break;
       case 'import.complete':

@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { Media } from './entities/media.entity';
-import { Indexer } from '../../plugins/download/indexers/entities/indexer.entity';
 import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
 import { getAppQualityById } from '../../common/constants/app-qualities';
 import {
@@ -42,8 +41,10 @@ export type SearchDecision =
 export class AutoGrabPipelineService {
   constructor(private readonly qualityDefs: QualityDefinitionsService) {}
 
+  /** Takes the structural shape `buildIndexerMinSeeders` declares, so core needs
+   *  no entity class from whoever owns the indexers. */
   async buildScoringContext(
-    indexers: Indexer[],
+    indexers: { id: number; settings?: Record<string, unknown> | null }[],
   ): Promise<AutoGrabScoringContext> {
     return {
       sizeByQuality: await this.qualityDefs.getSizeLimitsMap(),
@@ -51,7 +52,7 @@ export class AutoGrabPipelineService {
       indexerUnknownLang: new Map(
         indexers.map((ix) => [
           ix.id,
-          ix.settings?.unknownLanguageIsoCode as string | undefined,
+          ix.settings?.['unknownLanguageIsoCode'] as string | undefined,
         ]),
       ),
     };

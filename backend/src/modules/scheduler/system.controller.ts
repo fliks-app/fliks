@@ -18,10 +18,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Indexer } from '../../plugins/download/indexers/entities/indexer.entity';
-import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
 import { Library } from '../libraries/entities/library.entity';
-import { QbittorrentService } from '../../plugins/download/download-clients/qbittorrent.service';
+import { PluginRegistryService } from '../plugins/plugin-registry.service';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
@@ -130,8 +128,9 @@ export interface HealthReport {
   version: string;
   uptimeSeconds: number;
   database: ServiceStatus;
-  indexers: { enabled: number; total: number };
-  downloadClients: ServiceStatus[];
+  /** Core reports only how many plugins are running. A capability's own
+   *  reachability belongs on that capability's page, which its plugin owns. */
+  activePlugins: number;
   restartSupervisor: string | null;
 }
 
@@ -195,13 +194,9 @@ export class SystemController {
 
   constructor(
     private readonly dataSource: DataSource,
-    @InjectRepository(Indexer)
-    private readonly indexerRepo: Repository<Indexer>,
-    @InjectRepository(DownloadClient)
-    private readonly clientRepo: Repository<DownloadClient>,
     @InjectRepository(Library)
     private readonly libraryRepo: Repository<Library>,
-    private readonly qbittorrent: QbittorrentService,
+    private readonly pluginRegistry: PluginRegistryService,
     private readonly backup: BackupService,
     private readonly logBuffer: LogBufferService,
     private readonly eventsService: EventsService,
@@ -227,18 +222,11 @@ export class SystemController {
   @Get('health')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   async health(): Promise<HealthReport> {
-    const [dbStatus, indexers, clients] = await Promise.all([
-      this.checkDatabase(),
-      this.checkIndexers(),
-      this.checkClients(),
-    ]);
-
     return {
       version: APP_VERSION,
       uptimeSeconds: Math.floor(process.uptime()),
-      database: dbStatus,
-      indexers,
-      downloadClients: clients,
+      database: await this.checkDatabase(),
+      activePlugins: this.pluginRegistry.list().length,
       restartSupervisor: detectRestartSupervisor(),
     };
   }
@@ -271,14 +259,6 @@ export class SystemController {
     } catch (e) {
       return { name: 'PostgreSQL', ok: false, message: (e as Error).message };
     }
-  }
-
-  private async checkIndexers(): Promise<{ enabled: number; total: number }> {
-    const [enabled, total] = await Promise.all([
-      this.indexerRepo.count({ where: { enabled: true } }),
-      this.indexerRepo.count(),
-    ]);
-    return { enabled, total };
   }
 
   @Get('stats')
@@ -362,20 +342,6 @@ export class SystemController {
       q: q || undefined,
       limit: limit ? parseInt(limit, 10) : 200,
     });
-  }
-
-  private async checkClients(): Promise<ServiceStatus[]> {
-    const clients = await this.clientRepo.find({ where: { enabled: true } });
-    return Promise.all(
-      clients.map(async (c) => {
-        const result = await this.qbittorrent.testConnection(c.settings);
-        return {
-          name: c.name,
-          ok: result.ok,
-          message: result.ok ? undefined : result.message,
-        };
-      }),
-    );
   }
 
   // ---------------------------------------------------------------------------

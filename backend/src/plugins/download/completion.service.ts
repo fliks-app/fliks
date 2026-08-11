@@ -11,6 +11,7 @@ import { DownloadClient } from './download-clients/entities/download-client.enti
 import {
   QbittorrentService,
   QbittorrentTorrent,
+  qbittorrentStateToProgress,
 } from './download-clients/qbittorrent.service';
 import { Indexer } from './indexers/entities/indexer.entity';
 import { NamingService } from '../../modules/scheduler/naming.service';
@@ -461,7 +462,7 @@ export class CompletionService implements OnModuleInit {
         progress: t.progress,
         dlspeed: t.dlspeed,
         eta: t.eta,
-        state: t.state,
+        state: qbittorrentStateToProgress(t.state),
       });
     }
   }

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Subject, Observable, Subscription } from 'rxjs';
 import { randomUUID } from 'crypto';
+import { DownloadProgressState } from '../../common/constants/download-progress-state';
 
 export type SseEvent =
   | {
@@ -67,9 +68,9 @@ export type SseEvent =
   | { type: 'import.failed'; mediaId: number; title: string; error: string }
   | {
       // Live torrent progress for an in-flight grab, delivered to the media's
-      // request audience. `progress` is 0–1; `state` is the raw qBittorrent
-      // state (the client maps it to a label/colour). Season/episode set for
-      // the matched scope of a series.
+      // request audience. `progress` is 0–1; `state` is core's closed
+      // vocabulary (the client maps it to a label/colour). Season/episode set
+      // for the matched scope of a series.
       type: 'download.progress';
       mediaId: number;
       mediaType: 'movie' | 'series';
@@ -82,7 +83,7 @@ export type SseEvent =
       progress: number;
       dlspeed: number;
       eta: number;
-      state: string;
+      state: DownloadProgressState;
     }
   | { type: 'stalled.removed'; title: string }
   | { type: 'queue.updated' }

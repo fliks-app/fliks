@@ -39,18 +39,10 @@ export default tseslint.config(
     ignores: [
       'src/plugins/download/**',
       'src/app.module.ts',
-      'src/modules/media/auto-grab-pipeline.service.ts',
-      'src/modules/scheduler/scheduler.module.ts',
-      'src/modules/scheduler/system.controller.ts',
       'src/modules/blocklist/blocklist.module.ts',
       'src/modules/blocklist/blocklist.service.ts',
-      'src/modules/auth/casl/casl-ability.factory.ts',
-      'src/modules/setup-checklist/setup-checklist.module.ts',
-      'src/modules/setup-checklist/setup-checklist.service.ts',
-      'src/modules/plugins/proxy/policy-vocabulary.ts',
       'src/modules/counts/counts.module.ts',
       'src/modules/counts/counts.service.ts',
-      'src/modules/counts/counts.service.spec.ts',
     ],
     rules: {
       'no-restricted-imports': [

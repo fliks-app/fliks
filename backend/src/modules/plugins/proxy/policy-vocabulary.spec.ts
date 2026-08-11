@@ -23,6 +23,10 @@ describe('parseDeclaredPolicy', () => {
     ['empty string', ''],
     ['"manage" with no colon', 'manage'],
     ['three-part string', 'a:b:c'],
+    // Indexer/DownloadClient are bundle entities, not core ones — a plugin declaring a
+    // route policy against either must be refused, not silently accepted.
+    ['bundle entity, not a core subject', 'read:Indexer'],
+    ['bundle entity, not a core subject (2)', 'read:DownloadClient'],
     // A plugin-declared subject is refused unless the caller supplies the declaring
     // plugin's own set (see the `declaredSubjects` describe block below).
     ['plugin-declared subject, no declaredSubjects given', 'read:plugin:fliks.myplugin:download'],
@@ -72,6 +76,12 @@ describe('checkDeclaredPolicy', () => {
   it('fails closed on an unparseable policy regardless of how permissive the ability is', () => {
     const allowAll = ability((can) => can(Action.Manage, 'all'));
     expect(checkDeclaredPolicy('not-a-policy', allowAll)).toBe(false);
+  });
+
+  it('refuses a plugin declaring read:Indexer even for a super-admin ability', () => {
+    const allowAll = ability((can) => can(Action.Manage, 'all'));
+    expect(checkDeclaredPolicy('read:Indexer', allowAll)).toBe(false);
+    expect(checkDeclaredPolicy('read:DownloadClient', allowAll)).toBe(false);
   });
 
   it('permits a namespaced subject declared by the plugin when the ability grants it', () => {

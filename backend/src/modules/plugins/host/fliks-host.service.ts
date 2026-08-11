@@ -53,6 +53,7 @@ import {
 import { parseSeasonEpisode } from '../../../common/release-parsing';
 import { PluginCountsCacheService } from './plugin-counts-cache.service';
 import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
+import { DownloadProgressState } from '../../../common/constants/download-progress-state';
 
 /** `media.resolve`'s own bound — restated because `plugins/download/` (where the
  *  original `QUEUE_PAGE_SIZE_MAX` lives) is outside this file's import boundary. */
@@ -909,7 +910,7 @@ export class FliksHostImpl implements PluginHostApi {
     progress: number;
     bytesPerSecond?: number;
     etaSeconds?: number;
-    state: 'queued' | 'active' | 'stalled' | 'paused' | 'importing';
+    state: DownloadProgressState;
   }): Promise<void> {
     // ponytail: no server-side coalescing yet (plan asks for <=1/media/sec) —
     // add a per-media debounce once a real caller exercises the frequency.
@@ -924,7 +925,7 @@ export class FliksHostImpl implements PluginHostApi {
     progress: number;
     bytesPerSecond?: number;
     etaSeconds?: number;
-    state: string;
+    state: DownloadProgressState;
   }): Promise<void> {
     const media = await this.mediaRepo.findOne({ where: { id: p.mediaId } });
     const recipients = await this.sseAudience.recipientsForMedia(p.mediaId);

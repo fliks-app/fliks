@@ -79,7 +79,8 @@ export type AcquisitionEvent =
       ref: string;
       progress: number;
       etaSeconds: number | null;
-      state: string;
+      /** Closed vocabulary — see `progress.set`'s `state` below. */
+      state: 'queued' | 'active' | 'stalled' | 'paused' | 'importing';
     }
   | {
       type: 'acquisition.imported';
