@@ -46,6 +46,12 @@ import { MarkersModule } from '../markers/markers.module';
 import { Library } from '../libraries/entities/library.entity';
 import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.module';
 import { PluginsModule } from '../plugins/plugins.module';
+import { isDownloadBundleEnabled } from '../../common/constants/plugin-flags';
+
+// SchedulerService keeps these behind @Optional() — see FLIKS_BUNDLES.
+const downloadBundleProviders = isDownloadBundleEnabled()
+  ? [CompletionService, TorrentAutoMatcher, AutoGrabExecutorService, AcquisitionSchedulerService]
+  : [];
 
 @Module({
   imports: [
@@ -93,19 +99,15 @@ import { PluginsModule } from '../plugins/plugins.module';
   controllers: [CommandsController, SystemController, LivenessController],
   providers: [
     SchedulerService,
-    CompletionService,
     AcquisitionEventsService,
     NamingService,
     BackupService,
     UpdateCheckService,
     SubtitleSchedulerService,
-    TorrentAutoMatcher,
-    AutoGrabExecutorService,
-    AcquisitionSchedulerService,
+    ...downloadBundleProviders,
   ],
   exports: [
     SchedulerService,
-    CompletionService,
     AcquisitionEventsService,
     NamingService,
     LogBufferModule,

@@ -34,6 +34,7 @@ import { PluginsModule } from './modules/plugins/plugins.module';
 import { CommonModule } from './common/common.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
+import { isDownloadBundleEnabled } from './common/constants/plugin-flags';
 
 @Module({
   imports: [
@@ -88,7 +89,9 @@ import { join } from 'path';
     MetadataProvidersModule,
     IndexersModule,
     DownloadClientsModule,
-    GrabModule,
+    // The one in-repo bundle today; FLIKS_BUNDLES=<empty> drops its controller
+    // and grab routes entirely rather than exposing them disabled.
+    ...(isDownloadBundleEnabled() ? [GrabModule] : []),
     RequestsModule,
     FliksSchedulerModule,
     CleanupProfilesModule,

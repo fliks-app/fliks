@@ -20,3 +20,28 @@ export function unsignedProcessAllowlist(): string[] {
     .map((id) => id.trim())
     .filter((id) => id.length > 0);
 }
+
+/** Which in-repo bundles (`src/plugins/<id>/`) load into the module graph. */
+export const FLIKS_BUNDLES_ENV = 'FLIKS_BUNDLES';
+
+/** The bundle backing acquisition (indexers, download clients, grab, the acquisition jobs). */
+const DOWNLOAD_BUNDLE_ID = 'download';
+
+/**
+ * True when `bundleId` is in the comma-separated `FLIKS_BUNDLES` allowlist. Unset loads every
+ * bundle (today's behaviour); an empty string loads none; an id absent from a non-empty list
+ * is off. Unrecognised ids are ignored, same as `FLIKS_UNSIGNED_PLUGINS`.
+ */
+export function isBundleEnabled(bundleId: string): boolean {
+  const raw = process.env[FLIKS_BUNDLES_ENV];
+  if (raw === undefined) return true;
+  return raw
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0)
+    .includes(bundleId);
+}
+
+export function isDownloadBundleEnabled(): boolean {
+  return isBundleEnabled(DOWNLOAD_BUNDLE_ID);
+}
