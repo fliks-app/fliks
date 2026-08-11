@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { DataSource } from 'typeorm';
 import { CompletionService } from './completion.service';
-import { AcquisitionEventsService } from '../../modules/scheduler/acquisition-events.service';
+import { AcquisitionEventsService } from './acquisition-events.service';
 import { NamingService } from '../../modules/scheduler/naming.service';
 import { DownloadHistory } from './entities/download-history.entity';
 import { Media } from '../../modules/media/entities/media.entity';
@@ -26,7 +26,9 @@ const ORPHAN_MESSAGE = 'Torrent no longer present in download client';
 function buildService(matchByHash: Set<string>) {
   const update = jest.fn().mockResolvedValue(undefined);
   const emit = jest.fn();
-  const service = Object.create(CompletionService.prototype) as CompletionService;
+  const service = Object.create(
+    CompletionService.prototype,
+  ) as CompletionService;
 
   const matcher = {
     findMatch: (t: QbittorrentTorrent, histories: DownloadHistory[]) => {
@@ -54,7 +56,15 @@ function buildService(matchByHash: Set<string>) {
   const acquisitionEvents = Object.create(
     AcquisitionEventsService.prototype,
   ) as AcquisitionEventsService;
-  (acquisitionEvents as unknown as { events: unknown }).events = { emit };
+  const acquisitionEventsWired = acquisitionEvents as unknown as Record<
+    string,
+    unknown
+  >;
+  acquisitionEventsWired.events = { emit };
+  acquisitionEventsWired.historyRepo = {
+    count: jest.fn().mockResolvedValue(0),
+  };
+  acquisitionEventsWired.countsCache = { set: jest.fn() };
   wired.acquisitionEvents = acquisitionEvents;
   return { service, update, emit };
 }
@@ -203,7 +213,11 @@ describe('CompletionService.reconcileOrphanHistory', () => {
     await flip.done;
     expect(flip.emit).toHaveBeenCalledWith({ type: 'queue.updated' });
 
-    const stillThere = history({ id: 8, status: 'grabbed', updatedAt: HOUR_AGO });
+    const stillThere = history({
+      id: 8,
+      status: 'grabbed',
+      updatedAt: HOUR_AGO,
+    });
     const noop = run([torrent('h1')], [stillThere]);
     await noop.done;
     expect(noop.emit).not.toHaveBeenCalled();
@@ -213,9 +227,15 @@ describe('CompletionService.reconcileOrphanHistory', () => {
 describe('CompletionService.autoMatchOrphanTorrents', () => {
   function run(rows: DownloadHistory[], name: string, hash: string) {
     const tryMatch = jest.fn().mockResolvedValue(null);
-    const service = Object.create(CompletionService.prototype) as CompletionService;
+    const service = Object.create(
+      CompletionService.prototype,
+    ) as CompletionService;
     const wired = service as unknown as Record<string, unknown>;
-    wired.historyRepo = { find: async () => rows, save: jest.fn(), create: jest.fn() };
+    wired.historyRepo = {
+      find: async () => rows,
+      save: jest.fn(),
+      create: jest.fn(),
+    };
     wired.autoMatcher = { tryMatch };
     wired.unidentifiedHashes = new Set<string>();
     wired.log = { log: jest.fn(), warn: jest.fn(), debug: jest.fn() };
@@ -264,7 +284,14 @@ describe('CompletionService.autoMatchOrphanTorrents', () => {
 
   it('still tries to identify a torrent nothing accounts for', async () => {
     const { tryMatch, done } = run(
-      [history({ id: 5, status: 'completed', torrentHash: 'other', mediaId: 42 })],
+      [
+        history({
+          id: 5,
+          status: 'completed',
+          torrentHash: 'other',
+          mediaId: 42,
+        }),
+      ],
       'Unknown.Release.1080p',
       'h9',
     );
@@ -284,7 +311,9 @@ describe('CompletionService.cleanSeededTorrents', () => {
     settings: Record<string, unknown>,
   ) {
     const deleteTorrent = jest.fn().mockResolvedValue(undefined);
-    const service = Object.create(CompletionService.prototype) as CompletionService;
+    const service = Object.create(
+      CompletionService.prototype,
+    ) as CompletionService;
     const qb = {
       where: () => qb,
       andWhere: () => qb,
@@ -304,7 +333,13 @@ describe('CompletionService.cleanSeededTorrents', () => {
     wired.qbittorrent = {
       supports: () => true,
       getTorrents: async () => [
-        { hash: 'h1', name: 'pack', ratio: 0, completion_on: nowSec, ...seeded },
+        {
+          hash: 'h1',
+          name: 'pack',
+          ratio: 0,
+          completion_on: nowSec,
+          ...seeded,
+        },
       ],
       deleteTorrent,
     };
@@ -316,7 +351,15 @@ describe('CompletionService.cleanSeededTorrents', () => {
     const acquisitionEvents = Object.create(
       AcquisitionEventsService.prototype,
     ) as AcquisitionEventsService;
-    (acquisitionEvents as unknown as { events: unknown }).events = { emit };
+    const acquisitionEventsWired = acquisitionEvents as unknown as Record<
+      string,
+      unknown
+    >;
+    acquisitionEventsWired.events = { emit };
+    acquisitionEventsWired.historyRepo = {
+      count: jest.fn().mockResolvedValue(0),
+    };
+    acquisitionEventsWired.countsCache = { set: jest.fn() };
     wired.acquisitionEvents = acquisitionEvents;
     return { deleteTorrent, done: service.cleanSeededTorrents() };
   }
@@ -404,7 +447,9 @@ describe('CompletionService.processOne', () => {
    * bookkeeping around the single `libraryIngest.ingest()` call.
    */
   function buildProcessOneHarness() {
-    const service = Object.create(CompletionService.prototype) as CompletionService;
+    const service = Object.create(
+      CompletionService.prototype,
+    ) as CompletionService;
     const libraryIngest = Object.create(
       LibraryIngestService.prototype,
     ) as LibraryIngestService;
@@ -429,12 +474,18 @@ describe('CompletionService.processOne', () => {
       getTorrentFiles: jest.fn().mockResolvedValue([]),
       deleteTorrent: jest.fn().mockResolvedValue(undefined),
     };
-    const blocklist = { createFromHistory: jest.fn().mockResolvedValue(undefined) };
+    const blocklist = {
+      createFromHistory: jest.fn().mockResolvedValue(undefined),
+    };
     // 'false' short-circuits autoDetectMarkersOnImport so the marker-detection
     // background task never touches episodeRepo/seasonRepo a second time.
     const settings = { get: jest.fn().mockResolvedValue('false') };
     const sseAudience = { recipientsForMedia: jest.fn().mockResolvedValue([]) };
-    const events = { emit: jest.fn(), emitToUsers: jest.fn(), emitDomain: jest.fn() };
+    const events = {
+      emit: jest.fn(),
+      emitToUsers: jest.fn(),
+      emitDomain: jest.fn(),
+    };
     const ffprobe = {
       detectMediaFileInfo: jest
         .fn()
@@ -485,6 +536,10 @@ describe('CompletionService.processOne', () => {
     acquisitionEventsWired.sseAudience = sseAudience;
     acquisitionEventsWired.notifications = notifications;
     acquisitionEventsWired.mediaServers = mediaServers;
+    acquisitionEventsWired.historyRepo = {
+      count: jest.fn().mockResolvedValue(0),
+    };
+    acquisitionEventsWired.countsCache = { set: jest.fn() };
 
     const wired = service as unknown as Record<string, unknown>;
     wired.mediaRepo = mediaRepo;
@@ -748,14 +803,16 @@ describe('CompletionService.processOne', () => {
     expect(h.mediaFileRepo.save).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        relativePath: 'Season 01/Skyline Signals - S01E01 - Wake WEBDL-1080p.mkv',
+        relativePath:
+          'Season 01/Skyline Signals - S01E01 - Wake WEBDL-1080p.mkv',
         episode: { id: 601 },
       }),
     );
     expect(h.mediaFileRepo.save).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        relativePath: 'Season 01/Skyline Signals - S01E02 - Drift WEBDL-1080p.mkv',
+        relativePath:
+          'Season 01/Skyline Signals - S01E02 - Drift WEBDL-1080p.mkv',
         episode: { id: 602 },
       }),
     );
@@ -859,9 +916,9 @@ describe('CompletionService.processOne', () => {
       // it does is exactly what's being pinned, a mock would hide it. Lives
       // on the ingest instance now: that's what actually calls it.
       (h.libraryIngest as unknown as { fileTransfer: unknown }).fileTransfer =
-        new FileTransferService(
-          { query: jest.fn().mockResolvedValue([]) } as unknown as DataSource,
-        );
+        new FileTransferService({
+          query: jest.fn().mockResolvedValue([]),
+        } as unknown as DataSource);
       h.qbittorrent.getTorrentFiles.mockResolvedValue([qbFile(videoName, 12)]);
       const movieMedia = buildMedia({
         id: 5,
@@ -886,13 +943,19 @@ describe('CompletionService.processOne', () => {
 
       const destDir = path.join(rootDir, 'Nova Skyline (2023)');
       expect(
-        fs.existsSync(path.join(destDir, 'Nova Skyline (2023) WEBDL-1080p.mkv')),
+        fs.existsSync(
+          path.join(destDir, 'Nova Skyline (2023) WEBDL-1080p.mkv'),
+        ),
       ).toBe(true);
       expect(
-        fs.existsSync(path.join(destDir, 'Nova Skyline (2023) WEBDL-1080p.srt')),
+        fs.existsSync(
+          path.join(destDir, 'Nova Skyline (2023) WEBDL-1080p.srt'),
+        ),
       ).toBe(true);
       expect(
-        fs.existsSync(path.join(destDir, 'Nova Skyline (2023) WEBDL-1080p.txt')),
+        fs.existsSync(
+          path.join(destDir, 'Nova Skyline (2023) WEBDL-1080p.txt'),
+        ),
       ).toBe(false);
     } finally {
       fs.rmSync(srcDir, { recursive: true, force: true });

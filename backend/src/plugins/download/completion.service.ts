@@ -17,18 +17,18 @@ import { Indexer } from './indexers/entities/indexer.entity';
 import { NamingService } from '../../modules/scheduler/naming.service';
 import { BlocklistService } from '../../modules/blocklist/blocklist.service';
 import { EventsService } from '../../modules/scheduler/events.service';
-import { AcquisitionEventsService } from '../../modules/scheduler/acquisition-events.service';
+import { AcquisitionEventsService } from './acquisition-events.service';
 import { SettingsService } from '../../modules/settings/settings.service';
 import {
   ThumbnailService,
   buildSpriteLabel,
 } from '../../modules/streaming/thumbnail.service';
 import { MediaType } from '../../common/enums';
-import { StalledCheck } from '../../modules/scheduler/entities/stalled-check.entity';
+import { StalledCheck } from './entities/stalled-check.entity';
 import {
   countStalledStrikes,
   STALL_ELIGIBLE_STATES,
-} from '../../modules/scheduler/utils/stalled-progress.util';
+} from './stalled-progress.util';
 import { CleanupProfile } from '../../modules/cleanup-profiles/entities/cleanup-profile.entity';
 import { Library } from '../../modules/libraries/entities/library.entity';
 import {

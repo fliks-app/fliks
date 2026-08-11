@@ -17,7 +17,7 @@ import { MediaServersModule } from '../../media-servers/media-servers.module';
 import { SettingsModule } from '../../settings/settings.module';
 import { FliksHostImpl } from './fliks-host.service';
 import { InProcessPluginHostClient } from './in-process-plugin-host-client';
-import { PluginCountsCacheService } from './plugin-counts-cache.service';
+import { PluginCountsCacheModule } from './plugin-counts-cache.module';
 import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
 
 /**
@@ -45,13 +45,13 @@ import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
     NotificationsModule,
     MediaServersModule,
     SettingsModule,
+    PluginCountsCacheModule,
   ],
   providers: [
     { provide: PLUGIN_HOST_PLUGIN_ID, useValue: null },
     FliksHostImpl,
     InProcessPluginHostClient,
-    PluginCountsCacheService,
   ],
-  exports: [FliksHostImpl, InProcessPluginHostClient, PluginCountsCacheService],
+  exports: [FliksHostImpl, InProcessPluginHostClient, PluginCountsCacheModule],
 })
 export class PluginHostModule {}

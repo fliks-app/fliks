@@ -32,7 +32,7 @@ import { CompletionService } from './completion.service';
 import { AcquisitionSchedulerService } from './acquisition-scheduler.service';
 import { AutoGrabExecutorService } from './auto-grab-pipeline.service';
 import { TorrentAutoMatcher } from './torrent-auto-matcher.service';
-import { AcquisitionEventsService } from '../../modules/scheduler/acquisition-events.service';
+import { AcquisitionEventsService } from './acquisition-events.service';
 
 /**
  * Everything `FLIKS_BUNDLES` gates for acquisition: the four services core's

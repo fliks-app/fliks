@@ -9,6 +9,7 @@ import { PluginPackage } from './entities/plugin-package.entity';
 import { PluginRegistration } from './entities/plugin-registration.entity';
 import { PluginProcessService } from './plugin-process.service';
 import { PluginJobsService } from './plugin-jobs.service';
+import { ScheduledJobRegistry } from '../scheduler/scheduled-job-registry.service';
 import { CURRENT_FLIKS_VERSION } from './plugin-version';
 import type { SupervisorState } from './supervisor/plugin-supervisor';
 import { arePluginsDisabled, FLIKS_PLUGINS_DISABLED_ENV } from '../../common/constants/plugin-flags';
@@ -143,6 +144,7 @@ export class PluginRegistryService implements OnModuleInit {
     private readonly registrationRepo: Repository<PluginRegistration>,
     private readonly processService: PluginProcessService,
     private readonly pluginJobs: PluginJobsService,
+    private readonly scheduledJobs: ScheduledJobRegistry,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -432,10 +434,15 @@ export class PluginRegistryService implements OnModuleInit {
    * `manifest.jobs` is untrusted JSON. Each violation class gets its own
    * reason. `CORE_JOB_NAME_SET` mirrors `SchedulerService.SCHEDULERS`'s names — a plugin job can
    * never shadow one, since the merged admin listing and manual trigger would become ambiguous.
+   * Same reasoning for a name a `ScheduledJobRegistry` publisher (the download bundle, in-process)
+   * already holds — two publishers must never silently shadow one another either.
    */
   private validateJobs(
     raw: unknown[],
   ): { ok: true; jobs: PluginJob[] } | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
+    const publishedNames = new Set(
+      this.scheduledJobs.list().map((j) => j.name),
+    );
     const jobs: PluginJob[] = [];
     const seen = new Set<string>();
     for (const entry of raw) {
@@ -455,6 +462,13 @@ export class PluginRegistryService implements OnModuleInit {
       seen.add(name);
       if (CORE_JOB_NAME_SET.has(name)) {
         return { ok: false, reason: 'job-name-conflict', detail: `job "${name}" collides with a core scheduler job` };
+      }
+      if (publishedNames.has(name)) {
+        return {
+          ok: false,
+          reason: 'job-name-conflict',
+          detail: `job "${name}" collides with a job already published to the scheduler registry`,
+        };
       }
       try {
         CronExpressionParser.parse(cron);

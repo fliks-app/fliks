@@ -25,6 +25,7 @@ import { EventsModule } from '../scheduler/events.module';
 import { LogBufferModule } from '../scheduler/log-buffer.module';
 import { SettingsModule } from '../settings/settings.module';
 import { LibrariesModule } from '../libraries/libraries.module';
+import { ScheduledJobRegistryModule } from '../scheduler/scheduled-job-registry.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { LibrariesModule } from '../libraries/libraries.module';
     LogBufferModule,
     SettingsModule,
     LibrariesModule,
+    ScheduledJobRegistryModule,
   ],
   controllers: [
     PluginLogoController,

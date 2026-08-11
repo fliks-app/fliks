@@ -4,13 +4,13 @@ import { In, Repository } from 'typeorm';
 import { DownloadClient } from './entities/download-client.entity';
 import { DownloadHistory } from '../entities/download-history.entity';
 import { Media } from '../../../modules/media/entities/media.entity';
-import { StalledCheck } from '../../../modules/scheduler/entities/stalled-check.entity';
+import { StalledCheck } from '../entities/stalled-check.entity';
 import { CleanupProfile } from '../../../modules/cleanup-profiles/entities/cleanup-profile.entity';
 import { StalledCleanupProfileKey } from '../../../common/constants/stalled-cleanup-profiles';
 import {
   countStalledStrikes,
   STALL_ELIGIBLE_STATES,
-} from '../../../modules/scheduler/utils/stalled-progress.util';
+} from '../stalled-progress.util';
 import { QbittorrentService, QbittorrentTorrent } from './qbittorrent.service';
 import { CreateDownloadClientDto } from './dto/create-download-client.dto';
 import { UpdateDownloadClientDto } from './dto/update-download-client.dto';
