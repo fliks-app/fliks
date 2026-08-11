@@ -12,6 +12,7 @@ import {
 import { LogBufferService } from '../scheduler/log-buffer.service';
 import { SettingsService } from '../settings/settings.service';
 import type { ProcessPluginManifest } from '../../common/plugin-contract';
+import { PluginHostBindingService } from './host/plugin-host-binding.service';
 
 export type PluginProcessFailureReason = 'tampered' | 'db-provision-failed' | 'spawn-failed';
 export type PluginProcessStartResult = { ok: true } | { ok: false; reason: PluginProcessFailureReason; detail: string };
@@ -32,6 +33,7 @@ export class PluginProcessService implements OnApplicationShutdown {
   private readonly running = new Map<string, RunningPlugin>();
   private readonly supervisorFactory: PluginSupervisorFactory;
   private readonly startupTimeoutMs: number;
+  private readonly hostBinding: PluginHostBindingService | null;
 
   constructor(
     private readonly pluginDb: PluginDatabaseService,
@@ -39,9 +41,13 @@ export class PluginProcessService implements OnApplicationShutdown {
     private readonly settings: SettingsService,
     @Optional() supervisorFactory?: PluginSupervisorFactory,
     @Optional() startupTimeoutMs?: number,
+    // Optional (rather than an import edge to PluginHostModule) so tests that
+    // build this service by hand need not supply it — see plugin-host.module.ts.
+    @Optional() hostBinding?: PluginHostBindingService,
   ) {
     this.supervisorFactory = supervisorFactory ?? DEFAULT_FACTORY;
     this.startupTimeoutMs = startupTimeoutMs ?? DEFAULT_SUPERVISOR_OPTIONS.handshakeDeadlineMs;
+    this.hostBinding = hostBinding ?? null;
   }
 
   /** Materialise -> provision-check -> rotate -> config -> spawn; each stage's failure
@@ -76,6 +82,7 @@ export class PluginProcessService implements OnApplicationShutdown {
       dbUrl,
       config,
       memoryMb: manifest.memoryMb,
+      hostApi: this.hostBinding?.bind(pkg.pluginId) ?? null,
     });
     const unsubscribe = supervisor.onStateChange((state) =>
       this.logBuffer.log(`state: ${state}`, `plugin:${pkg.pluginId}`),

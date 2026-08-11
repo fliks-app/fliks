@@ -1,5 +1,8 @@
 import { existsSync, rmSync } from 'fs';
+import { connect } from 'net';
 import { DEFAULT_SUPERVISOR_OPTIONS, PluginSupervisor, type PluginSupervisorOptions } from './plugin-supervisor';
+import { RpcChannel } from './rpc-channel';
+import type { PluginHostApi } from '../../../common/plugin-contract';
 import {
   delay,
   makeFixtureDir,
@@ -8,6 +11,16 @@ import {
   waitForExitSignal,
   waitForState,
 } from './supervisor-test-helpers';
+
+/** Dials the supervisor's uplink socket exactly as a real `process` plugin's
+ *  own coreSock client would — same `RpcChannel`, opposite end. */
+function connectAsPlugin(sockPath: string): Promise<RpcChannel> {
+  return new Promise((resolve, reject) => {
+    const sock = connect(sockPath);
+    sock.once('connect', () => resolve(new RpcChannel(sock)));
+    sock.once('error', reject);
+  });
+}
 
 /**
  * Real spawns and real sockets throughout, timing figures scaled down via
@@ -62,6 +75,7 @@ describe('DEFAULT_SUPERVISOR_OPTIONS', () => {
       shutdownRpcDeadlineMs: 3_000,
       sigtermGraceMs: 2_000,
       logCapBytesPerMinute: 65_536,
+      hostCallTimeoutMs: 8_000,
     });
   });
 });
@@ -214,6 +228,72 @@ describe('shutdown', () => {
     expect(sup.getLastExitSignal()).toBe('SIGKILL');
     expect(existsSync(coreSockPath)).toBe(false);
     expect(existsSync(pluginSockPath)).toBe(false);
+  }, 10_000);
+});
+
+describe('host call dispatch', () => {
+  it('dispatches a known method to the bound hostApi and refuses an unknown one', async () => {
+    const hostApi = {
+      'config.get': jest.fn().mockResolvedValue({ token: 'abc' }),
+    } as unknown as PluginHostApi;
+    const sup = makeSupervisor('good', { hostApi });
+    await sup.start();
+    await waitForState(sup, 'ready');
+
+    const client = await connectAsPlugin(sup.getSocketPaths().coreSockPath);
+    const res = await client.call('config.get', { keys: ['token'] }, 2_000);
+    expect(res).toEqual({ token: 'abc' });
+    expect(hostApi['config.get']).toHaveBeenCalledWith({ keys: ['token'] });
+
+    await expect(client.call('no.such.method', {}, 2_000)).rejects.toThrow(/unknown host method/);
+    client.destroy();
+  }, 10_000);
+
+  it("never serves a request under another supervisor's hostApi, even when the payload names it", async () => {
+    const alphaApi = { 'config.get': jest.fn().mockResolvedValue({ who: 'alpha' }) } as unknown as PluginHostApi;
+    const betaApi = { 'config.get': jest.fn().mockResolvedValue({ who: 'beta' }) } as unknown as PluginHostApi;
+    const alpha = makeSupervisor('good', { hostApi: alphaApi });
+    const beta = makeSupervisor('good', { hostApi: betaApi });
+    await Promise.all([alpha.start(), beta.start()]);
+    await Promise.all([waitForState(alpha, 'ready'), waitForState(beta, 'ready')]);
+
+    const client = await connectAsPlugin(alpha.getSocketPaths().coreSockPath);
+    // A field no real payload has — the closest thing to "naming another plugin" a
+    // frame can carry, since none of the 15 methods take an id parameter at all.
+    const res = await client.call('config.get', { pluginId: 'the-other-one' }, 2_000);
+
+    expect(res).toEqual({ who: 'alpha' });
+    expect(alphaApi['config.get']).toHaveBeenCalledWith({ pluginId: 'the-other-one' });
+    expect(betaApi['config.get']).not.toHaveBeenCalled();
+    client.destroy();
+  }, 10_000);
+
+  it('answers a throwing host method with an error frame and keeps the supervisor ready', async () => {
+    const hostApi = {
+      'config.get': jest.fn().mockRejectedValue(new Error('boom')),
+    } as unknown as PluginHostApi;
+    const sup = makeSupervisor('good', { hostApi });
+    await sup.start();
+    await waitForState(sup, 'ready');
+
+    const client = await connectAsPlugin(sup.getSocketPaths().coreSockPath);
+    await expect(client.call('config.get', {}, 2_000)).rejects.toThrow(/boom/);
+    expect(sup.getState()).toBe('ready');
+    client.destroy();
+  }, 10_000);
+
+  it('times out a hanging host method rather than leaving the caller waiting forever', async () => {
+    const hostApi = {
+      'config.get': jest.fn(() => new Promise(() => {})),
+    } as unknown as PluginHostApi;
+    const sup = makeSupervisor('good', { hostApi, hostCallTimeoutMs: 50 });
+    await sup.start();
+    await waitForState(sup, 'ready');
+
+    const client = await connectAsPlugin(sup.getSocketPaths().coreSockPath);
+    await expect(client.call('config.get', {}, 2_000)).rejects.toThrow(/timed out/);
+    expect(sup.getState()).toBe('ready');
+    client.destroy();
   }, 10_000);
 });
 

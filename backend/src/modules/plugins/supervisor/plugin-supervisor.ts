@@ -7,7 +7,7 @@ import { getPluginsSocketDir } from '../../../common/constants/paths';
 import type { OnApplicationShutdown } from '@nestjs/common';
 import { LogBufferService } from '../../scheduler/log-buffer.service';
 import { CURRENT_FLIKS_VERSION } from '../plugin-version';
-import { PLUGIN_API_VERSION, type Note } from '../../../common/plugin-contract';
+import { PLUGIN_API_VERSION, type Note, type PluginHostApi } from '../../../common/plugin-contract';
 import { RpcChannel } from './rpc-channel';
 import { NoteRingBuffer } from './note-ring-buffer';
 import {
@@ -44,6 +44,7 @@ export const DEFAULT_SUPERVISOR_OPTIONS = {
   shutdownRpcDeadlineMs: 3_000,
   sigtermGraceMs: 2_000,
   logCapBytesPerMinute: 64 * 1024,
+  hostCallTimeoutMs: 8_000,
 };
 
 export interface PluginSupervisorOptions {
@@ -67,6 +68,29 @@ export interface PluginSupervisorOptions {
   shutdownRpcDeadlineMs?: number;
   sigtermGraceMs?: number;
   logCapBytesPerMinute?: number;
+  /** Ceiling on one inbound host call's own runtime, separate from the caller's 10s socket timeout. */
+  hostCallTimeoutMs?: number;
+  /** Bound to `id` above at construction via `PluginHostBindingService.bind` —
+   *  dispatch never re-derives identity from an inbound frame. `null` leaves core calls unanswered. */
+  hostApi?: PluginHostApi | null;
+}
+
+/** Rejects once `ms` elapses, whichever of `promise` or the timer settles first;
+ *  always clears the timer so a fast call never leaves one dangling. */
+function withDeadline<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`host method "${label}" timed out after ${ms}ms`)), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      },
+    );
+  });
 }
 
 /** 0600 keeps a second plugin out; the chown is what lets the dropped child in at all. */
@@ -83,7 +107,7 @@ function listenAndRestrict(server: Server, path: string, dropTo: { uid: number; 
 
 /**
  * Owns one `process`-tier plugin's lifecycle end to end. Core listens on both
- * sockets; the plugin dials out — `coreSock` for its 17 calls (unhandled here), `pluginSock` for the 7 core-initiated ones.
+ * sockets; the plugin dials out — `coreSock` for its 15 host calls, `pluginSock` for the core-initiated ones.
  */
 export class PluginSupervisor implements OnApplicationShutdown {
   private readonly opts: Required<PluginSupervisorOptions>;
@@ -132,6 +156,7 @@ export class PluginSupervisor implements OnApplicationShutdown {
       dbUrl: '',
       config: {},
       runtimeDir: getPluginsSocketDir(),
+      hostApi: null,
       ...options,
     };
     this.coreSockPath = join(this.opts.runtimeDir, `${this.opts.id}.core.sock`);
@@ -306,10 +331,23 @@ export class PluginSupervisor implements OnApplicationShutdown {
   }
 
   private onCoreConnected(socket: Socket): void {
-    // Plugin's uplink for the 17 core-side methods. No handler registered here —
-    // that dispatch is 3.5's proxy. Still framed and violation-checked like any connection.
+    // Plugin's uplink for the 15 host methods.
     const channel = new RpcChannel(socket);
     channel.onViolation((err) => this.onViolation(err));
+    channel.onRequest((method, payload) => this.dispatchHostCall(method, payload));
+  }
+
+  /** `hostApi` is fixed at construction to `this.opts.id` — nothing in `payload` can
+   *  select another plugin's identity. An unknown method or a call past
+   *  `hostCallTimeoutMs` both reject, so `RpcChannel` answers with an error frame
+   *  instead of leaving the plugin's own 10s client to time out. */
+  private dispatchHostCall(method: string, payload: unknown): Promise<unknown> {
+    const api = this.opts.hostApi as Record<string, (p: unknown) => Promise<unknown>> | null;
+    const fn = api?.[method];
+    if (!fn) return Promise.reject(new Error(`unknown host method "${method}"`));
+    // Promise.resolve().then(...) folds a synchronous throw from `fn` into the same
+    // rejection path as an async one, so both answer with an error frame, never crash.
+    return withDeadline(Promise.resolve().then(() => fn(payload)), this.opts.hostCallTimeoutMs, method);
   }
 
   private onPluginConnected(socket: Socket): void {
