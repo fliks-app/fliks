@@ -13,13 +13,6 @@ import { getAppLanguageById } from '../../../common/constants/app-languages';
 import type { Media } from '../../media/entities/media.entity';
 import type { Season } from '../../media/entities/season.entity';
 import type { Episode } from '../../media/entities/episode.entity';
-// Cross-boundary read for the equivalence proof only, per the task brief —
-// this copy is deleted once `plugins/download/` converts to the host method.
-import { AcquisitionEventsService } from '../../../plugins/download/acquisition-events.service';
-import type { EventsService } from '../../scheduler/events.service';
-import type { SseAudienceService } from '../../scheduler/sse-audience.service';
-import type { NotificationsService } from '../../notifications/notifications.service';
-import type { MediaServersService } from '../../media-servers/media-servers.service';
 
 /** Round-trips `value` through JSON and asserts nothing was lost or mutated —
  *  the property that matters once the transport becomes a socket (Phase 10.4).
@@ -383,14 +376,9 @@ describe('FliksHostImpl', () => {
       expect(h.acquisitionCandidates.listEpisodeTargets).not.toHaveBeenCalled();
     });
 
-    describe('movie availability gate — agrees with AcquisitionSchedulerService.isAvailable on every row', () => {
-      // Expected column is hand-derived from reading the current
-      // `AcquisitionSchedulerService.isAvailable`/`addDaysIso` source directly
-      // (backend/src/plugins/download/acquisition-scheduler.service.ts) — not
-      // from this file's own `FliksHostImpl.isAvailable`. A cross-import of
-      // the real class is blocked by the "core does not import
-      // plugins/download/" ESLint fence, so this table is the arms-length
-      // substitute for calling the live method.
+    describe('movie availability gate — agrees with the date-gate logic on every row', () => {
+      // Expected column is a hand-derived golden reference for the date-gate
+      // logic below — nothing else in the repo implements it to import from.
       const today = '2024-06-01';
 
       const rows: [string, Record<string, unknown>, boolean][] = [
@@ -675,7 +663,7 @@ describe('FliksHostImpl', () => {
             seeders: 10,
             leechers: 2,
             publishDate: new Date().toISOString(),
-            sourceRef: 'indexer-a',
+            sourceRef: 'source-a',
             blocked: false,
           },
         ],
@@ -710,7 +698,7 @@ describe('FliksHostImpl', () => {
             seeders: 10,
             leechers: 2,
             publishDate: new Date().toISOString(),
-            sourceRef: 'indexer-a',
+            sourceRef: 'source-a',
             minSeeders: 50,
             blocked: false,
           },
@@ -743,7 +731,7 @@ describe('FliksHostImpl', () => {
             seeders: 10,
             leechers: 2,
             publishDate: new Date().toISOString(),
-            sourceRef: 'indexer-a',
+            sourceRef: 'source-a',
             blocked: false,
           },
         ],
@@ -776,7 +764,7 @@ describe('FliksHostImpl', () => {
             seeders: 10,
             leechers: 2,
             publishDate: new Date().toISOString(),
-            sourceRef: 'indexer-a',
+            sourceRef: 'source-a',
             blocked: true,
           },
           {
@@ -786,7 +774,7 @@ describe('FliksHostImpl', () => {
             seeders: 10,
             leechers: 2,
             publishDate: new Date().toISOString(),
-            sourceRef: 'indexer-b',
+            sourceRef: 'source-b',
             blocked: false,
           },
         ],
@@ -1043,140 +1031,6 @@ describe('FliksHostImpl', () => {
         seasonNumber: 4,
       });
       expect(h.events.emit).not.toHaveBeenCalled();
-    });
-
-    it('matches AcquisitionEventsService exactly for acquisition.imported: same notification, SSE payload, queue refresh and media-server dispatch', async () => {
-      const h = makeHarness();
-      const media = makeMedia({
-        title: 'Imported Title',
-        path: '/lib/Imported Title (2020)',
-      });
-      h.mediaRepo.findOne.mockResolvedValue(media);
-      const real = new AcquisitionEventsService(
-        h.events as unknown as EventsService,
-        h.sseAudience as unknown as SseAudienceService,
-        h.notifications as unknown as NotificationsService,
-        h.mediaServers as unknown as MediaServersService,
-        {
-          count: jest.fn().mockResolvedValue(0),
-        } as unknown as ConstructorParameters<
-          typeof AcquisitionEventsService
-        >[4],
-        h.countsCache,
-      );
-
-      await real.publish({
-        type: 'acquisition.imported',
-        mediaId: 1,
-        title: media.title,
-        seasonNumber: 2,
-        episodeNumber: 3,
-        quality: '1080p',
-        sourceTitle: 'Release.Name',
-        mediaPath: (media as unknown as { path: string }).path,
-      });
-      const wantNotify: unknown = h.notifications.dispatch.mock.calls.at(-1);
-      const wantSse: unknown = h.events.emitToUsers.mock.calls.at(-1);
-      const wantQueue: unknown = h.events.emit.mock.calls.at(-1);
-      const wantServers: unknown = h.mediaServers.dispatch.mock.calls.at(-1);
-      h.notifications.dispatch.mockClear();
-      h.events.emitToUsers.mockClear();
-      h.events.emit.mockClear();
-      h.mediaServers.dispatch.mockClear();
-
-      await h.host['events.publish']([
-        {
-          type: 'acquisition.imported',
-          mediaId: 1,
-          seasonNumber: 2,
-          episodeNumber: 3,
-          quality: '1080p',
-          sourceTitle: 'Release.Name',
-        },
-      ]);
-      expect(h.notifications.dispatch.mock.calls.at(-1)).toEqual(wantNotify);
-      expect(h.events.emitToUsers.mock.calls.at(-1)).toEqual(wantSse);
-      expect(h.events.emit.mock.calls.at(-1)).toEqual(wantQueue);
-      expect(h.mediaServers.dispatch.mock.calls.at(-1)).toEqual(wantServers);
-    });
-
-    it('matches AcquisitionEventsService exactly for acquisition.failed, using the caller-supplied release title rather than media.title', async () => {
-      const h = makeHarness();
-      const real = new AcquisitionEventsService(
-        h.events as unknown as EventsService,
-        h.sseAudience as unknown as SseAudienceService,
-        h.notifications as unknown as NotificationsService,
-        h.mediaServers as unknown as MediaServersService,
-        {
-          count: jest.fn().mockResolvedValue(0),
-        } as unknown as ConstructorParameters<
-          typeof AcquisitionEventsService
-        >[4],
-        h.countsCache,
-      );
-
-      await real.publish({
-        type: 'acquisition.failed',
-        mediaId: 1,
-        title: 'Release.Name.Failed',
-        reason: 'boom',
-      });
-      const wantSse: unknown = h.events.emitToUsers.mock.calls.at(-1);
-      const wantQueue: unknown = h.events.emit.mock.calls.at(-1);
-      h.events.emitToUsers.mockClear();
-      h.events.emit.mockClear();
-
-      // media.title deliberately differs from the release title — proves the
-      // host method never re-derives it from mediaId.
-      h.mediaRepo.findOne.mockResolvedValue(
-        makeMedia({ title: 'Some Different Media Title' }),
-      );
-      await h.host['events.publish']([
-        {
-          type: 'acquisition.failed',
-          mediaId: 1,
-          title: 'Release.Name.Failed',
-          reason: 'boom',
-        },
-      ]);
-      expect(h.events.emitToUsers.mock.calls.at(-1)).toEqual(wantSse);
-      expect(h.events.emit.mock.calls.at(-1)).toEqual(wantQueue);
-    });
-
-    it('matches AcquisitionEventsService exactly for the new acquisition.stalled.removed variant', async () => {
-      const h = makeHarness();
-      const real = new AcquisitionEventsService(
-        h.events as unknown as EventsService,
-        h.sseAudience as unknown as SseAudienceService,
-        h.notifications as unknown as NotificationsService,
-        h.mediaServers as unknown as MediaServersService,
-        {
-          count: jest.fn().mockResolvedValue(0),
-        } as unknown as ConstructorParameters<
-          typeof AcquisitionEventsService
-        >[4],
-        h.countsCache,
-      );
-
-      await real.publish({
-        type: 'acquisition.stalled.removed',
-        mediaId: 1,
-        title: 'Stalled.Release',
-      });
-      const wantSse: unknown = h.events.emitToUsers.mock.calls.at(-1);
-      const wantQueue: unknown = h.events.emit.mock.calls.at(-1);
-      h.events.emitToUsers.mockClear();
-      h.events.emit.mockClear();
-
-      await h.host['events.publish']([
-        {
-          type: 'acquisition.stalled.removed',
-          mediaId: 1,
-          title: 'Stalled.Release',
-        },
-      ]);
-      expect(h.events.emitToUsers.mock.calls.at(-1)).toEqual(wantSse);
-      expect(h.events.emit.mock.calls.at(-1)).toEqual(wantQueue);
     });
 
     it('handles queue.changed and the batched acquisition.progress variant', async () => {

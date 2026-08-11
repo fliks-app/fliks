@@ -9,9 +9,8 @@ const not = (p: string) => `!${p}` as unknown as When[number];
 /**
  * Core's own `nav.main` / `nav.acquisition` items, expressed as contributions
  * so they merge with plugin contributions through the same weight/id sort
- * instead of being hardcoded markup. `core.activity` sits at weight 200 —
- * reserved for an acquisition plugin per the plan — because no such plugin
- * ships yet; core keeps rendering the item it still owns today.
+ * instead of being hardcoded markup. Weight 200 in `nav.acquisition` is free
+ * for a plugin to claim; core has nothing of its own to put there.
  */
 export const CORE_NAV_CONTRIBUTIONS: readonly UiContribution[] = [
   { id: 'core.home', slot: 'nav.main', weight: 100, labelKey: 'nav.home', icon: 'home', action: { kind: 'route', path: '/' } },
@@ -20,9 +19,9 @@ export const CORE_NAV_CONTRIBUTIONS: readonly UiContribution[] = [
   { id: 'core.playlists', slot: 'nav.main', weight: 2000, labelKey: 'nav.playlists', icon: 'list-video', action: { kind: 'route', path: '/playlists' } },
   { id: 'core.downloads', slot: 'nav.main', weight: 2100, labelKey: 'downloads.title', shortLabelKey: 'nav.downloads', icon: 'download', when: [not('isTv')], action: { kind: 'route', path: '/downloads' } },
   { id: 'core.history', slot: 'nav.main', weight: 2200, labelKey: 'nav.history', icon: 'history', action: { kind: 'route', path: '/history' } },
+  { id: 'core.subtitle_activity', slot: 'nav.main', weight: 2300, labelKey: 'activity.tab_subtitles', icon: 'history', action: { kind: 'route', path: '/activity' } },
 
   { id: 'core.requests', slot: 'nav.acquisition', weight: 100, labelKey: 'nav.requests', icon: 'clipboard-list', badge: 'pendingRequests', tone: 'danger', action: { kind: 'route', path: '/requests' } },
-  { id: 'core.activity', slot: 'nav.acquisition', weight: 200, labelKey: 'nav.activity', icon: 'download', badge: 'queueActive', action: { kind: 'route', path: '/activity' } },
   { id: 'core.calendar', slot: 'nav.acquisition', weight: 300, labelKey: 'nav.calendar', icon: 'calendar', action: { kind: 'route', path: '/calendar' } },
 ];
 
@@ -39,7 +38,7 @@ export interface CoreSettingsSection {
 
 /**
  * Core's own admin settings links as `settings.page` contributions, grouped
- * into the 8 sections the sidebar has always had. A plugin never joins one
+ * into the 7 sections the sidebar has always had. A plugin never joins one
  * of these — it gets a section of its own instead (see the admin feature's
  * `SettingsSectionsService`) — so weight only orders core items against
  * each other; the 100-spacing is kept anyway for a future core item to slot
@@ -70,14 +69,6 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
       { id: 'core.quality_definitions', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.quality_definitions', action: { kind: 'route', path: '/admin/settings/quality-definitions' } },
       { id: 'core.custom_formats', slot: 'settings.page', weight: 400, labelKey: 'settings.nav.custom_formats', action: { kind: 'route', path: '/admin/settings/custom-formats' } },
       { id: 'core.delay_profiles', slot: 'settings.page', weight: 500, labelKey: 'settings.nav.delay_profiles', action: { kind: 'route', path: '/admin/settings/delay-profiles' } },
-    ],
-  },
-  {
-    labelKey: 'admin.section_indexers',
-    items: [
-      { id: 'core.indexers', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.indexers', action: { kind: 'route', path: '/admin/settings/indexers' } },
-      { id: 'core.download_clients', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.download_clients', action: { kind: 'route', path: '/admin/settings/download-clients' } },
-      { id: 'core.blocklist', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.blocklist', action: { kind: 'route', path: '/admin/settings/blocklist' } },
     ],
   },
   {

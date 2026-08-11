@@ -1,3 +1,5 @@
+<h1 class="sr-only lg:not-sr-only text-2xl font-bold mb-4">{{ 'activity.tab_subtitles' | translate }}</h1>
+
 <div class="flex gap-2 mb-4">
   <select class="select select-bordered select-sm" [ngModel]="subFilterStatus()" (ngModelChange)="subFilterStatus.set($event); applySubFilters()">
     <option value="">{{ 'activity.all_statuses' | translate }}</option>

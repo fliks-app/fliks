@@ -6,8 +6,8 @@ import { EventsService } from './events.service';
 /**
  * Wraps `fn` in a `Command` row (running → completed/failed) plus the matching
  * `command.started`/`command.completed` events. Shared by core's own scheduled
- * jobs (`SchedulerService`) and the download bundle's two audited crons —
- * neither depends on the other to get it.
+ * jobs (`SchedulerService`) and any plugin's audited crons — neither depends
+ * on the other to get it.
  */
 export async function runAuditedCommand(
   commandRepo: Repository<Command>,

@@ -1,7 +1,7 @@
 /**
  * Decode the Latin-1 HTML4 named entities + numeric character refs
  * that surface in release titles emitted by Cardigann-wrapped
- * indexers (`Berl&iacute;n` → `Berlín`) and in `.torrent` `name`
+ * release feeds (`Berl&iacute;n` → `Berlín`) and in `.torrent` `name`
  * fields whose creator HTML-escaped diacritics before generating
  * the metainfo. Restricted to the Western-European subset that
  * actually shows up in real-world titles — adding hundreds of

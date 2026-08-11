@@ -137,7 +137,7 @@ export function inferLanguageCodeFromTitle(
 }
 
 /**
- * If parsed language is UNKNOWN and the indexer has an unknownLanguageIsoCode mapping,
+ * If parsed language is UNKNOWN and the release source has an unknownLanguageIsoCode mapping,
  * remap to that language.
  */
 export function resolveUnknownLanguage(

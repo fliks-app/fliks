@@ -42,10 +42,8 @@ export class GeneralSettingsComponent implements OnInit {
   readonly metadataRegionOptions = METADATA_REGION_OPTIONS;
 
   // Automation
-  readonly searchMissingAuto = signal('true');
   readonly autoGrabOnApproval = signal('true');
   readonly autoDetectMarkersOnImport = signal('true');
-  readonly rssSyncInterval = signal('15');
   readonly companionFileExtensions = signal('');
   readonly savingAutomation = signal(false);
 
@@ -60,10 +58,8 @@ export class GeneralSettingsComponent implements OnInit {
       this.publicUrl.set(map['public_url'] ?? '');
       this.metadataLanguage.set(map['metadata_language'] ?? 'en');
       this.metadataRegion.set(map['metadata_region'] ?? 'US');
-      this.searchMissingAuto.set(map['search_missing_auto'] ?? 'true');
       this.autoGrabOnApproval.set(map['requests_auto_grab_on_approval'] ?? 'true');
       this.autoDetectMarkersOnImport.set(map['markers_auto_detect_on_import'] ?? 'true');
-      this.rssSyncInterval.set(map['rss_sync_interval'] ?? '15');
       this.postImportScript.set(map['post_import_script'] ?? '');
       this.companionFileExtensions.set(
         map['companion_file_extensions'] ??
@@ -102,10 +98,8 @@ export class GeneralSettingsComponent implements OnInit {
     this.savingAutomation.set(true);
     try {
       await this.api.setBulk({
-        search_missing_auto: this.searchMissingAuto(),
         requests_auto_grab_on_approval: this.autoGrabOnApproval(),
         markers_auto_detect_on_import: this.autoDetectMarkersOnImport(),
-        rss_sync_interval: this.rssSyncInterval(),
         companion_file_extensions: this.companionFileExtensions(),
       });
       this.toast.success(this.translate.instant('settings.general.saved'));

@@ -59,7 +59,6 @@ interface Fixture {
   isTv: boolean;
   isNative: boolean;
   libraries: LibrarySummary[];
-  queueActive: number;
   pendingRequests: number;
   registry?: Partial<Record<SlotId, UiContribution[]>>;
 }
@@ -100,7 +99,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
           get: () =>
             Promise.resolve({
               mediaByLibrary: {},
-              badgeCounts: { queueActive: f.queueActive },
+              badgeCounts: {},
               pendingRequests: f.pendingRequests,
             }),
         },
@@ -249,7 +248,6 @@ const ADMIN_WITH_LIBRARIES: Fixture = {
     lib(2, 'Series', { isDefaultForSeries: true }),
     lib(3, 'Anime', { icon: 'swords' }),
   ],
-  queueActive: 3,
   pendingRequests: 2,
 };
 
@@ -260,7 +258,6 @@ const NON_ADMIN_NO_LIBRARIES: Fixture = {
   isTv: false,
   isNative: false,
   libraries: [],
-  queueActive: 0,
   pendingRequests: 0,
 };
 
@@ -271,7 +268,6 @@ const TV_FORM_FACTOR: Fixture = {
   isTv: true,
   isNative: false,
   libraries: [lib(1, 'Movies', { isDefaultForMovies: true })],
-  queueActive: 1,
   pendingRequests: 0,
 };
 
@@ -286,7 +282,6 @@ const NATIVE_PHONE: Fixture = {
     lib(2, 'Series', { isDefaultForSeries: true }),
     lib(3, 'Anime', { icon: 'swords' }),
   ],
-  queueActive: 5,
   pendingRequests: 1,
 };
 
@@ -307,8 +302,8 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
       { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
       { label: 'downloads.title', icon: 'lucideDownload', badge: null, href: '/downloads' },
       { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
+        { label: 'activity.tab_subtitles', icon: 'lucideHistory', badge: null, href: '/activity' },
       { label: 'nav.requests', icon: 'lucideClipboardList', badge: '2', href: '/requests' },
-      { label: 'nav.activity', icon: 'lucideDownload', badge: '3', href: '/activity' },
       { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },
     ]);
     expect(dockItems(fixture.nativeElement)).toEqual([]);
@@ -324,8 +319,8 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
       { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
       { label: 'downloads.title', icon: 'lucideDownload', badge: null, href: '/downloads' },
       { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
+        { label: 'activity.tab_subtitles', icon: 'lucideHistory', badge: null, href: '/activity' },
       { label: 'nav.requests', icon: 'lucideClipboardList', badge: null, href: '/requests' },
-      { label: 'nav.activity', icon: 'lucideDownload', badge: null, href: '/activity' },
       { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },
     ]);
   });
@@ -338,8 +333,8 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
       { label: 'Movies', icon: 'lucideLibrary', badge: null, href: '/libraries/Movies' },
       { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
       { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
+        { label: 'activity.tab_subtitles', icon: 'lucideHistory', badge: null, href: '/activity' },
       { label: 'nav.requests', icon: 'lucideClipboardList', badge: null, href: '/requests' },
-      { label: 'nav.activity', icon: 'lucideDownload', badge: '1', href: '/activity' },
       { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },
     ]);
   });
@@ -369,16 +364,12 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    // Deliberate change: the sheet used to hand-order main/acquisition items
-    // (Activity before History); it now renders each group by weight, main
-    // items first then acquisition items, so Activity (weight 200) now
-    // trails History (weight 2200) — a side effect of one ordering rule
-    // replacing the old ad-hoc markup order.
+    // Main items first, then acquisition items, each group ordered by weight.
     expect(sheetItems(fixture.nativeElement)).toEqual([
       { label: 'Anime', icon: 'lucideSwords', badge: null, href: '/libraries/Anime' },
       { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
       { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
-      { label: 'nav.activity', icon: 'lucideDownload', badge: '5', href: '/activity' },
+        { label: 'activity.tab_subtitles', icon: 'lucideHistory', badge: null, href: '/activity' },
       { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },
     ]);
   });

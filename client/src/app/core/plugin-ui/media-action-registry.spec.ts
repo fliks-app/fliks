@@ -5,8 +5,6 @@ const ALL_IDS: CoreMediaActionId[] = [
   'media.toggle-series-watched',
   'media.open-tracking',
   'media.request',
-  'media.grab-best',
-  'media.search-releases',
   'media.edit-profiles',
   'media.edit-library',
   'media.edit-subtitles',

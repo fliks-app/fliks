@@ -3,8 +3,8 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 export interface SidebarCounts {
-  /** Keyed by a nav contribution's `badge` (e.g. `queueActive`); a key no
-   *  publisher pushed is absent from the map, never present-and-0. */
+  /** Keyed by a nav contribution's `badge` field; a key no publisher
+   *  pushed is absent from the map, never present-and-0. */
   badgeCounts: Record<string, number>;
   /** Pending requests visible to the user (own only without requests.manage). */
   pendingRequests: number;

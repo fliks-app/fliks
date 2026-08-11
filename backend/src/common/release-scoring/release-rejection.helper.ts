@@ -8,13 +8,13 @@ import {
   resolveUnknownLanguage,
 } from '../release-parsing';
 
-/** Torznab search hit, as parsed off the wire by the indexer fetcher —
+/** A search hit as parsed off the wire by whoever fetched it —
  *  the input contract every scoring/rejection function below consumes. */
 export interface ReleaseCandidate {
   title: string;
   downloadUrl: string;
-  indexerId: number;
-  indexerName: string;
+  sourceId: number;
+  sourceName: string;
   size: number; // bytes, 0 if unknown
   seeders: number;
   leechers: number;
@@ -98,13 +98,13 @@ export function formatRejectionForLog(rejection: ReleaseRejection): string {
  */
 /**
  * Build the Torznab search query and the list of expected release-name
- * variants for matching. Mirrors Sonarr/Radarr: indexer release titles
+ * variants for matching: release titles
  * use the original (typically English) name, so we prefer `originalTitle`
  * as the query while passing every known spelling — original, localized,
  * alternative — through to the matcher.
  *
  * `customQuery` overrides everything: it stays authoritative both for
- * the query and the expected-title list (otherwise an indexer-specific
+ * the query and the expected-title list (otherwise a source-specific
  * search the user typed in could be matched against the localized
  * title and silently rejected).
  */
@@ -196,7 +196,7 @@ export function detectVideoCodec(title?: string): 'AV1' | 'HEVC' | 'VP9' | 'x264
   const t = title.toLowerCase();
   if (/\bav1\b/.test(t)) return 'AV1';
   // `h[.\s-]?` lets us catch "H.264", "H264", "h 264", "H-264" — some
-  // indexers tokenise dots to spaces, which would otherwise hide the
+  // some sources tokenise dots to spaces, which would otherwise hide the
   // codec marker behind a word boundary.
   if (/\b(x265|h[.\s-]?265|hevc)\b/.test(t)) return 'HEVC';
   if (/\bvp9\b/.test(t)) return 'VP9';
@@ -241,11 +241,11 @@ export function buildAllowedQualityIds(
   return set;
 }
 
-export function buildIndexerMinSeeders(
-  indexers: { id: number; settings?: Record<string, unknown> | null }[],
+export function buildSourceMinSeeders(
+  sources: { id: number; settings?: Record<string, unknown> | null }[],
 ): Map<number, number> {
   return new Map(
-    indexers.map((ix) => [
+    sources.map((ix) => [
       ix.id,
       Math.max(0, Number(ix.settings?.['minSeeders']) || 0),
     ]),
@@ -350,7 +350,7 @@ function significantTokens(tokens: string[]): string[] {
  * permissive only when *every* expected title is like that (a work with no
  * Latin-script name at all), leaving the caller's year guard as the safeguard.
  *
- * Used as a backend safety net for indexers that ignore `q=` and return any
+ * Used as a safety net for a source that ignores `q=` and returns any
  * S01 / category-2000 release regardless of what we asked for.
  */
 export function titleMatchesExpectation(
@@ -385,8 +385,8 @@ export function computeRejections(opts: {
   runtimeMinutes: number;
   sizeByQuality: Map<number, SizeLimits>;
   seeders: number;
-  indexerId: number;
-  indexerMinSeeders: Map<number, number>;
+  sourceId: number;
+  sourceMinSeeders: Map<number, number>;
   /** Release title — used to detect video codec for size-limit scaling AND
    *  for the title-mismatch check below. */
   releaseTitle?: string;
@@ -461,7 +461,7 @@ export function computeRejections(opts: {
     // truly bad sizes out.
   }
 
-  const minSeed = opts.indexerMinSeeders.get(opts.indexerId) ?? 0;
+  const minSeed = opts.sourceMinSeeders.get(opts.sourceId) ?? 0;
   if (minSeed > 0 && opts.seeders < minSeed) {
     out.push({
       code: 'MIN_SEEDERS',
@@ -589,9 +589,9 @@ export interface ReleaseScorerDeps {
     title: string,
     meta: { freeleech?: boolean; downloadVolumeFactor?: number },
   ): Promise<number>;
-  /** `indexerId` rides along so a caller keyed by per-release index (rather
+  /** `sourceId` rides along so a caller keyed by per-release index (rather
    *  than by title, which two releases may share) can disambiguate. */
-  isBlocked(title: string, indexerId: number): Promise<boolean>;
+  isBlocked(title: string, sourceId: number): Promise<boolean>;
 }
 
 /**
@@ -608,8 +608,8 @@ export async function scoreAndSortReleases(
     allowed: Set<number>;
     allowedLangs: Set<number>;
     sizeByQuality: Map<number, SizeLimits>;
-    indexerMinSeeders: Map<number, number>;
-    indexerUnknownLang: Map<number, string | undefined>;
+    sourceMinSeeders: Map<number, number>;
+    sourceUnknownLang: Map<number, string | undefined>;
     runtimeMinutes: number;
     /** Title(s) we expect releases to refer to. Releases whose name
      *  doesn't contain the significant tokens of *any* candidate are
@@ -623,14 +623,14 @@ export async function scoreAndSortReleases(
       const parsed = parseReleaseQuality(r.title);
       const lang = resolveUnknownLanguage(
         parseReleaseLanguage(r.title),
-        opts.indexerUnknownLang.get(r.indexerId),
+        opts.sourceUnknownLang.get(r.sourceId),
       );
       const [cfScore, isBlocklisted] = await Promise.all([
         deps.scoreCustomFormats(r.title, {
           freeleech: r.freeleech,
           downloadVolumeFactor: r.downloadVolumeFactor,
         }),
-        deps.isBlocked(r.title, r.indexerId),
+        deps.isBlocked(r.title, r.sourceId),
       ]);
       const rejections = computeRejections({
         qualityId: parsed.quality.id,
@@ -642,8 +642,8 @@ export async function scoreAndSortReleases(
         runtimeMinutes: opts.runtimeMinutes,
         sizeByQuality: opts.sizeByQuality,
         seeders: r.seeders,
-        indexerId: r.indexerId,
-        indexerMinSeeders: opts.indexerMinSeeders,
+        sourceId: r.sourceId,
+        sourceMinSeeders: opts.sourceMinSeeders,
         releaseTitle: r.title,
         expectedTitle: opts.expectedTitle,
       });

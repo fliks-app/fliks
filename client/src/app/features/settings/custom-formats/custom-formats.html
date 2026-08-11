@@ -153,13 +153,13 @@
                   <option [value]="t">{{ t }}</option>
                 }
               </select>
-              @if (spec.type === 'indexer_flag') {
+              @if (spec.type === 'release_flag') {
                 <select
                   class="select select-bordered select-xs flex-1 min-w-32"
                   [ngModel]="spec.value"
                   (ngModelChange)="updateSpec($index, { value: $event })"
                 >
-                  @for (v of indexerFlagValues; track v) {
+                  @for (v of releaseFlagValues; track v) {
                     <option [value]="v">{{ v }}</option>
                   }
                 </select>

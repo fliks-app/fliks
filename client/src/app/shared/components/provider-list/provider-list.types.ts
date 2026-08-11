@@ -1,8 +1,8 @@
 import type { FieldDef } from '../../../core/plugin-ui/contribution.types';
 
 /**
- * The generic shape `indexers`/`download_clients`/`subtitle_providers` already
- * share on the wire. Extra backend-specific fields (e.g. indexers' `cooldown`)
+ * The generic shape a provider-list consumer's wire format already fits.
+ * Extra backend-specific fields (e.g. subtitle providers' rate-limit state)
  * pass through untouched — the renderer never reads them.
  */
 export interface ProviderInstance {

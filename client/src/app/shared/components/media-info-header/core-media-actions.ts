@@ -50,24 +50,6 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     action: { kind: 'action', actionId: 'media.request' },
   },
   {
-    id: 'core.grab_best',
-    slot: 'media.actions',
-    weight: 500,
-    labelKey: 'media_detail.grab_best',
-    icon: 'download',
-    when: ['hasPermission:media.grab', '!mediaType:series', 'hasQualityProfile'],
-    action: { kind: 'action', actionId: 'media.grab-best' },
-  },
-  {
-    id: 'core.search_releases',
-    slot: 'media.actions',
-    weight: 600,
-    labelKey: 'media_detail.search_releases',
-    icon: 'search',
-    when: ['hasPermission:media.grab', '!mediaType:series', 'hasQualityProfile'],
-    action: { kind: 'action', actionId: 'media.search-releases' },
-  },
-  {
     // `!isEpisode`: profile/library assignment is title-level, not
     // per-episode — the pre-refactor episode header never bound
     // `canEditProfiles` at all (always false), for the same reason.

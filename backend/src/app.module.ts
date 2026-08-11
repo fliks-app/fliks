@@ -1,4 +1,4 @@
-import { Module, type Type } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './modules/auth/auth.module';
@@ -29,28 +29,6 @@ import { PluginsModule } from './modules/plugins/plugins.module';
 import { CommonModule } from './common/common.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
-import { isDownloadBundleEnabled } from './common/constants/plugin-flags';
-
-/**
- * The one in-repo bundle today. Loaded through `require` on purpose: a static
- * import runs the module's `TypeOrmModule.forFeature(...)` at import time, which
- * registers its entities with `autoLoadEntities` whether or not the module is
- * ever mounted — so `FLIKS_BUNDLES=` would still leave core carrying its tables.
- * These four lines go away with the directory when the bundle ships as an
- * archive the registry mounts at runtime.
- */
-function downloadBundleModules(): Type<unknown>[] {
-  if (!isDownloadBundleEnabled()) return [];
-  /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-require-imports */
-  return [
-    require('./plugins/download/indexers/indexers.module').IndexersModule,
-    require('./plugins/download/download-clients/download-clients.module')
-      .DownloadClientsModule,
-    require('./plugins/download/grab.module').GrabModule,
-    require('./plugins/download/download-bundle.module').DownloadBundleModule,
-  ];
-  /* eslint-enable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-require-imports */
-}
 
 @Module({
   imports: [
@@ -103,7 +81,6 @@ function downloadBundleModules(): Type<unknown>[] {
     PersonsModule,
     ProfilesModule,
     MetadataProvidersModule,
-    ...downloadBundleModules(),
     RequestsModule,
     FliksSchedulerModule,
     LibrariesModule,
@@ -122,8 +99,6 @@ function downloadBundleModules(): Type<unknown>[] {
     SetupChecklistModule,
     CountsModule,
     PluginsModule,
-    // Independent of the download bundle — the plugin-facing host methods
-    // are core code and must resolve with FLIKS_BUNDLES=.
   ],
 })
 export class AppModule {}

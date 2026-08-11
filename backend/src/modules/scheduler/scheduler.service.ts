@@ -63,8 +63,8 @@ export class SchedulerService implements OnModuleInit {
 
   // `name` is typed against `CoreSchedulerJobName` so adding a job here without mirroring
   // its name there (needed so a plugin job can be refused for colliding with it) fails to typecheck.
-  // The download bundle's five jobs aren't listed here — they come from `jobRegistry` instead,
-  // present only when the bundle registered them, which is what makes the listing 3-vs-8.
+  // A plugin's own jobs aren't listed here — they come from `jobRegistry` instead,
+  // present only when a plugin registered them.
   private static readonly SCHEDULERS: {
     name: CoreSchedulerJobName;
     cron: string;
@@ -132,8 +132,8 @@ export class SchedulerService implements OnModuleInit {
       pluginId: string | null;
     }[]
   > {
-    // The download bundle's five jobs, when it's loaded, merge in here exactly like
-    // core's own three — `jobRegistry` is empty (not filtered) when the bundle is off.
+    // A plugin's registered jobs merge in here exactly like core's own three —
+    // `jobRegistry` is simply empty when nothing has published to it.
     const available = [
       ...SchedulerService.SCHEDULERS,
       ...this.jobRegistry.list(),
@@ -199,7 +199,7 @@ export class SchedulerService implements OnModuleInit {
       'DetectMissingMarkers',
     ];
     if (!known.includes(name)) {
-      // A caller-input error (unknown name, or a job the download bundle just
+      // A caller-input error (unknown name, or a job its owning plugin just
       // dropped) — not a server fault, so 400 rather than an unhandled throw.
       throw new BadRequestException(
         `Unknown command: ${name}. Valid: ${known.join(', ')}`,

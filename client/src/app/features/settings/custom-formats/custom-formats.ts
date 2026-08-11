@@ -44,8 +44,8 @@ export class CustomFormatsSettingsComponent implements OnInit {
   readonly testResults = signal<{ formatId: number; formatName: string; matched: boolean; score: number }[]>([]);
   readonly testLoading = signal(false);
 
-  readonly specTypes = ['title_regex', 'source', 'resolution', 'language', 'indexer_flag'] as const;
-  readonly indexerFlagValues = ['freeleech', 'halfleech'] as const;
+  readonly specTypes = ['title_regex', 'source', 'resolution', 'language', 'release_flag'] as const;
+  readonly releaseFlagValues = ['freeleech', 'halfleech'] as const;
 
   ngOnInit() {
     this.reloadAll();

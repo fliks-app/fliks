@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 export interface CustomFormatSpec {
-  type: 'title_regex' | 'source' | 'resolution' | 'language' | 'indexer_flag';
+  type: 'title_regex' | 'source' | 'resolution' | 'language' | 'release_flag';
   value: string;
   negate?: boolean;
   required?: boolean;

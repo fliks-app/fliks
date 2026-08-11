@@ -39,7 +39,7 @@ export class PluginObjectGuardsService {
   ) {}
 
   /** Resolved lazily, at call time: a static import/DI edge here would close a
-   *  `Plugins -> Media -> Indexers -> Plugins` module cycle. */
+   *  module cycle back through the plugins module. */
   private mediaService(): MediaService {
     return this.moduleRef.get(MediaService, { strict: false });
   }

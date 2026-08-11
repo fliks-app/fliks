@@ -41,13 +41,10 @@ const EXCLUDED_PREFIXES = [
   '/api/playback/media/',
 ];
 
-// Live query endpoints (external indexers / providers) — never cache. A stale
-// hit here returns an old (often empty) result and only revalidates in the
+// Live query endpoints (external providers) — never cache. A stale hit here
+// returns an old (often empty) result and only revalidates in the
 // background, so the caller never sees the real response.
 const EXCLUDED_PATTERNS = [
-  /\/api\/media\/\d+\/(releases|upgrade-releases)/,
-  /\/api\/media\/\d+\/seasons\/\d+\/releases/,
-  /\/api\/media\/\d+\/episodes\/\d+\/releases/,
   /\/api\/media\/\d+\/subtitles\/search/,
 ];
 

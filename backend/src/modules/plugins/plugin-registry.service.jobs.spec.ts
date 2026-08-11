@@ -103,7 +103,7 @@ describe('PluginRegistryService — jobs registration', () => {
     });
   });
 
-  it('refuses a job name already published by a ScheduledJobRegistry publisher (e.g. the download bundle)', async () => {
+  it('refuses a job name already published by a ScheduledJobRegistry publisher (e.g. an installed plugin)', async () => {
     const manifest = processManifest('fliks.jobtest', [job({ name: 'SearchMissing' })]);
     const { service } = makeService(undefined, ['SearchMissing']);
     const result = await service.register(makePackage(manifest));

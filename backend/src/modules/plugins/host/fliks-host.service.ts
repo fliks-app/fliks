@@ -53,8 +53,7 @@ import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
 import { PluginHostContext } from './plugin-host-context';
 import { DownloadProgressState } from '../../../common/constants/download-progress-state';
 
-/** `media.resolve`'s own bound — restated because `plugins/download/` (where the
- *  original `QUEUE_PAGE_SIZE_MAX` lives) is outside this file's import boundary. */
+/** `media.resolve`'s own bound, per the contract's doc comment. */
 const QUEUE_PAGE_SIZE_MAX = 100;
 
 /** `acquisition.candidates`'s own bound, per the contract's doc comment. */
@@ -447,8 +446,8 @@ export class FliksHostImpl implements PluginHostApi {
       id: r.id,
       title: r.title,
       downloadUrl: '',
-      indexerId: i,
-      indexerName: r.sourceRef,
+      sourceId: i,
+      sourceName: r.sourceRef,
       size: r.size,
       seeders: r.seeders,
       leechers: r.leechers,
@@ -456,15 +455,15 @@ export class FliksHostImpl implements PluginHostApi {
       freeleech: r.freeleech ?? false,
       downloadVolumeFactor: r.downloadVolumeFactor ?? 1,
     }));
-    const indexerMinSeeders = new Map(
+    const sourceMinSeeders = new Map(
       p.releases.map((r, i) => [i, r.minSeeders ?? 0]),
     );
-    const indexerUnknownLang = new Map<number, string | undefined>(
+    const sourceUnknownLang = new Map<number, string | undefined>(
       p.releases.map((r, i) => [i, r.unknownLanguageIsoCode]),
     );
     // The plugin owns the blocklist table now — it tells us per release
     // rather than us querying, keyed the same way as the two maps above.
-    const indexerBlocked = new Map(p.releases.map((r, i) => [i, r.blocked]));
+    const sourceBlocked = new Map(p.releases.map((r, i) => [i, r.blocked]));
 
     // `scoreAndSortReleases` is declared to return `ScoredRelease[]` (no `id`),
     // but every row is a spread of its input candidate — `id` rides along.
@@ -474,8 +473,8 @@ export class FliksHostImpl implements PluginHostApi {
         allowed,
         allowedLangs,
         sizeByQuality,
-        indexerMinSeeders,
-        indexerUnknownLang,
+        sourceMinSeeders,
+        sourceUnknownLang,
         runtimeMinutes: media.runtime ?? 0,
         expectedTitle: expectedTitles,
       },
@@ -483,7 +482,7 @@ export class FliksHostImpl implements PluginHostApi {
         scoreCustomFormats: (title, meta) =>
           this.customFormats.scoreRelease(title, meta),
         isBlocked: (_title, i) =>
-          Promise.resolve(indexerBlocked.get(i) ?? false),
+          Promise.resolve(sourceBlocked.get(i) ?? false),
       },
     )) as unknown as (CandidateWithId &
       Awaited<ReturnType<typeof scoreAndSortReleases>>[number])[];
