@@ -14,7 +14,7 @@ import { DownloadClient } from './download-clients/entities/download-client.enti
 import { QbittorrentService } from './download-clients/qbittorrent.service';
 import { CustomFormatsService } from '../../modules/profiles/custom-formats.service';
 import { ProfilesService } from '../../modules/profiles/profiles.service';
-import { BlocklistService } from '../../modules/blocklist/blocklist.service';
+import { BlocklistService } from './blocklist/blocklist.service';
 import {
   parseReleaseQuality,
   parseSeasonEpisode,

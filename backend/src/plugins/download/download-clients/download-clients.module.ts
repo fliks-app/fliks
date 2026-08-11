@@ -8,7 +8,7 @@ import { DownloadClientsService } from './download-clients.service';
 import { DownloadClientsController } from './download-clients.controller';
 import { AuthModule } from '../../../modules/auth/auth.module';
 import { TorrentHistoryMatcher } from '../torrent-history-matcher.service';
-import { BlocklistModule } from '../../../modules/blocklist/blocklist.module';
+import { BlocklistModule } from '../blocklist/blocklist.module';
 import { SettingsModule } from '../../../modules/settings/settings.module';
 
 @Module({

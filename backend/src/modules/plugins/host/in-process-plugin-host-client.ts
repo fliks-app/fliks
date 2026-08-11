@@ -8,7 +8,7 @@ import {
 import { FliksHostImpl } from './fliks-host.service';
 
 /**
- * A caller's view of the 17 host methods, exactly as a `process` plugin's
+ * A caller's view of the 15 host methods, exactly as a `process` plugin's
  * socket client will see them. Today it forwards straight into
  * `FliksHostImpl` in-process; Phase 10.4 replaces the body of every method
  * here with an `RpcChannel.call(...)` and nothing on the caller side changes.
@@ -42,10 +42,6 @@ export class InProcessPluginHostClient implements PluginHostApi {
     this.host['media.resolve'](p);
   'media.exists': PluginHostApi['media.exists'] = (p) =>
     this.host['media.exists'](p);
-  'blocklist.add': PluginHostApi['blocklist.add'] = (p) =>
-    this.host['blocklist.add'](p);
-  'blocklist.check': PluginHostApi['blocklist.check'] = (p) =>
-    this.host['blocklist.check'](p);
   'requests.markInProgress': PluginHostApi['requests.markInProgress'] = (p) =>
     this.host['requests.markInProgress'](p);
   'library.ingest': PluginHostApi['library.ingest'] = (p) =>

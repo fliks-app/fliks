@@ -16,7 +16,6 @@ import { EventsModule } from './modules/scheduler/events.module';
 import { LibrariesModule } from './modules/libraries/libraries.module';
 import { PlaylistsModule } from './modules/playlists/playlists.module';
 import { SocialModule } from './modules/social/social.module';
-import { BlocklistModule } from './modules/blocklist/blocklist.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { SubtitlesModule } from './modules/subtitles/subtitles.module';
@@ -97,7 +96,6 @@ import { isDownloadBundleEnabled } from './common/constants/plugin-flags';
     LibrariesModule,
     PlaylistsModule,
     SocialModule,
-    BlocklistModule,
     NotificationsModule,
     SettingsModule,
     SubtitlesModule,

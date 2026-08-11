@@ -3,10 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BlocklistEntry } from './entities/blocklist-entry.entity';
 import { CreateBlocklistEntryDto } from './dto/create-blocklist-entry.dto';
-import { Indexer } from '../../plugins/download/indexers/entities/indexer.entity';
-import { Media } from '../media/entities/media.entity';
-import { User } from '../users/entities/user.entity';
-import { DownloadHistory } from '../../plugins/download/entities/download-history.entity';
+import { Indexer } from '../indexers/entities/indexer.entity';
+import { Media } from '../../../modules/media/entities/media.entity';
+import { User } from '../../../modules/users/entities/user.entity';
+import { DownloadHistory } from '../entities/download-history.entity';
 
 @Injectable()
 export class BlocklistService {

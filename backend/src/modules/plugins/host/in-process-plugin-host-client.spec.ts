@@ -3,7 +3,7 @@ import type { FliksHostImpl } from './fliks-host.service';
 import type { PluginHostApi } from '../../../common/plugin-contract';
 import { EventsService } from '../../scheduler/events.service';
 
-/** The 17 dotted method names `host-methods.ts` declares. */
+/** The 15 dotted method names `host-methods.ts` declares. */
 const PLUGIN_METHOD_NAMES: (keyof PluginHostApi)[] = [
   'media.acquisitionContext',
   'acquisition.candidates',
@@ -11,8 +11,6 @@ const PLUGIN_METHOD_NAMES: (keyof PluginHostApi)[] = [
   'releases.score',
   'media.resolve',
   'media.exists',
-  'blocklist.add',
-  'blocklist.check',
   'requests.markInProgress',
   'library.ingest',
   'events.publish',
@@ -34,11 +32,11 @@ function fakeHost(): FliksHostImpl {
 }
 
 describe('InProcessPluginHostClient', () => {
-  it('covers exactly the 17 methods host-methods.ts declares', () => {
-    expect(PLUGIN_METHOD_NAMES).toHaveLength(17);
+  it('covers exactly the 15 methods host-methods.ts declares', () => {
+    expect(PLUGIN_METHOD_NAMES).toHaveLength(15);
   });
 
-  it('forwards every one of the 17 contract methods to the host, unchanged', async () => {
+  it('forwards every one of the 15 contract methods to the host, unchanged', async () => {
     const host = fakeHost();
     const client = new InProcessPluginHostClient(host, new EventsService());
     const clientCalls = client as unknown as Record<

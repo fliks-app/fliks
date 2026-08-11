@@ -15,7 +15,7 @@ import {
 } from './download-clients/qbittorrent.service';
 import { Indexer } from './indexers/entities/indexer.entity';
 import { NamingService } from '../../modules/scheduler/naming.service';
-import { BlocklistService } from '../../modules/blocklist/blocklist.service';
+import { BlocklistService } from './blocklist/blocklist.service';
 import { EventsService } from '../../modules/scheduler/events.service';
 import { AcquisitionEventsService } from './acquisition-events.service';
 import { SettingsService } from '../../modules/settings/settings.service';

@@ -31,8 +31,6 @@ import {
 import { ProfilesService } from '../../profiles/profiles.service';
 import { QualityDefinitionsService } from '../../profiles/quality-definitions.service';
 import { CustomFormatsService } from '../../profiles/custom-formats.service';
-import { BlocklistService } from '../../blocklist/blocklist.service';
-import { BlocklistEntry } from '../../blocklist/entities/blocklist-entry.entity';
 import { RequestLifecycleService } from '../../requests/request-lifecycle.service';
 import { LibraryIngestService } from '../../../common/library-ingest/library-ingest.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -80,16 +78,8 @@ function rejectionDetail(rejection: {
   return parts.length ? parts.join(', ') : undefined;
 }
 
-function isUniqueViolation(e: unknown): boolean {
-  return (
-    typeof e === 'object' &&
-    e !== null &&
-    (e as { code?: string }).code === '23505'
-  );
-}
-
 /**
- * Core's implementation of the 17 plugin-facing host methods. Every value it
+ * Core's implementation of the 15 plugin-facing host methods. Every value it
  * returns is a plain, JSON-safe object built field-by-field from entities —
  * never the entity itself — because the same shape crosses a socket once the
  * transport changes (Phase 10.4).
@@ -104,8 +94,6 @@ export class FliksHostImpl implements PluginHostApi {
     private readonly episodeRepo: Repository<Episode>,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
-    @InjectRepository(BlocklistEntry)
-    private readonly blocklistEntryRepo: Repository<BlocklistEntry>,
     @InjectRepository(PluginRegistration)
     private readonly pluginRegistrationRepo: Repository<PluginRegistration>,
     private readonly autoGrab: AutoGrabPipelineService,
@@ -113,7 +101,6 @@ export class FliksHostImpl implements PluginHostApi {
     private readonly profiles: ProfilesService,
     private readonly qualityDefs: QualityDefinitionsService,
     private readonly customFormats: CustomFormatsService,
-    private readonly blocklist: BlocklistService,
     private readonly requestLifecycle: RequestLifecycleService,
     private readonly libraryIngestService: LibraryIngestService,
     private readonly notifications: NotificationsService,
@@ -143,9 +130,6 @@ export class FliksHostImpl implements PluginHostApi {
   // Group B — write acquisition state
   // ---------------------------------------------------------------------------
 
-  'blocklist.add': PluginHostApi['blocklist.add'] = (p) => this.blocklistAdd(p);
-  'blocklist.check': PluginHostApi['blocklist.check'] = (p) =>
-    this.blocklistCheck(p);
   'requests.markInProgress': PluginHostApi['requests.markInProgress'] = (p) =>
     this.requestsMarkInProgress(p);
 
@@ -440,6 +424,7 @@ export class FliksHostImpl implements PluginHostApi {
       sourceRef: string;
       minSeeders?: number;
       unknownLanguageIsoCode?: string;
+      blocked: boolean;
     }[];
   }): Promise<ScoredReleaseOut[]> {
     const media = await this.mediaRepo.findOne({ where: { id: p.mediaId } });
@@ -470,6 +455,9 @@ export class FliksHostImpl implements PluginHostApi {
     const indexerUnknownLang = new Map<number, string | undefined>(
       p.releases.map((r, i) => [i, r.unknownLanguageIsoCode]),
     );
+    // The plugin owns the blocklist table now — it tells us per release
+    // rather than us querying, keyed the same way as the two maps above.
+    const indexerBlocked = new Map(p.releases.map((r, i) => [i, r.blocked]));
 
     // `scoreAndSortReleases` is declared to return `ScoredRelease[]` (no `id`),
     // but every row is a spread of its input candidate — `id` rides along.
@@ -487,7 +475,8 @@ export class FliksHostImpl implements PluginHostApi {
       {
         scoreCustomFormats: (title, meta) =>
           this.customFormats.scoreRelease(title, meta),
-        isBlocked: (title) => this.blocklist.isBlocked(title),
+        isBlocked: (_title, i) =>
+          Promise.resolve(indexerBlocked.get(i) ?? false),
       },
     )) as unknown as (CandidateWithId &
       Awaited<ReturnType<typeof scoreAndSortReleases>>[number])[];
@@ -588,57 +577,7 @@ export class FliksHostImpl implements PluginHostApi {
   }
 
   // ===========================================================================
-  // B1 — blocklist.add
-  // ===========================================================================
-
-  private async blocklistAdd(p: {
-    idempotencyKey: string;
-    sourceTitle: string;
-    quality?: string;
-    mediaId?: number;
-    indexerName?: string;
-    downloadUrl?: string;
-    note: string;
-  }): Promise<{ id: number }> {
-    try {
-      const row = await this.blocklist.create({
-        sourceTitle: p.sourceTitle,
-        quality: p.quality,
-        mediaId: p.mediaId,
-        indexerName: p.indexerName,
-        downloadUrl: p.downloadUrl,
-        note: p.note,
-      });
-      return { id: row.id };
-    } catch (e) {
-      // Retrying the same title on a timeout must not error twice — the
-      // sourceTitle unique index is the de-dupe key `idempotencyKey` echoes.
-      if (!isUniqueViolation(e)) throw e;
-      const existing = await this.blocklistEntryRepo
-        .createQueryBuilder('b')
-        .where('LOWER(b.sourceTitle) = LOWER(:t)', { t: p.sourceTitle })
-        .getOne();
-      if (existing) return { id: existing.id };
-      throw e;
-    }
-  }
-
-  // ===========================================================================
-  // B2 — blocklist.check
-  // ===========================================================================
-
-  private async blocklistCheck(p: {
-    titles: string[];
-  }): Promise<{ blocked: string[] }> {
-    const blocked: string[] = [];
-    for (const title of p.titles) {
-      if (await this.blocklist.isBlocked(title)) blocked.push(title);
-    }
-    return { blocked };
-  }
-
-  // ===========================================================================
-  // B3 — requests.markInProgress
+  // B1 — requests.markInProgress
   // ===========================================================================
 
   private async requestsMarkInProgress(p: {

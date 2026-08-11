@@ -4,11 +4,9 @@ import { Media } from '../../media/entities/media.entity';
 import { Season } from '../../media/entities/season.entity';
 import { Episode } from '../../media/entities/episode.entity';
 import { MediaFile } from '../../media/entities/media-file.entity';
-import { BlocklistEntry } from '../../blocklist/entities/blocklist-entry.entity';
 import { PluginRegistration } from '../entities/plugin-registration.entity';
 import { MediaModule } from '../../media/media.module';
 import { ProfilesModule } from '../../profiles/profiles.module';
-import { BlocklistModule } from '../../blocklist/blocklist.module';
 import { RequestsModule } from '../../requests/requests.module';
 import { LibraryIngestModule } from '../../../common/library-ingest/library-ingest.module';
 import { NotificationsModule } from '../../notifications/notifications.module';
@@ -20,7 +18,7 @@ import { PluginCountsCacheModule } from './plugin-counts-cache.module';
 import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
 
 /**
- * Wires `FliksHostImpl` — core's implementation of the 17 plugin-facing host
+ * Wires `FliksHostImpl` — core's implementation of the 15 plugin-facing host
  * methods — and the in-process client that stands in for the RPC transport
  * until Phase 10.4. `EventsService`/`SseAudienceService` come for free from
  * the `@Global()` `EventsModule`, so they aren't imported here.
@@ -32,12 +30,10 @@ import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
       Season,
       Episode,
       MediaFile,
-      BlocklistEntry,
       PluginRegistration,
     ]),
     MediaModule,
     ProfilesModule,
-    BlocklistModule,
     RequestsModule,
     LibraryIngestModule,
     NotificationsModule,
