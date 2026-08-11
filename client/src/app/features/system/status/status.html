@@ -11,7 +11,7 @@
 @if (healthLoading()) {
   <div class="flex justify-center py-6"><span class="loading loading-spinner loading-md"></span></div>
 } @else if (health(); as h) {
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
     <div class="card bg-base-100 border border-base-200">
       <div class="card-body py-4 px-5 gap-1">
         <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'system.health_app' | translate }}</p>
@@ -30,22 +30,10 @@
       </div>
     </div>
     <div class="card bg-base-100 border border-base-200">
-      <div class="card-body py-4 px-5 gap-1">
-        <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'system.health_indexers' | translate }}</p>
-        <p class="text-lg font-bold">{{ h.indexers.enabled }}<span class="text-base-content/40 text-sm font-normal"> / {{ h.indexers.total }}</span></p>
-        <p class="text-sm text-base-content/60">{{ 'system.health_indexers_enabled' | translate }}</p>
-      </div>
-    </div>
-    <div class="card bg-base-100 border border-base-200">
       <div class="card-body py-4 px-5 gap-2">
-        <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'system.health_clients' | translate }}</p>
-        @if (h.downloadClients.length === 0) { <p class="text-sm text-base-content/50">{{ 'system.health_no_clients' | translate }}</p> }
-        @for (dc of h.downloadClients; track dc.name) {
-          <div class="flex items-center gap-2 text-sm">
-            <span class="inline-block w-2 h-2 rounded-full shrink-0" [class.bg-success]="dc.ok" [class.bg-error]="!dc.ok"></span>
-            <span class="truncate">{{ dc.name }}</span>
-          </div>
-        }
+        <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'system.health_plugins' | translate }}</p>
+        <p class="text-lg font-semibold">{{ h.activePlugins | number }}</p>
+        <p class="text-sm text-base-content/50">{{ 'system.health_plugins_hint' | translate }}</p>
       </div>
     </div>
   </div>

@@ -3,6 +3,7 @@ import { EventsService } from './events.service';
 import { SseAudienceService } from './sse-audience.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
+import { DownloadProgressState } from '../../common/constants/download-progress-state';
 
 export type AcquisitionEvent =
   | {
@@ -27,7 +28,7 @@ export type AcquisitionEvent =
       progress: number;
       dlspeed: number;
       eta: number;
-      state: string;
+      state: DownloadProgressState;
     }
   | {
       type: 'acquisition.stalled.removed';

@@ -1,6 +1,5 @@
 import { CountsService } from './counts.service';
 import type { User } from '../users/entities/user.entity';
-import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
 import { Media } from '../media/entities/media.entity';
 import { Action } from '../auth/casl/actions.enum';
@@ -17,7 +16,8 @@ describe('CountsService.getCounts', () => {
     const requestRepo = { count: jest.fn().mockResolvedValue(5) };
     const ability = {
       can: jest.fn((action: Action, subject: unknown) => {
-        if (subject === DownloadClient) return opts.canReadDownloadClient;
+        if (subject === Media && action === Action.Track)
+          return opts.canReadDownloadClient;
         if (subject === FliksRequest) return opts.canManageRequests;
         if (subject === Media) return opts.canReadMedia ?? true;
         return false;

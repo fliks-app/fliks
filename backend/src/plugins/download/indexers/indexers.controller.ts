@@ -19,7 +19,6 @@ import { JwtOrApiKeyGuard } from '../../../modules/auth/guards/jwt-or-api-key.gu
 import { PoliciesGuard } from '../../../modules/auth/casl/policies.guard';
 import { CheckPolicies } from '../../../modules/auth/casl/check-policies.decorator';
 import { Action } from '../../../modules/auth/casl/actions.enum';
-import { Indexer } from './entities/indexer.entity';
 import { IndexerStat } from './entities/indexer-stat.entity';
 
 @Controller('indexers')
@@ -32,56 +31,56 @@ export class IndexersController {
   ) {}
 
   @Post('test-connection')
-  @CheckPolicies((ability) => ability.can(Action.Read, Indexer))
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   testConnection(@Body() dto: TestIndexerConnectionDto) {
     return this.indexersService.testConnection(dto);
   }
 
   @Post()
-  @CheckPolicies((ability) => ability.can(Action.Create, Indexer))
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   create(@Body() dto: CreateIndexerDto) {
     return this.indexersService.create(dto);
   }
 
   @Get()
-  @CheckPolicies((ability) => ability.can(Action.Read, Indexer))
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   findAll() {
     return this.indexersService.findAll();
   }
 
   /** Declared before `:id` routes — `cooldowns` would otherwise hit ParseIntPipe. */
   @Delete('cooldowns')
-  @CheckPolicies((ability) => ability.can(Action.Update, Indexer))
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   clearAllCooldowns() {
     return this.indexersService.clearAllCooldowns();
   }
 
   @Delete(':id/cooldown')
-  @CheckPolicies((ability) => ability.can(Action.Update, Indexer))
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   clearCooldown(@Param('id', ParseIntPipe) id: number) {
     return this.indexersService.clearCooldown(id);
   }
 
   @Get(':id')
-  @CheckPolicies((ability) => ability.can(Action.Read, Indexer))
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   async findOne(@Param('id', ParseIntPipe) id: number) {
     return this.indexersService.redact(await this.indexersService.findOne(id));
   }
 
   @Put(':id')
-  @CheckPolicies((ability) => ability.can(Action.Update, Indexer))
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateIndexerDto) {
     return this.indexersService.update(id, dto);
   }
 
   @Delete(':id')
-  @CheckPolicies((ability) => ability.can(Action.Delete, Indexer))
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.indexersService.remove(id);
   }
 
   @Get(':id/stats')
-  @CheckPolicies((ability) => ability.can(Action.Read, Indexer))
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   async getStats(@Param('id', ParseIntPipe) id: number) {
     const since = new Date();
     since.setDate(since.getDate() - 30);

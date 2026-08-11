@@ -246,7 +246,7 @@ export class RequestLifecycleService
           progress: 0,
           dlspeed: 0,
           eta: 0,
-          state: 'downloading',
+          state: 'active',
         });
       }
     }

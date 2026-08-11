@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { DownloadHistory } from '../../plugins/download/entities/download-history.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
-import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
 import { Media } from '../media/entities/media.entity';
 import { User } from '../users/entities/user.entity';
 import { RequestStatus } from '../../common/enums';
@@ -65,7 +64,11 @@ export class CountsService {
    *   (added outside the app) are not counted at all.
    */
   private async countActiveQueue(ability: AppAbility): Promise<number> {
-    if (!ability.can(Action.Read, DownloadClient)) return 0;
+    if (
+      !ability.can(Action.Manage, 'Settings') &&
+      !ability.can(Action.Track, Media)
+    )
+      return 0;
     return this.historyRepo.count({
       where: { status: In(['grabbed', 'importing']) },
     });

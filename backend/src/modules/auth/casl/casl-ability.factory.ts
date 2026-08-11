@@ -8,8 +8,6 @@ import { Injectable } from '@nestjs/common';
 import { User } from '../../users/entities/user.entity';
 import { Media } from '../../media/entities/media.entity';
 import { FliksRequest } from '../../requests/entities/request.entity';
-import { Indexer } from '../../../plugins/download/indexers/entities/indexer.entity';
-import { DownloadClient } from '../../../plugins/download/download-clients/entities/download-client.entity';
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
 import { SubtitleProvider } from '../../subtitles/entities/subtitle-provider.entity';
@@ -25,8 +23,6 @@ type Subjects =
       | typeof User
       | typeof Media
       | typeof FliksRequest
-      | typeof Indexer
-      | typeof DownloadClient
       | typeof QualityProfile
       | typeof LanguageProfile
       | typeof SubtitleProvider
@@ -87,9 +83,9 @@ export class CaslAbilityFactory {
     if (perms.has('media.delete')) can(Action.Delete, Media);
     if (perms.has('media.grab')) can(Action.Grab, Media);
 
-    // --- read-only queue access for users who can add/request media ---
+    // --- read-only acquisition-progress access for users who can add/request media ---
     if (perms.has('media.create') || perms.has('requests.create')) {
-      can(Action.Read, DownloadClient);
+      can(Action.Track, Media);
     }
 
     // --- requests ---
@@ -120,8 +116,6 @@ export class CaslAbilityFactory {
     if (perms.has('settings.access')) {
       can(Action.Read, 'Settings');
       can(Action.Manage, 'Settings');
-      can(Action.Manage, Indexer);
-      can(Action.Manage, DownloadClient);
       can(Action.Manage, QualityProfile);
       can(Action.Manage, LanguageProfile);
       can(Action.Manage, SubtitleProvider);

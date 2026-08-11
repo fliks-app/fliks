@@ -3,8 +3,6 @@ import type { AppAbility } from '../../auth/casl/casl-ability.factory';
 import { User } from '../../users/entities/user.entity';
 import { Media } from '../../media/entities/media.entity';
 import { FliksRequest } from '../../requests/entities/request.entity';
-import { Indexer } from '../../../plugins/download/indexers/entities/indexer.entity';
-import { DownloadClient } from '../../../plugins/download/download-clients/entities/download-client.entity';
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../../profiles/entities/language-profile.entity';
 import { SubtitleProvider } from '../../subtitles/entities/subtitle-provider.entity';
@@ -23,8 +21,6 @@ const DECLARED_POLICY_SUBJECTS = new Map<string, PolicySubject>([
   ['User', User],
   ['Media', Media],
   ['FliksRequest', FliksRequest],
-  ['Indexer', Indexer],
-  ['DownloadClient', DownloadClient],
   ['QualityProfile', QualityProfile],
   ['LanguageProfile', LanguageProfile],
   ['SubtitleProvider', SubtitleProvider],

@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import FormData from 'form-data';
 import { DownloadClient } from './entities/download-client.entity';
 import { decodeHtmlEntities } from '../../../common/utils/decode-html-entities';
+import { DownloadProgressState } from '../../../common/constants/download-progress-state';
 
 /**
  * Pull the BitTorrent info-hash out of a magnet URI. Magnets carry the
@@ -55,6 +56,43 @@ export interface QbittorrentTorrent {
   completion_on: number;
   save_path: string;
   content_path: string;
+}
+
+/**
+ * Vendor state → core's closed `DownloadProgressState`. The only place this
+ * client's raw torrent state may be interpreted outside itself; `error` and
+ * `missingFiles` land on `stalled` (no progress, needs attention) rather
+ * than getting a dedicated state the closed vocabulary doesn't have. Seeding
+ * / upload-side states never reach here — callers only pass torrents still
+ * below 100% progress — so they fall through to the `active` default.
+ */
+export function qbittorrentStateToProgress(
+  state: string,
+): DownloadProgressState {
+  switch (state) {
+    case 'queuedDL':
+      return 'queued';
+    case 'stalledDL':
+    case 'error':
+    case 'missingFiles':
+      return 'stalled';
+    case 'pausedDL':
+    case 'pausedUP':
+    case 'stoppedDL':
+    case 'stoppedUP':
+      return 'paused';
+    case 'moving':
+      return 'importing';
+    case 'downloading':
+    case 'forcedDL':
+    case 'metaDL':
+    case 'forcedMetaDL':
+    case 'allocating':
+    case 'checkingDL':
+    case 'checkingResumeData':
+    default:
+      return 'active';
+  }
 }
 
 export interface QbittorrentTorrentFile {

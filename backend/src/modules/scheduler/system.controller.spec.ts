@@ -93,10 +93,8 @@ describe('SystemController.activeStreams recency filter', () => {
 
     const controller = new SystemController(
       {} as never, // dataSource
-      {} as never, // indexerRepo
-      {} as never, // clientRepo
       {} as never, // libraryRepo
-      {} as never, // qbittorrent
+      {} as never, // healthProbes
       {} as never, // backup
       {} as never, // logBuffer
       {} as never, // eventsService
@@ -192,8 +190,6 @@ describe('SystemController.sendPlayerCommand', () => {
       {} as never,
       {} as never,
       {} as never,
-      {} as never,
-      {} as never,
       eventsService as never,
       transcodingService as never,
       {} as never,
@@ -267,8 +263,6 @@ describe('SystemController.restart', () => {
 
   function makeController() {
     return new SystemController(
-      {} as never,
-      {} as never,
       {} as never,
       {} as never,
       {} as never,

@@ -4,13 +4,16 @@ import { Repository, Not } from 'typeorm';
 import { Library } from '../libraries/entities/library.entity';
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../profiles/entities/language-profile.entity';
-import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
-import { Indexer } from '../../plugins/download/indexers/entities/indexer.entity';
 import { SubtitleProvider } from '../subtitles/entities/subtitle-provider.entity';
 import { NotificationConnection } from '../notifications/entities/notification-connection.entity';
 import { User } from '../users/entities/user.entity';
 import { AutoApprovalRule } from '../requests/entities/auto-approval-rule.entity';
 import { SettingsService } from '../settings/settings.service';
+import {
+  ChecklistItemDef,
+  ChecklistItemRegistry,
+  ChecklistItemSeverity,
+} from './checklist-item-registry.service';
 
 /** Storage key in `app_settings` for the JSON array of dismissed
  *  checklist item keys. Global (not per-user) — Fliks installs
@@ -18,28 +21,11 @@ import { SettingsService } from '../settings/settings.service';
  *  and avoids a join table. */
 const DISMISSED_SETTING_KEY = 'setup_checklist_dismissed_keys';
 
-export type ChecklistItemSeverity = 'required' | 'recommended';
+/** Runtime-registered keys (from a bundle) join core's own, so this can't be
+ *  narrowed to a fixed union anymore. */
+export type ChecklistItemKey = string;
 
-export type ChecklistItemKey =
-  | 'library'
-  | 'quality-profile'
-  | 'language-profile'
-  | 'download-client'
-  | 'indexer'
-  | 'subtitle-provider'
-  | 'notification'
-  | 'non-admin-user'
-  | 'auto-approval-rule';
-
-interface ChecklistItemDef {
-  key: ChecklistItemKey;
-  severity: ChecklistItemSeverity;
-  /** Frontend route segments to navigate to when the user clicks
-   *  "Configurer". Kept on the backend so adding a new item only
-   *  touches one place. */
-  route: string[];
-  check: () => Promise<boolean>;
-}
+export type { ChecklistItemSeverity };
 
 export interface ChecklistItemStatus {
   key: ChecklistItemKey;
@@ -62,10 +48,6 @@ export class SetupChecklistService {
     private readonly qualityProfileRepo: Repository<QualityProfile>,
     @InjectRepository(LanguageProfile)
     private readonly languageProfileRepo: Repository<LanguageProfile>,
-    @InjectRepository(DownloadClient)
-    private readonly downloadClientRepo: Repository<DownloadClient>,
-    @InjectRepository(Indexer)
-    private readonly indexerRepo: Repository<Indexer>,
     @InjectRepository(SubtitleProvider)
     private readonly subtitleProviderRepo: Repository<SubtitleProvider>,
     @InjectRepository(NotificationConnection)
@@ -75,6 +57,7 @@ export class SetupChecklistService {
     @InjectRepository(AutoApprovalRule)
     private readonly autoApprovalRuleRepo: Repository<AutoApprovalRule>,
     private readonly settings: SettingsService,
+    private readonly registry: ChecklistItemRegistry,
   ) {}
 
   /** Single source of truth for checklist items. Adding a new item:
@@ -97,20 +80,6 @@ export class SetupChecklistService {
       severity: 'required',
       route: ['/admin', 'settings', 'language-profiles'],
       check: async () => (await this.languageProfileRepo.count()) > 0,
-    },
-    {
-      key: 'download-client',
-      severity: 'required',
-      route: ['/admin', 'settings', 'download-clients'],
-      check: async () =>
-        (await this.downloadClientRepo.count({ where: { enabled: true } })) > 0,
-    },
-    {
-      key: 'indexer',
-      severity: 'required',
-      route: ['/admin', 'settings', 'indexers'],
-      check: async () =>
-        (await this.indexerRepo.count({ where: { enabled: true } })) > 0,
     },
     {
       key: 'subtitle-provider',
@@ -141,12 +110,18 @@ export class SetupChecklistService {
     },
   ];
 
+  /** Core's own items, followed by whatever a bundle has registered. */
+  private allItems(): ChecklistItemDef[] {
+    return [...this.items, ...this.registry.list()];
+  }
+
   async getStatus(): Promise<ChecklistItemStatus[]> {
+    const items = this.allItems();
     const dismissed = await this.getDismissedKeys();
     // Run every check in parallel — each one is a single `count()` so
-    // hitting them sequentially would needlessly add 9× the round-trip.
+    // hitting them sequentially would needlessly add N× the round-trip.
     const dones = await Promise.all(
-      this.items.map(async (item) => {
+      items.map(async (item) => {
         try {
           return await item.check();
         } catch (err) {
@@ -159,7 +134,7 @@ export class SetupChecklistService {
         }
       }),
     );
-    return this.items.map((item, i) => ({
+    return items.map((item, i) => ({
       key: item.key,
       severity: item.severity,
       done: dones[i],
@@ -189,8 +164,9 @@ export class SetupChecklistService {
       const parsed = JSON.parse(raw) as unknown;
       if (!Array.isArray(parsed)) return new Set();
       return new Set(
-        parsed.filter((k): k is ChecklistItemKey =>
-          this.isKnownKey(k as string),
+        parsed.filter(
+          (k): k is ChecklistItemKey =>
+            typeof k === 'string' && this.isKnownKey(k),
         ),
       );
     } catch {
@@ -204,7 +180,7 @@ export class SetupChecklistService {
     await this.settings.set(DISMISSED_SETTING_KEY, JSON.stringify([...dismissed]));
   }
 
-  private isKnownKey(key: string): key is ChecklistItemKey {
-    return this.items.some((i) => i.key === key);
+  isKnownKey(key: string): boolean {
+    return this.allItems().some((i) => i.key === key);
   }
 }

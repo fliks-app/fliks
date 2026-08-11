@@ -6,8 +6,6 @@ import { FliksRequest } from '../requests/entities/request.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
-import { Indexer } from '../../plugins/download/indexers/entities/indexer.entity';
-import { DownloadClient } from '../../plugins/download/download-clients/entities/download-client.entity';
 import { SchedulerService } from './scheduler.service';
 import { NamingService } from './naming.service';
 import { BackupService } from './backup.service';
@@ -16,8 +14,6 @@ import { UpdateCheckService } from './update-check.service';
 import { CommandsController } from './commands.controller';
 import { SystemController } from './system.controller';
 import { LivenessController } from './liveness.controller';
-import { IndexersModule } from '../../plugins/download/indexers/indexers.module';
-import { DownloadClientsModule } from '../../plugins/download/download-clients/download-clients.module';
 import { MetadataProvidersModule } from '../metadata-providers/metadata-providers.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MediaModule } from '../media/media.module';
@@ -42,15 +38,9 @@ import { ScheduledJobRegistryModule } from './scheduled-job-registry.module';
       Media,
       MediaFile,
       Episode,
-      Indexer,
-      DownloadClient,
       SubtitleFile,
       Library,
     ]),
-    IndexersModule,
-    // forwardRef: SystemController's client health-check needs DownloadClientsModule,
-    // which imports BlocklistModule — unrelated to the acquisition bundle.
-    forwardRef(() => DownloadClientsModule),
     MetadataProvidersModule,
     NotificationsModule,
     forwardRef(() => MediaModule),
@@ -61,9 +51,8 @@ import { ScheduledJobRegistryModule } from './scheduled-job-registry.module';
     StreamingModule,
     MarkersModule,
     LogBufferModule,
-    // Already reachable transitively via IndexersModule -> PluginsModule (see
-    // LogBufferModule's own doc comment); imported directly here so SchedulerService can
-    // inject PluginJobsService for the merged job listing.
+    // Imported directly so SchedulerService can inject PluginJobsService for
+    // the merged job listing.
     PluginsModule,
     ScheduledJobRegistryModule,
   ],
