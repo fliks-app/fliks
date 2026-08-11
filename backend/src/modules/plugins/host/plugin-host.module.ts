@@ -14,14 +14,17 @@ import { MediaServersModule } from '../../media-servers/media-servers.module';
 import { SettingsModule } from '../../settings/settings.module';
 import { FliksHostImpl } from './fliks-host.service';
 import { InProcessPluginHostClient } from './in-process-plugin-host-client';
+import { PluginHostBindingService } from './plugin-host-binding.service';
 import { PluginCountsCacheModule } from './plugin-counts-cache.module';
 import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
 
 /**
  * Wires `FliksHostImpl` — core's implementation of the 15 plugin-facing host
- * methods — and the in-process client that stands in for the RPC transport
- * until Phase 10.4. `EventsService`/`SseAudienceService` come for free from
- * the `@Global()` `EventsModule`, so they aren't imported here.
+ * methods — the in-process client that stands in for the RPC transport until
+ * Phase 10.4, and `PluginHostBindingService`, which a real connection's
+ * dispatcher will use to get a `PluginHostApi` scoped to its own registration.
+ * `EventsService`/`SseAudienceService` come for free from the `@Global()`
+ * `EventsModule`, so they aren't imported here.
  */
 @Module({
   imports: [
@@ -45,7 +48,13 @@ import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
     { provide: PLUGIN_HOST_PLUGIN_ID, useValue: null },
     FliksHostImpl,
     InProcessPluginHostClient,
+    PluginHostBindingService,
   ],
-  exports: [FliksHostImpl, InProcessPluginHostClient, PluginCountsCacheModule],
+  exports: [
+    FliksHostImpl,
+    InProcessPluginHostClient,
+    PluginHostBindingService,
+    PluginCountsCacheModule,
+  ],
 })
 export class PluginHostModule {}

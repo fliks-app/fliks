@@ -50,6 +50,7 @@ import {
 import { parseSeasonEpisode } from '../../../common/release-parsing';
 import { PluginCountsCacheService } from './plugin-counts-cache.service';
 import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
+import { PluginHostContext } from './plugin-host-context';
 import { DownloadProgressState } from '../../../common/constants/download-progress-state';
 
 /** `media.resolve`'s own bound — restated because `plugins/download/` (where the
@@ -110,6 +111,12 @@ export class FliksHostImpl implements PluginHostApi {
     private readonly sseAudience: SseAudienceService,
     private readonly countsCache: PluginCountsCacheService,
   ) {}
+
+  /** `PluginHostContext` (set only by `PluginHostBindingService`, never by a plugin's
+   *  payload) wins when bound; the constructor value is the in-process default. */
+  private currentPluginId(): string | null {
+    return PluginHostContext.current() ?? this.pluginId;
+  }
 
   // ---------------------------------------------------------------------------
   // Group A — read
@@ -661,15 +668,16 @@ export class FliksHostImpl implements PluginHostApi {
   private async resolveAgainstGrantedRoots(
     paths: string[],
   ): Promise<{ path: string }[]> {
-    const registration = this.pluginId
+    const pluginId = this.currentPluginId();
+    const registration = pluginId
       ? await this.pluginRegistrationRepo.findOne({
-          where: { pluginId: this.pluginId },
+          where: { pluginId },
         })
       : null;
     const roots = registration?.ingestRoots ?? [];
     if (!roots.length) {
       throw new Error(
-        `library.ingest: no ingestRoots configured for plugin "${this.pluginId}"`,
+        `library.ingest: no ingestRoots configured for plugin "${pluginId}"`,
       );
     }
     return paths.map((raw) => ({
@@ -810,7 +818,7 @@ export class FliksHostImpl implements PluginHostApi {
     payload: unknown;
     audience: 'all' | { mediaId: number };
   }): Promise<void> {
-    const type = `plugin.${this.pluginId}.${p.type}`;
+    const type = `plugin.${this.currentPluginId()}.${p.type}`;
     if (p.audience === 'all') {
       this.events.emitRaw(type, p.payload, null);
       return;
@@ -874,7 +882,7 @@ export class FliksHostImpl implements PluginHostApi {
   private async configGet(p: {
     keys?: string[];
   }): Promise<Record<string, string>> {
-    const prefix = `plugin.${this.pluginId}.`;
+    const prefix = `plugin.${this.currentPluginId()}.`;
     const out: Record<string, string> = {};
     if (p.keys?.length) {
       for (const key of p.keys) {
@@ -899,7 +907,10 @@ export class FliksHostImpl implements PluginHostApi {
     key: string;
     value: string | null;
   }): Promise<void> {
-    await this.settings.set(`plugin.${this.pluginId}.${p.key}`, p.value);
+    await this.settings.set(
+      `plugin.${this.currentPluginId()}.${p.key}`,
+      p.value,
+    );
   }
 
   // ===========================================================================
