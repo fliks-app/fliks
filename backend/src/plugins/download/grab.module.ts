@@ -9,9 +9,9 @@ import { DownloadClientsModule } from './download-clients/download-clients.modul
 import { AuthModule } from '../../modules/auth/auth.module';
 import { ProfilesModule } from '../../modules/profiles/profiles.module';
 import { BlocklistModule } from '../../modules/blocklist/blocklist.module';
-import { NotificationsModule } from '../../modules/notifications/notifications.module';
 import { LibrariesModule } from '../../modules/libraries/libraries.module';
 import { MediaModule } from '../../modules/media/media.module';
+import { PluginHostModule } from '../../modules/plugins/host/plugin-host.module';
 import { GrabController } from './grab.controller';
 import { MovieDownloadService } from './movie-download.service';
 import { EpisodeDownloadService } from './episode-download.service';
@@ -24,9 +24,9 @@ import { EpisodeDownloadService } from './episode-download.service';
     AuthModule,
     ProfilesModule,
     BlocklistModule,
-    NotificationsModule,
     LibrariesModule,
     MediaModule,
+    PluginHostModule,
   ],
   controllers: [GrabController],
   providers: [MovieDownloadService, EpisodeDownloadService],
