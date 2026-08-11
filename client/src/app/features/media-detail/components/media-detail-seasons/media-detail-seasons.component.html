@@ -115,36 +115,6 @@
               <span class="flex-1">{{ 'media_detail.request_season' | translate }}</span>
             </button>
           }
-          @if (canGrab() && m.qualityProfile) {
-            <button
-              type="button"
-              class="dropdown-item text-white"
-              [disabled]="seasonReleasesLoading() && seasonReleasesOpenId() === selSeason.id"
-              (click)="loadSeasonReleases.emit(selSeason)"
-            >
-              @if (seasonReleasesLoading() && seasonReleasesOpenId() === selSeason.id) {
-                <span class="loading loading-spinner loading-sm"></span>
-                <span class="flex-1"></span>
-              } @else {
-                <svg lucidePackage class="h-5 w-5 shrink-0 opacity-80"></svg>
-                <span class="flex-1">{{ 'media_detail.season_releases' | translate }}</span>
-              }
-            </button>
-            <button
-              type="button"
-              class="dropdown-item text-white"
-              [disabled]="seasonGrabBusy() !== null"
-              (click)="grabSeason.emit(selSeason)"
-            >
-              @if (seasonGrabBusy() !== null) {
-                <span class="loading loading-spinner loading-sm"></span>
-                <span class="flex-1"></span>
-              } @else {
-                <svg lucideDownload class="h-5 w-5 shrink-0 opacity-80"></svg>
-                <span class="flex-1">{{ 'media_detail.grab_season' | translate }}</span>
-              }
-            </button>
-          }
           @if (isAdmin()) {
             <button
               type="button"

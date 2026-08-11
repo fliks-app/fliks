@@ -33,22 +33,6 @@ const noPluginApiPaths = {
 export default [
   {
     files: ['src/**/*.ts'],
-    // Files that still legitimately hold these routes — the settings pages for
-    // indexers/download-clients/blocklist, their specs, the API services behind
-    // them, and the queue's torrent-link call (media.service.ts). All leave with
-    // the plugin later.
-    ignores: [
-      'src/app/features/settings/indexers/indexers.ts',
-      'src/app/features/settings/indexers/indexers.spec.ts',
-      'src/app/features/settings/download-clients/download-clients.ts',
-      'src/app/features/settings/download-clients/download-clients.spec.ts',
-      'src/app/core/services/api/download-clients-api.service.ts',
-      'src/app/core/services/api/media.service.ts',
-      'src/app/core/services/api/blocklist-api.service.ts',
-      // Spec for the untouched error interceptor — its fixtures assert a raw
-      // download-clients path never leaks into a toast message.
-      'src/app/core/interceptors/error.interceptor.spec.ts',
-    ],
     languageOptions: {
       parser: tsParser,
       sourceType: 'module',

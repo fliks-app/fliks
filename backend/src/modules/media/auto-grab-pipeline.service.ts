@@ -4,7 +4,7 @@ import { QualityDefinitionsService } from '../profiles/quality-definitions.servi
 import { getAppQualityById } from '../../common/constants/app-qualities';
 import {
   SizeLimits,
-  buildIndexerMinSeeders,
+  buildSourceMinSeeders,
   rankFromQualityString,
 } from '../../common/release-scoring';
 
@@ -15,8 +15,8 @@ import {
  */
 export interface AutoGrabScoringContext {
   sizeByQuality: Map<number, SizeLimits>;
-  indexerMinSeeders: Map<number, number>;
-  indexerUnknownLang: Map<number, string | undefined>;
+  sourceMinSeeders: Map<number, number>;
+  sourceUnknownLang: Map<number, string | undefined>;
 }
 
 /** Outcome of {@link AutoGrabPipelineService.classifyForSearch}. */
@@ -33,7 +33,7 @@ export type SearchDecision =
 /**
  * Classification for the auto-grab pipeline: whether a media needs a search
  * (missing / upgrade / skip / unprofiled) and the per-run scoring context
- * indexers contribute (size limits, min seeders, unknown-language
+ * a release source contributes (size limits, min seeders, unknown-language
  * fallback). Grab execution — scoring releases, picking one, recording
  * DownloadHistory — is a separate concern.
  */
@@ -41,16 +41,16 @@ export type SearchDecision =
 export class AutoGrabPipelineService {
   constructor(private readonly qualityDefs: QualityDefinitionsService) {}
 
-  /** Takes the structural shape `buildIndexerMinSeeders` declares, so core needs
-   *  no entity class from whoever owns the indexers. */
+  /** Takes the structural shape `buildSourceMinSeeders` declares, so core needs
+   *  no entity class from whoever owns the release sources. */
   async buildScoringContext(
-    indexers: { id: number; settings?: Record<string, unknown> | null }[],
+    sources: { id: number; settings?: Record<string, unknown> | null }[],
   ): Promise<AutoGrabScoringContext> {
     return {
       sizeByQuality: await this.qualityDefs.getSizeLimitsMap(),
-      indexerMinSeeders: buildIndexerMinSeeders(indexers),
-      indexerUnknownLang: new Map(
-        indexers.map((ix) => [
+      sourceMinSeeders: buildSourceMinSeeders(sources),
+      sourceUnknownLang: new Map(
+        sources.map((ix) => [
           ix.id,
           ix.settings?.['unknownLanguageIsoCode'] as string | undefined,
         ]),
@@ -102,7 +102,7 @@ export class AutoGrabPipelineService {
     };
   }
 
-  /** Whether SearchMissing should query indexers for this media/files pair.
+  /** Whether a search should be run for this media/files pair.
    *  False when already at cutoff, upgrades disabled, or unprofiled. */
   shouldSearchMissing(
     media: Media,

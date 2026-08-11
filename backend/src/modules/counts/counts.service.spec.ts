@@ -4,7 +4,6 @@ import { FliksRequest } from '../requests/entities/request.entity';
 import { Media } from '../media/entities/media.entity';
 import { Action } from '../auth/casl/actions.enum';
 import { PluginCountsCacheService } from '../plugins/host/plugin-counts-cache.service';
-import { AcquisitionEventsService } from '../../plugins/download/acquisition-events.service';
 
 describe('CountsService.getCounts', () => {
   const user = { id: 7 } as User;
@@ -60,28 +59,6 @@ describe('CountsService.getCounts', () => {
     pluginCounts.set('queueActive', 4);
     const counts = await service.getCounts(user);
     expect(counts.badgeCounts).not.toHaveProperty('queueActive');
-  });
-
-  it('round-trips through the real publisher: an acquisition event lands in the same cache CountsService reads', async () => {
-    const { service, pluginCounts } = make({ canManageRequests: false });
-    const historyRepo = { count: jest.fn().mockResolvedValue(6) };
-    const acquisitionEvents = new AcquisitionEventsService(
-      { emit: jest.fn() } as never,
-      { recipientsForMedia: jest.fn() } as never,
-      { dispatch: jest.fn() } as never,
-      { dispatch: jest.fn() } as never,
-      historyRepo as never,
-      pluginCounts,
-    );
-
-    await acquisitionEvents.publish({ type: 'acquisition.queue.changed' });
-    const counts = await service.getCounts(user);
-
-    expect(counts.badgeCounts.queueActive).toBe(6);
-    const where = historyRepo.count.mock.calls[0][0].where as {
-      status: { value: string[] };
-    };
-    expect(where.status.value).toEqual(['grabbed', 'importing']);
   });
 
   it('scopes pending requests to the user when they cannot manage requests', async () => {

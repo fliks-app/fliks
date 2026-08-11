@@ -434,7 +434,7 @@ export class PluginRegistryService implements OnModuleInit {
    * `manifest.jobs` is untrusted JSON. Each violation class gets its own
    * reason. `CORE_JOB_NAME_SET` mirrors `SchedulerService.SCHEDULERS`'s names — a plugin job can
    * never shadow one, since the merged admin listing and manual trigger would become ambiguous.
-   * Same reasoning for a name a `ScheduledJobRegistry` publisher (the download bundle, in-process)
+   * Same reasoning for a name a `ScheduledJobRegistry` publisher (an installed plugin)
    * already holds — two publishers must never silently shadow one another either.
    */
   private validateJobs(

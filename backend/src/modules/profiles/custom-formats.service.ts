@@ -129,7 +129,7 @@ export class CustomFormatsService {
         return titleLower.includes(val);
       case 'language':
         return titleLower.includes(val);
-      case 'indexer_flag':
+      case 'release_flag':
         if (val === 'freeleech') return meta?.freeleech === true;
         if (val === 'halfleech') return meta?.downloadVolumeFactor === 0.5;
         return false;

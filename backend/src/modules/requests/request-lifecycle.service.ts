@@ -177,7 +177,7 @@ export class RequestLifecycleService
     // If the import actually satisfied at least one request, kick off
     // an immediate SearchMissing for that media so the user doesn't
     // wait up to 6 h for the next scheduled tick. Fire-and-forget;
-    // failures (missing indexer, etc.) are logged inside the scheduler.
+    // failures (no release source configured, etc.) are logged by whoever searches.
     if (touched.length && (await this.autoGrabOnApproval())) {
       this.events.emitDomain({
         type: 'media.acquisition.requested',

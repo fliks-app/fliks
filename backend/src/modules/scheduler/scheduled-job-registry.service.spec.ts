@@ -9,7 +9,7 @@ describe('ScheduledJobRegistry', () => {
     run: jest.fn().mockResolvedValue(undefined),
   });
 
-  it('lists nothing before anything registers — the download-bundle-off case', () => {
+  it('lists nothing before anything registers — the no-plugin-installed case', () => {
     const registry = new ScheduledJobRegistry();
     expect(registry.list()).toEqual([]);
     expect(registry.get('SearchMissing')).toBeUndefined();

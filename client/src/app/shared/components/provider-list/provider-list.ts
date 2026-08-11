@@ -63,7 +63,7 @@ export class ProviderListComponent implements OnInit {
   readonly testConnection = input<((draft: ProviderDraft) => Promise<ProviderTestResult>) | null>(null);
   /** Last chance to normalise the save body (e.g. trim a URL) without resurrecting a dropped secret. */
   readonly beforeSave = input<((body: Record<string, unknown>) => Record<string, unknown>) | null>(null);
-  /** Extra per-row column/actions the generic shape can't express (e.g. indexers' cooldown badge). */
+  /** Extra per-row column/actions the generic shape can't express (e.g. subtitle providers' rate-limit badge). */
   readonly rowExtraStatus = input<TemplateRef<{ $implicit: ProviderInstance }> | null>(null);
   readonly rowExtraActions = input<TemplateRef<{ $implicit: ProviderInstance }> | null>(null);
   /** Fires after every successful (re)load — the hook for a host's own data that tracks the row set (e.g. rate limits). */

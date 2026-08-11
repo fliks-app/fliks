@@ -53,7 +53,7 @@ describe('NavContributionsService', () => {
     const ids = svc.mainItems().map((i) => i.id);
     // Both plugin items tie core's "My profile" (weight 300) — id order wins,
     // and stays the same regardless of which plugin installed first.
-    expect(ids).toEqual(['core.home', 'core.search', 'a-plugin', 'core.my_profile', 'z-plugin', 'core.playlists', 'core.downloads', 'core.history']);
+    expect(ids).toEqual(['core.home', 'core.search', 'a-plugin', 'core.my_profile', 'z-plugin', 'core.playlists', 'core.downloads', 'core.history', 'core.subtitle_activity']);
   });
 
   it('drops a contribution with an unknown action.kind — fails closed, never a broken item', () => {
@@ -120,19 +120,19 @@ describe('NavContributionsService', () => {
   it('splits nav.main around the library block at weight 1000', () => {
     const svc = createService();
     expect(svc.mainItemsBeforeLibraries().map((i) => i.id)).toEqual(['core.home', 'core.search', 'core.my_profile']);
-    expect(svc.mainItemsAfterLibraries().map((i) => i.id)).toEqual(['core.playlists', 'core.downloads', 'core.history']);
+    expect(svc.mainItemsAfterLibraries().map((i) => i.id)).toEqual(['core.playlists', 'core.downloads', 'core.history', 'core.subtitle_activity']);
   });
 
   it('acquisition: core requests + calendar, weight 200 free for a plugin', () => {
     const svc = createService();
-    expect(svc.acquisitionItems().map((i) => i.id)).toEqual(['core.requests', 'core.activity', 'core.calendar']);
+    expect(svc.acquisitionItems().map((i) => i.id)).toEqual(['core.requests', 'core.calendar']);
   });
 
   it('maps tone to a badge class: danger -> warning, default -> primary', () => {
     const svc = createService();
     const requests = svc.acquisitionItems().find((i) => i.id === 'core.requests');
-    const activity = svc.acquisitionItems().find((i) => i.id === 'core.activity');
+    const calendar = svc.acquisitionItems().find((i) => i.id === 'core.calendar');
     expect(requests?.badgeClass).toBe('badge-warning');
-    expect(activity?.badgeClass).toBe('badge-primary');
+    expect(calendar?.badgeClass).toBe('badge-primary');
   });
 });

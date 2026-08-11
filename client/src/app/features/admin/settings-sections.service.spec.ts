@@ -42,11 +42,11 @@ function createService(opts: { isAdmin?: boolean; entries?: PluginUiEntry[] } = 
 }
 
 describe('SettingsSectionsService', () => {
-  it('resolves the 8 core sections with 25 items total, and nothing else, with an empty registry', () => {
+  it('resolves the 7 core sections with 22 items total, and nothing else, with an empty registry', () => {
     const svc = createService();
     const sections = svc.sections();
-    expect(sections).toHaveLength(8);
-    expect(sections.reduce((n, s) => n + s.items.length, 0)).toBe(25);
+    expect(sections).toHaveLength(7);
+    expect(sections.reduce((n, s) => n + s.items.length, 0)).toBe(22);
   });
 
   it('sorts a plugin section\'s own items by weight then id, independent of core', () => {
@@ -73,14 +73,14 @@ describe('SettingsSectionsService', () => {
     const svc = createService({
       entries: [entry('fliks.a', [contribution('nav', 100, { slot: 'nav.main' })], { name: 'A' })],
     });
-    expect(svc.sections()).toHaveLength(8);
+    expect(svc.sections()).toHaveLength(7);
   });
 
   it('drops a plugin settings.page contribution with an unrecognised action kind', () => {
     const svc = createService({
       entries: [entry('fliks.a', [contribution('broken', 100, { action: { kind: 'bogus' } as never })], { name: 'A' })],
     });
-    expect(svc.sections()).toHaveLength(8);
+    expect(svc.sections()).toHaveLength(7);
   });
 
   it('produces the identical section list for an admin and a non-admin context', () => {

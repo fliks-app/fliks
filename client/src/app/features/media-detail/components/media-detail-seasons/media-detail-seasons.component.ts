@@ -13,7 +13,6 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   LucideCheck,
   LucideClipboardList,
-  LucideDownload,
   LucideEllipsisVertical,
   LucideEye,
   LucideEyeOff,
@@ -22,7 +21,6 @@ import {
   LucideList,
   LucideListChecks,
   LucideListPlus,
-  LucidePackage,
   LucideUserPlus,
   LucideX,
 } from '@lucide/angular';
@@ -68,7 +66,7 @@ function readEpisodeViewFromStorage(): EpisodeView {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, UpperCasePipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, CollapsibleSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, ClampToggleDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
+  imports: [TranslateModule, UpperCasePipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, CollapsibleSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, ClampToggleDirective, LucideCheck, LucideClipboardList, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucideUserPlus, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
@@ -88,13 +86,9 @@ export class MediaDetailSeasonsComponent {
     seasonsVisibleWithDiskFilter(this.media(), this.episodesHasFileOnly()),
   );
   readonly filteredEpisodes = input.required<Episode[]>();
-  readonly seasonReleasesLoading = input(false);
-  readonly seasonReleasesOpenId = input<number | null>(null);
-  readonly seasonGrabBusy = input<string | null>(null);
   readonly seasonBusyId = input<number | null>(null);
   readonly watchedEpisodeIds = input<Set<number>>(new Set());
   readonly episodeProgress = input<Record<number, number>>({});
-  readonly canGrab = input(false);
   readonly isAdmin = input(false);
   /** Viewer can submit a request (regular requester). Surfaces the
    *  Demander entry for any season that still has missing episodes. */
@@ -113,8 +107,6 @@ export class MediaDetailSeasonsComponent {
 
   readonly selectSeason = output<number>();
   readonly episodesHasFileOnlyChange = output<boolean>();
-  readonly loadSeasonReleases = output<Season>();
-  readonly grabSeason = output<Season>();
   readonly toggleSeasonMonitored = output<Season>();
   readonly toggleSeasonWatched = output<{ season: Season; watched: boolean }>();
   readonly toggleEpisodeWatched = output<{ episode: Episode; watched: boolean }>();

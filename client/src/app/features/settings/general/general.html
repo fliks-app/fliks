@@ -113,32 +113,7 @@
       <div class="card-body gap-5">
         <h2 class="card-title text-base">{{ 'settings.general.section_automation' | translate }}</h2>
 
-        <label class="form-control w-full max-w-xs">
-          <div class="label">
-            <span class="label-text">{{ 'settings.general.rss_interval' | translate }}</span>
-          </div>
-          <input
-            type="number"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="rssSyncInterval()"
-            (ngModelChange)="rssSyncInterval.set($event)"
-            min="5"
-            max="120"
-          />
-          <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.general.rss_interval_hint' | translate }}</span>
-          </div>
-        </label>
 
-        <label class="label cursor-pointer justify-start gap-3 max-w-max">
-          <input
-            type="checkbox"
-            class="toggle toggle-sm"
-            [ngModel]="searchMissingAuto() === 'true'"
-            (ngModelChange)="searchMissingAuto.set($event ? 'true' : 'false')"
-          />
-          <span class="label-text">{{ 'settings.general.search_missing_auto' | translate }}</span>
-        </label>
 
         <label class="label cursor-pointer justify-start gap-3 max-w-max">
           <input

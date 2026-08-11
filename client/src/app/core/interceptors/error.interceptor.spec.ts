@@ -61,13 +61,13 @@ describe('errorInterceptor', () => {
 
   it('shows the translated generic message for a framework 404 (Cannot GET ...), never the raw URL', () => {
     fireAndFlush(
-      '/api/download-clients/queue',
-      { statusCode: 404, message: 'Cannot GET /api/download-clients/queue', error: 'Not Found' },
+      '/api/plugins/acme/queue',
+      { statusCode: 404, message: 'Cannot GET /api/plugins/acme/queue', error: 'Not Found' },
       { status: 404 },
     );
     const messages = toast.toasts().map((t) => t.message);
     expect(messages).toEqual(['Resource not found']);
-    expect(messages.join()).not.toContain('/api/download-clients');
+    expect(messages.join()).not.toContain('/api/plugins/acme');
   });
 
   it('still shows a real backend 404 message untouched', () => {
@@ -81,15 +81,15 @@ describe('errorInterceptor', () => {
 
   it('surfaces a 503 (an installed-but-unreachable plugin) instead of swallowing it', () => {
     fireAndFlush(
-      '/api/download-clients/test-connection',
-      { statusCode: 503, message: 'Download client unreachable', error: 'Service Unavailable' },
+      '/api/plugins/acme/test-connection',
+      { statusCode: 503, message: 'Plugin unreachable', error: 'Service Unavailable' },
       { status: 503 },
     );
-    expect(toast.toasts().map((t) => t.message)).toEqual(['Download client unreachable']);
+    expect(toast.toasts().map((t) => t.message)).toEqual(['Plugin unreachable']);
   });
 
   it('still shows a bare 503 with no body message via the generic translation', () => {
-    fireAndFlush('/api/download-clients/queue', null, { status: 503 });
+    fireAndFlush('/api/plugins/acme/queue', null, { status: 503 });
     expect(toast.toasts().map((t) => t.message)).toEqual(['Service temporarily unavailable']);
   });
 

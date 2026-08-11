@@ -218,7 +218,6 @@ export class MediaInfoHeaderComponent {
   readonly multipleFiles = computed(() => this.files().length > 1);
 
   // ── Inputs: permissions / loading ──
-  readonly canGrab = input(false);
   readonly canEditProfiles = input(false);
   readonly canDelete = input(false);
   readonly isAdmin = input(false);
@@ -234,8 +233,6 @@ export class MediaInfoHeaderComponent {
    *  deletion request already on the title). Surfaces the deletion entry in
    *  the More dropdown. */
   readonly canRequestDeletion = input(false);
-  readonly releasesLoading = input(false);
-  readonly grabBusy = input<string | null>(null);
   readonly monitoredLoading = input(false);
   readonly deleteLoading = input(false);
   /** Status badge rendered next to the kebab menu (download progress, or the
@@ -261,8 +258,6 @@ export class MediaInfoHeaderComponent {
   readonly refreshMetadata = output<void>();
   readonly toggleMonitored = output<void>();
   readonly deleteMedia = output<void>();
-  readonly loadReleases = output<void>();
-  readonly grabBest = output<void>();
   readonly openAnalyze = output<void>();
   readonly editSubtitles = output<void>();
   /** Open the tracking-status modal scoped to this header's context
@@ -601,8 +596,6 @@ export class MediaInfoHeaderComponent {
     'media.toggle-series-watched': () => this.onToggleWatched(),
     'media.open-tracking': () => this.openTracking.emit(),
     'media.request': () => this.requestMedia.emit(),
-    'media.grab-best': () => this.grabBest.emit(),
-    'media.search-releases': () => this.loadReleases.emit(),
     'media.edit-profiles': () => this.openProfiles.emit(),
     'media.edit-library': () => this.openLibrary.emit(),
     'media.edit-subtitles': () => this.editSubtitles.emit(),
@@ -678,18 +671,15 @@ export class MediaInfoHeaderComponent {
   }
 
   /** Mid-request spinner, per actionId — matches the pre-refactor markup 1:1
-   *  (search-releases and request-deletion never had one; grab-best did). */
+   *  (request-deletion never had one). */
   isItemBusy(item: ResolvedMediaAction): boolean {
-    if (item.actionId === 'media.grab-best') return this.grabBusy() === 'best';
-    if (item.actionId === 'media.search-releases') return this.releasesLoading();
     if (item.actionId === 'media.delete') return this.deleteLoading();
     return false;
   }
 
   /** Disabled state, per actionId — matches the pre-refactor markup 1:1
-   *  (search-releases and request-deletion were never disabled). */
+   *  (request-deletion was never disabled). */
   isItemDisabled(item: ResolvedMediaAction): boolean {
-    if (item.actionId === 'media.grab-best') return this.grabBusy() !== null;
     if (item.actionId === 'media.toggle-monitored') return this.monitoredLoading();
     if (item.actionId === 'media.delete') return this.deleteLoading();
     return false;

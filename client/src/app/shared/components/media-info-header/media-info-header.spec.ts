@@ -39,7 +39,6 @@ function hasPerm(role: Role, perm: string): boolean {
 const OWNER: Role = { isAdmin: true, permissions: [] };
 const READER: Role = { isAdmin: false, permissions: ['media.read'] };
 const REQUESTER: Role = { isAdmin: false, permissions: ['media.read', 'requests.create'] };
-const GRABBER: Role = { isAdmin: false, permissions: ['media.grab'] };
 const DELETER: Role = { isAdmin: false, permissions: ['media.delete'] };
 
 /** Reproduces media-detail.ts's own derivations (media-detail.ts:648-668) so the
@@ -47,7 +46,6 @@ const DELETER: Role = { isAdmin: false, permissions: ['media.delete'] };
 function deriveInputs(role: Role, opts: { deleteRequestPending?: boolean } = {}) {
   const pending = opts.deleteRequestPending ?? false;
   return {
-    canGrab: hasPerm(role, 'media.grab'),
     canEditProfiles: hasPerm(role, 'media.edit'),
     canDelete: hasPerm(role, 'media.delete'),
     isAdmin: hasPerm(role, 'settings.access'),
@@ -68,8 +66,6 @@ interface MediaFixture {
   sharingDisabled?: boolean;
   isTv?: boolean;
   watched?: boolean;
-  grabBusy?: string | null;
-  releasesLoading?: boolean;
   monitoredLoading?: boolean;
   deleteLoading?: boolean;
   registry?: Partial<Record<SlotId, UiContribution[]>>;
@@ -161,7 +157,6 @@ async function createFixture(
   // Series-root watched state comes from `seriesFullyWatched`, not the playback-state
   // fetch — the component reads it directly when there's no episode context.
   fixture.componentRef.setInput('seriesFullyWatched', watched);
-  fixture.componentRef.setInput('canGrab', derived.canGrab);
   fixture.componentRef.setInput('canDelete', derived.canDelete);
   fixture.componentRef.setInput('isAdmin', derived.isAdmin);
   fixture.componentRef.setInput('canRequest', derived.canRequest);
@@ -170,8 +165,6 @@ async function createFixture(
     fixture.componentRef.setInput('canRequestDeletion', derived.canRequestDeletion);
   }
   fixture.componentRef.setInput('userHasOpenWholeRequest', !!media.userHasOpenWholeRequest);
-  fixture.componentRef.setInput('grabBusy', media.grabBusy ?? null);
-  fixture.componentRef.setInput('releasesLoading', !!media.releasesLoading);
   fixture.componentRef.setInput('monitoredLoading', !!media.monitoredLoading);
   fixture.componentRef.setInput('deleteLoading', !!media.deleteLoading);
 
@@ -239,8 +232,6 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     expect(labels(fixture.nativeElement)).toEqual([
       'recommend.menu_item',
       'tracking.menu_item',
-      'media_detail.grab_best',
-      'media_detail.search_releases',
       'media_detail.edit_profiles',
       'media_detail.edit_library',
       'media_detail.edit_subtitles',
@@ -303,26 +294,6 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
       'tracking.menu_item',
       'media_detail.request_media',
       'media_detail.request_deletion',
-    ]);
-  });
-
-  it('media.grab: movie root', async () => {
-    const fixture = await createFixture(GRABBER, { mediaType: 'movie', ...MOVIE });
-    expect(labels(fixture.nativeElement)).toEqual([
-      'recommend.menu_item',
-      'tracking.menu_item',
-      'media_detail.grab_best',
-      'media_detail.search_releases',
-      'media_detail.edit_subtitles',
-    ]);
-  });
-
-  it('media.grab: series root — grab/search are per-unit, hidden at series level despite the permission', async () => {
-    const fixture = await createFixture(GRABBER, { mediaType: 'series', ...SERIES });
-    expect(labels(fixture.nativeElement)).toEqual([
-      'recommend.menu_item',
-      'media_detail.mark_series_watched',
-      'tracking.menu_item',
     ]);
   });
 

@@ -235,25 +235,10 @@ export const routes: Routes = [
       {
         path: 'activity',
         loadComponent: () =>
-          import('./features/activity/activity').then((m) => m.ActivityComponent),
-        children: [
-          {
-            path: '',
-            loadComponent: () =>
-              import('./features/activity/queue/queue').then(
-                (m) => m.ActivityQueueComponent,
-              ),
-            data: { titleKey: 'activity.title' },
-          },
-          {
-            path: 'subtitles',
-            loadComponent: () =>
-              import('./features/activity/subtitles/subtitles').then(
-                (m) => m.ActivitySubtitlesComponent,
-              ),
-            data: { titleKey: 'activity.tab_subtitles' },
-          },
-        ],
+          import('./features/activity/subtitles/subtitles').then(
+            (m) => m.ActivitySubtitlesComponent,
+          ),
+        data: { titleKey: 'activity.tab_subtitles' },
       },
       {
         path: 'calendar',
@@ -413,10 +398,7 @@ export const routes: Routes = [
           { path: 'language-profiles', loadComponent: () => import('./features/settings/language-profiles/language-profiles').then((m) => m.LanguageProfilesComponent) },
           { path: 'quality-definitions', loadComponent: () => import('./features/settings/quality-definitions/quality-definitions').then((m) => m.QualityDefinitionsComponent) },
           { path: 'custom-formats', loadComponent: () => import('./features/settings/custom-formats/custom-formats').then((m) => m.CustomFormatsSettingsComponent) },
-          { path: 'indexers', loadComponent: () => import('./features/settings/indexers/indexers').then((m) => m.IndexersSettingsComponent) },
-          { path: 'download-clients', loadComponent: () => import('./features/settings/download-clients/download-clients').then((m) => m.DownloadClientsSettingsComponent) },
           { path: 'naming', loadComponent: () => import('./features/settings/naming/naming').then((m) => m.NamingSettingsComponent) },
-          { path: 'blocklist', loadComponent: () => import('./features/settings/blocklist/blocklist').then((m) => m.BlocklistSettingsComponent) },
           { path: 'notifications', loadComponent: () => import('./features/settings/notifications/notifications').then((m) => m.NotificationsSettingsComponent) },
           { path: 'media-servers', loadComponent: () => import('./features/settings/media-servers/media-servers').then((m) => m.MediaServersSettingsComponent) },
           { path: 'plugins', loadComponent: () => import('./features/settings/plugins/plugins').then((m) => m.PluginsSettingsComponent) },
