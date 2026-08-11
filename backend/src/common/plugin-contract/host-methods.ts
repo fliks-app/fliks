@@ -185,12 +185,6 @@ export interface PluginHostApi {
         seasonNumber?: number;
         episodeNumber?: number;
         episodeTitle?: string;
-        stalledCleanupProfile: {
-          key: string;
-          samples: number;
-          intervalMinutes: number;
-          autoRestart: boolean;
-        } | null;
       }
     >
   >;

@@ -42,11 +42,11 @@ function createService(opts: { isAdmin?: boolean; entries?: PluginUiEntry[] } = 
 }
 
 describe('SettingsSectionsService', () => {
-  it('resolves the 8 core sections with 26 items total, and nothing else, with an empty registry', () => {
+  it('resolves the 8 core sections with 25 items total, and nothing else, with an empty registry', () => {
     const svc = createService();
     const sections = svc.sections();
     expect(sections).toHaveLength(8);
-    expect(sections.reduce((n, s) => n + s.items.length, 0)).toBe(26);
+    expect(sections.reduce((n, s) => n + s.items.length, 0)).toBe(25);
   });
 
   it('sorts a plugin section\'s own items by weight then id, independent of core', () => {

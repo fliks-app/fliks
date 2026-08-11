@@ -97,18 +97,6 @@
 
       <label class="form-control w-full max-w-md">
         <div class="label">
-          <span class="label-text text-base">{{ 'settings.libraries.stalled_cleanup' | translate }}</span>
-        </div>
-        <select class="select select-bordered w-full"
-          [ngModel]="state.formCleanup()" (ngModelChange)="state.formCleanup.set($event)">
-          @for (opt of cleanupOptions; track opt.value) {
-            <option [ngValue]="opt.value">{{ opt.labelKey | translate }}</option>
-          }
-        </select>
-      </label>
-
-      <label class="form-control w-full max-w-md">
-        <div class="label">
           <span class="label-text text-base">{{ 'settings.libraries.default_quality_profile' | translate }}</span>
         </div>
         <select class="select select-bordered w-full"

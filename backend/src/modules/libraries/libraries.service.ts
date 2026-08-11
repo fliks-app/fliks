@@ -143,7 +143,6 @@ export class LibrariesService {
           color: dto.color ?? null,
           mediaTypes: dto.mediaTypes ?? [MediaType.MOVIE, MediaType.SERIES],
           preferredProvider: dto.preferredProvider ?? null,
-          stalledCleanupProfile: dto.stalledCleanupProfile ?? null,
           defaultQualityProfile: dto.defaultQualityProfileId
             ? ({ id: dto.defaultQualityProfileId } as QualityProfile)
             : null,
@@ -195,8 +194,6 @@ export class LibrariesService {
         patch.metadataLanguage = dto.metadataLanguage || null;
       if (dto.metadataRegion !== undefined)
         patch.metadataRegion = dto.metadataRegion || null;
-      if (dto.stalledCleanupProfile !== undefined)
-        patch.stalledCleanupProfile = dto.stalledCleanupProfile;
       if (dto.defaultQualityProfileId !== undefined) {
         patch.defaultQualityProfile = dto.defaultQualityProfileId
           ? ({ id: dto.defaultQualityProfileId } as QualityProfile)

@@ -6,7 +6,6 @@ import { Episode } from '../../media/entities/episode.entity';
 import { MediaFile } from '../../media/entities/media-file.entity';
 import { BlocklistEntry } from '../../blocklist/entities/blocklist-entry.entity';
 import { PluginRegistration } from '../entities/plugin-registration.entity';
-import { CleanupProfile } from '../../cleanup-profiles/entities/cleanup-profile.entity';
 import { MediaModule } from '../../media/media.module';
 import { ProfilesModule } from '../../profiles/profiles.module';
 import { BlocklistModule } from '../../blocklist/blocklist.module';
@@ -35,7 +34,6 @@ import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
       MediaFile,
       BlocklistEntry,
       PluginRegistration,
-      CleanupProfile,
     ]),
     MediaModule,
     ProfilesModule,

@@ -2,16 +2,11 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
-  IsIn,
   IsInt,
   IsOptional,
   IsString,
 } from 'class-validator';
 import { MediaType } from '../../../common/enums/media-type.enum';
-import {
-  STALLED_CLEANUP_PROFILE_KEYS,
-  StalledCleanupProfileKey,
-} from '../../../common/constants/stalled-cleanup-profiles';
 
 export class CreateLibraryDto {
   @IsString()
@@ -35,10 +30,6 @@ export class CreateLibraryDto {
   @IsOptional()
   @IsString()
   preferredProvider?: string | null;
-
-  @IsOptional()
-  @IsIn([...STALLED_CLEANUP_PROFILE_KEYS, null])
-  stalledCleanupProfile?: StalledCleanupProfileKey | null;
 
   @IsOptional()
   @IsInt()

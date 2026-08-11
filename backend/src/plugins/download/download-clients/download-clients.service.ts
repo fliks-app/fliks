@@ -5,12 +5,11 @@ import { DownloadClient } from './entities/download-client.entity';
 import { DownloadHistory } from '../entities/download-history.entity';
 import { Media } from '../../../modules/media/entities/media.entity';
 import { StalledCheck } from '../entities/stalled-check.entity';
-import { CleanupProfile } from '../../../modules/cleanup-profiles/entities/cleanup-profile.entity';
-import { StalledCleanupProfileKey } from '../../../common/constants/stalled-cleanup-profiles';
 import {
   countStalledStrikes,
   STALL_ELIGIBLE_STATES,
 } from '../stalled-progress.util';
+import { getStallConfig } from '../stall-config.util';
 import { QbittorrentService, QbittorrentTorrent } from './qbittorrent.service';
 import { CreateDownloadClientDto } from './dto/create-download-client.dto';
 import { UpdateDownloadClientDto } from './dto/update-download-client.dto';
@@ -18,6 +17,7 @@ import { TestDownloadClientDto } from './dto/test-download-client.dto';
 import { TorrentHistoryMatcher } from '../torrent-history-matcher.service';
 import { BlocklistService } from '../../../modules/blocklist/blocklist.service';
 import { EventsService } from '../../../modules/scheduler/events.service';
+import { SettingsService } from '../../../modules/settings/settings.service';
 import { redactSecretFields, mergeSecretFields } from '../../../common/utils/secret-fields.util';
 import { FieldDef } from '../../../common/plugin-contract/ui-contribution';
 
@@ -48,10 +48,10 @@ export interface QueueEntry extends QbittorrentTorrent {
   /** Indexer the torrent was grabbed from (resolved through DownloadHistory). */
   indexerName?: string;
   /** Consecutive no-progress stall snapshots for this torrent, computed with
-   *  the same tolerance as the stalled cleanup. Present only when the item's
-   *  media→library carries a cleanup profile. */
+   *  the same tolerance as the stalled cleanup. Present only while the global
+   *  stall config is enabled (unset sample count means cleanup is off). */
   stalledStrikes?: number;
-  /** The profile's sample count — the cleanup removes the torrent when
+  /** The configured sample count — the cleanup removes the torrent when
    *  `stalledStrikes` reaches this. */
   stalledStrikesRequired?: number;
   /** Download client status (Downloading, Seeding, Paused, Stalled…) */
@@ -121,8 +121,7 @@ export class DownloadClientsService {
     private readonly historyRepo: Repository<DownloadHistory>,
     @InjectRepository(StalledCheck)
     private readonly stalledCheckRepo: Repository<StalledCheck>,
-    @InjectRepository(CleanupProfile)
-    private readonly cleanupProfileRepo: Repository<CleanupProfile>,
+    private readonly settings: SettingsService,
     private readonly qbittorrent: QbittorrentService,
     private readonly historyMatcher: TorrentHistoryMatcher,
     private readonly blocklist: BlocklistService,
@@ -407,11 +406,6 @@ export class DownloadClientsService {
       relations: ['media', 'indexer', 'episode', 'season'],
     });
 
-    // Cleanup profile key per entry, resolved during the match (media.library
-    // is eager-loaded). Side map rather than an entry field so the internal
-    // key never serializes to the client.
-    const profileKeyByEntry = new Map<QueueEntry, StalledCleanupProfileKey>();
-
     for (const entry of results) {
       const match = await this.historyMatcher.matchAndHeal(
         entry,
@@ -421,8 +415,6 @@ export class DownloadClientsService {
         entry.mediaId = match.mediaId;
         entry.mediaTitle = match.media.title;
         entry.mediaType = match.media.type;
-        const profileKey = match.media.library?.stalledCleanupProfile;
-        if (profileKey) profileKeyByEntry.set(entry, profileKey);
       }
       if (match?.indexer) {
         entry.indexerName = match.indexer.name;
@@ -485,39 +477,33 @@ export class DownloadClientsService {
     const start = (page - 1) * pageSize;
     const items = filtered.slice(start, start + pageSize);
 
-    await this.annotateStalledStrikes(items, profileKeyByEntry);
+    await this.annotateStalledStrikes(items);
 
     return { items, total, page, pageSize };
   }
 
   /**
-   * Fills `stalledStrikes` / `stalledStrikesRequired` on queue items whose
-   * media→library carries a cleanup profile, using the same no-progress
-   * tolerance and run-length logic as the stalled cleanup. The count is
-   * clamped to the profile's sample target so the display stays "x/N" even
-   * when a torrent outlives the firing threshold (e.g. the client refused
-   * the deletion). Runs on the page slice only — the queue is polled every
-   * 10 s, so queries stay bounded to one page.
+   * Fills `stalledStrikes` / `stalledStrikesRequired` on eligible queue items,
+   * using the same no-progress tolerance and run-length logic as the stalled
+   * cleanup. The count is clamped to the configured sample target so the
+   * display stays "x/N" even when a torrent outlives the firing threshold
+   * (e.g. the client refused the deletion). Runs on the page slice only — the
+   * queue is polled every 10 s, so queries stay bounded to one page.
    *
    * Only torrents currently subject to stall monitoring are annotated:
    * paused/seeding/imported items would otherwise surface stale snapshots
-   * (rows live until removal or the 24 h prune, not until import).
+   * (rows live until removal or the 24 h prune, not until import). No-ops
+   * while the global stall config is unset — same off-by-default as the
+   * cleanup itself.
    */
-  private async annotateStalledStrikes(
-    items: QueueEntry[],
-    profileKeyByEntry: Map<QueueEntry, StalledCleanupProfileKey>,
-  ): Promise<void> {
+  private async annotateStalledStrikes(items: QueueEntry[]): Promise<void> {
     const eligible = items.filter(
-      (it) =>
-        it.hash &&
-        it.progress < 1 &&
-        STALL_ELIGIBLE_STATES.has(it.state) &&
-        profileKeyByEntry.has(it),
+      (it) => it.hash && it.progress < 1 && STALL_ELIGIBLE_STATES.has(it.state),
     );
     if (!eligible.length) return;
 
-    const profiles = await this.cleanupProfileRepo.find();
-    const profileByKey = new Map(profiles.map((p) => [p.key, p]));
+    const stallConfig = await getStallConfig(this.settings);
+    if (!stallConfig) return;
 
     const hashes = eligible.map((it) => it.hash);
     const rows = await this.stalledCheckRepo.find({
@@ -534,11 +520,12 @@ export class DownloadClientsService {
     }
 
     for (const it of eligible) {
-      const profile = profileByKey.get(profileKeyByEntry.get(it)!);
-      if (!profile) continue;
       const snaps = snapsByHash.get(it.hash.toLowerCase()) ?? [];
-      it.stalledStrikes = Math.min(countStalledStrikes(snaps), profile.samples);
-      it.stalledStrikesRequired = profile.samples;
+      it.stalledStrikes = Math.min(
+        countStalledStrikes(snaps),
+        stallConfig.samples,
+      );
+      it.stalledStrikesRequired = stallConfig.samples;
     }
   }
 }

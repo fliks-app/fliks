@@ -76,7 +76,7 @@ function makeMedia(overrides: Record<string, unknown> = {}): Media {
     releaseDate: null,
     qualityProfile: null,
     languageProfile: null,
-    library: { id: 7, path: '/lib', stalledCleanupProfile: null },
+    library: { id: 7, path: '/lib' },
     ...overrides,
   } as unknown as Media;
 }
@@ -112,7 +112,6 @@ interface Harness {
   mediaFileRepo: ReturnType<typeof fakeRepo>;
   blocklistEntryRepo: ReturnType<typeof fakeRepo>;
   pluginRegistrationRepo: ReturnType<typeof fakeRepo>;
-  cleanupProfileRepo: ReturnType<typeof fakeRepo>;
   autoGrab: { classifyForSearch: jest.Mock };
   acquisitionCandidates: {
     listMovieTargets: jest.Mock;
@@ -145,7 +144,6 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
   const mediaFileRepo = fakeRepo();
   const blocklistEntryRepo = fakeRepo();
   const pluginRegistrationRepo = fakeRepo();
-  const cleanupProfileRepo = fakeRepo();
   const autoGrab = { classifyForSearch: jest.fn() };
   const acquisitionCandidates = {
     listMovieTargets: jest.fn().mockResolvedValue([]),
@@ -196,7 +194,6 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
     mediaFileRepo,
     blocklistEntryRepo,
     pluginRegistrationRepo,
-    cleanupProfileRepo,
     autoGrab,
     acquisitionCandidates,
     profiles,
@@ -222,7 +219,6 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
     mediaFileRepo,
     blocklistEntryRepo,
     pluginRegistrationRepo,
-    cleanupProfileRepo,
     autoGrab,
     acquisitionCandidates,
     profiles,
@@ -776,23 +772,14 @@ describe('FliksHostImpl', () => {
   // ===========================================================================
 
   describe('media.resolve', () => {
-    it('resolves media/season/episode ids under prefixed keys, with the cleanup profile inlined', async () => {
+    it('resolves media/season/episode ids under prefixed keys', async () => {
       const h = makeHarness();
-      const media = makeMedia({
-        id: 5,
-        library: { id: 7, path: '/lib', stalledCleanupProfile: 'fast' },
-      });
+      const media = makeMedia({ id: 5, library: { id: 7, path: '/lib' } });
       const season = makeSeason({ id: 50, media });
       const episode = makeEpisode({ id: 500, season, episodeNumber: 3 });
       h.mediaRepo.find.mockResolvedValue([media]);
       h.seasonRepo.find.mockResolvedValue([season]);
       h.episodeRepo.find.mockResolvedValue([episode]);
-      h.cleanupProfileRepo.findOne.mockResolvedValue({
-        key: 'fast',
-        samples: 3,
-        intervalMinutes: 5,
-        autoRestart: true,
-      });
 
       const result = await h.host['media.resolve']({
         mediaIds: [5],
@@ -804,12 +791,6 @@ describe('FliksHostImpl', () => {
         'media:5',
         'season:50',
       ]);
-      expect(result['media:5'].stalledCleanupProfile).toEqual({
-        key: 'fast',
-        samples: 3,
-        intervalMinutes: 5,
-        autoRestart: true,
-      });
       expect(result['episode:500'].episodeNumber).toBe(3);
       expectJsonSafe(result);
     });

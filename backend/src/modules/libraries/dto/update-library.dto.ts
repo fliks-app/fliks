@@ -2,16 +2,11 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
-  IsIn,
   IsInt,
   IsOptional,
   IsString,
 } from 'class-validator';
 import { MediaType } from '../../../common/enums/media-type.enum';
-import {
-  STALLED_CLEANUP_PROFILE_KEYS,
-  StalledCleanupProfileKey,
-} from '../../../common/constants/stalled-cleanup-profiles';
 
 /**
  * Patch DTO. `userIds` is managed via the dedicated PUT :id/access endpoint.
@@ -53,10 +48,6 @@ export class UpdateLibraryDto {
   @IsOptional()
   @IsString()
   metadataRegion?: string | null;
-
-  @IsOptional()
-  @IsIn([...STALLED_CLEANUP_PROFILE_KEYS, null])
-  stalledCleanupProfile?: StalledCleanupProfileKey | null;
 
   @IsOptional()
   @IsInt()

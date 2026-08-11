@@ -13,7 +13,6 @@ import { DownloadBundleModule } from './plugins/download/download-bundle.module'
 import { RequestsModule } from './modules/requests/requests.module';
 import { FliksSchedulerModule } from './modules/scheduler/scheduler.module';
 import { EventsModule } from './modules/scheduler/events.module';
-import { CleanupProfilesModule } from './modules/cleanup-profiles/cleanup-profiles.module';
 import { LibrariesModule } from './modules/libraries/libraries.module';
 import { PlaylistsModule } from './modules/playlists/playlists.module';
 import { SocialModule } from './modules/social/social.module';
@@ -95,7 +94,6 @@ import { isDownloadBundleEnabled } from './common/constants/plugin-flags';
     ...(isDownloadBundleEnabled() ? [GrabModule, DownloadBundleModule] : []),
     RequestsModule,
     FliksSchedulerModule,
-    CleanupProfilesModule,
     LibrariesModule,
     PlaylistsModule,
     SocialModule,

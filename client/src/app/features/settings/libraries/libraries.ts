@@ -15,7 +15,6 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   Library,
   LibrariesApiService,
-  StalledCleanupProfileKey,
 } from '../../../core/services/api/libraries-api.service';
 import { UsersApiService, UserRow } from '../../../core/services/api/users-api.service';
 import {
@@ -60,7 +59,6 @@ export class LibrariesSettingsComponent implements OnInit {
   readonly formMovies = signal(true);
   readonly formSeries = signal(true);
   readonly formProvider = signal<string | null>(null);
-  readonly formCleanup = signal<StalledCleanupProfileKey | null>(null);
   readonly formQualityProfileId = signal<number | null>(null);
   readonly formLanguageProfileId = signal<number | null>(null);
   readonly formDefaultMovies = signal(false);
@@ -99,12 +97,6 @@ export class LibrariesSettingsComponent implements OnInit {
   ];
 
   readonly providerOptions = METADATA_PROVIDER_OPTIONS_LIBRARY;
-  readonly cleanupOptions: { value: StalledCleanupProfileKey | null; labelKey: string }[] = [
-    { value: null, labelKey: 'settings.cleanup_profiles.none' },
-    { value: 'fast', labelKey: 'settings.cleanup_profiles.profile_fast' },
-    { value: 'medium', labelKey: 'settings.cleanup_profiles.profile_medium' },
-    { value: 'slow', labelKey: 'settings.cleanup_profiles.profile_slow' },
-  ];
 
   ngOnInit() {
     void this.reload();
@@ -138,7 +130,6 @@ export class LibrariesSettingsComponent implements OnInit {
     this.formMovies.set(true);
     this.formSeries.set(true);
     this.formProvider.set(null);
-    this.formCleanup.set(null);
     this.formQualityProfileId.set(null);
     this.formLanguageProfileId.set(null);
     this.formDefaultMovies.set(false);
@@ -195,7 +186,6 @@ export class LibrariesSettingsComponent implements OnInit {
         color: this.formColor(),
         mediaTypes,
         preferredProvider: this.formProvider(),
-        stalledCleanupProfile: this.formCleanup(),
         defaultQualityProfileId: this.formQualityProfileId(),
         defaultLanguageProfileId: this.formLanguageProfileId(),
         isDefaultForMovies: this.formDefaultMovies(),
