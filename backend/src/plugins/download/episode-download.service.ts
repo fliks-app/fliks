@@ -29,7 +29,7 @@ import { CustomFormatsService } from '../../modules/profiles/custom-formats.serv
 import { ProfilesService } from '../../modules/profiles/profiles.service';
 import { QualityDefinitionsService } from '../../modules/profiles/quality-definitions.service';
 import { BlocklistService } from '../../modules/blocklist/blocklist.service';
-import { NotificationsService } from '../../modules/notifications/notifications.service';
+import { InProcessPluginHostClient } from '../../modules/plugins/host/in-process-plugin-host-client';
 import { MediaType } from '../../common/enums';
 import { QualityProfileItem } from '../../modules/profiles/entities/quality-profile.entity';
 
@@ -104,7 +104,7 @@ export class EpisodeDownloadService {
     private readonly qbittorrent: QbittorrentService,
     private readonly customFormats: CustomFormatsService,
     private readonly blocklist: BlocklistService,
-    private readonly notifications: NotificationsService,
+    private readonly host: InProcessPluginHostClient,
     private readonly qualityDefs: QualityDefinitionsService,
     private readonly profiles: ProfilesService,
     private readonly events: EventsService,
@@ -371,10 +371,13 @@ export class EpisodeDownloadService {
       ),
     );
 
-    void this.notifications.dispatch('grab.started', {
-      title: `${media.title} ${epLabel}`,
-      quality: parsed.quality.name,
-      sourceTitle,
+    void this.host['notifications.dispatch']({
+      event: 'grab.started',
+      payload: {
+        title: `${media.title} ${epLabel}`,
+        quality: parsed.quality.name,
+        sourceTitle,
+      },
     });
 
     this.events.emitDomain({
@@ -659,10 +662,13 @@ export class EpisodeDownloadService {
           }),
         ),
       );
-      void this.notifications.dispatch('grab.started', {
-        title: `${media.title} S${String(season.seasonNumber).padStart(2, '0')}`,
-        quality: parsed.quality.name,
-        sourceTitle,
+      void this.host['notifications.dispatch']({
+        event: 'grab.started',
+        payload: {
+          title: `${media.title} S${String(season.seasonNumber).padStart(2, '0')}`,
+          quality: parsed.quality.name,
+          sourceTitle,
+        },
       });
       this.events.emitDomain({
         type: 'acquisition.grabbed',
@@ -761,10 +767,13 @@ export class EpisodeDownloadService {
           }),
         ),
       );
-      void this.notifications.dispatch('grab.started', {
-        title: `${media.title} S${String(season.seasonNumber).padStart(2, '0')}`,
-        quality: bestPack.qualityName,
-        sourceTitle: bestPack.title,
+      void this.host['notifications.dispatch']({
+        event: 'grab.started',
+        payload: {
+          title: `${media.title} S${String(season.seasonNumber).padStart(2, '0')}`,
+          quality: bestPack.qualityName,
+          sourceTitle: bestPack.title,
+        },
       });
       this.events.emitDomain({
         type: 'acquisition.grabbed',

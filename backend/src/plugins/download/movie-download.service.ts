@@ -18,7 +18,7 @@ import { CustomFormatsService } from '../../modules/profiles/custom-formats.serv
 import { ProfilesService } from '../../modules/profiles/profiles.service';
 import { QualityDefinitionsService } from '../../modules/profiles/quality-definitions.service';
 import { BlocklistService } from '../../modules/blocklist/blocklist.service';
-import { NotificationsService } from '../../modules/notifications/notifications.service';
+import { InProcessPluginHostClient } from '../../modules/plugins/host/in-process-plugin-host-client';
 import { MediaType } from '../../common/enums';
 import { GrabMovieDto } from './dto/grab-movie.dto';
 import { QualityProfileItem } from '../../modules/profiles/entities/quality-profile.entity';
@@ -96,7 +96,7 @@ export class MovieDownloadService {
     private readonly qbittorrent: QbittorrentService,
     private readonly customFormats: CustomFormatsService,
     private readonly blocklist: BlocklistService,
-    private readonly notifications: NotificationsService,
+    private readonly host: InProcessPluginHostClient,
     private readonly qualityDefs: QualityDefinitionsService,
     private readonly profiles: ProfilesService,
     private readonly events: EventsService,
@@ -342,10 +342,13 @@ export class MovieDownloadService {
       ),
     );
 
-    void this.notifications.dispatch('grab.started', {
-      title: media.title,
-      quality: parsed.quality.name,
-      sourceTitle,
+    void this.host['notifications.dispatch']({
+      event: 'grab.started',
+      payload: {
+        title: media.title,
+        quality: parsed.quality.name,
+        sourceTitle,
+      },
     });
 
     this.events.emitDomain({ type: 'acquisition.grabbed', mediaId });
@@ -582,10 +585,13 @@ export class MovieDownloadService {
       ),
     );
 
-    void this.notifications.dispatch('grab.started', {
-      title: media.title,
-      quality: parsed.quality.name,
-      sourceTitle,
+    void this.host['notifications.dispatch']({
+      event: 'grab.started',
+      payload: {
+        title: media.title,
+        quality: parsed.quality.name,
+        sourceTitle,
+      },
     });
 
     return saved;
