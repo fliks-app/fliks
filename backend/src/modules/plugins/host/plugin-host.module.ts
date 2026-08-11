@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Media } from '../../media/entities/media.entity';
 import { Season } from '../../media/entities/season.entity';
@@ -20,12 +20,17 @@ import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
 
 /**
  * Wires `FliksHostImpl` — core's implementation of the 15 plugin-facing host
- * methods — the in-process client that stands in for the RPC transport until
- * Phase 10.4, and `PluginHostBindingService`, which a real connection's
- * dispatcher will use to get a `PluginHostApi` scoped to its own registration.
+ * methods — the in-process client, and `PluginHostBindingService`, which the
+ * supervisor uses to get a `PluginHostApi` scoped to one plugin's registration.
  * `EventsService`/`SseAudienceService` come for free from the `@Global()`
  * `EventsModule`, so they aren't imported here.
+ *
+ * `@Global()` for the same reason: this module reaches `MediaModule`, which
+ * (via `FliksSchedulerModule`) reaches `PluginsModule` — importing this module
+ * from `PluginsModule` would close that loop into a cycle. Global-scoping
+ * exports the binding service without adding that edge.
  */
+@Global()
 @Module({
   imports: [
     TypeOrmModule.forFeature([

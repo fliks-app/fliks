@@ -6,8 +6,8 @@
           <app-input-field
             [type]="inputType(field)"
             [label]="field.labelKey | translate"
-            [hint]="field.hint ?? ''"
-            [placeholder]="field.placeholder ?? ''"
+            [hint]="field.hint ? (field.hint | translate) : ''"
+            [placeholder]="field.placeholder ? (field.placeholder | translate) : ''"
             [disabled]="disabled()"
             [value]="fieldValue(field)"
             (valueChange)="setValue(field, $event)"
@@ -20,7 +20,7 @@
       @case ('toggle') {
         <app-toggle-field
           [label]="field.labelKey | translate"
-          [hint]="field.hint ?? ''"
+          [hint]="field.hint ? (field.hint | translate) : ''"
           [disabled]="disabled()"
           [value]="fieldBool(field)"
           (valueChange)="setBool(field, $event)"
@@ -30,7 +30,7 @@
         <div class="flex flex-col gap-1">
           <app-select-field
             [label]="field.labelKey | translate"
-            [hint]="field.hint ?? ''"
+            [hint]="field.hint ? (field.hint | translate) : ''"
             [disabled]="disabled()"
             [value]="fieldValue(field)"
             (valueChange)="setValue(field, $event)"

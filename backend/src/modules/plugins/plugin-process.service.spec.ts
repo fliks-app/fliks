@@ -9,6 +9,7 @@ import { createHash } from 'crypto';
 import { minimalProcessManifest } from './archive/test-manifests';
 import type { PluginPackage } from './entities/plugin-package.entity';
 import type { PluginSupervisor, PluginSupervisorOptions, SupervisorState } from './supervisor/plugin-supervisor';
+import type { PluginHostBindingService } from './host/plugin-host-binding.service';
 
 /**
  * Waits until the factory has built `count` supervisors, so a fake's state can be flipped
@@ -166,6 +167,30 @@ describe('PluginProcessService.startFor', () => {
       expect.objectContaining({ id: pkg.pluginId, dbUrl: 'postgresql://fake-dsn', memoryMb: 256 }),
     );
     expect(service.stateOf(pkg.pluginId)).toBe('ready');
+  });
+
+  it("binds the supervisor's hostApi to this plugin's own id when a PluginHostBindingService is given", async () => {
+    const pkg = fakePackage();
+    const boundApi = { 'config.get': jest.fn() };
+    const bind = jest.fn().mockReturnValue(boundApi);
+    const hostBinding = { bind } as unknown as PluginHostBindingService;
+    const { factory, instances } = makeFactory();
+    const service = new PluginProcessService(
+      fakePluginDb() as never,
+      fakeLogBuffer() as never,
+      fakeSettings() as never,
+      factory,
+      undefined,
+      hostBinding,
+    );
+
+    const startPromise = service.startFor(pkg);
+    await waitForSupervisors(instances);
+    instances[0].setState('ready');
+    await startPromise;
+
+    expect(bind).toHaveBeenCalledWith(pkg.pluginId);
+    expect(instances[0].options.hostApi).toBe(boundApi);
   });
 
   it('passes a null rotated password through as undefined', async () => {
