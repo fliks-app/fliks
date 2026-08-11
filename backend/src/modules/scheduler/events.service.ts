@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Subject, Observable, Subscription } from 'rxjs';
 import { randomUUID } from 'crypto';
 import { DownloadProgressState } from '../../common/constants/download-progress-state';
+import { DownloadProgressCacheService } from './download-progress-cache.service';
 
 export type SseEvent =
   | {
@@ -233,36 +234,60 @@ export class EventsService {
   private readonly domainSubject = new Subject<DomainEvent>();
   private readonly connections = new Map<string, { userId: number }>();
 
+  // Defaulted so every existing `new EventsService()` in other services'
+  // tests keeps compiling — Nest's own DI always supplies the real instance.
+  constructor(
+    private readonly progressCache: DownloadProgressCacheService = new DownloadProgressCacheService(),
+  ) {}
+
   /** Broadcast to every connected client. */
   emit(event: SseEvent): void {
-    this.subject.next({ audience: null, connectionIds: null, event });
+    this.dispatch({ audience: null, connectionIds: null, event });
   }
 
   /** Deliver only to the given user's SSE connections. */
   emitToUser(userId: number, event: SseEvent): void {
-    this.subject.next({ audience: [userId], connectionIds: null, event });
+    this.dispatch({ audience: [userId], connectionIds: null, event });
   }
 
   /** Deliver only to the given users' SSE connections. Empty list = nobody. */
   emitToUsers(userIds: number[], event: SseEvent): void {
-    this.subject.next({ audience: userIds, connectionIds: null, event });
+    this.dispatch({ audience: userIds, connectionIds: null, event });
   }
 
   /** Escape hatch for a type outside the closed `SseEvent` union — namespaced
    *  plugin events (`plugin.<id>.<type>`). `audience: null` broadcasts. */
   emitRaw(type: string, payload: unknown, audience: number[] | null): void {
     const event = { type, payload } as unknown as SseEvent;
-    this.subject.next({ audience, connectionIds: null, event });
+    this.dispatch({ audience, connectionIds: null, event });
   }
 
   /** Deliver only to one SSE connection (multi-device remote control). */
   emitToConnection(connectionId: string, event: SseEvent): void {
     if (!this.connections.has(connectionId)) return;
-    this.subject.next({
+    this.dispatch({
       audience: null,
       connectionIds: [connectionId],
       event,
     });
+  }
+
+  /** Every user-scoped emit funnels through here, so `download.progress`'s
+   *  replay cache (fed by whichever caller pushes it — core or an in-process
+   *  bundle) never depends on catching every call site individually. */
+  private dispatch(env: SseEnvelope): void {
+    if (env.audience) {
+      if (env.event.type === 'download.progress') {
+        this.progressCache.record(env.audience, env.event);
+      } else if (env.event.type === 'import.complete') {
+        this.progressCache.clear(
+          env.event.mediaId,
+          env.event.seasonNumber,
+          env.event.episodeNumber,
+        );
+      }
+    }
+    this.subject.next(env);
   }
 
   hasConnection(connectionId: string): boolean {
@@ -280,6 +305,13 @@ export class EventsService {
           connectionId,
         } satisfies SseEvent),
       } as MessageEvent);
+
+      // Replay this user's last-known progress so a client connecting between
+      // publisher ticks isn't blind until the next one (audience-scoped —
+      // `snapshotFor` only returns leaves this user was already a recipient of).
+      for (const event of this.progressCache.snapshotFor(userId)) {
+        subscriber.next({ data: JSON.stringify(event) } as MessageEvent);
+      }
 
       const sub = this.subject.subscribe((env) => {
         if (!this.shouldDeliver(env, userId, connectionId)) return;

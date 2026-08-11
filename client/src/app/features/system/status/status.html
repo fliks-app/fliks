@@ -57,7 +57,7 @@
   <div class="card-body gap-4">
     <h2 class="card-title text-base">{{ 'system.commands_title' | translate }}</h2>
     <div class="flex flex-wrap gap-2">
-      @for (item of commandItems; track $index) {
+      @for (item of commandItems(); track $index) {
         @if (item.type === 'single') {
           <button type="button" class="btn btn-outline btn-sm" (click)="trigger(item.name)" [disabled]="triggering() !== null">
             @if (triggering() === item.name) { <span class="loading loading-spinner loading-xs"></span> }

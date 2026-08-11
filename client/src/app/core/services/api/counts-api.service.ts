@@ -3,8 +3,9 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 export interface SidebarCounts {
-  /** Downloads still doing work (grabbed / importing), from the history table. */
-  queueActive: number;
+  /** Keyed by a nav contribution's `badge` (e.g. `queueActive`); a key no
+   *  publisher pushed is absent from the map, never present-and-0. */
+  badgeCounts: Record<string, number>;
   /** Pending requests visible to the user (own only without requests.manage). */
   pendingRequests: number;
   /** Media count per accessible library id. */

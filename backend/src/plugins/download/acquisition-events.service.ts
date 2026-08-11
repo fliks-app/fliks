@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { EventsService } from '../../modules/scheduler/events.service';
@@ -20,7 +20,12 @@ export type AcquisitionEvent =
       sourceTitle: string;
       mediaPath: string | null;
     }
-  | { type: 'acquisition.failed'; mediaId: number; title: string; reason: string }
+  | {
+      type: 'acquisition.failed';
+      mediaId: number;
+      title: string;
+      reason: string;
+    }
   | { type: 'acquisition.queue.changed' }
   | {
       type: 'acquisition.progress';
@@ -48,7 +53,7 @@ export type AcquisitionEvent =
  * bundle's own module, not `FliksSchedulerModule` — core doesn't inject it.
  */
 @Injectable()
-export class AcquisitionEventsService {
+export class AcquisitionEventsService implements OnModuleInit {
   constructor(
     private readonly events: EventsService,
     private readonly sseAudience: SseAudienceService,
@@ -59,14 +64,26 @@ export class AcquisitionEventsService {
     private readonly countsCache: PluginCountsCacheService,
   ) {}
 
+  /** Seed the badge once at startup: a progress tick deliberately does not
+   *  refresh it, so without this the count stays absent until a row moves. */
+  async onModuleInit(): Promise<void> {
+    await this.refreshQueueCount();
+  }
+
+  private async refreshQueueCount(): Promise<void> {
+    this.countsCache.set(
+      'queueActive',
+      await this.historyRepo.count({
+        where: { status: In(['grabbed', 'importing']) },
+      }),
+    );
+  }
+
   async publish(event: AcquisitionEvent): Promise<void> {
     // Every variant but a progress tick can move a row in/out of grabbed/importing,
     // so the pushed badge count is refreshed on all of them rather than tracked per-branch.
     if (event.type !== 'acquisition.progress') {
-      const queueActive = await this.historyRepo.count({
-        where: { status: In(['grabbed', 'importing']) },
-      });
-      this.countsCache.set('queueActive', queueActive);
+      await this.refreshQueueCount();
     }
     switch (event.type) {
       case 'acquisition.imported': {

@@ -15,14 +15,16 @@ import { LibrariesService } from '../libraries/libraries.service';
 import { PluginCountsCacheService } from '../plugins/host/plugin-counts-cache.service';
 
 export interface SidebarCounts {
-  queueActive: number;
+  /** Keyed by a nav contribution's `badge` (e.g. `queueActive`); a key a
+   *  publisher never pushed is absent, never present-and-0. */
+  badgeCounts: Record<string, number>;
   pendingRequests: number;
   mediaByLibrary: Record<number, number>;
 }
 
-/** Aggregated badge counts for the app shell, in one round-trip. `queueActive`
- *  is whatever an acquisition plugin last pushed via `counts.set` — 0 with
- *  none installed or connected, never a query against its own tables. */
+/** Aggregated badge counts for the app shell, in one round-trip. `badgeCounts`
+ *  holds whatever a plugin last pushed via `counts.set`, gated per key by the
+ *  same audience as the surface it feeds — never a query against its tables. */
 @Injectable()
 export class CountsService {
   constructor(
@@ -41,22 +43,24 @@ export class CountsService {
       this.countMediaByLibrary(user, ability),
     ]);
     return {
-      queueActive: this.readActiveQueue(ability),
+      badgeCounts: this.readBadgeCounts(ability),
       pendingRequests,
       mediaByLibrary,
     };
   }
 
   /** Same audience as the queue itself: settings managers, plus the users the
-   *  client seeds progress for. Unset means 0, never a stale last-seen value. */
-  private readActiveQueue(ability: AppAbility): number {
-    if (
-      !ability.can(Action.Manage, 'Settings') &&
-      !ability.can(Action.Track, Media)
-    ) {
-      return 0;
+   *  client seeds progress for. Absent — not 0 — for anyone else, or if no
+   *  publisher ever pushed a value. */
+  private readBadgeCounts(ability: AppAbility): Record<string, number> {
+    const counts: Record<string, number> = {};
+    const canSeeQueue =
+      ability.can(Action.Manage, 'Settings') ||
+      ability.can(Action.Track, Media);
+    if (canSeeQueue && this.pluginCounts.has('queueActive')) {
+      counts.queueActive = this.pluginCounts.get('queueActive');
     }
-    return this.pluginCounts.get('queueActive');
+    return counts;
   }
 
   /** Same scoping as RequestsService.findAll: managers count everything,

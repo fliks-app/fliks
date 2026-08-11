@@ -890,14 +890,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       if (this.canRequestDeletion()) {
         void this.loadDeleteRequestState(m.tmdbId, m.type);
       }
-      // Seed live download progress (users who can request/import may read the
-      // queue; SSE keeps it live after). Plain viewers skip — they get no feed.
-      if (
-        this.auth.hasPermission('requests.create') ||
-        this.auth.hasPermission('media.create')
-      ) {
-        void this.downloadProgress.seed();
-      }
       // Resume/watched/progress hit uncacheable /api/playback/media/* — load
       // them off the render path so a slow server never holds the spinner.
       void (async () => {

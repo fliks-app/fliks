@@ -138,12 +138,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.reload();
-    this.seedProgress();
     // Native app-resume: this page only exists while it's the visible route
     // (no route reuse), so an unguarded reload is always the on-screen one.
     this.resumeSub = this.appResume.resume$.subscribe(() => {
       this.reload();
-      this.seedProgress();
     });
     try {
       const [qp, lp, libs] = await Promise.all([
@@ -202,17 +200,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
       this.total.set(res.total);
     } finally {
       this.loading.set(false);
-    }
-  }
-
-  /** Seed live download progress only for users allowed to read the download
-   *  queue (request/media creators); others get progress via SSE only. */
-  private seedProgress(): void {
-    if (
-      this.auth.hasPermission('requests.create') ||
-      this.auth.hasPermission('media.create')
-    ) {
-      void this.downloadProgress.seed();
     }
   }
 

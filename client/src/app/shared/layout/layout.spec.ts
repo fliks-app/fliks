@@ -98,7 +98,11 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         provide: CountsApiService,
         useValue: {
           get: () =>
-            Promise.resolve({ mediaByLibrary: {}, queueActive: f.queueActive, pendingRequests: f.pendingRequests }),
+            Promise.resolve({
+              mediaByLibrary: {},
+              badgeCounts: { queueActive: f.queueActive },
+              pendingRequests: f.pendingRequests,
+            }),
         },
       },
       { provide: ServerConfigService, useValue: {} },

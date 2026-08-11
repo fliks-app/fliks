@@ -10,11 +10,16 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
-      // Show toasts for client errors (400-499 except 408) + 500.
+      // Show toasts for client errors (400-499 except 408) + 500 + 503.
       // Skip: i18n, network errors, gateway errors, timeouts, offline, and
       // 401 — the auth guard handles unauth state by redirecting to the user
-      // picker; toasting the 401 just adds noise on top of that flow.
-      const showToast = (err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 401) || err.status === 500;
+      // picker; toasting the 401 just adds noise on top of that flow. 503 is
+      // what an installed-but-unreachable plugin returns — the one 5xx an
+      // admin most needs surfaced.
+      const showToast =
+        (err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 401) ||
+        err.status === 500 ||
+        err.status === 503;
       // Discover/search/browse GETs degrade in place (stale cache or empty
       // rows), so an upstream 500 there must not spray toasts — one discover
       // open fires several parallel metadata calls at once.
@@ -32,6 +37,12 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   );
 };
 
+/** Nest's own 404 for a route nothing serves (`Cannot ${method} ${url}`) — a
+ *  raw URL a user has no context for, never a message the app itself wrote. */
+function isFrameworkNotFound(status: number, message: unknown): boolean {
+  return status === 404 && typeof message === 'string' && /^Cannot [A-Z]+ /.test(message);
+}
+
 function extractMessage(
   err: HttpErrorResponse,
   translate: TranslateService,
@@ -46,7 +57,7 @@ function extractMessage(
     return body;
   }
 
-  if (body?.message) {
+  if (body?.message && !isFrameworkNotFound(err.status, body.message)) {
     if (Array.isArray(body.message)) return body.message.join(', ');
     // Backends may return an i18n key for user-facing validation errors
     // (English-only rule keeps the copy out of the API); translate it when

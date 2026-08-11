@@ -69,21 +69,25 @@ export class SchedulerService implements OnModuleInit {
     name: CoreSchedulerJobName;
     cron: string;
     triggerable: boolean;
+    labelKey: string;
   }[] = [
     {
       name: 'RefreshMetadata',
       cron: CronExpression.EVERY_DAY_AT_4AM,
       triggerable: true,
+      labelKey: 'system.cmd_refresh_metadata',
     },
     {
       name: 'SubtitleSearch',
       cron: CronExpression.EVERY_6_HOURS,
       triggerable: true,
+      labelKey: 'system.cmd_subtitle_search',
     },
     {
       name: 'SubtitleUpgrade',
       cron: CronExpression.EVERY_6_HOURS,
       triggerable: true,
+      labelKey: 'system.cmd_subtitle_upgrade',
     },
   ];
 
@@ -120,6 +124,7 @@ export class SchedulerService implements OnModuleInit {
       name: string;
       cron: string;
       triggerable: boolean;
+      labelKey: string;
       lastRun: Date | null;
       lastStatus: string | null;
       nextRun: Date;
@@ -153,6 +158,7 @@ export class SchedulerService implements OnModuleInit {
         name: s.name,
         cron: s.cron,
         triggerable: s.triggerable,
+        labelKey: s.labelKey,
         lastRun: last?.startedOn ?? null,
         lastStatus: last?.status ?? null,
         nextRun: interval.next().toDate(),
@@ -165,6 +171,7 @@ export class SchedulerService implements OnModuleInit {
       name: job.name,
       cron: job.cron,
       triggerable: job.triggerable,
+      labelKey: job.labelKey,
       lastRun: null,
       lastStatus: null,
       nextRun: CronExpressionParser.parse(job.cron).next().toDate(),

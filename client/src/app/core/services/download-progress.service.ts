@@ -1,7 +1,6 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import { MediaType } from '../enums/media-type.enum';
 import { DownloadProgressState } from '../enums/download-progress-state.enum';
-import { DownloadClientsApiService } from './api/download-clients-api.service';
 import { foldLeaves } from '../../shared/utils/download-format';
 
 /** Identifies one torrent within a season: the episode number, an explicit
@@ -13,7 +12,7 @@ export type LeafKey = number | 'PACK' | `hash:${string}`;
 export interface DownloadLeaf {
   percent: number; // 0–100
   state: DownloadProgressState;
-  weight?: number; // torrent size in bytes; set from the queue seed, absent on SSE
+  weight?: number; // torrent size in bytes, for a size-weighted percent (see foldLeaves)
 }
 
 export interface SeasonProgress {
@@ -69,28 +68,20 @@ function rollupSeasons(seasons: Map<number, SeasonProgress>): {
 }
 
 /**
- * App-wide store of in-flight download progress, fed primarily by
- * `download.progress` SSE events (via {@link SseService}) and seeded once from
- * the download queue when a surface mounts mid-download. One shared signal —
- * the requests views and media-detail read it by `mediaId`. The status itself
+ * App-wide store of in-flight download progress, fed by `download.progress`
+ * SSE events (via {@link SseService}). One shared signal — the requests
+ * views and media-detail read it by `mediaId`. The status itself
  * (label/colour/aggregation) is derived on read via the pure helpers in
  * `download-format`, so this store stays a plain data holder.
  */
 @Injectable({ providedIn: 'root' })
 export class DownloadProgressService {
-  private readonly api = inject(DownloadClientsApiService);
-
   readonly progress = signal<Map<number, MediaDownloadProgress>>(new Map());
-
-  /** Bumped on every live mutation (SSE apply/clear) so an in-flight seed()
-   *  can detect a fresher update landed during its fetch and not clobber it. */
-  private mutationGen = 0;
 
   /** Apply a `download.progress` SSE event. Updates a single leaf; deletes it
    *  (and any now-empty season/media) once it reaches 100%. */
   applyProgress(e: DownloadProgressEvent): void {
     const percent = Math.round(e.progress * 100);
-    this.mutationGen++;
     this.progress.update((prev) => {
       const next = new Map(prev);
 
@@ -150,7 +141,6 @@ export class DownloadProgressService {
     seasonNumber?: number,
     episodeNumber?: number,
   ): void {
-    this.mutationGen++;
     this.progress.update((prev) => {
       const cur = prev.get(mediaId);
       if (!cur) return prev;
@@ -185,56 +175,5 @@ export class DownloadProgressService {
       }
       return next;
     });
-  }
-
-  /** Rebuild the map from the current download queue — covers a page opened
-   *  mid-download before the next SSE tick. Rebuilds (never merges) so a
-   *  finished torrent that left the queue drops out. Queue items carry `size`,
-   *  so seeded leaves get a `weight` for the size-weighted percent. Bails if a
-   *  live SSE mutation landed during the fetch (trusts the fresher state). */
-  async seed(): Promise<void> {
-    const gen = this.mutationGen;
-    try {
-      const res = await this.api.getQueue({ pageSize: 100 });
-      if (gen !== this.mutationGen) return;
-      const map = new Map<number, MediaDownloadProgress>();
-      for (const it of res.items) {
-        if (it.mediaId == null || it.progress >= 1) continue;
-        const percent = Math.round(it.progress * 100);
-        // The queue snapshot has no closed state of its own; the next SSE
-        // tick corrects this within ~1s.
-        const leaf: DownloadLeaf = { percent, state: 'active', weight: it.size };
-        if (it.mediaType === 'series' && it.seasonNumber != null) {
-          const cur = map.get(it.mediaId);
-          const seasons = new Map(cur?.seasons ?? []);
-          const leaves = new Map(seasons.get(it.seasonNumber)?.leaves ?? []);
-          leaves.set(leafKey(it.episodeNumber, it.hash), leaf);
-          seasons.set(it.seasonNumber, { leaves });
-          const rolled = rollupSeasons(seasons);
-          map.set(it.mediaId, {
-            mediaId: it.mediaId,
-            mediaType: 'series',
-            percent: rolled.percent,
-            state: rolled.state,
-            dlspeed: it.dlspeed,
-            eta: it.eta,
-            seasons,
-          });
-        } else {
-          const f = foldLeaves([leaf]);
-          map.set(it.mediaId, {
-            mediaId: it.mediaId,
-            mediaType: it.mediaType ?? 'movie',
-            percent: f.percent,
-            state: f.state || 'active',
-            dlspeed: it.dlspeed,
-            eta: it.eta,
-          });
-        }
-      }
-      this.progress.set(map);
-    } catch {
-      /* ignore — SSE will populate as events arrive */
-    }
   }
 }
