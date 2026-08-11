@@ -6,6 +6,9 @@ export interface RegisteredJob {
   name: string;
   cron: string;
   triggerable: boolean;
+  /** i18n key for a manual-trigger button — lets a generic UI render one
+   *  without core naming the publisher's jobs. */
+  labelKey: string;
   /** The raw action only — the caller (scheduled tick or manual dispatch)
    *  supplies its own `Command`-row lifecycle around it. */
   run: () => Promise<void>;

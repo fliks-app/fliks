@@ -38,28 +38,28 @@ describe('CountsService.getCounts', () => {
     return { service, requestRepo, mediaService, libraries, pluginCounts };
   }
 
-  it('reads the queue count from an unset cache key as 0, never querying anything', async () => {
+  it('leaves the queue badge absent from the map when no publisher ever pushed it', async () => {
     const { service, pluginCounts } = make({ canManageRequests: false });
     const counts = await service.getCounts(user);
-    expect(counts.queueActive).toBe(0);
-    expect(pluginCounts.get('queueActive')).toBe(0);
+    expect(counts.badgeCounts).not.toHaveProperty('queueActive');
+    expect(pluginCounts.has('queueActive')).toBe(false);
   });
 
   it('reflects a value pushed to the shared cache, with no cache mock in the way', async () => {
     const { service, pluginCounts } = make({ canManageRequests: false });
     pluginCounts.set('queueActive', 4);
     const counts = await service.getCounts(user);
-    expect(counts.queueActive).toBe(4);
+    expect(counts.badgeCounts.queueActive).toBe(4);
   });
 
-  it('hides a pushed queue count from a user who may not see the queue', async () => {
+  it('hides a pushed queue count from a user who may not see the queue — absent, not 0', async () => {
     const { service, pluginCounts } = make({
       canManageRequests: false,
       canReadMedia: false,
     });
     pluginCounts.set('queueActive', 4);
     const counts = await service.getCounts(user);
-    expect(counts.queueActive).toBe(0);
+    expect(counts.badgeCounts).not.toHaveProperty('queueActive');
   });
 
   it('round-trips through the real publisher: an acquisition event lands in the same cache CountsService reads', async () => {
@@ -77,7 +77,7 @@ describe('CountsService.getCounts', () => {
     await acquisitionEvents.publish({ type: 'acquisition.queue.changed' });
     const counts = await service.getCounts(user);
 
-    expect(counts.queueActive).toBe(6);
+    expect(counts.badgeCounts.queueActive).toBe(6);
     const where = historyRepo.count.mock.calls[0][0].where as {
       status: { value: string[] };
     };

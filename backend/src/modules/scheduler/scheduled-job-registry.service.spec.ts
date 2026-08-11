@@ -5,6 +5,7 @@ describe('ScheduledJobRegistry', () => {
     name,
     cron: '*/15 * * * *',
     triggerable,
+    labelKey: `system.cmd_${name.toLowerCase()}`,
     run: jest.fn().mockResolvedValue(undefined),
   });
 

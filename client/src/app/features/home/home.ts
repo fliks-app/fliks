@@ -405,16 +405,6 @@ export class HomeComponent implements OnInit, OnDestroy {
     const wantRequests = this.visibleSections().some(
       (s) => s.type === 'requests-recent',
     );
-    // Seed live download progress so cards opened mid-download show the current
-    // percent before the next SSE tick. Only users allowed to read the queue
-    // (request/media creators) hit the endpoint; others get progress via SSE.
-    if (
-      wantRequests &&
-      (this.auth.hasPermission('requests.create') ||
-        this.auth.hasPermission('media.create'))
-    ) {
-      void this.downloadProgress.seed();
-    }
 
     try {
       const [recent, calendar, libEntries, requests] = await Promise.all([

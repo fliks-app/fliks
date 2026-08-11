@@ -1248,6 +1248,8 @@
     "cmd_refresh_metadata": "Metadaten aktualisieren",
     "cmd_refresh_missing_metadata": "Fehlende Metadaten neu laden",
     "cmd_import_completed": "Abgeschlossene Downloads importieren",
+    "cmd_clean_stalled": "Blockierte Torrents bereinigen",
+    "cmd_clean_seeded": "Geseedete Torrents bereinigen",
     "cmd_rescan_all": "Alle Dateien erneut scannen",
     "cmd_rescan_missing_files": "Fehlende Dateien erneut scannen",
     "cmd_generate_sprites": "Sprites generieren",

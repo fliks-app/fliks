@@ -1,5 +1,5 @@
 import {
-  Component, ChangeDetectionStrategy, signal, inject, OnInit, effect,
+  Component, ChangeDetectionStrategy, signal, inject, OnInit, effect, computed,
 } from '@angular/core';
 import { DecimalPipe, NgClass, KeyValuePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
@@ -15,6 +15,8 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; body?: Record<string, unknown>; }
 interface ServiceStatus { name: string; ok: boolean; message?: string; }
 interface HealthReport { version: string; uptimeSeconds: number; database: ServiceStatus; installedPlugins: number; restartSupervisor: string | null; }
+/** Trimmed to what the manual-trigger button list needs. */
+interface SchedulerJob { name: string; triggerable: boolean; labelKey: string; }
 
 @Component({
   selector: 'app-system-status',
@@ -38,15 +40,14 @@ export class SystemStatusComponent implements OnInit {
   readonly clearing = signal(false);
   readonly restarting = signal(false);
 
-  readonly commandItems: (
+  readonly registeredJobs = signal<SchedulerJob[]>([]);
+
+  /** Core's own manual-trigger groups. A publisher's jobs never join one of
+   *  these — they land in the dynamic group `commandItems` appends below. */
+  readonly coreCommandGroups: (
     | { type: 'single'; name: string; label: string }
     | { type: 'group'; label: string; items: { name: string; label: string }[] }
   )[] = [
-    { type: 'group', label: 'system.cmd_group_media', items: [
-      { name: 'SearchMissing', label: 'system.cmd_search_missing' },
-      { name: 'RssSync', label: 'system.cmd_rss_sync' },
-      { name: 'ImportCompleted', label: 'system.cmd_import_completed' },
-    ]},
     { type: 'group', label: 'system.cmd_group_metadata', items: [
       { name: 'RefreshMetadata', label: 'system.cmd_refresh_metadata' },
       { name: 'RefreshMissingMetadata', label: 'system.cmd_refresh_missing_metadata' },
@@ -69,14 +70,28 @@ export class SystemStatusComponent implements OnInit {
     ]},
   ];
 
+  private readonly coreCommandNames = new Set(
+    this.coreCommandGroups.flatMap((g) => (g.type === 'single' ? [g.name] : g.items.map((i) => i.name))),
+  );
+
+  /** Core's groups, plus whatever a publisher registered that core doesn't already
+   *  show — SearchMissing/RssSync/... with the acquisition bundle on, nothing without it. */
+  readonly commandItems = computed(() => {
+    const dynamic = this.registeredJobs()
+      .filter((j) => j.triggerable && !this.coreCommandNames.has(j.name))
+      .map((j) => ({ name: j.name, label: j.labelKey }));
+    if (dynamic.length === 0) return this.coreCommandGroups;
+    return [...this.coreCommandGroups, { type: 'group' as const, label: 'system.cmd_group_media', items: dynamic }];
+  });
+
   /** Flat list for label lookups in command history. */
-  readonly availableCommands = [
-    ...this.commandItems.flatMap(item =>
+  readonly availableCommands = computed(() => [
+    ...this.commandItems().flatMap(item =>
       item.type === 'single' ? [item] : item.items,
     ),
     // Non-triggerable commands (background-only) that still appear in history.
     { name: 'IntroDetection', label: 'system.cmd_intro_detection' },
-  ];
+  ]);
 
   constructor() {
     effect(() => {
@@ -91,6 +106,17 @@ export class SystemStatusComponent implements OnInit {
     this.sse.connect();
     this.loadHealth();
     this.loadCommands();
+    this.loadSchedulers();
+  }
+
+  /** Feeds the dynamic trigger-button group — silently empty on failure,
+   *  same as any other publisher-fed part of this page. */
+  async loadSchedulers() {
+    try {
+      this.registeredJobs.set(await firstValueFrom(this.http.get<SchedulerJob[]>('/api/commands/schedulers')));
+    } catch {
+      // handled by global interceptor
+    }
   }
 
   async loadHealth() {
@@ -198,6 +224,6 @@ export class SystemStatusComponent implements OnInit {
   /** i18n key for known scheduler commands (progress bar + consistency with manual actions). */
   commandLabelKey(commandName: string): string {
     const baseName = commandName.split(':')[0];
-    return this.availableCommands.find((c) => c.name === baseName)?.label ?? commandName;
+    return this.availableCommands().find((c) => c.name === baseName)?.label ?? commandName;
   }
 }

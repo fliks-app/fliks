@@ -4,16 +4,9 @@ import { firstValueFrom } from 'rxjs';
 
 export type ChecklistItemSeverity = 'required' | 'recommended';
 
-export type ChecklistItemKey =
-  | 'library'
-  | 'quality-profile'
-  | 'language-profile'
-  | 'download-client'
-  | 'indexer'
-  | 'subtitle-provider'
-  | 'notification'
-  | 'non-admin-user'
-  | 'auto-approval-rule';
+/** Core's own keys join whatever a bundle registers (mirrors the backend's
+ *  `ChecklistItemRegistry`) — not a fixed union anymore. */
+export type ChecklistItemKey = string;
 
 export interface ChecklistItem {
   key: ChecklistItemKey;

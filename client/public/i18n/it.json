@@ -1248,6 +1248,8 @@
     "cmd_refresh_metadata": "Aggiorna i metadati",
     "cmd_refresh_missing_metadata": "Ricarica i metadati mancanti",
     "cmd_import_completed": "Importa i download completati",
+    "cmd_clean_stalled": "Pulisci i torrent bloccati",
+    "cmd_clean_seeded": "Pulisci i torrent seedati",
     "cmd_rescan_all": "Riscansiona tutti i file",
     "cmd_rescan_missing_files": "Riscansiona i file mancanti",
     "cmd_generate_sprites": "Genera gli sprite",

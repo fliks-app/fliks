@@ -202,8 +202,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
   );
   /** Media count per library ID. */
   readonly libraryCounts = signal<Record<number, number>>({});
-  readonly queueCount = signal(0);
-  readonly pendingRequestCount = signal(0);
+  /** Badge counts by contribution `badgeKey` — the API's `badgeCounts` map
+   *  plus `pendingRequests` folded in, so lookup stays one generic line. */
+  readonly badgeCounts = signal<Record<string, number>>({});
 
   private readonly navContrib = inject(NavContributionsService);
   /** `nav.main` items before/after the library block, and `nav.acquisition` —
@@ -225,13 +226,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.acquisitionItems().filter((i) => !DOCK_PINNED_IDS.includes(i.id)),
   );
 
-  /** Looks up a contribution's badge count by its declared key — the only
-   *  keys core's own items use today; a plugin badge stays at 0 until the
-   *  counts endpoint grows a matching field. */
+  /** Looks up a contribution's badge count by its declared key, whatever
+   *  publisher (core or a plugin) it came from. Absent means no badge. */
   badgeCountFor(item: ResolvedNavItem): number {
-    if (item.badgeKey === 'queueActive') return this.queueCount();
-    if (item.badgeKey === 'pendingRequests') return this.pendingRequestCount();
-    return 0;
+    return (item.badgeKey && this.badgeCounts()[item.badgeKey]) || 0;
   }
 
   /** Refresh counts when relevant SSE events arrive */
@@ -315,8 +313,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
       ]);
       this.libraries.set(libs);
       this.libraryCounts.set(counts.mediaByLibrary);
-      this.queueCount.set(counts.queueActive);
-      this.pendingRequestCount.set(counts.pendingRequests);
+      this.badgeCounts.set({ ...counts.badgeCounts, pendingRequests: counts.pendingRequests });
     } catch {
       // silently ignore — counts are non-critical
     }
@@ -328,8 +325,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     try {
       const counts = await this.countsApi.get();
       this.libraryCounts.set(counts.mediaByLibrary);
-      this.queueCount.set(counts.queueActive);
-      this.pendingRequestCount.set(counts.pendingRequests);
+      this.badgeCounts.set({ ...counts.badgeCounts, pendingRequests: counts.pendingRequests });
     } catch { /* ignore */ }
   }
 

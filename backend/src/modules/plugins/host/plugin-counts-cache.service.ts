@@ -17,4 +17,10 @@ export class PluginCountsCacheService {
   get(key: string): number {
     return this.counts.get(key) ?? 0;
   }
+
+  /** Tells "never pushed" apart from an explicit 0 — callers that must not
+   *  show a badge for a publisher that never connected read this first. */
+  has(key: string): boolean {
+    return this.counts.has(key);
+  }
 }
