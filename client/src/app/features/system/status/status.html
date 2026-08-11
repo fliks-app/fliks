@@ -32,8 +32,7 @@
     <div class="card bg-base-100 border border-base-200">
       <div class="card-body py-4 px-5 gap-2">
         <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'system.health_plugins' | translate }}</p>
-        <p class="text-lg font-semibold">{{ h.activePlugins | number }}</p>
-        <p class="text-sm text-base-content/50">{{ 'system.health_plugins_hint' | translate }}</p>
+        <p class="text-lg font-semibold">{{ h.installedPlugins | number }}</p>
       </div>
     </div>
   </div>

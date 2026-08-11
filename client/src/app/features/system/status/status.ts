@@ -14,7 +14,7 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 
 interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; body?: Record<string, unknown>; }
 interface ServiceStatus { name: string; ok: boolean; message?: string; }
-interface HealthReport { version: string; uptimeSeconds: number; database: ServiceStatus; activePlugins: number; restartSupervisor: string | null; }
+interface HealthReport { version: string; uptimeSeconds: number; database: ServiceStatus; installedPlugins: number; restartSupervisor: string | null; }
 
 @Component({
   selector: 'app-system-status',

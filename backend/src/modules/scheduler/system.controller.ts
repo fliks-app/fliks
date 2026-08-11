@@ -19,7 +19,7 @@ import { DataSource, Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Library } from '../libraries/entities/library.entity';
-import { PluginRegistryService } from '../plugins/plugin-registry.service';
+import { PluginPackage } from '../plugins/entities/plugin-package.entity';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
@@ -128,9 +128,9 @@ export interface HealthReport {
   version: string;
   uptimeSeconds: number;
   database: ServiceStatus;
-  /** Core reports only how many plugins are running. A capability's own
+  /** Core reports only how many plugins are installed. A capability's own
    *  reachability belongs on that capability's page, which its plugin owns. */
-  activePlugins: number;
+  installedPlugins: number;
   restartSupervisor: string | null;
 }
 
@@ -196,7 +196,8 @@ export class SystemController {
     private readonly dataSource: DataSource,
     @InjectRepository(Library)
     private readonly libraryRepo: Repository<Library>,
-    private readonly pluginRegistry: PluginRegistryService,
+    @InjectRepository(PluginPackage)
+    private readonly pluginPackageRepo: Repository<PluginPackage>,
     private readonly backup: BackupService,
     private readonly logBuffer: LogBufferService,
     private readonly eventsService: EventsService,
@@ -226,7 +227,7 @@ export class SystemController {
       version: APP_VERSION,
       uptimeSeconds: Math.floor(process.uptime()),
       database: await this.checkDatabase(),
-      activePlugins: this.pluginRegistry.list().length,
+      installedPlugins: await this.pluginPackageRepo.count(),
       restartSupervisor: detectRestartSupervisor(),
     };
   }
