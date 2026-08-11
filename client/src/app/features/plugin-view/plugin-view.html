@@ -16,9 +16,12 @@
   @default {
     @if (providersView(); as view) {
       @if (resolvedImplementations(); as impls) {
+        @if (implementationsLoadError()) {
+          <div role="alert" class="alert alert-warning mb-4">{{ 'plugin_view.implementations_load_error' | translate }}</div>
+        }
         <app-provider-list
           [titleKey]="view.labelKey"
-          [listUrl]="view.list"
+          [listUrl]="resourceUrl(view.list)"
           [implementations]="impls"
           [labels]="providerLabels(view)"
           [showPriority]="view.showPriority ?? true"
@@ -35,10 +38,10 @@
     } @else if (tableView(); as view) {
       <app-data-table
         [titleKey]="view.labelKey"
-        [listUrl]="view.list"
+        [listUrl]="resourceUrl(view.list)"
         [columns]="view.columns"
-        [rowActions]="view.rowActions ?? []"
-        [listActions]="view.listActions ?? []"
+        [rowActions]="tableRowActions(view)"
+        [listActions]="tableListActions(view)"
         [defaultSortKey]="view.defaultSortKey ?? null"
         [paged]="view.paged ?? false"
         [pageSize]="view.pageSize ?? 20"

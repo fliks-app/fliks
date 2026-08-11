@@ -17,7 +17,7 @@ import {
   ProviderTestResult,
 } from '../../shared/components/provider-list/provider-list.types';
 import { DataTableComponent } from '../../shared/components/data-table/data-table';
-import type { TableRow } from '../../shared/components/data-table/data-table.types';
+import type { ListAction, RowAction, TableRow } from '../../shared/components/data-table/data-table.types';
 import type { FormConfigPage } from '../../core/plugin-ui/contribution.types';
 import { AnyConfigPage, ProvidersView, TableView, isFormView, isProvidersView, isTableView } from './view-kinds.types';
 
@@ -103,6 +103,9 @@ export class PluginViewComponent {
 
   // --- `providers` kind: the driver list is itself a proxied route ---
   readonly resolvedImplementations = signal<ProviderImplementation[] | null>(null);
+  /** A failed fetch still resolves to `[]` (so the renderer mounts), but that's
+   *  indistinguishable from a real driver with no fields — flag it separately. */
+  readonly implementationsLoadError = signal(false);
 
   constructor() {
     effect(() => {
@@ -143,12 +146,23 @@ export class PluginViewComponent {
     }
   }
 
+  /** A manifest declares routes relative to itself — only the proxy at
+   *  `/api/plugins/<id>/` actually serves them. */
+  resourceUrl(path: string): string {
+    return `/api/plugins/${this.pluginId()}${path}`;
+  }
+
   private async loadImplementations(route: string): Promise<void> {
     this.resolvedImplementations.set(null);
+    this.implementationsLoadError.set(false);
     try {
-      this.resolvedImplementations.set(await firstValueFrom(this.http.get<ProviderImplementation[]>(route)));
+      this.resolvedImplementations.set(
+        await firstValueFrom(this.http.get<ProviderImplementation[]>(this.resourceUrl(route))),
+      );
     } catch {
+      // An empty list here is indistinguishable from "no fields to show" — surface it instead.
       this.resolvedImplementations.set([]);
+      this.implementationsLoadError.set(true);
     }
   }
 
@@ -159,23 +173,34 @@ export class PluginViewComponent {
     if (!action) return null;
     return async (draft: ProviderDraft) => {
       try {
-        return await firstValueFrom(this.http.post<ProviderTestResult>(action.route, draft));
+        return await firstValueFrom(
+          this.http.request<ProviderTestResult>(action.method, this.resourceUrl(action.route), { body: draft }),
+        );
       } catch {
         return { ok: false, message: this.translate.instant('provider_list.test_network_error') };
       }
     };
   }
 
-  /** `actions[].scope: 'list'` — rendered once above the rows, POSTed with no draft. */
+  /** `actions[].scope: 'list'` — rendered once above the rows, run with no draft. */
   providerListActions(view: ProvidersView): ProviderListAction[] {
     return (view.actions ?? [])
       .filter((a) => a.scope === 'list')
       .map((a) => ({
         labelKey: a.labelKey,
         run: async () => {
-          await firstValueFrom(this.http.post(a.route, {}));
+          await firstValueFrom(this.http.request(a.method, this.resourceUrl(a.route), { body: {} }));
         },
       }));
+  }
+
+  /** Only `kind: 'proxy'` carries a plugin-relative path — `route`/`action` resolve in-app. */
+  tableRowActions(view: TableView): RowAction[] {
+    return (view.rowActions ?? []).map((a) => (a.kind === 'proxy' ? { ...a, path: this.resourceUrl(a.path) } : a));
+  }
+
+  tableListActions(view: TableView): ListAction[] {
+    return (view.listActions ?? []).map((a) => ({ ...a, path: this.resourceUrl(a.path) }));
   }
 
   /** Merges a page's own wording over the generic provider-list chrome. */
