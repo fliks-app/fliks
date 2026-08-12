@@ -64,7 +64,9 @@ volumes/*
 /scripts/
 logos/
 plans/
-/docs/
+# Scratch documentation stays local; the plugin contract is shared, so it is tracked.
+/docs/*
+!/docs/plugins.md
 docker-compose.yml
 docker-compose.prod.yml
 .worktrees/

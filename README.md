@@ -245,6 +245,7 @@ then always reports "up to date" and never contacts GitHub.
 | `windows/`, `macos/` | native server hosts (tray / menu bar) |
 | `appletv/` | native tvOS app (SwiftUI) |
 | `cast-receiver/` | custom Chromecast receiver |
+| `docs/plugins.md` | how the plugin system works, for whoever writes one |
 
 ## License
 
