@@ -19,8 +19,8 @@
       @for (row of rows(); track row.sourceId + ':' + row.plugin.id) {
         <div class="border border-base-200 rounded-lg p-4 flex flex-col gap-2">
           <div class="flex items-start gap-3">
-            @if (row.plugin.logo) {
-              <img [src]="row.plugin.logo" (error)="hideBrokenLogo($event)" alt="" class="w-10 h-10 rounded object-contain bg-base-200 shrink-0" />
+            @if (logoFor(row); as logo) {
+              <img [src]="logo" (error)="hideBrokenLogo($event)" alt="" class="w-10 h-10 rounded object-contain bg-base-200 shrink-0" />
             }
             <div class="min-w-0 flex-1">
               <p class="font-medium truncate">{{ row.plugin.name }}</p>
@@ -50,7 +50,7 @@
                   @if (isInspecting(row)) {
                     <span class="loading loading-spinner loading-xs"></span>
                   }
-                  {{ 'settings.plugins.catalogue.install' | translate: { version: row.latestVersion } }}
+                  {{ 'settings.plugins.catalogue.install' | translate }}
                 </button>
               } @else {
                 <span class="text-xs text-base-content/40 shrink-0">{{ 'settings.plugins.catalogue.no_installable' | translate }}</span>
