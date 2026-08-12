@@ -37,6 +37,7 @@ function makePackage(manifest: PluginManifest, overrides: Partial<PluginPackage>
     verifiedByKeyId: null,
     manifest,
     status: 'active',
+    enabled: true,
     ...overrides,
   } as PluginPackage;
 }
@@ -108,6 +109,31 @@ describe('PluginRegistryService — boot load', () => {
     expect(service.get(failing.id)).toBeUndefined();
     expect(service.get(good.id)).toBeDefined();
     expect(service.list()).toHaveLength(1);
+  });
+
+  it('a disabled package is neither started nor registered, and a later enabled one still loads', async () => {
+    const disabled = minimalDataManifest({ id: 'fliks.boot-disabled', fliks: COMPATIBLE_RANGE });
+    const good = minimalDataManifest({ id: 'fliks.good-plugin', fliks: COMPATIBLE_RANGE });
+    const { service } = makeService([makePackage(disabled, { enabled: false }), makePackage(good)]);
+
+    await service.onModuleInit();
+
+    expect(service.get(disabled.id)).toBeUndefined();
+    expect(service.get(good.id)).toBeDefined();
+    expect(service.list()).toHaveLength(1);
+  });
+
+  it('a disabled process-tier package never spawns its supervisor', async () => {
+    const manifest = minimalProcessManifest(
+      { 'plugin.js': 'a'.repeat(64), 'logo.png': 'b'.repeat(64) },
+      { id: 'fliks.boot-disabled-process', fliks: COMPATIBLE_RANGE },
+    );
+    const { service, processService } = makeService([makePackage(manifest, { enabled: false })]);
+
+    await service.onModuleInit();
+
+    expect(processService.startFor).not.toHaveBeenCalled();
+    expect(service.get(manifest.id)).toBeUndefined();
   });
 });
 
@@ -217,7 +243,7 @@ describe('PluginRegistryService.register()', () => {
       expect(service.get(pkg.pluginId)).toBeDefined();
       const row = registrationRepo.rows.get(pkg.pluginId);
       expect(row).toEqual(
-        expect.objectContaining({ pluginId: pkg.pluginId, enabled: true, ingestRoots: [], scopes: ['media:read'] }),
+        expect.objectContaining({ pluginId: pkg.pluginId, ingestRoots: [], scopes: ['media:read'] }),
       );
     });
 
@@ -225,30 +251,16 @@ describe('PluginRegistryService.register()', () => {
       const pkg = processPackage({ id: 'fliks.processreload' });
       const { service, registrationRepo } = makeService();
       await service.register(pkg);
-      registrationRepo.rows.get(pkg.pluginId)!.enabled = false;
       registrationRepo.rows.get(pkg.pluginId)!.ingestRoots = ['/media/custom'];
 
       const second = await service.register(pkg);
 
-      expect(second).toEqual({ ok: false, pluginId: pkg.pluginId, reason: 'disabled', detail: expect.any(String) });
+      expect(second).toEqual({ ok: true, pluginId: pkg.pluginId });
       const row = registrationRepo.rows.get(pkg.pluginId);
       expect(row?.ingestRoots).toEqual(['/media/custom']);
       expect(row?.manifest).toEqual(pkg.manifest);
     });
 
-    it('a disabled registration refuses with "disabled" and never calls startFor', async () => {
-      const pkg = processPackage({ id: 'fliks.processdisabled' });
-      const { service, registrationRepo, processService } = makeService();
-      await service.register(pkg);
-      registrationRepo.rows.get(pkg.pluginId)!.enabled = false;
-      processService.startFor.mockClear();
-
-      const result = await service.register(pkg);
-
-      expect(result).toEqual({ ok: false, pluginId: pkg.pluginId, reason: 'disabled', detail: expect.any(String) });
-      expect(processService.startFor).not.toHaveBeenCalled();
-      expect(service.get(pkg.pluginId)).toBeUndefined();
-    });
 
     it('propagates a spawn failure reason and registers nothing', async () => {
       const pkg = processPackage({ id: 'fliks.processspawnfail' });

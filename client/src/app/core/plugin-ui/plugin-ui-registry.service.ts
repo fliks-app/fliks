@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom, of } from 'rxjs';
 import { catchError, timeout } from 'rxjs/operators';
@@ -17,8 +17,9 @@ const FETCH_TIMEOUT_MS = 3000;
 @Injectable({ providedIn: 'root' })
 export class PluginUiRegistryService {
   private readonly http = inject(HttpClient);
-  private entries: PluginUiEntry[] = [];
-  private bySlot = new Map<SlotId, UiContribution[]>();
+  /** A signal, so a reload after an install or a toggle re-runs every consumer's `computed`
+   *  instead of waiting for the next full page load. */
+  private readonly entriesSignal = signal<PluginUiEntry[]>([]);
 
   async load(): Promise<void> {
     const entries = await firstValueFrom(
@@ -27,13 +28,16 @@ export class PluginUiRegistryService {
         catchError(() => of<PluginUiEntry[]>([])),
       ),
     );
-    this.entries = Array.isArray(entries) ? entries : [];
-    this.index();
+    this.entriesSignal.set(Array.isArray(entries) ? entries : []);
   }
 
-  private index(): void {
+  private get entries(): PluginUiEntry[] {
+    return this.entriesSignal();
+  }
+
+  private readonly bySlotSignal = computed(() => {
     const bySlot = new Map<SlotId, UiContribution[]>();
-    for (const entry of this.entries) {
+    for (const entry of this.entriesSignal()) {
       for (const contribution of entry.contributions ?? []) {
         const list = bySlot.get(contribution.slot);
         if (list) list.push(contribution);
@@ -43,17 +47,17 @@ export class PluginUiRegistryService {
     for (const list of bySlot.values()) {
       list.sort((a, b) => a.weight - b.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     }
-    this.bySlot = bySlot;
-  }
+    return bySlot;
+  });
 
   /** Contributions for one slot, sorted ascending by weight then ascending by id. */
   contributionsFor(slot: SlotId): UiContribution[] {
-    return this.bySlot.get(slot) ?? [];
+    return this.bySlotSignal().get(slot) ?? [];
   }
 
   /** The one contribution (any slot) whose route action points at this path, if any. */
   findRouteContribution(path: string): UiContribution | undefined {
-    for (const list of this.bySlot.values()) {
+    for (const list of this.bySlotSignal().values()) {
       const found = list.find((c) => c.action.kind === 'route' && c.action.path === path);
       if (found) return found;
     }

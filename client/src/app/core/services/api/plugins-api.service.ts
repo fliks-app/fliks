@@ -18,6 +18,10 @@ export interface PluginSummary {
   statusReason: string | null;
   signature: PluginTrust;
   verifiedByKeyId: string | null;
+  enabled: boolean;
+  /** `process` only — null for `data`, which has no supervisor. */
+  processState?: string | null;
+  statusMessage?: string;
 }
 
 /** Mirrors backend `PluginInspectReport`. A refusal carries `refusalCode`/`detail` and nothing else. */
@@ -113,6 +117,14 @@ export class PluginsApiService {
 
   uninstall(pluginId: string) {
     return firstValueFrom(this.http.delete<void>(`/api/plugins/${pluginId}`));
+  }
+
+  disable(pluginId: string) {
+    return firstValueFrom(this.http.post<PluginSummary>(`/api/plugins/${pluginId}/disable`, {}));
+  }
+
+  enable(pluginId: string) {
+    return firstValueFrom(this.http.post<PluginSummary>(`/api/plugins/${pluginId}/enable`, {}));
   }
 
   listSources() {

@@ -1243,6 +1243,7 @@
     "health_app": "Applicazione",
     "health_db": "Database",
     "health_plugins": "Plugin installati",
+    "health_plugins_running": "{{count}} in esecuzione",
     "uptime": "Uptime",
     "logs_title": "Log",
     "logs_all_levels": "Tutti i livelli",
@@ -2080,6 +2081,7 @@
       "col_tier": "Tier",
       "col_trust": "Trust",
       "col_status": "Status",
+      "col_enabled": "Enabled",
       "tier_data": "Data",
       "tier_process": "Process",
       "status_active": "Active",
@@ -2091,6 +2093,10 @@
       "inspect_error": "Unable to read this archive.",
       "installed": "Plugin installed.",
       "install_failed_but_kept": "\"{{id}}\" was installed but could not start: {{reason}}",
+      "enabled_toast": "Plugin enabled.",
+      "disabled_toast": "Plugin disabled.",
+      "enable_failed_but_kept": "\"{{id}}\" is enabled but could not start: {{reason}}",
+      "toggle_error": "Unable to update the plugin state.",
       "trust": {
         "official": "Official",
         "verified": "Verified — {{key}}",
@@ -2177,7 +2183,9 @@
         "hidden_versions": "{{count}} versione/i nascosta/e — richiede Fliks {{version}}+",
         "hidden_versions_no_upgrade": "{{count}} versione/i nascosta/e",
         "inspect_error": "Impossibile recuperare questo plugin."
-      }
+      },
+      "status_disabled": "Disattivato",
+      "status_unavailable": "Non disponibile"
     }
   },
   "roles": {

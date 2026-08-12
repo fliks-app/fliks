@@ -33,6 +33,7 @@
       <div class="card-body py-4 px-5 gap-2">
         <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'system.health_plugins' | translate }}</p>
         <p class="text-lg font-semibold">{{ h.installedPlugins | number }}</p>
+        <p class="text-sm text-base-content/60">{{ 'system.health_plugins_running' | translate: { count: h.runningPlugins } }}</p>
       </div>
     </div>
   </div>

@@ -16,9 +16,6 @@ export class PluginRegistration extends BaseEntity {
   @Column({ type: 'text', array: true, default: () => "'{}'" })
   scopes: PluginScope[];
 
-  @Column({ default: true })
-  enabled: boolean;
-
   /** Cached for `GET /api/plugins/ui`; refreshed at hello, manual refresh, and the plugin's own notify. */
   @Column({ type: 'jsonb' })
   manifest: PluginManifest;
