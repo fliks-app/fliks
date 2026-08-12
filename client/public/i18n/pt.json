@@ -2087,7 +2087,7 @@
       "status_active": "Active",
       "status_failed": "Failed",
       "uninstall": "Uninstall",
-      "confirm_uninstall": "Desinstalar «{{name}}»? Os seus ficheiros são eliminados imediatamente, e um plugin com o seu próprio esquema de base de dados perde esse esquema e todas as suas tabelas.",
+      "confirm_uninstall": "Desinstalar «{{name}}»? Os dados associados a este plugin serão perdidos.",
       "uninstalled": "Plugin uninstalled.",
       "uninstall_error": "Unable to uninstall the plugin.",
       "inspect_error": "Unable to read this archive.",
