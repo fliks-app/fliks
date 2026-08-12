@@ -3,12 +3,16 @@ import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
+import { PluginWebhookDispatcherService, type WebhookTestResult } from './plugin-webhook-dispatcher.service';
 import { PluginInstallService, PluginSummary } from './plugin-install.service';
 
 @Controller('plugins')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
 export class PluginsController {
-  constructor(private readonly installService: PluginInstallService) {}
+  constructor(
+    private readonly installService: PluginInstallService,
+    private readonly dispatcher: PluginWebhookDispatcherService,
+  ) {}
 
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
@@ -31,6 +35,15 @@ export class PluginsController {
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   async disable(@Param('pluginId') pluginId: string): Promise<PluginSummary> {
     return this.installService.disable(pluginId);
+  }
+
+  /** Posts one synthetic event to whatever this plugin declared, so an operator can prove their
+   *  endpoint answers without waiting for a real import. */
+  @Post(':pluginId/events/test')
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+  async testEventDelivery(@Param('pluginId') pluginId: string): Promise<WebhookTestResult> {
+    await this.installService.assertInstalled(pluginId);
+    return this.dispatcher.sendTest(pluginId);
   }
 
   /** Re-registers through the same path a boot load takes. Idempotent. */

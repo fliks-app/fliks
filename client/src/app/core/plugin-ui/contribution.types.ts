@@ -89,6 +89,10 @@ interface ConfigPageBase {
 export interface FormConfigPage extends ConfigPageBase {
   kind?: 'form';
   fields: FieldDef[];
+  /** Buttons core implements on the plugin's behalf. `actionId` names a closed catalogue core
+   *  resolves; an unknown one renders nothing. A `data` plugin executes no code of its own, so
+   *  this is the only way it can offer an action at all. */
+  actions?: { id: string; labelKey: string; actionId: string }[];
 }
 
 /** One search/grab pair the core release picker calls for a given context. */

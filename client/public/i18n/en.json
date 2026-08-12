@@ -2365,7 +2365,10 @@
     "unknown_plugin": "The plugin this page belongs to isn't installed.",
     "unknown_view": "This plugin doesn't have a page by that name.",
     "unsupported_kind": "This page isn't supported by your version of Fliks yet.",
-    "implementations_load_error": "Couldn't load the provider types — some fields may be missing below."
+    "implementations_load_error": "Couldn't load the provider types — some fields may be missing below.",
+    "webhook_test_ok": "Test event delivered to {{count}} endpoint(s).",
+    "webhook_test_unconfigured": "No endpoint configured yet — nothing was sent.",
+    "webhook_test_failed": "Test delivery failed: {{detail}}"
   },
   "provider_list": {
     "new": "New",

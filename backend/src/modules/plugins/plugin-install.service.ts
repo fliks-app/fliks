@@ -224,6 +224,12 @@ export class PluginInstallService {
     await this.registry.restartProcess(pluginId);
   }
 
+  /** 404s an id nothing is installed under, for a caller that acts on a plugin without needing
+   *  its row. */
+  async assertInstalled(pluginId: string): Promise<void> {
+    await this.findInstalledPlugin(pluginId);
+  }
+
   /** Idempotent: an already-disabled plugin is returned as-is. Stops the supervisor and drops the
    *  live registration via `unregister()` — the package row, its archive and its schema are untouched. */
   async disable(pluginId: string): Promise<PluginSummary> {

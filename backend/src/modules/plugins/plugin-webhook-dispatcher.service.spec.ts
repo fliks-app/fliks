@@ -171,4 +171,31 @@ describe('PluginWebhookDispatcherService', () => {
 
       expect(requests).toHaveLength(0);
   });
+
+    it('posts one synthetic event per declaration, through the same guards', async () => {
+      const registry = {
+        listWebhooksForEvent: () => [],
+        listWebhooksForPlugin: () => [{ event: 'media.imported', webhook: 'setting:endpoint_url' }],
+      } as unknown as PluginRegistryService;
+      const settings = settingsStub({ 'plugin.fliks.acme.endpoint_url': 'https://hooks.example/mine' });
+      const service = new PluginWebhookDispatcherService(new EventsService(), registry, settings);
+
+      const result = await service.sendTest('fliks.acme');
+
+      expect(result).toEqual({ configured: true, delivered: 1, failures: [] });
+      expect(requests.map((r) => r.url)).toEqual(['https://hooks.example/mine']);
+    });
+
+    it('VERDICT: reports "not configured" instead of sending anywhere when the endpoint is empty', async () => {
+      const registry = {
+        listWebhooksForEvent: () => [],
+        listWebhooksForPlugin: () => [{ event: 'media.imported', webhook: 'setting:endpoint_url' }],
+      } as unknown as PluginRegistryService;
+      const service = new PluginWebhookDispatcherService(new EventsService(), registry, settingsStub());
+
+      const result = await service.sendTest('fliks.acme');
+
+      expect(result).toEqual({ configured: false, delivered: 0, failures: [] });
+      expect(requests).toHaveLength(0);
+  });
 });

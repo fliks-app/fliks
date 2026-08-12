@@ -379,6 +379,11 @@ export class PluginRegistryService implements OnModuleInit {
     return out;
   }
 
+  /** Everything one plugin declared — what a test delivery walks. */
+  listWebhooksForPlugin(pluginId: string): { event: PluginWebhookEventName; webhook: string }[] {
+    return [...(this.webhookDeclarations.get(pluginId) ?? [])];
+  }
+
   /** Drops this plugin's previous webhooks (if any) and installs `declarations` in their place. */
   private replaceWebhookDeclarations(pluginId: string, declarations: { event: PluginWebhookEventName; webhook: string }[]): void {
     if (declarations.length === 0) this.webhookDeclarations.delete(pluginId);

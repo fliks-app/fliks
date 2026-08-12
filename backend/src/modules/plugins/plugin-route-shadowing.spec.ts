@@ -10,6 +10,7 @@ import { PluginProxyController } from './proxy/plugin-proxy.controller';
 import { PluginRouteGuard } from './proxy/plugin-route.guard';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginInstallService } from './plugin-install.service';
+import { PluginWebhookDispatcherService } from './plugin-webhook-dispatcher.service';
 import { PluginCatalogClientService } from './plugin-catalog-client.service';
 import { PluginProcessService } from './plugin-process.service';
 import { PluginSource } from './entities/plugin-source.entity';
@@ -57,6 +58,7 @@ describe('plugins/* route shadowing', () => {
       providers: [
         { provide: PluginRegistryService, useValue: registry },
         { provide: PluginInstallService, useValue: installService },
+        { provide: PluginWebhookDispatcherService, useValue: { sendTest: jest.fn() } },
         { provide: PluginCatalogClientService, useValue: catalogClient },
         { provide: PluginProcessService, useValue: processService },
         { provide: getRepositoryToken(PluginSource), useValue: sourceRepo },

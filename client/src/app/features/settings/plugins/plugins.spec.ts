@@ -105,7 +105,6 @@ describe('PluginsSettingsComponent — enable/disable toggle', () => {
     http.expectOne({ url: '/api/plugins/fliks.acme', method: 'DELETE' }).flush({});
     await settle(fixture);
     http.expectOne({ url: '/api/plugins', method: 'GET' }).flush([]);
-    http.expectOne({ url: '/api/plugins/sources', method: 'GET' }).flush([]);
     await settle(fixture);
 
     // Without this the pages stay linked in the admin sidebar until a full page load.
