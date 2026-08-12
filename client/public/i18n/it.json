@@ -1123,7 +1123,11 @@
     "tstatus_paused": "In pausa",
     "tstatus_queued": "In coda",
     "tstatus_unknown": "Sconosciuto",
-    "fstatus_importing": "Import in corso"
+    "fstatus_importing": "Import in corso",
+    "status_downloaded": "Scaricato",
+    "status_upgraded": "Aggiornato",
+    "status_synced": "Sincronizzato",
+    "status_failed": "Fallito"
   },
   "tracking": {
     "menu_item": "Vedi lo stato del monitoraggio",
@@ -1431,7 +1435,8 @@
       "subtitles": "Sottotitoli",
       "schedulers": "Attività pianificate",
       "streaming": "Streaming",
-      "plugins": "Plugins"
+      "plugins": "Plugins",
+      "subtitles_activity": "Attività sottotitoli"
     },
     "streaming": {
       "title": "Streaming",

@@ -10,8 +10,8 @@ export const PLUGIN_CHILD_GID = 65534;
 let cachedPermissionFlag: string | null = null;
 
 /**
- * `--permission` is the plan's flag (stable on the NodeSource 24 this server
- * runs); older Nodes need `--experimental-permission`. Probed once and cached.
+ * `--permission` is the flag name to use (stable on the NodeSource 24 this
+ * server runs); older Nodes need `--experimental-permission`. Probed once and cached.
  */
 export function resolvePermissionFlag(): string {
   if (cachedPermissionFlag) return cachedPermissionFlag;

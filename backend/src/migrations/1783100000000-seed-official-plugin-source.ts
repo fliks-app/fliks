@@ -4,8 +4,8 @@ const OFFICIAL_CATALOG_URL = 'https://fliks-app.github.io/fliks-plugin-catalog/c
 
 /**
  * The official catalog source, seeded once so a fresh install has something to
- * browse without typing a URL — "N per install, the official one is just the
- * seeded first" (`plans/plugin-system.plan.md`). No pinned key: refreshes fall
+ * browse without typing a URL. It's just the first row in `plugin_sources` —
+ * nothing caps how many more an admin adds. No pinned key: refreshes fall
  * back to the compiled-in `OFFICIAL_KEYS` (`release-2026`).
  */
 export class SeedOfficialPluginSource1783100000000 implements MigrationInterface {

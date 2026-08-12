@@ -15,15 +15,20 @@ import {
 } from '../../../core/services/api/subtitles-api.service';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
+import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
+import { SUBTITLE_LANGUAGE_CODES } from '../../../core/constants/subtitle-languages';
 import { episodeLabel } from '../../../shared/utils/episode-label';
 
 @Component({
-  selector: 'app-activity-subtitles',
-  imports: [TranslateModule, LocaleDatePipe, NgClass, RouterLink, FormsModule, PaginationComponent],
+  selector: 'app-subtitles-activity',
+  imports: [TranslateModule, LocaleDatePipe, LocalizeLanguagePipe, NgClass, RouterLink, FormsModule, PaginationComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  templateUrl: './subtitles.html',
+  templateUrl: './subtitles-activity.html',
 })
-export class ActivitySubtitlesComponent implements OnInit {
+export class SubtitlesActivityComponent implements OnInit {
+  /** The same codes the translation targets offer, rendered through `localizeLanguage`. */
+  readonly languageCodes = SUBTITLE_LANGUAGE_CODES;
+
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly translate = inject(TranslateService);
 

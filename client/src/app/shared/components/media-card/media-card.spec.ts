@@ -17,17 +17,15 @@ import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-regis
 import type { SlotId, UiContribution } from '../../../core/plugin-ui/contribution.types';
 
 /**
- * Characterisation test for the card's contextual actions menu, written
- * before the `card.actions` contribution-registry refactor (plan PR 5.5) and
- * run unchanged before and after. Captures the action list as data
- * ({labelKey, icon, tone}) plus each handler's real side effect, across every
- * distinct input combination a real caller uses today (grepped from
- * home/library/search/media-detail/media-detail-seasons) — a silent change
- * in what a viewer sees, or in what a row's click actually does, fails here.
+ * Characterisation test for the card's contextual actions menu. Captures the
+ * action list as data ({labelKey, icon, tone}) plus each handler's real side
+ * effect, across every distinct input combination a real caller uses today
+ * (grepped from home/library/search/media-detail/media-detail-seasons) — a
+ * silent change in what a viewer sees, or in what a row's click actually
+ * does, fails here.
  *
- * `PluginUiRegistryService` is provided (empty by default) even though the
- * pre-refactor component never reads it — so this exact file also runs
- * unchanged post-refactor, once the component starts consuming it.
+ * `PluginUiRegistryService` is provided (empty by default) so this file
+ * keeps passing whether or not the component consumes it.
  */
 
 interface Role {

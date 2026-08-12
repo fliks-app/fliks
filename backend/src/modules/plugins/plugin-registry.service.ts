@@ -130,9 +130,9 @@ export type PluginRegistrationResult = PluginRegistrationSuccess | PluginRegistr
 
 /**
  * In-memory installed-plugin set — the only thing the rest of core asks about
- * plugins. Populated at boot (L0-L4 of `plans/plugin-system.plan.md`'s load
- * table) and by `register()`, the hot-reload entry point the installer calls
- * for both tiers (P4a). L1 (`state.json` quarantine) still has no home; L3
+ * plugins. Populated at boot (L0-L4, the load checks below) and by
+ * `register()`, the hot-reload entry point the installer calls for both
+ * tiers (P4a). L1 (`state.json` quarantine) still has no home; L3
  * (re-hashing `plugin.js` from the loaded fd) is `PluginProcessService`'s.
  */
 @Injectable()

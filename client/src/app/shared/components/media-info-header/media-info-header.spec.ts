@@ -17,12 +17,10 @@ import type { SlotId, UiContribution } from '../../../core/plugin-ui/contributio
 
 /**
  * Permission-matrix + characterisation test for the `media.actions` kebab
- * menu. Written once, run unchanged before AND after the registry refactor
- * (PR 5.4) — see the plan's PR 5.4 acceptance criteria. `when` is
- * presentation only: every action behind these items stays CASL-guarded
- * server-side, so a bypassed predicate here is a cosmetic bug, never an
- * authorization one — but a WRONG one still offers a destructive action to
- * the wrong viewer's eyes, which is what this file exists to catch.
+ * menu. `when` is presentation only: every action behind these items stays
+ * CASL-guarded server-side, so a bypassed predicate here is a cosmetic bug,
+ * never an authorization one — but a WRONG one still offers a destructive
+ * action to the wrong viewer's eyes, which is what this file exists to catch.
  */
 
 // ── Role model: mirrors backend/src/common/constants/permissions.ts ──

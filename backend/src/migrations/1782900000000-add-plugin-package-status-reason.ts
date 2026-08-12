@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-/** Carries why `register()` refused a package, so a `failed` row is attributable (PR 7.2). */
+/** Carries why `register()` refused a package, so a `failed` row is attributable. */
 export class AddPluginPackageStatusReason1782900000000 implements MigrationInterface {
   name = 'AddPluginPackageStatusReason1782900000000';
 

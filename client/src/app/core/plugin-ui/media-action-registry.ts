@@ -1,7 +1,7 @@
 /**
  * Closed catalogue of `media.actions` actionIds core implements. A plugin's
  * contribution to this slot may only reference one of these — it never ships
- * its own handler (per the plan's "no plugin ships Angular" rule).
+ * its own handler — plugins never ship their own Angular code.
  */
 export type CoreMediaActionId =
   | 'media.recommend'

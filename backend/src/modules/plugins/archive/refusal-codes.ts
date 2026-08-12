@@ -1,7 +1,7 @@
 /**
- * One code per archive guard (see `plans/plugin-system.plan.md`, "Guards,
- * ordered"). The code is the contract: a caller branches on it, never on
- * `detail`, which is log/debug text only.
+ * One code per archive guard, in the order the guards run. The code is the
+ * contract: a caller branches on it, never on `detail`, which is log/debug
+ * text only.
  */
 export type PluginRefusalCode =
   | 'PLUGIN_BAD_MAGIC'

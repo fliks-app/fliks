@@ -10,9 +10,9 @@ import { PaginationComponent } from '../pagination/pagination';
 import { CellValue, ListAction, PagedResult, RowAction, TableColumn, TableRow } from './data-table.types';
 
 /**
- * The `table` view kind from the plugin plan: declared columns, declared row
- * actions, no client-side sorting beyond one declared default, no pluggable
- * cell renderers. Deliberately not a general grid.
+ * The `table` view kind: declared columns, declared row actions, no
+ * client-side sorting beyond one declared default, no pluggable cell
+ * renderers. Deliberately not a general grid.
  */
 @Component({
   selector: 'app-data-table',
@@ -31,7 +31,7 @@ export class DataTableComponent implements OnInit {
   readonly listUrl = input.required<string>();
   readonly columns = input.required<readonly TableColumn[]>();
   readonly rowActions = input<readonly RowAction[]>([]);
-  /** List-scope actions (the plan's `listActions[]`) — rendered once, next to the title. */
+  /** List-scope actions (`ListAction[]`) — rendered once, next to the title. */
   readonly listActions = input<readonly ListAction[]>([]);
   /** Applied once after load; there is no header-click re-sort. */
   readonly defaultSortKey = input<string | null>(null);

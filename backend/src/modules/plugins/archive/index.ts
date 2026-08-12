@@ -1,4 +1,4 @@
-/** Archive validator: guards, signature verification and staging extraction. No DI, no controller — see plans/plugin-system.plan.md PR 3.3. */
+/** Archive validator: guards, signature verification and staging extraction. No DI, no controller. */
 export * from './refusal-codes';
 export * from './limits';
 export * from './trust-store';

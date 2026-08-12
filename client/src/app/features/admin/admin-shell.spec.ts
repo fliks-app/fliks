@@ -37,6 +37,7 @@ const BASELINE_SIDEBAR = [
   { label: 'admin.section_subtitles', links: [
     { label: 'settings.nav.subtitles', href: '/admin/settings/subtitles' },
     { label: 'settings.nav.subtitle_providers', href: '/admin/settings/subtitle-providers' },
+    { label: 'settings.nav.subtitles_activity', href: '/admin/settings/subtitles-activity' },
   ] },
   { label: 'admin.section_integrations', links: [
     { label: 'settings.nav.media_servers', href: '/admin/settings/media-servers' },
@@ -121,10 +122,10 @@ function createFixture(opts: { isAdmin?: boolean; entries?: PluginUiEntry[] } = 
 
 describe('AdminShellComponent — sidebar characterisation', () => {
   // Same fixture run under both an admin and a non-admin auth context: the
-  // sidebar has never gated any of its 22 links on isAdmin (only the /admin
+  // sidebar has never gated any of its 23 links on isAdmin (only the /admin
   // route guard does), and the refactor must not start doing so implicitly.
   it.each([['admin', true], ['non-admin', false]] as const)(
-    'renders the unchanged 7-section, 22-link sidebar for a %s context',
+    'renders the unchanged 7-section, 23-link sidebar for a %s context',
     (_label, isAdmin) => {
       const fixture = createFixture({ isAdmin });
       expect(readSidebar(fixture)).toEqual(BASELINE_SIDEBAR);

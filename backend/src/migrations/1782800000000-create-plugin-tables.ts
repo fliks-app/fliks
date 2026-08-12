@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-/** The three plugin tables (`plans/plugin-system.plan.md`, "Where plugin storage lives").
+/** The three tables plugin state lives in.
  *  All three are new and empty on upgrade. */
 export class CreatePluginTables1782800000000 implements MigrationInterface {
   name = 'CreatePluginTables1782800000000';

@@ -82,7 +82,7 @@ describe('buildSpawnPlan', () => {
     expect(plan.env.FLIKS_CFG_UNRELATED).toBe('kept-as-is');
   });
 
-  it('builds the node argv verbatim from the plan', () => {
+  it('builds the exact node argv: permission flag, fs allowlist, heap cap, entry file', () => {
     const plan = buildSpawnPlan(baseInput);
     expect(plan.expectedCmdline).toEqual([
       process.execPath,

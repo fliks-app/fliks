@@ -53,7 +53,7 @@ describe('NavContributionsService', () => {
     const ids = svc.mainItems().map((i) => i.id);
     // Both plugin items tie core's "My profile" (weight 300) — id order wins,
     // and stays the same regardless of which plugin installed first.
-    expect(ids).toEqual(['core.home', 'core.search', 'a-plugin', 'core.my_profile', 'z-plugin', 'core.playlists', 'core.downloads', 'core.history', 'core.subtitle_activity']);
+    expect(ids).toEqual(['core.home', 'core.search', 'a-plugin', 'core.my_profile', 'z-plugin', 'core.playlists', 'core.downloads', 'core.history']);
   });
 
   it('drops a contribution with an unknown action.kind — fails closed, never a broken item', () => {
@@ -120,7 +120,7 @@ describe('NavContributionsService', () => {
   it('splits nav.main around the library block at weight 1000', () => {
     const svc = createService();
     expect(svc.mainItemsBeforeLibraries().map((i) => i.id)).toEqual(['core.home', 'core.search', 'core.my_profile']);
-    expect(svc.mainItemsAfterLibraries().map((i) => i.id)).toEqual(['core.playlists', 'core.downloads', 'core.history', 'core.subtitle_activity']);
+    expect(svc.mainItemsAfterLibraries().map((i) => i.id)).toEqual(['core.playlists', 'core.downloads', 'core.history']);
   });
 
   it('acquisition: core requests + calendar, weight 200 free for a plugin', () => {

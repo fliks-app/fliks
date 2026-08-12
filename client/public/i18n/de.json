@@ -1123,7 +1123,11 @@
     "tstatus_paused": "Pausiert",
     "tstatus_queued": "In Warteschlange",
     "tstatus_unknown": "Unbekannt",
-    "fstatus_importing": "Import läuft"
+    "fstatus_importing": "Import läuft",
+    "status_downloaded": "Heruntergeladen",
+    "status_upgraded": "Aktualisiert",
+    "status_synced": "Synchronisiert",
+    "status_failed": "Fehlgeschlagen"
   },
   "tracking": {
     "menu_item": "Tracking-Status ansehen",
@@ -1431,7 +1435,8 @@
       "subtitles": "Untertitel",
       "schedulers": "Geplante Aufgaben",
       "streaming": "Streaming",
-      "plugins": "Plugins"
+      "plugins": "Plugins",
+      "subtitles_activity": "Untertitel-Aktivität"
     },
     "streaming": {
       "title": "Streaming",

@@ -3,9 +3,8 @@ import type { PluginKind } from '../../../common/plugin-contract';
 
 /**
  * One published version's compatibility declaration — the same two axes as a plugin
- * manifest (`pluginApi` exact, `fliks` a lower-bounded range), see
- * `plans/plugin-system.plan.md`, "The four skew cases". Everything else about a
- * version (download location, hashes) is install-pipeline (PR 7.2) concern and
+ * manifest (`pluginApi` exact, `fliks` a lower-bounded range). Everything else about a
+ * version (download location, hashes) is install-pipeline concern and
  * opaque here, so it passes through the index signature untouched.
  */
 export interface CatalogVersionEntry {

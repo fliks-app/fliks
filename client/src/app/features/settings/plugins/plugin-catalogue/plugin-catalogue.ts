@@ -12,7 +12,7 @@ interface CatalogueRow {
   latestVersion: string | null;
 }
 
-/** What every cached catalog offers, merged across sources (`plans/plugin-system.plan.md`, "Catalogue browsing"). */
+/** What every cached catalog offers, merged across sources. */
 @Component({
   selector: 'app-plugin-catalogue',
   imports: [TranslateModule],

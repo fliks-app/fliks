@@ -7,7 +7,7 @@ import { getPluginsRuntimeDir } from '../../common/constants/paths';
 import { PluginInstallException } from './plugin-install.exception';
 import type { PluginPackageOrigin } from './entities/plugin-package.entity';
 
-/** `plans/plugin-system.plan.md`, "Staging disk-fill" guard. */
+/** Caps concurrent staged imports so an upload flood can't fill disk. */
 export const MAX_CONCURRENT_STAGED_IMPORTS = 5;
 const STAGING_MAX_AGE_MS = 60 * 60 * 1000;
 const ARCHIVE_FILENAME = 'archive.zip';

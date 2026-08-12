@@ -69,10 +69,9 @@ interface WalkedEntry {
 }
 
 /**
- * V1-V7 of the install pipeline (`plans/plugin-system.plan.md`, "Guards,
- * ordered"). Nothing touches disk. The signature is verified before the
- * manifest's business rules are even read - refusal order in this
- * function mirrors the plan's table, not convenience.
+ * V1-V7 of the install pipeline. Nothing touches disk. The signature is
+ * verified before the manifest's business rules are even read — this
+ * function's refusal order is deliberate, not convenience.
  */
 export async function inspect(buffer: Buffer, options: InspectOptions = {}): Promise<InspectResult> {
   // V1/V2 - bytes already in RAM; magic + whole-archive size cap, nothing parsed yet.

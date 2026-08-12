@@ -30,7 +30,7 @@ function createErrorKey(code: string | undefined): string {
   }
 }
 
-/** Sources list + add form (`plans/plugin-system.plan.md`, "N per install, the official one is just the seeded first"). */
+/** Sources list + add form — any number of sources, the official catalog is just the seeded first row. */
 @Component({
   selector: 'app-plugin-sources',
   imports: [FormsModule, DatePipe, LucideX, TranslateModule],

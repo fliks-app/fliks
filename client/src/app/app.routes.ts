@@ -234,14 +234,6 @@ export const routes: Routes = [
         data: { titleKey: 'requests.title' },
       },
       {
-        path: 'activity',
-        loadComponent: () =>
-          import('./features/activity/subtitles/subtitles').then(
-            (m) => m.ActivitySubtitlesComponent,
-          ),
-        data: { titleKey: 'activity.tab_subtitles' },
-      },
-      {
         path: 'calendar',
         loadComponent: () =>
           import('./features/calendar/calendar').then((m) => m.CalendarComponent),
@@ -424,6 +416,7 @@ export const routes: Routes = [
           { path: 'users', loadComponent: () => import('./features/settings/users/users').then((m) => m.UsersSettingsComponent) },
           { path: 'roles', loadComponent: () => import('./features/settings/roles/roles').then((m) => m.RolesSettingsComponent) },
           { path: 'subtitle-providers', loadComponent: () => import('./features/settings/subtitle-providers/subtitle-providers').then((m) => m.SubtitleProvidersSettingsComponent) },
+          { path: 'subtitles-activity', loadComponent: () => import('./features/settings/subtitles-activity/subtitles-activity').then((m) => m.SubtitlesActivityComponent) },
           {
             path: 'subtitles',
             loadComponent: () => import('./features/settings/subtitles/subtitles-shell').then((m) => m.SubtitlesShellComponent),

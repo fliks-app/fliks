@@ -19,9 +19,8 @@ import { trustBadgeFor, requiresAcknowledgement } from '../plugin-trust';
 import { refusalMessageKey } from '../plugin-refusal';
 
 /**
- * The install consent sheet ("plans/plugin-system.plan.md", "One install UX").
- * Owns the confirm call itself — the caller only needs to open it with an
- * inspect report and listen for `installed`.
+ * The install consent sheet. Owns the confirm call itself — the caller only
+ * needs to open it with an inspect report and listen for `installed`.
  */
 @Component({
   selector: 'app-plugin-install-consent',

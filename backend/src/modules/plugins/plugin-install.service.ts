@@ -100,8 +100,7 @@ function findInstallableVersion(
 }
 
 /**
- * Orchestrates the install/update/uninstall pipeline for both tiers
- * (`plans/plugin-system.plan.md`, "Install pipeline, end to end"). `process`
+ * Orchestrates the install/update/uninstall pipeline for both tiers. `process`
  * archives flow through the same guards and the same promotion — only
  * `PluginRegistryService.register()` tells them apart, provisioning a schema
  * and spawning a supervisor. A spawn failure does not roll back the install.

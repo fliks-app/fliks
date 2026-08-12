@@ -8,7 +8,7 @@ import { PluginInstallService, PluginInspectReport, PluginInstallResult } from '
 import { ConfirmImportDto } from './dto/confirm-import.dto';
 import { MAX_ARCHIVE_COMPRESSED_BYTES } from './archive';
 
-/** Manual-upload half of the install pipeline (`plans/plugin-system.plan.md`, "Manual upload"). */
+/** Manual-upload half of the install pipeline. */
 @Controller('plugins/import')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
 export class PluginImportController {

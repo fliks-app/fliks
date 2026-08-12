@@ -14,7 +14,7 @@ export interface ProviderInstance {
   [extra: string]: unknown;
 }
 
-/** One driver a provider instance can be created against — the plan's `ProvidersView.implementations[]` entry. */
+/** One driver a provider instance can be created against — a `ProvidersConfigPage.implementations[]` entry. */
 export interface ProviderImplementation {
   implementation: string;
   labelKey: string;
@@ -32,7 +32,7 @@ export interface ProviderDraft {
   settings: Record<string, unknown>;
 }
 
-/** A list-scope action (the plan's `ProvidersConfigPage.actions[].scope: 'list'`) — rendered
+/** A list-scope action (`ProvidersConfigPage.actions[].scope: 'list'`) — rendered
  *  once above the rows, not per row. `run` owns the request; the component only reloads after. */
 export interface ProviderListAction {
   labelKey: string;
