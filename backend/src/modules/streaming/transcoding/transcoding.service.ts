@@ -1513,7 +1513,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    *    at least one entry, the ffmpeg job is kept warm. When the count
    *    drops to zero, JOB_GRACE_MS later the ffmpeg process is killed.
    *
-   * 2. Sessions that were never seen with a live session (legacy URL
+   * 2. Sessions that were never seen with a live session (direct-URL
    *    fetches, admin scrubbing) fall back to the SESSION_TIMEOUT_MS
    *    idle window — safe default that mirrors the pre-heartbeat
    *    behaviour.
@@ -1574,7 +1574,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Idle-timeout fallback for transcode sessions without a tracked
-   *  live session — kept on the legacy SESSION_TIMEOUT_MS window. */
+   *  live session — kept on the SESSION_TIMEOUT_MS window. */
   private fallbackIdleCleanup(
     now: number,
     id: string,

@@ -13,12 +13,12 @@
  *     parsed quality and the transcode ladder.
  *   • 3840×2024 (IMAX 4K): height-only fails `>= 2160`, mis-labels it
  *     1080p and drops the 2160p ladder rung. Width-ceiling rescues it.
- *   • 854×480 (16:9 widescreen SD): the legacy `w <= 720` 480 ceiling
- *     mis-bucketed this as 720p; bumping the width ceiling to 854
- *     (matching the 480p profile width) returns 480 as expected.
+ *   • 854×480 (16:9 widescreen SD): a `w <= 720` 480 ceiling would
+ *     mis-bucket this as 720p; the width ceiling is 854
+ *     (matching the 480p profile width) so it returns 480 as expected.
  *
  * Returns 480 when both inputs are zero / missing — safest fallback for
- * legacy probes that hadn't recorded dimensions yet. Shared by
+ * sources whose probe hasn't recorded dimensions. Shared by
  * `profileFitsSource` (transcode ladder filtering) and `resolveQuality`
  * (parsed-quality storage) so the player and the file badge agree on
  * what bucket a source belongs to.

@@ -1,7 +1,7 @@
 import { StreamLifetime } from '../lifetime-constants';
 
 /** Maximum idle window for transcode sessions that were never paired
- *  with a {@link LiveSessionRegistry} entry (legacy URL fetches, admin
+ *  with a {@link LiveSessionRegistry} entry (direct-URL fetches, admin
  *  scrubbing, etc.). Sessions tied to a live session ride on the
  *  {@link JOB_GRACE_MS} grace window after their last heartbeat
  *  instead — see `TranscodingService.cleanupStaleSessions`. Sourced

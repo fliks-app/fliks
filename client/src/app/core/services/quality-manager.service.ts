@@ -358,16 +358,9 @@ export class QualityManagerService {
     try {
       const raw = localStorage.getItem(PLAYER_QUALITY_STORAGE_KEY);
       if (!raw) return null;
-      // New JSON format
-      if (raw.startsWith('{')) {
-        const parsed = JSON.parse(raw) as { id?: string; height?: number };
-        if (typeof parsed.id !== 'string') return null;
-        return { id: parsed.id, height: parsed.height ?? 0 };
-      }
-      // Legacy plain-string format — derive height from the id when possible
-      // (e.g. "1080p" → 1080). Unknown ids ('auto', 'original') get 0.
-      const m = raw.match(/^(\d+)p$/);
-      return { id: raw, height: m ? parseInt(m[1], 10) : 0 };
+      const parsed = JSON.parse(raw) as { id?: string; height?: number };
+      if (typeof parsed.id !== 'string') return null;
+      return { id: parsed.id, height: parsed.height ?? 0 };
     } catch {
       return null;
     }

@@ -1,11 +1,10 @@
-import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TranslationProvider } from './entities/translation-provider.entity';
 import { CreateTranslationProviderDto } from './dto/create-translation-provider.dto';
 import { UpdateTranslationProviderDto } from './dto/update-translation-provider.dto';
 import { TranslationProviderFactory } from './providers/translation-provider.factory';
-import { SubtitleTranslationSettingsCache } from './subtitle-translation-settings-cache.service';
 import { TranslationEngine } from '../../common/enums';
 
 /** Trigger-facing projection of an enabled provider — never carries `settings`
@@ -18,19 +17,12 @@ export interface AvailableTranslationProvider {
 }
 
 @Injectable()
-export class TranslationProviderService implements OnModuleInit {
-  private readonly log = new Logger(TranslationProviderService.name);
-
+export class TranslationProviderService {
   constructor(
     @InjectRepository(TranslationProvider)
     private readonly repo: Repository<TranslationProvider>,
     private readonly factory: TranslationProviderFactory,
-    private readonly legacySettings: SubtitleTranslationSettingsCache,
   ) {}
-
-  async onModuleInit(): Promise<void> {
-    await this.seedFromLegacyConfig();
-  }
 
   async create(dto: CreateTranslationProviderDto): Promise<TranslationProvider> {
     const provider = this.repo.create({
@@ -149,51 +141,5 @@ export class TranslationProviderService implements OnModuleInit {
       next.isDefault = true;
       await this.repo.save(next);
     }
-  }
-
-  /** On first boot with no providers, migrate the single legacy
-   *  `subtitle_translation_*` engine config into one enabled default provider so
-   *  installs that were already translating keep working with zero admin action.
-   *  Idempotent and table-safe (no-op once any provider exists). */
-  private async seedFromLegacyConfig(): Promise<void> {
-    try {
-      if ((await this.repo.count()) > 0) return;
-      const legacy = await this.legacySettings.get();
-      const settings = this.legacyEngineSettings(legacy);
-      try {
-        this.factory.validateConfig(legacy.engine, settings);
-      } catch {
-        return; // legacy config isn't usable — nothing worth seeding
-      }
-      await this.repo.save(
-        this.repo.create({
-          name: this.engineLabel(legacy.engine),
-          engine: legacy.engine,
-          settings,
-          enabled: true,
-          isDefault: true,
-        }),
-      );
-      this.log.log(
-        `Seeded a "${legacy.engine}" translation provider from legacy settings`,
-      );
-    } catch (err) {
-      // Table may not exist yet under some startup orderings; a later boot seeds.
-      this.log.warn(`Translation-provider seed skipped: ${err}`);
-    }
-  }
-
-  private legacyEngineSettings(
-    legacy: Awaited<ReturnType<SubtitleTranslationSettingsCache['get']>>,
-  ): Record<string, unknown> {
-    if (legacy.engine === 'openai') return { ...legacy.openai };
-    if (legacy.engine === 'libretranslate') return { ...legacy.libretranslate };
-    return { ...legacy.gemini };
-  }
-
-  private engineLabel(engine: TranslationEngine): string {
-    if (engine === 'openai') return 'OpenAI-compatible';
-    if (engine === 'libretranslate') return 'LibreTranslate';
-    return 'Gemini';
   }
 }

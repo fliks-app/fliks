@@ -146,7 +146,7 @@ export class SubtitleSyncService {
     }
   }
 
-  /** Direct sync (called from queue or legacy) */
+  /** Direct sync, called from the scheduler queue or the manual-sync endpoint. */
   async syncSubtitle(
     id: number,
     options: SyncOptions = {},

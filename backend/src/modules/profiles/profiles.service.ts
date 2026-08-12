@@ -79,7 +79,7 @@ export class ProfilesService {
    * Strict variant for the manual grab paths: throws `BadRequest` when the
    * quality profile is missing or empty. Language profile is treated as
    * optional — a null profile yields an empty `allowedLangs` set (permissive)
-   * so the manual "Search releases" button doesn't break on legacy media
+   * so the manual "Search releases" button doesn't break on media
    * imported before language profiles were always assigned. The auto
    * SearchMissing pipeline uses the non-throwing variant and refuses to
    * act on missing-profile rows via `classifyForSearch`.

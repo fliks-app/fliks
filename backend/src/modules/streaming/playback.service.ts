@@ -118,37 +118,15 @@ export class PlaybackService implements OnModuleInit {
   }
 
   async onModuleInit() {
-    await this.deduplicateAndCreateIndexes();
+    await this.ensureIndexes();
   }
 
   /**
-   * Deduplicate legacy rows (multiple per mediaId+episodeId) and create partial unique indexes.
-   * Safe to run repeatedly — uses IF NOT EXISTS.
+   * Creates the partial unique indexes that keep one row per user+movie and per
+   * user+episode. Idempotent, and the constraint the writes rely on.
    */
-  private async deduplicateAndCreateIndexes() {
+  private async ensureIndexes() {
     try {
-      // Delete duplicates: for each (userId, mediaId, episodeId) group, keep only the most recent row
-      const deleted = await this.repo.query(`
-        DELETE FROM playback_states ps
-        USING (
-          SELECT "userId", "mediaId", COALESCE("episodeId", 0) AS eid,
-                 MAX(id) AS keep_id
-          FROM playback_states
-          GROUP BY "userId", "mediaId", COALESCE("episodeId", 0)
-          HAVING COUNT(*) > 1
-        ) dups
-        WHERE ps."userId" = dups."userId"
-          AND ps."mediaId" = dups."mediaId"
-          AND COALESCE(ps."episodeId", 0) = dups.eid
-          AND ps.id != dups.keep_id
-        RETURNING ps.id
-      `);
-      if (deleted?.length) {
-        this.log.log(
-          `Deduplicated ${deleted.length} legacy playback_states rows`,
-        );
-      }
-
       // Drop the old unique constraint if it still exists
       await this.repo
         .query(

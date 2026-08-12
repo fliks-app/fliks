@@ -144,7 +144,7 @@ export async function detectHwAccel(
  *  - Subtitle burn-in needs CPU surfaces for libass — force `'none'`
  *    on QSV / VAAPI / NVENC. VideoToolbox decode already lands in CPU
  *    buffers so libass works in-place.
- *  - QSV cannot crop on the legacy vaapi-decode-then-hwmap chain (the
+ *  - QSV cannot crop on the vaapi-decode-then-hwmap chain (the
  *    fixed-size QSV frame pool rejects the variable output of CPU
  *    `crop` after hwupload back to vaapi). When the caller indicates
  *    `qsvCanCrop=true` we stay on QSV — that flag means the caller has

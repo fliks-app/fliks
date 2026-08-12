@@ -32,7 +32,7 @@ export class RolesService implements OnModuleInit {
     return this.libraryRepo.find({ where: { id: In(ids) } });
   }
 
-  /** Seed default roles & migrate legacy users on startup. */
+  /** Seed default roles on startup. */
   async onModuleInit() {
     const count = await this.roleRepo.count();
     if (count === 0) {

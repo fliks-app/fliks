@@ -282,7 +282,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const list = m.files ?? [];
     // Series files always belong to an episode; the root page never has
     // a "main file" to display, so don't surface orphans here even if
-    // legacy data leaked them through.
+    // older rows leaked them through.
     return m.type === 'series' ? [] : list;
   });
 

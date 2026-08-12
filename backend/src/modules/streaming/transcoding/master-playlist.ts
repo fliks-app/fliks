@@ -60,7 +60,7 @@ function topFittingProfile(
  *    `*-hdr` inputs pass through unchanged.
  *  - An explicit `onlyQuality` always wins over `supportsAbr`.
  *  - Falls back to the full ladder when the pin doesn't match any
- *    rung (legacy URLs / typos). */
+ *    rung (a stale saved link, a typo). */
 function applyQualityPin(
   ladder: TranscodeProfile[],
   onlyQuality: string | undefined,

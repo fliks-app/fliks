@@ -160,8 +160,8 @@ export class LanguageProfilesComponent implements OnInit {
     }
   }
 
-  /** Set the HI preference; keep the legacy `hi` boolean in sync so the scorer's
-   *  fallback and any remaining `hi` readers stay correct. */
+  /** Set the HI preference; keep the compact `hi` boolean in sync too, since
+   *  `resolveHearingImpairedMode` reads it as the stored form. */
   setSubHiMode(isoCode: string, mode: HearingImpairedMode) {
     const next = new Map(this.subtitleEntries());
     const entry = next.get(isoCode);

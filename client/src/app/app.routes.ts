@@ -67,7 +67,8 @@ export const routes: Routes = [
           import('./features/library/library').then((m) => m.LibraryComponent),
         data: { reuse: true },
       },
-      // Legacy redirects — resolved to actual library name in LibraryComponent
+      // The app's only way to reach "my movies/series" without knowing the library's
+      // name: LibraryComponent resolves the sentinel to whichever library holds the flag.
       {
         path: 'movies',
         redirectTo: '/libraries/__default_movies__',

@@ -721,7 +721,7 @@ export class SystemController {
     if (sseConnectionId && this.eventsService.hasConnection(sseConnectionId)) {
       this.eventsService.emitToConnection(sseConnectionId, cmdEvent);
     } else {
-      // Legacy clients without a bound SSE connection: every tab/device for
+      // Clients without a bound SSE connection: every tab/device for
       // this user receives the command — they must filter on sessionId.
       this.eventsService.emitToUser(target.userId, cmdEvent);
     }

@@ -578,7 +578,7 @@ export class FfprobeService {
 
       // limit (cropdetect threshold for "this pixel is black"):
       //   - SDR encodes black around luma 16 (BT.709 narrow range), so
-      //     limit=24 is the legacy default and works.
+      //     limit=24 is ffmpeg's cropdetect default and works.
       //   - HDR (PQ / HLG) encodes black around luma 50–70 — limit=24
       //     misses every 4K HDR Bluray we touched. limit=64 catches the
       //     letterbox but on SDR it pulls in low-luma scene content

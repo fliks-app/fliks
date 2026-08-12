@@ -10,7 +10,6 @@ export interface DisplaySettings {
 }
 
 const STORAGE_KEY = 'display.settings';
-const LEGACY_ONLY_MY_REQUESTS_KEY = 'fliks.home.onlyMyRequests';
 
 const DEFAULTS: DisplaySettings = {
   homeBackground: true,
@@ -28,12 +27,6 @@ export class DisplaySettingsService {
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<DisplaySettings>;
         return { ...DEFAULTS, ...parsed };
-      }
-      // First load after the toggle moved out of home — pick up the old key
-      // so the user's preference survives the migration.
-      const legacy = localStorage.getItem(LEGACY_ONLY_MY_REQUESTS_KEY);
-      if (legacy !== null) {
-        return { ...DEFAULTS, onlyMyRequests: legacy === 'true' };
       }
     } catch { /* ignore */ }
     return { ...DEFAULTS };

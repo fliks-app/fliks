@@ -309,7 +309,7 @@ export interface TranscodeSession {
    *  the manifest, so the session must respawn. */
   videoVariant?: import('./codec/types').CodecVariant;
   /** Mux flavour the session was spawned for:
-   *  - `'ts'`: MPEG-TS HLS (legacy Tizen fallback, opt-in via `useTs`).
+   *  - `'ts'`: MPEG-TS HLS (Tizen AVPlay only, opt-in via `useTs`).
    *  - `'fmp4'`: fMP4 via HLS muxer — the universal path. Segments are
    *    post-processed at serve time (`cmaf-rewrite.ts`) to strip the
    *    `sidx` boxes + rewrite the `iso5` brand to `cmfc`, so the

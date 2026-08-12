@@ -33,7 +33,7 @@ describe('parseSeasonEpisode', () => {
     });
   });
 
-  it('parses legacy 1x02 form', () => {
+  it('parses 1x02 form', () => {
     expect(parseSeasonEpisode('Show.Name.1x02.DVDRip')).toEqual({
       season: 1,
       episode: 2,
@@ -66,7 +66,7 @@ describe('parseSeasonEpisode', () => {
     });
   });
 
-  it('does not treat x265 codec as a legacy season×episode tag', () => {
+  it('does not treat x265 codec as a season×episode tag', () => {
     expect(parseSeasonEpisode('Show.Name.S09.1080p.x265-GROUP')).toEqual({
       season: 9,
       episode: null,

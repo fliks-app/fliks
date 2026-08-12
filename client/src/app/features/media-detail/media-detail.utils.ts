@@ -17,7 +17,7 @@ export function displayMediaFilePath(
   return normalizeDisplayPath(`${a}/${b}`);
 }
 
-/** Collapse `.` / `..` in a display path (legacy DB rows could store unsafe relatives). */
+/** Collapse `.` / `..` in a display path (older DB rows could store unsafe relatives). */
 function normalizeDisplayPath(p: string): string {
   const parts = p.split('/');
   const stack: string[] = [];
