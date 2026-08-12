@@ -46,6 +46,9 @@ export interface IngestResult {
     seasonId?: number;
     sourcePath: string;
   }[];
+  /** Files whose destination was already taken. A retried import is a no-op, and a caller that
+   *  cannot tell that from "nothing could be placed" reports a success as a failure. */
+  alreadyPresent: string[];
 }
 
 /**
@@ -91,7 +94,7 @@ export class LibraryIngestService {
         `Media #${req.mediaId} is not anchored to a library folder`,
       );
     }
-    if (!req.files.length) return { imported: [] };
+    if (!req.files.length) return { imported: [], alreadyPresent: [] };
 
     // A series release carrying several video files is a season pack: every file
     // is its own episode. Anything else keeps only the largest file (samples,
@@ -113,6 +116,7 @@ export class LibraryIngestService {
       ? this.naming.extractReleaseGroup(req.releaseName)
       : undefined;
 
+    const alreadyPresent: string[] = [];
     const imported: (IngestResult['imported'][number] & {
       destPath: string;
       seasonNumber?: number;
@@ -246,7 +250,8 @@ export class LibraryIngestService {
 
       if ((await collides(relativePath, destPath)) && !req.force) {
         if (!req.uniquifyOnCollision) {
-          // Re-running the same import is a safe no-op.
+          // Re-running the same import is a safe no-op — reported, not silent.
+          alreadyPresent.push(file.path);
           continue;
         }
         // A different file maps to a name already taken by this media (e.g.
@@ -376,6 +381,7 @@ export class LibraryIngestService {
         seasonId,
         sourcePath,
       })),
+      alreadyPresent,
     };
   }
 }

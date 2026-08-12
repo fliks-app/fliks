@@ -219,6 +219,10 @@ export interface PluginHostApi {
     sourceLabel: string;
   }) => Promise<{
     imported: { mediaFileId: number; relativePath: string; quality: string }[];
+    /** Source paths whose destination was already taken, so nothing was written for them. A
+     *  retried ingest lands here, and reading it as "nothing could be placed" reports a
+     *  completed import as a failure. */
+    alreadyPresent: string[];
     seasonNumber?: number;
     episodeNumber?: number;
   }>;

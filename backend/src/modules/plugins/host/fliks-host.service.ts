@@ -596,6 +596,7 @@ export class FliksHostImpl implements PluginHostApi {
     sourceLabel: string;
   }): Promise<{
     imported: { mediaFileId: number; relativePath: string; quality: string }[];
+    alreadyPresent: string[];
     seasonNumber?: number;
     episodeNumber?: number;
   }> {
@@ -647,7 +648,7 @@ export class FliksHostImpl implements PluginHostApi {
       }
     }
 
-    return { imported, seasonNumber, episodeNumber };
+    return { imported, alreadyPresent: result.alreadyPresent, seasonNumber, episodeNumber };
   }
 
   /** `realpath`s `rawPath` and refuses it unless it resolves inside one of `roots`. */
