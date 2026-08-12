@@ -1,0 +1,85 @@
+import { provideZonelessChangeDetection } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
+import { of } from 'rxjs';
+import { PluginCatalogueComponent } from './plugin-catalogue';
+
+/** An installed plugin still needs a way to reach a newer version, or the only route to an update
+ *  is uninstalling — which drops the plugin's data. */
+
+const CATALOG = {
+  plugins: [
+    {
+      id: 'fliks.acme',
+      name: 'Acme',
+      author: 'Fliks',
+      description: 'd',
+      kind: 'process',
+      installable: [
+        { version: '1.0.0', pluginApi: 0, fliks: '>=2.0.0 <3.0.0', zipUrl: 'https://x/1', sha256: 'a' },
+        { version: '1.1.0', pluginApi: 0, fliks: '>=2.0.0 <3.0.0', zipUrl: 'https://x/2', sha256: 'b' },
+      ],
+      hidden: null,
+    },
+  ],
+};
+
+async function settle(fixture: ComponentFixture<unknown>) {
+  await fixture.whenStable();
+  await new Promise((r) => setTimeout(r, 0));
+  fixture.detectChanges();
+}
+
+async function createComponent(installed: [string, string][]) {
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      provideTranslateService({
+        lang: 'en',
+        loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+      }),
+    ],
+  });
+  const http = TestBed.inject(HttpTestingController);
+  const fixture = TestBed.createComponent(PluginCatalogueComponent);
+  fixture.componentRef.setInput('installedIds', new Set(installed.map(([id]) => id)));
+  fixture.componentRef.setInput('installedVersions', new Map(installed));
+  fixture.detectChanges();
+  http.expectOne({ url: '/api/plugins/sources', method: 'GET' }).flush([{ id: 1, url: 'https://src', enabled: true }]);
+  await settle(fixture);
+  http.expectOne({ url: '/api/plugins/sources/1/catalog', method: 'GET' }).flush({
+    cachedCatalog: CATALOG,
+    lastRefreshedAt: null,
+    lastRefreshError: null,
+  });
+  await settle(fixture);
+  return { fixture, http };
+}
+
+function buttonLabels(fixture: ComponentFixture<unknown>): string[] {
+  return Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button')).map(
+    (b) => b.textContent?.trim() ?? '',
+  );
+}
+
+describe('PluginCatalogueComponent — updating an installed plugin', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  it('VERDICT: offers the newer version to a plugin already installed on an older one', async () => {
+    const { fixture } = await createComponent([['fliks.acme', '1.0.0']]);
+
+    expect(fixture.componentInstance.updateTarget(fixture.componentInstance.rows()[0])).toBe('1.1.0');
+    expect(buttonLabels(fixture).join(' ')).toContain('settings.plugins.catalogue.switch_to');
+  });
+
+  it('offers nothing when the installed version is the catalogue\'s newest', async () => {
+    const { fixture } = await createComponent([['fliks.acme', '1.1.0']]);
+
+    expect(fixture.componentInstance.updateTarget(fixture.componentInstance.rows()[0])).toBeNull();
+    expect(buttonLabels(fixture).join(' ')).not.toContain('settings.plugins.catalogue.switch_to');
+  });
+});

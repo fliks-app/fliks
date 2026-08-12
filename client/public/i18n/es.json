@@ -2182,7 +2182,9 @@
         "no_installable": "Sin versión instalable",
         "hidden_versions": "{{count}} versión(es) oculta(s) — requiere Fliks {{version}}+",
         "hidden_versions_no_upgrade": "{{count}} versión(es) oculta(s)",
-        "inspect_error": "No se pudo obtener este plugin."
+        "inspect_error": "No se pudo obtener este plugin.",
+        "switch_to": "Actualizar a {{version}}",
+        "update_keeps_data": "Se conservan tus ajustes."
       },
       "status_disabled": "Desactivado",
       "status_unavailable": "No disponible"

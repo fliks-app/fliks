@@ -30,6 +30,7 @@ export class PluginCataloguePageComponent implements OnInit {
 
   private readonly rows = signal<PluginSummary[]>([]);
   readonly installedIds = computed(() => new Set(this.rows().map((r) => r.pluginId)));
+  readonly installedVersions = computed(() => new Map(this.rows().map((r) => [r.pluginId, r.version])));
 
   ngOnInit(): void {
     this.reload();

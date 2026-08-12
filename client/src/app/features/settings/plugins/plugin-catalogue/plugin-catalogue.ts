@@ -25,6 +25,9 @@ export class PluginCatalogueComponent implements OnInit {
   private readonly toast = inject(ToastService);
 
   readonly installedIds = input<ReadonlySet<string>>(new Set());
+  /** Installed version per plugin id — what makes "already installed" and "out of date"
+   *  distinguishable on a card. */
+  readonly installedVersions = input<ReadonlyMap<string, string>>(new Map());
 
   /** A version was inspected and staged; the parent owns the consent sheet and opens it with this report. */
   readonly install = output<PluginInspectReport>();
@@ -64,6 +67,15 @@ export class PluginCatalogueComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /** The version this card would install, when it is not the one already installed. Null when
+   *  the plugin is absent or already on the catalogue's newest. The list is ordered oldest to
+   *  newest by core's parser, so the last entry is the target without a semver comparison. */
+  updateTarget(row: CatalogueRow): string | null {
+    const installed = this.installedVersions().get(row.plugin.id);
+    if (!installed || !row.latestVersion) return null;
+    return installed === row.latestVersion ? null : row.latestVersion;
   }
 
   isInstalled(pluginId: string): boolean {
