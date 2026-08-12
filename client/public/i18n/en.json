@@ -2209,7 +2209,9 @@
         "no_installable": "No installable version",
         "hidden_versions": "{{count}} version(s) hidden — requires Fliks {{version}}+",
         "hidden_versions_no_upgrade": "{{count}} version(s) hidden",
-        "inspect_error": "Unable to fetch this plugin."
+        "inspect_error": "Unable to fetch this plugin.",
+        "switch_to": "Update to {{version}}",
+        "update_keeps_data": "Your settings are kept."
       },
       "status_disabled": "Disabled",
       "status_unavailable": "Unavailable"

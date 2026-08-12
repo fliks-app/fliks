@@ -55,6 +55,16 @@
               } @else {
                 <span class="text-xs text-base-content/40 shrink-0">{{ 'settings.plugins.catalogue.no_installable' | translate }}</span>
               }
+            } @else if (updateTarget(row); as version) {
+              <div class="flex flex-col items-end gap-0.5 shrink-0">
+                <button type="button" class="btn btn-primary btn-xs" [disabled]="isInspecting(row)" (click)="installLatest(row)">
+                  @if (isInspecting(row)) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  }
+                  {{ 'settings.plugins.catalogue.switch_to' | translate: { version: version } }}
+                </button>
+                <span class="text-[0.7rem] text-base-content/50">{{ 'settings.plugins.catalogue.update_keeps_data' | translate }}</span>
+              </div>
             }
           </div>
         </div>
