@@ -233,7 +233,14 @@ describe('PluginViewComponent', () => {
           list: '/providers',
           implementations: '/implementations',
           actions: [
-            { id: 'stats', labelKey: 'x.stats', method: 'GET', route: '/providers/:id/stats', scope: 'row' },
+            {
+              id: 'stats',
+              labelKey: 'x.stats',
+              method: 'GET',
+              route: '/providers/:id/stats',
+              scope: 'row',
+              result: { kind: 'table', columns: [{ key: 'date', labelKey: 'x.date' }], emptyKey: 'x.empty' },
+            },
             { id: 'clear-cooldown', labelKey: 'x.clear', method: 'DELETE', route: '/providers/:id/cooldown', scope: 'row' },
             { id: 'clear-all', labelKey: 'x.clear_all', method: 'DELETE', route: '/providers/cooldowns', scope: 'list' },
           ],
@@ -249,6 +256,8 @@ describe('PluginViewComponent', () => {
     const rowActions = fixture.componentInstance.providerRowActions(fixture.componentInstance.providersView()!);
     expect(rowActions.map((a) => a.labelKey)).toEqual(['x.stats', 'x.clear']);
     expect(rowActions[0]!.route).toBe('/api/plugins/fliks.a/providers/:id/stats');
+    // Dropping `result` here would make the renderer hide the button entirely.
+    expect(rowActions[0]!.result?.columns.map((c) => c.key)).toEqual(['date']);
     http.verify();
   });
 
