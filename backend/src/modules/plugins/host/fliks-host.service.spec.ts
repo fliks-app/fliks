@@ -949,6 +949,25 @@ describe('FliksHostImpl', () => {
         expect.any(Object),
       );
     });
+    it('VERDICT: passes through the paths that were already in place, so a retry is not a failure', async () => {
+      const h = makeHarness();
+      h.pluginRegistrationRepo.findOne.mockResolvedValue({ ingestRoots: [tmpRoot] });
+      h.mediaRepo.findOne.mockResolvedValue(makeMedia());
+      h.libraryIngestService.ingest.mockResolvedValue({ imported: [], alreadyPresent: [sourceFile] });
+
+      const result = await h.host['library.ingest']({
+        idempotencyKey: 'k1',
+        mediaId: 1,
+        paths: [sourceFile],
+        transfer: 'copy',
+        sourceLabel: 'Release.Name',
+      });
+
+      // Without this a caller cannot tell "nothing could be placed" from "it is already there",
+      // and reports a completed import as failed on every retry.
+      expect(result).toEqual(expect.objectContaining({ imported: [], alreadyPresent: [sourceFile] }));
+    });
+
 
     it('refuses a path outside every configured ingest root', async () => {
       const h = makeHarness();

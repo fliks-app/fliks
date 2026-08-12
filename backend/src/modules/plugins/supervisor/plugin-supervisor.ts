@@ -31,6 +31,16 @@ export type SupervisorState =
 
 const STDERR_TAIL_BYTES = 4 * 1024;
 
+/**
+ * Host methods whose own work is not a lookup. `library.ingest` copies the release into the
+ * library and probes it: one 2160p file blew straight past the 8 s default in production, and the
+ * deadline only abandons the wait — core finished the copy, so the plugin recorded a failure for
+ * an import that had landed.
+ */
+const HOST_CALL_DEADLINE_OVERRIDES_MS: Readonly<Record<string, number>> = {
+  'library.ingest': 30 * 60_000,
+};
+
 /** `WARN` as the line's own level — after any bracketed prefixes, never inside the message. */
 const SELF_DECLARED_WARN = /^(?:\[[^\]]*\]\s*)*WARN\b/;
 
@@ -350,7 +360,8 @@ export class PluginSupervisor implements OnApplicationShutdown {
     if (!fn) return Promise.reject(new Error(`unknown host method "${method}"`));
     // Promise.resolve().then(...) folds a synchronous throw from `fn` into the same
     // rejection path as an async one, so both answer with an error frame, never crash.
-    return withDeadline(Promise.resolve().then(() => fn(payload)), this.opts.hostCallTimeoutMs, method);
+    const deadlineMs = HOST_CALL_DEADLINE_OVERRIDES_MS[method] ?? this.opts.hostCallTimeoutMs;
+    return withDeadline(Promise.resolve().then(() => fn(payload)), deadlineMs, method);
   }
 
   private onPluginConnected(socket: Socket): void {
