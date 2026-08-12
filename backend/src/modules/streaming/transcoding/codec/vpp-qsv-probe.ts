@@ -19,7 +19,7 @@ const execFileAsync = promisify(execFile);
  *
  *  The flag is queried by `qsvScaleFilter8bit` (and the HDR encoder
  *  filter chains) to decide between the upstream `vpp_qsv=tonemap=1`
- *  single-pass HDR→SDR path and the legacy `hwmap+tonemap_vaapi+hwmap`
+ *  single-pass HDR→SDR path and the `hwmap+tonemap_vaapi+hwmap`
  *  fallback. */
 let probedOnce = false;
 let enabled = false;

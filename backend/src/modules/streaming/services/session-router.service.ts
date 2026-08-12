@@ -91,7 +91,7 @@ export class SessionRouter {
   /** 410-gate HLS routes against a stale `?sid=`: when the URL carries a sid the
    *  registry no longer knows (backend restart / long-idle GC), refuse with a
    *  typed body the player recovery flow pattern-matches (`session_expired`).
-   *  Without a sid the request passes (legacy direct-URL fetches fall back to
+   *  Without a sid the request passes (direct-URL fetches fall back to
    *  the userId lookup downstream). The touch also keeps an actively-playing
    *  session warm — segments pulled off these routes refresh the ttl without a
    *  separate heartbeat. */

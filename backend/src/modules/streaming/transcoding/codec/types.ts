@@ -112,7 +112,7 @@ export interface EncoderInput {
    *  probe). The qsv-native filter helper (`qsvScaleFilter*`) branches
    *  on this: `'opencl'` plus qsv input surfaces emits a `vpp_qsv`
    *  crop+scale pass followed by an opencl tonemap round-trip — no
-   *  CPU bounce, ~3× faster on cropped HDR than the legacy
+   *  CPU bounce, ~3× faster on cropped HDR than the
    *  `hwdownload→CPU crop→hwupload→scale_vaapi→opencl` chain. Only
    *  meaningful when `tonemap` is true. */
   tonemapPath: 'vaapi' | 'opencl' | 'qsv';

@@ -87,7 +87,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     return this.route.snapshot.paramMap.get('provider') ?? 'tmdb';
   });
 
-  /** External ID from route — either :externalId or legacy :tmdbId */
+  /** External ID from route: `:externalId` on the provider-aware routes, `:tmdbId` on the TMDB-only ones. */
   readonly externalId = computed(() => {
     return this.route.snapshot.paramMap.get('externalId')
       ?? this.route.snapshot.paramMap.get('tmdbId')

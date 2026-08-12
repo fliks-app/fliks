@@ -265,8 +265,8 @@ export class MediaQueryService {
       // downloaded* — the whole movie for movies, each individual episode
       // for series. Movies use `media.files[]`; series fold "totally missing"
       // entries (no file → rank 0) into this bucket and lean on
-      // `parseReleaseQuality` (via {@link rankFromQualityString}) so legacy
-      // stored quality strings are parsed instead of needing an exact
+      // `parseReleaseQuality` (via {@link rankFromQualityString}) so stored
+      // quality strings are parsed by rank instead of needing an exact
       // `APP_QUALITIES.name` match.
       const cutoffByMedia = new Map<number, number>();
       for (const m of enriched) {

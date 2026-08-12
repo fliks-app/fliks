@@ -10,7 +10,7 @@ import { cappedRungVideoBitrateBps } from './quality-ladder';
 import type { CodecVariant, EncoderTarget } from './codec/types';
 import type { AudioStreamMeta, TranscodeProfile } from './types';
 
-/** SDR fallback variant for legacy callers that don't thread `sdrVariant`
+/** SDR fallback variant for callers that don't thread `sdrVariant`
  *  (H.264 High 8-bit). Keeps the codec-string + bitrate-cap behaviour identical
  *  to the pre-variant default (`h264` has CODEC_BITRATE_FACTOR 1, same as the
  *  former `undefined` target codec). */

@@ -26,9 +26,9 @@ export interface SubtitleLanguageItem {
   forced: boolean;
   hi: boolean;
   /**
-   * Per-language hearing-impaired preference. Optional — when absent
-   * the legacy `hi` boolean is interpreted: `hi=true` → `prefer`,
-   * `hi=false` → `avoid`.
+   * Explicit per-language override, layered on top of the compact `hi`
+   * boolean every stored item carries: `hi=true` → `prefer`, `hi=false`
+   * → `avoid` when this field is absent.
    *
    * - `prefer`:  HI subs score the 1-point bit; non-HI don't.
    * - `avoid`:   non-HI subs score the bit; HI don't. (Default.)
@@ -38,8 +38,8 @@ export interface SubtitleLanguageItem {
   hearingImpaired?: HearingImpairedMode;
 }
 
-/** Resolves a language item's effective HI mode, defaulting from the
- *  legacy `hi` boolean when no explicit mode is set. */
+/** Resolves a language item's effective HI mode from the compact `hi`
+ *  boolean — every stored item carries `hi`, not `hearingImpaired`. */
 export function resolveHearingImpairedMode(
   item: SubtitleLanguageItem,
 ): HearingImpairedMode {

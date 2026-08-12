@@ -523,7 +523,7 @@ export class StreamingApiService {
       episodeId?: number;
       // Live-session heartbeat fields. Only present once the player has
       // received a `sessionId` from `getPlaybackInfo`; the backend
-      // tolerates their absence (legacy / unauthenticated paths).
+      // tolerates their absence (unauthenticated paths, or before it arrives).
       sessionId?: string;
       state?: LivePlaybackState;
       quality?: string | null;

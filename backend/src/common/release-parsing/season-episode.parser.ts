@@ -7,7 +7,7 @@
  *   - `Show.Name.s01e02.…`      → same (case-insensitive).
  *   - `Show.Name.S01.…`         → full season 1 (pack).
  *   - `Show.Name.Season.01.…`   → full season 1 (older form).
- *   - `Show.Name.1x02.…`        → legacy `<season>x<episode>` form.
+ *   - `Show.Name.1x02.…`        → `<season>x<episode>` form.
  *   - `Show.Name.Complete.S01`  → full season 1.
  *
  * Pure function, no dependencies. Tests live next to the file.
@@ -26,9 +26,9 @@ export interface ParsedSeasonEpisode {
 const SE_RE = /\bS(\d{1,2})E(\d{1,3})\b/i;
 const SEASON_ONLY_RE = /\bS(\d{1,2})(?!E\d)\b/i;
 const SEASON_KEYWORD_RE = /\bSeason[\s._-]?(\d{1,2})\b/i;
-/** Legacy `1x02` — require a digit before `x` so `x265` / `HEVCx265`
- *  never parse as season 26 episode 5. */
-const LEGACY_RE = /(?<![a-zA-Z])(\d{1,2})x(\d{1,3})\b/i;
+/** The `1x02` `<season>x<episode>` form — require a digit before `x` so
+ *  `x265` / `HEVCx265` never parse as season 26 episode 5. */
+const SEASON_X_EPISODE_RE = /(?<![a-zA-Z])(\d{1,2})x(\d{1,3})\b/i;
 
 export function parseSeasonEpisode(title: string): ParsedSeasonEpisode {
   // 1. SxxExx — most common.
@@ -40,12 +40,12 @@ export function parseSeasonEpisode(title: string): ParsedSeasonEpisode {
       isFullSeason: false,
     };
   }
-  // 2. Legacy `1x02` form.
-  const legacy = LEGACY_RE.exec(title);
-  if (legacy) {
+  // 2. `1x02` form.
+  const xForm = SEASON_X_EPISODE_RE.exec(title);
+  if (xForm) {
     return {
-      season: parseInt(legacy[1], 10),
-      episode: parseInt(legacy[2], 10),
+      season: parseInt(xForm[1], 10),
+      episode: parseInt(xForm[2], 10),
       isFullSeason: false,
     };
   }

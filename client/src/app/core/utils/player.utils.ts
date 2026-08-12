@@ -164,7 +164,7 @@ export function audioChannelsLabel(channels: number | null | undefined): string 
  * list — used to produce a translated `Piste N` / `Audio N` head when
  * the language tag is `und` / `xx`, so the dropdown doesn't surface
  * `und` to the user. Omit the index to keep the literal `und` head
- * (legacy / non-listed callers).
+ * (callers with no track-list position to number).
  */
 export function formatAudioLabel(
   audio: { language?: string; title?: string; codec?: string; channels?: number },

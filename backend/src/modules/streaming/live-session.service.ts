@@ -396,7 +396,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Most-recently-active session for a (user, file). Fallback used by
-   * HLS routes when the URL omits `?sid=` (legacy clients, prewarm,
+   * HLS routes when the URL omits `?sid=` (direct-URL fetches, prewarm,
    * etc.) — picks the freshest entry so the active session wins over a
    * stale one. Returns null when nothing matches.
    */

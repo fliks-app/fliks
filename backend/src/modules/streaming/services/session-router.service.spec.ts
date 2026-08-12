@@ -54,7 +54,7 @@ describe('SessionRouter', () => {
   });
 
   describe('assertFresh', () => {
-    it('no-ops without a sid (legacy direct-URL fetch)', () => {
+    it('no-ops without a sid (direct-URL fetch)', () => {
       expect(() => router.assertFresh(req())).not.toThrow();
       expect(live.touch).not.toHaveBeenCalled();
     });

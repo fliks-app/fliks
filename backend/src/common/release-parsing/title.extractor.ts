@@ -39,7 +39,7 @@ export interface ExtractedRelease {
 const YEAR_RE = /\b((?:19|20)\d{2})\b/g;
 
 /**
- * Matches the LAST occurrence of the canonical S/E / season / legacy
+ * Matches the LAST occurrence of the canonical S/E / season / `1x02`
  * markers in the title. Used to slice the title prefix.
  */
 const SE_CUT_RE = /\b(?:S\d{1,2}(?:E\d{1,3})?|Season[\s._-]?\d{1,2}|\d{1,2}x\d{1,3}|Complete[\s._-]?(?:Series|S\d{1,2}))\b/i;

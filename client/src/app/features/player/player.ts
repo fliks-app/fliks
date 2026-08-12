@@ -150,7 +150,7 @@ class PausableTimeout {
          Safari with the bottom URL bar, the layout viewport ignores the
          chrome so 'bottom: 0' lands BEHIND it — explicit 'height: 100dvh'
          caps the container to the visible (dynamic) viewport and pulls
-         the seekbar above the URL bar. '100vh' is the legacy fallback for
+         the seekbar above the URL bar. '100vh' is the fallback for
          browsers without dvh support (Tizen Chrome 85 — no URL bar). */
       inset: 0;
       height: 100vh;
@@ -351,7 +351,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Label for the currently picked quality, mirroring the per-rung
    *  label in the dropdown (`q.label`) — so the header row stays in
    *  sync with the list and never surfaces internal ids like
-   *  `1080p-hdr`. Falls back to the id for legacy callers. */
+   *  `1080p-hdr`. Falls back to the id before the quality list has loaded. */
   readonly activeQualityLabel = computed(() => {
     const id = this.activeQualityId();
     if (id === 'auto') {
@@ -2607,7 +2607,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     // iOS Safari rejects the standard Fullscreen API on arbitrary elements
     // (and `document.fullscreenEnabled` is false). The only path to a
-    // fullscreen video there is the legacy `webkitEnterFullscreen` on the
+    // fullscreen video there is the `webkitEnterFullscreen` API on the
     // <video> tag itself, which surfaces the native iOS player overlay.
     // Detect by capability, not UA, so iPadOS-as-desktop-mode still works.
     if (!document.fullscreenEnabled) {
@@ -3611,11 +3611,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // EXCLUSION: the Tizen Return key (keyCode 10009 / `XF86Back`) must
     // bubble up to the window-level handler in `app.ts` — otherwise the
     // user can't exit the player. Same for `Escape` on dev keyboards.
-    // Tizen reports 10009 with no reliable `e.key` on older firmware, so the
-    // legacy code stays load-bearing; read it through a plain typed view to
+    // Tizen reports 10009 with no reliable `e.key` on older firmware, so
+    // `keyCode` stays load-bearing; read it through a plain typed view to
     // keep clear of the lib.dom `keyCode` deprecation.
-    const legacyKeyCode = (e as { keyCode: number }).keyCode;
-    const isBackKey = legacyKeyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack' || e.key === 'Escape';
+    const tizenKeyCode = (e as { keyCode: number }).keyCode;
+    const isBackKey = tizenKeyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack' || e.key === 'Escape';
 
     // A floating cue (skip-intro / next-episode) stays visible and actionable
     // even while the controls bar is hidden. So — unlike a hidden bar control —
@@ -3652,7 +3652,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     // ArrowLeft/Right are claimed by the seekbar when it owns focus, and used
     // for D-pad navigation between controls otherwise. Skip them here unless
-    // no control has focus (in which case keep the legacy "background" seek).
+    // no control has focus (in which case keep the "background" seek).
     const arrowSeekAllowed = !activeEl || activeEl === document.body;
 
     switch (e.key) {

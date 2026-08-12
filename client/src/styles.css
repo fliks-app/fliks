@@ -553,7 +553,7 @@ body.tv .btn-circle {
    Chromium 85 (Tizen 6.5 / webOS 6) doesn't recognise the CSS Values L4
    `infinity` keyword, the declaration is dropped, and every `rounded-full`
    element (avatars, pills, FABs, the seekbar track + thumb) falls back to
-   square corners. Re-state the same intent with the legacy `9999px`
+   square corners. Re-state the same intent with a finite `9999px`
    sentinel so the value parses on the TV WebView. Scoped to `body.tv`
    so the modern bundle keeps the wide-gamut form. */
 body.tv .rounded-full {

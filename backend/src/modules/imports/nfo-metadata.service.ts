@@ -82,7 +82,7 @@ export class NfoMetadataService {
         else if (type === 'imdb' && !out.imdbId) out.imdbId = value;
       });
 
-      // Legacy single-tag forms.
+      // Single-tag id fields — an alternate NFO convention to <uniqueid>.
       if (!out.tmdbId) out.tmdbId = toInt($('tmdbid').first().text());
       if (!out.tvdbId) out.tvdbId = toInt($('tvdbid').first().text());
       if (!out.imdbId) {

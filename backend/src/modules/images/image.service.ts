@@ -175,8 +175,8 @@ export class ImageService {
 
   /**
    * Absolute path on disk for a given size (default: `full`).
-   * `full` keeps the legacy filename (no suffix) for backward compatibility
-   * with images downloaded before multi-size support.
+   * `full` is the canonical, unsuffixed filename; `thumb`/`medium` add a
+   * `-size` suffix, so images stored before multi-size support still resolve.
    */
   getDiskPath(
     type: ImageType,

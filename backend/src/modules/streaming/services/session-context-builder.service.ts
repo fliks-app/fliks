@@ -105,9 +105,9 @@ export class SessionContextBuilder {
       sourceDvBlSignalCompatId: si?.video?.[0]?.dvBlSignalCompatId,
       // Variant chosen by stream-builder's codec selector at playback-info time,
       // threaded through every session spawn so ffmpeg-args resolves the
-      // matching encoder descriptor. Undefined only for legacy callers that
-      // never sent a sid (they route through the userId-based findCurrent
-      // fallback).
+      // matching encoder descriptor. Undefined only before a sid exists
+      // (e.g. the playback-info bootstrap call) — routes through the
+      // userId-based findCurrent fallback instead.
       videoVariant: live?.videoVariant ?? undefined,
     };
   }

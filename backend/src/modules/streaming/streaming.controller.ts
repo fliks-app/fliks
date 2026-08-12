@@ -1084,9 +1084,8 @@ export class StreamingController {
       deviceParam === 'mobile' || deviceParam === 'desktop'
         ? deviceParam
         : (live?.deviceType ?? 'desktop');
-    // Client-side ABR capability, frozen on the session at playback-info. No
-    // live session (legacy URL / stale sid) defaults to true — the existing
-    // full-ladder behaviour.
+    // Client-side ABR capability, frozen on the session at playback-info. A request
+    // with no live session (a stale sid) defaults to the full ladder.
     const supportsAbr = live?.supportsAbr ?? true;
     // Persist the master.m3u8 decisions back on the session so segment
     // requests stay coherent (especially for the URL-override device
@@ -1387,10 +1386,9 @@ export class StreamingController {
     }
 
     // Audio is produced by the video session whenever the master picked the
-    // var_stream_map layout (`setUseExtXMedia`). That's now true for any
-    // fMP4 source with audio (issue #148, Tizen) and for multi-audio
-    // sources regardless of mux flavour. Only the muxed TS / muxed-fMP4
-    // legacy path needs a separate audio-only session as a fallback.
+    // var_stream_map layout (`setUseExtXMedia`): any fMP4 source with audio
+    // (issue #148, Tizen) and any multi-audio source, whatever the mux. Only a
+    // muxed TS / muxed-fMP4 source needs a separate audio-only session instead.
     const live = this.sessionRouter.findRequestSession(req, mediaFileId);
     const useExtXMedia = live?.useExtXMedia ?? false;
     if (!useExtXMedia) {
@@ -2158,7 +2156,6 @@ export class StreamingController {
       req.user as User,
     );
 
-    const user = req.user;
     // Keep the LiveSession alive while the Range chunks roll in — the
     // heartbeat endpoint only fires on HLS/transcode paths, so without this
     // every direct-play would get GC'd 30 s after playback-info and disappear
@@ -2167,14 +2164,6 @@ export class StreamingController {
     const sid = firstQueryString(req.query, 'sid');
     if (sid) {
       this.liveSessions.heartbeat(sid, {});
-    } else if (!firstQueryString(req.query, 'download')) {
-      // Canary for the removed direct-play tracker: a playback reaching this
-      // route without a sid never went through playback-info, so it has no
-      // LiveSession and won't appear on the activity dashboard. If this never
-      // logs in real use, the legacy no-playback-info path is confirmed dead.
-      this.log.warn(
-        `direct-play stream without sid (mediaFileId=${mediaFileId}, userId=${user?.id ?? 'anon'}) — no LiveSession, not shown on the activity dashboard`,
-      );
     }
 
     const duration = resolved.mediaFile.streamInfo?.durationSeconds;
