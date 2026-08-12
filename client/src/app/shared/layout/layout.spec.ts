@@ -302,7 +302,6 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
       { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
       { label: 'downloads.title', icon: 'lucideDownload', badge: null, href: '/downloads' },
       { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
-        { label: 'activity.tab_subtitles', icon: 'lucideHistory', badge: null, href: '/activity' },
       { label: 'nav.requests', icon: 'lucideClipboardList', badge: '2', href: '/requests' },
       { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },
     ]);
@@ -319,7 +318,6 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
       { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
       { label: 'downloads.title', icon: 'lucideDownload', badge: null, href: '/downloads' },
       { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
-        { label: 'activity.tab_subtitles', icon: 'lucideHistory', badge: null, href: '/activity' },
       { label: 'nav.requests', icon: 'lucideClipboardList', badge: null, href: '/requests' },
       { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },
     ]);
@@ -333,7 +331,6 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
       { label: 'Movies', icon: 'lucideLibrary', badge: null, href: '/libraries/Movies' },
       { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
       { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
-        { label: 'activity.tab_subtitles', icon: 'lucideHistory', badge: null, href: '/activity' },
       { label: 'nav.requests', icon: 'lucideClipboardList', badge: null, href: '/requests' },
       { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },
     ]);
@@ -369,7 +366,6 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
       { label: 'Anime', icon: 'lucideSwords', badge: null, href: '/libraries/Anime' },
       { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
       { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
-        { label: 'activity.tab_subtitles', icon: 'lucideHistory', badge: null, href: '/activity' },
       { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },
     ]);
   });

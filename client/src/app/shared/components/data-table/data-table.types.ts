@@ -20,15 +20,15 @@ export interface PagedResult<T> {
 }
 
 /**
- * The plan's `RowAction` union: `route`/`proxy` the renderer executes itself,
- * `action` an id core resolves — a plugin row invoking a flow it doesn't own.
+ * `route`/`proxy` the renderer executes itself, `action` an id core resolves
+ * — a plugin row invoking a flow it doesn't own.
  */
 export type RowAction =
   | { kind: 'route'; labelKey: string; path: string }
   | { kind: 'action'; labelKey: string; actionId: string }
   | { kind: 'proxy'; labelKey: string; method: 'POST' | 'DELETE'; path: string; confirmKey?: string };
 
-/** List-scope action (the plan's `TableConfigPage.listActions[]`) — rendered once, not per row. */
+/** List-scope action (`TableConfigPage.listActions[]`) — rendered once, not per row. */
 export interface ListAction {
   labelKey: string;
   method: 'POST' | 'DELETE';

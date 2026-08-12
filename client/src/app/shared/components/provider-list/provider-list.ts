@@ -89,13 +89,13 @@ export class ProviderListComponent implements OnInit {
   readonly defaultEnabled = input(true);
   /** Sorts rows by priority and adds move-up/down swaps — priority is meaningless to reorder otherwise. */
   readonly reorderable = input(false);
-  /** Rendered once above the rows (the plan's `actions[].scope: 'list'`), distinct from per-row actions. */
+  /** Rendered once above the rows (`ProvidersConfigPage.actions[].scope: 'list'`), distinct from per-row actions. */
   readonly listActions = input<readonly ProviderListAction[]>([]);
-  /** Rendered per row (the plan's `actions[].scope: 'row'`) — every entry gets its own button. */
+  /** Rendered per row (`ProvidersConfigPage.actions[].scope: 'row'`) — every entry gets its own button. */
   readonly rowActions = input<readonly ProviderRowAction[]>([]);
   /** Matches subtitle-providers' current UX: renaming the draft to the driver's label while creating. */
   readonly autoFillNameFromImplementation = input(false);
-  /** Runs against the unsaved draft (before create/update) — the plan's motivating row action. */
+  /** Runs against the unsaved draft (before create/update), catching a bad connection before it's saved. */
   readonly testConnection = input<((draft: ProviderDraft) => Promise<ProviderTestResult>) | null>(null);
   /** Last chance to normalise the save body (e.g. trim a URL) without resurrecting a dropped secret. */
   readonly beforeSave = input<((body: Record<string, unknown>) => Record<string, unknown>) | null>(null);

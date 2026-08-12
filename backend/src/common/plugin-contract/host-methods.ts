@@ -224,8 +224,6 @@ export interface PluginHostApi {
   }>;
 
   // Group D — events and outbound (5)
-  // (Section header in the plan says "(4)"; the 15-method total only
-  // reconciles with the 5 methods listed below, D1-D5.)
 
   /** Batched. Core resolves the SSE audience via SseAudienceService.recipientsForMedia. */
   'events.publish': (p: AcquisitionEvent[]) => Promise<void>;

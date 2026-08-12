@@ -49,10 +49,9 @@ function asProvisionFailure(err: unknown): PluginInstallException {
 }
 
 /**
- * Owns the per-plugin Postgres role + schema (`plans/plugin-system.plan.md`,
- * "Database ownership"). Every identifier interpolated into SQL here passed
- * {@link pluginDbIdentifier} or {@link validateCoreRefNames} first; every
- * value is a bound parameter.
+ * Owns the per-plugin Postgres role + schema. Every identifier interpolated
+ * into SQL here passed {@link pluginDbIdentifier} or {@link validateCoreRefNames}
+ * first; every value is a bound parameter.
  */
 @Injectable()
 export class PluginDatabaseService {

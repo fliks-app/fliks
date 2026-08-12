@@ -175,7 +175,7 @@ export class PluginViewComponent {
     }
   }
 
-  /** Tests the unsaved draft — the plan's `ProvidersConfigPage.testConnection`, distinct from
+  /** Tests the unsaved draft — `ProvidersConfigPage.testConnection`, distinct from
    *  `actions[]`: there is no row yet, so no `:id` to substitute. */
   providerTestConnection(view: ProvidersView): ((draft: ProviderDraft) => Promise<ProviderTestResult>) | null {
     const test = view.testConnection;

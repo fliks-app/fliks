@@ -1,7 +1,7 @@
 /**
- * The closed entry-name set (`plans/plugin-system.plan.md`, "The ZIP — a
- * closed literal file list"). Matched by `===` only — never normalised,
- * never case-folded — so path traversal has no class of name to exploit.
+ * The closed entry-name set a plugin archive may contain. Matched by `===`
+ * only — never normalised, never case-folded — so path traversal has no
+ * class of name to exploit.
  */
 export const LEGAL_ENTRY_NAMES = [
   'plugin.json',

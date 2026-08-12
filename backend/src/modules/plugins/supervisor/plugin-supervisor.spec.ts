@@ -62,7 +62,7 @@ afterEach(async () => {
 }, 15_000);
 
 describe('DEFAULT_SUPERVISOR_OPTIONS', () => {
-  it('matches the plan exactly', () => {
+  it('has these exact default values', () => {
     expect(DEFAULT_SUPERVISOR_OPTIONS).toEqual({
       memoryMb: 256,
       handshakeDeadlineMs: 10_000,

@@ -19,7 +19,6 @@ export const CORE_NAV_CONTRIBUTIONS: readonly UiContribution[] = [
   { id: 'core.playlists', slot: 'nav.main', weight: 2000, labelKey: 'nav.playlists', icon: 'list-video', action: { kind: 'route', path: '/playlists' } },
   { id: 'core.downloads', slot: 'nav.main', weight: 2100, labelKey: 'downloads.title', shortLabelKey: 'nav.downloads', icon: 'download', when: [not('isTv')], action: { kind: 'route', path: '/downloads' } },
   { id: 'core.history', slot: 'nav.main', weight: 2200, labelKey: 'nav.history', icon: 'history', action: { kind: 'route', path: '/history' } },
-  { id: 'core.subtitle_activity', slot: 'nav.main', weight: 2300, labelKey: 'activity.tab_subtitles', icon: 'history', action: { kind: 'route', path: '/activity' } },
 
   { id: 'core.requests', slot: 'nav.acquisition', weight: 100, labelKey: 'nav.requests', icon: 'clipboard-list', badge: 'pendingRequests', tone: 'danger', action: { kind: 'route', path: '/requests' } },
   { id: 'core.calendar', slot: 'nav.acquisition', weight: 300, labelKey: 'nav.calendar', icon: 'calendar', action: { kind: 'route', path: '/calendar' } },
@@ -76,6 +75,7 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
     items: [
       { id: 'core.subtitles', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.subtitles', action: { kind: 'route', path: '/admin/settings/subtitles' } },
       { id: 'core.subtitle_providers', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.subtitle_providers', action: { kind: 'route', path: '/admin/settings/subtitle-providers' } },
+      { id: 'core.subtitles_activity', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.subtitles_activity', action: { kind: 'route', path: '/admin/settings/subtitles-activity' } },
     ],
   },
   {

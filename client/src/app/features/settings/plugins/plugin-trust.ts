@@ -6,7 +6,7 @@ export interface TrustBadge {
   cssClass: string;
 }
 
-/** Maps backend `TrustOutcome` onto the plan's four-badge model (Official / Verified / Unverified / Imported manually). */
+/** Maps backend `TrustOutcome` onto the four-badge model (Official / Verified / Unverified / Imported manually). */
 export function trustBadgeFor(trust: PluginTrust | undefined): TrustBadge {
   if (trust === 'official') return { labelKey: 'settings.plugins.trust.official', cssClass: 'badge-success' };
   if (trust === 'unsigned') return { labelKey: 'settings.plugins.trust.manual', cssClass: 'badge-ghost' };
