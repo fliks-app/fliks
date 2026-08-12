@@ -152,7 +152,9 @@ describe('backoff', () => {
       if (s === 'backoff') backoffIndices.push(sup.getBackoffIndex());
     });
     await sup.start();
-    await delay(750);
+    // Each cycle spawns a real process, so a fixed wait counts fewer cycles under a loaded suite.
+    const deadline = Date.now() + 8_000;
+    while (backoffIndices.length < 2 && Date.now() < deadline) await delay(25);
     expect(backoffIndices.length).toBeGreaterThanOrEqual(2);
     expect(Math.max(...backoffIndices)).toBeLessThanOrEqual(1);
   }, 10_000);

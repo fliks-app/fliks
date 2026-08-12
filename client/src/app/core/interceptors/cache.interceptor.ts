@@ -39,6 +39,9 @@ const EXCLUDED_PREFIXES = [
   '/api/auth',
   '/api/stream',
   '/api/playback/media/',
+  // A plugin route reaches whatever the plugin talks to — a tracker, a download client. This cache
+  // ignores HTTP headers, so the proxy's `no-store` alone would not stop it.
+  '/api/plugins',
 ];
 
 // Live query endpoints (external providers) — never cache. A stale hit here
@@ -164,7 +167,7 @@ export async function invalidatePrefix(prefix: string): Promise<void> {
 
 // ── Interceptor ──
 
-function isCacheable(url: string): boolean {
+export function isCacheable(url: string): boolean {
   if (EXCLUDED_PREFIXES.some((p) => url.startsWith(p))) return false;
   if (EXCLUDED_PATTERNS.some((r) => r.test(url))) return false;
   return CACHEABLE_PREFIXES.some((p) => url.startsWith(p));

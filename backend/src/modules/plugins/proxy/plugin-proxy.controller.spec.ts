@@ -150,7 +150,7 @@ describe('PluginProxyController — response header allowlist', () => {
     await controller.proxy('fliks.testplugin', fakeRequest(), res);
 
     const setHeaderNames = res.setHeader.mock.calls.map(([name]: [string]) => name);
-    expect(setHeaderNames).toEqual(['Content-Type']);
+    expect(setHeaderNames).toEqual(['Cache-Control', 'Content-Type']);
   });
 
   it('drops a header name containing CRLF even if its lowercase form would otherwise be allowed', async () => {
@@ -164,7 +164,7 @@ describe('PluginProxyController — response header allowlist', () => {
 
     await controller.proxy('fliks.testplugin', fakeRequest(), res);
 
-    expect(res.setHeader).not.toHaveBeenCalled();
+    expect(res.setHeader.mock.calls).toEqual([['Cache-Control', 'no-store']]);
   });
 
   it('drops an allowlisted header whose value carries CRLF, which Node would throw on', async () => {
@@ -182,7 +182,7 @@ describe('PluginProxyController — response header allowlist', () => {
     await controller.proxy('fliks.testplugin', fakeRequest(), res);
 
     const names = res.setHeader.mock.calls.map(([name]: [string]) => name.toLowerCase());
-    expect(names).toEqual(['content-type']);
+    expect(names).toEqual(['cache-control', 'content-type']);
   });
 
   it('keeps every header on the allowlist', async () => {
@@ -202,6 +202,31 @@ describe('PluginProxyController — response header allowlist', () => {
 
     await controller.proxy('fliks.testplugin', fakeRequest(), res);
 
-    expect(res.setHeader).toHaveBeenCalledTimes(5);
+    expect(res.setHeader).toHaveBeenCalledTimes(6);
+  });
+
+  it('sends no-store on a plugin response that declares no cache directive of its own', async () => {
+    const callPlugin = jest.fn().mockResolvedValue({ status: 200, headers: {}, body: [] });
+    const { controller } = makeController('ready', callPlugin);
+    const res = fakeResponse();
+
+    await controller.proxy('fliks.testplugin', fakeRequest(), res);
+
+    expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
+  });
+
+  it('lets a plugin serving an asset override no-store', async () => {
+    const callPlugin = jest.fn().mockResolvedValue({
+      status: 200,
+      headers: { 'cache-control': 'public, max-age=86400' },
+      body: 'logo',
+    });
+    const { controller } = makeController('ready', callPlugin);
+    const res = fakeResponse();
+
+    await controller.proxy('fliks.testplugin', fakeRequest(), res);
+
+    const last = res.setHeader.mock.calls.filter(([n]: [string]) => n.toLowerCase() === 'cache-control').at(-1);
+    expect(last).toEqual(['cache-control', 'public, max-age=86400']);
   });
 });

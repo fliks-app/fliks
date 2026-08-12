@@ -80,6 +80,9 @@ export class PluginProxyController {
     }
 
     res.status(clampStatus(result.status));
+    // A plugin route reaches whatever the plugin talks to; a stored copy answers a later, different
+    // question. Set before forwarding so a plugin serving an asset can still opt into caching.
+    res.setHeader('Cache-Control', 'no-store');
     for (const [name, value] of Object.entries(result.headers ?? {})) {
       if (
         typeof value !== 'string' ||
