@@ -261,6 +261,8 @@ export class PluginViewComponent {
       ...(l?.emptyKey ? { emptyKey: l.emptyKey } : {}),
       ...(l?.testKey ? { testConnectionKey: l.testKey } : {}),
       ...(l?.deleteConfirmKey ? { confirmDeleteKey: l.deleteConfirmKey } : {}),
+      ...(l?.createTitleKey ? { createTitleKey: l.createTitleKey } : {}),
+      ...(l?.editTitleKey ? { editTitleKey: l.editTitleKey } : {}),
     };
   }
 

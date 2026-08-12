@@ -82,6 +82,35 @@ describe('PluginRegistryService — webhooks', () => {
     });
   });
 
+  it('accepts `setting:` naming a field the plugin declares on a form page', async () => {
+    const manifest = minimalDataManifest({
+      fliks: COMPATIBLE_RANGE,
+      events: [webhookDeclaration({ webhook: 'setting:endpoint_url' })],
+      ui: { configPages: [{ id: 'general', labelKey: 'x', fields: [{ key: 'endpoint_url', type: 'url', labelKey: 'y' }] }] },
+    });
+    const service = makeService();
+
+    await expect(service.register(makePackage(manifest))).resolves.toEqual({ ok: true, pluginId: manifest.id });
+  });
+
+  it('VERDICT: refuses `setting:` naming a field no page declares — it would deliver nowhere, in silence', async () => {
+    const manifest = minimalDataManifest({
+      fliks: COMPATIBLE_RANGE,
+      events: [webhookDeclaration({ webhook: 'setting:typo_url' })],
+      ui: { configPages: [{ id: 'general', labelKey: 'x', fields: [{ key: 'endpoint_url', type: 'url', labelKey: 'y' }] }] },
+    });
+    const service = makeService();
+
+    const result = await service.register(makePackage(manifest));
+
+    expect(result).toEqual({
+      ok: false,
+      pluginId: manifest.id,
+      reason: 'unknown-webhook-setting',
+      detail: expect.any(String),
+    });
+  });
+
   it('refuses a malformed webhook URL', async () => {
     const manifest = minimalDataManifest({
       fliks: COMPATIBLE_RANGE,

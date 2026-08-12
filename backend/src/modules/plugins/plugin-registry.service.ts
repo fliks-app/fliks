@@ -16,6 +16,7 @@ import { arePluginsDisabled, FLIKS_PLUGINS_DISABLED_ENV } from '../../common/con
 import {
   PLUGIN_API_VERSION,
   PLUGIN_WEBHOOK_EVENT_NAMES,
+  WEBHOOK_SETTING_PREFIX,
   type PluginKind,
   type PluginManifest,
   type ProcessPluginManifest,
@@ -24,6 +25,7 @@ import {
   type PluginJob,
   type ReleasePickerPair,
   type ReleasePickerRoutes,
+  type ConfigPage,
 } from '../../common/plugin-contract';
 import { OFFICIAL_KEYS, resolveTrust, readArchiveEntries, type TrustOutcome } from './archive';
 import { isInternalAddress } from './internal-address';
@@ -86,6 +88,7 @@ export type PluginRegistrationFailureReason =
   | 'invalid-webhook-url'
   | 'insecure-webhook-scheme'
   | 'internal-webhook-host'
+  | 'unknown-webhook-setting'
   | 'invalid-route-method'
   | 'invalid-route-path'
   | 'invalid-route-policy'
@@ -135,6 +138,16 @@ export type PluginRegistrationResult = PluginRegistrationSuccess | PluginRegistr
  * tiers (P4a). L1 (`state.json` quarantine) still has no home; L3
  * (re-hashing `plugin.js` from the loaded fd) is `PluginProcessService`'s.
  */
+/** Keys a plugin declares on its `form` pages — the only values an operator can set for it. */
+function formFieldKeys(pages: ConfigPage[]): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const page of pages) {
+    if (page.kind && page.kind !== 'form') continue;
+    for (const field of page.fields ?? []) if (typeof field?.key === 'string') keys.add(field.key);
+  }
+  return keys;
+}
+
 @Injectable()
 export class PluginRegistryService implements OnModuleInit {
   private readonly logger = new Logger(PluginRegistryService.name);
@@ -214,7 +227,10 @@ export class PluginRegistryService implements OnModuleInit {
 
     // Structurally legal on `process` too, but only `data` fans out over HTTP —
     // `process` gets domain events pushed over its own socket instead.
-    const webhookCheck = this.validateWebhookDeclarations(manifest.events ?? []);
+    const webhookCheck = this.validateWebhookDeclarations(
+      manifest.events ?? [],
+      formFieldKeys(manifest.ui?.configPages ?? []),
+    );
     if (!webhookCheck.ok) return this.fail(pkg.pluginId, webhookCheck.reason, webhookCheck.detail);
 
     const releasePickerCheck = this.validateReleasePicker(
@@ -397,6 +413,7 @@ export class PluginRegistryService implements OnModuleInit {
    */
   private validateWebhookDeclarations(
     raw: unknown[],
+    settingKeys: ReadonlySet<string>,
   ):
     | { ok: true; declarations: { event: PluginWebhookEventName; webhook: string }[] }
     | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
@@ -408,6 +425,19 @@ export class PluginRegistryService implements OnModuleInit {
 
       if (!WEBHOOK_EVENT_NAMES.has(event)) {
         return { ok: false, reason: 'invalid-webhook-event', detail: `event "${event}" is not a recognised domain event` };
+      }
+      if (webhook.startsWith(WEBHOOK_SETTING_PREFIX)) {
+        // A key naming nothing would deliver nowhere, in silence, forever.
+        const key = webhook.slice(WEBHOOK_SETTING_PREFIX.length);
+        if (!settingKeys.has(key)) {
+          return {
+            ok: false,
+            reason: 'unknown-webhook-setting',
+            detail: `webhook "${webhook}" names no field declared on a form page`,
+          };
+        }
+        declarations.push({ event: event as PluginWebhookEventName, webhook });
+        continue;
       }
       let url: URL;
       try {
