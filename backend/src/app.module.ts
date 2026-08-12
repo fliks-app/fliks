@@ -26,6 +26,7 @@ import { FilesystemModule } from './modules/filesystem/filesystem.module';
 import { SetupChecklistModule } from './modules/setup-checklist/setup-checklist.module';
 import { CountsModule } from './modules/counts/counts.module';
 import { PluginsModule } from './modules/plugins/plugins.module';
+import { PluginLegacyAliasModule } from './modules/plugins/proxy/plugin-legacy-alias.module';
 import { PluginHostModule } from './modules/plugins/host/plugin-host.module';
 import { CommonModule } from './common/common.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
@@ -103,6 +104,9 @@ import { join } from 'path';
     // @Global(): registered once here so PluginProcessService (in PluginsModule) can
     // inject PluginHostBindingService without an import edge back into this module.
     PluginHostModule,
+    // Dead last, and it must stay there: it owns an app-wide `*splat` catch-all, which
+    // Express matches ahead of every route registered after it.
+    PluginLegacyAliasModule,
   ],
 })
 export class AppModule {}

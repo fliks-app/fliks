@@ -20,8 +20,6 @@ import { PluginUiController } from './plugin-ui.controller';
 import { PluginObjectGuardsService } from './proxy/plugin-object-guards.service';
 import { PluginRouteGuard } from './proxy/plugin-route.guard';
 import { PluginProxyController } from './proxy/plugin-proxy.controller';
-import { PluginLegacyAliasMatchGuard, PluginLegacyAliasPolicyGuard } from './proxy/plugin-legacy-alias.guard';
-import { PluginLegacyAliasController } from './proxy/plugin-legacy-alias.controller';
 import { AuthModule } from '../auth/auth.module';
 import { EventsModule } from '../scheduler/events.module';
 import { LogBufferModule } from '../scheduler/log-buffer.module';
@@ -47,8 +45,6 @@ import { ScheduledJobRegistryModule } from '../scheduler/scheduled-job-registry.
     PluginUiController,
     // Last: its `*splat` wildcard must never shadow the concrete routes above.
     PluginProxyController,
-    // Last of all: a legacy alias must never shadow a route any other controller — core's own included — already serves.
-    PluginLegacyAliasController,
   ],
   providers: [
     PluginRegistryService,
@@ -62,9 +58,7 @@ import { ScheduledJobRegistryModule } from '../scheduler/scheduled-job-registry.
     PluginDatabaseService,
     PluginObjectGuardsService,
     PluginRouteGuard,
-    PluginLegacyAliasMatchGuard,
-    PluginLegacyAliasPolicyGuard,
   ],
-  exports: [TypeOrmModule, PluginRegistryService, PluginDatabaseService, PluginJobsService],
+  exports: [TypeOrmModule, PluginRegistryService, PluginDatabaseService, PluginJobsService, PluginProcessService],
 })
 export class PluginsModule {}
