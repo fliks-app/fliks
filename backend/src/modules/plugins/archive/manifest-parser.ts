@@ -31,7 +31,6 @@ const PROCESS_KEYS = new Set([
   'files',
   'database',
   'routes',
-  'legacyPaths',
   'scopes',
   'ingestRoots',
   'jobs',

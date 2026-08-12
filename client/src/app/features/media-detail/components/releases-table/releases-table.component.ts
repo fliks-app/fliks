@@ -14,7 +14,7 @@ import {
   LucideDownload,
   LucidePackage,
 } from '@lucide/angular';
-import { MovieRelease } from '../../../../core/services/api/media.service';
+import { MovieRelease } from '../../media-detail-release-picker.service';
 import { formatMediaDetailBytes } from '../../media-detail.utils';
 import { formatReleaseRejection } from '../../media-detail-release.utils';
 

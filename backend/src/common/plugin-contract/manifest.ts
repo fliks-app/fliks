@@ -1,4 +1,4 @@
-import type { UiContribution, ConfigPage } from './ui-contribution';
+import type { UiContribution, ConfigPage, ReleasePickerRoutes } from './ui-contribution';
 import type { PluginScope } from './principal';
 
 /**
@@ -79,6 +79,9 @@ interface PluginManifestBase {
   ui?: {
     contributions?: UiContribution[];
     configPages?: ConfigPage[];
+    /** Fills core's release picker. Every route here must also be declared in
+     *  `provides.routes[]`, so it carries a policy like any other. */
+    releasePicker?: ReleasePickerRoutes;
   };
   /** `data`-tier outbound notifications only. */
   events?: PluginWebhookDeclaration[];
@@ -101,8 +104,6 @@ export interface ProcessPluginManifest extends PluginManifestBase {
   files: Record<string, string>;
   database: { schema: boolean; coreRefs: string[] };
   routes: PluginRoute[];
-  /** URL aliases core keeps for one major version. */
-  legacyPaths?: Record<string, string>;
   scopes: PluginScope[];
   /** Allowlist for `library.ingest` paths. */
   ingestRoots: string[];

@@ -152,6 +152,27 @@ describe('PluginUiRegistryService', () => {
     expect(registry.i18nFor('de')).toBeUndefined();
   });
 
+  it('returns null for releasePicker when no plugin declares one', async () => {
+    const promise = registry.load();
+    http.expectOne('/api/plugins/ui').flush([entry('fliks.a', [])]);
+    await promise;
+
+    expect(registry.releasePicker()).toBeNull();
+  });
+
+  it('returns the declaring plugin\'s id and routes for releasePicker', async () => {
+    const routes = {
+      movie: { search: '/:id/releases', grab: '/:id/grab' },
+      season: { search: '/:id/seasons/:seasonId/releases', grab: '/:id/seasons/:seasonId/grab' },
+      episode: { search: '/:id/episodes/:episodeId/releases', grab: '/:id/episodes/:episodeId/grab' },
+    };
+    const promise = registry.load();
+    http.expectOne('/api/plugins/ui').flush([entry('fliks.a', [], { releasePicker: routes })]);
+    await promise;
+
+    expect(registry.releasePicker()).toEqual({ pluginId: 'fliks.a', routes });
+  });
+
   it('lets no plugin redefine another plugin\'s key, picking the winner by plugin id', async () => {
     const promise = registry.load();
     http.expectOne('/api/plugins/ui').flush([

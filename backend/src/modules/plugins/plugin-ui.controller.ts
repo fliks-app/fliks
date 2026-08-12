@@ -1,7 +1,7 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PluginRegistryService } from './plugin-registry.service';
-import type { ConfigPage, UiContribution } from '../../common/plugin-contract';
+import type { ConfigPage, ReleasePickerRoutes, UiContribution } from '../../common/plugin-contract';
 
 export interface PluginUiEntry {
   pluginId: string;
@@ -11,6 +11,8 @@ export interface PluginUiEntry {
   configPages: ConfigPage[];
   /** Flat `"a.b.c"` dicts per locale; the client merges them under core's own keys. */
   i18n: Record<string, Record<string, string>>;
+  /** At most one plugin across the whole listing ever carries this. */
+  releasePicker?: ReleasePickerRoutes;
 }
 
 /**
@@ -35,6 +37,7 @@ export class PluginUiController {
         contributions: plugin.manifest.ui?.contributions ?? [],
         configPages: plugin.manifest.ui?.configPages ?? [],
         i18n: plugin.manifest.i18n ?? {},
+        releasePicker: this.registry.releasePickerFor(plugin.pluginId),
       }));
   }
 }

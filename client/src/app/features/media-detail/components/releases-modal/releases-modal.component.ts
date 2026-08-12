@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
-import { MovieRelease } from '../../../../core/services/api/media.service';
+import { MovieRelease } from '../../media-detail-release-picker.service';
 import { ReleasesTableComponent } from '../releases-table/releases-table.component';
 import { DismissableStackService } from '../../../../core/services/dismissable-stack.service';
 
