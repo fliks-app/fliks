@@ -31,6 +31,9 @@ export type SupervisorState =
 
 const STDERR_TAIL_BYTES = 4 * 1024;
 
+/** `WARN` as the line's own level — after any bracketed prefixes, never inside the message. */
+const SELF_DECLARED_WARN = /^(?:\[[^\]]*\]\s*)*WARN\b/;
+
 /** Every figure here is "The spawn call and the supervisor"'s, verbatim. Override only in tests. */
 export const DEFAULT_SUPERVISOR_OPTIONS = {
   memoryMb: 256,
@@ -420,7 +423,10 @@ export class PluginSupervisor implements OnApplicationShutdown {
         if (line.length === 0) continue;
         if (level === 'log') this.opts.logBuffer.log(line, tag);
         else {
-          this.opts.logBuffer.error(line, undefined, tag);
+          // A plugin that names its own level keeps it: everything it writes to stderr,
+          // warnings included, would otherwise paint the core log as errors.
+          if (SELF_DECLARED_WARN.test(line)) this.opts.logBuffer.warn(line, tag);
+          else this.opts.logBuffer.error(line, undefined, tag);
           this.stderrTail = (this.stderrTail + line + '\n').slice(-STDERR_TAIL_BYTES);
         }
       }

@@ -107,6 +107,11 @@ if (mode === 'never-connect') {
     process.on('SIGTERM', () => {}); // forces the supervisor down the SIGKILL branch
   }
 
+  if (mode === 'log-levels') {
+    process.stderr.write('[2026-01-01T00:00:00.000Z] WARN nothing configured yet\n');
+    process.stderr.write('[2026-01-01T00:00:00.000Z] ERROR the driver refused\n');
+  }
+
   if (mode === 'flood-stdout') {
     setInterval(() => {
       for (let i = 0; i < 500; i++) process.stdout.write('x'.repeat(200) + '\n');
