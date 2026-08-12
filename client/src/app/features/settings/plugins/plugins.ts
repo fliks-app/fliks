@@ -112,6 +112,7 @@ export class PluginsSettingsComponent implements OnInit {
 
   async onInstalled(result: PluginInstallResult): Promise<void> {
     await this.reload();
+    await this.registry.load();
     if (result.status === 'active') {
       this.toast.success(this.translate.instant('settings.plugins.installed'));
     } else {
@@ -175,6 +176,7 @@ export class PluginsSettingsComponent implements OnInit {
     try {
       await this.api.uninstall(row.pluginId);
       await this.reload();
+      await this.registry.load();
       this.toast.success(this.translate.instant('settings.plugins.uninstalled'));
     } catch {
       this.toast.error(this.translate.instant('settings.plugins.uninstall_error'));

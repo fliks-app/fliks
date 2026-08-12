@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal, v
 import { RouterLink } from '@angular/router';
 import { LucideChevronLeft } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { PluginUiRegistryService } from '../../../../core/plugin-ui/plugin-ui-registry.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import {
   PluginsApiService,
@@ -21,6 +22,7 @@ import { PluginCatalogueComponent } from './plugin-catalogue';
 })
 export class PluginCataloguePageComponent implements OnInit {
   private readonly api = inject(PluginsApiService);
+  private readonly registry = inject(PluginUiRegistryService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
 
@@ -48,6 +50,9 @@ export class PluginCataloguePageComponent implements OnInit {
 
   async onInstalled(result: PluginInstallResult): Promise<void> {
     await this.reload();
+    // The sidebar and the nav read the registry: without this a freshly installed plugin's
+    // pages exist and nothing links to them until the next full page load.
+    await this.registry.load();
     if (result.status === 'active') {
       this.toast.success(this.translate.instant('settings.plugins.installed'));
     } else {
