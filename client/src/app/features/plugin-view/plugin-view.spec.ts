@@ -82,6 +82,45 @@ describe('PluginViewComponent', () => {
     http.verify();
   });
 
+  it('VERDICT: types a stored setting by its declared field kind — "false" is off, not a truthy string', async () => {
+    const { fixture, http } = createComponent(
+      { pluginId: 'fliks.a', view: 'settings' },
+      {
+        hasPlugin: () => true,
+        configPage: () => ({
+          id: 'settings',
+          labelKey: 'x',
+          fields: [
+            { key: 'autoGrab', type: 'toggle', labelKey: 'y', default: true },
+            { key: 'unsetToggle', type: 'toggle', labelKey: 'y', default: true },
+            { key: 'interval', type: 'number', labelKey: 'y', default: 60 },
+            { key: 'samples', type: 'number', labelKey: 'y' },
+          ],
+        }),
+      },
+    );
+    fixture.detectChanges();
+    http.expectOne({ url: '/api/settings', method: 'GET' }).flush({
+      'plugin.fliks.a.autoGrab': 'false',
+      'plugin.fliks.a.interval': '30',
+      'plugin.fliks.a.samples': '',
+    });
+    await settle(fixture);
+
+    const value = fixture.componentInstance.formValue();
+    expect(value['autoGrab']).toBe(false);
+    // Unset falls back to the declared default, not to the empty string.
+    expect(value['unsetToggle']).toBe(true);
+    expect(value['interval']).toBe(30);
+    // An empty number stays empty: 0 samples would mean something else entirely.
+    expect(value['samples']).toBe('');
+
+    // Every toggle rendered off would look identical to a load that never ran — check the DOM too.
+    const boxes = Array.from(fixture.nativeElement.querySelectorAll('input[type="checkbox"]')) as HTMLInputElement[];
+    expect(boxes.map((b) => b.checked)).toEqual([false, true]);
+    http.verify();
+  });
+
   it('renders the providers renderer once the implementations route resolves, and lists rows from the declared route', async () => {
     // Manifest paths are declared relative to the plugin, exactly as a real manifest ships them —
     // if the component ever requests these verbatim instead of proxying them, `http.expectOne` below fails.
