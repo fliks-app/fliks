@@ -215,7 +215,10 @@ export class SystemController {
     private readonly updateCheck: UpdateCheckService,
   ) {}
 
+  // Authentication is the whole gate: the stream only ever emits what this user id is
+  // already a recipient of, and `PoliciesGuard` denies a handler that declares nothing.
   @Sse('events')
+  @CheckPolicies(() => true)
   events(@CurrentUser() user: User): Observable<MessageEvent> {
     return this.eventsService.getStream(user.id);
   }
