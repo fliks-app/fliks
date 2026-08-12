@@ -33,6 +33,8 @@ interface GrabBody {
   downloadUrl?: string;
   sourceTitle?: string;
   sourceId?: number;
+  /** Manual override for a release the profile would otherwise reject — never sent for an allowed grab. */
+  force?: boolean;
 }
 
 interface RouteParams {

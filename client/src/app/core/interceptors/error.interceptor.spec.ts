@@ -20,7 +20,9 @@ const EN_ERRORS: TranslationObject = {
     '500': 'Internal server error',
     '503': 'Service temporarily unavailable',
     unknown: 'Error {{code}}',
+    '409': 'Conflict - the resource already exists',
   },
+  download: { grab: { errors: { unprofiled: 'This title has no quality profile' } } },
 };
 
 describe('errorInterceptor', () => {
@@ -58,6 +60,16 @@ describe('errorInterceptor', () => {
     client.get(url).subscribe({ error: () => {} });
     http.expectOne(url).flush(body, { statusText: 'Error', ...opts });
   }
+
+  it("VERDICT: prefers a plugin error's own key over the status sentence", () => {
+    fireAndFlush('/api/plugins/fliks.acme/1/releases', { error: { key: 'download.grab.errors.unprofiled' } }, { status: 409 });
+    expect(toast.toasts().map((t) => t.message)).toEqual(['This title has no quality profile']);
+  });
+
+  it('falls back to a plugin error detail rather than a contradicting status sentence', () => {
+    fireAndFlush('/api/plugins/fliks.acme/1/grab', { error: { key: 'download.some.untranslated', detail: 'Tracker refused the grab' } }, { status: 409 });
+    expect(toast.toasts().map((t) => t.message)).toEqual(['Tracker refused the grab']);
+  });
 
   it('shows the translated generic message for a framework 404 (Cannot GET ...), never the raw URL', () => {
     fireAndFlush(

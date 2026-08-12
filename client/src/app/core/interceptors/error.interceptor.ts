@@ -67,6 +67,18 @@ function extractMessage(
     return translated !== msg ? translated : msg;
   }
 
+  // A plugin route answers `{error:{key,detail}}`; its keys are merged into the catalogue on
+  // install. A status sentence would contradict the reason the plugin already named.
+  const pluginKey = body?.error?.key;
+  if (typeof pluginKey === 'string' && pluginKey) {
+    const translated = translate.instant(pluginKey, { detail: body.error.detail });
+    if (translated !== pluginKey) return translated;
+    const detail = body.error.detail;
+    return typeof detail === 'string' && detail
+      ? detail
+      : translate.instant('errors.unknown', { code: err.status });
+  }
+
   const key = `errors.${err.status}`;
   const translated = translate.instant(key);
   if (translated !== key) {

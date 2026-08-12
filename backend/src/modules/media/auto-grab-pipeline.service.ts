@@ -21,9 +21,9 @@ export interface AutoGrabScoringContext {
 
 /** Outcome of {@link AutoGrabPipelineService.classifyForSearch}. */
 export type SearchDecision =
-  | { mode: 'skip' | 'unprofiled' }
+  | { mode: 'unprofiled' }
   | {
-      mode: 'missing' | 'upgrade';
+      mode: 'missing' | 'upgrade' | 'skip';
       /** Releases must have `rank > minRankExclusive`. 0 for "missing" mode. */
       minRankExclusive: number;
       /** Releases must have `rank <= maxRankInclusive`. +Infinity for "missing". */
@@ -62,7 +62,8 @@ export class AutoGrabPipelineService {
    * Decide what (if anything) SearchMissing should do for a given media.
    *
    * - `skip`        — has files at/above cutoff, OR has files but profile
-   *                   forbids upgrades.
+   *                   forbids upgrades. Still carries the ranked bounds a
+   *                   manual search can score against; never auto-grabbed.
    * - `unprofiled`  — quality or language profile missing; we refuse to act.
    *                   The system-default profiles are a seed only and are
    *                   NOT applied at runtime.
@@ -86,15 +87,21 @@ export class AutoGrabPipelineService {
       };
     }
     const profile = media.qualityProfile;
-    if (!profile.upgradeAllowed) return { mode: 'skip' };
     let currentRank = 0;
     for (const f of files) {
       const r = rankFromQualityString(f.quality);
       if (r > currentRank) currentRank = r;
     }
     const cutoffRank = getAppQualityById(profile.cutoff)?.rank;
-    if (cutoffRank == null) return { mode: 'skip' };
-    if (currentRank >= cutoffRank) return { mode: 'skip' };
+    // A skip still carries the ranked bounds an upgrade would have used, so a
+    // manual search can score releases even though auto-grab has nothing to do.
+    const maxRankInclusive = cutoffRank ?? Number.POSITIVE_INFINITY;
+    if (!profile.upgradeAllowed)
+      return { mode: 'skip', minRankExclusive: currentRank, maxRankInclusive };
+    if (cutoffRank == null)
+      return { mode: 'skip', minRankExclusive: currentRank, maxRankInclusive };
+    if (currentRank >= cutoffRank)
+      return { mode: 'skip', minRankExclusive: currentRank, maxRankInclusive: cutoffRank };
     return {
       mode: 'upgrade',
       minRankExclusive: currentRank,

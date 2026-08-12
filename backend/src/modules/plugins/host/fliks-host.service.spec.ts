@@ -254,20 +254,34 @@ describe('FliksHostImpl', () => {
       ).toBeNull();
     });
 
-    it('collapses "skip" and "unprofiled" decisions to want: null', async () => {
+    it('collapses "unprofiled" to want: null — no profile means nothing can be scored', async () => {
       const h = makeHarness();
       h.mediaRepo.findOne.mockResolvedValue(makeMedia());
       h.mediaFileRepo.find.mockResolvedValue([]);
-
-      h.autoGrab.classifyForSearch.mockReturnValue({ mode: 'skip' });
-      expect(
-        (await h.host['media.acquisitionContext']({ mediaId: 1 }))?.want,
-      ).toBeNull();
 
       h.autoGrab.classifyForSearch.mockReturnValue({ mode: 'unprofiled' });
       expect(
         (await h.host['media.acquisitionContext']({ mediaId: 1 }))?.want,
       ).toBeNull();
+    });
+
+    it('carries the ranked constraints for a "skip" decision, so a manual search can still score releases', async () => {
+      const h = makeHarness();
+      h.mediaRepo.findOne.mockResolvedValue(makeMedia());
+      h.mediaFileRepo.find.mockResolvedValue([]);
+
+      h.autoGrab.classifyForSearch.mockReturnValue({
+        mode: 'skip',
+        minRankExclusive: 62,
+        maxRankInclusive: 62,
+      });
+      const result = await h.host['media.acquisitionContext']({ mediaId: 1 });
+      expect(result?.want).toMatchObject({
+        decision: 'skip',
+        minRankExclusive: 62,
+        maxRankInclusive: 62,
+      });
+      expectJsonSafe(result);
     });
 
     it('populates season + episode for an episode-scoped lookup', async () => {
@@ -374,6 +388,48 @@ describe('FliksHostImpl', () => {
         limit: 10,
       });
       expect(h.acquisitionCandidates.listEpisodeTargets).not.toHaveBeenCalled();
+    });
+
+    it('never offers a "skip" or "unprofiled" target — auto-grab must not act on either', async () => {
+      const h = makeHarness();
+      const movie = makeMedia({ id: 1 });
+      const series = makeMedia({ id: 2, type: MediaType.SERIES });
+      const season = makeSeason({ id: 20, mediaId: 2 });
+      const ep1 = makeEpisode({ id: 201, season, episodeNumber: 1 });
+      const ep2 = makeEpisode({ id: 202, season, episodeNumber: 2 });
+      // On a season the pack list does not cover, so it survives as a single and
+      // reaches `buildFromEpisodeTarget` — the packed season's episodes never do.
+      const loneSeason = makeSeason({ id: 21, mediaId: 2 });
+      const ep3 = makeEpisode({ id: 203, season: loneSeason, episodeNumber: 1 });
+
+      h.acquisitionCandidates.listMovieTargets.mockResolvedValue([
+        { media: movie, files: [] },
+      ]);
+      h.acquisitionCandidates.listEpisodeTargets.mockResolvedValue([
+        { media: series, season, episode: ep1, files: [] },
+        { media: series, season: loneSeason, episode: ep3, files: [] },
+      ]);
+      h.acquisitionCandidates.groupIntoSeasonPacks.mockResolvedValue([
+        {
+          media: series,
+          season,
+          episodes: [ep1, ep2],
+          files: [],
+          totalEpisodeCount: 2,
+        },
+      ]);
+      // Every branch (movie, single episode, season pack) resolves to a
+      // decision the candidates path must drop before it reaches a plugin.
+      h.autoGrab.classifyForSearch
+        .mockReturnValueOnce({ mode: 'skip', minRankExclusive: 40, maxRankInclusive: 62 })
+        .mockReturnValueOnce({ mode: 'unprofiled' })
+        .mockReturnValueOnce({ mode: 'skip', minRankExclusive: 40, maxRankInclusive: 62 });
+
+      const result = await h.host['acquisition.candidates']({
+        availableOn: '2099-01-01',
+        limit: 10,
+      });
+      expect(result.items).toEqual([]);
     });
 
     describe('movie availability gate — agrees with the date-gate logic on every row', () => {

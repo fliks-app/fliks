@@ -1,7 +1,7 @@
 <dialog #dialog class="modal" role="dialog" aria-modal="true" (close)="onDialogClose()">
   <div class="modal-box">
     <h3 class="text-lg font-bold">{{ title() }}</h3>
-    <p class="py-4">{{ message() }}</p>
+    <p class="py-4 whitespace-pre-line">{{ message() }}</p>
     <div class="modal-action">
       @if (dismissLabel(); as dl) {
         <button class="btn btn-ghost" (click)="confirmService.dismiss()">{{ dl }}</button>

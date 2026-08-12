@@ -14,7 +14,7 @@
       </tr>
     </thead>
     <tbody>
-      @for (r of filteredReleases(); track r.downloadUrl; let i = $index) {
+      @for (r of releases(); track r.downloadUrl; let i = $index) {
         <tr [class.opacity-50]="r.blocklisted || !r.languageAllowed || r.rejections.length > 0">
           <td class="text-sm min-w-0">
             <!-- Title scrolls horizontally on its own -->
@@ -40,6 +40,8 @@
                   }
                   @if (r.blocklisted) {
                     <span class="badge badge-sm badge-error">{{ 'media_detail.blocklisted' | translate }}</span>
+                  } @else if (!r.allowed) {
+                    <span class="badge badge-sm badge-warning">{{ 'media_detail.not_allowed' | translate }}</span>
                   }
                   @if (r.rejections.length > 0) {
                     <div class="tooltip tooltip-top before:whitespace-pre-line" [attr.data-tip]="rejectionText(r.rejections)">
@@ -62,12 +64,13 @@
                   <span>{{ r.sourceName }}</span>
                 </div>
               </div>
-              @if (canGrab() && r.allowed && !r.blocklisted) {
+              @if (canGrab() && !r.blocklisted) {
                 @if (grabState().get(grabKey(i)) === 'ok') {
                   <svg lucideCheck class="h-5 w-5 text-success shrink-0"></svg>
                 } @else {
-                  <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0"
-                    (click)="grab.emit({ release: r, index: i })"
+                  <button type="button" class="btn btn-xs btn-square shrink-0"
+                    [class.btn-ghost]="r.allowed" [class.btn-warning]="!r.allowed"
+                    (click)="onGrabClick(r, i)"
                     [disabled]="grabBusy() !== null">
                     @if (grabBusy() === grabKey(i)) {
                       <span class="loading loading-spinner loading-xs"></span>
@@ -93,6 +96,8 @@
               }
               @if (r.blocklisted) {
                 <span class="badge badge-sm badge-error">{{ 'media_detail.blocklisted' | translate }}</span>
+              } @else if (!r.allowed) {
+                <span class="badge badge-sm badge-warning">{{ 'media_detail.not_allowed' | translate }}</span>
               }
               @if (r.rejections.length > 0) {
                 <div class="tooltip tooltip-left before:whitespace-pre-line" [attr.data-tip]="rejectionText(r.rejections)">
@@ -120,12 +125,13 @@
           </td>
           <td class="hidden sm:table-cell text-sm">{{ r.sourceName }}</td>
           <td class="hidden sm:table-cell w-10">
-            @if (canGrab() && r.allowed && !r.blocklisted) {
+            @if (canGrab() && !r.blocklisted) {
               @if (grabState().get(grabKey(i)) === 'ok') {
                 <svg lucideCheck class="h-5 w-5 text-success"></svg>
               } @else {
-                <button type="button" class="btn btn-ghost btn-xs btn-square"
-                  (click)="grab.emit({ release: r, index: i })"
+                <button type="button" class="btn btn-xs btn-square"
+                  [class.btn-ghost]="r.allowed" [class.btn-warning]="!r.allowed"
+                  (click)="onGrabClick(r, i)"
                   [disabled]="grabBusy() !== null">
                   @if (grabBusy() === grabKey(i)) {
                     <span class="loading loading-spinner loading-xs"></span>
