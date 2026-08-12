@@ -120,6 +120,8 @@ export interface TableColumn {
   key: string;
   labelKey: string;
   format?: 'date' | 'bytes' | 'percent';
+  /** Maps a cell value to a translate key — a status column renders its raw enum otherwise. */
+  labelKeys?: Record<string, string>;
 }
 
 /** One proxied route lists instances, another lists the implementations and their fields. */
@@ -163,11 +165,18 @@ export interface ProvidersConfigPage extends ConfigPageBase {
   };
 }
 
+/** One `table` filter — its current value is sent to `list` as a query param named by
+ *  `key`; an empty value is omitted. Filtering itself is the plugin's job, core only forwards it. */
+export type TableFilter =
+  | { kind: 'search'; key: string; placeholderKey: string }
+  | { kind: 'select'; key: string; labelKey: string; options: { value: string; labelKey: string }[] };
+
 /** Read-mostly: declared columns and declared row actions, never a general grid. */
 export interface TableConfigPage extends ConfigPageBase {
   kind: 'table';
   list: string;
   columns: TableColumn[];
+  filters?: TableFilter[];
   rowActions?: (
     | { kind: 'route'; labelKey: string; path: string }
     | { kind: 'action'; labelKey: string; actionId: string }

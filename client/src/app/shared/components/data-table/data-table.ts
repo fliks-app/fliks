@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, input, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -7,7 +7,10 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { formatBytes } from '../../utils/download-format';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { PaginationComponent } from '../pagination/pagination';
-import { CellValue, ListAction, PagedResult, RowAction, TableColumn, TableRow } from './data-table.types';
+import { CellValue, ListAction, PagedResult, RowAction, TableColumn, TableFilter, TableRow } from './data-table.types';
+
+/** Keystroke-to-request debounce for a `search` filter — see `onSearchInput`. */
+const SEARCH_DEBOUNCE_MS = 300;
 
 /**
  * The `table` view kind: declared columns, declared row actions, no
@@ -42,6 +45,8 @@ export class DataTableComponent implements OnInit {
   /** `list` answers `{data,total,page,pageSize}` rather than a bare array. */
   readonly paged = input(false);
   readonly pageSize = input(20);
+  /** Declared `search`/`select` filters, rendered above the table. */
+  readonly filters = input<readonly TableFilter[]>([]);
 
   readonly rows = signal<TableRow[]>([]);
   readonly loading = signal(true);
@@ -53,28 +58,72 @@ export class DataTableComponent implements OnInit {
   readonly total = signal(0);
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize())));
 
+  /** Current value per filter `key`; an empty entry is omitted from the request. */
+  readonly filterValues = signal<Record<string, string>>({});
+  private searchDebounce: ReturnType<typeof setTimeout> | null = null;
+  private loadSeq = 0;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => {
+      if (this.searchDebounce) clearTimeout(this.searchDebounce);
+    });
+  }
+
   ngOnInit(): void {
     void this.loadRows();
   }
 
   async loadRows(): Promise<void> {
+    // Only the newest reload may write: a filtered scan can resolve after a later, narrower one.
+    const seq = ++this.loadSeq;
     this.loading.set(true);
     this.listError.set('');
     try {
+      let params = new HttpParams();
+      for (const [key, value] of Object.entries(this.filterValues())) {
+        if (value) params = params.set(key, value);
+      }
       if (this.paged()) {
-        const params = new HttpParams().set('page', this.page()).set('pageSize', this.pageSize());
+        params = params.set('page', this.page()).set('pageSize', this.pageSize());
         const res = await firstValueFrom(this.http.get<PagedResult<TableRow>>(this.listUrl(), { params }));
+        if (seq !== this.loadSeq) return;
         this.rows.set(this.applyDefaultSort(Array.isArray(res?.data) ? res.data : []));
         this.total.set(res?.total ?? 0);
       } else {
-        const data = await firstValueFrom(this.http.get<TableRow[]>(this.listUrl()));
+        const data = await firstValueFrom(this.http.get<TableRow[]>(this.listUrl(), { params }));
+        if (seq !== this.loadSeq) return;
         this.rows.set(this.applyDefaultSort(Array.isArray(data) ? data : []));
       }
     } catch {
-      this.listError.set(this.translate.instant(this.loadErrorKey()));
+      if (seq === this.loadSeq) this.listError.set(this.translate.instant(this.loadErrorKey()));
     } finally {
-      this.loading.set(false);
+      if (seq === this.loadSeq) this.loading.set(false);
     }
+  }
+
+  /** A `select` filter reloads immediately; a `search` box debounces so a fast typist
+   *  doesn't fire one query per keystroke against the plugin's own (uncached) database. */
+  onSearchInput(key: string, event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.filterValues.update((v) => ({ ...v, [key]: value }));
+    if (this.searchDebounce) clearTimeout(this.searchDebounce);
+    this.searchDebounce = setTimeout(() => void this.applyFilterChange(), SEARCH_DEBOUNCE_MS);
+  }
+
+  onSelectChange(key: string, event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    this.filterValues.update((v) => ({ ...v, [key]: value }));
+    void this.applyFilterChange();
+  }
+
+  /** A key with no entry yet — no keystroke, no default selection — reads as ''. */
+  filterValue(key: string): string {
+    return (this.filterValues() as Record<string, string | undefined>)[key] ?? '';
+  }
+
+  private async applyFilterChange(): Promise<void> {
+    this.page.set(1);
+    await this.loadRows();
   }
 
   async goToPage(page: number): Promise<void> {
@@ -94,6 +143,13 @@ export class DataTableComponent implements OnInit {
 
   cellPercent(value: CellValue): string {
     return typeof value === 'number' ? `${Math.round(value)}%` : String(value ?? '');
+  }
+
+  /** An undeclared value renders as itself rather than as a missing translate key. */
+  cellLabel(col: TableColumn, value: CellValue): string {
+    const raw = String(value ?? '');
+    const key = col.labelKeys?.[raw];
+    return key ? this.translate.instant(key) : raw;
   }
 
   private applyDefaultSort(rows: TableRow[]): TableRow[] {
