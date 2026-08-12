@@ -361,11 +361,20 @@ describe('PluginProcessService — lifecycle', () => {
     expect(service.statusMessageOf('fliks.never-started')).toBe('');
   });
 
-  it('statusMessageOf falls back to the stderr tail when there is no breaker message', async () => {
+  it('statusMessageOf falls back to the stderr tail of a plugin that is down', async () => {
     const { service, pkg, instances } = await startedService();
     instances[0].stderrTail = 'last gasp';
+    instances[0].setState('crashed');
 
     expect(service.statusMessageOf(pkg.pluginId)).toBe('last gasp');
+  });
+
+  it('statusMessageOf reports nothing for a healthy plugin that logged warnings', async () => {
+    const { service, pkg, instances } = await startedService();
+    instances[0].stderrTail = 'WARN no download client configured yet\n';
+
+    expect(service.stateOf(pkg.pluginId)).toBe('ready');
+    expect(service.statusMessageOf(pkg.pluginId)).toBe('');
   });
 
   it('restart stops the old supervisor and spawns a fresh one, rotating the password again', async () => {

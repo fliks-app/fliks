@@ -187,6 +187,24 @@ describe('circuit breaker', () => {
   }, 10_000);
 });
 
+describe('child stdio', () => {
+  it("keeps a stderr line's own WARN level instead of logging it as an error", async () => {
+    const logBuffer = newLogBuffer();
+    const sup = makeSupervisor('log-levels', { logBuffer });
+    await sup.start();
+    await waitForState(sup, 'ready');
+    await delay(100);
+
+    const warns = logBuffer.getEntries({ level: 'warn' }).map((e) => e.message);
+    const errors = logBuffer.getEntries({ level: 'error' }).map((e) => e.message);
+    expect(warns.some((m) => m.includes('nothing configured yet'))).toBe(true);
+    expect(errors.some((m) => m.includes('nothing configured yet'))).toBe(false);
+    expect(errors.some((m) => m.includes('the driver refused'))).toBe(true);
+    // Both stay in the tail: it is the crash diagnosis, not a level filter.
+    expect(sup.getStderrTail()).toContain('nothing configured yet');
+  }, 10_000);
+});
+
 describe('ring buffer backpressure', () => {
   it('drops the oldest event and counts drops when the child never reads', async () => {
     const sup = makeSupervisor('no-read');

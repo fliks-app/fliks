@@ -26,6 +26,9 @@ interface RunningPlugin {
 
 const DEFAULT_FACTORY: PluginSupervisorFactory = (options) => new PluginSupervisor(options);
 
+/** States where the stderr tail is the diagnosis rather than routine output. */
+const DOWN_STATES: ReadonlySet<SupervisorState> = new Set(['crashed', 'backoff', 'failed', 'degraded']);
+
 /** Owns every live `process` plugin's supervisor, one per plugin id. `startFor`/`stopFor`
  *  are the map's only entry and exit, so it always reflects who is actually spawned. */
 @Injectable()
@@ -113,7 +116,10 @@ export class PluginProcessService implements OnApplicationShutdown {
   statusMessageOf(pluginId: string): string {
     const supervisor = this.running.get(pluginId)?.supervisor;
     if (!supervisor) return '';
-    return supervisor.getStatusMessage() || supervisor.getStderrTail();
+    const breakerMessage = supervisor.getStatusMessage();
+    if (breakerMessage) return breakerMessage;
+    // The stderr tail explains a failure; a healthy plugin's own warnings are not its status.
+    return DOWN_STATES.has(supervisor.getState()) ? supervisor.getStderrTail() : '';
   }
 
   /** Passthrough so the HTTP proxy never touches a supervisor directly. */
