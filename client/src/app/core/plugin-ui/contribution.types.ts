@@ -96,8 +96,12 @@ export interface ProvidersConfigPage extends ConfigPageBase {
   kind: 'providers';
   list: string;
   implementations: string;
+  /** Tests the unsaved draft — POSTs `{implementation, settings}` before any row is
+   *  saved. Distinct from `actions[]`: there is no row yet, so no `:id` to substitute. */
+  testConnection?: { route: string };
   /** `method` is explicit: encoding it into `route` left the caller POSTing to a
-   *  string that contained the verb. */
+   *  string that contained the verb. Every `scope: 'row'` entry renders its own button —
+   *  its route's `:id` is substituted with the row's id before the request ever fires. */
   actions?: {
     id: string;
     labelKey: string;

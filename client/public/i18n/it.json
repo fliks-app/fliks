@@ -2320,6 +2320,7 @@
     "unknown_implementation": "Tipo di provider sconosciuto: le sue impostazioni non possono essere modificate qui.",
     "test_connection": "Verifica connessione",
     "test_network_error": "Impossibile contattare il server per il test.",
+    "test_unknown_result": "Il test è terminato, ma non è stato possibile tradurre il risultato.",
     "move_up": "Sposta su",
     "move_down": "Sposta giù"
   },

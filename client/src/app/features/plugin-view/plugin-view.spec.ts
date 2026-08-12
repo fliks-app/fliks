@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
+import { TranslateLoader, TranslateService, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 import { PluginViewComponent } from './plugin-view';
@@ -28,7 +28,9 @@ function createComponent(
       provideHttpClientTesting(),
       provideTranslateService({
         lang: 'en',
-        loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+        // 'ok' stands in for a plugin's own merged messageKey — `PluginI18nService` puts a
+        // plugin's dict in this same store, so a real key resolves exactly like this fake one.
+        loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({ ok: 'All good' }) } },
       }),
       { provide: ActivatedRoute, useValue: { paramMap: of(convertToParamMap(params)) } },
       { provide: Router, useValue: { navigateByUrl } },
@@ -135,7 +137,7 @@ describe('PluginViewComponent', () => {
     http.verify();
   });
 
-  it('runs a `scope: \'row\'` provider action with its declared method against the proxied route', async () => {
+  it('tests the unsaved draft against `testConnection.route`, never an `actions[]` entry', async () => {
     const { fixture, http } = createComponent(
       { pluginId: 'fliks.a', view: 'providers' },
       {
@@ -146,7 +148,10 @@ describe('PluginViewComponent', () => {
           labelKey: 'x.title',
           list: '/providers',
           implementations: '/implementations',
-          actions: [{ id: 'test', labelKey: 'x.test', method: 'DELETE', route: '/providers/reset', scope: 'row' }],
+          testConnection: { route: '/test-connection' },
+          // A row action happens to share the id 'test' here — proves the test handler
+          // never falls back to reading actions[], the shape of the original bug.
+          actions: [{ id: 'test', labelKey: 'x.stats', method: 'GET', route: '/providers/:id/stats', scope: 'row' }],
         }),
       },
     );
@@ -158,9 +163,92 @@ describe('PluginViewComponent', () => {
 
     const run = fixture.componentInstance.providerTestConnection(fixture.componentInstance.providersView()!);
     const resultPromise = run!({ implementation: 'demo', settings: {} });
-    // A method other than POST proves `action.method` drives the call, not a hardcoded verb.
-    http.expectOne({ url: '/api/plugins/fliks.a/providers/reset', method: 'DELETE' }).flush({ ok: true, message: 'ok' });
-    expect(await resultPromise).toEqual({ ok: true, message: 'ok' });
+    const req = http.expectOne({ url: '/api/plugins/fliks.a/test-connection', method: 'POST' });
+    expect(req.request.body).toEqual({ implementation: 'demo', settings: {} });
+    req.flush({ ok: true, messageKey: 'ok' });
+    expect(await resultPromise).toEqual({ ok: true, message: 'All good' });
+    http.verify();
+  });
+
+  it('is absent (null) when a providers page declares no `testConnection`', () => {
+    const { fixture } = createComponent(
+      { pluginId: 'fliks.a', view: 'providers' },
+      {
+        hasPlugin: () => true,
+        configPage: () => ({
+          kind: 'providers',
+          id: 'x',
+          labelKey: 'x.title',
+          list: '/providers',
+          implementations: '/implementations',
+        }),
+      },
+    );
+    fixture.detectChanges();
+    expect(fixture.componentInstance.providerTestConnection(fixture.componentInstance.providersView()!)).toBeNull();
+  });
+
+  it('falls back to a generic message, never the raw key, when `messageKey` resolves to nothing', async () => {
+    const { fixture, http } = createComponent(
+      { pluginId: 'fliks.a', view: 'providers' },
+      {
+        hasPlugin: () => true,
+        configPage: () => ({
+          kind: 'providers',
+          id: 'x',
+          labelKey: 'x.title',
+          list: '/providers',
+          implementations: '/implementations',
+          testConnection: { route: '/test-connection' },
+        }),
+      },
+    );
+    fixture.detectChanges();
+    http.expectOne({ url: '/api/plugins/fliks.a/implementations', method: 'GET' }).flush([]);
+    await settle(fixture);
+    http.expectOne({ url: '/api/plugins/fliks.a/providers', method: 'GET' }).flush([]);
+    await settle(fixture);
+
+    const run = fixture.componentInstance.providerTestConnection(fixture.componentInstance.providersView()!);
+    const resultPromise = run!({ implementation: 'demo', settings: {} });
+    http
+      .expectOne({ url: '/api/plugins/fliks.a/test-connection', method: 'POST' })
+      .flush({ ok: false, messageKey: 'download.indexers.test.a_key_this_plugin_never_shipped', detail: 'boom' });
+    const result = await resultPromise;
+    expect(result.ok).toBe(false);
+    expect(result.message).not.toContain('download.indexers.test.a_key_this_plugin_never_shipped');
+    expect(result.message).toContain('boom');
+    http.verify();
+  });
+
+  it('renders one button per `scope: \'row\'` entry — plural, unlike `actions[].find` first-wins', async () => {
+    const { fixture, http } = createComponent(
+      { pluginId: 'fliks.a', view: 'providers' },
+      {
+        hasPlugin: () => true,
+        configPage: () => ({
+          kind: 'providers',
+          id: 'x',
+          labelKey: 'x.title',
+          list: '/providers',
+          implementations: '/implementations',
+          actions: [
+            { id: 'stats', labelKey: 'x.stats', method: 'GET', route: '/providers/:id/stats', scope: 'row' },
+            { id: 'clear-cooldown', labelKey: 'x.clear', method: 'DELETE', route: '/providers/:id/cooldown', scope: 'row' },
+            { id: 'clear-all', labelKey: 'x.clear_all', method: 'DELETE', route: '/providers/cooldowns', scope: 'list' },
+          ],
+        }),
+      },
+    );
+    fixture.detectChanges();
+    http.expectOne({ url: '/api/plugins/fliks.a/implementations', method: 'GET' }).flush([]);
+    await settle(fixture);
+    http.expectOne({ url: '/api/plugins/fliks.a/providers', method: 'GET' }).flush([]);
+    await settle(fixture);
+
+    const rowActions = fixture.componentInstance.providerRowActions(fixture.componentInstance.providersView()!);
+    expect(rowActions.map((a) => a.labelKey)).toEqual(['x.stats', 'x.clear']);
+    expect(rowActions[0]!.route).toBe('/api/plugins/fliks.a/providers/:id/stats');
     http.verify();
   });
 

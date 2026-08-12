@@ -2320,6 +2320,7 @@
     "unknown_implementation": "Tipo de provedor desconhecido — não é possível editar as configurações aqui.",
     "test_connection": "Testar conexão",
     "test_network_error": "Não foi possível contatar o servidor para o teste.",
+    "test_unknown_result": "O teste terminou, mas o resultado não pôde ser traduzido.",
     "move_up": "Subir",
     "move_down": "Descer"
   },
