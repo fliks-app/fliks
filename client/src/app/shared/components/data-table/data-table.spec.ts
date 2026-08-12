@@ -3,11 +3,11 @@ import { TestBed } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
-import { of } from 'rxjs';
+import { Subject, of } from 'rxjs';
 import { vi } from 'vitest';
 import { DataTableComponent } from './data-table';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
-import { ListAction, RowAction, TableColumn } from './data-table.types';
+import { ListAction, RowAction, TableColumn, TableFilter, TableRow } from './data-table.types';
 
 const COLUMNS: TableColumn[] = [{ key: 'name', labelKey: 'x.name' }];
 
@@ -22,6 +22,7 @@ async function createComponent(opts: {
   columns?: TableColumn[];
   rowActions?: RowAction[];
   listActions?: ListAction[];
+  filters?: TableFilter[];
   resolveAction?: (actionId: string, row: unknown) => (() => void) | undefined;
   defaultSortKey?: string;
   paged?: boolean;
@@ -45,6 +46,7 @@ async function createComponent(opts: {
   fixture.componentRef.setInput('columns', opts.columns ?? COLUMNS);
   if (opts.rowActions) fixture.componentRef.setInput('rowActions', opts.rowActions);
   if (opts.listActions) fixture.componentRef.setInput('listActions', opts.listActions);
+  if (opts.filters) fixture.componentRef.setInput('filters', opts.filters);
   if (opts.resolveAction) fixture.componentRef.setInput('resolveAction', opts.resolveAction);
   if (opts.defaultSortKey) fixture.componentRef.setInput('defaultSortKey', opts.defaultSortKey);
   if (opts.paged) fixture.componentRef.setInput('paged', opts.paged);
@@ -170,5 +172,136 @@ describe('DataTableComponent — characterisation', () => {
     await item.run();
     expect(post).toHaveBeenCalledWith('/api/x/1/grab', {});
     expect(get).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('DataTableComponent — declared filters', () => {
+  const SEARCH: TableFilter = { kind: 'search', key: 'q', placeholderKey: 'x.search' };
+  const STATUS: TableFilter = {
+    kind: 'select',
+    key: 'status',
+    labelKey: 'x.status',
+    options: [{ value: '', labelKey: 'x.all' }, { value: 'failed', labelKey: 'x.failed' }],
+  };
+
+  it('VERDICT: typing in a search filter sends it as a query param, debounced, and resets the page', async () => {
+    const get = vi.fn(() => of({ data: [{ id: 1, name: 'A' }], total: 40, page: 1, pageSize: 20 }));
+    const fixture = await createComponent({ http: { get }, paged: true, filters: [SEARCH] });
+    await fixture.componentInstance.goToPage(2);
+    get.mockClear();
+
+    const input = fixture.nativeElement.querySelector('input[type="search"]') as HTMLInputElement;
+    expect(input).toBeTruthy();
+    input.value = 'abc';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    // Debounced: the keystroke alone must not have fired a request yet.
+    expect(get).not.toHaveBeenCalled();
+    await new Promise((r) => setTimeout(r, 350));
+    fixture.detectChanges();
+
+    expect(get).toHaveBeenCalledTimes(1);
+    const [, options] = get.mock.calls[0] as unknown as [string, { params: { toString(): string } }];
+    expect(options.params.toString()).toBe('q=abc&page=1&pageSize=20');
+  });
+
+  it('VERDICT: a select filter reloads immediately and resets the page', async () => {
+    const get = vi.fn(() => of({ data: [{ id: 1, name: 'A' }], total: 40, page: 1, pageSize: 20 }));
+    const fixture = await createComponent({ http: { get }, paged: true, filters: [STATUS] });
+    await fixture.componentInstance.goToPage(2);
+    get.mockClear();
+
+    const select = fixture.nativeElement.querySelector('select') as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    select.value = 'failed';
+    select.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 0));
+    fixture.detectChanges();
+
+    expect(get).toHaveBeenCalledTimes(1);
+    const [, options] = get.mock.calls[0] as unknown as [string, { params: { toString(): string } }];
+    expect(options.params.toString()).toBe('status=failed&page=1&pageSize=20');
+  });
+
+  it('sends a declared filter on an unpaged (bare-array) list too', async () => {
+    const get = vi.fn(() => of([{ id: 1, name: 'A' }]));
+    const fixture = await createComponent({ http: { get }, filters: [STATUS] });
+    const select = fixture.nativeElement.querySelector('select') as HTMLSelectElement;
+    select.value = 'failed';
+    select.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const last = get.mock.calls.at(-1) as unknown as [string, { params: { toString(): string } }];
+    expect(last[1].params.toString()).toBe('status=failed');
+  });
+
+  it('VERDICT: clearing a filter drops the param instead of sending it blank', async () => {
+    const get = vi.fn(() => of([{ id: 1, name: 'A' }]));
+    const fixture = await createComponent({ http: { get }, filters: [STATUS] });
+    const select = fixture.nativeElement.querySelector('select') as HTMLSelectElement;
+
+    select.value = 'failed';
+    select.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 0));
+    select.value = '';
+    select.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const last = get.mock.calls.at(-1) as unknown as [string, { params: { toString(): string } }];
+    expect(last[1].params.toString()).toBe('');
+  });
+
+  it('VERDICT: the rendered selection comes from state, not from a prior DOM write', async () => {
+    const fixture = await createComponent({ http: { get: () => of([{ id: 1, name: 'A' }]) }, filters: [STATUS] });
+
+    fixture.componentInstance.filterValues.set({ status: 'failed' });
+    fixture.detectChanges();
+
+    const select = fixture.nativeElement.querySelector('select') as HTMLSelectElement;
+    expect(select.value).toBe('failed');
+  });
+
+  it('VERDICT: a superseded reload never overwrites the rows of the newest one', async () => {
+    const pending: Subject<TableRow[]>[] = [];
+    const get = vi.fn(() => {
+      const subject = new Subject<TableRow[]>();
+      pending.push(subject);
+      return subject.asObservable();
+    });
+    const fixture = await createComponent({ http: { get }, filters: [STATUS] });
+    const select = fixture.nativeElement.querySelector('select') as HTMLSelectElement;
+
+    select.value = 'failed';
+    select.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(pending).toHaveLength(2);
+
+    // The newest request answers first; the slow initial one must not win the race.
+    pending[1].next([{ id: 2, name: 'newest' }]);
+    pending[1].complete();
+    await new Promise((r) => setTimeout(r, 0));
+    pending[0].next([{ id: 1, name: 'stale' }]);
+    pending[0].complete();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(fixture.componentInstance.rows().map((r) => r['name'])).toEqual(['newest']);
+  });
+
+  it('renders a declared value label for a cell instead of its raw value', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of([{ id: 1, status: 'failed' }]) },
+      columns: [{ key: 'status', labelKey: 'x.status', labelKeys: { failed: 'x.failed_label' } }],
+    });
+    expect(fixture.componentInstance.cellLabel(fixture.componentInstance.columns()[0], 'failed')).toBe('x.failed_label');
+    expect(fixture.componentInstance.cellLabel(fixture.componentInstance.columns()[0], 'other')).toBe('other');
+  });
+
+  it('renders no control for an unrecognised filter kind (fail closed)', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of([{ id: 1, name: 'A' }]) },
+      filters: [{ kind: 'bogus' } as unknown as TableFilter],
+    });
+    expect(fixture.nativeElement.querySelectorAll('input[type="search"], select')).toHaveLength(0);
   });
 });

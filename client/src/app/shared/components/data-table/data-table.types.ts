@@ -2,7 +2,14 @@ export interface TableColumn {
   key: string;
   labelKey: string;
   format?: 'date' | 'bytes' | 'percent';
+  /** Maps a cell value to a translate key — a status column renders its raw enum otherwise. */
+  labelKeys?: Record<string, string>;
 }
+
+/** `TableConfigPage.filters[]` — value sent to `list` as a query param named by `key`. */
+export type TableFilter =
+  | { kind: 'search'; key: string; placeholderKey: string }
+  | { kind: 'select'; key: string; labelKey: string; options: { value: string; labelKey: string }[] };
 
 export type CellValue = string | number | boolean | null | undefined;
 

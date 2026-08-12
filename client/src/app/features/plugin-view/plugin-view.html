@@ -41,6 +41,7 @@
         [titleKey]="view.labelKey"
         [listUrl]="resourceUrl(view.list)"
         [columns]="view.columns"
+        [filters]="view.filters ?? []"
         [rowActions]="tableRowActions(view)"
         [listActions]="tableListActions(view)"
         [defaultSortKey]="view.defaultSortKey ?? null"

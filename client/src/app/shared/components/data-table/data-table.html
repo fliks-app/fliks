@@ -22,7 +22,38 @@
     }
   </div>
 
-  @if (loading()) {
+  @if (filters().length) {
+    <div class="flex flex-wrap items-center gap-2">
+      @for (filter of filters(); track filter.key) {
+        @switch (filter.kind) {
+          @case ('search') {
+            <input
+              type="search"
+              class="input input-bordered input-sm w-full max-w-xs"
+              [placeholder]="filter.placeholderKey | translate"
+              [value]="filterValue(filter.key)"
+              (input)="onSearchInput(filter.key, $event)"
+            />
+          }
+          @case ('select') {
+            <select
+              class="select select-bordered select-sm"
+              [attr.aria-label]="filter.labelKey | translate"
+              (change)="onSelectChange(filter.key, $event)"
+            >
+              @for (option of filter.options; track option.value) {
+                <option [value]="option.value" [selected]="filterValue(filter.key) === option.value">
+                  {{ option.labelKey | translate }}
+                </option>
+              }
+            </select>
+          }
+        }
+      }
+    </div>
+  }
+
+  @if (loading() && !rows().length) {
     <div class="flex justify-center py-16">
       <span class="loading loading-spinner loading-lg"></span>
     </div>
@@ -31,7 +62,7 @@
   } @else if (rows().length === 0) {
     <p class="text-center py-12 text-base-content/50">{{ emptyKey() | translate }}</p>
   } @else {
-    <div class="overflow-x-auto rounded-lg border border-base-200">
+    <div class="overflow-x-auto rounded-lg border border-base-200" [class.opacity-50]="loading()">
       <table class="table table-zebra table-sm">
         <thead>
           <tr>
@@ -52,7 +83,7 @@
                     @case ('date') { {{ cellDate(row[col.key]) | localeDate }} }
                     @case ('bytes') { {{ cellBytes(row[col.key]) }} }
                     @case ('percent') { {{ cellPercent(row[col.key]) }} }
-                    @default { {{ row[col.key] }} }
+                    @default { {{ cellLabel(col, row[col.key]) }} }
                   }
                 </td>
               }
