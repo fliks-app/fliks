@@ -25,26 +25,6 @@ export function pluginRequestPath(req: Request): string {
   return nextSlash === -1 ? '' : afterPluginId.slice(nextSlash);
 }
 
-/** Shared with `PluginLegacyAliasPolicyGuard`, which resolves its route from an alias
- *  table instead of a URL param but must enforce the exact same policy/objectGuard. */
-export async function checkPolicyAndObjectGuard(
-  resolved: ResolvedPluginRoute,
-  user: User,
-  declaredSubjects: ReadonlySet<string>,
-  caslAbilityFactory: CaslAbilityFactory,
-  objectGuards: PluginObjectGuardsService,
-): Promise<boolean> {
-  const ability = caslAbilityFactory.createForUser(user);
-  if (!checkDeclaredPolicy(resolved.route.policy, ability, declaredSubjects)) return false;
-  if (!resolved.route.objectGuard) return true;
-
-  const parsedGuard = parseObjectGuard(resolved.route.objectGuard);
-  if (!parsedGuard) return false;
-  const value = resolved.params[parsedGuard.paramName];
-  if (typeof value !== 'string') return false;
-  return objectGuards.check(parsedGuard.guard, value, user);
-}
-
 /** Stands in for `PoliciesGuard`, which reads `@CheckPolicies` from the handler — every request
  *  here hits the same handler, so the policy has to come from the resolved route instead. */
 @Injectable()
@@ -66,8 +46,15 @@ export class PluginRouteGuard implements CanActivate {
     if (!req.user) return false;
 
     const declaredSubjects = this.registry.declaredPermissionsFor(pluginId);
-    if (!(await checkPolicyAndObjectGuard(resolved, req.user, declaredSubjects, this.caslAbilityFactory, this.objectGuards))) {
-      return false;
+    const ability = this.caslAbilityFactory.createForUser(req.user);
+    if (!checkDeclaredPolicy(resolved.route.policy, ability, declaredSubjects)) return false;
+
+    if (resolved.route.objectGuard) {
+      const parsedGuard = parseObjectGuard(resolved.route.objectGuard);
+      if (!parsedGuard) return false;
+      const value = resolved.params[parsedGuard.paramName];
+      if (typeof value !== 'string') return false;
+      if (!(await this.objectGuards.check(parsedGuard.guard, value, req.user))) return false;
     }
 
     req[RESOLVED_PLUGIN_ROUTE_KEY] = resolved;

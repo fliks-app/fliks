@@ -22,12 +22,13 @@ import {
   type PluginWebhookEventName,
   type PluginRoute,
   type PluginJob,
+  type ReleasePickerPair,
+  type ReleasePickerRoutes,
 } from '../../common/plugin-contract';
 import { OFFICIAL_KEYS, resolveTrust, readArchiveEntries, type TrustOutcome } from './archive';
 import { isInternalAddress } from './internal-address';
 import type { DomainEvent } from '../scheduler/events.service';
 import { PluginRouteTable, type ResolvedPluginRoute } from './proxy/plugin-route-table';
-import { PluginLegacyAliasTable, type LegacyAliasSpec } from './proxy/plugin-legacy-alias-table';
 import { parseDeclaredPolicy } from './proxy/policy-vocabulary';
 import { parseObjectGuard } from './proxy/plugin-object-guards.service';
 import { PLUGIN_PERMISSION_NAME_PATTERN, pluginPermissionSubject } from '../../common/constants/plugin-permissions';
@@ -53,20 +54,17 @@ export { CURRENT_FLIKS_VERSION };
 /** A manifest route's `method` must be one of these, compared case-insensitively. */
 const KNOWN_HTTP_METHODS: ReadonlySet<string> = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
 
-/** Splits a `legacyPaths` key or value ("<METHOD> <path>") on its first space. */
-function parseMethodAndPath(spec: string): { method: string; path: string } | null {
-  const sep = spec.indexOf(' ');
-  if (sep === -1) return null;
-  const method = spec.slice(0, sep).toUpperCase();
-  const path = spec.slice(sep + 1);
-  if (!KNOWN_HTTP_METHODS.has(method) || !path.startsWith('/')) return null;
-  return { method, path };
-}
-
 /** Shared so a plugin with nothing declared doesn't cost an allocation per lookup. */
 const EMPTY_SUBJECT_SET: ReadonlySet<string> = new Set();
 
 const CORE_JOB_NAME_SET: ReadonlySet<string> = new Set(CORE_SCHEDULER_JOB_NAMES);
+
+const RELEASE_PICKER_CONTEXTS: readonly (keyof ReleasePickerRoutes)[] = ['movie', 'season', 'episode'];
+/** The method each `releasePicker` action's declared route must carry. */
+const RELEASE_PICKER_ACTIONS: readonly { key: keyof ReleasePickerPair; method: string }[] = [
+  { key: 'search', method: 'GET' },
+  { key: 'grab', method: 'POST' },
+];
 
 export interface RegisteredPlugin {
   pluginId: string;
@@ -93,8 +91,8 @@ export type PluginRegistrationFailureReason =
   | 'invalid-route-policy'
   | 'invalid-route-object-guard'
   | 'duplicate-route'
-  | 'invalid-legacy-path'
-  | 'legacy-path-conflict'
+  | 'invalid-release-picker'
+  | 'release-picker-conflict'
   | 'invalid-permission'
   | 'invalid-job-name'
   | 'invalid-job-cron'
@@ -130,13 +128,6 @@ export interface PluginRegistrationFailure {
 }
 export type PluginRegistrationResult = PluginRegistrationSuccess | PluginRegistrationFailure;
 
-export interface ResolvedLegacyAlias {
-  pluginId: string;
-  /** The plugin's own path, with the alias key's captured params substituted in. */
-  targetPath: string;
-  resolved: ResolvedPluginRoute;
-}
-
 /**
  * In-memory installed-plugin set — the only thing the rest of core asks about
  * plugins. Populated at boot (L0-L4 of `plans/plugin-system.plan.md`'s load
@@ -153,9 +144,9 @@ export class PluginRegistryService implements OnModuleInit {
   private readonly webhookDeclarations = new Map<string, { event: PluginWebhookEventName; webhook: string }[]>();
   /** Keyed by plugin id; compiled once per `register()` from already-validated routes. */
   private readonly routeTables = new Map<string, PluginRouteTable>();
-  /** Keyed by plugin id; compiled once per `register()` from already-validated `legacyPaths`.
-   *  Lifecycle mirrors `routeTables`: kept across `unregister()`, dropped on `forget()`. */
-  private readonly legacyAliasTables = new Map<string, PluginLegacyAliasTable>();
+  /** Keyed by plugin id; at most one entry may exist across the whole map — `register()`
+   *  refuses a second plugin's `releasePicker`. Lifecycle mirrors `routeTables`. */
+  private readonly releasePickers = new Map<string, ReleasePickerRoutes>();
   /** Keyed by plugin id; namespaced (`plugin:<id>:<name>`) CASL subjects this plugin declared.
    *  Lifecycle mirrors `routeTables`, not `webhookDeclarations`: kept across `unregister()`, dropped on `forget()`. */
   private readonly declaredPermissions = new Map<string, ReadonlySet<string>>();
@@ -222,8 +213,14 @@ export class PluginRegistryService implements OnModuleInit {
     const webhookCheck = this.validateWebhookDeclarations(manifest.events ?? []);
     if (!webhookCheck.ok) return this.fail(pkg.pluginId, webhookCheck.reason, webhookCheck.detail);
 
+    const releasePickerCheck = this.validateReleasePicker(
+      pkg.pluginId,
+      manifest.ui?.releasePicker,
+      manifest.kind === 'process' ? manifest.routes : [],
+    );
+    if (!releasePickerCheck.ok) return this.fail(pkg.pluginId, releasePickerCheck.reason, releasePickerCheck.detail);
+
     let declaredSubjects: ReadonlySet<string> = EMPTY_SUBJECT_SET;
-    let legacyAliases: LegacyAliasSpec[] = [];
     if (manifest.kind === 'process') {
       const permissionsCheck = this.validatePermissions(pkg.pluginId, manifest.permissions ?? []);
       if (!permissionsCheck.ok) return this.fail(pkg.pluginId, permissionsCheck.reason, permissionsCheck.detail);
@@ -235,15 +232,11 @@ export class PluginRegistryService implements OnModuleInit {
       const routesCheck = this.validateRoutes(manifest.routes, declaredSubjects);
       if (!routesCheck.ok) return this.fail(pkg.pluginId, routesCheck.reason, routesCheck.detail);
 
-      const legacyPathsCheck = this.validateLegacyPaths(pkg.pluginId, manifest.legacyPaths ?? {}, manifest.routes);
-      if (!legacyPathsCheck.ok) return this.fail(pkg.pluginId, legacyPathsCheck.reason, legacyPathsCheck.detail);
-      legacyAliases = legacyPathsCheck.entries;
-
       // Installed before running: what a plugin declares stays true while its process is
       // down, so a request to one of its routes can answer 503 instead of a bare Forbidden.
       this.replaceRouteTable(pkg.pluginId, manifest.routes);
       this.replaceDeclaredPermissions(pkg.pluginId, declaredSubjects);
-      this.replaceLegacyAliasTable(pkg.pluginId, legacyAliases);
+      this.replaceReleasePicker(pkg.pluginId, manifest.ui?.releasePicker);
 
       const activation = await this.activateProcess(pkg, manifest);
       if (!activation.ok) return activation;
@@ -269,7 +262,7 @@ export class PluginRegistryService implements OnModuleInit {
     this.replaceWebhookDeclarations(pkg.pluginId, manifest.kind === 'data' ? webhookCheck.declarations : []);
     this.replaceRouteTable(pkg.pluginId, manifest.kind === 'process' ? manifest.routes : []);
     this.replaceDeclaredPermissions(pkg.pluginId, manifest.kind === 'process' ? declaredSubjects : EMPTY_SUBJECT_SET);
-    this.replaceLegacyAliasTable(pkg.pluginId, manifest.kind === 'process' ? legacyAliases : []);
+    this.replaceReleasePicker(pkg.pluginId, manifest.ui?.releasePicker);
     return { ok: true, pluginId: pkg.pluginId };
   }
 
@@ -278,7 +271,7 @@ export class PluginRegistryService implements OnModuleInit {
     await this.unregister(pluginId);
     this.replaceRouteTable(pluginId, []);
     this.replaceDeclaredPermissions(pluginId, EMPTY_SUBJECT_SET);
-    this.replaceLegacyAliasTable(pluginId, []);
+    this.replaceReleasePicker(pluginId, undefined);
   }
 
   /** Withdraws what the plugin offers and stops its process, but keeps its declared routes and
@@ -360,18 +353,10 @@ export class PluginRegistryService implements OnModuleInit {
     return this.routeTables.get(pluginId)?.resolve(method, path) ?? null;
   }
 
-  /** Matches `path` against every installed plugin's `legacyPaths` (map iteration order), then
-   *  resolves the substituted target through that same plugin's own route table — the alias
-   *  carries no policy of its own. Registration already refuses a key claimed by more than one
-   *  plugin, so at most one table can ever match. */
-  resolveLegacyAlias(method: string, path: string): ResolvedLegacyAlias | null {
-    for (const [pluginId, table] of this.legacyAliasTables) {
-      const targetPath = table.resolve(method, path);
-      if (targetPath === null) continue;
-      const resolved = this.resolveRoute(pluginId, method, targetPath);
-      return resolved ? { pluginId, targetPath, resolved } : null;
-    }
-    return null;
+  /** The installed plugin's `releasePicker` declaration, or `undefined` — at most one
+   *  plugin ever holds this, enforced at `register()`. */
+  releasePickerFor(pluginId: string): ReleasePickerRoutes | undefined {
+    return this.releasePickers.get(pluginId);
   }
 
   /** The namespaced CASL subjects this plugin declared — empty if unregistered, `data`, or none declared.
@@ -409,10 +394,10 @@ export class PluginRegistryService implements OnModuleInit {
     else this.routeTables.set(pluginId, new PluginRouteTable(routes));
   }
 
-  /** Drops this plugin's previous alias table (if any) and compiles `entries` into a fresh one. */
-  private replaceLegacyAliasTable(pluginId: string, entries: LegacyAliasSpec[]): void {
-    if (entries.length === 0) this.legacyAliasTables.delete(pluginId);
-    else this.legacyAliasTables.set(pluginId, new PluginLegacyAliasTable(entries));
+  /** Drops this plugin's previous `releasePicker` (if any) and installs `picker` in its place. */
+  private replaceReleasePicker(pluginId: string, picker: ReleasePickerRoutes | undefined): void {
+    if (!picker) this.releasePickers.delete(pluginId);
+    else this.releasePickers.set(pluginId, picker);
   }
 
   /**
@@ -584,51 +569,39 @@ export class PluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * `manifest.legacyPaths` is untrusted JSON. Each key/value must be `"<METHOD> <path>"`; the value
-   * must name a route this same manifest declares in `routes[]`, since an alias borrows that route's
-   * policy rather than carrying one of its own; and both sides must capture the same param names, or
-   * building the target path from the key's captured params would throw at request time instead of
-   * failing here. Two installed plugins claiming the identical key are both refused — silently
-   * letting one win would leave the other's alias dangling with no way for its author to know.
+   * `manifest.ui.releasePicker` is untrusted JSON. Each of its six routes must name a route this
+   * same manifest declares in `routes[]`, with the matching method — `search` a `GET`, `grab` a
+   * `POST` — since a route not declared there carries no policy and would be an unguarded hole.
+   * Exactly one installed plugin may declare a `releasePicker`: core resolves a single one, and
+   * silently picking a winner would leave the other author unaware theirs never fires.
    */
-  private validateLegacyPaths(
+  private validateReleasePicker(
     pluginId: string,
-    raw: Record<string, string>,
+    releasePicker: ReleasePickerRoutes | undefined,
     routes: PluginRoute[],
-  ): { ok: true; entries: LegacyAliasSpec[] } | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
+  ): { ok: true } | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
+    if (!releasePicker) return { ok: true };
+
     const declaredRouteKeys = new Set(routes.map((r) => `${r.method.toUpperCase()} ${r.path}`));
-    const entries: LegacyAliasSpec[] = [];
-    for (const [key, value] of Object.entries(raw)) {
-      const parsedKey = parseMethodAndPath(key);
-      const parsedValue = parseMethodAndPath(value);
-      if (!parsedKey || !parsedValue) {
-        return { ok: false, reason: 'invalid-legacy-path', detail: `legacyPaths entry "${key}" -> "${value}" is not "<METHOD> <path>"` };
-      }
-      if (!declaredRouteKeys.has(`${parsedValue.method} ${parsedValue.path}`)) {
-        return { ok: false, reason: 'invalid-legacy-path', detail: `legacyPaths "${key}" targets "${value}", which is not declared in routes[]` };
-      }
-
-      let keyNames: Set<string>, valueNames: Set<string>;
-      try {
-        keyNames = new Set(pathToRegexp(parsedKey.path).keys.map((k) => k.name));
-        valueNames = new Set(pathToRegexp(parsedValue.path).keys.map((k) => k.name));
-      } catch (err) {
-        return { ok: false, reason: 'invalid-legacy-path', detail: `legacyPaths key "${key}" is not a valid path: ${(err as Error).message}` };
-      }
-      if (keyNames.size !== valueNames.size || [...keyNames].some((n) => !valueNames.has(n))) {
-        return { ok: false, reason: 'invalid-legacy-path', detail: `legacyPaths "${key}" and "${value}" must capture the same param names` };
-      }
-
-      const dedupeKey = `${parsedKey.method} ${parsedKey.path}`;
-      for (const [otherId, otherTable] of this.legacyAliasTables) {
-        if (otherId !== pluginId && otherTable.keys().includes(dedupeKey)) {
-          return { ok: false, reason: 'legacy-path-conflict', detail: `legacyPaths key "${dedupeKey}" is already claimed by another installed plugin` };
+    for (const context of RELEASE_PICKER_CONTEXTS) {
+      for (const { key, method } of RELEASE_PICKER_ACTIONS) {
+        const path = releasePicker[context][key];
+        if (!declaredRouteKeys.has(`${method} ${path}`)) {
+          return {
+            ok: false,
+            reason: 'invalid-release-picker',
+            detail: `releasePicker.${context}.${key} "${path}" is not declared as a ${method} route in routes[]`,
+          };
         }
       }
-
-      entries.push({ method: parsedKey.method, keyPath: parsedKey.path, targetPath: parsedValue.path });
     }
-    return { ok: true, entries };
+
+    for (const otherId of this.releasePickers.keys()) {
+      if (otherId !== pluginId) {
+        return { ok: false, reason: 'release-picker-conflict', detail: 'releasePicker is already claimed by another installed plugin' };
+      }
+    }
+    return { ok: true };
   }
 
   /** Every failure path funnels here, so a failing re-registration can never leave a stale entry active. */
@@ -640,7 +613,7 @@ export class PluginRegistryService implements OnModuleInit {
     if (!INSTALLED_BUT_NOT_RUNNING.has(reason)) {
       this.replaceRouteTable(pluginId, []);
       this.replaceDeclaredPermissions(pluginId, EMPTY_SUBJECT_SET);
-      this.replaceLegacyAliasTable(pluginId, []);
+      this.replaceReleasePicker(pluginId, undefined);
     }
     return { ok: false, pluginId, reason, detail };
   }

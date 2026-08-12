@@ -88,6 +88,26 @@ export interface FormConfigPage extends ConfigPageBase {
   fields: FieldDef[];
 }
 
+/** One search/grab pair the core release picker calls for a given context. */
+export interface ReleasePickerPair {
+  /** `GET`, answering an array of scored releases. */
+  search: string;
+  /** `POST`, taking `{downloadUrl, sourceTitle?, sourceId?}`. */
+  grab: string;
+}
+
+/**
+ * Routes the core release picker calls, relative to the plugin — core prefixes each with
+ * its proxy path and substitutes `:id`, `:seasonId` and `:episodeId` from the open title.
+ * Declared by whichever plugin contributes the picker's menu entries; core holds no route
+ * of its own for this, so with nothing declared the picker never opens.
+ */
+export interface ReleasePickerRoutes {
+  movie: ReleasePickerPair;
+  season: ReleasePickerPair;
+  episode: ReleasePickerPair;
+}
+
 /** One column of a declared table — a `table` page's rows, or a row action's result. */
 export interface TableColumn {
   key: string;

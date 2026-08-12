@@ -20,12 +20,12 @@ import {
   Media,
   Season,
   Episode,
-  MovieRelease,
   MediaCastEntry,
   MediaCrewEntry,
   RelatedMedia,
   MediaCollection,
 } from '../../core/services/api/media.service';
+import { MediaDetailReleasePickerService, MovieRelease } from './media-detail-release-picker.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
 import {
@@ -126,6 +126,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly mediaService = inject(MediaService);
+  private readonly releasePickerApi = inject(MediaDetailReleasePickerService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly auth = inject(AuthService);
   private readonly translate = inject(TranslateService);
@@ -1090,7 +1091,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.releasesSearched.set(false);
     this.movieReleasesModal()?.showModal();
     try {
-      const rows = await this.mediaService.getMovieReleases(m.id);
+      const rows = await this.releasePickerApi.getMovieReleases(m.id);
       this.releases.set(rows);
       this.releasesSearched.set(true);
     } catch (err: unknown) {
@@ -1111,7 +1112,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!m || m.type !== 'movie') return;
     this.grabBusy.set('best');
     try {
-      await this.mediaService.grabMovie(m.id, {});
+      await this.releasePickerApi.grabMovie(m.id, {});
       this.grabState.update((s) => new Map(s).set('best', 'ok'));
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
@@ -1526,7 +1527,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.epReleasesLoading.set(true);
     this.episodeReleasesModal()?.showModal();
     try {
-      const rows = await this.mediaService.getEpisodeReleases(mediaId, episodeId);
+      const rows = await this.releasePickerApi.getEpisodeReleases(mediaId, episodeId);
       this.epReleases.set(rows);
       this.epReleasesSearched.set(true);
     } catch (err: unknown) {
@@ -1543,7 +1544,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   async grabEpisodeBest(mediaId: number, episodeId: number) {
     this.epGrabBusy.set('best');
     try {
-      await this.mediaService.grabEpisode(mediaId, episodeId, {});
+      await this.releasePickerApi.grabEpisode(mediaId, episodeId, {});
       this.epGrabState.update((s) => new Map(s).set('best', 'ok'));
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
@@ -1557,7 +1558,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const key = `ep-${index}`;
     this.epGrabBusy.set(key);
     try {
-      await this.mediaService.grabEpisode(mediaId, episodeId, {
+      await this.releasePickerApi.grabEpisode(mediaId, episodeId, {
         downloadUrl: r.downloadUrl,
         sourceTitle: r.title,
         sourceId: r.sourceId,
@@ -1579,7 +1580,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.seasonReleasesLoading.set(true);
     this.seasonReleasesModal()?.showModal();
     try {
-      const rows = await this.mediaService.getSeasonReleases(mediaId, season.id);
+      const rows = await this.releasePickerApi.getSeasonReleases(mediaId, season.id);
       this.seasonReleases.set(rows);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
@@ -1594,7 +1595,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   async grabSeasonAuto(mediaId: number, season: Season) {
     this.seasonGrabBusy.set('best');
     try {
-      await this.mediaService.grabSeason(mediaId, season.id, {});
+      await this.releasePickerApi.grabSeason(mediaId, season.id, {});
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       /* error toast surfaced by the global interceptor */
@@ -1613,7 +1614,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const key = `s-${index}`;
     this.seasonGrabBusy.set(key);
     try {
-      await this.mediaService.grabSeason(mediaId, season.id, {
+      await this.releasePickerApi.grabSeason(mediaId, season.id, {
         downloadUrl: r.downloadUrl,
         sourceTitle: r.title,
         sourceId: r.sourceId,
@@ -1738,7 +1739,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const key = `r-${index}`;
     this.grabBusy.set(key);
     try {
-      await this.mediaService.grabMovie(m.id, {
+      await this.releasePickerApi.grabMovie(m.id, {
         downloadUrl: r.downloadUrl,
         sourceTitle: r.title,
         sourceId: r.sourceId,

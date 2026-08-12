@@ -64,6 +64,7 @@ function makeController(plugins: RegisteredPlugin[], stateByPluginId: Record<str
   const registry = {
     list: jest.fn().mockReturnValue(plugins),
     processStateOf: jest.fn((pluginId: string) => stateByPluginId[pluginId] ?? null),
+    releasePickerFor: jest.fn().mockReturnValue(undefined),
   };
   return { controller: new PluginUiController(registry as never), registry };
 }
@@ -74,7 +75,7 @@ describe('PluginUiController', () => {
 
     controller.list();
 
-    expect(Object.keys(registry)).toEqual(['list', 'processStateOf']);
+    expect(Object.keys(registry)).toEqual(['list', 'processStateOf', 'releasePickerFor']);
     expect(registry.list).toHaveBeenCalledTimes(1);
   });
 
@@ -101,6 +102,19 @@ describe('PluginUiController', () => {
     expect(result).toHaveLength(1);
     expect(result[0].pluginId).toBe('fliks.b');
     expect(result[0].contributions).toHaveLength(1);
+  });
+
+  it('includes the releasePicker the registry reports for a plugin', () => {
+    const picker = {
+      movie: { search: '/movie/search', grab: '/movie/grab' },
+      season: { search: '/season/search', grab: '/season/grab' },
+      episode: { search: '/episode/search', grab: '/episode/grab' },
+    };
+    const { controller, registry } = makeController([processPlugin('fliks.b')], { 'fliks.b': 'ready' });
+    registry.releasePickerFor.mockReturnValue(picker);
+
+    expect(controller.list()[0].releasePicker).toEqual(picker);
+    expect(registry.releasePickerFor).toHaveBeenCalledWith('fliks.b');
   });
 
   it.each(['crashed', 'degraded', null])('filters out a process plugin whose state is "%s"', (state) => {

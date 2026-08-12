@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom, of } from 'rxjs';
 import { catchError, timeout } from 'rxjs/operators';
-import type { ConfigPage, SlotId, UiContribution } from './contribution.types';
+import type { ConfigPage, ReleasePickerRoutes, SlotId, UiContribution } from './contribution.types';
 import type { PluginUiEntry } from './plugin-ui-response';
 
 /** Bounds the boot-blocking wait: a dead plugin endpoint must never hold the splash. */
@@ -72,6 +72,13 @@ export class PluginUiRegistryService {
 
   configPage(pluginId: string, pageId: string): ConfigPage | undefined {
     return this.entries.find((e) => e.pluginId === pluginId)?.configPages?.find((p) => p.id === pageId);
+  }
+
+  /** The plugin declaring `ui.releasePicker`, or null when none is installed. The backend
+   *  refuses a second declaration, so at most one entry ever has it — the first is it. */
+  releasePicker(): { pluginId: string; routes: ReleasePickerRoutes } | null {
+    const entry = this.entries.find((e) => e.releasePicker);
+    return entry?.releasePicker ? { pluginId: entry.pluginId, routes: entry.releasePicker } : null;
   }
 
   /**

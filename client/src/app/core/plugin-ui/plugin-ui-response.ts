@@ -1,4 +1,4 @@
-import type { ConfigPage, UiContribution } from './contribution.types';
+import type { ConfigPage, ReleasePickerRoutes, UiContribution } from './contribution.types';
 
 /**
  * `GET /api/plugins/ui` response entry, one per plugin whose contributions
@@ -13,4 +13,6 @@ export interface PluginUiEntry {
   configPages: ConfigPage[];
   /** Translations to merge into ngx-translate so `labelKey` resolves. */
   i18n?: Record<string, Record<string, string>>;
+  /** From `ui.releasePicker` — absent on a plugin that doesn't contribute one. */
+  releasePicker?: ReleasePickerRoutes;
 }

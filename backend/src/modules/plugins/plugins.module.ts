@@ -59,6 +59,6 @@ import { ScheduledJobRegistryModule } from '../scheduler/scheduled-job-registry.
     PluginObjectGuardsService,
     PluginRouteGuard,
   ],
-  exports: [TypeOrmModule, PluginRegistryService, PluginDatabaseService, PluginJobsService, PluginProcessService],
+  exports: [TypeOrmModule, PluginRegistryService, PluginDatabaseService, PluginJobsService],
 })
 export class PluginsModule {}

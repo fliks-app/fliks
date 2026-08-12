@@ -64,6 +64,6 @@ describe('validateDataTierManifest()', () => {
   });
 
   it('PLUGIN_BAD_MANIFEST: refuses an unknown top-level key not covered by a specific rule', () => {
-    expectRefusal({ ...minimalDataManifest(), legacyPaths: {} }, 'PLUGIN_BAD_MANIFEST');
+    expectRefusal({ ...minimalDataManifest(), notAField: {} }, 'PLUGIN_BAD_MANIFEST');
   });
 });
