@@ -24,6 +24,31 @@ export interface AppQualityDef {
   rank: number;
 }
 
+export interface MovieRelease {
+  title: string;
+  downloadUrl: string;
+  qualityId: number;
+  qualityName: string;
+  rank: number;
+  allowed: boolean;
+  customFormatScore: number;
+  blocklisted: boolean;
+  sourceId: number;
+  sourceName: string;
+  languageId: number;
+  languageName: string;
+  languageAllowed: boolean;
+  size: number;
+  seeders: number;
+  leechers: number;
+  rejections: { code: string; params?: Record<string, number | string> }[];
+  freeleech: boolean;
+  downloadVolumeFactor: number;
+  isFullSeason: boolean;
+  sizeDeviation: number | null;
+  videoCodec: 'AV1' | 'HEVC' | 'VP9' | 'x264' | null;
+}
+
 export interface Episode {
   id: number;
   episodeNumber: number;
@@ -417,6 +442,21 @@ export class MediaService {
     return firstValueFrom(this.http.delete(`/api/media/${id}`));
   }
 
+  getMovieReleases(id: number, q?: string) {
+    const params: Record<string, string> = {};
+    if (q?.trim()) params['q'] = q.trim();
+    return firstValueFrom(this.http.get<MovieRelease[]>(`/api/media/${id}/releases`, { params }));
+  }
+
+  grabMovie(id: number, body?: { downloadUrl?: string; sourceTitle?: string; sourceId?: number }) {
+    return firstValueFrom(
+      this.http.post<{ id: number; status: string }>(
+        `/api/media/${id}/grab`,
+        body ?? {},
+      ),
+    );
+  }
+
   deleteFile(mediaId: number, fileId: number, deleteOnDisk: boolean) {
     return firstValueFrom(
       this.http.delete<void>(`/api/media/${mediaId}/files/${fileId}`, {
@@ -436,6 +476,41 @@ export class MediaService {
   ) {
     return firstValueFrom(this.http.patch<Media>(`/api/media/${id}/profiles`, body));
   }
+
+  getSeasonReleases(mediaId: number, seasonId: number, q?: string) {
+    const params: Record<string, string> = {};
+    if (q?.trim()) params['q'] = q.trim();
+    return firstValueFrom(
+      this.http.get<MovieRelease[]>(`/api/media/${mediaId}/seasons/${seasonId}/releases`, { params }),
+    );
+  }
+
+  grabSeason(mediaId: number, seasonId: number, body?: { downloadUrl?: string; sourceTitle?: string; sourceId?: number }) {
+    return firstValueFrom(
+      this.http.post<{ grabbed: number; errors: string[] }>(
+        `/api/media/${mediaId}/seasons/${seasonId}/grab`,
+        body ?? {},
+      ),
+    );
+  }
+
+  getEpisodeReleases(mediaId: number, episodeId: number, q?: string) {
+    const params: Record<string, string> = {};
+    if (q?.trim()) params['q'] = q.trim();
+    return firstValueFrom(
+      this.http.get<MovieRelease[]>(`/api/media/${mediaId}/episodes/${episodeId}/releases`, { params }),
+    );
+  }
+
+  grabEpisode(mediaId: number, episodeId: number, body?: { downloadUrl?: string; sourceTitle?: string; sourceId?: number }) {
+    return firstValueFrom(
+      this.http.post<{ id: number; status: string }>(
+        `/api/media/${mediaId}/episodes/${episodeId}/grab`,
+        body ?? {},
+      ),
+    );
+  }
+
 
   toggleMonitored(id: number, monitored: boolean) {
     return firstValueFrom(this.http.put<Media>(`/api/media/${id}`, { monitored }));
