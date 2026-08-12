@@ -1251,6 +1251,7 @@
     "health_app": "App",
     "health_db": "Database",
     "health_plugins": "Installed plugins",
+    "health_plugins_running": "{{count}} running",
     "uptime": "Uptime",
     "logs_title": "Logs",
     "logs_all_levels": "All levels",
@@ -2107,6 +2108,7 @@
       "col_tier": "Tier",
       "col_trust": "Trust",
       "col_status": "Status",
+      "col_enabled": "Enabled",
       "tier_data": "Data",
       "tier_process": "Process",
       "status_active": "Active",
@@ -2118,6 +2120,10 @@
       "inspect_error": "Unable to read this archive.",
       "installed": "Plugin installed.",
       "install_failed_but_kept": "\"{{id}}\" was installed but could not start: {{reason}}",
+      "enabled_toast": "Plugin enabled.",
+      "disabled_toast": "Plugin disabled.",
+      "enable_failed_but_kept": "\"{{id}}\" is enabled but could not start: {{reason}}",
+      "toggle_error": "Unable to update the plugin state.",
       "trust": {
         "official": "Official",
         "verified": "Verified — {{key}}",
@@ -2204,7 +2210,9 @@
         "hidden_versions": "{{count}} version(s) hidden — requires Fliks {{version}}+",
         "hidden_versions_no_upgrade": "{{count}} version(s) hidden",
         "inspect_error": "Unable to fetch this plugin."
-      }
+      },
+      "status_disabled": "Disabled",
+      "status_unavailable": "Unavailable"
     }
   },
   "roles": {

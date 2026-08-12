@@ -131,6 +131,8 @@ export interface HealthReport {
   /** Core reports only how many plugins are installed. A capability's own
    *  reachability belongs on that capability's page, which its plugin owns. */
   installedPlugins: number;
+  /** Enabled, not necessarily reachable — same scope limit as `installedPlugins`. */
+  runningPlugins: number;
   restartSupervisor: string | null;
 }
 
@@ -231,6 +233,7 @@ export class SystemController {
       uptimeSeconds: Math.floor(process.uptime()),
       database: await this.checkDatabase(),
       installedPlugins: await this.pluginPackageRepo.count(),
+      runningPlugins: await this.pluginPackageRepo.count({ where: { enabled: true } }),
       restartSupervisor: detectRestartSupervisor(),
     };
   }

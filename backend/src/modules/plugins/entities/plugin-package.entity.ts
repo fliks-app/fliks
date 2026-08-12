@@ -35,6 +35,10 @@ export class PluginPackage extends BaseEntity {
   @Column({ type: 'jsonb' })
   manifest: PluginManifest;
 
+  /** Operator on/off switch — independent of `status`, which is an activation outcome, not a choice. */
+  @Column({ default: true })
+  enabled: boolean;
+
   /** `failed` on a P4 activation failure; the row (and archive) stand regardless. */
   @Column({ type: 'enum', enum: PLUGIN_PACKAGE_STATUSES, default: 'active' })
   status: PluginPackageStatus;

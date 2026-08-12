@@ -29,7 +29,7 @@ describe('plugins/* route shadowing', () => {
   beforeAll(async () => {
     installService = {
       listInstalled: jest.fn().mockResolvedValue([]),
-      setEnabled: jest.fn().mockResolvedValue({}),
+      disable: jest.fn().mockResolvedValue({}),
       restart: jest.fn().mockResolvedValue(undefined),
       uninstall: jest.fn().mockResolvedValue(undefined),
       confirmImport: jest.fn().mockResolvedValue({}),
@@ -94,9 +94,9 @@ describe('plugins/* route shadowing', () => {
     expect(processService.callPlugin).not.toHaveBeenCalled();
   });
 
-  it('PATCH /plugins/:pluginId reaches PluginsController.setEnabled, not the proxy', async () => {
-    await request(app.getHttpServer()).patch('/plugins/fliks.testplugin').send({ enabled: false }).expect(200);
-    expect(installService.setEnabled).toHaveBeenCalledWith('fliks.testplugin', false);
+  it('POST /plugins/:pluginId/disable reaches PluginsController.disable, not the proxy', async () => {
+    await request(app.getHttpServer()).post('/plugins/fliks.testplugin/disable').expect(201);
+    expect(installService.disable).toHaveBeenCalledWith('fliks.testplugin');
     expect(processService.callPlugin).not.toHaveBeenCalled();
   });
 

@@ -12,7 +12,9 @@ import { LucideEllipsisVertical } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
+import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import {
   PluginsApiService,
   PluginSummary,
@@ -25,7 +27,15 @@ import { trustBadgeFor } from './plugin-trust';
 
 @Component({
   selector: 'app-plugins-settings',
-  imports: [RouterLink, LucideEllipsisVertical, TranslateModule, DropdownMenuComponent, PluginInstallConsentComponent, PluginSourcesComponent],
+  imports: [
+    RouterLink,
+    LucideEllipsisVertical,
+    TranslateModule,
+    DropdownMenuComponent,
+    ToggleFieldComponent,
+    PluginInstallConsentComponent,
+    PluginSourcesComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugins.html',
 })
@@ -33,6 +43,7 @@ export class PluginsSettingsComponent implements OnInit {
   private readonly api = inject(PluginsApiService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
+  private readonly registry = inject(PluginUiRegistryService);
   private readonly confirmation = inject(ConfirmationService);
 
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
@@ -43,6 +54,7 @@ export class PluginsSettingsComponent implements OnInit {
   readonly loading = signal(true);
   readonly listError = signal('');
   readonly uploading = signal(false);
+  readonly togglingId = signal<string | null>(null);
 
   readonly trustBadgeFor = trustBadgeFor;
 
@@ -109,6 +121,46 @@ export class PluginsSettingsComponent implements OnInit {
           reason: result.detail ?? result.reason ?? '',
         }),
       );
+    }
+  }
+
+  /** Idempotent on the backend, so a stray double-click never 409s — only the in-flight guard here matters for the UI. */
+  /** What the row is actually doing, in the order that matters to an operator: their own off
+   *  switch, then a failed activation, then a process that is up but not answering. */
+  statusBadgeFor(row: PluginSummary): { labelKey: string; cssClass: string } {
+    if (!row.enabled) return { labelKey: 'settings.plugins.status_disabled', cssClass: 'badge-ghost' };
+    if (row.status === 'failed') return { labelKey: 'settings.plugins.status_failed', cssClass: 'badge-error' };
+    if (row.processState && row.processState !== 'ready') {
+      return { labelKey: 'settings.plugins.status_unavailable', cssClass: 'badge-warning' };
+    }
+    return { labelKey: 'settings.plugins.status_active', cssClass: 'badge-success' };
+  }
+
+  async toggleEnabled(row: PluginSummary, enabled: boolean): Promise<void> {
+    if (this.togglingId()) return;
+    this.togglingId.set(row.pluginId);
+    try {
+      const updated = enabled ? await this.api.enable(row.pluginId) : await this.api.disable(row.pluginId);
+      this.rows.update((rows) => rows.map((r) => (r.pluginId === updated.pluginId ? updated : r)));
+      // The nav, the settings sidebar and every action slot read the registry — without this
+      // a toggled plugin's entries only appear or vanish on the next full page load.
+      await this.registry.load();
+      if (updated.status === 'failed') {
+        this.toast.warning(
+          this.translate.instant('settings.plugins.enable_failed_but_kept', {
+            id: updated.pluginId,
+            reason: updated.statusReason ?? '',
+          }),
+        );
+      } else {
+        this.toast.success(
+          this.translate.instant(enabled ? 'settings.plugins.enabled_toast' : 'settings.plugins.disabled_toast'),
+        );
+      }
+    } catch {
+      this.toast.error(this.translate.instant('settings.plugins.toggle_error'));
+    } finally {
+      this.togglingId.set(null);
     }
   }
 

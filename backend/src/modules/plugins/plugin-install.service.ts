@@ -60,6 +60,7 @@ export interface PluginSummary {
   statusReason: string | null;
   signature: TrustOutcome;
   verifiedByKeyId: string | null;
+  enabled: boolean;
   /** `process` only — `null`/`''` for `data`, which has no supervisor. */
   processState: SupervisorState | null;
   statusMessage: string;
@@ -216,14 +217,6 @@ export class PluginInstallService {
   }
 
   /** Persists the enabled flag on `plugin_registrations` and starts or stops the process to match. */
-  async setEnabled(pluginId: string, enabled: boolean): Promise<PluginSummary> {
-    const pkg = await this.findInstalledProcessPlugin(pluginId);
-    const result = await this.registry.setEnabled(pkg, enabled);
-    pkg.status = result.ok ? 'active' : 'failed';
-    pkg.statusReason = result.ok ? null : `${result.reason}: ${result.detail}`;
-    await this.packageRepo.save(pkg);
-    return this.toSummary(pkg);
-  }
 
   /** Clears a tripped circuit breaker and respawns. */
   async restart(pluginId: string): Promise<void> {
@@ -231,9 +224,40 @@ export class PluginInstallService {
     await this.registry.restartProcess(pluginId);
   }
 
-  private async findInstalledProcessPlugin(pluginId: string): Promise<PluginPackage> {
+  /** Idempotent: an already-disabled plugin is returned as-is. Stops the supervisor and drops the
+   *  live registration via `unregister()` — the package row, its archive and its schema are untouched. */
+  async disable(pluginId: string): Promise<PluginSummary> {
+    const pkg = await this.findInstalledPlugin(pluginId);
+    if (!pkg.enabled) return this.toSummary(pkg);
+
+    pkg.enabled = false;
+    await this.packageRepo.save(pkg);
+    await this.registry.unregister(pluginId);
+    return this.toSummary(pkg);
+  }
+
+  /** Idempotent: an already-enabled plugin is returned as-is. Otherwise re-registers through the
+   *  same path a boot load takes, so a failure to come back reports the way it would at boot. */
+  async enable(pluginId: string): Promise<PluginSummary> {
+    const pkg = await this.findInstalledPlugin(pluginId);
+    if (pkg.enabled) return this.toSummary(pkg);
+
+    pkg.enabled = true;
+    const result = await this.registry.register(pkg);
+    pkg.status = result.ok ? 'active' : 'failed';
+    pkg.statusReason = result.ok ? null : `${result.reason}: ${result.detail}`;
+    await this.packageRepo.save(pkg);
+    return this.toSummary(pkg);
+  }
+
+  private async findInstalledPlugin(pluginId: string): Promise<PluginPackage> {
     const pkg = await this.packageRepo.findOne({ where: { pluginId } });
     if (!pkg) throw new PluginInstallException(HttpStatus.NOT_FOUND, 'PLUGIN_NOT_FOUND', `plugin "${pluginId}" is not installed`);
+    return pkg;
+  }
+
+  private async findInstalledProcessPlugin(pluginId: string): Promise<PluginPackage> {
+    const pkg = await this.findInstalledPlugin(pluginId);
     if (pkg.manifest.kind !== 'process') {
       throw new PluginInstallException(HttpStatus.BAD_REQUEST, 'PLUGIN_NOT_PROCESS_TIER', `plugin "${pluginId}" is not a process-tier plugin`);
     }
@@ -252,6 +276,7 @@ export class PluginInstallService {
       statusReason: pkg.statusReason,
       signature: pkg.signature,
       verifiedByKeyId: pkg.verifiedByKeyId,
+      enabled: pkg.enabled,
       processState: isProcess ? this.registry.processStateOf(pkg.pluginId) : null,
       statusMessage: isProcess ? this.registry.processStatusMessageOf(pkg.pluginId) : '',
     };
@@ -307,7 +332,8 @@ export class PluginInstallService {
 
     let saved: PluginPackage;
     try {
-      const row = existing ?? this.packageRepo.create({ pluginId: manifest.id });
+      // A fresh install always starts enabled; an upgrade keeps whatever the admin last chose.
+      const row = existing ?? this.packageRepo.create({ pluginId: manifest.id, enabled: true });
       row.version = manifest.version;
       row.archive = buffer;
       row.origin = origin;
@@ -323,6 +349,13 @@ export class PluginInstallService {
     }
 
     if (previousDir && existsSync(previousDir)) rmSync(previousDir, { recursive: true, force: true });
+
+    // An upgrade over a disabled plugin stores the new archive and stays off: reactivating it
+    // silently would undo the operator's decision behind a version bump.
+    if (!saved.enabled) {
+      this.logger.log(`plugin "${saved.pluginId}" upgraded while disabled — not activated`);
+      return { pluginId: saved.pluginId, version: saved.version, status: 'active' };
+    }
 
     const registration = await this.registry.register(saved);
     if (!registration.ok) {

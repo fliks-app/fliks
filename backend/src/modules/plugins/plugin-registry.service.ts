@@ -170,6 +170,10 @@ export class PluginRegistryService implements OnModuleInit {
 
     const packages = await this.packageRepo.find();
     for (const pkg of packages) {
+      if (!pkg.enabled) {
+        this.logger.log(`plugin "${pkg.pluginId}" is disabled — not loaded`);
+        continue;
+      }
       try {
         const result = await this.register(pkg);
         if (!result.ok) {
@@ -284,18 +288,6 @@ export class PluginRegistryService implements OnModuleInit {
   }
 
   /** Persists the admin's enabled/disabled choice and starts or stops the process to match it. */
-  async setEnabled(pkg: PluginPackage, enabled: boolean): Promise<PluginRegistrationResult> {
-    const registration = await this.registrationRepo.findOne({ where: { pluginId: pkg.pluginId } });
-    if (!registration) throw new NotFoundException(`plugin "${pkg.pluginId}" has no registration row`);
-    registration.enabled = enabled;
-    await this.registrationRepo.save(registration);
-
-    if (!enabled) {
-      await this.unregister(pkg.pluginId);
-      return this.fail(pkg.pluginId, 'disabled', `plugin "${pkg.pluginId}" is disabled`);
-    }
-    return this.register(pkg);
-  }
 
   /** Clears a tripped circuit breaker by swapping in a freshly-provisioned supervisor. */
   async restartProcess(pluginId: string): Promise<void> {
@@ -311,7 +303,7 @@ export class PluginRegistryService implements OnModuleInit {
   }
 
   /** Loads or creates the `plugin_registrations` row (seeding it only on create),
-   *  refreshes its cached manifest, then spawns unless the admin disabled it. */
+   *  refreshes its cached manifest, then spawns. */
   private async activateProcess(
     pkg: PluginPackage,
     manifest: ProcessPluginManifest,
@@ -322,17 +314,12 @@ export class PluginRegistryService implements OnModuleInit {
         pluginId: pkg.pluginId,
         ingestRoots: manifest.ingestRoots,
         scopes: manifest.scopes,
-        enabled: true,
         manifest,
       });
     } else {
       registration.manifest = manifest;
     }
     await this.registrationRepo.save(registration);
-
-    if (!registration.enabled) {
-      return this.fail(pkg.pluginId, 'disabled', `plugin "${pkg.pluginId}" is disabled`);
-    }
 
     const result = await this.processService.startFor(pkg);
     if (!result.ok) return this.fail(pkg.pluginId, result.reason, result.detail);

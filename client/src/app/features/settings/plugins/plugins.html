@@ -49,6 +49,7 @@
             <th>{{ 'settings.plugins.col_tier' | translate }}</th>
             <th>{{ 'settings.plugins.col_trust' | translate }}</th>
             <th>{{ 'settings.plugins.col_status' | translate }}</th>
+            <th>{{ 'settings.plugins.col_enabled' | translate }}</th>
             <th class="text-end w-32"></th>
           </tr>
         </thead>
@@ -78,14 +79,21 @@
                 </span>
               </td>
               <td>
-                @if (row.status === 'active') {
-                  <span class="badge badge-success badge-sm">{{ 'settings.plugins.status_active' | translate }}</span>
-                } @else {
-                  <span class="badge badge-error badge-sm">{{ 'settings.plugins.status_failed' | translate }}</span>
-                  @if (row.statusReason) {
-                    <p class="text-xs text-error/80 mt-1 max-w-[16rem]">{{ row.statusReason }}</p>
-                  }
+                <span class="badge badge-sm" [class]="statusBadgeFor(row).cssClass">
+                  {{ statusBadgeFor(row).labelKey | translate }}
+                </span>
+                @if (row.status === 'failed' && row.statusReason) {
+                  <p class="text-xs text-error/80 mt-1 max-w-[16rem]">{{ row.statusReason }}</p>
                 }
+              </td>
+              <td>
+                <app-toggle-field
+                  [label]="''"
+                  [value]="row.enabled"
+                  (valueChange)="toggleEnabled(row, $event)"
+                  [disabled]="togglingId() === row.pluginId"
+                  toggleClass="toggle-primary toggle-sm"
+                />
               </td>
               <td class="text-end">
                 <button type="button" class="btn btn-ghost btn-xs text-error" (click)="uninstall(row)">

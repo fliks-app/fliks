@@ -6,6 +6,7 @@ import { PluginInstallService, installedPluginDir } from './plugin-install.servi
 import { PluginInstallException } from './plugin-install.exception';
 import { PluginStagingService } from './plugin-staging.service';
 import { PluginRegistryService } from './plugin-registry.service';
+import { PluginUiController } from './plugin-ui.controller';
 import { PluginDatabaseService } from './plugin-database.service';
 import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry } from './plugin-registry.test-helpers';
 import { PluginPackage } from './entities/plugin-package.entity';
@@ -135,6 +136,7 @@ describe('PluginInstallService', () => {
   let repo: ReturnType<typeof fakePackageRepo>;
   let registrationRepo: ReturnType<typeof fakeRegistrationRepo>;
   let registry: PluginRegistryService;
+  let processService: ReturnType<typeof fakeProcessService>;
   let staging: PluginStagingService;
   let pluginDb: ReturnType<typeof fakePluginDb>;
   let service: PluginInstallService;
@@ -151,10 +153,11 @@ describe('PluginInstallService', () => {
     // One instance shared by both: the registry writes the registration row and uninstall
     // deletes it, so two separate fakes would make either assertion vacuous.
     registrationRepo = fakeRegistrationRepo();
+    processService = fakeProcessService();
     registry = new PluginRegistryService(
       repo as never,
       registrationRepo as never,
-      fakeProcessService() as never,
+      processService as never,
       fakePluginJobsService() as never,
       fakeScheduledJobRegistry() as never,
     );
@@ -489,6 +492,112 @@ describe('PluginInstallService', () => {
           }),
         ]),
       );
+    });
+  });
+
+  describe('disable / enable', () => {
+    async function installProcess(overrides: Partial<ProcessPluginManifest> = {}): Promise<ProcessPluginManifest> {
+      const { buffer, manifest } = signedProcessArchive(overrides);
+      const { stagingId, sha256 } = await service.inspectUpload(buffer);
+      await service.confirmImport({ stagingId: stagingId!, sha256: sha256! });
+      return manifest;
+    }
+
+    async function installData(overrides: Partial<DataPluginManifest> = {}): Promise<DataPluginManifest> {
+      const { buffer, manifest } = signedDataArchive(overrides);
+      const { stagingId, sha256 } = await service.inspectUpload(buffer);
+      await service.confirmImport({ stagingId: stagingId!, sha256: sha256! });
+      return manifest;
+    }
+
+    it('stops the supervisor and drops the live registration, leaving the row, archive and schema alone', async () => {
+      const manifest = await installProcess({ id: 'fliks.disablehappy' });
+      expect(registry.get(manifest.id)).toBeDefined();
+
+      const summary = await service.disable(manifest.id);
+
+      expect(summary).toEqual(expect.objectContaining({ pluginId: manifest.id, enabled: false, status: 'active' }));
+      expect(processService.stopFor).toHaveBeenCalledWith(manifest.id);
+      expect(registry.get(manifest.id)).toBeUndefined();
+      expect(repo.rows.get(manifest.id)).toEqual(expect.objectContaining({ enabled: false, status: 'active' }));
+      expect(repo.remove).not.toHaveBeenCalled();
+      expect(pluginDb.deprovision).not.toHaveBeenCalled();
+      expect(existsSync(installedPluginDir(manifest.id, manifest.version))).toBe(true);
+    });
+
+    it('VERDICT: an upgrade over a disabled plugin stores the archive and stays off', async () => {
+      const manifest = await installProcess({ id: 'fliks.upgradedisabled', version: '1.0.0' });
+      await service.disable(manifest.id);
+      processService.startFor.mockClear();
+
+      await installProcess({ id: 'fliks.upgradedisabled', version: '1.1.0' });
+
+      const row = repo.rows.get(manifest.id);
+      expect(row).toEqual(expect.objectContaining({ version: '1.1.0', enabled: false }));
+      // Reactivating behind a version bump would undo the operator's decision in silence.
+      expect(registry.get(manifest.id)).toBeUndefined();
+      expect(processService.startFor).not.toHaveBeenCalled();
+    });
+
+    it('is idempotent: disabling an already-disabled plugin does not stop the supervisor again', async () => {
+      const manifest = await installProcess({ id: 'fliks.disabletwice' });
+      await service.disable(manifest.id);
+      processService.stopFor.mockClear();
+
+      const summary = await service.disable(manifest.id);
+
+      expect(summary.enabled).toBe(false);
+      expect(processService.stopFor).not.toHaveBeenCalled();
+    });
+
+    it('restores the plugin through the same activation path a boot load takes', async () => {
+      const manifest = await installProcess({ id: 'fliks.enablehappy' });
+      await service.disable(manifest.id);
+      processService.startFor.mockClear();
+
+      const summary = await service.enable(manifest.id);
+
+      expect(summary).toEqual(expect.objectContaining({ pluginId: manifest.id, enabled: true, status: 'active' }));
+      expect(processService.startFor).toHaveBeenCalledTimes(1);
+      expect(registry.get(manifest.id)).toBeDefined();
+    });
+
+    it('is idempotent: enabling an already-enabled plugin does not re-register', async () => {
+      const manifest = await installProcess({ id: 'fliks.enabletwice' });
+      processService.startFor.mockClear();
+
+      const summary = await service.enable(manifest.id);
+
+      expect(summary.enabled).toBe(true);
+      expect(processService.startFor).not.toHaveBeenCalled();
+    });
+
+    it('a failed re-activation reports the way it would at boot: enabled, but status failed with the reason', async () => {
+      const manifest = await installProcess({ id: 'fliks.enablefails' });
+      await service.disable(manifest.id);
+      processService.startFor.mockResolvedValueOnce({ ok: false, reason: 'spawn-failed', detail: 'never reached ready' });
+
+      const summary = await service.enable(manifest.id);
+
+      expect(summary).toEqual(
+        expect.objectContaining({ enabled: true, status: 'failed', statusReason: expect.stringContaining('spawn-failed') }),
+      );
+      expect(registry.get(manifest.id)).toBeUndefined();
+    });
+
+    it('404s on an unknown plugin id for both routes', async () => {
+      await expectInstallError(service.disable('fliks.neverinstalled'), 404, 'PLUGIN_NOT_FOUND');
+      await expectInstallError(service.enable('fliks.neverinstalled'), 404, 'PLUGIN_NOT_FOUND');
+    });
+
+    it('excludes a disabled plugin from GET /plugins/ui — the controller reads the same registry membership', async () => {
+      const manifest = await installData({ id: 'fliks.disableui' });
+      const ui = new PluginUiController(registry);
+      expect(ui.list().map((r) => r.pluginId)).toContain(manifest.id);
+
+      await service.disable(manifest.id);
+
+      expect(ui.list().map((r) => r.pluginId)).not.toContain(manifest.id);
     });
   });
 });
