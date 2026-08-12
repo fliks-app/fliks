@@ -30,6 +30,13 @@ import {
   ProviderRowAction,
   ProviderTestResult,
 } from './provider-list.types';
+import { DataTableComponent } from '../data-table/data-table';
+
+interface RowActionResultView {
+  url: string;
+  title: string;
+  result: NonNullable<ProviderRowAction['result']>;
+}
 
 /** Substitutes a row action route's `:id` with the row's own id — null (never a request) when
  *  there was no `:id` to substitute, or any `:token` placeholder survives that, so a mistyped
@@ -56,6 +63,7 @@ export function resolveRowActionRoute(route: string, id: number | string): strin
     ToggleFieldComponent,
     SelectFieldComponent,
     SchemaFormComponent,
+    DataTableComponent,
     LucideArrowUp,
     LucideArrowDown,
   ],
@@ -67,6 +75,7 @@ export class ProviderListComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly resultDialog = viewChild<ElementRef<HTMLDialogElement>>('resultDialog');
 
   readonly titleKey = input.required<string>();
   readonly listUrl = input.required<string>();
@@ -113,6 +122,14 @@ export class ProviderListComponent implements OnInit {
 
   readonly listActionBusy = signal<string | null>(null);
   readonly rowActionBusy = signal<string | null>(null);
+
+  /** The open `GET` row action's declared table. Null keeps `<app-data-table>` out of the
+   *  DOM, so it only fetches when a row asked for it. */
+  readonly resultView = signal<RowActionResultView | null>(null);
+
+  /** A `GET` with no declared `result` has nothing to show, so it gets no button — the same
+   *  fail-closed rule the `table` kind applies to an unknown `actionId`. */
+  readonly visibleRowActions = computed(() => this.rowActions().filter((a) => a.method !== 'GET' || !!a.result));
 
   /** Display order: priority ascending when `reorderable`, otherwise the server's own order. */
   readonly orderedRows = computed(() =>
@@ -313,8 +330,8 @@ export class ProviderListComponent implements OnInit {
     return `${row.id}:${action.labelKey}`;
   }
 
-  /** A `GET` shows its response (this generic renderer has no domain-specific view for it);
-   *  a mutation just reloads the rows. Never fires when the row's `:id` can't be substituted. */
+  /** A `GET` opens its declared table, which fetches the route itself; a mutation just
+   *  reloads the rows. Never fires when the row's `:id` can't be substituted. */
   async runRowAction(row: ProviderInstance, action: ProviderRowAction): Promise<void> {
     const url = resolveRowActionRoute(action.route, row.id);
     if (!url) return;
@@ -326,18 +343,25 @@ export class ProviderListComponent implements OnInit {
       });
       if (!ok) return;
     }
+    if (action.method === 'GET') {
+      if (!action.result) return;
+      this.resultView.set({ url, title: `${row.name} — ${this.translate.instant(action.labelKey)}`, result: action.result });
+      this.resultDialog()?.nativeElement.showModal();
+      return;
+    }
     this.rowActionBusy.set(this.rowActionKey(row, action));
     try {
-      const result = await firstValueFrom(this.http.request(action.method, url));
-      if (action.method === 'GET') {
-        await this.confirmation.alert({ title: this.translate.instant(action.labelKey), message: JSON.stringify(result) });
-      } else {
-        await this.reload();
-      }
+      await firstValueFrom(this.http.request(action.method, url));
+      await this.reload();
     } catch {
       // handled by the global error interceptor
     } finally {
       this.rowActionBusy.set(null);
     }
+  }
+
+  closeResult(): void {
+    this.resultDialog()?.nativeElement.close();
+    this.resultView.set(null);
   }
 }

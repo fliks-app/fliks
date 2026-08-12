@@ -21,6 +21,12 @@ beforeAll(() => {
   }
 });
 
+const STATS_RESULT: NonNullable<ProviderRowAction['result']> = {
+  kind: 'table',
+  emptyKey: 'x.stats_empty',
+  columns: [{ key: 'date', labelKey: 'x.stats_date' }],
+};
+
 const LABELS: ProviderListLabels = {
   newLabelKey: 'x.new',
   colNameKey: 'x.col_name',
@@ -214,7 +220,7 @@ describe('ProviderListComponent — characterisation', () => {
   it('renders one button per `scope: "row"` action — stats and clear-cooldown both reachable, not just the first', async () => {
     const get = vi.fn(() => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
     const rowActions: ProviderRowAction[] = [
-      { labelKey: 'x.stats', method: 'GET', route: '/api/x/:id/stats' },
+      { labelKey: 'x.stats', method: 'GET', route: '/api/x/:id/stats', result: STATS_RESULT },
       { labelKey: 'x.clear_cooldown', method: 'DELETE', route: '/api/x/:id/cooldown' },
     ];
     const fixture = await createComponent({ get }, { rowActions });
@@ -223,21 +229,36 @@ describe('ProviderListComponent — characterisation', () => {
     expect(buttons.some((b) => b.textContent?.includes('x.clear_cooldown'))).toBe(true);
   });
 
-  it('substitutes the row id into a row action route before requesting it, and shows a GET result via alert', async () => {
+  it("substitutes the row id into a GET row action's route and hands it to its declared table", async () => {
     const get = vi.fn(() => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
     const request = vi.fn(() => of({ some: 'stats' }));
-    const alert = vi.fn(() => Promise.resolve());
-    const fixture = await createComponent(
-      { get, request },
-      { confirmation: { confirm: () => Promise.resolve(true), alert } },
-    );
+    const fixture = await createComponent({ get, request });
+
     await fixture.componentInstance.runRowAction(fixture.componentInstance.rows()[0], {
       labelKey: 'x.stats',
       method: 'GET',
       route: '/api/x/:id/stats',
+      result: STATS_RESULT,
     });
-    expect(request).toHaveBeenCalledWith('GET', '/api/x/7/stats');
-    expect(alert).toHaveBeenCalledTimes(1);
+
+    expect(fixture.componentInstance.resultView()?.url).toBe('/api/x/7/stats');
+    expect(fixture.componentInstance.resultView()?.title).toContain('A');
+    // The embedded table owns the fetch; the component must not request it a second time.
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('VERDICT: renders no button for a GET row action that declares no result, and opens nothing', async () => {
+    const get = vi.fn(() => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const request = vi.fn(() => of({ some: 'stats' }));
+    const rowActions: ProviderRowAction[] = [{ labelKey: 'x.stats', method: 'GET', route: '/api/x/:id/stats' }];
+    const fixture = await createComponent({ get, request }, { rowActions });
+
+    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+    expect(buttons.some((b) => b.textContent?.includes('x.stats'))).toBe(false);
+
+    await fixture.componentInstance.runRowAction(fixture.componentInstance.rows()[0], rowActions[0]);
+    expect(fixture.componentInstance.resultView()).toBeNull();
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('reloads (rather than alerting) after a mutating row action succeeds', async () => {

@@ -72,7 +72,7 @@
                 @if (rowExtraActions(); as tpl) {
                   <ng-container *ngTemplateOutlet="tpl; context: { $implicit: row }" />
                 }
-                @for (action of rowActions(); track action.labelKey) {
+                @for (action of visibleRowActions(); track action.labelKey) {
                   <button
                     type="button"
                     class="btn btn-ghost btn-xs"
@@ -175,5 +175,24 @@
   </div>
   <form method="dialog" class="modal-backdrop">
     <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">close</button>
+  </form>
+</dialog>
+
+<dialog #resultDialog class="modal">
+  <div class="modal-box max-w-2xl">
+    @if (resultView(); as view) {
+      <h3 class="font-bold text-lg mb-4">{{ view.title }}</h3>
+      <app-data-table
+        [listUrl]="view.url"
+        [columns]="view.result.columns"
+        [emptyKey]="view.result.emptyKey"
+      />
+    }
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="closeResult()">{{ 'common.close' | translate }}</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeResult()" [attr.aria-label]="'common.close' | translate">close</button>
   </form>
 </dialog>

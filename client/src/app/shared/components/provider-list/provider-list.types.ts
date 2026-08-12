@@ -1,4 +1,4 @@
-import type { FieldDef } from '../../../core/plugin-ui/contribution.types';
+import type { FieldDef, TableColumn } from '../../../core/plugin-ui/contribution.types';
 
 /**
  * The generic shape a provider-list consumer's wire format already fits.
@@ -47,6 +47,8 @@ export interface ProviderRowAction {
   method: 'GET' | 'POST' | 'DELETE';
   route: string;
   confirmKey?: string;
+  /** How a `GET`'s answer renders (`ProvidersConfigPage.actions[].result`). */
+  result?: { kind: 'table'; columns: TableColumn[]; emptyKey: string };
 }
 
 export interface ProviderListLabels {

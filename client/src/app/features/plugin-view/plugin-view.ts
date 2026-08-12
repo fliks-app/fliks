@@ -207,7 +207,13 @@ export class PluginViewComponent {
   providerRowActions(view: ProvidersView): ProviderRowAction[] {
     return (view.actions ?? [])
       .filter((a) => a.scope === 'row')
-      .map((a) => ({ labelKey: a.labelKey, method: a.method, route: this.resourceUrl(a.route), confirmKey: a.confirmKey }));
+      .map((a) => ({
+        labelKey: a.labelKey,
+        method: a.method,
+        route: this.resourceUrl(a.route),
+        confirmKey: a.confirmKey,
+        result: a.result,
+      }));
   }
 
   /** `actions[].scope: 'list'` — rendered once above the rows, run with no draft. */

@@ -91,6 +91,13 @@ export interface FormConfigPage extends ConfigPageBase {
   fields: FieldDef[];
 }
 
+/** One column of a declared table — a `table` page's rows, or a row action's result. */
+export interface TableColumn {
+  key: string;
+  labelKey: string;
+  format?: 'date' | 'bytes' | 'percent';
+}
+
 /** One proxied route lists instances, another lists the implementations and their fields. */
 export interface ProvidersConfigPage extends ConfigPageBase {
   kind: 'providers';
@@ -109,6 +116,9 @@ export interface ProvidersConfigPage extends ConfigPageBase {
     route: string;
     scope: 'row' | 'list';
     confirmKey?: string;
+    /** How core renders what a `GET` answers — an array of rows, in declared columns.
+     *  A `GET` without it renders no button: core has no domain view to fall back on. */
+    result?: { kind: 'table'; columns: TableColumn[]; emptyKey: string };
   }[];
   reorderable?: boolean;
   /** Priority is not a universal provider concept; hide the column when the
@@ -129,7 +139,7 @@ export interface ProvidersConfigPage extends ConfigPageBase {
 export interface TableConfigPage extends ConfigPageBase {
   kind: 'table';
   list: string;
-  columns: { key: string; labelKey: string; format?: 'date' | 'bytes' | 'percent' }[];
+  columns: TableColumn[];
   rowActions?: (
     | { kind: 'route'; labelKey: string; path: string }
     | { kind: 'action'; labelKey: string; actionId: string }

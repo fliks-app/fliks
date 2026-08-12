@@ -26,7 +26,8 @@ export class DataTableComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
 
-  readonly titleKey = input.required<string>();
+  /** Empty renders no heading — an embedded table (a row action's result) carries its own. */
+  readonly titleKey = input('');
   readonly listUrl = input.required<string>();
   readonly columns = input.required<readonly TableColumn[]>();
   readonly rowActions = input<readonly RowAction[]>([]);
