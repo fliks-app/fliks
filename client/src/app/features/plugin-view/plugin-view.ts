@@ -7,6 +7,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucideTriangleAlert } from '@lucide/angular';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
 import { SettingsApiService } from '../../core/services/api/settings-api.service';
+import { ToastService } from '../../core/services/toast.service';
 import { SchemaFormComponent, SchemaFormValue } from '../../shared/components/schema-form/schema-form';
 import { ProviderListComponent } from '../../shared/components/provider-list/provider-list';
 import {
@@ -92,6 +93,7 @@ export class PluginViewComponent {
   private readonly settingsApi = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
+  private readonly toast = inject(ToastService);
 
   // Angular reuses this component across param changes on the same route
   // config (same wildcard path, different pluginId/view) — read reactively.
@@ -127,6 +129,7 @@ export class PluginViewComponent {
   readonly formValue = signal<SchemaFormValue>({});
   readonly formLoading = signal(true);
   readonly formSaving = signal(false);
+  readonly formActionBusy = signal<string | null>(null);
 
   // --- `providers` kind: the driver list is itself a proxied route ---
   readonly resolvedImplementations = signal<ProviderImplementation[] | null>(null);
@@ -155,6 +158,34 @@ export class PluginViewComponent {
       this.formValue.set(value);
     } finally {
       this.formLoading.set(false);
+    }
+  }
+
+  /** The closed catalogue of buttons core implements on a `form` page. An unknown id renders
+   *  nothing: a `data` plugin cannot ship code, so core is the only thing that can act. */
+  formActions(page: FormConfigPage): { id: string; labelKey: string; actionId: string }[] {
+    return (page.actions ?? []).filter((a) => a.actionId === 'events.test-delivery');
+  }
+
+  async runFormAction(action: { id: string; labelKey: string; actionId: string }): Promise<void> {
+    this.formActionBusy.set(action.id);
+    try {
+      const res = await firstValueFrom(
+        this.http.post<{ configured: boolean; delivered: number; failures: string[] }>(
+          `/api/plugins/${this.pluginId()}/events/test`,
+          {},
+        ),
+      );
+      if (!res.configured) this.toast.warning(this.translate.instant('plugin_view.webhook_test_unconfigured'));
+      else if (res.failures.length) {
+        this.toast.error(this.translate.instant('plugin_view.webhook_test_failed', { detail: res.failures.join('; ') }));
+      } else {
+        this.toast.success(this.translate.instant('plugin_view.webhook_test_ok', { count: res.delivered }));
+      }
+    } catch {
+      // surfaced by the global error interceptor
+    } finally {
+      this.formActionBusy.set(null);
     }
   }
 

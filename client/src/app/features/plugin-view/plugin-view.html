@@ -57,12 +57,22 @@
         <div class="flex flex-col gap-4">
           <h2 class="text-lg font-bold">{{ page.labelKey | translate }}</h2>
           <app-schema-form [fields]="page.fields" [(value)]="formValue" [disabled]="formSaving()" />
-          <button type="button" class="btn btn-primary self-start" [disabled]="formSaving()" (click)="saveForm()">
-            @if (formSaving()) {
-              <span class="loading loading-spinner loading-sm"></span>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" class="btn btn-primary" [disabled]="formSaving()" (click)="saveForm()">
+              @if (formSaving()) {
+                <span class="loading loading-spinner loading-sm"></span>
+              }
+              {{ 'common.save' | translate }}
+            </button>
+            @for (action of formActions(page); track action.id) {
+              <button type="button" class="btn btn-outline" [disabled]="formActionBusy() === action.id" (click)="runFormAction(action)">
+                @if (formActionBusy() === action.id) {
+                  <span class="loading loading-spinner loading-sm"></span>
+                }
+                {{ action.labelKey | translate }}
+              </button>
             }
-            {{ 'common.save' | translate }}
-          </button>
+          </div>
         </div>
       }
     } @else {

@@ -2337,7 +2337,10 @@
     "unavailable_title": "Diese Seite ist nicht verfügbar",
     "unknown_plugin": "Das Plugin, zu dem diese Seite gehört, ist nicht installiert.",
     "unknown_view": "Dieses Plugin hat keine Seite mit diesem Namen.",
-    "unsupported_kind": "Diese Seite wird von deiner Fliks-Version noch nicht unterstützt."
+    "unsupported_kind": "Diese Seite wird von deiner Fliks-Version noch nicht unterstützt.",
+    "webhook_test_ok": "Testereignis an {{count}} Endpunkt(e) geliefert.",
+    "webhook_test_unconfigured": "Noch kein Endpunkt konfiguriert — es wurde nichts gesendet.",
+    "webhook_test_failed": "Testzustellung fehlgeschlagen: {{detail}}"
   },
   "provider_list": {
     "new": "Neu",

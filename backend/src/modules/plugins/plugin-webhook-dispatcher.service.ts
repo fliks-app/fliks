@@ -8,6 +8,14 @@ import { isInternalAddress } from './internal-address';
 import { SettingsService } from '../settings/settings.service';
 import { WEBHOOK_SETTING_PREFIX } from '../../common/plugin-contract';
 
+/** What the admin page shows after a test: whether an endpoint is configured at all, how many
+ *  answered, and what the ones that did not said. */
+export interface WebhookTestResult {
+  configured: boolean;
+  delivered: number;
+  failures: string[];
+}
+
 const WEBHOOK_TIMEOUT_MS = 5_000;
 /** Core never reads the body — cap it so a hostile endpoint can't hold the connection streaming data. */
 const WEBHOOK_MAX_RESPONSE_BYTES = 64 * 1024;
@@ -59,16 +67,23 @@ export class PluginWebhookDispatcherService implements OnModuleInit, OnModuleDes
   private async deliver(pluginId: string, declared: string, event: DomainEvent): Promise<void> {
     const webhook = await this.resolveTarget(pluginId, declared);
     if (!webhook) return;
+    if (!(await this.isDeliverable(pluginId, webhook))) return;
+    await this.postGuarded(pluginId, webhook, { event, pluginId });
+  }
+
+  /** https, parses, and resolves to nothing internal — re-checked on every attempt, because a
+   *  name that passed at configuration time can be repointed afterwards. */
+  private async isDeliverable(pluginId: string, webhook: string): Promise<boolean> {
     if (!webhook.startsWith('https://')) {
       this.logger.warn(`plugin "${pluginId}" webhook skipped — configured endpoint is not https`);
-      return;
+      return false;
     }
     let hostname: string;
     try {
       hostname = new URL(webhook).hostname;
     } catch {
       this.logger.warn(`plugin "${pluginId}" webhook skipped — "${webhook}" no longer parses as a URL`);
-      return;
+      return false;
     }
 
     let addresses: string[];
@@ -76,18 +91,23 @@ export class PluginWebhookDispatcherService implements OnModuleInit, OnModuleDes
       addresses = (await dns.promises.lookup(hostname, { all: true })).map((a) => a.address);
     } catch (err) {
       this.logger.warn(`plugin "${pluginId}" webhook skipped — DNS lookup failed for "${hostname}": ${(err as Error).message}`);
-      return;
+      return false;
     }
     const internal = addresses.find(isInternalAddress);
     if (internal) {
       this.logger.warn(`plugin "${pluginId}" webhook skipped — "${hostname}" resolves to internal address ${internal}`);
-      return;
+      return false;
     }
+    return true;
+  }
 
+  /** Resolves, re-checks and posts. The guards — https, no internal address, DNS re-resolved on
+   *  every attempt — are the point of routing every delivery through here. */
+  private async postGuarded(pluginId: string, webhook: string, body: unknown): Promise<{ ok: boolean; detail?: string }> {
     try {
       await axios.post(
         webhook,
-        { event, pluginId },
+        body,
         {
           timeout: WEBHOOK_TIMEOUT_MS,
           maxRedirects: 0,
@@ -95,8 +115,42 @@ export class PluginWebhookDispatcherService implements OnModuleInit, OnModuleDes
           headers: { 'User-Agent': 'Fliks-Plugin-Webhook/1.0', 'Content-Type': 'application/json' },
         },
       );
+      return { ok: true };
     } catch (err) {
-      this.logger.warn(`plugin "${pluginId}" webhook delivery failed: ${(err as Error).message}`);
+      const detail = (err as Error).message;
+      this.logger.warn(`plugin "${pluginId}" webhook delivery failed: ${detail}`);
+      return { ok: false, detail };
     }
+  }
+
+  /**
+   * Posts one synthetic event to every webhook this plugin declares, so an operator can prove
+   * their endpoint answers before waiting for something real. Same resolution and same guards as
+   * a real delivery; `configured: false` means the target setting is still empty.
+   */
+  async sendTest(pluginId: string): Promise<WebhookTestResult> {
+    const targets = this.registry.listWebhooksForPlugin(pluginId);
+    const failures: string[] = [];
+    let delivered = 0;
+    let configured = false;
+
+    for (const declared of targets) {
+      const webhook = await this.resolveTarget(pluginId, declared.webhook);
+      if (!webhook) continue;
+      configured = true;
+      if (!(await this.isDeliverable(pluginId, webhook))) {
+        failures.push(`${declared.event}: target refused`);
+        continue;
+      }
+      const result = await this.postGuarded(pluginId, webhook, {
+        event: { type: 'test.delivery', declaredFor: declared.event },
+        pluginId,
+        test: true,
+      });
+      if (result.ok) delivered++;
+      else failures.push(`${declared.event}: ${result.detail ?? 'failed'}`);
+    }
+
+    return { configured, delivered, failures };
   }
 }

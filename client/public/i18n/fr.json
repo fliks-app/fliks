@@ -2365,7 +2365,10 @@
     "unknown_plugin": "Le plugin auquel appartient cette page n'est pas installé.",
     "unknown_view": "Ce plugin n'a pas de page portant ce nom.",
     "unsupported_kind": "Cette page n'est pas encore prise en charge par votre version de Fliks.",
-    "implementations_load_error": "Impossible de charger les types de fournisseur — certains champs peuvent manquer ci-dessous."
+    "implementations_load_error": "Impossible de charger les types de fournisseur — certains champs peuvent manquer ci-dessous.",
+    "webhook_test_ok": "Événement de test livré à {{count}} point(s) d’entrée.",
+    "webhook_test_unconfigured": "Aucun point d’entrée configuré — rien n’a été envoyé.",
+    "webhook_test_failed": "Échec de la livraison de test : {{detail}}"
   },
   "provider_list": {
     "new": "Nouveau",
