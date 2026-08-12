@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import { SystemController } from './system.controller';
+import { CHECK_POLICIES_KEY, type PolicyHandler } from '../auth/casl/check-policies.decorator';
 
 jest.mock('fs', () => ({
   ...jest.requireActual<typeof import('fs')>('fs'),
@@ -330,5 +331,15 @@ describe('SystemController.restart', () => {
     });
     jest.runAllTimers();
     expect(kill).toHaveBeenCalledWith(1, 'SIGTERM');
+  });
+});
+
+describe('SystemController.events policy', () => {
+  it('VERDICT: declares a policy, because PoliciesGuard denies a handler that declares none', () => {
+    const handlers = Reflect.getMetadata(CHECK_POLICIES_KEY, SystemController.prototype.events) as
+      | PolicyHandler[]
+      | undefined;
+
+    expect(handlers?.length).toBeGreaterThan(0);
   });
 });
