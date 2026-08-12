@@ -115,6 +115,25 @@
               <span class="flex-1">{{ 'media_detail.request_season' | translate }}</span>
             </button>
           }
+          @for (item of seasonActionItems(); track item.id) {
+            <button
+              type="button"
+              class="dropdown-item text-white"
+              [disabled]="seasonActionPending(item.actionId)"
+              (click)="item.handler()"
+            >
+              @if (seasonActionPending(item.actionId)) {
+                <span class="loading loading-spinner loading-sm"></span>
+                <span class="flex-1"></span>
+              } @else if (item.actionId === 'season.search-releases') {
+                <svg lucidePackage class="h-5 w-5 shrink-0 opacity-80"></svg>
+                <span class="flex-1">{{ item.labelKey | translate }}</span>
+              } @else {
+                <svg lucideDownload class="h-5 w-5 shrink-0 opacity-80"></svg>
+                <span class="flex-1">{{ item.labelKey | translate }}</span>
+              }
+            </button>
+          }
           @if (isAdmin()) {
             <button
               type="button"

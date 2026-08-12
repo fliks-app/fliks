@@ -1,0 +1,57 @@
+<dialog #dialog class="modal">
+  <div class="modal-box w-[95%] max-w-7xl my-8 max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden p-0">
+    <div class="px-4 pt-4 sm:px-6 sm:pt-6 shrink-0">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-lg font-bold">{{ title() }}</h3>
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle btn-ghost">✕</button>
+        </form>
+      </div>
+
+      @if (showGrabBest() && canGrab()) {
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            class="btn btn-primary btn-xs"
+            (click)="grabBest.emit()"
+            [disabled]="grabBestDisabled() || grabBusy() !== null"
+          >
+            @if (grabBestBusy()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'media_detail.grab_best' | translate }}
+          </button>
+        </div>
+      }
+    </div>
+
+    <div class="flex-1 overflow-y-auto px-4 sm:px-6">
+      @if (loading()) {
+        <div class="flex justify-center py-8">
+          <span class="loading loading-spinner loading-lg"></span>
+        </div>
+      } @else if (error()) {
+        <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
+      } @else if (searched() && releases().length === 0) {
+        <p class="text-sm text-base-content/60 py-4">{{ emptyMessage() | translate }}</p>
+      } @else if (releases().length) {
+        <app-releases-table
+          [releases]="releases()"
+          [grabBusy]="grabBusy()"
+          [grabState]="grabState()"
+          [canGrab]="canGrab()"
+          [showCfScore]="showCfScore()"
+          [grabPrefix]="grabPrefix()"
+          (grab)="grab.emit($event)"
+        />
+      }
+    </div>
+
+    <div class="modal-action px-4 pb-4 sm:px-6 shrink-0">
+      <form method="dialog">
+        <button class="btn btn-sm">{{ 'common.close' | translate }}</button>
+      </form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>

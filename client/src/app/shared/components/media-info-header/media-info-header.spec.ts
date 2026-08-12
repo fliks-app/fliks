@@ -66,6 +66,8 @@ interface MediaFixture {
   sharingDisabled?: boolean;
   isTv?: boolean;
   watched?: boolean;
+  grabBusy?: string | null;
+  releasesLoading?: boolean;
   monitoredLoading?: boolean;
   deleteLoading?: boolean;
   registry?: Partial<Record<SlotId, UiContribution[]>>;
@@ -165,6 +167,8 @@ async function createFixture(
     fixture.componentRef.setInput('canRequestDeletion', derived.canRequestDeletion);
   }
   fixture.componentRef.setInput('userHasOpenWholeRequest', !!media.userHasOpenWholeRequest);
+  fixture.componentRef.setInput('grabBusy', media.grabBusy ?? null);
+  fixture.componentRef.setInput('releasesLoading', !!media.releasesLoading);
   fixture.componentRef.setInput('monitoredLoading', !!media.monitoredLoading);
   fixture.componentRef.setInput('deleteLoading', !!media.deleteLoading);
 
@@ -205,6 +209,14 @@ function menuItems(root: HTMLElement): CapturedItem[] {
 
 function labels(root: HTMLElement): string[] {
   return menuItems(root).map((i) => i.label);
+}
+
+/** Raw elements behind {@link menuItems}, in the same order — needed to
+ *  dispatch a real click rather than just inspect the rendered row. */
+function dropdownButtons(root: HTMLElement): HTMLButtonElement[] {
+  const desktopMenu = root.querySelectorAll('app-dropdown-menu')[1];
+  if (!desktopMenu) return [];
+  return Array.from(desktopMenu.querySelectorAll('.dropdown-item')) as HTMLButtonElement[];
 }
 
 // ── The permission matrix ──
@@ -514,5 +526,78 @@ describe('MediaInfoHeaderComponent — media.actions merges with plugin contribu
 
     const deleter = await createFixture(DELETER, { mediaType: 'movie', ...MOVIE, registry: wideOpen });
     expect(labels(deleter.nativeElement)).toContain('x.delete_wide');
+  });
+});
+
+// ── The release picker (`media.grab-best` / `media.search-releases`): core owns the
+// handler and the modals it opens, but the menu entry itself is a plugin contribution —
+// with no plugin installed, no button exists at all.
+
+describe('MediaInfoHeaderComponent — release-picker actions are plugin-contributed, not core items', () => {
+  const releasePickerRegistry = {
+    'media.actions': [
+      {
+        id: 'fliks.acme.grab-best',
+        slot: 'media.actions' as const,
+        weight: 500,
+        labelKey: 'x.grab_best',
+        icon: 'download',
+        action: { kind: 'action' as const, actionId: 'media.grab-best' },
+      },
+      {
+        id: 'fliks.acme.search-releases',
+        slot: 'media.actions' as const,
+        weight: 600,
+        labelKey: 'x.search_releases',
+        icon: 'search',
+        action: { kind: 'action' as const, actionId: 'media.search-releases' },
+      },
+    ],
+  };
+
+  it('VERDICT: with no plugin installed, neither entry exists — core carries no acquisition menu item', async () => {
+    const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE });
+    const shown = labels(fixture.nativeElement);
+    expect(shown).not.toContain('x.grab_best');
+    expect(shown).not.toContain('x.search_releases');
+  });
+
+  it('a plugin contribution surfaces both actions and routes clicks to core\'s own outputs', async () => {
+    const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, registry: releasePickerRegistry });
+    const shown = labels(fixture.nativeElement);
+    const grabIdx = shown.indexOf('x.grab_best');
+    const searchIdx = shown.indexOf('x.search_releases');
+    expect(grabIdx).toBeGreaterThanOrEqual(0);
+    expect(searchIdx).toBeGreaterThanOrEqual(0);
+
+    let grabbed = false;
+    let searched = false;
+    fixture.componentInstance.grabBest.subscribe(() => (grabbed = true));
+    fixture.componentInstance.loadReleases.subscribe(() => (searched = true));
+
+    const buttons = dropdownButtons(fixture.nativeElement);
+    buttons[grabIdx].click();
+    buttons[searchIdx].click();
+
+    expect(grabbed).toBe(true);
+    expect(searched).toBe(true);
+  });
+
+  it('grabBusy/releasesLoading still drive the busy spinner + disabled state for the plugin-contributed rows', async () => {
+    // Busy swaps the icon slot for a spinner, which shifts readItem's label lookup —
+    // so locate the row by index (idle fixture) rather than by its now-blank label.
+    const idle = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, registry: releasePickerRegistry });
+    const grabIdx = labels(idle.nativeElement).indexOf('x.grab_best');
+    expect(grabIdx).toBeGreaterThanOrEqual(0);
+    expect(dropdownButtons(idle.nativeElement)[grabIdx].disabled).toBe(false);
+
+    const busy = await createFixture(OWNER, {
+      mediaType: 'movie',
+      ...MOVIE,
+      registry: releasePickerRegistry,
+      grabBusy: 'best',
+      releasesLoading: true,
+    });
+    expect(dropdownButtons(busy.nativeElement)[grabIdx].disabled).toBe(true);
   });
 });

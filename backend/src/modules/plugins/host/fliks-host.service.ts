@@ -70,14 +70,6 @@ type MediaResolveEntry = Awaited<
   ReturnType<PluginHostApi['media.resolve']>
 >[string];
 
-function rejectionDetail(rejection: {
-  params?: Record<string, number | string>;
-}): string | undefined {
-  if (!rejection.params) return undefined;
-  const parts = Object.entries(rejection.params).map(([k, v]) => `${k}=${v}`);
-  return parts.length ? parts.join(', ') : undefined;
-}
-
 /**
  * Core's implementation of the 15 plugin-facing host methods. Every value it
  * returns is a plain, JSON-safe object built field-by-field from entities —
@@ -501,10 +493,7 @@ export class FliksHostImpl implements PluginHostApi {
       isFullSeason: row.isFullSeason,
       sizeDeviation: row.sizeDeviation ?? 0,
       videoCodec: row.videoCodec,
-      rejections: row.rejections.map((r) => ({
-        code: r.code,
-        detail: rejectionDetail(r),
-      })),
+      rejections: row.rejections.map((r) => ({ code: r.code, params: r.params })),
     }));
   }
 

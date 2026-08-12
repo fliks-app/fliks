@@ -62,7 +62,9 @@ export interface ScoredRelease {
   isFullSeason: boolean;
   sizeDeviation: number;
   videoCodec: string | null;
-  rejections: { code: string; detail?: string }[];
+  /** `params` is interpolated into the frontend's own `rejection.<code>` string —
+   *  flattening it to a message here would strip the numbers out of the reason. */
+  rejections: { code: string; params?: Record<string, number | string> }[];
 }
 
 /** Domain facts a plugin publishes; core decides the SSE audience for each. */

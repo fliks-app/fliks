@@ -676,7 +676,7 @@ describe('FliksHostImpl', () => {
       expectJsonSafe(result);
     });
 
-    it('returns [] for an unknown media id, and renders rejection params as a detail string', async () => {
+    it("returns [] for an unknown media id, and carries a rejection's params across the boundary", async () => {
       const h = makeHarness();
       h.mediaRepo.findOne.mockResolvedValueOnce(null);
       expect(
@@ -707,9 +707,10 @@ describe('FliksHostImpl', () => {
       expect(result[0].rejections.some((r) => r.code === 'MIN_SEEDERS')).toBe(
         true,
       );
+      // The frontend interpolates these into its own `rejection.MIN_SEEDERS` string.
       expect(
-        result[0].rejections.find((r) => r.code === 'MIN_SEEDERS')?.detail,
-      ).toMatch(/actual=10/);
+        result[0].rejections.find((r) => r.code === 'MIN_SEEDERS')?.params,
+      ).toEqual({ actual: 10, min: 50 });
       expectJsonSafe(result);
     });
 

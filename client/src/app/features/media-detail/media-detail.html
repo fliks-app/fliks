@@ -60,10 +60,14 @@
           [isAdmin]="isAdmin()"
           [canRequest]="canRequest()"
           [userHasOpenWholeRequest]="hasBlockingRequest()"
+          [releasesLoading]="epReleasesLoading()"
+          [grabBusy]="epGrabBusy()"
           (selectedFileIdChange)="selectedFileId.set($event)"
           (openDownload)="openDownloadModal()"
           (refreshMetadata)="refreshMetadata()"
           (toggleMonitored)="toggleMonitored()"
+          (loadReleases)="loadEpisodeReleases(m.id, s.id, ep.id)"
+          (grabBest)="grabEpisodeBest(m.id, ep.id)"
           (openAnalyze)="openAnalyzeModal()"
           (editSubtitles)="openSubtitles()"
           (episodeWatchedToggled)="onEpisodeWatchedToggledFromHeader($event)"
@@ -177,6 +181,8 @@
           [canRequest]="canRequest()"
           [userHasOpenWholeRequest]="hasBlockingRequest()"
           [canRequestDeletion]="showRequestDeletion()"
+          [releasesLoading]="releasesLoading()"
+          [grabBusy]="grabBusy()"
           [monitoredLoading]="monitoredLoading()"
           [deleteLoading]="deleteLoading()"
           (selectedFileIdChange)="selectedFileId.set($event)"
@@ -186,6 +192,8 @@
           (refreshMetadata)="refreshMetadata()"
           (toggleMonitored)="toggleMonitored()"
           (deleteMedia)="deleteMedia()"
+          (loadReleases)="loadReleases()"
+          (grabBest)="grabBest()"
           (openAnalyze)="openAnalyzeModal()"
           (seriesWatchedToggled)="onSeriesWatchedToggled($event)"
           (editSubtitles)="openSubtitles()"
@@ -286,6 +294,9 @@
             [activeSeasonId]="activeSeasonId()"
             [episodesHasFileOnly]="episodesHasFileOnly()"
             [filteredEpisodes]="activeSeason(m) ? filteredSeasonEpisodes(activeSeason(m)!) : []"
+            [seasonReleasesLoading]="seasonReleasesLoading()"
+            [seasonReleasesOpenId]="seasonReleasesOpen()"
+            [seasonGrabBusy]="seasonGrabBusy()"
             [seasonBusyId]="seasonBusy()"
             [seasonWatchedBusyId]="seasonWatchedBusy()"
             [isAdmin]="isAdmin()"
@@ -294,6 +305,8 @@
             [likedSeasonIds]="likeState().seasonIds"
             (selectSeason)="selectSeason($event)"
             (episodesHasFileOnlyChange)="setEpisodesHasFileOnly($event)"
+            (loadSeasonReleases)="loadSeasonReleases(m.id, $event)"
+            (grabSeason)="grabSeasonAuto(m.id, $event)"
             (toggleSeasonMonitored)="toggleSeasonMonitored($event)"
             (toggleSeasonWatched)="onToggleSeasonWatched(m.id, $event.season, $event.watched)"
             (toggleEpisodeWatched)="onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
@@ -320,6 +333,44 @@
     <!-- Modals (shared between modes) -->
     <div>
       <app-tracking-status-modal #trackingModal />
+      <app-releases-modal #movieReleasesModal
+        [title]="'media_detail.download_section' | translate"
+        [releases]="releases()"
+        [loading]="releasesLoading()"
+        [searched]="releasesSearched()"
+        [error]="releasesError()"
+        [grabBusy]="grabBusy()"
+        [grabState]="grabState()"
+        [canGrab]="canGrab()"
+        grabPrefix="r"
+        (grab)="grabRelease($event.release, $event.index)"
+      />
+
+      <app-releases-modal #episodeReleasesModal
+        [title]="'media_detail.ep_releases_title' | translate"
+        [releases]="epReleases()"
+        [loading]="epReleasesLoading()"
+        [searched]="epReleasesSearched()"
+        [error]="epReleasesError()"
+        [grabBusy]="epGrabBusy()"
+        [grabState]="epGrabState()"
+        [canGrab]="canGrab()"
+        grabPrefix="ep"
+        (grab)="grabEpisodeRelease(m.id, selectedEpisodeId()!, $event.release, $event.index)"
+      />
+
+      <app-releases-modal #seasonReleasesModal
+        [title]="'media_detail.season_packs_title' | translate"
+        [releases]="seasonReleases()"
+        [loading]="seasonReleasesLoading()"
+        [searched]="true"
+        [error]="seasonReleasesError()"
+        [grabBusy]="seasonGrabBusy()"
+        [grabState]="seasonReleaseGrabState()"
+        [showCfScore]="false"
+        grabPrefix="s"
+        (grab)="onGrabSeasonReleaseFromModal(m.id, $event.release, $event.index)"
+      />
 
       <app-media-detail-profiles-modal
         [profilesOptionsLoading]="profilesOptionsLoading()"

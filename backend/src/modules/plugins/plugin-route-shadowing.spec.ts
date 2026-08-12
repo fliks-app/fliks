@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { Controller, Get, INestApplication, Param } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
@@ -8,6 +8,8 @@ import { PluginSourcesController } from './plugin-sources.controller';
 import { PluginImportController } from './plugin-import.controller';
 import { PluginProxyController } from './proxy/plugin-proxy.controller';
 import { PluginRouteGuard } from './proxy/plugin-route.guard';
+import { PluginLegacyAliasController } from './proxy/plugin-legacy-alias.controller';
+import { PluginLegacyAliasMatchGuard, PluginLegacyAliasPolicyGuard, RESOLVED_LEGACY_ALIAS_KEY } from './proxy/plugin-legacy-alias.guard';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginInstallService } from './plugin-install.service';
 import { PluginCatalogClientService } from './plugin-catalog-client.service';
@@ -15,6 +17,16 @@ import { PluginProcessService } from './plugin-process.service';
 import { PluginSource } from './entities/plugin-source.entity';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
+
+/** Stands in for a real core controller (e.g. `MediaController`) — same route shape, none of its
+ *  dependencies — to prove the ordering mechanism protects any core route, not just plugin ones. */
+@Controller('media')
+class FakeMediaController {
+  @Get(':id')
+  get(@Param('id') id: string) {
+    return { id };
+  }
+}
 
 /** Every guard is stubbed to permit, so a request's outcome depends only on which controller's
  *  handler Express actually dispatches to — this proves registration order, not policy logic. */
@@ -45,12 +57,17 @@ describe('plugins/* route shadowing', () => {
 
     const moduleRef = await Test.createTestingModule({
       controllers: [
+        // Mirrors AppModule: MediaModule (and every other feature module) is imported before
+        // PluginsModule, so its routes are always registered first.
+        FakeMediaController,
         PluginLogoController,
         PluginSourcesController,
         PluginImportController,
         PluginsController,
         // Last on purpose — mirrors plugins.module.ts's controllers[] order.
         PluginProxyController,
+        // Last of all — a legacy alias must never get a chance to shadow anything above.
+        PluginLegacyAliasController,
       ],
       providers: [
         { provide: PluginRegistryService, useValue: registry },
@@ -66,6 +83,16 @@ describe('plugins/* route shadowing', () => {
       .useValue({ canActivate: () => true })
       .overrideGuard(PluginRouteGuard)
       .useValue({ canActivate: () => true })
+      .overrideGuard(PluginLegacyAliasMatchGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(PluginLegacyAliasPolicyGuard)
+      .useValue({
+        canActivate: (ctx: import('@nestjs/common').ExecutionContext) => {
+          const req = ctx.switchToHttp().getRequest<Record<string, unknown>>();
+          req[RESOLVED_LEGACY_ALIAS_KEY] = { pluginId: 'fliks.testplugin', targetPath: '/x' };
+          return true;
+        },
+      })
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -125,6 +152,17 @@ describe('plugins/* route shadowing', () => {
 
   it('a genuinely undeclared plugins/* path still reaches the proxy controller', async () => {
     await request(app.getHttpServer()).get('/plugins/fliks.testplugin/some/route').expect(503);
+    expect(registry.processStateOf).toHaveBeenCalledWith('fliks.testplugin');
+  });
+
+  it('GET /media/:id reaches the core stand-in controller, never the legacy-alias fallback', async () => {
+    await request(app.getHttpServer()).get('/media/7').expect(200, { id: '7' });
+    expect(processService.callPlugin).not.toHaveBeenCalled();
+  });
+
+  it('a URL no earlier controller claims still reaches the legacy-alias fallback', async () => {
+    await request(app.getHttpServer()).get('/some/totally/unmatched/path').expect(503);
+    expect(processService.callPlugin).not.toHaveBeenCalled();
     expect(registry.processStateOf).toHaveBeenCalledWith('fliks.testplugin');
   });
 });
