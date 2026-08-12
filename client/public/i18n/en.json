@@ -2114,7 +2114,7 @@
       "status_active": "Active",
       "status_failed": "Failed",
       "uninstall": "Uninstall",
-      "confirm_uninstall": "Uninstall “{{name}}”? Its files are deleted immediately, and a plugin that owns a database schema loses that schema and every table in it.",
+      "confirm_uninstall": "Uninstall “{{name}}”? Any data associated with this plugin will be lost.",
       "uninstalled": "Plugin uninstalled.",
       "uninstall_error": "Unable to uninstall the plugin.",
       "inspect_error": "Unable to read this archive.",

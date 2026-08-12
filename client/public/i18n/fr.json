@@ -2114,7 +2114,7 @@
       "status_active": "Actif",
       "status_failed": "Échec",
       "uninstall": "Désinstaller",
-      "confirm_uninstall": "Désinstaller « {{name}} » ? Ses fichiers sont supprimés immédiatement, et un plugin qui possède un schéma de base de données perd ce schéma et toutes ses tables.",
+      "confirm_uninstall": "Désinstaller « {{name}} » ? Les données associées à ce plugin seront perdues.",
       "uninstalled": "Plugin désinstallé.",
       "uninstall_error": "Impossible de désinstaller le plugin.",
       "inspect_error": "Impossible de lire cette archive.",

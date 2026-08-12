@@ -2087,7 +2087,7 @@
       "status_active": "Active",
       "status_failed": "Failed",
       "uninstall": "Uninstall",
-      "confirm_uninstall": "„{{name}}“ deinstallieren? Die Dateien werden sofort gelöscht, und ein Plugin mit eigenem Datenbankschema verliert dieses Schema samt aller Tabellen.",
+      "confirm_uninstall": "„{{name}}“ deinstallieren? Alle zu diesem Plugin gehörenden Daten gehen verloren.",
       "uninstalled": "Plugin uninstalled.",
       "uninstall_error": "Unable to uninstall the plugin.",
       "inspect_error": "Unable to read this archive.",
