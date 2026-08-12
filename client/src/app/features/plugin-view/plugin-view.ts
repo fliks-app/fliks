@@ -14,6 +14,7 @@ import {
   ProviderImplementation,
   ProviderListAction,
   ProviderListLabels,
+  ProviderRowAction,
   ProviderTestResult,
 } from '../../shared/components/provider-list/provider-list.types';
 import { DataTableComponent } from '../../shared/components/data-table/data-table';
@@ -22,6 +23,14 @@ import type { FormConfigPage } from '../../core/plugin-ui/contribution.types';
 import { AnyConfigPage, ProvidersView, TableView, isFormView, isProvidersView, isTableView } from './view-kinds.types';
 
 type UnavailableReason = 'unknown_plugin' | 'unknown_view';
+
+/** A plugin's own `testConnection` wire shape — `messageKey` names an entry in its manifest
+ *  `i18n` dict, `detail` the dynamic half (an HTTP status, its own error text). */
+interface PluginTestConnectionResponse {
+  ok: boolean;
+  messageKey: string;
+  detail?: string;
+}
 
 /** Generic chrome for a real plugin's `providers` page — the plugin owns only field/implementation labelKeys. */
 const PLUGIN_PROVIDER_LABELS: ProviderListLabels = {
@@ -166,20 +175,39 @@ export class PluginViewComponent {
     }
   }
 
-  /** The plan's motivating row action — a proxied route, run against the unsaved draft.
-   *  Only the first `scope: 'row'` entry is wired; additional ones are dropped. */
+  /** Tests the unsaved draft — the plan's `ProvidersConfigPage.testConnection`, distinct from
+   *  `actions[]`: there is no row yet, so no `:id` to substitute. */
   providerTestConnection(view: ProvidersView): ((draft: ProviderDraft) => Promise<ProviderTestResult>) | null {
-    const action = view.actions?.find((a) => a.scope === 'row');
-    if (!action) return null;
+    const test = view.testConnection;
+    if (!test) return null;
     return async (draft: ProviderDraft) => {
       try {
-        return await firstValueFrom(
-          this.http.request<ProviderTestResult>(action.method, this.resourceUrl(action.route), { body: draft }),
+        const res = await firstValueFrom(
+          this.http.post<PluginTestConnectionResponse>(this.resourceUrl(test.route), draft),
         );
+        return { ok: res.ok, message: this.resolvePluginMessage(res.messageKey, res.detail) };
       } catch {
         return { ok: false, message: this.translate.instant('provider_list.test_network_error') };
       }
     };
+  }
+
+  /** `messageKey` names an entry in the plugin's own manifest `i18n` dict — merged into the
+   *  active language by `PluginI18nService` at boot, so it resolves the same way a `labelKey`
+   *  does. A miss (a manifest/plugin-code mismatch) falls back rather than printing the raw key. */
+  private resolvePluginMessage(messageKey: string, detail?: string): string {
+    const resolved = this.translate.instant(messageKey);
+    const base = resolved === messageKey ? this.translate.instant('provider_list.test_unknown_result') : resolved;
+    return detail ? `${base} — ${detail}` : base;
+  }
+
+  /** `actions[].scope: 'row'` — every entry renders its own button. `route` is only
+   *  host-prefixed here; substituting the row's `:id` is `ProviderListComponent`'s job,
+   *  since only it holds the row. */
+  providerRowActions(view: ProvidersView): ProviderRowAction[] {
+    return (view.actions ?? [])
+      .filter((a) => a.scope === 'row')
+      .map((a) => ({ labelKey: a.labelKey, method: a.method, route: this.resourceUrl(a.route), confirmKey: a.confirmKey }));
   }
 
   /** `actions[].scope: 'list'` — rendered once above the rows, run with no draft. */

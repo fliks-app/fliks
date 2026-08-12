@@ -27,8 +27,18 @@ import {
   ProviderInstance,
   ProviderListAction,
   ProviderListLabels,
+  ProviderRowAction,
   ProviderTestResult,
 } from './provider-list.types';
+
+/** Substitutes a row action route's `:id` with the row's own id — null (never a request) when
+ *  there was no `:id` to substitute, or any `:token` placeholder survives that, so a mistyped
+ *  or list-scope route can never fire with a literal placeholder still in its path. */
+export function resolveRowActionRoute(route: string, id: number | string): string | null {
+  if (!route.includes(':id')) return null;
+  const resolved = route.replace(':id', String(id));
+  return /:[A-Za-z_]/.test(resolved) ? null : resolved;
+}
 
 /**
  * The `providers` view kind from the plugin plan: a CRUD list of instances,
@@ -72,6 +82,8 @@ export class ProviderListComponent implements OnInit {
   readonly reorderable = input(false);
   /** Rendered once above the rows (the plan's `actions[].scope: 'list'`), distinct from per-row actions. */
   readonly listActions = input<readonly ProviderListAction[]>([]);
+  /** Rendered per row (the plan's `actions[].scope: 'row'`) — every entry gets its own button. */
+  readonly rowActions = input<readonly ProviderRowAction[]>([]);
   /** Matches subtitle-providers' current UX: renaming the draft to the driver's label while creating. */
   readonly autoFillNameFromImplementation = input(false);
   /** Runs against the unsaved draft (before create/update) — the plan's motivating row action. */
@@ -100,6 +112,7 @@ export class ProviderListComponent implements OnInit {
   readonly testResult = signal<ProviderTestResult | null>(null);
 
   readonly listActionBusy = signal<string | null>(null);
+  readonly rowActionBusy = signal<string | null>(null);
 
   /** Display order: priority ascending when `reorderable`, otherwise the server's own order. */
   readonly orderedRows = computed(() =>
@@ -293,6 +306,38 @@ export class ProviderListComponent implements OnInit {
       await this.reload();
     } finally {
       this.listActionBusy.set(null);
+    }
+  }
+
+  rowActionKey(row: ProviderInstance, action: ProviderRowAction): string {
+    return `${row.id}:${action.labelKey}`;
+  }
+
+  /** A `GET` shows its response (this generic renderer has no domain-specific view for it);
+   *  a mutation just reloads the rows. Never fires when the row's `:id` can't be substituted. */
+  async runRowAction(row: ProviderInstance, action: ProviderRowAction): Promise<void> {
+    const url = resolveRowActionRoute(action.route, row.id);
+    if (!url) return;
+    if (action.confirmKey) {
+      const ok = await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: this.translate.instant(action.confirmKey),
+        variant: 'danger',
+      });
+      if (!ok) return;
+    }
+    this.rowActionBusy.set(this.rowActionKey(row, action));
+    try {
+      const result = await firstValueFrom(this.http.request(action.method, url));
+      if (action.method === 'GET') {
+        await this.confirmation.alert({ title: this.translate.instant(action.labelKey), message: JSON.stringify(result) });
+      } else {
+        await this.reload();
+      }
+    } catch {
+      // handled by the global error interceptor
+    } finally {
+      this.rowActionBusy.set(null);
     }
   }
 }

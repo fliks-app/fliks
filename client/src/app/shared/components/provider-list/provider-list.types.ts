@@ -39,6 +39,16 @@ export interface ProviderListAction {
   run: () => Promise<void>;
 }
 
+/** A row-scope action (`ProvidersConfigPage.actions[].scope: 'row'`), host-prefixed but with
+ *  `:id` still in `route` — substituting it against the row, and never firing if a placeholder
+ *  survives that, is this component's job because only it holds the row. */
+export interface ProviderRowAction {
+  labelKey: string;
+  method: 'GET' | 'POST' | 'DELETE';
+  route: string;
+  confirmKey?: string;
+}
+
 export interface ProviderListLabels {
   newLabelKey: string;
   colNameKey: string;

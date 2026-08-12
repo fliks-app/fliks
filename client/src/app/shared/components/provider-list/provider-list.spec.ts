@@ -4,9 +4,9 @@ import { HttpClient } from '@angular/common/http';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
-import { ProviderListComponent } from './provider-list';
+import { ProviderListComponent, resolveRowActionRoute } from './provider-list';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
-import { ProviderImplementation, ProviderListAction, ProviderListLabels } from './provider-list.types';
+import { ProviderImplementation, ProviderListAction, ProviderListLabels, ProviderRowAction } from './provider-list.types';
 
 beforeAll(() => {
   if (!HTMLDialogElement.prototype.showModal) {
@@ -62,6 +62,7 @@ interface FakeHttp {
   post?: (...a: any[]) => unknown;
   put?: (...a: any[]) => unknown;
   delete?: (...a: any[]) => unknown;
+  request?: (...a: any[]) => unknown;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -71,6 +72,9 @@ async function createComponent(
     implementations: ProviderImplementation[];
     reorderable: boolean;
     listActions: ProviderListAction[];
+    rowActions: ProviderRowAction[];
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    confirmation: { confirm: (...a: any[]) => Promise<boolean>; alert: (...a: any[]) => Promise<void> };
   }> = {},
 ) {
   TestBed.configureTestingModule({
@@ -81,7 +85,10 @@ async function createComponent(
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
       { provide: HttpClient, useValue: http as unknown as HttpClient },
-      { provide: ConfirmationService, useValue: { confirm: () => Promise.resolve(true), alert: () => Promise.resolve() } },
+      {
+        provide: ConfirmationService,
+        useValue: opts.confirmation ?? { confirm: () => Promise.resolve(true), alert: () => Promise.resolve() },
+      },
     ],
   });
   const fixture = TestBed.createComponent(ProviderListComponent);
@@ -91,6 +98,7 @@ async function createComponent(
   fixture.componentRef.setInput('labels', LABELS);
   if (opts.reorderable) fixture.componentRef.setInput('reorderable', opts.reorderable);
   if (opts.listActions) fixture.componentRef.setInput('listActions', opts.listActions);
+  if (opts.rowActions) fixture.componentRef.setInput('rowActions', opts.rowActions);
   fixture.detectChanges();
   await fixture.whenStable();
   await new Promise((r) => setTimeout(r, 0));
@@ -201,5 +209,89 @@ describe('ProviderListComponent — characterisation', () => {
     await fixture.componentInstance.runListAction({ labelKey: 'x.sync', run });
     expect(run).toHaveBeenCalledTimes(1);
     expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders one button per `scope: "row"` action — stats and clear-cooldown both reachable, not just the first', async () => {
+    const get = vi.fn(() => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const rowActions: ProviderRowAction[] = [
+      { labelKey: 'x.stats', method: 'GET', route: '/api/x/:id/stats' },
+      { labelKey: 'x.clear_cooldown', method: 'DELETE', route: '/api/x/:id/cooldown' },
+    ];
+    const fixture = await createComponent({ get }, { rowActions });
+    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+    expect(buttons.some((b) => b.textContent?.includes('x.stats'))).toBe(true);
+    expect(buttons.some((b) => b.textContent?.includes('x.clear_cooldown'))).toBe(true);
+  });
+
+  it('substitutes the row id into a row action route before requesting it, and shows a GET result via alert', async () => {
+    const get = vi.fn(() => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const request = vi.fn(() => of({ some: 'stats' }));
+    const alert = vi.fn(() => Promise.resolve());
+    const fixture = await createComponent(
+      { get, request },
+      { confirmation: { confirm: () => Promise.resolve(true), alert } },
+    );
+    await fixture.componentInstance.runRowAction(fixture.componentInstance.rows()[0], {
+      labelKey: 'x.stats',
+      method: 'GET',
+      route: '/api/x/:id/stats',
+    });
+    expect(request).toHaveBeenCalledWith('GET', '/api/x/7/stats');
+    expect(alert).toHaveBeenCalledTimes(1);
+  });
+
+  it('reloads (rather than alerting) after a mutating row action succeeds', async () => {
+    const get = vi.fn(() => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const request = vi.fn(() => of({}));
+    const fixture = await createComponent({ get, request });
+    await fixture.componentInstance.runRowAction(fixture.componentInstance.rows()[0], {
+      labelKey: 'x.clear_cooldown',
+      method: 'DELETE',
+      route: '/api/x/:id/cooldown',
+    });
+    expect(request).toHaveBeenCalledWith('DELETE', '/api/x/7/cooldown');
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips the request entirely when the confirm prompt is declined', async () => {
+    const get = vi.fn(() => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const request = vi.fn(() => of({}));
+    const fixture = await createComponent(
+      { get, request },
+      { confirmation: { confirm: () => Promise.resolve(false), alert: () => Promise.resolve() } },
+    );
+    await fixture.componentInstance.runRowAction(fixture.componentInstance.rows()[0], {
+      labelKey: 'x.clear_cooldown',
+      method: 'DELETE',
+      route: '/api/x/:id/cooldown',
+      confirmKey: 'x.confirm_clear',
+    });
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('VERDICT: never requests a row action route whose placeholder survives id substitution', async () => {
+    const get = vi.fn(() => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const request = vi.fn(() => of({}));
+    const fixture = await createComponent({ get, request });
+    await fixture.componentInstance.runRowAction(fixture.componentInstance.rows()[0], {
+      labelKey: 'x.bad',
+      method: 'GET',
+      route: '/api/x/:id/:extra',
+    });
+    expect(request).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveRowActionRoute', () => {
+  it('substitutes the row id for :id', () => {
+    expect(resolveRowActionRoute('/api/plugins/x/indexers/:id/stats', 7)).toBe('/api/plugins/x/indexers/7/stats');
+  });
+
+  it('returns null — never a request — when a placeholder survives substitution', () => {
+    expect(resolveRowActionRoute('/api/plugins/x/indexers/:id/:extra', 7)).toBeNull();
+  });
+
+  it('returns null when the route never had :id to begin with', () => {
+    expect(resolveRowActionRoute('/api/plugins/x/indexers/cooldowns', 7)).toBeNull();
   });
 });

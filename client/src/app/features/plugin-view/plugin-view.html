@@ -28,6 +28,7 @@
           [defaultPriority]="view.defaultPriority ?? 0"
           [reorderable]="view.reorderable ?? false"
           [listActions]="providerListActions(view)"
+          [rowActions]="providerRowActions(view)"
           [testConnection]="providerTestConnection(view)"
         />
       } @else {

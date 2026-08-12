@@ -72,6 +72,19 @@
                 @if (rowExtraActions(); as tpl) {
                   <ng-container *ngTemplateOutlet="tpl; context: { $implicit: row }" />
                 }
+                @for (action of rowActions(); track action.labelKey) {
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs"
+                    (click)="runRowAction(row, action)"
+                    [disabled]="rowActionBusy() === rowActionKey(row, action)"
+                  >
+                    @if (rowActionBusy() === rowActionKey(row, action)) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                    }
+                    {{ action.labelKey | translate }}
+                  </button>
+                }
                 <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(row)">
                   {{ labels().editKey | translate }}
                 </button>

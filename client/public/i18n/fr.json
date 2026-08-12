@@ -2348,6 +2348,7 @@
     "unknown_implementation": "Type de fournisseur inconnu — impossible d'en modifier les paramètres ici.",
     "test_connection": "Tester la connexion",
     "test_network_error": "Impossible de contacter le serveur pour le test.",
+    "test_unknown_result": "Le test est terminé, mais le résultat n'a pas pu être traduit.",
     "move_up": "Monter",
     "move_down": "Descendre"
   },

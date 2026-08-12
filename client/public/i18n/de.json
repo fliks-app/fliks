@@ -2320,6 +2320,7 @@
     "unknown_implementation": "Unbekannter Anbietertyp — seine Einstellungen können hier nicht bearbeitet werden.",
     "test_connection": "Verbindung testen",
     "test_network_error": "Der Server konnte für den Test nicht erreicht werden.",
+    "test_unknown_result": "Der Test ist abgeschlossen, aber das Ergebnis konnte nicht übersetzt werden.",
     "move_up": "Nach oben",
     "move_down": "Nach unten"
   },
