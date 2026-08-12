@@ -18,6 +18,11 @@ import { Episode } from '../../media/entities/episode.entity';
 @Index(['user', 'media', 'completed'])
 @Index(['user', 'completed', 'lastPlayedAt'])
 @Index(['user', 'episode', 'completed'])
+// One row per user+movie and per user+episode. Two partial indexes rather than one
+// composite: `episodeId IS NULL` is what separates a movie row from an episode row,
+// and NULLs never collide in a plain unique index.
+@Index('idx_playback_user_movie', ['user', 'media'], { unique: true, where: '"episodeId" IS NULL' })
+@Index('idx_playback_user_episode', ['user', 'episode'], { unique: true, where: '"episodeId" IS NOT NULL' })
 export class PlaybackState extends BaseEntity {
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })

@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Injectable,
   Logger,
-  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
@@ -79,7 +78,7 @@ const HISTORY_MIN_WATCH_SECONDS = 5;
 const PG_FK_VIOLATION = '23503';
 
 @Injectable()
-export class PlaybackService implements OnModuleInit {
+export class PlaybackService {
   private readonly log = new Logger(PlaybackService.name);
 
   constructor(
@@ -117,51 +116,7 @@ export class PlaybackService implements OnModuleInit {
     }
   }
 
-  async onModuleInit() {
-    await this.ensureIndexes();
-  }
-
-  /**
-   * Creates the partial unique indexes that keep one row per user+movie and per
-   * user+episode. Idempotent, and the constraint the writes rely on.
-   */
-  private async ensureIndexes() {
-    try {
-      // Drop the old unique constraint if it still exists
-      await this.repo
-        .query(
-          `
-        ALTER TABLE playback_states
-        DROP CONSTRAINT IF EXISTS "UQ_playback_states_userId_mediaFileId"
-      `,
-        )
-        .catch(() => {});
-      // TypeORM may name it differently
-      await this.repo
-        .query(
-          `
-        DROP INDEX IF EXISTS "UQ_playback_states_userId_mediaFileId"
-      `,
-        )
-        .catch(() => {});
-
-      // Create partial unique indexes
-      await this.repo.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_playback_user_movie
-        ON playback_states ("userId", "mediaId")
-        WHERE "episodeId" IS NULL
-      `);
-      await this.repo.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_playback_user_episode
-        ON playback_states ("userId", "episodeId")
-        WHERE "episodeId" IS NOT NULL
-      `);
-    } catch (err) {
-      this.log.warn(`Failed to create playback unique indexes: ${err}`);
-    }
-  }
-
-  /** Find state by media/episode (the new primary lookup). */
+  /** Find state by media/episode. */
   private findState(
     userId: number,
     mediaId: number,
