@@ -60,7 +60,9 @@ export class SchemaFormComponent {
   }
 
   protected fieldBool(field: FieldDef): boolean {
-    return Boolean(this.value()[field.key]);
+    const v = this.value()[field.key];
+    // `Boolean('false')` is true, and a settings store hands back text.
+    return typeof v === 'string' ? v === 'true' : Boolean(v);
   }
 
   protected setValue(field: FieldDef, raw: string): void {

@@ -163,3 +163,16 @@ describe('SchemaFormComponent — required validation', () => {
     expect(fixture.nativeElement.querySelector('.text-error')).toBeNull();
   });
 });
+
+it('VERDICT: reads a stringified boolean, so a stored "false" renders off', async () => {
+  const fields: FieldDef[] = [
+    { key: 'a', type: 'toggle', labelKey: 'x.a' },
+    { key: 'b', type: 'toggle', labelKey: 'x.b' },
+  ];
+  const fixture = createComponent(fields, { a: 'false', b: 'true' });
+  // `ngModel` writes to the DOM asynchronously; a single detectChanges leaves both unchecked.
+  await fixture.whenStable();
+
+  const boxes = Array.from(fixture.nativeElement.querySelectorAll('input[type="checkbox"]')) as HTMLInputElement[];
+  expect(boxes.map((b) => b.checked)).toEqual([false, true]);
+});

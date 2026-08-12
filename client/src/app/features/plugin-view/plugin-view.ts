@@ -19,7 +19,7 @@ import {
 } from '../../shared/components/provider-list/provider-list.types';
 import { DataTableComponent } from '../../shared/components/data-table/data-table';
 import type { ListAction, RowAction, TableRow } from '../../shared/components/data-table/data-table.types';
-import type { FormConfigPage } from '../../core/plugin-ui/contribution.types';
+import type { FieldDef, FormConfigPage } from '../../core/plugin-ui/contribution.types';
 import { AnyConfigPage, ProvidersView, TableView, isFormView, isProvidersView, isTableView } from './view-kinds.types';
 
 type UnavailableReason = 'unknown_plugin' | 'unknown_view';
@@ -30,6 +30,24 @@ interface PluginTestConnectionResponse {
   ok: boolean;
   messageKey: string;
   detail?: string;
+}
+
+/**
+ * `app_settings` stores every value as text, and the form model is typed: a `toggle` handed the
+ * string "false" renders checked, and a `number` handed "60" is a string in a numeric field.
+ * An unset number stays empty rather than becoming 0 — that is what "no cleanup" means.
+ */
+function typedSetting(field: FieldDef, raw: string | null | undefined): string | number | boolean {
+  if (field.type === 'toggle') {
+    return raw === undefined || raw === null || raw === '' ? Boolean(field.default) : raw === 'true';
+  }
+  if (field.type === 'number') {
+    const source = raw !== undefined && raw !== null && raw !== '' ? raw : field.default;
+    if (source === undefined || source === null || source === '') return '';
+    const n = Number(source);
+    return Number.isFinite(n) ? n : '';
+  }
+  return raw ?? (field.default != null ? String(field.default) : '');
 }
 
 /** Generic chrome for a real plugin's `providers` page — the plugin owns only field/implementation labelKeys. */
@@ -119,7 +137,7 @@ export class PluginViewComponent {
   constructor() {
     effect(() => {
       const p = this.page();
-      if (p && isFormView(p)) void this.loadFormValue(p.fields.map((f) => [f.key, f.default] as const));
+      if (p && isFormView(p)) void this.loadFormValue(p.fields);
     });
     effect(() => {
       const p = this.page();
@@ -127,16 +145,13 @@ export class PluginViewComponent {
     });
   }
 
-  private async loadFormValue(defaults: readonly (readonly [string, unknown])[]): Promise<void> {
+  private async loadFormValue(fields: readonly FieldDef[]): Promise<void> {
     this.formLoading.set(true);
     try {
       const all = await this.settingsApi.getAll();
       const prefix = `plugin.${this.pluginId()}.`;
       const value: SchemaFormValue = {};
-      for (const [key, def] of defaults) {
-        const raw = all[prefix + key];
-        value[key] = (raw ?? def ?? '') as string | number | boolean;
-      }
+      for (const field of fields) value[field.key] = typedSetting(field, all[prefix + field.key]);
       this.formValue.set(value);
     } finally {
       this.formLoading.set(false);
