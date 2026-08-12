@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  computed,
   inject,
   input,
   output,
@@ -17,6 +16,7 @@ import {
 import { MovieRelease } from '../../media-detail-release-picker.service';
 import { formatMediaDetailBytes } from '../../media-detail.utils';
 import { formatReleaseRejection } from '../../media-detail-release.utils';
+import { ConfirmationService } from '../../../../core/services/confirmation.service';
 
 @Component({
   selector: 'app-releases-table',
@@ -26,9 +26,9 @@ import { formatReleaseRejection } from '../../media-detail-release.utils';
 })
 export class ReleasesTableComponent {
   private readonly translate = inject(TranslateService);
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly releases = input.required<MovieRelease[]>();
-  readonly filteredReleases = computed(() => this.releases().filter((r) => r.allowed));
   readonly grabBusy = input<string | null>(null);
   readonly grabState = input<Map<string, 'ok' | 'error'>>(new Map());
   readonly canGrab = input(false);
@@ -39,6 +39,20 @@ export class ReleasesTableComponent {
 
   grabKey(i: number): string {
     return `${this.grabPrefix()}-${i}`;
+  }
+
+  /** An allowed release grabs straight away; a rejected one confirms first,
+   *  naming the reason, since it bypasses the profile guard by hand. */
+  async onGrabClick(r: MovieRelease, i: number): Promise<void> {
+    if (!r.allowed) {
+      const ok = await this.confirmation.confirm({
+        title: this.translate.instant('media_detail.grab_rejected_confirm_title'),
+        message: this.translate.instant('media_detail.grab_rejected_confirm', { reason: this.rejectionText(r.rejections) }),
+        variant: 'warning',
+      });
+      if (!ok) return;
+    }
+    this.grab.emit({ release: r, index: i });
   }
 
   rejectionText(rejections: { code: string; params?: Record<string, number | string> }[]): string {

@@ -936,27 +936,23 @@ export class FliksHostImpl implements PluginHostApi {
     decision: SearchDecision | null,
     files: { quality?: string | null }[],
   ): AcquisitionTarget['want'] {
-    if (!decision) return null;
-    if (decision.mode === 'skip' || decision.mode === 'unprofiled') return null;
-    // Already excluded 'skip'/'unprofiled' above — only the ranked branch remains.
-    const active = decision as Extract<
-      SearchDecision,
-      { mode: 'missing' | 'upgrade' }
-    >;
+    // `unprofiled` has nothing to score against; `skip` does, and only by hand (buildForCandidates).
+    if (!decision || decision.mode === 'unprofiled') return null;
     const { allowed, allowedLangs } =
       this.profiles.resolveAllowedForMedia(media);
+    // Applies to `skip` too: a by-hand search must not present what the profile would refuse.
     const resolutionUpgradeOnly =
-      active.mode === 'upgrade' &&
+      decision.mode !== 'missing' &&
       !!media.qualityProfile?.resolutionUpgradeOnly;
     return {
-      decision: active.mode,
+      decision: decision.mode,
       allowedQualityIds: [...allowed],
       allowedLanguageIds: [...allowedLangs],
-      minRankExclusive: active.minRankExclusive,
+      minRankExclusive: decision.minRankExclusive,
       // `Infinity` (JSON-unsafe) means "no ceiling" — MAX_SAFE_INTEGER says the
       // same thing to a plugin without breaking JSON across the wire.
-      maxRankInclusive: Number.isFinite(active.maxRankInclusive)
-        ? active.maxRankInclusive
+      maxRankInclusive: Number.isFinite(decision.maxRankInclusive)
+        ? decision.maxRankInclusive
         : Number.MAX_SAFE_INTEGER,
       minResolution: resolutionUpgradeOnly
         ? maxResolutionFromQualityStrings(files)
@@ -965,9 +961,20 @@ export class FliksHostImpl implements PluginHostApi {
     };
   }
 
+  /** The unattended feed: a `skip`/`unprofiled` target must never reach a plugin's scheduler. */
+  private buildForCandidates(
+    media: Media,
+    decision: SearchDecision,
+    files: { quality?: string | null }[],
+  ): AcquisitionTarget | null {
+    if (decision.mode === 'skip' || decision.mode === 'unprofiled')
+      return null;
+    return this.buildAcquisitionTarget(media, decision, files);
+  }
+
   private buildFromMovieTarget(t: MovieTarget): AcquisitionTarget | null {
     const decision = this.autoGrab.classifyForSearch(t.media, t.files);
-    return this.buildAcquisitionTarget(t.media, decision, t.files);
+    return this.buildForCandidates(t.media, decision, t.files);
   }
 
   private buildFromEpisodeTarget(
@@ -975,7 +982,7 @@ export class FliksHostImpl implements PluginHostApi {
     episodeCount: number,
   ): AcquisitionTarget | null {
     const decision = this.autoGrab.classifyForSearch(t.media, t.files);
-    const target = this.buildAcquisitionTarget(t.media, decision, t.files);
+    const target = this.buildForCandidates(t.media, decision, t.files);
     if (!target) return null;
     target.season = {
       id: t.season.id,
@@ -995,7 +1002,7 @@ export class FliksHostImpl implements PluginHostApi {
     t: SeasonPackTarget,
   ): AcquisitionTarget | null {
     const decision = this.autoGrab.classifyForSearch(t.media, t.files);
-    const target = this.buildAcquisitionTarget(t.media, decision, t.files);
+    const target = this.buildForCandidates(t.media, decision, t.files);
     if (!target) return null;
     target.season = {
       id: t.season.id,

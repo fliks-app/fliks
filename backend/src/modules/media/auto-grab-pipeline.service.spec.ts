@@ -43,3 +43,43 @@ describe('AutoGrabPipelineService.shouldSearchMissing', () => {
     ).toBe(false);
   });
 });
+
+describe('AutoGrabPipelineService.classifyForSearch — "skip" still carries ranked bounds', () => {
+  const service = Object.create(
+    AutoGrabPipelineService.prototype,
+  ) as AutoGrabPipelineService;
+
+  const profile = {
+    cutoff: 16, // WEBDL-1080p rank 62
+    upgradeAllowed: true,
+    items: [],
+  };
+
+  const media = {
+    qualityProfile: profile,
+    languageProfile: { audioLanguages: [] },
+  } as unknown as Media;
+
+  it('carries the current/cutoff rank when the file already meets cutoff', () => {
+    expect(
+      service.classifyForSearch(media, [{ quality: 'WEBDL-1080p' }]),
+    ).toEqual({ mode: 'skip', minRankExclusive: 62, maxRankInclusive: 62 });
+  });
+
+  it('carries the current/cutoff rank when upgrades are disabled, even below cutoff', () => {
+    const noUpgrade = {
+      ...media,
+      qualityProfile: { ...profile, upgradeAllowed: false },
+    } as unknown as Media;
+    expect(
+      service.classifyForSearch(noUpgrade, [{ quality: 'HDTV-720p' }]),
+    ).toEqual({ mode: 'skip', minRankExclusive: 40, maxRankInclusive: 62 });
+  });
+
+  it('still returns "unprofiled" with no rank data when a profile is missing', () => {
+    const unprofiled = { qualityProfile: null, languageProfile: null } as unknown as Media;
+    expect(service.classifyForSearch(unprofiled, [])).toEqual({
+      mode: 'unprofiled',
+    });
+  });
+});

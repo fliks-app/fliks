@@ -73,6 +73,7 @@ import {
   seasonsVisibleWithDiskFilter,
 } from './media-detail.utils';
 import type { MediaFileRow } from './media-detail.utils';
+import { isUnprofiledReleaseError, releaseGrabBody } from './media-detail-release.utils';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
 import { SseService, type SseEvent } from '../../core/services/sse.service';
@@ -625,6 +626,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly releasesLoading = signal(false);
   readonly releasesSearched = signal(false);
   readonly releasesError = signal('');
+  readonly releasesEmptyMessage = signal('media_detail.releases_empty');
   readonly grabBusy = signal<string | null>(null);
   readonly grabToast = signal('');
   readonly grabState = signal<Map<string, 'ok' | 'error'>>(new Map());
@@ -714,6 +716,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly epReleasesLoading = signal(false);
   readonly epReleasesSearched = signal(false);
   readonly epReleasesError = signal('');
+  readonly epReleasesEmptyMessage = signal('media_detail.releases_empty');
   readonly epGrabBusy = signal<string | null>(null);
   readonly epGrabToast = signal('');
   readonly epGrabState = signal<Map<string, 'ok' | 'error'>>(new Map());
@@ -726,6 +729,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly seasonReleases = signal<MovieRelease[]>([]);
   readonly seasonReleasesLoading = signal(false);
   readonly seasonReleasesError = signal('');
+  readonly seasonReleasesEmptyMessage = signal('media_detail.releases_empty');
 
   readonly movieReleasesModal = viewChild<ReleasesModalComponent>('movieReleasesModal');
   readonly episodeReleasesModal = viewChild<ReleasesModalComponent>('episodeReleasesModal');
@@ -1086,6 +1090,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!m || m.type !== 'movie') return;
     this.releasesLoading.set(true);
     this.releasesError.set('');
+    this.releasesEmptyMessage.set('media_detail.releases_empty');
     this.grabToast.set('');
     this.releases.set([]);
     this.releasesSearched.set(false);
@@ -1095,13 +1100,17 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.releases.set(rows);
       this.releasesSearched.set(true);
     } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
       this.releases.set([]);
       this.releasesSearched.set(true);
-      this.releasesError.set(
-        httpErr.error?.message ??
-          this.translate.instant('media_detail.releases_error'),
-      );
+      if (isUnprofiledReleaseError(err)) {
+        this.releasesEmptyMessage.set('media_detail.no_quality_profile');
+      } else {
+        const httpErr = err as { error?: { message?: string } };
+        this.releasesError.set(
+          httpErr.error?.message ??
+            this.translate.instant('media_detail.releases_error'),
+        );
+      }
     } finally {
       this.releasesLoading.set(false);
     }
@@ -1523,6 +1532,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.epReleases.set([]);
     this.epReleasesSearched.set(false);
     this.epReleasesError.set('');
+    this.epReleasesEmptyMessage.set('media_detail.releases_empty');
     this.epGrabToast.set('');
     this.epReleasesLoading.set(true);
     this.episodeReleasesModal()?.showModal();
@@ -1531,11 +1541,15 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.epReleases.set(rows);
       this.epReleasesSearched.set(true);
     } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
       this.epReleasesSearched.set(true);
-      this.epReleasesError.set(
-        httpErr.error?.message ?? this.translate.instant('media_detail.releases_error'),
-      );
+      if (isUnprofiledReleaseError(err)) {
+        this.epReleasesEmptyMessage.set('media_detail.no_quality_profile');
+      } else {
+        const httpErr = err as { error?: { message?: string } };
+        this.epReleasesError.set(
+          httpErr.error?.message ?? this.translate.instant('media_detail.releases_error'),
+        );
+      }
     } finally {
       this.epReleasesLoading.set(false);
     }
@@ -1558,11 +1572,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const key = `ep-${index}`;
     this.epGrabBusy.set(key);
     try {
-      await this.releasePickerApi.grabEpisode(mediaId, episodeId, {
-        downloadUrl: r.downloadUrl,
-        sourceTitle: r.title,
-        sourceId: r.sourceId,
-      });
+      await this.releasePickerApi.grabEpisode(mediaId, episodeId, releaseGrabBody(r));
       this.epGrabState.update((s) => new Map(s).set(key, 'ok'));
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
@@ -1577,16 +1587,21 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.seasonForReleases.set(season);
     this.seasonReleases.set([]);
     this.seasonReleasesError.set('');
+    this.seasonReleasesEmptyMessage.set('media_detail.releases_empty');
     this.seasonReleasesLoading.set(true);
     this.seasonReleasesModal()?.showModal();
     try {
       const rows = await this.releasePickerApi.getSeasonReleases(mediaId, season.id);
       this.seasonReleases.set(rows);
     } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      this.seasonReleasesError.set(
-        httpErr.error?.message ?? this.translate.instant('media_detail.releases_error'),
-      );
+      if (isUnprofiledReleaseError(err)) {
+        this.seasonReleasesEmptyMessage.set('media_detail.no_quality_profile');
+      } else {
+        const httpErr = err as { error?: { message?: string } };
+        this.seasonReleasesError.set(
+          httpErr.error?.message ?? this.translate.instant('media_detail.releases_error'),
+        );
+      }
     } finally {
       this.seasonReleasesLoading.set(false);
     }
@@ -1614,11 +1629,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const key = `s-${index}`;
     this.seasonGrabBusy.set(key);
     try {
-      await this.releasePickerApi.grabSeason(mediaId, season.id, {
-        downloadUrl: r.downloadUrl,
-        sourceTitle: r.title,
-        sourceId: r.sourceId,
-      });
+      await this.releasePickerApi.grabSeason(mediaId, season.id, releaseGrabBody(r));
       this.seasonReleaseGrabState.update((s) => new Map(s).set(key, 'ok'));
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
@@ -1739,11 +1750,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const key = `r-${index}`;
     this.grabBusy.set(key);
     try {
-      await this.releasePickerApi.grabMovie(m.id, {
-        downloadUrl: r.downloadUrl,
-        sourceTitle: r.title,
-        sourceId: r.sourceId,
-      });
+      await this.releasePickerApi.grabMovie(m.id, releaseGrabBody(r));
       this.grabState.update((s) => new Map(s).set(key, 'ok'));
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {

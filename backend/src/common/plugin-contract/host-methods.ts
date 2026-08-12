@@ -9,7 +9,9 @@ export type MediaKind = 'movie' | 'series';
 
 /**
  * Everything a plugin needs to decide whether, and how, to acquire one
- * piece of media. `want: null` means unprofiled — the plugin must not act.
+ * piece of media. `want: null` means unprofiled: nothing can be scored without a profile.
+ * `decision: 'skip'` carries the same constraints for a title that already satisfies its
+ * profile — searchable and scorable by hand, never grabbed unattended.
  */
 export interface AcquisitionTarget {
   mediaId: number;
@@ -24,7 +26,7 @@ export interface AcquisitionTarget {
   tvdbId: number | null;
   libraryId: number;
   want: {
-    decision: 'missing' | 'upgrade';
+    decision: 'missing' | 'upgrade' | 'skip';
     allowedQualityIds: number[];
     allowedLanguageIds: number[];
     minRankExclusive: number;

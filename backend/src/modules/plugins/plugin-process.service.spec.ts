@@ -13,12 +13,13 @@ import type { PluginHostBindingService } from './host/plugin-host-binding.servic
 
 /**
  * Waits until the factory has built `count` supervisors, so a fake's state can be flipped
- * exactly where `startFor` is blocked. Predicate rather than a fixed number of ticks:
- * `startFor` re-extracts a real archive first, which takes an unknown number of them.
+ * exactly where `startFor` is blocked. Bounded by wall clock, not by a tick budget:
+ * `startFor` re-extracts a real archive, and microtask pumping does not wait for disk.
  */
 async function waitForSupervisors(instances: FakeSupervisor[], count = 1): Promise<void> {
-  for (let i = 0; i < 500 && instances.length < count; i++) {
-    await new Promise((resolve) => setImmediate(resolve));
+  const deadline = Date.now() + 10_000;
+  while (instances.length < count && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 2));
   }
   if (instances.length < count) throw new Error(`only ${instances.length} supervisor(s) built, wanted ${count}`);
 }
