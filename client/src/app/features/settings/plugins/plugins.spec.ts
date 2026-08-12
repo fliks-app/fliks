@@ -97,6 +97,22 @@ describe('PluginsSettingsComponent — enable/disable toggle', () => {
     expect(fixture.componentInstance.rows()[0]).toEqual(expect.objectContaining({ enabled: false, statusReason: 'server-said-so' }));
   });
 
+  it('VERDICT: uninstalling re-reads the contributions, so the sidebar loses the plugin at once', async () => {
+    const { fixture, http } = await createComponent();
+
+    void fixture.componentInstance.uninstall(ROW);
+    await settle(fixture);
+    http.expectOne({ url: '/api/plugins/fliks.acme', method: 'DELETE' }).flush({});
+    await settle(fixture);
+    http.expectOne({ url: '/api/plugins', method: 'GET' }).flush([]);
+    http.expectOne({ url: '/api/plugins/sources', method: 'GET' }).flush([]);
+    await settle(fixture);
+
+    // Without this the pages stay linked in the admin sidebar until a full page load.
+    http.expectOne({ url: '/api/plugins/ui', method: 'GET' }).flush([]);
+    await settle(fixture);
+  });
+
   it('VERDICT: a disabled plugin does not read as active in the status column', async () => {
     const { fixture } = await createComponent([{ ...ROW, enabled: false }]);
 
