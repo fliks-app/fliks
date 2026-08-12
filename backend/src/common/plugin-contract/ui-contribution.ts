@@ -149,6 +149,10 @@ export interface ProvidersConfigPage extends ConfigPageBase {
     emptyKey?: string;
     testKey?: string;
     deleteConfirmKey?: string;
+    /** The editor dialog's own titles — "New instance" reads like a placeholder on a page
+     *  about indexers. */
+    createTitleKey?: string;
+    editTitleKey?: string;
   };
 }
 

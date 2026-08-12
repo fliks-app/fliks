@@ -29,10 +29,15 @@ export type PluginWebhookEventName = (typeof PLUGIN_WEBHOOK_EVENT_NAMES)[number]
  * fields are optional at the type level — a manifest is untrusted JSON, so
  * `PluginRegistryService` validates every entry before believing it.
  */
+/** Makes a webhook target the operator's own: the rest of the value names a field the plugin
+ *  declares on a `form` page, read at delivery. A manifest cannot know an install's endpoint. */
+export const WEBHOOK_SETTING_PREFIX = 'setting:';
+
 export interface PluginWebhookDeclaration {
   event: PluginWebhookEventName;
-  /** An absolute https URL. Validated again at registration and at every
-   *  dispatch: a manifest is untrusted JSON and DNS can move under it. */
+  /** An absolute https URL, or `setting:<key>`. Either way it is validated at registration and
+   *  again at every dispatch: a manifest is untrusted JSON, a setting is operator input, and
+   *  DNS can move under both. */
   webhook: string;
 }
 

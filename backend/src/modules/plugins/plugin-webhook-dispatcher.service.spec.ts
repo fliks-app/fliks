@@ -1,6 +1,7 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import * as dns from 'dns';
 import { PluginWebhookDispatcherService } from './plugin-webhook-dispatcher.service';
+import type { SettingsService } from '../settings/settings.service';
 import { EventsService } from '../scheduler/events.service';
 import { PluginRegistryService } from './plugin-registry.service';
 
@@ -8,6 +9,11 @@ jest.mock('dns', () => ({ promises: { lookup: jest.fn() } }));
 
 function registryStub(map: Record<string, { pluginId: string; webhook: string }[]>): PluginRegistryService {
   return { listWebhooksForEvent: jest.fn((eventType: string) => map[eventType] ?? []) } as unknown as PluginRegistryService;
+}
+
+/** Only `get` is reached: a `setting:` webhook resolves through it, a literal URL never touches it. */
+function settingsStub(values: Record<string, string> = {}) {
+  return { get: async (key: string) => values[key] ?? null } as unknown as SettingsService;
 }
 
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -36,7 +42,7 @@ describe('PluginWebhookDispatcherService', () => {
       'media.imported': [{ pluginId: 'fliks.plugin-a', webhook: 'https://hooks.example/a' }],
     });
     const events = new EventsService();
-    new PluginWebhookDispatcherService(events, registry).onModuleInit();
+    new PluginWebhookDispatcherService(events, registry, settingsStub()).onModuleInit();
 
     events.emitDomain({ type: 'media.imported', mediaId: 1, tmdbId: null, mediaType: 'movie', libraryId: null, addedByUserId: null });
     await flush();
@@ -48,7 +54,7 @@ describe('PluginWebhookDispatcherService', () => {
   it('does not deliver to a plugin subscribed to a different event', async () => {
     const registry = registryStub({}); // nothing subscribed to media.removed
     const events = new EventsService();
-    new PluginWebhookDispatcherService(events, registry).onModuleInit();
+    new PluginWebhookDispatcherService(events, registry, settingsStub()).onModuleInit();
 
     events.emitDomain({ type: 'media.removed', mediaId: 1, tmdbId: null, mediaType: 'movie' });
     await flush();
@@ -64,7 +70,7 @@ describe('PluginWebhookDispatcherService', () => {
       ],
     });
     const events = new EventsService();
-    new PluginWebhookDispatcherService(events, registry).onModuleInit();
+    new PluginWebhookDispatcherService(events, registry, settingsStub()).onModuleInit();
 
     events.emitDomain({ type: 'settings.changed', key: 'library_path' });
     await flush();
@@ -78,7 +84,7 @@ describe('PluginWebhookDispatcherService', () => {
       'settings.changed': [{ pluginId: 'fliks.rebinder', webhook: 'https://rebinder.example/hook' }],
     });
     const events = new EventsService();
-    new PluginWebhookDispatcherService(events, registry).onModuleInit();
+    new PluginWebhookDispatcherService(events, registry, settingsStub()).onModuleInit();
 
     events.emitDomain({ type: 'settings.changed', key: 'x' });
     await flush();
@@ -99,7 +105,7 @@ describe('PluginWebhookDispatcherService', () => {
       return Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config }) as never;
     };
     const events = new EventsService();
-    new PluginWebhookDispatcherService(events, registry).onModuleInit();
+    new PluginWebhookDispatcherService(events, registry, settingsStub()).onModuleInit();
 
     // emitDomain is synchronous and void — the caller (and the emitter's own contract) is never affected.
     expect(() => events.emitDomain({ type: 'settings.changed', key: 'x' })).not.toThrow();
@@ -114,7 +120,7 @@ describe('PluginWebhookDispatcherService', () => {
       'media.removed': [{ pluginId: 'fliks.plugin-a', webhook: 'https://hooks.example/a' }],
     });
     const events = new EventsService();
-    new PluginWebhookDispatcherService(events, registry).onModuleInit();
+    new PluginWebhookDispatcherService(events, registry, settingsStub()).onModuleInit();
 
     events.emitDomain({ type: 'media.removed', mediaId: 42, tmdbId: 99, mediaType: 'movie' });
     await flush();
@@ -123,5 +129,46 @@ describe('PluginWebhookDispatcherService', () => {
       event: { type: 'media.removed', mediaId: 42, tmdbId: 99, mediaType: 'movie' },
       pluginId: 'fliks.plugin-a',
     });
+  });
+
+    it("VERDICT: resolves `setting:` to the operator's own URL and posts there", async () => {
+      const registry = registryStub({
+        'media.imported': [{ pluginId: 'fliks.acme', webhook: 'setting:endpoint_url' }],
+      });
+      const events = new EventsService();
+      const settings = settingsStub({ 'plugin.fliks.acme.endpoint_url': 'https://hooks.example/mine' });
+      new PluginWebhookDispatcherService(events, registry, settings).onModuleInit();
+
+      events.emitDomain({ type: 'media.imported', mediaId: 1, tmdbId: null, mediaType: 'movie', libraryId: null, addedByUserId: null });
+      await flush();
+
+      expect(requests.map((r) => r.url)).toEqual(['https://hooks.example/mine']);
+    });
+
+    it('posts nothing while the endpoint is unset — an operator who has not filled it in is not a failure', async () => {
+      const registry = registryStub({
+        'media.imported': [{ pluginId: 'fliks.acme', webhook: 'setting:endpoint_url' }],
+      });
+      const events = new EventsService();
+      new PluginWebhookDispatcherService(events, registry, settingsStub()).onModuleInit();
+
+      events.emitDomain({ type: 'media.imported', mediaId: 1, tmdbId: null, mediaType: 'movie', libraryId: null, addedByUserId: null });
+      await flush();
+
+      expect(requests).toHaveLength(0);
+    });
+
+    it('refuses a configured endpoint that is not https', async () => {
+      const registry = registryStub({
+        'media.imported': [{ pluginId: 'fliks.acme', webhook: 'setting:endpoint_url' }],
+      });
+      const events = new EventsService();
+      const settings = settingsStub({ 'plugin.fliks.acme.endpoint_url': 'http://hooks.example/mine' });
+      new PluginWebhookDispatcherService(events, registry, settings).onModuleInit();
+
+      events.emitDomain({ type: 'media.imported', mediaId: 1, tmdbId: null, mediaType: 'movie', libraryId: null, addedByUserId: null });
+      await flush();
+
+      expect(requests).toHaveLength(0);
   });
 });

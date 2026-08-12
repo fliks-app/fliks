@@ -5,6 +5,8 @@ import * as dns from 'dns';
 import { EventsService, type DomainEvent } from '../scheduler/events.service';
 import { PluginRegistryService } from './plugin-registry.service';
 import { isInternalAddress } from './internal-address';
+import { SettingsService } from '../settings/settings.service';
+import { WEBHOOK_SETTING_PREFIX } from '../../common/plugin-contract';
 
 const WEBHOOK_TIMEOUT_MS = 5_000;
 /** Core never reads the body — cap it so a hostile endpoint can't hold the connection streaming data. */
@@ -23,6 +25,7 @@ export class PluginWebhookDispatcherService implements OnModuleInit, OnModuleDes
   constructor(
     private readonly events: EventsService,
     private readonly registry: PluginRegistryService,
+    private readonly settings: SettingsService,
   ) {}
 
   onModuleInit(): void {
@@ -44,7 +47,22 @@ export class PluginWebhookDispatcherService implements OnModuleInit, OnModuleDes
    * does not eliminate the attack: the HTTP client below re-resolves the same name to
    * actually connect, leaving a window between this check and its connect().
    */
-  private async deliver(pluginId: string, webhook: string, event: DomainEvent): Promise<void> {
+  /** `setting:<key>` reads `plugin.<id>.<key>`; an operator who hasn't filled it in yet has no
+   *  endpoint, which is a normal state and not a failure to report. */
+  private async resolveTarget(pluginId: string, webhook: string): Promise<string | null> {
+    if (!webhook.startsWith(WEBHOOK_SETTING_PREFIX)) return webhook;
+    const key = `plugin.${pluginId}.${webhook.slice(WEBHOOK_SETTING_PREFIX.length)}`;
+    const value = (await this.settings.get(key))?.trim();
+    return value ? value : null;
+  }
+
+  private async deliver(pluginId: string, declared: string, event: DomainEvent): Promise<void> {
+    const webhook = await this.resolveTarget(pluginId, declared);
+    if (!webhook) return;
+    if (!webhook.startsWith('https://')) {
+      this.logger.warn(`plugin "${pluginId}" webhook skipped — configured endpoint is not https`);
+      return;
+    }
     let hostname: string;
     try {
       hostname = new URL(webhook).hostname;

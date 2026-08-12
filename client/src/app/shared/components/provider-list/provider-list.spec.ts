@@ -81,6 +81,7 @@ async function createComponent(
     rowActions: ProviderRowAction[];
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     confirmation: { confirm: (...a: any[]) => Promise<boolean>; alert: (...a: any[]) => Promise<void> };
+    labels: ProviderListLabels;
   }> = {},
 ) {
   TestBed.configureTestingModule({
@@ -101,7 +102,7 @@ async function createComponent(
   fixture.componentRef.setInput('titleKey', 'x.title');
   fixture.componentRef.setInput('listUrl', '/api/x');
   fixture.componentRef.setInput('implementations', opts.implementations ?? IMPLS);
-  fixture.componentRef.setInput('labels', LABELS);
+  fixture.componentRef.setInput('labels', opts.labels ?? LABELS);
   if (opts.reorderable) fixture.componentRef.setInput('reorderable', opts.reorderable);
   if (opts.listActions) fixture.componentRef.setInput('listActions', opts.listActions);
   if (opts.rowActions) fixture.componentRef.setInput('rowActions', opts.rowActions);
@@ -314,5 +315,31 @@ describe('resolveRowActionRoute', () => {
 
   it('returns null when the route never had :id to begin with', () => {
     expect(resolveRowActionRoute('/api/plugins/x/indexers/cooldowns', 7)).toBeNull();
+  });
+});
+
+describe('ProviderListComponent — editor dialog chrome', () => {
+  it('names the dialog from the page, and closes on the ✕ without saving', async () => {
+    const get = vi.fn(() => of([{ id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const post = vi.fn(() => of({}));
+    const fixture = await createComponent(
+      { get, post },
+      { labels: { ...LABELS, createTitleKey: 'x.new_indexer' } },
+    );
+
+    fixture.componentInstance.openCreate();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('x.new_indexer');
+
+    const close = Array.from(fixture.nativeElement.querySelectorAll('dialog button')).find(
+      (b) => (b as HTMLButtonElement).textContent?.trim() === '✕',
+    ) as HTMLButtonElement | undefined;
+    expect(close).toBeTruthy();
+    close!.click();
+    await fixture.whenStable();
+
+    expect(post).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.editingId()).toBeNull();
   });
 });
