@@ -344,18 +344,15 @@ function significantTokens(tokens: string[]): string[] {
  * international name still passes when both the localized and original forms
  * are in the candidate list (TMDB's `alternative_titles` / TVDB's `aliases`).
  *
- * A candidate the tokenizer strips to nothing — an alternative title written
- * in a non-Latin script, say — carries no comparable tokens, so it is skipped:
- * it can neither vouch for a match nor veto one. Acceptance falls back to
- * permissive only when *every* expected title is like that (a work with no
- * Latin-script name at all), leaving the caller's year guard as the safeguard.
- *
  * Used as a safety net for a source that ignores `q=` and returns any
  * S01 / category-2000 release regardless of what we asked for.
  */
 export function titleMatchesExpectation(
   releaseTitle: string,
   expected: string | string[],
+  /** What an expectation this tokenizer cannot read (a wholly non-Latin title) means: a rejection
+   *  net must not veto what it cannot read, identification must not claim every release. */
+  whenUnreadable: 'match' | 'no-match' = 'match',
 ): boolean {
   const candidates = (Array.isArray(expected) ? expected : [expected]).filter(
     (s): s is string => !!s && s.trim().length > 0,
@@ -371,7 +368,7 @@ export function titleMatchesExpectation(
       if (tokens.every((t) => releaseTokens.has(t))) return true;
     }
   }
-  return !comparable;
+  return !comparable && whenUnreadable === 'match';
 }
 
 export function computeRejections(opts: {

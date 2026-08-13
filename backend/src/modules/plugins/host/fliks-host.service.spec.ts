@@ -611,6 +611,21 @@ describe('FliksHostImpl', () => {
       expectJsonSafe(result);
     });
 
+    it('VERDICT: a library title this tokenizer cannot read claims no release', async () => {
+      const h = makeHarness();
+      // Wholly non-Latin: it tokenizes to nothing, so it can be told apart from no release at all.
+      const media = makeMedia({ title: '\u6211\u4e0d\u8fc7\u662f\u4e2a\u5927\u7f57\u91d1\u4ed9' });
+      h.mediaRepo.find.mockResolvedValue([media]);
+      h.mediaFileRepo.find.mockResolvedValue([]);
+      h.autoGrab.classifyForSearch.mockReturnValue({ mode: 'missing', minRankExclusive: 0, maxRankInclusive: 100 });
+
+      const result = await h.host['releases.match']({
+        titles: [{ id: 'a', title: 'Totally.Unrelated.Show.S01E01.1080p.WEB-DL', publishDate: new Date().toISOString() }],
+      });
+
+      expect(result[0]).toMatchObject({ decision: 'skip', skipReason: 'unmatched' });
+    });
+
     it('skips a release fresher than minAgeMinutes', async () => {
       const h = makeHarness();
       const media = makeMedia({ title: 'Fresh Movie' });

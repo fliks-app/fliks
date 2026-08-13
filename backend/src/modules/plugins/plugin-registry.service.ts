@@ -5,13 +5,15 @@ import * as net from 'net';
 import * as semver from 'semver';
 import { pathToRegexp, type Keys } from 'path-to-regexp';
 import { CronExpressionParser } from 'cron-parser';
-import { PluginPackage } from './entities/plugin-package.entity';
+import { PluginPackage, type PluginPackageStatus } from './entities/plugin-package.entity';
 import { PluginRegistration } from './entities/plugin-registration.entity';
-import { PluginProcessService } from './plugin-process.service';
+import { PluginProcessService, type PluginProcessStartResult } from './plugin-process.service';
 import { PluginJobsService } from './plugin-jobs.service';
 import { ScheduledJobRegistry } from '../scheduler/scheduled-job-registry.service';
 import { CURRENT_FLIKS_VERSION } from './plugin-version';
 import type { SupervisorState } from './supervisor/plugin-supervisor';
+import { sweepOrphans } from './supervisor/pid-file';
+import { getPluginsSocketDir } from '../../common/constants/paths';
 import { arePluginsDisabled, FLIKS_PLUGINS_DISABLED_ENV } from '../../common/constants/plugin-flags';
 import {
   PLUGIN_API_VERSION,
@@ -117,6 +119,8 @@ const INSTALLED_BUT_NOT_RUNNING: ReadonlySet<PluginRegistrationFailureReason> = 
   'tampered',
   'db-provision-failed',
   'spawn-failed',
+  'incompatible-fliks',
+  'incompatible-api',
 ]);
 
 export interface PluginRegistrationSuccess {
@@ -175,6 +179,9 @@ export class PluginRegistryService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
+    // Kills a plugin child leaked by a previous crash before anything new claims its socket path.
+    sweepOrphans(getPluginsSocketDir());
+
     // L0 — read before any plugin row is touched.
     if (arePluginsDisabled()) {
       this.logger.warn(`${FLIKS_PLUGINS_DISABLED_ENV}=1 — no plugin will be loaded`);
@@ -189,13 +196,29 @@ export class PluginRegistryService implements OnModuleInit {
       }
       try {
         const result = await this.register(pkg);
+        await this.persistBootOutcome(pkg, result.ok ? null : `${result.reason}: ${result.detail}`);
         if (!result.ok) {
           this.logger.warn(`plugin "${result.pluginId}" not loaded (${result.reason}): ${result.detail}`);
         }
       } catch (err) {
-        // One bad row must never take the app down at boot.
+        // One bad row must never take the app down at boot — including the status write itself.
+        await this.persistBootOutcome(pkg, (err as Error).message);
         this.logger.warn(`plugin "${pkg.pluginId}" failed to load: ${(err as Error).message}`);
       }
+    }
+  }
+
+  /** Mirrors this boot attempt's outcome onto `plugin_packages.status`: the admin list reads
+   *  that row, not the in-memory registry, so a refusal here must not leave a stale `active` badge. */
+  private async persistBootOutcome(pkg: PluginPackage, statusReason: string | null): Promise<void> {
+    const status: PluginPackageStatus = statusReason === null ? 'active' : 'failed';
+    if (pkg.status === status && pkg.statusReason === statusReason) return;
+    pkg.status = status;
+    pkg.statusReason = statusReason;
+    try {
+      await this.packageRepo.save(pkg);
+    } catch (err) {
+      this.logger.warn(`could not persist status for "${pkg.pluginId}": ${(err as Error).message}`);
     }
   }
 
@@ -305,9 +328,15 @@ export class PluginRegistryService implements OnModuleInit {
 
   /** Persists the admin's enabled/disabled choice and starts or stops the process to match it. */
 
-  /** Clears a tripped circuit breaker by swapping in a freshly-provisioned supervisor. */
-  async restartProcess(pluginId: string): Promise<void> {
-    await this.processService.restart(pluginId);
+  /** Restarts (or cold-starts, for a plugin that never reached `running`) this plugin's
+   *  process from `pkg` — the result reflects what actually happened, never a silent no-op. */
+  /** Goes through `register` so a restart cannot execute a package the signature or compatibility
+   *  checks refuse, and never revives one the admin disabled. */
+  async restartProcess(pkg: PluginPackage): Promise<PluginRegistrationResult> {
+    if (!pkg.enabled) {
+      return this.fail(pkg.pluginId, 'disabled', 'this plugin is disabled');
+    }
+    return this.register(pkg);
   }
 
   processStateOf(pluginId: string): SupervisorState | null {

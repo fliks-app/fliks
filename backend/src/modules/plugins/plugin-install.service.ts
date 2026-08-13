@@ -218,10 +218,17 @@ export class PluginInstallService {
 
   /** Persists the enabled flag on `plugin_registrations` and starts or stops the process to match. */
 
-  /** Clears a tripped circuit breaker and respawns. */
+  /** Clears a tripped circuit breaker and respawns, or cold-starts a plugin that never came
+   *  up — persists whichever it turns out to be, and answers 503 rather than a silent success. */
   async restart(pluginId: string): Promise<void> {
-    await this.findInstalledProcessPlugin(pluginId);
-    await this.registry.restartProcess(pluginId);
+    const pkg = await this.findInstalledProcessPlugin(pluginId);
+    const result = await this.registry.restartProcess(pkg);
+    pkg.status = result.ok ? 'active' : 'failed';
+    pkg.statusReason = result.ok ? null : `${result.reason}: ${result.detail}`;
+    await this.packageRepo.save(pkg);
+    if (!result.ok) {
+      throw new PluginInstallException(HttpStatus.SERVICE_UNAVAILABLE, 'PLUGIN_UNAVAILABLE', `${result.reason}: ${result.detail}`);
+    }
   }
 
   /** 404s an id nothing is installed under, for a caller that acts on a plugin without needing

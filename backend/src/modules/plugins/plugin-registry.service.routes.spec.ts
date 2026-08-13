@@ -159,6 +159,34 @@ describe('PluginRegistryService — route registration validation', () => {
     expect(service.resolveRoute(first.id, 'GET', '/releases/42')).not.toBeNull();
   });
 
+  it('keeps a previously-declared route resolvable across an incompatible-fliks re-registration — 503, not 403', async () => {
+    const service = makeService();
+    const routes: PluginRoute[] = [{ method: 'GET', path: '/queue', policy: 'read:Media' }];
+    const good = processManifest(routes);
+    await service.register(makePackage(good));
+    expect(service.resolveRoute(good.id, 'GET', '/queue')).not.toBeNull();
+
+    const incompatible = { ...processManifest(routes), fliks: '>=99.0.0' };
+    const result = await service.register(makePackage(incompatible));
+
+    expect(result).toMatchObject({ ok: false, reason: 'incompatible-fliks' });
+    expect(service.resolveRoute(good.id, 'GET', '/queue')).not.toBeNull();
+  });
+
+  it('keeps a previously-declared route resolvable across an incompatible-api re-registration — 503, not 403', async () => {
+    const service = makeService();
+    const routes: PluginRoute[] = [{ method: 'GET', path: '/queue', policy: 'read:Media' }];
+    const good = processManifest(routes);
+    await service.register(makePackage(good));
+    expect(service.resolveRoute(good.id, 'GET', '/queue')).not.toBeNull();
+
+    const incompatible = { ...processManifest(routes), pluginApi: good.pluginApi + 1 };
+    const result = await service.register(makePackage(incompatible));
+
+    expect(result).toMatchObject({ ok: false, reason: 'incompatible-api' });
+    expect(service.resolveRoute(good.id, 'GET', '/queue')).not.toBeNull();
+  });
+
   it('leaves no route table behind for a plugin that fails an unrelated, earlier registration check', async () => {
     const manifest = processManifest([{ method: 'GET', path: '/queue', policy: 'read:Media' }]);
     manifest.fliks = '>=99.0.0'; // incompatible on purpose — fails before route validation even runs

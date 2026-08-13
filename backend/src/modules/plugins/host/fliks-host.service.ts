@@ -324,12 +324,14 @@ export class FliksHostImpl implements PluginHostApi {
       ...extra,
     });
 
+    // Identification: a title this tokenizer cannot read must claim nothing, or the first such
+    // row in the library answers for every release that matches nothing else.
     const media = library.find((m) =>
-      titleMatchesExpectation(entry.title, [
-        m.title,
-        m.originalTitle ?? '',
-        ...(m.alternativeTitles ?? []),
-      ]),
+      titleMatchesExpectation(
+        entry.title,
+        [m.title, m.originalTitle ?? '', ...(m.alternativeTitles ?? [])],
+        'no-match',
+      ),
     );
     if (!media) return skip('unmatched');
     if (!media.monitored) return skip('not-monitored', media.id);

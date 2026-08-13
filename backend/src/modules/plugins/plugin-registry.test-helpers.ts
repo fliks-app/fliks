@@ -44,7 +44,7 @@ export function fakeProcessService(startForResult: PluginProcessStartResult = { 
     stopFor: jest.fn(async () => undefined),
     stateOf: jest.fn(() => null),
     statusMessageOf: jest.fn(() => ''),
-    restart: jest.fn(async () => undefined),
+    restart: jest.fn(async () => startForResult),
     stopAll: jest.fn(async () => undefined),
     emitToAll: jest.fn(),
   };

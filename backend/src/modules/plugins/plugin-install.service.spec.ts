@@ -600,4 +600,46 @@ describe('PluginInstallService', () => {
       expect(ui.list().map((r) => r.pluginId)).not.toContain(manifest.id);
     });
   });
+
+  describe('restart', () => {
+    async function installProcess(overrides: Partial<ProcessPluginManifest> = {}): Promise<ProcessPluginManifest> {
+      const { buffer, manifest } = signedProcessArchive(overrides);
+      const { stagingId, sha256 } = await service.inspectUpload(buffer);
+      await service.confirmImport({ stagingId: stagingId!, sha256: sha256! });
+      return manifest;
+    }
+
+    it('persists an active status and resolves without throwing when the process comes back up', async () => {
+      const manifest = await installProcess({ id: 'fliks.restarthappy' });
+
+      await expect(service.restart(manifest.id)).resolves.toBeUndefined();
+
+      expect(processService.startFor).toHaveBeenCalledWith(expect.objectContaining({ pluginId: manifest.id }));
+      expect(repo.rows.get(manifest.id)).toEqual(expect.objectContaining({ status: 'active', statusReason: null }));
+    });
+
+    it('VERDICT: refuses to revive a plugin the admin disabled', async () => {
+      const manifest = await installProcess({ id: 'fliks.restartdisabled' });
+      await service.disable(manifest.id);
+      processService.startFor.mockClear();
+
+      await expectInstallError(service.restart(manifest.id), 503, 'PLUGIN_UNAVAILABLE');
+      expect(processService.startFor).not.toHaveBeenCalled();
+    });
+
+    it('answers 503 and marks the row failed, instead of a silent success, when the restart cannot bring the plugin up', async () => {
+      const manifest = await installProcess({ id: 'fliks.restartfails' });
+      processService.startFor.mockResolvedValueOnce({ ok: false, reason: 'db-provision-failed', detail: 'role missing' });
+
+      await expectInstallError(service.restart(manifest.id), 503, 'PLUGIN_UNAVAILABLE');
+
+      expect(repo.rows.get(manifest.id)).toEqual(
+        expect.objectContaining({ status: 'failed', statusReason: expect.stringContaining('db-provision-failed') }),
+      );
+    });
+
+    it('404s restarting a plugin that is not installed', async () => {
+      await expectInstallError(service.restart('fliks.neverinstalled'), 404, 'PLUGIN_NOT_FOUND');
+    });
+  });
 });

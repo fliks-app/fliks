@@ -53,13 +53,17 @@ export class PluginProcessService implements OnApplicationShutdown {
     this.hostBinding = hostBinding ?? null;
   }
 
-  /** Materialise -> provision-check -> rotate -> config -> spawn; each stage's failure
+  /** Stop -> materialise -> provision-check -> rotate -> config -> spawn; each stage's failure
    *  carries its own reason. A slow handshake is reported but left running to retry on its own. */
   async startFor(pkg: PluginPackage): Promise<PluginProcessStartResult> {
     const manifest = pkg.manifest;
     if (manifest.kind !== 'process') {
       throw new Error(`startFor() called for non-process plugin "${pkg.pluginId}"`);
     }
+
+    // An upgrade re-registers the same id while the previous version's supervisor (and its
+    // accepted host socket, health loop, pg connections) is still up — never leave it orphaned.
+    await this.stopFor(pkg.pluginId);
 
     const materialised = await this.materialise(pkg, manifest);
     if (!materialised.ok) return { ok: false, reason: 'tampered', detail: materialised.detail };
@@ -127,14 +131,6 @@ export class PluginProcessService implements OnApplicationShutdown {
     const supervisor = this.running.get(pluginId)?.supervisor;
     if (!supervisor) return Promise.reject(new Error(`plugin "${pluginId}" is not running`));
     return supervisor.callPlugin<T>(method, params, timeoutMs);
-  }
-
-  /** Swaps in a fresh supervisor rather than reusing the tripped one, so the rotated password stays "once per spawn". */
-  async restart(pluginId: string): Promise<void> {
-    const entry = this.running.get(pluginId);
-    if (!entry) return;
-    await this.stopFor(pluginId);
-    await this.startFor(entry.pkg);
   }
 
   async stopAll(): Promise<void> {

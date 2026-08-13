@@ -1,3 +1,5 @@
+jest.mock('./supervisor/pid-file', () => ({ sweepOrphans: jest.fn() }));
+
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { buildZip, ZipEntrySpec } from './archive/zip-builder';
@@ -7,8 +9,12 @@ import { svgLogo, pngLogo } from './archive/test-fixtures';
 import { OFFICIAL_KEYS } from './archive/trust-store';
 import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry } from './plugin-registry.test-helpers';
 import { FLIKS_PLUGINS_DISABLED_ENV } from '../../common/constants/plugin-flags';
+import { sweepOrphans } from './supervisor/pid-file';
+import { getPluginsSocketDir } from '../../common/constants/paths';
 import type { PluginManifest, ProcessPluginManifest } from '../../common/plugin-contract';
 import type { PluginProcessStartResult } from './plugin-process.service';
+
+const sweepOrphansMock = jest.mocked(sweepOrphans);
 
 /** A `fliks` range every test can rely on matching this repo's own `package.json` version. */
 const COMPATIBLE_RANGE = '>=1.0.0 <3.0.0';
@@ -37,13 +43,14 @@ function makePackage(manifest: PluginManifest, overrides: Partial<PluginPackage>
     verifiedByKeyId: null,
     manifest,
     status: 'active',
+    statusReason: null,
     enabled: true,
     ...overrides,
   } as PluginPackage;
 }
 
 function repoMock(rows: PluginPackage[] = []) {
-  return { find: jest.fn().mockResolvedValue(rows) };
+  return { find: jest.fn().mockResolvedValue(rows), save: jest.fn(async (row: PluginPackage) => row) };
 }
 
 /** Every registry test but boot-load exercises `register()` directly, so the process side is always faked here. */
@@ -65,9 +72,23 @@ function makeService(rows: PluginPackage[] = [], processResult: PluginProcessSta
 describe('PluginRegistryService — boot load', () => {
   const originalEnv = process.env[FLIKS_PLUGINS_DISABLED_ENV];
 
+  beforeEach(() => {
+    sweepOrphansMock.mockClear();
+  });
+
   afterEach(() => {
     if (originalEnv === undefined) delete process.env[FLIKS_PLUGINS_DISABLED_ENV];
     else process.env[FLIKS_PLUGINS_DISABLED_ENV] = originalEnv;
+  });
+
+  it('sweeps orphaned pid files from the sockets dir before anything else, even when plugins are disabled', async () => {
+    process.env[FLIKS_PLUGINS_DISABLED_ENV] = '1';
+    const { service, repo } = makeService([makePackage(minimalDataManifest({ fliks: COMPATIBLE_RANGE }))]);
+
+    await service.onModuleInit();
+
+    expect(sweepOrphansMock).toHaveBeenCalledWith(getPluginsSocketDir());
+    expect(repo.find).not.toHaveBeenCalled();
   });
 
   it('L0: FLIKS_PLUGINS_DISABLED=1 registers nothing and never queries the repository', async () => {
@@ -78,6 +99,39 @@ describe('PluginRegistryService — boot load', () => {
 
     expect(repo.find).not.toHaveBeenCalled();
     expect(service.list()).toEqual([]);
+  });
+
+  it('a boot-time registration failure marks the row failed, so the admin list stops reporting it active', async () => {
+    const bad = minimalDataManifest({ id: 'fliks.bootstatusfail', fliks: '>=99.0.0' });
+    const pkg = makePackage(bad);
+    const { service, repo } = makeService([pkg]);
+
+    await service.onModuleInit();
+
+    expect(repo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ pluginId: bad.id, status: 'failed', statusReason: expect.stringContaining('incompatible-fliks') }),
+    );
+  });
+
+  it('a boot-time registration success clears a status left failed by a previous boot', async () => {
+    const good = minimalDataManifest({ id: 'fliks.bootstatusclear', fliks: COMPATIBLE_RANGE });
+    const pkg = makePackage(good, { status: 'failed', statusReason: 'incompatible-fliks: stale' });
+    const { service, repo } = makeService([pkg]);
+
+    await service.onModuleInit();
+
+    expect(repo.save).toHaveBeenCalledWith(expect.objectContaining({ pluginId: good.id, status: 'active', statusReason: null }));
+  });
+
+  it('an unexpected exception during registration still marks the row failed', async () => {
+    const good = minimalDataManifest({ id: 'fliks.bootstatusthrow', fliks: COMPATIBLE_RANGE });
+    const pkg = makePackage(good);
+    const { service, repo } = makeService([pkg]);
+    jest.spyOn(service, 'register').mockRejectedValueOnce(new Error('boom'));
+
+    await service.onModuleInit();
+
+    expect(repo.save).toHaveBeenCalledWith(expect.objectContaining({ pluginId: good.id, status: 'failed', statusReason: 'boom' }));
   });
 
   it('boot continues past a failing package and still registers a later valid one', async () => {
