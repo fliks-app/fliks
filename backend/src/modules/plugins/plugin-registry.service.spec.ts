@@ -332,3 +332,26 @@ describe('PluginRegistryService.register()', () => {
     });
   });
 });
+
+describe('PluginRegistryService — i18n namespace claims', () => {
+  function withI18n(id: string, key: string) {
+    return makePackage(minimalDataManifest({ id, fliks: COMPATIBLE_RANGE, i18n: { en: { [key]: 'Label' } } }));
+  }
+
+  it('VERDICT: refuses a second plugin whose i18n root another loaded plugin already claims', async () => {
+    const { service } = makeService();
+
+    expect((await service.register(withI18n('acme.one', 'shared.greeting'))).ok).toBe(true);
+    const result = await service.register(withI18n('acme.two', 'shared.other'));
+
+    expect(result).toMatchObject({ ok: false, reason: 'i18n-namespace-conflict' });
+    if (!result.ok) expect(result.detail).toContain('acme.one');
+  });
+
+  it('accepts two plugins under different roots', async () => {
+    const { service } = makeService();
+
+    expect((await service.register(withI18n('acme.one', 'one.greeting'))).ok).toBe(true);
+    expect((await service.register(withI18n('acme.two', 'two.greeting'))).ok).toBe(true);
+  });
+});

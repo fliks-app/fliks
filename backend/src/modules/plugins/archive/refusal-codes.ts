@@ -29,22 +29,18 @@ export type PluginRefusalCode =
   | 'PLUGIN_FILE_SET_MISMATCH'
   | 'PLUGIN_TIER_VIOLATION'
   | 'PLUGIN_BAD_MANIFEST'
+  // One per nested section `parseManifest` does not look inside: the code names the section, so an
+  // author learns what to fix without core surfacing `detail`.
+  | 'PLUGIN_BAD_UI'
+  | 'PLUGIN_BAD_UI_CONTRIBUTIONS'
+  | 'PLUGIN_BAD_UI_CONFIG_PAGES'
+  | 'PLUGIN_BAD_UI_RELEASE_PICKER'
+  | 'PLUGIN_BAD_EVENTS'
   /** `id`/`version` are SQL identifiers and filesystem path segments downstream —
    *  validated once here so every later consumer can trust them unchecked. */
   | 'PLUGIN_BAD_ID'
   | 'PLUGIN_BAD_VERSION'
   | 'PLUGIN_BAD_LOGO'
-  /** `data`-tier manifest field bans (see `PluginManifestBase` deltas) — each
-   *  names the process-only field it caught, so a refusal is attributable. */
-  | 'PLUGIN_DATA_HAS_FILES'
-  | 'PLUGIN_DATA_HAS_ROUTES'
-  | 'PLUGIN_DATA_HAS_DATABASE'
-  | 'PLUGIN_DATA_HAS_JOBS'
-  | 'PLUGIN_DATA_HAS_INGEST_ROOTS'
-  | 'PLUGIN_DATA_HAS_MEMORY_MB'
-  | 'PLUGIN_DATA_HAS_RUNTIME'
-  | 'PLUGIN_DATA_HAS_PERMISSIONS'
-  | 'PLUGIN_DATA_HAS_CHECKLIST'
   /** yauzl refused the archive and no more specific guard claimed it. Never
    *  report a specific cause we did not actually establish. */
   | 'PLUGIN_MALFORMED_ARCHIVE';

@@ -30,6 +30,7 @@ import {
   type ConfigPage,
 } from '../../common/plugin-contract';
 import { OFFICIAL_KEYS, resolveTrust, readArchiveEntries, type TrustOutcome } from './archive';
+import { i18nRoot } from './archive/manifest-parser';
 import { isInternalAddress } from './internal-address';
 import type { DomainEvent } from '../scheduler/events.service';
 import { PluginRouteTable, type ResolvedPluginRoute } from './proxy/plugin-route-table';
@@ -97,13 +98,13 @@ export type PluginRegistrationFailureReason =
   | 'invalid-route-object-guard'
   | 'duplicate-route'
   | 'invalid-release-picker'
-  | 'release-picker-conflict'
   | 'invalid-permission'
   | 'invalid-job-name'
   | 'invalid-job-cron'
   | 'invalid-job-triggerable'
   | 'invalid-job-label'
   | 'job-name-conflict'
+  | 'i18n-namespace-conflict'
   | 'disabled'
   | 'tampered'
   | 'db-provision-failed'
@@ -161,8 +162,8 @@ export class PluginRegistryService implements OnModuleInit {
   private readonly webhookDeclarations = new Map<string, { event: PluginWebhookEventName; webhook: string }[]>();
   /** Keyed by plugin id; compiled once per `register()` from already-validated routes. */
   private readonly routeTables = new Map<string, PluginRouteTable>();
-  /** Keyed by plugin id; at most one entry may exist across the whole map — `register()`
-   *  refuses a second plugin's `releasePicker`. Lifecycle mirrors `routeTables`. */
+  /** Keyed by plugin id; one entry per plugin that declares a releasePicker — `releasePickerFor`
+   *  exposes only the entry whose id wins `releasePickerWinner`. Lifecycle mirrors `routeTables`. */
   private readonly releasePickers = new Map<string, ReleasePickerRoutes>();
   /** Keyed by plugin id; namespaced (`plugin:<id>:<name>`) CASL subjects this plugin declared.
    *  Lifecycle mirrors `routeTables`, not `webhookDeclarations`: kept across `unregister()`, dropped on `forget()`. */
@@ -257,11 +258,14 @@ export class PluginRegistryService implements OnModuleInit {
     if (!webhookCheck.ok) return this.fail(pkg.pluginId, webhookCheck.reason, webhookCheck.detail);
 
     const releasePickerCheck = this.validateReleasePicker(
-      pkg.pluginId,
       manifest.ui?.releasePicker,
       manifest.kind === 'process' ? manifest.routes : [],
     );
     if (!releasePickerCheck.ok) return this.fail(pkg.pluginId, releasePickerCheck.reason, releasePickerCheck.detail);
+
+    const i18nCheck = this.validateI18nNamespace(pkg.pluginId, manifest);
+    if (!i18nCheck.ok) return this.fail(pkg.pluginId, i18nCheck.reason, i18nCheck.detail);
+
 
     let declaredSubjects: ReadonlySet<string> = EMPTY_SUBJECT_SET;
     if (manifest.kind === 'process') {
@@ -269,7 +273,7 @@ export class PluginRegistryService implements OnModuleInit {
       if (!permissionsCheck.ok) return this.fail(pkg.pluginId, permissionsCheck.reason, permissionsCheck.detail);
       declaredSubjects = permissionsCheck.subjects;
 
-      const jobsCheck = this.validateJobs(manifest.jobs ?? []);
+      const jobsCheck = this.validateJobs(pkg.pluginId, manifest.jobs ?? []);
       if (!jobsCheck.ok) return this.fail(pkg.pluginId, jobsCheck.reason, jobsCheck.detail);
 
       const routesCheck = this.validateRoutes(manifest.routes, declaredSubjects);
@@ -306,6 +310,12 @@ export class PluginRegistryService implements OnModuleInit {
     this.replaceRouteTable(pkg.pluginId, manifest.kind === 'process' ? manifest.routes : []);
     this.replaceDeclaredPermissions(pkg.pluginId, manifest.kind === 'process' ? declaredSubjects : EMPTY_SUBJECT_SET);
     this.replaceReleasePicker(pkg.pluginId, manifest.ui?.releasePicker);
+    if (manifest.ui?.releasePicker) {
+      const winner = this.releasePickerWinner();
+      if (winner !== pkg.pluginId) {
+        this.logger.warn(`plugin "${pkg.pluginId}" declared a releasePicker but "${winner}" holds it (lower plugin id wins)`);
+      }
+    }
     return { ok: true, pluginId: pkg.pluginId };
   }
 
@@ -385,10 +395,21 @@ export class PluginRegistryService implements OnModuleInit {
     return this.routeTables.get(pluginId)?.resolve(method, path) ?? null;
   }
 
-  /** The installed plugin's `releasePicker` declaration, or `undefined` — at most one
-   *  plugin ever holds this, enforced at `register()`. */
+  /** This plugin's `releasePicker`, or `undefined` if another declaring plugin's id
+   *  wins `releasePickerWinner` — every other route and permission is unaffected. */
   releasePickerFor(pluginId: string): ReleasePickerRoutes | undefined {
+    if (pluginId !== this.releasePickerWinner()) return undefined;
     return this.releasePickers.get(pluginId);
+  }
+
+  /** Deterministic winner among every plugin currently declaring a releasePicker: the
+   *  lexicographically smallest id — stable across restarts, unlike unordered boot-load order. */
+  private releasePickerWinner(): string | undefined {
+    let winner: string | undefined;
+    for (const id of this.releasePickers.keys()) {
+      if (winner === undefined || id < winner) winner = id;
+    }
+    return winner;
   }
 
   /** The namespaced CASL subjects this plugin declared — empty if unregistered, `data`, or none declared.
@@ -517,19 +538,16 @@ export class PluginRegistryService implements OnModuleInit {
     return { ok: true, subjects };
   }
 
-  /**
-   * `manifest.jobs` is untrusted JSON. Each violation class gets its own
-   * reason. `CORE_JOB_NAME_SET` mirrors `SchedulerService.SCHEDULERS`'s names — a plugin job can
-   * never shadow one, since the merged admin listing and manual trigger would become ambiguous.
-   * Same reasoning for a name a `ScheduledJobRegistry` publisher (an installed plugin)
-   * already holds — two publishers must never silently shadow one another either.
-   */
+  /** `manifest.jobs` is untrusted JSON; each violation gets its own reason. Checked against
+   *  `CORE_JOB_NAME_SET`, `ScheduledJobRegistry` (no current publisher), and other plugins' own jobs. */
   private validateJobs(
+    pluginId: string,
     raw: unknown[],
   ): { ok: true; jobs: PluginJob[] } | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
-    const publishedNames = new Set(
-      this.scheduledJobs.list().map((j) => j.name),
-    );
+    const takenNames = new Set(this.scheduledJobs.list().map((j) => j.name));
+    for (const { pluginId: otherId, job } of this.pluginJobs.listDeclared()) {
+      if (otherId !== pluginId) takenNames.add(job.name);
+    }
     const jobs: PluginJob[] = [];
     const seen = new Set<string>();
     for (const entry of raw) {
@@ -550,11 +568,11 @@ export class PluginRegistryService implements OnModuleInit {
       if (CORE_JOB_NAME_SET.has(name)) {
         return { ok: false, reason: 'job-name-conflict', detail: `job "${name}" collides with a core scheduler job` };
       }
-      if (publishedNames.has(name)) {
+      if (takenNames.has(name)) {
         return {
           ok: false,
           reason: 'job-name-conflict',
-          detail: `job "${name}" collides with a job already published to the scheduler registry`,
+          detail: `job "${name}" collides with a job already registered by another plugin or bundle`,
         };
       }
       try {
@@ -619,15 +637,30 @@ export class PluginRegistryService implements OnModuleInit {
     return { ok: true };
   }
 
-  /**
-   * `manifest.ui.releasePicker` is untrusted JSON. Each of its six routes must name a route this
-   * same manifest declares in `routes[]`, with the matching method — `search` a `GET`, `grab` a
-   * `POST` — since a route not declared there carries no policy and would be an unguarded hole.
-   * Exactly one installed plugin may declare a `releasePicker`: core resolves a single one, and
-   * silently picking a winner would leave the other author unaware theirs never fires.
-   */
-  private validateReleasePicker(
+  /** `manifest.ui.releasePicker` is untrusted JSON; each of its six routes must name a route this
+   *  manifest declares in `routes[]`, with the matching method (`search` GET, `grab` POST). */
+  /** Plugin dictionaries share one flat key tree, so two plugins under the same root would
+   *  overwrite each other's strings by load order. First loaded keeps it; the second is told. */
+  private validateI18nNamespace(
     pluginId: string,
+    manifest: PluginManifest,
+  ): { ok: true } | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
+    const root = i18nRoot(manifest);
+    if (!root) return { ok: true };
+    for (const [otherId, other] of this.registry) {
+      if (otherId === pluginId) continue;
+      if (i18nRoot(other.manifest) === root) {
+        return {
+          ok: false,
+          reason: 'i18n-namespace-conflict',
+          detail: `i18n keys under "${root}." are already claimed by plugin "${otherId}"`,
+        };
+      }
+    }
+    return { ok: true };
+  }
+
+  private validateReleasePicker(
     releasePicker: ReleasePickerRoutes | undefined,
     routes: PluginRoute[],
   ): { ok: true } | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
@@ -644,12 +677,6 @@ export class PluginRegistryService implements OnModuleInit {
             detail: `releasePicker.${context}.${key} "${path}" is not declared as a ${method} route in routes[]`,
           };
         }
-      }
-    }
-
-    for (const otherId of this.releasePickers.keys()) {
-      if (otherId !== pluginId) {
-        return { ok: false, reason: 'release-picker-conflict', detail: 'releasePicker is already claimed by another installed plugin' };
       }
     }
     return { ok: true };

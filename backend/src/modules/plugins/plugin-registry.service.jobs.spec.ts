@@ -103,7 +103,7 @@ describe('PluginRegistryService — jobs registration', () => {
     });
   });
 
-  it('refuses a job name already published by a ScheduledJobRegistry publisher (e.g. an installed plugin)', async () => {
+  it('refuses a job name already published by a ScheduledJobRegistry publisher (a non-plugin bundle)', async () => {
     const manifest = processManifest('fliks.jobtest', [job({ name: 'SearchMissing' })]);
     const { service } = makeService(undefined, ['SearchMissing']);
     const result = await service.register(makePackage(manifest));
@@ -113,6 +113,44 @@ describe('PluginRegistryService — jobs registration', () => {
       reason: 'job-name-conflict',
       detail: expect.stringContaining('SearchMissing'),
     });
+  });
+
+  it('refuses a second plugin declaring a job name the first plugin already registered', async () => {
+    const { service } = makeService();
+    const first = processManifest('fliks.a', [job({ name: 'sync' })]);
+    await service.register(makePackage(first));
+
+    const second = processManifest('fliks.b', [job({ name: 'sync' })]);
+    const result = await service.register(makePackage(second));
+
+    expect(result).toEqual({
+      ok: false,
+      pluginId: 'fliks.b',
+      reason: 'job-name-conflict',
+      detail: expect.stringContaining('sync'),
+    });
+  });
+
+  it('lets the same plugin re-register the job name it already owns', async () => {
+    const { service } = makeService();
+    const manifest = processManifest('fliks.a', [job({ name: 'sync' })]);
+    await service.register(makePackage(manifest));
+
+    const result = await service.register(makePackage(manifest));
+
+    expect(result).toEqual({ ok: true, pluginId: 'fliks.a' });
+  });
+
+  it('frees the job name for another plugin once the first is forgotten (uninstalled)', async () => {
+    const { service } = makeService();
+    const first = processManifest('fliks.a', [job({ name: 'sync' })]);
+    await service.register(makePackage(first));
+    await service.forget('fliks.a');
+
+    const second = processManifest('fliks.b', [job({ name: 'sync' })]);
+    const result = await service.register(makePackage(second));
+
+    expect(result).toEqual({ ok: true, pluginId: 'fliks.b' });
   });
 
   it('refuses a cron expression the scheduler cannot parse', async () => {

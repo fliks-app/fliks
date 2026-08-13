@@ -1,0 +1,457 @@
+{
+  "fliks.download@0.1.5": {
+    "id": "fliks.download",
+    "version": "0.1.5",
+    "kind": "process",
+    "ui": {
+      "contributions": [
+        {
+          "id": "fliks-download.settings.general",
+          "slot": "settings.page",
+          "weight": 100,
+          "labelKey": "download.config.general.title",
+          "icon": "download",
+          "action": {
+            "kind": "route",
+            "path": "/admin/settings/plugins/fliks.download/general"
+          }
+        },
+        {
+          "id": "fliks-download.settings.indexers",
+          "slot": "settings.page",
+          "weight": 110,
+          "labelKey": "download.config.indexers.title",
+          "icon": "search",
+          "action": {
+            "kind": "route",
+            "path": "/admin/settings/plugins/fliks.download/indexers"
+          }
+        },
+        {
+          "id": "fliks-download.settings.download-clients",
+          "slot": "settings.page",
+          "weight": 120,
+          "labelKey": "download.config.download_clients.title",
+          "icon": "server",
+          "action": {
+            "kind": "route",
+            "path": "/admin/settings/plugins/fliks.download/download-clients"
+          }
+        },
+        {
+          "id": "fliks-download.nav.queue",
+          "slot": "nav.acquisition",
+          "weight": 100,
+          "labelKey": "download.config.queue.title",
+          "icon": "download",
+          "action": {
+            "kind": "route",
+            "path": "/plugins/fliks.download/queue"
+          }
+        },
+        {
+          "id": "fliks-download.settings.history",
+          "slot": "settings.page",
+          "weight": 130,
+          "labelKey": "download.config.history.title",
+          "icon": "history",
+          "action": {
+            "kind": "route",
+            "path": "/admin/settings/plugins/fliks.download/history"
+          }
+        },
+        {
+          "id": "fliks-download.media.grab-best",
+          "slot": "media.actions",
+          "weight": 500,
+          "labelKey": "download.media.grab_best",
+          "icon": "download",
+          "when": [
+            "hasPermission:media.grab",
+            "!mediaType:series",
+            "hasQualityProfile"
+          ],
+          "action": {
+            "kind": "action",
+            "actionId": "media.grab-best"
+          }
+        },
+        {
+          "id": "fliks-download.media.search-releases",
+          "slot": "media.actions",
+          "weight": 600,
+          "labelKey": "download.media.search_releases",
+          "icon": "search",
+          "when": [
+            "hasPermission:media.grab",
+            "!mediaType:series",
+            "hasQualityProfile"
+          ],
+          "action": {
+            "kind": "action",
+            "actionId": "media.search-releases"
+          }
+        },
+        {
+          "id": "fliks-download.season.search-releases",
+          "slot": "media.season.actions",
+          "weight": 500,
+          "labelKey": "download.season.search_releases",
+          "icon": "package",
+          "when": [
+            "hasPermission:media.grab",
+            "hasQualityProfile"
+          ],
+          "action": {
+            "kind": "action",
+            "actionId": "season.search-releases"
+          }
+        },
+        {
+          "id": "fliks-download.season.grab-best",
+          "slot": "media.season.actions",
+          "weight": 600,
+          "labelKey": "download.season.grab_best",
+          "icon": "download",
+          "when": [
+            "hasPermission:media.grab",
+            "hasQualityProfile"
+          ],
+          "action": {
+            "kind": "action",
+            "actionId": "season.grab-best"
+          }
+        }
+      ],
+      "configPages": [
+        {
+          "id": "general",
+          "labelKey": "download.config.general.title",
+          "icon": "download",
+          "fields": [
+            {
+              "key": "requestsAutoGrabOnApproval",
+              "type": "toggle",
+              "labelKey": "download.config.general.auto_grab_on_approval",
+              "hint": "download.config.general.auto_grab_on_approval_hint",
+              "default": true
+            },
+            {
+              "key": "stall_samples",
+              "type": "number",
+              "labelKey": "download.config.stall.samples",
+              "hint": "download.config.stall.samples_hint"
+            },
+            {
+              "key": "stall_interval_minutes",
+              "type": "number",
+              "labelKey": "download.config.stall.interval_minutes",
+              "hint": "download.config.stall.interval_minutes_hint",
+              "default": 60
+            },
+            {
+              "key": "stall_auto_restart",
+              "type": "toggle",
+              "labelKey": "download.config.stall.auto_restart",
+              "hint": "download.config.stall.auto_restart_hint",
+              "default": true
+            },
+            {
+              "key": "stall_include_manual_grabs",
+              "type": "toggle",
+              "labelKey": "download.config.stall.include_manual_grabs",
+              "hint": "download.config.stall.include_manual_grabs_hint",
+              "default": false
+            }
+          ]
+        },
+        {
+          "id": "indexers",
+          "kind": "providers",
+          "labelKey": "download.config.indexers.title",
+          "icon": "search",
+          "list": "/indexers",
+          "implementations": "/indexers/implementations",
+          "testConnection": {
+            "route": "/indexers/test-connection"
+          },
+          "showPriority": true,
+          "defaultPriority": 25,
+          "labels": {
+            "newKey": "download.config.indexers.labels.new",
+            "emptyKey": "download.config.indexers.labels.empty",
+            "testKey": "download.config.indexers.labels.test",
+            "deleteConfirmKey": "download.config.indexers.labels.delete_confirm",
+            "createTitleKey": "download.config.indexers.labels.create_title",
+            "editTitleKey": "download.config.indexers.labels.edit_title"
+          },
+          "actions": [
+            {
+              "id": "stats",
+              "labelKey": "download.config.indexers.actions.stats",
+              "method": "GET",
+              "route": "/indexers/:id/stats",
+              "scope": "row",
+              "result": {
+                "kind": "table",
+                "emptyKey": "download.config.indexers.stats.empty",
+                "columns": [
+                  {
+                    "key": "date",
+                    "labelKey": "download.config.indexers.stats.date"
+                  },
+                  {
+                    "key": "queries",
+                    "labelKey": "download.config.indexers.stats.queries"
+                  },
+                  {
+                    "key": "avgResponseMs",
+                    "labelKey": "download.config.indexers.stats.avg_response"
+                  },
+                  {
+                    "key": "totalResults",
+                    "labelKey": "download.config.indexers.stats.results"
+                  },
+                  {
+                    "key": "errors",
+                    "labelKey": "download.config.indexers.stats.errors"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "clear-cooldown",
+              "labelKey": "download.config.indexers.actions.clear_cooldown",
+              "method": "DELETE",
+              "route": "/indexers/:id/cooldown",
+              "scope": "row"
+            },
+            {
+              "id": "clear-all-cooldowns",
+              "labelKey": "download.config.indexers.actions.clear_all_cooldowns",
+              "method": "DELETE",
+              "route": "/indexers/cooldowns",
+              "scope": "list"
+            }
+          ]
+        },
+        {
+          "id": "download-clients",
+          "kind": "providers",
+          "labelKey": "download.config.download_clients.title",
+          "icon": "server",
+          "list": "/download-clients",
+          "implementations": "/download-clients/implementations",
+          "testConnection": {
+            "route": "/download-clients/test-connection"
+          },
+          "showPriority": true,
+          "defaultPriority": 1,
+          "labels": {
+            "newKey": "download.config.download_clients.labels.new",
+            "emptyKey": "download.config.download_clients.labels.empty",
+            "testKey": "download.config.download_clients.labels.test",
+            "deleteConfirmKey": "download.config.download_clients.labels.delete_confirm",
+            "createTitleKey": "download.config.download_clients.labels.create_title",
+            "editTitleKey": "download.config.download_clients.labels.edit_title"
+          }
+        },
+        {
+          "id": "queue",
+          "kind": "table",
+          "labelKey": "download.config.queue.title",
+          "icon": "download",
+          "list": "/queue",
+          "paged": true,
+          "pageSize": 25,
+          "columns": [
+            {
+              "key": "title",
+              "labelKey": "download.config.queue.columns.title"
+            },
+            {
+              "key": "state",
+              "labelKey": "download.config.queue.columns.state"
+            },
+            {
+              "key": "progress",
+              "labelKey": "download.config.queue.columns.progress",
+              "format": "percent"
+            },
+            {
+              "key": "bytesPerSecond",
+              "labelKey": "download.config.queue.columns.speed",
+              "format": "bytes"
+            }
+          ],
+          "rowActions": [
+            {
+              "kind": "action",
+              "labelKey": "download.config.queue.actions.open_media",
+              "actionId": "table.open-media"
+            }
+          ]
+        },
+        {
+          "id": "history",
+          "kind": "table",
+          "labelKey": "download.config.history.title",
+          "icon": "history",
+          "list": "/history",
+          "paged": true,
+          "pageSize": 25,
+          "filters": [
+            {
+              "kind": "search",
+              "key": "q",
+              "placeholderKey": "download.config.history.filters.search_placeholder"
+            },
+            {
+              "kind": "select",
+              "key": "status",
+              "labelKey": "download.config.history.filters.status_label",
+              "options": [
+                {
+                  "value": "",
+                  "labelKey": "download.config.history.filters.status_all"
+                },
+                {
+                  "value": "grabbed",
+                  "labelKey": "download.config.history.filters.status_grabbed"
+                },
+                {
+                  "value": "importing",
+                  "labelKey": "download.config.history.filters.status_importing"
+                },
+                {
+                  "value": "completed",
+                  "labelKey": "download.config.history.filters.status_completed"
+                },
+                {
+                  "value": "failed",
+                  "labelKey": "download.config.history.filters.status_failed"
+                },
+                {
+                  "value": "warning",
+                  "labelKey": "download.config.history.filters.status_warning"
+                }
+              ]
+            }
+          ],
+          "columns": [
+            {
+              "key": "date",
+              "labelKey": "download.config.history.columns.date",
+              "format": "date"
+            },
+            {
+              "key": "title",
+              "labelKey": "download.config.history.columns.title"
+            },
+            {
+              "key": "quality",
+              "labelKey": "download.config.history.columns.quality"
+            },
+            {
+              "key": "source",
+              "labelKey": "download.config.history.columns.source"
+            },
+            {
+              "key": "grabSource",
+              "labelKey": "download.config.history.columns.grab_source"
+            },
+            {
+              "key": "status",
+              "labelKey": "download.config.history.columns.status",
+              "labelKeys": {
+                "grabbed": "download.config.history.filters.status_grabbed",
+                "importing": "download.config.history.filters.status_importing",
+                "completed": "download.config.history.filters.status_completed",
+                "failed": "download.config.history.filters.status_failed",
+                "warning": "download.config.history.filters.status_warning"
+              }
+            },
+            {
+              "key": "statusMessage",
+              "labelKey": "download.config.history.columns.detail"
+            }
+          ],
+          "rowActions": [
+            {
+              "kind": "action",
+              "labelKey": "download.config.queue.actions.open_media",
+              "actionId": "table.open-media"
+            }
+          ]
+        }
+      ],
+      "releasePicker": {
+        "movie": {
+          "search": "/:id/releases",
+          "grab": "/:id/grab"
+        },
+        "season": {
+          "search": "/:id/seasons/:seasonId/releases",
+          "grab": "/:id/seasons/:seasonId/grab"
+        },
+        "episode": {
+          "search": "/:id/episodes/:episodeId/releases",
+          "grab": "/:id/episodes/:episodeId/grab"
+        }
+      }
+    }
+  },
+  "fliks.webhooks@1.1.2": {
+    "id": "fliks.webhooks",
+    "version": "1.1.2",
+    "kind": "data",
+    "ui": {
+      "contributions": [
+        {
+          "id": "fliks-webhooks.settings.general",
+          "slot": "settings.page",
+          "weight": 100,
+          "labelKey": "webhooks.config.title",
+          "icon": "webhook",
+          "action": {
+            "kind": "route",
+            "path": "/admin/settings/plugins/fliks.webhooks/general"
+          }
+        }
+      ],
+      "configPages": [
+        {
+          "id": "general",
+          "labelKey": "webhooks.config.title",
+          "icon": "webhook",
+          "fields": [
+            {
+              "key": "endpoint_url",
+              "type": "url",
+              "labelKey": "webhooks.config.endpoint_url",
+              "hint": "webhooks.config.endpoint_url_hint",
+              "required": true
+            }
+          ],
+          "actions": [
+            {
+              "id": "test-delivery",
+              "labelKey": "webhooks.config.test",
+              "actionId": "events.test-delivery"
+            }
+          ]
+        }
+      ]
+    },
+    "events": [
+      {
+        "event": "media.imported",
+        "webhook": "setting:endpoint_url"
+      },
+      {
+        "event": "request.approved",
+        "webhook": "setting:endpoint_url"
+      }
+    ]
+  }
+}
