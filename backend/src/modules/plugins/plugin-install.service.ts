@@ -28,7 +28,7 @@ import {
 import { validateManifestShape } from './manifest-shape.validator';
 import type { TrustOutcome } from './archive/trust-store';
 import type { CatalogVersionEntry, FilteredCatalog, FilteredCatalogEntry } from './catalog/catalog';
-import { PLUGIN_API_VERSION, type PluginKind, type PluginManifest } from '../../common/plugin-contract';
+import { SUPPORTED_PLUGIN_API_VERSIONS, fliksRangeVersion, type PluginKind, type PluginManifest } from '../../common/plugin-contract';
 import type { ConfirmImportDto } from './dto/confirm-import.dto';
 import type { SupervisorState } from './supervisor/plugin-supervisor';
 
@@ -90,7 +90,10 @@ function fsyncPath(path: string): void {
 
 /** Same two checks `PluginRegistryService.register()` runs at L4 — reported here as information only, never a staging gate. */
 function isCompatible(manifest: PluginManifest): boolean {
-  return manifest.pluginApi === PLUGIN_API_VERSION && semver.satisfies(CURRENT_FLIKS_VERSION, manifest.fliks);
+  return (
+    SUPPORTED_PLUGIN_API_VERSIONS.includes(manifest.pluginApi) &&
+    semver.satisfies(fliksRangeVersion(CURRENT_FLIKS_VERSION), manifest.fliks)
+  );
 }
 
 /** `zipUrl`/`sha256` are install-pipeline-owned fields on a catalog version entry — see `catalog/catalog.ts`'s doc comment. */

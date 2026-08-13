@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import axios from 'axios';
 import { PluginSource } from './entities/plugin-source.entity';
 import { OFFICIAL_KEYS, resolveTrust, MAX_SIGNATURE_BYTES } from './archive';
-import { PLUGIN_API_VERSION } from '../../common/plugin-contract';
+import { SUPPORTED_PLUGIN_API_VERSIONS } from '../../common/plugin-contract';
 import { CURRENT_FLIKS_VERSION } from './plugin-registry.service';
 import { parseCatalogDocument, filterCatalog, type FilteredCatalog } from './catalog/catalog';
 
@@ -88,7 +88,7 @@ export class PluginCatalogClientService {
       return this.fail(source, 'malformed-catalog', 'catalog signature verified but the document did not parse');
     }
 
-    const filtered: FilteredCatalog = filterCatalog(document, PLUGIN_API_VERSION, CURRENT_FLIKS_VERSION);
+    const filtered: FilteredCatalog = filterCatalog(document, SUPPORTED_PLUGIN_API_VERSIONS, CURRENT_FLIKS_VERSION);
     source.cachedCatalog = filtered as unknown as Record<string, unknown>;
     source.lastRefreshedAt = new Date();
     source.lastRefreshError = null;

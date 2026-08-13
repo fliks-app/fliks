@@ -29,6 +29,12 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
 
 - `runtime` — the only legal value is the literal `"node"`.
 - `memoryMb` — passed through as the child's own `--max-old-space-size`. Core does not clamp it.
+- `pluginApi` — the contract revision this plugin is written against. Core accepts every value in
+  its own `SUPPORTED_PLUGIN_API_VERSIONS`, so a bump does not orphan your plugin the day it lands:
+  the older value keeps working until a later release drops it, and that window is when to republish.
+- `fliks` — the core versions this plugin runs on, as a semver range with a mandatory upper bound
+  (`>=3.0.0 <4.0.0`). A prerelease core matches as its own release would, so a `3.0.0-rc` runs the
+  plugins that declare `>=3.0.0` — which is how a major upgrade gets rehearsed before it ships.
 - `files` — sha256 of every archive entry but the manifest and its own signature.
 - `database` — `{ schema: boolean, coreRefs: string[] }`: whether it wants its own schema, and
   which core tables it needs `REFERENCES` on.
