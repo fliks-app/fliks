@@ -7,6 +7,9 @@ import { getPluginsSocketDir } from '../../../common/constants/paths';
 import type { OnApplicationShutdown } from '@nestjs/common';
 import { LogBufferService } from '../../scheduler/log-buffer.service';
 import { CURRENT_FLIKS_VERSION } from '../plugin-version';
+import type { PluginApi } from '../../../common/plugin-contract';
+
+type HelloReply = Awaited<ReturnType<PluginApi['hello']>>;
 import { PLUGIN_API_VERSION, type Note, type PluginHostApi } from '../../../common/plugin-contract';
 import { RpcChannel } from './rpc-channel';
 import { NoteRingBuffer } from './note-ring-buffer';
@@ -468,14 +471,15 @@ export class PluginSupervisor implements OnApplicationShutdown {
 
   private async attemptHandshake(channel: RpcChannel): Promise<void> {
     try {
-      const res = await channel.call<{ manifest: unknown; token?: string }>(
+      const res = await channel.call<HelloReply>(
         'hello',
         { pluginApi: PLUGIN_API_VERSION, coreVersion: CURRENT_FLIKS_VERSION, config: this.opts.config },
         this.opts.handshakeDeadlineMs,
       );
-      // The token never travels core->plugin; only a process holding the real
-      // FLIKS_PLUGIN_TOKEN (via its own env) can echo the right value back.
-      if (res.token !== this.token) {
+      // The token never travels core->plugin; only a process holding the real FLIKS_PLUGIN_TOKEN
+      // can echo it back. Annotated, so loosening the contract's `token` stops compiling here.
+      const echoed: string = res.token;
+      if (echoed !== this.token) {
         this.handleCrash('hello token mismatch');
         return;
       }

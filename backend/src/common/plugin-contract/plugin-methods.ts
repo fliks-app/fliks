@@ -15,7 +15,11 @@ export interface PluginApi {
     pluginApi: number;
     coreVersion: string;
     config: Record<string, string>;
-  }) => Promise<{ manifest: PluginManifest }>;
+  }) => Promise<{
+    manifest: PluginManifest;
+    /** `FLIKS_PLUGIN_TOKEN` echoed back — proof the responder is the process core spawned; never travels core→plugin. */
+    token: string;
+  }>;
 
   health: () => Promise<{ ok: boolean; detail?: string }>;
 

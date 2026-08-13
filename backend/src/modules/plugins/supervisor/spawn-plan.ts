@@ -1,7 +1,7 @@
 import { spawnSync, type SpawnOptions } from 'child_process';
 import { chmodSync, chownSync, mkdirSync, readdirSync } from 'fs';
 import { join } from 'path';
-import { PLUGIN_API_VERSION } from '../../../common/plugin-contract';
+import { PLUGIN_API_VERSION, type PluginSpawnEnv } from '../../../common/plugin-contract';
 
 /** The unprivileged identity a plugin child drops to when core runs as root. */
 export const PLUGIN_CHILD_UID = 65534;
@@ -86,7 +86,8 @@ export function buildSpawnPlan(input: SpawnPlanInput): SpawnPlan {
     `${input.dir}/plugin.js`,
   ];
 
-  const env: NodeJS.ProcessEnv = {
+  // Typed off the contract, so a variable renamed or dropped here stops compiling.
+  const env: PluginSpawnEnv & NodeJS.ProcessEnv = {
     PATH: '/usr/local/bin:/usr/bin:/bin',
     NODE_ENV: 'production',
     TZ: process.env.TZ ?? 'UTC',

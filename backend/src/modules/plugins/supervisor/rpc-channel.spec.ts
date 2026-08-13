@@ -88,4 +88,49 @@ describe('RpcChannel', () => {
     pair.server.destroy();
     await expect(pending).rejects.toThrow(/closed/);
   });
+
+  describe('error frame codes', () => {
+    // Each message mirrors an exact throw site in fliks-host.service.ts,
+    // plugin-host-binding.service.ts or plugin-supervisor.ts, pinned by those files' own specs.
+    const cases: [string, () => Error, string][] = [
+      ['unknown host method', () => new Error('unknown host method "media.resolve"'), 'ERR_NO_METHOD'],
+      ['host-side deadline', () => new Error('host method "library.ingest" timed out after 30000ms'), 'ERR_TIMEOUT'],
+      ['registration gone', () => new Error('plugin "some-plugin" has no active registration'), 'ERR_NOT_FOUND'],
+      [
+        'ingest path missing on disk',
+        () => Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' }),
+        'ERR_NOT_FOUND',
+      ],
+      [
+        'no ingest roots configured',
+        () => new Error('library.ingest: no ingestRoots configured for plugin "some-plugin"'),
+        'ERR_DENIED',
+      ],
+      [
+        'path outside every ingest root',
+        () => new Error('library.ingest: "/tmp/x" is outside every configured ingest root'),
+        'ERR_DENIED',
+      ],
+      [
+        'plugin missing a required scope',
+        () => new Error('plugin "some-plugin" is missing scope "ingest:write" required for "library.ingest"'),
+        'ERR_DENIED',
+      ],
+      ['payload over its documented limit', () => new Error('media.resolve: 150 ids exceeds the 100 limit'), 'ERR_VALIDATION'],
+      ['anything else', () => new Error('some completely unrelated failure'), 'ERR'],
+    ];
+
+    for (const [label, buildError, expectedCode] of cases) {
+      it(`classifies ${label} as ${expectedCode}`, async () => {
+        const pair = await makePair();
+        cleanup = () => teardown(pair);
+        pair.server.onRequest(async () => {
+          throw buildError();
+        });
+        await expect(pair.client.call('some.method', {}, 1_000)).rejects.toThrow(
+          new RegExp(`^${expectedCode}: `),
+        );
+      });
+    }
+  });
 });
