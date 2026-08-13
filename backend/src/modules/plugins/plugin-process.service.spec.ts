@@ -323,6 +323,30 @@ describe('PluginProcessService.startFor', () => {
     expect(instances[0].stopCalls).toBe(0);
     expect(service.stateOf(pkg.pluginId)).toBe('ready');
   });
+
+  it('called again for an id that is already running stops the old supervisor before spawning a new one', async () => {
+    const pkg = fakePackage();
+
+    const pluginDb = fakePluginDb();
+    const { factory, instances } = makeFactory();
+    const service = new PluginProcessService(pluginDb as never, fakeLogBuffer() as never, fakeSettings() as never, factory);
+
+    const firstStart = service.startFor(pkg);
+    await waitForSupervisors(instances, 1);
+    instances[0].setState('ready');
+    await firstStart;
+
+    const secondStart = service.startFor(pkg);
+    await waitForSupervisors(instances, 2);
+    instances[1].setState('ready');
+    await secondStart;
+
+    expect(instances[0].stopCalls).toBe(1);
+    expect(instances).toHaveLength(2);
+    expect(instances[1].startCalls).toBe(1);
+    expect(pluginDb.rotatePassword).toHaveBeenCalledTimes(2);
+    expect(service.stateOf(pkg.pluginId)).toBe('ready');
+  });
 });
 
 describe('PluginProcessService — lifecycle', () => {
@@ -378,15 +402,16 @@ describe('PluginProcessService — lifecycle', () => {
     expect(service.statusMessageOf(pkg.pluginId)).toBe('');
   });
 
-  it('restart stops the old supervisor and spawns a fresh one, rotating the password again', async () => {
+  it('startFor stops the old supervisor and spawns a fresh one, rotating the password again', async () => {
     const { service, pkg, pluginDb, instances } = await startedService();
     expect(pluginDb.rotatePassword).toHaveBeenCalledTimes(1);
 
-    const restartPromise = service.restart(pkg.pluginId);
+    const restartPromise = service.startFor(pkg);
     await waitForSupervisors(instances, 2);
     instances[1].setState('ready');
-    await restartPromise;
+    const result = await restartPromise;
 
+    expect(result).toEqual({ ok: true });
     expect(instances).toHaveLength(2);
     expect(instances[0].stopCalls).toBe(1);
     expect(instances[1].startCalls).toBe(1);
@@ -394,13 +419,28 @@ describe('PluginProcessService — lifecycle', () => {
     expect(service.stateOf(pkg.pluginId)).toBe('ready');
   });
 
-  it('restart on a plugin that never started is a no-op', async () => {
-    const service = new PluginProcessService(fakePluginDb() as never, fakeLogBuffer() as never, fakeSettings() as never, makeFactory().factory);
+  it('startFor cold-starts a plugin that never reached running, rather than no-op-ing', async () => {
+    const pkg = fakePackage();
+    const pluginDb = fakePluginDb();
+    pluginDb.provision.mockRejectedValueOnce(new Error('db unreachable'));
+    const { factory, instances } = makeFactory();
+    const service = new PluginProcessService(pluginDb as never, fakeLogBuffer() as never, fakeSettings() as never, factory);
 
-    await expect(service.restart('fliks.never-started')).resolves.toBeUndefined();
+    const firstResult = await service.startFor(pkg);
+    expect(firstResult).toEqual({ ok: false, reason: 'db-provision-failed', detail: 'db unreachable' });
+    expect(service.stateOf(pkg.pluginId)).toBeNull();
+
+    const restartPromise = service.startFor(pkg);
+    await waitForSupervisors(instances, 1);
+    instances[0].setState('ready');
+    const result = await restartPromise;
+
+    expect(result).toEqual({ ok: true });
+    expect(instances).toHaveLength(1);
+    expect(service.stateOf(pkg.pluginId)).toBe('ready');
   });
 
-  it('a plugin whose start failed is still present for stateOf/statusMessageOf, and restart respawns it', async () => {
+  it('a plugin whose start failed is still present for stateOf/statusMessageOf, and startFor respawns it', async () => {
     const pkg = fakePackage();
 
     const pluginDb = fakePluginDb();
@@ -418,7 +458,7 @@ describe('PluginProcessService — lifecycle', () => {
     expect(service.stateOf(pkg.pluginId)).toBe('failed');
     expect(service.statusMessageOf(pkg.pluginId)).toBe('boom');
 
-    const restartPromise = service.restart(pkg.pluginId);
+    const restartPromise = service.startFor(pkg);
     await waitForSupervisors(instances, 2);
     instances[1].setState('ready');
     await restartPromise;

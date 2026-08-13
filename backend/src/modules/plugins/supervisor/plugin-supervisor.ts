@@ -400,8 +400,18 @@ export class PluginSupervisor implements OnApplicationShutdown {
       config: this.opts.config,
     });
 
-    this.child = spawn(plan.command, plan.args, plan.options);
-    writePidFile(this.opts.runtimeDir, this.opts.id, this.child.pid!, plan.expectedCmdline);
+    // An exec that never happened surfaces either way: asynchronously as 'error', or synchronously
+    // from `spawn` itself when the uid drop is refused. Both are crashes, never an uncaught throw.
+    try {
+      this.child = spawn(plan.command, plan.args, plan.options);
+    } catch (err) {
+      this.child = null;
+      this.handleCrash(`failed to spawn: ${(err as Error).message}`);
+      return;
+    }
+    this.child.on('error', (err) => this.handleCrash(`failed to spawn: ${err.message}`));
+    const pid = this.child.pid;
+    if (pid !== undefined) writePidFile(this.opts.runtimeDir, this.opts.id, pid, plan.expectedCmdline);
     this.wireChildIo(this.child);
     this.child.on('exit', (code, signal) => this.onChildExit(code, signal));
 
@@ -552,6 +562,7 @@ export class PluginSupervisor implements OnApplicationShutdown {
     }
     this.pluginChannel?.destroy();
     this.pluginChannel = null;
+    this.ringBackpressured = false; // the 'drain' listener that would clear it died with the socket
 
     this.setState('crashed');
     this.totalCrashes++;
@@ -570,6 +581,7 @@ export class PluginSupervisor implements OnApplicationShutdown {
       this.setState('failed');
       return;
     }
+    this.opts.logBuffer.warn(`plugin crashed: ${reason}`, `plugin:${this.opts.id}`);
 
     const delay = this.opts.backoffLadderMs[Math.min(this.backoffIndex, this.opts.backoffLadderMs.length - 1)];
     this.backoffIndex++;

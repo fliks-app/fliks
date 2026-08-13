@@ -48,11 +48,8 @@ function cmdlineMatches(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
-/**
- * Kills any live process whose pid file matches its expected cmdline. A
- * true no-op in Docker (SIGKILLing PID 1 already tears down the namespace) —
- * it exists for Windows/macOS, which leak a plugin child across a crash. Runs unconditionally so it isn't mistaken for dead code.
- */
+/** Kills any live process whose pid file matches its expected cmdline — a true no-op in Docker
+ *  (SIGKILLing PID 1 tears down the namespace already); exists for Windows/macOS, which leak a plugin child across a crash. */
 export function sweepOrphans(runtimeDir: string): void {
   if (!existsSync(runtimeDir)) return;
   for (const file of readdirSync(runtimeDir)) {

@@ -10,6 +10,8 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 import { Season } from './season.entity';
 
 @Entity('episodes')
+// Declared here as well as in its migration, or the dev schema sync drops what it does not know.
+@Index('idx_episodes_season_hasfile_end', ['season', 'hasFile', 'endEpisodeNumber'])
 export class Episode extends BaseEntity {
   @ManyToOne(() => Season, (season) => season.episodes, {
     onDelete: 'CASCADE',

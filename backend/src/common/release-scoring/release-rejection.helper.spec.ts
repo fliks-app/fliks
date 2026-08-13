@@ -213,13 +213,22 @@ describe('resolveSearchTitles + titleMatchesExpectation', () => {
     ).toBe(false);
   });
 
-  it('stays permissive when every candidate is non-Latin', () => {
-    // A work stored only under a non-Latin name yields no comparable tokens;
-    // acceptance falls back to permissive so it remains grabbable.
+  it("VERDICT: an unreadable expectation claims nothing when the caller is identifying", () => {
+    // Identification: the first such row would otherwise answer for every unmatched release.
     expect(
-      titleMatchesExpectation('Anything.1985.1080p.x264-GROUP', [
-        '作品タイトル',
-        '作品',
+      titleMatchesExpectation('Anything.1985.1080p.x264-GROUP', ['作品タイトル', '作品'], 'no-match'),
+    ).toBe(false);
+  });
+
+  it('an unreadable expectation vetoes nothing when the caller is a rejection net', () => {
+    // Scoring already knows the media; a net that cannot read the title must not reject its releases.
+    expect(titleMatchesExpectation('Anything.1985.1080p.x264-GROUP', ['作品タイトル', '作品'])).toBe(true);
+  });
+
+  it('still tokenizes the Latin portion of a mixed-script title', () => {
+    expect(
+      titleMatchesExpectation('Tokyo.Story.S01E01.1080p.WEB-DL.x264-GROUP', [
+        '東京 Tokyo Story',
       ]),
     ).toBe(true);
   });

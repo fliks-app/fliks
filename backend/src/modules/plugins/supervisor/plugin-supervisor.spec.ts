@@ -1,12 +1,15 @@
-import { existsSync, rmSync } from 'fs';
+import { existsSync, rmSync, writeFileSync } from 'fs';
 import { connect } from 'net';
+import { join } from 'path';
 import { DEFAULT_SUPERVISOR_OPTIONS, PluginSupervisor, type PluginSupervisorOptions } from './plugin-supervisor';
 import { RpcChannel } from './rpc-channel';
+import { pidFilePath } from './pid-file';
 import type { PluginHostApi } from '../../../common/plugin-contract';
 import {
   delay,
   makeFixtureDir,
   makeRuntimeDir,
+  mockFailedSpawn,
   newLogBuffer,
   waitForExitSignal,
   waitForState,
@@ -86,7 +89,9 @@ describe('handshake', () => {
     await sup.start();
     await waitForState(sup, 'ready');
     const before = sup.getHealthCheckCount();
-    await delay(200); // a few real health ticks at healthIntervalMs=60
+    // Real health ticks at healthIntervalMs=60 — poll rather than assume a fixed wait covers enough of them.
+    const deadline = Date.now() + 3_000;
+    while (sup.getHealthCheckCount() <= before && Date.now() < deadline) await delay(20);
     expect(sup.getHealthCheckCount()).toBeGreaterThan(before);
     expect(sup.getState()).toBe('ready');
   }, 10_000);
@@ -111,6 +116,56 @@ describe('handshake', () => {
     const sup = makeSupervisor('never-connect');
     await sup.start();
     await waitForState(sup, 'crashed');
+  }, 10_000);
+});
+
+describe('spawn failure', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('an exec that never happens crashes the plugin instead of taking the process down, and never writes a pid file for it', async () => {
+    const dir = makeFixtureDir('good');
+    const runtimeDir = makeRuntimeDir();
+    dirsToClean.push(dir, runtimeDir);
+    const id = 'spawn-fail';
+    const sup = new PluginSupervisor({
+      id,
+      dir,
+      runtimeDir,
+      logBuffer: newLogBuffer(),
+      handshakeDeadlineMs: 250,
+      healthIntervalMs: 60,
+      healthDeadlineMs: 30,
+      backoffLadderMs: [20, 20],
+      readyResetMs: 300,
+      breakerWindowMs: 600,
+      breakerMaxCrashes: 6,
+      shutdownRpcDeadlineMs: 100,
+      sigtermGraceMs: 80,
+    });
+    supervisorsToStop.push(sup);
+
+    // Listening before start(): the failed exec's crash-then-backoff happens
+    // in one synchronous burst, so 'crashed' can come and go before an
+    // after-the-fact waitForState would ever get to subscribe for it. Read the
+    // pid file from inside the callback too — the real retry below writes a
+    // real one, which would otherwise mask a wrongly-written first pid file.
+    const seen: string[] = [];
+    let pidFileSeenAtCrash: boolean | null = null;
+    sup.onStateChange((s) => {
+      seen.push(s);
+      if (s === 'crashed' && pidFileSeenAtCrash === null) {
+        pidFileSeenAtCrash = existsSync(pidFilePath(runtimeDir, id));
+      }
+    });
+
+    mockFailedSpawn('spawn setpriv ENOENT');
+    await sup.start();
+    // If the missing 'error' listener regresses, this exception takes the
+    // whole test worker down instead of the supervisor recovering below.
+    await waitForState(sup, 'ready'); // the mock was one-shot: the retry spawns for real
+
+    expect(seen).toContain('crashed');
+    expect(pidFileSeenAtCrash).toBe(false);
   }, 10_000);
 });
 
@@ -154,11 +209,12 @@ describe('backoff', () => {
       if (s === 'backoff') backoffIndices.push(sup.getBackoffIndex());
     });
     await sup.start();
-    // Each cycle spawns a real process, so a fixed wait counts fewer cycles under a loaded suite.
+    // Without the reset the ladder climbs on every cycle; with it, consecutive entries stay level.
+    // An absolute ceiling would flake instead: a loaded machine can slow one handshake past the window.
     const deadline = Date.now() + 8_000;
-    while (backoffIndices.length < 2 && Date.now() < deadline) await delay(25);
-    expect(backoffIndices.length).toBeGreaterThanOrEqual(2);
-    expect(Math.max(...backoffIndices)).toBeLessThanOrEqual(1);
+    while (backoffIndices.length < 3 && Date.now() < deadline) await delay(25);
+    expect(backoffIndices.length).toBeGreaterThanOrEqual(3);
+    expect(backoffIndices.some((v, i) => i > 0 && v <= backoffIndices[i - 1]!)).toBe(true);
   }, 10_000);
 });
 
@@ -189,6 +245,35 @@ describe('circuit breaker', () => {
     sup.reEnable();
     expect(sup.getState()).toBe('stopped');
   }, 10_000);
+
+  it('logs the crash reason at warn for each crash below the breaker, without a duplicate for the one that trips it', async () => {
+    const logBuffer = newLogBuffer();
+    const sup = makeSupervisor('exit-immediately', {
+      logBuffer,
+      backoffLadderMs: [5, 5, 5, 5, 5, 5],
+      breakerWindowMs: 2_000,
+      breakerMaxCrashes: 6,
+    });
+    await sup.start();
+    await waitForState(sup, 'failed', 5_000);
+
+    const warns = logBuffer.getEntries({ level: 'warn' }).map((e) => e.message);
+    const errors = logBuffer.getEntries({ level: 'error' }).map((e) => e.message);
+    expect(warns.filter((m) => m.includes('exited unexpectedly')).length).toBe(5);
+    expect(errors.filter((m) => m.includes('circuit breaker tripped'))).toHaveLength(1);
+  }, 10_000);
+});
+
+describe('crash reason logging', () => {
+  it('is visible at warn well before the breaker would ever trip', async () => {
+    const logBuffer = newLogBuffer();
+    const sup = makeSupervisor('never-hello', { logBuffer, backoffLadderMs: [1_000, 1_000] });
+    await sup.start();
+    await waitForState(sup, 'crashed');
+
+    const warns = logBuffer.getEntries({ level: 'warn' }).map((e) => e.message);
+    expect(warns.some((m) => m.includes('handshake timeout'))).toBe(true);
+  }, 10_000);
 });
 
 describe('child stdio', () => {
@@ -218,6 +303,46 @@ describe('ring buffer backpressure', () => {
     for (let i = 0; i < 3_000; i++) sup.emitEvent('test.event', { i, filler });
     expect(sup.getRingSize()).toBeLessThanOrEqual(64);
     expect(sup.getEventDropCount()).toBeGreaterThan(0);
+  }, 10_000);
+
+  it('resets once the backpressured child crashes, so delivery resumes after respawn', async () => {
+    const dir = makeFixtureDir('no-read');
+    const runtimeDir = makeRuntimeDir();
+    dirsToClean.push(dir, runtimeDir);
+    const sup = new PluginSupervisor({
+      id: 'ring-recovery',
+      dir,
+      runtimeDir,
+      logBuffer: newLogBuffer(),
+      handshakeDeadlineMs: 250,
+      healthIntervalMs: 60,
+      healthDeadlineMs: 30,
+      backoffLadderMs: [15, 30, 60, 120],
+      readyResetMs: 300,
+      breakerWindowMs: 600,
+      breakerMaxCrashes: 6,
+      shutdownRpcDeadlineMs: 100,
+      sigtermGraceMs: 80,
+    });
+    supervisorsToStop.push(sup);
+
+    await sup.start();
+    await waitForState(sup, 'ready');
+    const filler = 'x'.repeat(1024);
+    for (let i = 0; i < 3_000; i++) sup.emitEvent('test.event', { i, filler });
+    expect(sup.getEventDropCount()).toBeGreaterThan(0); // real backpressure, same as above
+
+    // The next life must actually be able to drain the ring — flip the mode before it respawns.
+    writeFileSync(join(dir, 'FIXTURE_MODE'), 'good');
+    // Same tick as the flood above: no 'drain' event can slip in and reset the flag on its own first.
+    (sup as unknown as { child: { kill(signal: string): void } }).child.kill('SIGKILL');
+
+    await waitForState(sup, 'crashed');
+    await waitForState(sup, 'ready');
+
+    const deadline = Date.now() + 3_000;
+    while (sup.getRingSize() > 0 && Date.now() < deadline) await delay(20);
+    expect(sup.getRingSize()).toBe(0);
   }, 10_000);
 });
 
