@@ -20,6 +20,27 @@ function isNote(f: Frame): f is Note {
   return typeof (f as Note).m === 'string' && !('i' in f);
 }
 
+/** ENOENT is a structural signal (`fs.realpathSync` on a missing ingest path); everything
+ *  else here matches message text from fliks-host.service.ts / plugin-host-binding.service.ts /
+ *  plugin-supervisor.ts, which this file never edits — a wording change there falls back to 'ERR'. */
+const HOST_ERROR_PATTERNS: readonly [RegExp, string][] = [
+  [/^unknown host method /, 'ERR_NO_METHOD'],
+  [/ timed out after \d+ms$/, 'ERR_TIMEOUT'],
+  [/ has no active registration$/, 'ERR_NOT_FOUND'],
+  [/^library\.ingest: no ingestRoots configured/, 'ERR_DENIED'],
+  [/ is outside every configured ingest root$/, 'ERR_DENIED'],
+  [/ is missing scope ".*" required for /, 'ERR_DENIED'],
+  [/ exceeds the \d+ limit$/, 'ERR_VALIDATION'],
+];
+
+function classifyHostError(err: Error): string {
+  if ((err as NodeJS.ErrnoException).code === 'ENOENT') return 'ERR_NOT_FOUND';
+  for (const [pattern, code] of HOST_ERROR_PATTERNS) {
+    if (pattern.test(err.message)) return code;
+  }
+  return 'ERR';
+}
+
 /**
  * One newline-delimited JSON-RPC connection. Symmetric: either side may
  * `call()` the other; a frame fitting none of Req/Res/Note is a protocol violation, same as an unparsable line.
@@ -90,7 +111,8 @@ export class RpcChannel {
       const r = await this.requestHandler(req.m, req.p);
       this.write({ i: req.i, r });
     } catch (err) {
-      this.write({ i: req.i, e: { c: 'ERR', m: (err as Error).message } });
+      const e = err as Error;
+      this.write({ i: req.i, e: { c: classifyHostError(e), m: e.message } });
     }
   }
 

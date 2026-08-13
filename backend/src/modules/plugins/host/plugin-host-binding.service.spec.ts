@@ -6,6 +6,11 @@ import { InProcessPluginHostClient } from './in-process-plugin-host-client';
 import { PluginHostBindingService } from './plugin-host-binding.service';
 import { PluginCountsCacheService } from './plugin-counts-cache.service';
 import { EventsService } from '../../scheduler/events.service';
+import {
+  HOST_METHOD_SCOPES,
+  type PluginHostApi,
+  type PluginScope,
+} from '../../../common/plugin-contract';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -24,10 +29,13 @@ function fakeRepo() {
 /** Stand-in for the `plugin_registrations` table, keyed by plugin id.
  *  `delete` is what an uninstall does mid-connection, per `plugin-install.service.ts`. */
 class FakeRegistrationRepo {
-  private rows = new Map<string, { pluginId: string; ingestRoots: string[] }>();
+  private rows = new Map<
+    string,
+    { pluginId: string; ingestRoots: string[]; scopes: PluginScope[] }
+  >();
 
-  seed(pluginId: string, ingestRoots: string[]): void {
-    this.rows.set(pluginId, { pluginId, ingestRoots });
+  seed(pluginId: string, ingestRoots: string[], scopes: PluginScope[] = []): void {
+    this.rows.set(pluginId, { pluginId, ingestRoots, scopes });
   }
 
   delete(pluginId: string): void {
@@ -117,8 +125,8 @@ describe('PluginHostBindingService', () => {
     fs.writeFileSync(fileBeta, 'x');
 
     try {
-      registrations.seed('test.alpha', [rootAlpha]);
-      registrations.seed('test.beta', [rootBeta]);
+      registrations.seed('test.alpha', [rootAlpha], ['config:rw', 'ingest:write']);
+      registrations.seed('test.beta', [rootBeta], ['config:rw', 'ingest:write']);
       await settings.set('plugin.test.alpha.token', 'A-secret');
       await settings.set('plugin.test.beta.token', 'B-secret');
 
@@ -181,8 +189,8 @@ describe('PluginHostBindingService', () => {
 
   it('adversarial: ignores a plugin id smuggled inside the payload — identity comes only from bind()', async () => {
     const { settings, registrations, binding } = makeStack();
-    registrations.seed('test.alpha', []);
-    registrations.seed('test.beta', []);
+    registrations.seed('test.alpha', [], ['config:rw']);
+    registrations.seed('test.beta', [], ['config:rw']);
 
     const alpha = binding.bind('test.alpha');
     const beta = binding.bind('test.beta');
@@ -203,8 +211,8 @@ describe('PluginHostBindingService', () => {
 
   it('fails closed the instant a registration vanishes, with no collateral on the surviving plugin', async () => {
     const { registrations, client, binding } = makeStack();
-    registrations.seed('test.alpha', []);
-    registrations.seed('test.beta', []);
+    registrations.seed('test.alpha', [], ['config:rw']);
+    registrations.seed('test.beta', [], ['config:rw']);
 
     const alpha = binding.bind('test.alpha');
     const beta = binding.bind('test.beta');
@@ -222,5 +230,76 @@ describe('PluginHostBindingService', () => {
     // Refused before ever reaching the host — not a deeper failure inside it.
     expect(clientSpy.mock.calls.length).toBe(callsBefore);
     await expect(beta['config.get']({})).resolves.toEqual({});
+  });
+
+  describe('scope enforcement', () => {
+    /** One valid payload per method — just enough for `FliksHostImpl` to run its
+     *  fake-backed path without throwing for a reason other than the scope check. */
+    const PAYLOADS: { [K in keyof PluginHostApi]: Parameters<PluginHostApi[K]>[0] } = {
+      'media.acquisitionContext': { mediaId: 1 },
+      'acquisition.candidates': { availableOn: '2024-01-01', limit: 10 },
+      'releases.match': { titles: [] },
+      'releases.score': { mediaId: 1, releases: [] },
+      'media.resolve': {},
+      'media.exists': { mediaIds: [] },
+      'requests.markInProgress': { idempotencyKey: 'x', mediaId: 1 },
+      'library.ingest': {
+        idempotencyKey: 'x',
+        mediaId: 1,
+        paths: [],
+        transfer: 'copy',
+        sourceLabel: 's',
+      },
+      'events.publish': [],
+      'notifications.dispatch': { event: 'grab.started', payload: {} },
+      'counts.set': { key: 'k', value: 1 },
+      'events.emitOwn': { type: 't', payload: {}, audience: 'all' },
+      'progress.set': { mediaId: 1, ref: 'r', progress: 0, state: 'active' },
+      'config.get': {},
+      'config.set': { key: 'k', value: 'v' },
+    };
+
+    const cases = (Object.keys(HOST_METHOD_SCOPES) as (keyof PluginHostApi)[]).map((method) => ({
+      method,
+      scopes: HOST_METHOD_SCOPES[method],
+      /** The one reported when nothing is granted — the first the filter finds. */
+      firstScope: HOST_METHOD_SCOPES[method][0]!,
+    }));
+
+    function call(api: PluginHostApi, method: keyof PluginHostApi): Promise<unknown> {
+      return (api[method] as (p: unknown) => Promise<unknown>)(PAYLOADS[method]);
+    }
+
+    it.each(cases)(
+      '$method rejects without $firstScope and passes once every scope it needs is granted',
+      async ({ method, scopes, firstScope }) => {
+        const { registrations, binding } = makeStack();
+
+        registrations.seed('test.scoped', ['/tmp'], []);
+        await expect(call(binding.bind('test.scoped'), method)).rejects.toThrow(
+          `missing scope "${firstScope}" required for "${method}"`,
+        );
+
+        // Granting all but the last must still refuse: a method needing two is not half-granted.
+        if (scopes.length > 1) {
+          registrations.seed('test.scoped', ['/tmp'], scopes.slice(0, -1));
+          await expect(call(binding.bind('test.scoped'), method)).rejects.toThrow('missing scope');
+        }
+
+        registrations.seed('test.scoped', ['/tmp'], [...scopes]);
+        await call(binding.bind('test.scoped'), method); // must not reject once granted
+      },
+    );
+
+    it('a plugin holding only one scope cannot reach a method requiring another', async () => {
+      const { registrations, binding } = makeStack();
+      registrations.seed('test.narrow', [], ['config:rw']);
+      const bound = binding.bind('test.narrow');
+
+      await expect(bound['media.exists']({ mediaIds: [] })).rejects.toThrow(
+        'missing scope "media:read" required for "media.exists"',
+      );
+      await expect(bound['config.get']({})).resolves.toEqual({});
+    });
   });
 });

@@ -18,15 +18,42 @@ plugin that needs to answer one route is a `process` plugin.
 
 ## The manifest
 
-One `plugin.json` at the archive root, validated before anything is written. Beyond identity
-(`id`, `version`, `pluginApi`, `fliks` range with a mandatory upper bound, `author`, `license`,
-`logo`):
+One `plugin.json` at the archive root, validated before anything is written. Every manifest,
+`data` or `process`, must carry all of: `id`, `pluginApi`, `name`, `version`, `fliks` (a semver
+range with a mandatory upper bound, e.g. `">=2.1.0 <3.0.0"`), `author`, `description`, `license`,
+`logo`, and `kind` (`data` or `process`) — the install fails if any one is missing. `homepage` is
+the only identity field that's optional.
 
-- `kind` — `data` or `process`, read from inside the signed manifest.
-- `provides.routes[]` (`process`) — every route core will proxy, each with the CASL `policy` it
-  requires and an optional `objectGuard`. A route that is not declared does not exist.
-- `database` (`process`) — whether it wants its own schema, and which core tables it needs
-  `REFERENCES` on.
+A `process` manifest additionally requires these seven keys — reference `fk-plugin-download`'s
+`plugin.json` for a manifest that satisfies all of them:
+
+- `runtime` — the only legal value is the literal `"node"`.
+- `memoryMb` — passed through as the child's own `--max-old-space-size`. Core does not clamp it.
+- `files` — sha256 of every archive entry but the manifest and its own signature.
+- `database` — `{ schema: boolean, coreRefs: string[] }`: whether it wants its own schema, and
+  which core tables it needs `REFERENCES` on.
+- `routes[]` — every route core will proxy, each with the CASL `policy` it requires and an
+  optional `objectGuard`. A route that is not declared does not exist. (Not `provides.routes[]` —
+  there is no `provides` key; `routes` sits at the manifest's top level.)
+- `scopes[]` — the grants this plugin needs, consented once at install and enforced on every host
+  call. Declare every scope the methods you call require, from this table:
+
+  | Scope | Host methods it unlocks |
+  |---|---|
+  | `media:read` | `media.acquisitionContext`, `media.resolve`, `media.exists`, and — because both answer with media identity for the whole library — `acquisition.candidates` and `releases.match` |
+  | `acquisition:candidates` | `acquisition.candidates`, `releases.match` |
+  | `releases:score` | `releases.score` |
+  | `requests:progress` | `requests.markInProgress` |
+  | `ingest:write` | `library.ingest` |
+  | `events:emit` | `events.publish`, `notifications.dispatch`, `events.emitOwn`, `counts.set`, `progress.set` |
+  | `config:rw` | `config.get`, `config.set` |
+
+  A method whose scopes you have not all declared rejects with `missing scope "<scope>" required
+  for "<method>"`. `HOST_METHOD_SCOPES` in the contract is the source this table restates.
+- `ingestRoots[]` — the allowlist `library.ingest` paths must fall under; may be empty.
+
+Optional beyond that:
+
 - `jobs[]` (`process`) — named cron entries core schedules and dispatches.
 - `events[]` — domain events to receive. A `data` plugin gets an HTTPS POST from core; a `process`
   plugin gets a note over its socket.
@@ -75,6 +102,41 @@ plugin repository, because a spawned plugin cannot import from core at runtime. 
 the copies honest: a CI job diffs the client mirror against the backend's, and each plugin repo
 runs a drift checker against a sibling checkout. Compare **declarations, not just names** — a
 field that matches by name and differs by type compiles and misbehaves.
+
+`fk-plugin-download` is the reference `process` plugin — a working implementation of everything
+in this section. Its `src/plugin.ts` answers all 7 core-initiated methods, `src/host-methods.ts`
+and `src/protocol.ts` are its own hand-kept mirrors of the contract, and
+`scripts/check-contract-drift.ts` is how it checks itself against a sibling core checkout.
+
+### Environment
+
+Core never passes `...process.env` to the child — everything a `process` plugin gets is one of
+these, set once at spawn (`supervisor/spawn-plan.ts`):
+
+- `FLIKS_PLUGIN_TOKEN` — random per spawn. Echo it back, unmodified, as `hello`'s `token`: it is
+  the only proof the responder is the process core just spawned, not something else connected to
+  the same socket. Get this wrong and the plugin is SIGKILLed with no message naming why.
+- `FLIKS_CORE_SOCK` — the unix socket to dial for this plugin's own host-API calls.
+- `FLIKS_PLUGIN_SOCK` — the unix socket to listen on for core's calls.
+- `FLIKS_DB_URL` — this plugin's own Postgres connection string; empty when its manifest declared
+  no schema.
+- `FLIKS_PLUGIN_ID` — this manifest's `id`, verbatim.
+- `FLIKS_API_VERSION` — the plugin API version, stringified. Checked for exact equality, never a
+  range.
+- `FLIKS_CFG_*` — every `plugin.<id>.<key>` admin setting, re-keyed: drop the `plugin.<id>.`
+  prefix, upper-case what's left, replace every character outside `[A-Z0-9_]` with `_`, and
+  prepend `FLIKS_CFG_`. Not a fixed set — read whichever names your own manifest's settings
+  resolve to.
+
+### The handshake
+
+The first call core makes on a freshly spawned child is `hello`, with `{ pluginApi, coreVersion,
+config }`. The reply must be `{ manifest, token }`: `manifest` is this archive's own
+`plugin.json`, read fresh rather than baked into the bundle, and `token` is `FLIKS_PLUGIN_TOKEN`
+echoed back exactly. A wrong or missing token is a crash: core logs `plugin crashed: hello token
+mismatch` against that plugin's own log stream and retries up the backoff ladder until the breaker
+trips. See `fk-plugin-download`'s `hello` handler in `src/plugin.ts` for a minimal implementation
+that gets both right.
 
 ## Database
 
