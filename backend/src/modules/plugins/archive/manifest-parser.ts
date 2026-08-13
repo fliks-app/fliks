@@ -75,6 +75,39 @@ function isStringRecord(v: unknown): v is Record<string, string> {
   return isRecord(v) && Object.values(v).every((x) => typeof x === 'string');
 }
 
+function isI18nDict(v: unknown): v is Record<string, Record<string, string>> {
+  return isRecord(v) && Object.values(v).every((locale) => isStringRecord(locale));
+}
+
+/** True if any key is a dotted ancestor of another — `insertValue` would clobber one turning the flat dict into a tree. */
+function hasBranchConflict(keys: readonly string[]): boolean {
+  return keys.some((key, i) => keys.some((other, j) => i !== j && other.startsWith(`${key}.`)));
+}
+
+/** Every key under one root branch, the same root in every locale: which root is the plugin's own
+ *  choice, but `PluginRegistryService` refuses a root another loaded plugin already claims. */
+function i18nClaimsOneRoot(i18n: Record<string, Record<string, string>>): boolean {
+  const roots = new Set<string>();
+  for (const dict of Object.values(i18n)) {
+    const keys = Object.keys(dict);
+    if (hasBranchConflict(keys)) return false;
+    for (const key of keys) {
+      const root = key.split('.')[0];
+      if (!root || root === key) return false;
+      roots.add(root);
+    }
+  }
+  return roots.size <= 1;
+}
+
+/** The root branch this manifest's keys sit under, or null when it declares none. */
+export function i18nRoot(manifest: PluginManifest): string | null {
+  for (const dict of Object.values(manifest.i18n ?? {})) {
+    for (const key of Object.keys(dict)) return key.split('.')[0] ?? null;
+  }
+  return null;
+}
+
 function isRouteArray(v: unknown): v is PluginRoute[] {
   return (
     Array.isArray(v) &&
@@ -123,6 +156,11 @@ export function parseManifest(bytes: Buffer): PluginManifest | null {
   }
   if (!isRecord(json)) return null;
   if (!hasRequiredBaseFields(json)) return null;
+
+  if (json.i18n !== undefined) {
+    if (!isI18nDict(json.i18n)) return null;
+    if (!i18nClaimsOneRoot(json.i18n)) return null;
+  }
 
   if (json.kind === 'data') {
     for (const key of Object.keys(json)) {

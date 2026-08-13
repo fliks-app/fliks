@@ -12,8 +12,8 @@ describe('refusalMessageKey', () => {
   });
 
   it('buckets every data-tier field violation together', () => {
-    expect(refusalMessageKey('PLUGIN_DATA_HAS_ROUTES')).toBe('settings.plugins.consent.refusal.data_tier_field');
-    expect(refusalMessageKey('PLUGIN_DATA_HAS_CHECKLIST')).toBe('settings.plugins.consent.refusal.data_tier_field');
+    expect(refusalMessageKey('PLUGIN_BAD_UI_CONTRIBUTIONS')).toBe('settings.plugins.consent.refusal.bad_ui_contributions');
+    expect(refusalMessageKey('PLUGIN_BAD_EVENTS')).toBe('settings.plugins.consent.refusal.bad_events');
   });
 
   it('gives signature/hash/tier codes their own message', () => {

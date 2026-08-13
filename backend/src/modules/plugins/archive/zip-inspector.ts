@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import * as semver from 'semver';
+import { validateManifestShape } from '../manifest-shape.validator';
 import * as yauzl from 'yauzl';
 import type { PluginKind, PluginManifest } from '../../../common/plugin-contract';
 import { parseManifest } from './manifest-parser';
@@ -230,6 +231,9 @@ export async function inspect(buffer: Buffer, options: InspectOptions = {}): Pro
   if (semver.valid(manifest.version) === null) {
     return refuse('PLUGIN_BAD_VERSION', `version ${JSON.stringify(manifest.version)} is not valid semver`);
   }
+  // Ahead of `deriveCapabilities`, which walks `ui` and would either throw or invent entries.
+  const shape = validateManifestShape(manifest);
+  if (!shape.ok) return shape;
   const hasPluginJs = entryBuffers.has('plugin.js');
   if (manifest.kind === 'data' && hasPluginJs) {
     return refuse('PLUGIN_TIER_VIOLATION', 'a data-tier archive may not carry plugin.js');

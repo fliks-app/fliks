@@ -79,7 +79,7 @@ describe('PluginRegistryService — releasePicker registration validation', () =
     expect(result).toEqual({ ok: false, pluginId: manifest.id, reason: 'invalid-release-picker', detail: expect.any(String) });
   });
 
-  it('refuses a second installed plugin declaring a releasePicker while the first still holds one', async () => {
+  it('lets a second plugin register its own releasePicker alongside the first — no conflict failure', async () => {
     const service = makeService();
     const first = processManifest('fliks.a', VALID_PICKER);
     await service.register(makePackage(first));
@@ -87,7 +87,34 @@ describe('PluginRegistryService — releasePicker registration validation', () =
     const second = processManifest('fliks.b', VALID_PICKER);
     const result = await service.register(makePackage(second));
 
-    expect(result).toEqual({ ok: false, pluginId: second.id, reason: 'release-picker-conflict', detail: expect.any(String) });
+    expect(result).toEqual({ ok: true, pluginId: second.id });
+  });
+
+  it('resolves the releasePicker winner by lexicographically smallest plugin id, regardless of registration order', async () => {
+    const service = makeService();
+    // Registers "fliks.zebra" first so a first-come-wins rule would pick the wrong plugin.
+    await service.register(makePackage(processManifest('fliks.zebra', VALID_PICKER)));
+    await service.register(makePackage(processManifest('fliks.alpha', VALID_PICKER)));
+
+    expect(service.releasePickerFor('fliks.alpha')).toEqual(VALID_PICKER);
+    expect(service.releasePickerFor('fliks.zebra')).toBeUndefined();
+  });
+
+  it('keeps the losing plugin\'s routes and permissions — only the releasePicker is withheld', async () => {
+    const service = makeService();
+    await service.register(makePackage(processManifest('fliks.alpha', VALID_PICKER)));
+
+    const extraRoute: PluginRoute = { method: 'GET', path: '/custom', policy: 'read:plugin:fliks.zebra:custom' };
+    const loserManifest = {
+      ...processManifest('fliks.zebra', VALID_PICKER, [...ROUTES, extraRoute]),
+      permissions: ['custom'],
+    } as PluginManifest;
+    const result = await service.register(makePackage(loserManifest));
+
+    expect(result).toEqual({ ok: true, pluginId: 'fliks.zebra' });
+    expect(service.releasePickerFor('fliks.zebra')).toBeUndefined();
+    expect(service.resolveRoute('fliks.zebra', 'GET', '/custom')).not.toBeNull();
+    expect(service.declaredPermissionsFor('fliks.zebra')).toEqual(new Set(['plugin:fliks.zebra:custom']));
   });
 
   it('lets the same plugin re-register the releasePicker it already owns', async () => {
@@ -121,9 +148,10 @@ describe('PluginRegistryService — releasePicker registration validation', () =
     const second = processManifest('fliks.b', VALID_PICKER);
     const result = await service.register(makePackage(second));
     expect(result).toEqual({ ok: true, pluginId: second.id });
+    expect(service.releasePickerFor(second.id)).toEqual(VALID_PICKER);
   });
 
-  it('keeps the releasePicker claimed across unregister, so a stopped plugin still blocks another', async () => {
+  it('keeps the releasePicker declaration claimed across unregister, so a stopped plugin still wins the tie-break', async () => {
     const service = makeService();
     const first = processManifest('fliks.a', VALID_PICKER);
     await service.register(makePackage(first));
@@ -133,6 +161,7 @@ describe('PluginRegistryService — releasePicker registration validation', () =
 
     const second = processManifest('fliks.b', VALID_PICKER);
     const result = await service.register(makePackage(second));
-    expect(result).toEqual({ ok: false, pluginId: second.id, reason: 'release-picker-conflict', detail: expect.any(String) });
+    expect(result).toEqual({ ok: true, pluginId: second.id });
+    expect(service.releasePickerFor(second.id)).toBeUndefined();
   });
 });

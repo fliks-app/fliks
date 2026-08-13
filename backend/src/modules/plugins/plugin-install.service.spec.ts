@@ -60,6 +60,22 @@ function fakePluginDb() {
   };
 }
 
+function fakeSettingsService() {
+  const rows = new Map<string, string | null>();
+  return {
+    rows,
+    getAll: jest.fn(async () => Object.fromEntries(rows)),
+    get: jest.fn(async (key: string) => rows.get(key) ?? null),
+    set: jest.fn(async (key: string, value: string | null) => {
+      rows.set(key, value);
+      return { key, value } as never;
+    }),
+    delete: jest.fn(async (key: string) => {
+      rows.delete(key);
+    }),
+  };
+}
+
 function tamperedZip(): Buffer {
   // A well-formed archive that `inspect()` refuses on its own — a control
   // character in an entry name — standing in for a directory modified
@@ -139,6 +155,7 @@ describe('PluginInstallService', () => {
   let processService: ReturnType<typeof fakeProcessService>;
   let staging: PluginStagingService;
   let pluginDb: ReturnType<typeof fakePluginDb>;
+  let settings: ReturnType<typeof fakeSettingsService>;
   let service: PluginInstallService;
   const originalAdapter = axios.defaults.adapter;
 
@@ -163,12 +180,14 @@ describe('PluginInstallService', () => {
     );
     staging = new PluginStagingService();
     pluginDb = fakePluginDb();
+    settings = fakeSettingsService();
     service = new PluginInstallService(
       repo as never,
       registrationRepo as never,
       registry,
       staging,
       pluginDb as unknown as PluginDatabaseService,
+      settings as never,
     );
   });
 
@@ -205,6 +224,28 @@ describe('PluginInstallService', () => {
 
       expect(report).toEqual({ installable: false, refusalCode: 'PLUGIN_BAD_MAGIC', detail: expect.any(String) });
       expect(stageSpy).not.toHaveBeenCalled();
+    });
+
+    it('refuses (never crashes on) a data manifest whose ui.contributions is an object, not an array', async () => {
+      const { buffer } = signedDataArchive({
+        id: 'fliks.badcontribobj',
+        ui: { contributions: { foo: 'bar' } } as unknown as DataPluginManifest['ui'],
+      });
+
+      const report = await service.inspectUpload(buffer);
+
+      expect(report).toEqual({ installable: false, refusalCode: 'PLUGIN_BAD_UI_CONTRIBUTIONS', detail: expect.any(String) });
+    });
+
+    it('refuses a data manifest whose ui.contributions is a string, rather than fabricating capabilities from its characters', async () => {
+      const { buffer } = signedDataArchive({
+        id: 'fliks.badcontribstr',
+        ui: { contributions: 'not-an-array' } as unknown as DataPluginManifest['ui'],
+      });
+
+      const report = await service.inspectUpload(buffer);
+
+      expect(report).toEqual({ installable: false, refusalCode: 'PLUGIN_BAD_UI_CONTRIBUTIONS', detail: expect.any(String) });
     });
   });
 
@@ -292,6 +333,35 @@ describe('PluginInstallService', () => {
       const second = await service.inspectUpload(buffer);
 
       expect(second.stagingId).toBe(first.stagingId);
+    });
+
+    it('refuses a data manifest with a malformed shared field (its own re-inspect, bypassing inspectUpload) and never creates a package row', async () => {
+      const { buffer, manifest } = signedDataArchive({
+        id: 'fliks.confirmbadevents',
+        events: { event: 'media.imported', webhook: 'https://example.invalid/hook' } as unknown as DataPluginManifest['events'],
+      });
+      const { stagingId, sha256 } = staging.stage(buffer);
+
+      await expectInstallError(service.confirmImport({ stagingId, sha256 }), 422, 'PLUGIN_BAD_EVENTS');
+
+      expect(repo.rows.has(manifest.id)).toBe(false);
+    });
+
+    it('VERDICT: never leaves an active row behind a register() that throws', async () => {
+      const { buffer, manifest } = signedProcessArchive({ id: 'fliks.processregistercrash' });
+      const { stagingId, sha256 } = await service.inspectUpload(buffer);
+      jest.spyOn(registry, 'register').mockRejectedValueOnce(new Error('object is not iterable'));
+
+      const result = await service.confirmImport({ stagingId: stagingId!, sha256: sha256! });
+
+      expect(result).toEqual({
+        pluginId: manifest.id,
+        version: manifest.version,
+        status: 'failed',
+        reason: 'register-crashed',
+        detail: expect.any(String),
+      });
+      expect(repo.rows.get(manifest.id)?.status).toBe('failed');
     });
   });
 
@@ -459,6 +529,60 @@ describe('PluginInstallService', () => {
 
     it('is safe for a plugin whose row and files never existed', async () => {
       await expect(service.uninstall('fliks.neverinstalled')).resolves.toBeUndefined();
+    });
+
+    it('clears every plugin.<id>.* setting on uninstall, secrets included, but leaves other plugins alone', async () => {
+      const { buffer, manifest } = signedDataArchive({ id: 'fliks.settingsclear' });
+      const { stagingId, sha256 } = await service.inspectUpload(buffer);
+      await service.confirmImport({ stagingId: stagingId!, sha256: sha256! });
+      await settings.set(`plugin.${manifest.id}.endpoint_url`, 'https://example.invalid/hook');
+      await settings.set(`plugin.${manifest.id}.api_token`, 's3cr3t');
+      await settings.set('plugin.fliks.other.endpoint_url', 'https://untouched.invalid');
+
+      await service.uninstall(manifest.id);
+
+      expect(settings.rows.has(`plugin.${manifest.id}.endpoint_url`)).toBe(false);
+      expect(settings.rows.has(`plugin.${manifest.id}.api_token`)).toBe(false);
+      expect(settings.rows.get('plugin.fliks.other.endpoint_url')).toBe('https://untouched.invalid');
+    });
+
+    it('VERDICT: never touches a plugin whose id starts with the uninstalled one', async () => {
+      // Ids carry dots, so `plugin.acme.` is a prefix of `plugin.acme.extra.`'s namespace.
+      const outer = signedDataArchive({ id: 'acme' });
+      const inner = signedDataArchive({ id: 'acme.extra' });
+      for (const { buffer } of [outer, inner]) {
+        const { stagingId, sha256 } = await service.inspectUpload(buffer);
+        await service.confirmImport({ stagingId: stagingId!, sha256: sha256! });
+      }
+      await settings.set('plugin.acme.endpoint_url', 'https://outer.invalid');
+      await settings.set('plugin.acme.extra.api_token', 'inner-s3cr3t');
+
+      await service.uninstall('acme');
+
+      expect(settings.rows.has('plugin.acme.endpoint_url')).toBe(false);
+      expect(settings.rows.get('plugin.acme.extra.api_token')).toBe('inner-s3cr3t');
+    });
+
+    it('VERDICT: an id nothing is installed under deletes no settings at all', async () => {
+      const { buffer, manifest } = signedDataArchive({ id: 'acme.installed' });
+      const { stagingId, sha256 } = await service.inspectUpload(buffer);
+      await service.confirmImport({ stagingId: stagingId!, sha256: sha256! });
+      await settings.set(`plugin.${manifest.id}.api_token`, 'keep-me');
+
+      await service.uninstall('acme');
+
+      expect(settings.rows.get(`plugin.${manifest.id}.api_token`)).toBe('keep-me');
+    });
+
+    it('clears plugin.<id>.* settings for a process-tier plugin too, on the same footing as data', async () => {
+      const { buffer, manifest } = signedProcessArchive({ id: 'fliks.processsettingsclear' });
+      const { stagingId, sha256 } = await service.inspectUpload(buffer);
+      await service.confirmImport({ stagingId: stagingId!, sha256: sha256! });
+      await settings.set(`plugin.${manifest.id}.password`, 'hunter2');
+
+      await service.uninstall(manifest.id);
+
+      expect(settings.rows.has(`plugin.${manifest.id}.password`)).toBe(false);
     });
   });
 

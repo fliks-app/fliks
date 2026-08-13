@@ -8,13 +8,24 @@ import * as semver from 'semver';
 import { PluginPackage, PluginPackageOrigin, PluginPackageStatus } from './entities/plugin-package.entity';
 import { PluginSource } from './entities/plugin-source.entity';
 import { PluginRegistration } from './entities/plugin-registration.entity';
-import { PluginRegistryService, CURRENT_FLIKS_VERSION } from './plugin-registry.service';
+import { PluginRegistryService, CURRENT_FLIKS_VERSION, type PluginRegistrationResult } from './plugin-registry.service';
 import { PluginStagingService } from './plugin-staging.service';
 import { PluginDatabaseService } from './plugin-database.service';
+import { SettingsService } from '../settings/settings.service';
 import { PluginInstallException } from './plugin-install.exception';
 import { installedPluginDir, promoteDir } from './plugin-paths';
 import { unsignedProcessAllowlist } from '../../common/constants/plugin-flags';
-import { inspect, InspectSuccess, extractToStaging, MAX_ARCHIVE_COMPRESSED_BYTES, type PluginRefusalCode } from './archive';
+import {
+  inspect,
+  refuse,
+  InspectSuccess,
+  InspectResult,
+  InspectOptions,
+  extractToStaging,
+  MAX_ARCHIVE_COMPRESSED_BYTES,
+  type PluginRefusalCode,
+} from './archive';
+import { validateManifestShape } from './manifest-shape.validator';
 import type { TrustOutcome } from './archive/trust-store';
 import type { CatalogVersionEntry, FilteredCatalog, FilteredCatalogEntry } from './catalog/catalog';
 import { PLUGIN_API_VERSION, type PluginKind, type PluginManifest } from '../../common/plugin-contract';
@@ -118,11 +129,23 @@ export class PluginInstallService {
     private readonly registry: PluginRegistryService,
     private readonly staging: PluginStagingService,
     private readonly pluginDb: PluginDatabaseService,
+    private readonly settings: SettingsService,
   ) {}
+
+  /** `inspect()` refuses every malformed archive by itself; a throw reaching here is a defect in
+   *  core, so it is logged rather than reported as the author's malformed manifest and forgotten. */
+  private async safeInspect(buffer: Buffer, options: InspectOptions): Promise<InspectResult> {
+    try {
+      return await inspect(buffer, options);
+    } catch (err) {
+      this.logger.error(`inspect() threw instead of refusing: ${(err as Error).message}`);
+      return refuse('PLUGIN_BAD_MANIFEST', `plugin.json failed structural validation: ${(err as Error).message}`);
+    }
+  }
 
   /** V1-V7 in memory, then stages the raw bytes. Nothing is activated. */
   async inspectUpload(buffer: Buffer): Promise<PluginInspectReport> {
-    const result = await inspect(buffer, { unsignedProcessAllowlist: unsignedProcessAllowlist() });
+    const result = await this.safeInspect(buffer, { unsignedProcessAllowlist: unsignedProcessAllowlist() });
     if (!result.ok) return { installable: false, refusalCode: result.code, detail: result.detail };
 
     const { stagingId } = this.staging.stage(buffer);
@@ -145,7 +168,7 @@ export class PluginInstallService {
       );
     }
 
-    const result = await inspect(buffer, { unsignedProcessAllowlist: unsignedProcessAllowlist() });
+    const result = await this.safeInspect(buffer, { unsignedProcessAllowlist: unsignedProcessAllowlist() });
     if (!result.ok) {
       throw new PluginInstallException(HttpStatus.UNPROCESSABLE_ENTITY, result.code, result.detail);
     }
@@ -188,7 +211,7 @@ export class PluginInstallService {
       );
     }
 
-    const result = await inspect(buffer, { unsignedProcessAllowlist: unsignedProcessAllowlist() });
+    const result = await this.safeInspect(buffer, { unsignedProcessAllowlist: unsignedProcessAllowlist() });
     if (!result.ok) return { installable: false, refusalCode: result.code, detail: result.detail };
 
     const { stagingId } = this.staging.stage(buffer, 'catalog');
@@ -209,11 +232,29 @@ export class PluginInstallService {
     await this.registrationRepo.delete({ pluginId });
     const pkg = await this.packageRepo.findOne({ where: { pluginId } });
     if (!pkg) return;
+    // Config-page values and anything the plugin wrote via `config.set`, secrets included: a
+    // reinstall must ask again rather than inherit them.
+    await this.clearPluginSettings(pluginId);
     if (pkg.manifest.kind === 'process') {
       await this.pluginDb.deprovision(pluginId);
     }
     await this.packageRepo.remove(pkg);
     rmSync(installedPluginDir(pkg.pluginId, pkg.version), { recursive: true, force: true });
+  }
+
+  /** Every `plugin.<id>.*` app setting this plugin owns. Ids contain dots, so one id can be a
+   *  prefix of another's namespace — those keys belong to the more specific id, never to this one. */
+  private async clearPluginSettings(pluginId: string): Promise<void> {
+    const prefix = `plugin.${pluginId}.`;
+    const others = (await this.packageRepo.find())
+      .map((p) => `plugin.${p.pluginId}.`)
+      .filter((p) => p !== prefix && p.startsWith(prefix));
+    const all = await this.settings.getAll();
+    for (const key of Object.keys(all)) {
+      if (!key.startsWith(prefix)) continue;
+      if (others.some((p) => key.startsWith(p))) continue;
+      await this.settings.delete(key);
+    }
   }
 
   /** Persists the enabled flag on `plugin_registrations` and starts or stops the process to match. */
@@ -370,7 +411,19 @@ export class PluginInstallService {
       return { pluginId: saved.pluginId, version: saved.version, status: 'active' };
     }
 
-    const registration = await this.registry.register(saved);
+    // The row above is already `active`: a throw here — a shape `register()` doesn't guard
+    // against — must still land it on `failed`, never leave it active behind an exception.
+    let registration: PluginRegistrationResult;
+    try {
+      registration = await this.registry.register(saved);
+    } catch (err) {
+      const detail = (err as Error).message;
+      saved.status = 'failed';
+      saved.statusReason = `register-crashed: ${detail}`;
+      await this.packageRepo.save(saved);
+      this.logger.warn(`plugin "${saved.pluginId}" installed but not activated (register-crashed): ${detail}`);
+      return { pluginId: saved.pluginId, version: saved.version, status: 'failed', reason: 'register-crashed', detail };
+    }
     if (!registration.ok) {
       saved.status = 'failed';
       saved.statusReason = `${registration.reason}: ${registration.detail}`;

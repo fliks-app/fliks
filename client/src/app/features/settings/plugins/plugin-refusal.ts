@@ -23,18 +23,15 @@ const MALFORMED_CODES = new Set([
 
 const TOO_LARGE_CODES = new Set(['PLUGIN_TOO_LARGE', 'PLUGIN_RATIO', 'PLUGIN_MANIFEST_TOO_LARGE']);
 
-/** `data`-tier manifest carrying a process-only field (`archive/refusal-codes.ts`) — one message covers the family. */
-const DATA_TIER_CODES = new Set([
-  'PLUGIN_DATA_HAS_FILES',
-  'PLUGIN_DATA_HAS_ROUTES',
-  'PLUGIN_DATA_HAS_DATABASE',
-  'PLUGIN_DATA_HAS_JOBS',
-  'PLUGIN_DATA_HAS_INGEST_ROOTS',
-  'PLUGIN_DATA_HAS_MEMORY_MB',
-  'PLUGIN_DATA_HAS_RUNTIME',
-  'PLUGIN_DATA_HAS_PERMISSIONS',
-  'PLUGIN_DATA_HAS_CHECKLIST',
-]);
+/** A nested manifest section `parseManifest` does not look inside — the code names which one, so
+ *  the message can tell an author what to fix. */
+const MANIFEST_SECTION_KEYS: Readonly<Record<string, string>> = {
+  PLUGIN_BAD_UI: 'settings.plugins.consent.refusal.bad_ui',
+  PLUGIN_BAD_UI_CONTRIBUTIONS: 'settings.plugins.consent.refusal.bad_ui_contributions',
+  PLUGIN_BAD_UI_CONFIG_PAGES: 'settings.plugins.consent.refusal.bad_ui_config_pages',
+  PLUGIN_BAD_UI_RELEASE_PICKER: 'settings.plugins.consent.refusal.bad_ui_release_picker',
+  PLUGIN_BAD_EVENTS: 'settings.plugins.consent.refusal.bad_events',
+};
 
 /**
  * One i18n key per refusal-code family — never the backend `detail` string, which
@@ -44,9 +41,9 @@ const DATA_TIER_CODES = new Set([
  * stable, safe-to-surface contract.
  */
 export function refusalMessageKey(code: string | undefined): string {
+  if (code && MANIFEST_SECTION_KEYS[code]) return MANIFEST_SECTION_KEYS[code];
   if (code && MALFORMED_CODES.has(code)) return 'settings.plugins.consent.refusal.malformed';
   if (code && TOO_LARGE_CODES.has(code)) return 'settings.plugins.consent.refusal.too_large';
-  if (code && DATA_TIER_CODES.has(code)) return 'settings.plugins.consent.refusal.data_tier_field';
   switch (code) {
     case 'PLUGIN_BAD_SIGNATURE':
       return 'settings.plugins.consent.refusal.bad_signature';

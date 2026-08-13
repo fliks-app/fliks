@@ -2125,13 +2125,17 @@
         "refusal": {
           "malformed": "This archive is not a valid Fliks plugin package.",
           "too_large": "This archive is too large, or its contents don't match what it declares.",
-          "data_tier_field": "This plugin claims to be data-only, but its manifest declares program code. It was refused.",
           "bad_signature": "This archive's signature is malformed.",
           "unsigned_process": "This plugin runs code but is not signed. Signed process plugins are required.",
           "hash_mismatch": "This archive changed after it was inspected. Upload it again.",
           "file_set_mismatch": "This archive's files do not match its manifest.",
           "tier_violation": "This archive's contents do not match its declared kind.",
-          "unknown": "This plugin could not be installed (code {{code}})."
+          "unknown": "This plugin could not be installed (code {{code}}).",
+          "bad_ui": "El manifiesto de este plugin tiene una sección `ui` mal formada. Se ha rechazado.",
+          "bad_ui_contributions": "El manifiesto de este plugin tiene una lista `ui.contributions` mal formada. Se ha rechazado.",
+          "bad_ui_config_pages": "El manifiesto de este plugin tiene una lista `ui.configPages` mal formada. Se ha rechazado.",
+          "bad_ui_release_picker": "El manifiesto de este plugin tiene una sección `ui.releasePicker` mal formada. Se ha rechazado.",
+          "bad_events": "El manifiesto de este plugin tiene una lista `events` mal formada. Se ha rechazado."
         }
       },
       "sources": {
