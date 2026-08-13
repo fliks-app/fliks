@@ -1,3 +1,4 @@
+import * as semver from 'semver';
 /**
  * Wire protocol for the two unix sockets between core and a `process`
  * plugin: newline-delimited JSON, one object per line.
@@ -28,11 +29,27 @@ export type Note<P = unknown> = { m: string; p?: P };
 export const MAX_FRAME_BYTES = 4 * 1024 * 1024;
 
 /**
- * Checked for exact equality at catalog, install and `hello` — never a
- * range. Within one value the method set is additive-only; any removal
- * or semantic change bumps it.
+ * What core sends a plugin at `hello`. Within one value the method set is additive-only; any
+ * removal or semantic change bumps it.
  */
 export const PLUGIN_API_VERSION = 0;
+
+/**
+ * Every value core still accepts from a manifest, newest last. Retiring one is what orphans the
+ * plugins that declare it, so a bump adds an entry and a later release drops the oldest — the
+ * window in between is when authors republish.
+ */
+export const SUPPORTED_PLUGIN_API_VERSIONS: readonly number[] = [0];
+
+/**
+ * The version a `fliks` range is matched against: a prerelease resolves as its own release, since
+ * `3.0.0-rc.1` sorts *below* `3.0.0` and would otherwise satisfy no range that admits 3.0.0 —
+ * leaving a release candidate unable to run any plugin, and the upgrade impossible to rehearse.
+ */
+export function fliksRangeVersion(version: string): string {
+  const parsed = semver.parse(version);
+  return parsed ? `${parsed.major}.${parsed.minor}.${parsed.patch}` : version;
+}
 
 /**
  * Environment core sets on every spawn (see `supervisor/spawn-plan.ts`) — the only way in

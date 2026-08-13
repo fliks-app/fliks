@@ -1,5 +1,5 @@
 import { parseCatalogDocument, filterCatalog, type CatalogDocument, type CatalogVersionEntry } from './catalog';
-import { PLUGIN_API_VERSION } from '../../../common/plugin-contract';
+import { PLUGIN_API_VERSION, SUPPORTED_PLUGIN_API_VERSIONS } from '../../../common/plugin-contract';
 
 /** A `fliks` range every test can rely on matching this repo's own `package.json` version
  *  (same convention as `plugin-registry.service.spec.ts`'s `COMPATIBLE_RANGE`). */
@@ -62,7 +62,7 @@ describe('parseCatalogDocument()', () => {
 describe('filterCatalog()', () => {
   it('lists a version whose pluginApi matches and whose fliks range is satisfied', () => {
     const doc = document({ versions: [version()] });
-    const result = filterCatalog(doc, PLUGIN_API_VERSION, '2.0.1');
+    const result = filterCatalog(doc, SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1');
     expect(result.plugins[0].installable).toEqual([version()]);
     expect(result.plugins[0].hidden).toBeNull();
   });
@@ -70,7 +70,7 @@ describe('filterCatalog()', () => {
   it('hides a version whose pluginApi does not match exactly, and counts it', () => {
     const mismatched = version({ pluginApi: PLUGIN_API_VERSION + 1, fliks: COMPATIBLE_RANGE });
     const doc = document({ versions: [mismatched] });
-    const result = filterCatalog(doc, PLUGIN_API_VERSION, '2.0.1');
+    const result = filterCatalog(doc, SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1');
     expect(result.plugins[0].installable).toEqual([]);
     // No version number reveals it: the mismatch is the plugin API, not the range.
     expect(result.plugins[0].hidden).toEqual({ count: 1, minFliksVersion: null });
@@ -79,7 +79,7 @@ describe('filterCatalog()', () => {
   it('hides a version whose fliks range excludes the running core version, and counts it', () => {
     const tooNew = version({ fliks: '>=5.0.0 <6.0.0' });
     const doc = document({ versions: [tooNew] });
-    const result = filterCatalog(doc, PLUGIN_API_VERSION, '2.0.1');
+    const result = filterCatalog(doc, SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1');
     expect(result.plugins[0].installable).toEqual([]);
     expect(result.plugins[0].hidden).toEqual({ count: 1, minFliksVersion: '5.0.0' });
   });
@@ -88,7 +88,7 @@ describe('filterCatalog()', () => {
     const needsFive = version({ version: '2.0.0', fliks: '>=5.0.0 <6.0.0' });
     const needsFour = version({ version: '3.0.0', fliks: '>=4.0.0 <5.0.0' });
     const doc = document({ versions: [needsFive, needsFour] });
-    const result = filterCatalog(doc, PLUGIN_API_VERSION, '2.0.1');
+    const result = filterCatalog(doc, SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1');
     expect(result.plugins[0].hidden).toEqual({ count: 2, minFliksVersion: '4.0.0' });
   });
 
@@ -96,13 +96,13 @@ describe('filterCatalog()', () => {
     // The range's upper bound is already behind us: upgrading moves further away.
     const tooOld = version({ fliks: '>=1.0.0 <2.0.0' });
     const doc = document({ versions: [tooOld] });
-    const result = filterCatalog(doc, PLUGIN_API_VERSION, '2.0.1');
+    const result = filterCatalog(doc, SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1');
     expect(result.plugins[0].hidden).toEqual({ count: 1, minFliksVersion: null });
   });
 
   it('keeps a plugin in the result with an empty installable list when every version is hidden', () => {
     const doc = document({ versions: [version({ fliks: '>=5.0.0 <6.0.0' })] });
-    const result = filterCatalog(doc, PLUGIN_API_VERSION, '2.0.1');
+    const result = filterCatalog(doc, SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1');
     expect(result.plugins).toHaveLength(1);
     expect(result.plugins[0].id).toBe('fliks.test-plugin');
     expect(result.plugins[0].installable).toEqual([]);
@@ -113,16 +113,16 @@ describe('filterCatalog()', () => {
     const ok = version({ version: '1.0.0' });
     const tooNew = version({ version: '2.0.0', fliks: '>=5.0.0 <6.0.0' });
     const doc = document({ versions: [ok, tooNew] });
-    const result = filterCatalog(doc, PLUGIN_API_VERSION, '2.0.1');
+    const result = filterCatalog(doc, SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1');
     expect(result.plugins[0].installable).toEqual([ok]);
     expect(result.plugins[0].hidden).toEqual({ count: 1, minFliksVersion: '5.0.0' });
   });
 
   it('carries an optional logo URL through unchanged, and omits it when absent', () => {
-    const withLogo = filterCatalog(document({ logo: 'https://example.com/logo.png' }), PLUGIN_API_VERSION, '2.0.1');
+    const withLogo = filterCatalog(document({ logo: 'https://example.com/logo.png' }), SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1');
     expect(withLogo.plugins[0].logo).toBe('https://example.com/logo.png');
 
-    const withoutLogo = filterCatalog(document(), PLUGIN_API_VERSION, '2.0.1');
+    const withoutLogo = filterCatalog(document(), SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1');
     expect(withoutLogo.plugins[0].logo).toBeUndefined();
   });
 });

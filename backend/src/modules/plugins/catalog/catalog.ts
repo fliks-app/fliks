@@ -1,4 +1,5 @@
 import * as semver from 'semver';
+import { fliksRangeVersion } from '../../../common/plugin-contract';
 import type { PluginKind } from '../../../common/plugin-contract';
 
 /**
@@ -108,8 +109,8 @@ export interface FilteredCatalog {
   plugins: FilteredCatalogEntry[];
 }
 
-function isInstallable(v: CatalogVersionEntry, pluginApiVersion: number, fliksVersion: string): boolean {
-  return v.pluginApi === pluginApiVersion && semver.satisfies(fliksVersion, v.fliks);
+function isInstallable(v: CatalogVersionEntry, supportedApiVersions: readonly number[], fliksVersion: string): boolean {
+  return supportedApiVersions.includes(v.pluginApi) && semver.satisfies(fliksRangeVersion(fliksVersion), v.fliks);
 }
 
 function summarizeHidden(
@@ -118,7 +119,7 @@ function summarizeHidden(
 ): HiddenVersionsSummary | null {
   if (hidden.length === 0) return null;
   const reachable = hidden
-    .filter((v) => !semver.satisfies(fliksVersion, v.fliks))
+    .filter((v) => !semver.satisfies(fliksRangeVersion(fliksVersion), v.fliks))
     .map((v) => semver.minVersion(v.fliks))
     .filter((v): v is semver.SemVer => v !== null && semver.gt(v, fliksVersion));
   const lowest = reachable.length
@@ -128,17 +129,20 @@ function summarizeHidden(
 }
 
 /**
- * `pluginApi` exact equality and `semver.satisfies` against the running core version
- * — the same two checks `PluginRegistryService.register` runs at load, applied here
- * one layer earlier so the admin never sees a version they cannot install.
+ * The same two checks `PluginRegistryService.register` runs at load, applied one layer earlier
+ * so an admin never sees a version they cannot install.
  */
-export function filterCatalog(document: CatalogDocument, pluginApiVersion: number, fliksVersion: string): FilteredCatalog {
+export function filterCatalog(
+  document: CatalogDocument,
+  supportedApiVersions: readonly number[],
+  fliksVersion: string,
+): FilteredCatalog {
   return {
     plugins: document.plugins.map((entry) => {
       const installable: CatalogVersionEntry[] = [];
       const hidden: CatalogVersionEntry[] = [];
       for (const version of entry.versions) {
-        (isInstallable(version, pluginApiVersion, fliksVersion) ? installable : hidden).push(version);
+        (isInstallable(version, supportedApiVersions, fliksVersion) ? installable : hidden).push(version);
       }
       return {
         id: entry.id,

@@ -16,7 +16,8 @@ import { sweepOrphans } from './supervisor/pid-file';
 import { getPluginsSocketDir } from '../../common/constants/paths';
 import { arePluginsDisabled, FLIKS_PLUGINS_DISABLED_ENV } from '../../common/constants/plugin-flags';
 import {
-  PLUGIN_API_VERSION,
+  SUPPORTED_PLUGIN_API_VERSIONS,
+  fliksRangeVersion,
   PLUGIN_WEBHOOK_EVENT_NAMES,
   WEBHOOK_SETTING_PREFIX,
   type PluginKind,
@@ -234,14 +235,14 @@ export class PluginRegistryService implements OnModuleInit {
 
     // L3 (re-hash plugin.js from the loaded fd) happens inside `PluginProcessService.startFor`, below.
     // L4
-    if (manifest.pluginApi !== PLUGIN_API_VERSION) {
+    if (!SUPPORTED_PLUGIN_API_VERSIONS.includes(manifest.pluginApi)) {
       return this.fail(
         pkg.pluginId,
         'incompatible-api',
-        `manifest declares pluginApi ${manifest.pluginApi}, running ${PLUGIN_API_VERSION}`,
+        `manifest declares pluginApi ${manifest.pluginApi}, this core accepts ${SUPPORTED_PLUGIN_API_VERSIONS.join(', ')}`,
       );
     }
-    if (!semver.satisfies(CURRENT_FLIKS_VERSION, manifest.fliks)) {
+    if (!semver.satisfies(fliksRangeVersion(CURRENT_FLIKS_VERSION), manifest.fliks)) {
       return this.fail(
         pkg.pluginId,
         'incompatible-fliks',
