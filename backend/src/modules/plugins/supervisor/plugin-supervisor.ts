@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'child_process';
 import { createServer, type Server, type Socket } from 'net';
 import { randomBytes } from 'crypto';
-import { chmodSync, chownSync, mkdirSync, unlinkSync } from 'fs';
+import { chmodSync, chownSync, mkdirSync, readdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { getPluginsSocketDir } from '../../../common/constants/paths';
 import type { OnApplicationShutdown } from '@nestjs/common';
@@ -109,6 +109,11 @@ function withDeadline<T>(promise: Promise<T>, ms: number, label: string): Promis
   });
 }
 
+/** A plugin id is dotted, and a dot is a regex metacharacter. */
+function escapeForRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** 0600 keeps a second plugin out; the chown is what lets the dropped child in at all. */
 function listenAndRestrict(server: Server, path: string, dropTo: { uid: number; gid: number } | null): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -175,8 +180,10 @@ export class PluginSupervisor implements OnApplicationShutdown {
       hostApi: null,
       ...options,
     };
-    this.coreSockPath = join(this.opts.runtimeDir, `${this.opts.id}.core.sock`);
-    this.pluginSockPath = join(this.opts.runtimeDir, `${this.opts.id}.plugin.sock`);
+    // Random suffix: another plugin (same uid, same runtime dir) can't derive this path from the id alone.
+    const rand = randomBytes(8).toString('hex');
+    this.coreSockPath = join(this.opts.runtimeDir, `${this.opts.id}.${rand}.core.sock`);
+    this.pluginSockPath = join(this.opts.runtimeDir, `${this.opts.id}.${rand}.plugin.sock`);
   }
 
   getState(): SupervisorState {
@@ -324,9 +331,24 @@ export class PluginSupervisor implements OnApplicationShutdown {
 
   private async setupSockets(): Promise<void> {
     mkdirSync(this.opts.runtimeDir, { recursive: true });
-    for (const p of [this.coreSockPath, this.pluginSockPath]) {
+    const dropTo = this.dropTarget();
+    try {
+      // 0710: owner lists it, a dropped child's group traverses to a known socket path but cannot readdir.
+      chmodSync(this.opts.runtimeDir, 0o710);
+      if (dropTo) chownSync(this.opts.runtimeDir, -1, dropTo.gid);
+    } catch (err) {
+      this.opts.logBuffer.warn(
+        `could not harden runtime dir permissions: ${(err as Error).message}`,
+        `plugin:${this.opts.id}`,
+      );
+    }
+    // A random name is never reused, so this plugin's own sockets from earlier runs would
+    // accumulate for ever; only its own are touched, and it is about to own them anyway.
+    const stale = new RegExp(`^${escapeForRegExp(this.opts.id)}\\.[0-9a-f]{16}\\.(?:core|plugin)\\.sock$`);
+    for (const name of readdirSync(this.opts.runtimeDir)) {
+      if (!stale.test(name)) continue;
       try {
-        unlinkSync(p);
+        unlinkSync(join(this.opts.runtimeDir, name));
       } catch {
         // nothing stale to remove
       }
@@ -339,7 +361,6 @@ export class PluginSupervisor implements OnApplicationShutdown {
       }
       this.onPluginConnected(s);
     });
-    const dropTo = this.dropTarget();
     await Promise.all([
       listenAndRestrict(this.coreServer, this.coreSockPath, dropTo),
       listenAndRestrict(this.pluginServer, this.pluginSockPath, dropTo),

@@ -42,6 +42,13 @@ function randomHexPassword(): string {
   return password;
 }
 
+/** A foreign key from this plugin's own schema into `public` that would block core deletes. */
+export interface UnsafeCoreRefFk {
+  constraint: string;
+  table: string;
+  referencedTable: string;
+}
+
 function asProvisionFailure(err: unknown): PluginInstallException {
   if (err instanceof PluginInstallException) return err;
   const detail = err instanceof Error ? err.message : String(err);
@@ -127,6 +134,28 @@ export class PluginDatabaseService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  /** Only `CASCADE`/`SET NULL` (`confdeltype` 'c'/'n') let a core `DELETE` proceed unattended. */
+  async findUnsafeCoreRefFks(pluginId: string): Promise<UnsafeCoreRefFk[]> {
+    const identifier = pluginDbIdentifier(pluginId);
+    const rows = await this.dataSource.query(
+      `SELECT con.conname AS constraint_name, cl.relname AS table_name, fcl.relname AS referenced_table
+         FROM pg_constraint con
+         JOIN pg_class cl ON cl.oid = con.conrelid
+         JOIN pg_namespace ns ON ns.oid = cl.relnamespace
+         JOIN pg_class fcl ON fcl.oid = con.confrelid
+         JOIN pg_namespace fns ON fns.oid = fcl.relnamespace
+        WHERE con.contype = 'f' AND ns.nspname = $1 AND fns.nspname = 'public'
+          AND con.confdeltype NOT IN ('c', 'n')
+        ORDER BY con.conname`,
+      [identifier],
+    );
+    return (rows as { constraint_name: string; table_name: string; referenced_table: string }[]).map((row) => ({
+      constraint: row.constraint_name,
+      table: row.table_name,
+      referencedTable: row.referenced_table,
+    }));
   }
 
   /** P4b — a fresh password per spawn, never persisted. Returns the DSN, or null when this plugin has no provisioned role. */

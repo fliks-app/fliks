@@ -10,6 +10,7 @@ import { minimalProcessManifest } from './archive/test-manifests';
 import type { PluginPackage } from './entities/plugin-package.entity';
 import type { PluginSupervisor, PluginSupervisorOptions, SupervisorState } from './supervisor/plugin-supervisor';
 import type { PluginHostBindingService } from './host/plugin-host-binding.service';
+import type { UnsafeCoreRefFk } from './plugin-database.service';
 
 /**
  * Waits until the factory has built `count` supervisors, so a fake's state can be flipped
@@ -82,6 +83,7 @@ function fakePluginDb(order: string[] = []) {
     provision: jest.fn(async () => {
       order.push('provision');
     }),
+    findUnsafeCoreRefFks: jest.fn(async (): Promise<UnsafeCoreRefFk[]> => []),
     rotatePassword: jest.fn(async () => {
       order.push('rotate');
       return 'postgresql://fake-dsn' as string | null;
@@ -253,6 +255,32 @@ describe('PluginProcessService.startFor', () => {
 
     expect(result).toEqual({ ok: false, reason: 'db-provision-failed', detail: 'db unreachable' });
     expect(instances).toHaveLength(0);
+  });
+
+  it('an unsafe core-ref foreign key warns for every offending constraint but still starts the plugin', async () => {
+    const pkg = fakePackage();
+
+    const pluginDb = fakePluginDb();
+    pluginDb.findUnsafeCoreRefFks.mockResolvedValue([
+      { constraint: 'zz_probe_mediaId_fkey', table: 'zz_probe', referencedTable: 'media' },
+      { constraint: 'zz_second_fkey', table: 'zz_second', referencedTable: 'episodes' },
+    ]);
+    const logBuffer = fakeLogBuffer();
+    const { factory, instances } = makeFactory();
+    const service = new PluginProcessService(pluginDb as never, logBuffer as never, fakeSettings() as never, factory);
+
+    const startPromise = service.startFor(pkg);
+    await waitForSupervisors(instances);
+    instances[0].setState('ready');
+    const result = await startPromise;
+
+    expect(result).toEqual({ ok: true });
+    expect(instances).toHaveLength(1);
+    expect(pluginDb.rotatePassword).toHaveBeenCalled();
+    expect(logBuffer.warn).toHaveBeenCalledWith(expect.stringContaining('zz_probe_mediaId_fkey'), `plugin:${pkg.pluginId}`);
+    expect(logBuffer.warn).toHaveBeenCalledWith(expect.stringContaining('zz_second_fkey'), `plugin:${pkg.pluginId}`);
+    expect(service.statusMessageOf(pkg.pluginId)).toContain('zz_probe_mediaId_fkey');
+    expect(service.statusMessageOf(pkg.pluginId)).toContain('zz_second_fkey');
   });
 
   it('a rotatePassword failure also returns "db-provision-failed" and spawns nothing', async () => {
