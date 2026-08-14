@@ -30,6 +30,7 @@ import { SettingsModule } from '../settings/settings.module';
 import { LibrariesModule } from '../libraries/libraries.module';
 import { MarkersModule } from '../markers/markers.module';
 import { PlaylistsModule } from '../playlists/playlists.module';
+import { PluginsModule } from '../plugins/plugins.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { PlaylistsModule } from '../playlists/playlists.module';
     LibrariesModule,
     MarkersModule,
     PlaylistsModule,
+    PluginsModule,
   ],
   controllers: [StreamingController, PlaybackController],
   providers: [

@@ -95,6 +95,30 @@ admin sidebar.
 If a page needs something these three cannot express, it is not a plugin page. The escape is a
 core change adding a `kind`, not a plugin shipping code.
 
+## Player pre-roll
+
+**`ui.player`** declares one route, `{ preRollRoute: string }`, that must name a `POST` entry in
+this manifest's own `routes[]` — the same rule `releasePicker` applies to its own routes. Only one
+plugin's declaration is ever live: if more than one declares it, the lexicographically smallest
+plugin id wins and the others are logged and ignored, exactly like `releasePicker`.
+
+Before a `playback-info` response goes out, core POSTs `{ mediaFileId, mediaId, episodeId }` to the
+winning plugin's route on behalf of the requesting user and expects back a JSON array of items
+shaped `{ mediaFileId: number, labelKey?: string, skippable?: boolean }` — **`mediaFileId` only**;
+there is no URL and no path in this contract. An item names a library file; it is not a pointer to
+one, and core is the only party that ever turns it into something playable. The array is capped at
+`PRE_ROLL_ITEMS_MAX` items; anything past the cap, not a positive integer `mediaFileId`, repeated,
+or naming the item about to play anyway, is dropped — the last two would play one file twice.
+
+Every id core gets back is still resolved and ACL-checked through the exact same path the main
+item uses — a file in a library the requesting user cannot see, or one that no longer resolves, is
+dropped silently. A plugin can only *name* a candidate; it can never grant access to one. If no
+plugin declares `ui.player`, the plugin is not running, the call fails or times out, or it answers
+anything other than 200 with that exact shape, `playback-info` simply omits `preRoll` from its
+response — the feature is invisible on failure, never a broken playback-info call.
+
+The Apple TV and Cast players do not model this field and will play the main video only.
+
 ## What a `process` plugin can ask of core
 
 A spawned plugin talks to core over two unix sockets with newline-delimited JSON-RPC: one for the

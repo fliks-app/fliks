@@ -66,6 +66,8 @@ import { PlaybackService } from './playback.service';
 import { MarkersService } from '../markers/markers.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 import { StreamingSettingsCache } from './streaming-settings-cache.service';
+import { PluginPreRollService } from '../plugins/plugin-pre-roll.service';
+import type { PreRollItem } from '../../common/plugin-contract';
 
 // Derived from the ladders themselves (SDR + HDR, full + eco) so a new rung
 // can never be forgotten here — the missing eco entry is exactly what 400'd
@@ -95,6 +97,23 @@ export function withTimestampMap(
   const mpegts = Math.round(Math.max(0, startSeconds) * 90000);
   const map = `X-TIMESTAMP-MAP=MPEGTS:${mpegts},LOCAL:00:00:00.000`;
   return text.replace(/^(WEBVTT[^\n]*)\n/, `$1\n${map}\n`);
+}
+
+/**
+ * Asks the plugin, then ACL-gates every candidate through the same `resolveFile` the main item
+ * uses, for the same user: a plugin only names an id, it never grants access to one. Answers
+ * `undefined` rather than `[]` so a plugin-free install serializes with `preRoll` absent.
+ */
+export async function resolvePreRoll<TUser>(deps: {
+  ask: () => Promise<PreRollItem[]>;
+  resolveFile: (mediaFileId: number, user: TUser) => Promise<unknown>;
+  user: TUser;
+}): Promise<PreRollItem[] | undefined> {
+  const candidates = await deps.ask();
+  if (!candidates.length) return undefined;
+  const checks = await Promise.allSettled(candidates.map((c) => deps.resolveFile(c.mediaFileId, deps.user)));
+  const allowed = candidates.filter((_, i) => checks[i].status === 'fulfilled');
+  return allowed.length ? allowed : undefined;
 }
 
 /** Accepted HLS segment / init filenames (fMP4 init, fMP4 or TS segment). */
@@ -297,6 +316,7 @@ export class StreamingController {
     private readonly segmentPackaging: SegmentPackagingService,
     private readonly sessionRouter: SessionRouter,
     private readonly sessionContextBuilder: SessionContextBuilder,
+    private readonly pluginPreRoll: PluginPreRollService,
   ) {}
 
   private getStreamingSettings() {
@@ -754,6 +774,18 @@ export class StreamingController {
       ? resolved.mediaFile.streamInfo.chapters
       : undefined;
 
+    const preRoll = await resolvePreRoll({
+      ask: () =>
+        this.pluginPreRoll.ask({
+          mediaFileId,
+          mediaId: resolved.mediaFile.mediaId,
+          episodeId: episodeId ?? undefined,
+          principal: { kind: 'delegated', userId },
+        }),
+      resolveFile: (id, forUser) => this.streamingService.resolveFile(id, forUser),
+      user,
+    });
+
     // Surface the tonemap mechanism the session actually runs, not the admin
     // pick. QSV/VAAPI encoders run the HW tonemap (vaapi/opencl/qsv after
     // `auto` resolution + boot probe); NVENC runs `tonemap_opencl` on the GPU
@@ -933,6 +965,7 @@ export class StreamingController {
       durationSeconds: duration,
       markers,
       chapters,
+      preRoll,
       sessionId: liveSession.sessionId,
       profileHash,
     };

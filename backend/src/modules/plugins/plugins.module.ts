@@ -4,6 +4,7 @@ import { PluginPackage } from './entities/plugin-package.entity';
 import { PluginSource } from './entities/plugin-source.entity';
 import { PluginRegistration } from './entities/plugin-registration.entity';
 import { PluginRegistryService } from './plugin-registry.service';
+import { PluginPreRollService } from './plugin-pre-roll.service';
 import { PluginWebhookDispatcherService } from './plugin-webhook-dispatcher.service';
 import { PluginProcessService } from './plugin-process.service';
 import { PluginJobsService } from './plugin-jobs.service';
@@ -60,7 +61,8 @@ import { ScheduledJobRegistryModule } from '../scheduler/scheduled-job-registry.
     PluginDatabaseService,
     PluginObjectGuardsService,
     PluginRouteGuard,
+    PluginPreRollService,
   ],
-  exports: [TypeOrmModule, PluginRegistryService, PluginDatabaseService, PluginJobsService],
+  exports: [TypeOrmModule, PluginRegistryService, PluginDatabaseService, PluginJobsService, PluginPreRollService],
 })
 export class PluginsModule {}

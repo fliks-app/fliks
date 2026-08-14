@@ -1,3 +1,5 @@
+import type { PreRollItem } from '../../../common/plugin-contract';
+
 /**
  * Playback info response — the backend's decision on how to play a media file.
  */
@@ -182,4 +184,7 @@ export interface PlaybackInfoResponse {
      *  overlay can flag the active crop without re-running detect. */
     crop?: { width: number; height: number; x: number; y: number };
   };
+
+  /** ACL-filtered pre-roll candidates (ids/labels only, no URL). Omitted, not `[]`, when unused. */
+  preRoll?: PreRollItem[];
 }

@@ -30,6 +30,7 @@ import {
   type PluginJob,
   type ReleasePickerPair,
   type ReleasePickerRoutes,
+  type PlayerDeclaration,
   type ConfigPage,
 } from '../../common/plugin-contract';
 import { OFFICIAL_KEYS, resolveTrust, readArchiveEntries, type TrustOutcome } from './archive';
@@ -101,6 +102,7 @@ export type PluginRegistrationFailureReason =
   | 'invalid-route-object-guard'
   | 'duplicate-route'
   | 'invalid-release-picker'
+  | 'invalid-player'
   | 'invalid-permission'
   | 'invalid-job-name'
   | 'invalid-job-cron'
@@ -168,6 +170,9 @@ export class PluginRegistryService implements OnModuleInit {
   /** Keyed by plugin id; one entry per plugin that declares a releasePicker — `releasePickerFor`
    *  exposes only the entry whose id wins `releasePickerWinner`. Lifecycle mirrors `routeTables`. */
   private readonly releasePickers = new Map<string, ReleasePickerRoutes>();
+  /** Keyed by plugin id; one entry per plugin that declares `ui.player` — `preRollRoute`
+   *  exposes only the entry whose id wins `preRollWinner`. Lifecycle mirrors `releasePickers`. */
+  private readonly playerDeclarations = new Map<string, PlayerDeclaration>();
   /** Keyed by plugin id; namespaced (`plugin:<id>:<name>`) CASL subjects this plugin declared.
    *  Lifecycle mirrors `routeTables`, not `webhookDeclarations`: kept across `unregister()`, dropped on `forget()`. */
   private readonly declaredPermissions = new Map<string, ReadonlySet<string>>();
@@ -267,6 +272,9 @@ export class PluginRegistryService implements OnModuleInit {
     );
     if (!releasePickerCheck.ok) return this.fail(pkg.pluginId, releasePickerCheck.reason, releasePickerCheck.detail);
 
+    const playerCheck = this.validatePlayer(manifest.ui?.player, manifest.kind === 'process' ? manifest.routes : []);
+    if (!playerCheck.ok) return this.fail(pkg.pluginId, playerCheck.reason, playerCheck.detail);
+
     const i18nCheck = this.validateI18nNamespace(pkg.pluginId, manifest);
     if (!i18nCheck.ok) return this.fail(pkg.pluginId, i18nCheck.reason, i18nCheck.detail);
 
@@ -288,6 +296,7 @@ export class PluginRegistryService implements OnModuleInit {
       this.replaceRouteTable(pkg.pluginId, manifest.routes);
       this.replaceDeclaredPermissions(pkg.pluginId, declaredSubjects);
       this.replaceReleasePicker(pkg.pluginId, manifest.ui?.releasePicker);
+      this.replacePlayer(pkg.pluginId, manifest.ui?.player);
 
       const activation = await this.activateProcess(pkg, manifest);
       if (!activation.ok) return activation;
@@ -320,6 +329,13 @@ export class PluginRegistryService implements OnModuleInit {
         this.logger.warn(`plugin "${pkg.pluginId}" declared a releasePicker but "${winner}" holds it (lower plugin id wins)`);
       }
     }
+    this.replacePlayer(pkg.pluginId, manifest.ui?.player);
+    if (manifest.ui?.player) {
+      const winner = this.preRollWinner();
+      if (winner !== pkg.pluginId) {
+        this.logger.warn(`plugin "${pkg.pluginId}" declared ui.player but "${winner}" holds it (lower plugin id wins)`);
+      }
+    }
     return { ok: true, pluginId: pkg.pluginId };
   }
 
@@ -329,6 +345,7 @@ export class PluginRegistryService implements OnModuleInit {
     this.replaceRouteTable(pluginId, []);
     this.replaceDeclaredPermissions(pluginId, EMPTY_SUBJECT_SET);
     this.replaceReleasePicker(pluginId, undefined);
+    this.replacePlayer(pluginId, undefined);
   }
 
   /** Withdraws what the plugin offers and stops its process, but keeps its declared routes and
@@ -429,6 +446,24 @@ export class PluginRegistryService implements OnModuleInit {
     return winner;
   }
 
+  /** The winning plugin id and its route in one call — what `PluginPreRollService` actually
+   *  needs, since it starts with no plugin id in hand. `undefined` when nobody declares it. */
+  preRollRoute(): { pluginId: string; route: string } | undefined {
+    const pluginId = this.preRollWinner();
+    const route = pluginId ? this.playerDeclarations.get(pluginId)?.preRollRoute : undefined;
+    return pluginId && route ? { pluginId, route } : undefined;
+  }
+
+  /** Deterministic winner among every plugin currently declaring `ui.player`: the
+   *  lexicographically smallest id, same rule as {@link releasePickerWinner}. */
+  private preRollWinner(): string | undefined {
+    let winner: string | undefined;
+    for (const id of this.playerDeclarations.keys()) {
+      if (winner === undefined || id < winner) winner = id;
+    }
+    return winner;
+  }
+
   /** The namespaced CASL subjects this plugin declared — empty if unregistered, `data`, or none declared.
    *  `PluginRouteGuard` scopes every check to exactly this, so a route never authorizes against another plugin's subject. */
   declaredPermissionsFor(pluginId: string): ReadonlySet<string> {
@@ -473,6 +508,12 @@ export class PluginRegistryService implements OnModuleInit {
   private replaceReleasePicker(pluginId: string, picker: ReleasePickerRoutes | undefined): void {
     if (!picker) this.releasePickers.delete(pluginId);
     else this.releasePickers.set(pluginId, picker);
+  }
+
+  /** Drops this plugin's previous `ui.player` (if any) and installs `player` in its place. */
+  private replacePlayer(pluginId: string, player: PlayerDeclaration | undefined): void {
+    if (!player) this.playerDeclarations.delete(pluginId);
+    else this.playerDeclarations.set(pluginId, player);
   }
 
   /**
@@ -699,6 +740,25 @@ export class PluginRegistryService implements OnModuleInit {
     return { ok: true };
   }
 
+  /** `manifest.ui.player` is untrusted JSON; `preRollRoute` must name a route this manifest
+   *  declares in `routes[]`, with method POST — exactly as `releasePicker` requires of its routes. */
+  private validatePlayer(
+    player: PlayerDeclaration | undefined,
+    routes: PluginRoute[],
+  ): { ok: true } | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
+    if (!player) return { ok: true };
+
+    const declaredRouteKeys = new Set(routes.map((r) => `${r.method.toUpperCase()} ${r.path}`));
+    if (!declaredRouteKeys.has(`POST ${player.preRollRoute}`)) {
+      return {
+        ok: false,
+        reason: 'invalid-player',
+        detail: `ui.player.preRollRoute "${player.preRollRoute}" is not declared as a POST route in routes[]`,
+      };
+    }
+    return { ok: true };
+  }
+
   /** Every failure path funnels here, so a failing re-registration can never leave a stale entry active. */
   private fail(pluginId: string, reason: PluginRegistrationFailureReason, detail: string): PluginRegistrationFailure {
     this.registry.delete(pluginId);
@@ -709,6 +769,7 @@ export class PluginRegistryService implements OnModuleInit {
       this.replaceRouteTable(pluginId, []);
       this.replaceDeclaredPermissions(pluginId, EMPTY_SUBJECT_SET);
       this.replaceReleasePicker(pluginId, undefined);
+      this.replacePlayer(pluginId, undefined);
     }
     return { ok: false, pluginId, reason, detail };
   }

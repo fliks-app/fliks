@@ -3,8 +3,10 @@ import {
   withTimestampMap,
   buildVodPlaylist,
   buildVariableVodPlaylist,
+  resolvePreRoll,
 } from './streaming.controller';
 import type { LiveSession } from './live-session.service';
+import type { PreRollItem } from '../../common/plugin-contract';
 
 describe('buildVodPlaylist', () => {
   const url = (i: string): string => `seg-${i}.m4s`;
@@ -105,6 +107,7 @@ describe('StreamingController.stopLiveSession', () => {
       {} as never, // segmentPackaging
       {} as never, // sessionRouter
       {} as never, // sessionContextBuilder
+      {} as never, // pluginPreRoll
     );
 
     return { controller, liveSessions, activeStreamTracker, transcodingService };
@@ -217,5 +220,56 @@ describe('StreamingController.stopLiveSession', () => {
     controller.stopLiveSession('sid-1');
 
     expect(activeStreamTracker.unregister).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolvePreRoll', () => {
+  const item = (mediaFileId: number): PreRollItem => ({ mediaFileId });
+  const USER = { id: 42, name: 'viewer' };
+
+  it('drops a candidate the user has no library access to (the security property)', async () => {
+    // Mirrors resolveFile: rejects for anything outside this user's ACL.
+    const resolveFile = jest.fn((id: number) =>
+      id === 2 ? Promise.reject(new Error('MediaFile #2 not found')) : Promise.resolve({ id }),
+    );
+
+    const result = await resolvePreRoll({
+      ask: () => Promise.resolve([item(1), item(2), item(3)]),
+      resolveFile,
+      user: USER,
+    });
+
+    expect(result).toEqual([item(1), item(3)]);
+  });
+
+  it('checks every candidate against the REQUESTING user, not some other identity', async () => {
+    const resolveFile = jest.fn(() => Promise.resolve({}));
+
+    await resolvePreRoll({ ask: () => Promise.resolve([item(1), item(2)]), resolveFile, user: USER });
+
+    // The user threaded into the check is the one the request was made by.
+    expect(resolveFile).toHaveBeenCalledWith(1, USER);
+    expect(resolveFile).toHaveBeenCalledWith(2, USER);
+  });
+
+  it('is undefined, not an empty array, when the plugin offers nothing', async () => {
+    const resolveFile = jest.fn(() => Promise.resolve({}));
+    await expect(resolvePreRoll({ ask: () => Promise.resolve([]), resolveFile, user: USER })).resolves.toBeUndefined();
+    expect(resolveFile).not.toHaveBeenCalled();
+  });
+
+  it('is undefined when nothing survives the ACL filter, so the field stays absent', async () => {
+    const result = await resolvePreRoll({
+      ask: () => Promise.resolve([item(1)]),
+      resolveFile: () => Promise.reject(new Error('not found')),
+      user: USER,
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it('never throws when the ask itself fails', async () => {
+    await expect(
+      resolvePreRoll({ ask: () => Promise.resolve([]), resolveFile: () => Promise.resolve({}), user: USER }),
+    ).resolves.toBeUndefined();
   });
 });
