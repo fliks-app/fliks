@@ -2353,6 +2353,13 @@
     "webhook_test_unconfigured": "Nenhum ponto de entrada configurado — nada foi enviado.",
     "webhook_test_failed": "A entrega de teste falhou: {{detail}}"
   },
+  "schema_form": {
+    "min_value": "Deve ser pelo menos {{min}}.",
+    "max_value": "Deve ser no máximo {{max}}.",
+    "min_length": "Deve ter pelo menos {{min}} caracteres.",
+    "max_length": "Deve ter no máximo {{max}} caracteres.",
+    "status_unset": "Ainda não definido"
+  },
   "provider_list": {
     "new": "Novo",
     "col_name": "Nome",

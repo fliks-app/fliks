@@ -1,48 +1,73 @@
-<div class="flex flex-col gap-4">
-  @for (field of fields(); track field.key) {
-    @switch (fieldKind(field)) {
-      @case ('input') {
-        <div class="flex flex-col gap-1">
-          <app-input-field
-            [type]="inputType(field)"
-            [label]="field.labelKey | translate"
-            [hint]="field.hint ? (field.hint | translate) : ''"
-            [placeholder]="field.placeholder ? (field.placeholder | translate) : ''"
-            [disabled]="disabled()"
-            [value]="fieldValue(field)"
-            (valueChange)="setValue(field, $event)"
-          />
-          @if (isInvalid(field)) {
-            <p class="text-error text-xs">{{ 'common.field_required' | translate }}</p>
-          }
-        </div>
-      }
-      @case ('toggle') {
-        <app-toggle-field
+<ng-template #fieldTpl let-field>
+  @switch (fieldKind(field)) {
+    @case ('input') {
+      <div class="flex flex-col gap-1">
+        <app-input-field
+          [type]="inputType(field)"
+          [label]="field.labelKey | translate"
+          [hint]="field.hint ? (field.hint | translate) : ''"
+          [placeholder]="field.placeholder ? (field.placeholder | translate) : ''"
+          [disabled]="disabled()"
+          [value]="fieldValue(field)"
+          (valueChange)="setValue(field, $event)"
+        />
+        @for (err of fieldErrors(field); track err.key) {
+          <p class="text-error text-xs">{{ err.key | translate: err.params }}</p>
+        }
+      </div>
+    }
+    @case ('toggle') {
+      <app-toggle-field
+        [label]="field.labelKey | translate"
+        [hint]="field.hint ? (field.hint | translate) : ''"
+        [disabled]="disabled()"
+        [value]="fieldBool(field)"
+        (valueChange)="setBool(field, $event)"
+      />
+    }
+    @case ('select') {
+      <div class="flex flex-col gap-1">
+        <app-select-field
           [label]="field.labelKey | translate"
           [hint]="field.hint ? (field.hint | translate) : ''"
           [disabled]="disabled()"
-          [value]="fieldBool(field)"
-          (valueChange)="setBool(field, $event)"
-        />
-      }
-      @case ('select') {
-        <div class="flex flex-col gap-1">
-          <app-select-field
-            [label]="field.labelKey | translate"
-            [hint]="field.hint ? (field.hint | translate) : ''"
-            [disabled]="disabled()"
-            [value]="fieldValue(field)"
-            (valueChange)="setValue(field, $event)"
-          >
-            @for (opt of field.options ?? []; track opt.value) {
-              <option [value]="opt.value">{{ opt.labelKey | translate }}</option>
-            }
-          </app-select-field>
-          @if (isInvalid(field)) {
-            <p class="text-error text-xs">{{ 'common.field_required' | translate }}</p>
+          [value]="fieldValue(field)"
+          (valueChange)="setValue(field, $event)"
+        >
+          @for (opt of field.options ?? []; track opt.value) {
+            <option [value]="opt.value">{{ opt.labelKey | translate }}</option>
           }
+        </app-select-field>
+        @for (err of fieldErrors(field); track err.key) {
+          <p class="text-error text-xs">{{ err.key | translate: err.params }}</p>
+        }
+      </div>
+    }
+  }
+</ng-template>
+
+<div class="flex flex-col gap-4">
+  @for (item of fields(); track $index) {
+    @switch (itemKind(item)) {
+      @case ('caption') {
+        <p class="text-sm text-base-content/70">{{ asCaption(item).textKey | translate }}</p>
+      }
+      @case ('group') {
+        <fieldset class="flex flex-col gap-3 rounded-box border border-base-300 p-3">
+          <legend class="text-sm font-semibold px-1">{{ asGroup(item).labelKey | translate }}</legend>
+          @for (field of asGroup(item).fields; track field.key) {
+            <ng-container [ngTemplateOutlet]="fieldTpl" [ngTemplateOutletContext]="{ $implicit: field }" />
+          }
+        </fieldset>
+      }
+      @case ('status') {
+        <div class="flex items-center justify-between gap-2 text-sm">
+          <span class="text-base-content/70">{{ asStatus(item).labelKey | translate }}</span>
+          <span class="font-mono">{{ statusValue(asStatus(item)) || ('schema_form.status_unset' | translate) }}</span>
         </div>
+      }
+      @default {
+        <ng-container [ngTemplateOutlet]="fieldTpl" [ngTemplateOutletContext]="{ $implicit: item }" />
       }
     }
   }

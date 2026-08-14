@@ -1,17 +1,26 @@
-import { ChangeDetectionStrategy, Component, input, model } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, model } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { TranslateModule } from '@ngx-translate/core';
-import { FieldDef } from '../../../core/plugin-ui/contribution.types';
+import { FieldDef, FormCaption, FormGroup, FormItem, FormStatus } from '../../../core/plugin-ui/contribution.types';
 import { InputFieldComponent, InputFieldType } from '../forms/input-field/input-field';
 import { SelectFieldComponent } from '../forms/select-field/select-field';
 import { ToggleFieldComponent } from '../forms/toggle-field/toggle-field';
 
-/** Keyed by `FieldDef.key`; a select/text/number value is always a string here, coerced on read. */
+/** Keyed by `FieldDef.key`; a select/text/number value is always a string here, coerced on read.
+ *  A `status` item's current value is keyed by its own `settingKey` in this same bag. */
 export type SchemaFormValue = Record<string, string | number | boolean>;
 
 type FieldKind = 'input' | 'toggle' | 'select';
+type ItemKind = 'field' | 'caption' | 'group' | 'status';
+
+interface FieldError {
+  key: string;
+  params?: Record<string, unknown>;
+}
+
 
 /**
- * Renders a `FieldDef[]` as DaisyUI controls, delegating to the four shared
+ * Renders a `FormItem[]` as DaisyUI controls, delegating to the three shared
  * `forms/` components. An unmatched `field.type` renders nothing — it must
  * never blank out or break the rest of the form.
  *
@@ -24,14 +33,53 @@ type FieldKind = 'input' | 'toggle' | 'select';
  */
 @Component({
   selector: 'app-schema-form',
-  imports: [InputFieldComponent, SelectFieldComponent, ToggleFieldComponent, TranslateModule],
+  imports: [InputFieldComponent, SelectFieldComponent, ToggleFieldComponent, NgTemplateOutlet, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './schema-form.html',
 })
 export class SchemaFormComponent {
-  readonly fields = input.required<readonly FieldDef[]>();
+  readonly fields = input.required<readonly FormItem[]>();
   readonly value = model.required<SchemaFormValue>();
   readonly disabled = input(false);
+
+  /** True while a value breaks a declared constraint. A `required` field left empty is shown as a
+   *  hint but does not hold here: clearing one is how an operator unsets it. */
+  readonly invalid = computed(() =>
+    this.flatFields().some((f) => this.fieldErrors(f).some((e) => e.key !== 'common.field_required')),
+  );
+
+  private flatFields(): FieldDef[] {
+    const out: FieldDef[] = [];
+    for (const item of this.fields()) {
+      if (item.kind === 'group') out.push(...item.fields);
+      else if (item.kind === undefined || item.kind === 'field') out.push(item);
+    }
+    return out;
+  }
+
+  protected itemKind(item: FormItem): ItemKind {
+    if (item.kind === 'caption') return 'caption';
+    if (item.kind === 'group') return 'group';
+    if (item.kind === 'status') return 'status';
+    return 'field';
+  }
+
+  protected asCaption(item: FormItem): FormCaption {
+    return item as FormCaption;
+  }
+
+  protected asGroup(item: FormItem): FormGroup {
+    return item as FormGroup;
+  }
+
+  protected asStatus(item: FormItem): FormStatus {
+    return item as FormStatus;
+  }
+
+  protected statusValue(item: FormStatus): string {
+    const v = this.value()[item.settingKey];
+    return v === undefined || v === null ? '' : String(v);
+  }
 
   protected fieldKind(field: FieldDef): FieldKind | null {
     switch (field.type) {
@@ -79,9 +127,32 @@ export class SchemaFormComponent {
     this.value.set({ ...this.value(), [field.key]: v });
   }
 
+  /** An empty optional field is not invalid: a constraint describes a value, and there isn't one. */
+  protected fieldErrors(field: FieldDef): FieldError[] {
+    if (field.secret) return [];
+    const errors: FieldError[] = [];
+    const raw = this.value()[field.key];
+    const isEmpty = raw === undefined || raw === null || String(raw).trim() === '';
+    if (field.required && isEmpty) errors.push({ key: 'common.field_required' });
+    if (isEmpty) return errors;
+
+    const str = String(raw);
+    if (field.type === 'number') {
+      const n = Number(raw);
+      if (field.min !== undefined && n < field.min) errors.push({ key: 'schema_form.min_value', params: { min: field.min } });
+      if (field.max !== undefined && n > field.max) errors.push({ key: 'schema_form.max_value', params: { max: field.max } });
+    } else {
+      if (field.minLength !== undefined && str.length < field.minLength) {
+        errors.push({ key: 'schema_form.min_length', params: { min: field.minLength } });
+      }
+      if (field.maxLength !== undefined && str.length > field.maxLength) {
+        errors.push({ key: 'schema_form.max_length', params: { max: field.maxLength } });
+      }
+    }
+    return errors;
+  }
+
   protected isInvalid(field: FieldDef): boolean {
-    if (!field.required || field.secret) return false;
-    const v = this.value()[field.key];
-    return v === undefined || v === null || String(v).trim() === '';
+    return this.fieldErrors(field).length > 0;
   }
 }

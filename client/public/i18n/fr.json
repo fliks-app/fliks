@@ -2381,6 +2381,13 @@
     "webhook_test_unconfigured": "Aucun point d’entrée configuré — rien n’a été envoyé.",
     "webhook_test_failed": "Échec de la livraison de test : {{detail}}"
   },
+  "schema_form": {
+    "min_value": "Doit être au moins {{min}}.",
+    "max_value": "Doit être au plus {{max}}.",
+    "min_length": "Doit contenir au moins {{min}} caractères.",
+    "max_length": "Doit contenir au plus {{max}} caractères.",
+    "status_unset": "Non défini"
+  },
   "provider_list": {
     "new": "Nouveau",
     "col_name": "Nom",

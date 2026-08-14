@@ -57,9 +57,9 @@
       } @else {
         <div class="flex flex-col gap-4">
           <h2 class="text-lg font-bold">{{ page.labelKey | translate }}</h2>
-          <app-schema-form [fields]="page.fields" [(value)]="formValue" [disabled]="formSaving()" />
+          <app-schema-form #schemaForm [fields]="page.fields" [(value)]="formValue" [disabled]="formSaving()" />
           <div class="flex flex-wrap items-center gap-2">
-            <button type="button" class="btn btn-primary" [disabled]="formSaving()" (click)="saveForm()">
+            <button type="button" class="btn btn-primary" [disabled]="formSaving() || schemaForm.invalid()" (click)="saveForm()">
               @if (formSaving()) {
                 <span class="loading loading-spinner loading-sm"></span>
               }

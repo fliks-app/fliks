@@ -89,6 +89,28 @@ catalogue per slot, and an id it does not know renders nothing.
   field set, an optional connection test, and row/list actions.
 - `table` — a read-only list over one route, with declared columns and row actions.
 
+A `form` page's `fields[]` is an ordered list of items, discriminated on `kind`:
+
+- a bare field (no `kind`, or `kind: 'field'`) — the input it has always rendered;
+- `caption` — static text between fields, carrying a `textKey`; no input, no value;
+- `group` — a labelled section of input fields. **One level only**: a group's own `fields` are
+  plain input fields, never another group — nesting one is refused at install, not merely ignored;
+- `status` — a read-only line naming a `settingKey`. It shows whatever value the plugin last wrote
+  to `plugin.<id>.<settingKey>` via `config.set`. There is no route behind it, so — like the rest
+  of `form` — it still renders with the process stopped; it is not a live status check.
+
+A field may also declare validation constraints, all optional: `min`/`max` for a `number` field,
+`minLength`/`maxLength` otherwise. The renderer enforces them before it will save. They are an
+authoring affordance, not a trust boundary — the settings endpoint behind every `form` page is
+already admin-gated. A blank `required` field is shown as a hint but does not block saving, because
+clearing a value is how an operator unsets it.
+
+There is deliberately no author-supplied regular expression. A pattern arriving from a manifest is
+untrusted, a `providers` page's fields arrive over HTTP at render time and never pass the manifest
+validator at all, and no syntactic check separates a safe expression from one that hangs the tab —
+a measured `^(a|a)+$` takes over a second on 26 characters, while an ordinary IPv4 or hostname
+pattern trips every heuristic that catches it.
+
 Declaring a page does **not** link to it: a `settings.page` contribution is what puts it in the
 admin sidebar.
 

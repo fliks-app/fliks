@@ -48,11 +48,15 @@ export interface UiContribution {
   action: { kind: 'route'; path: string } | { kind: 'action'; actionId: string };
 }
 
-/** The seven field kinds `<app-schema-form>` renders, over four form components. */
+/** The seven field kinds `<app-schema-form>` renders, over three form components. */
 export type FieldType = 'text' | 'email' | 'password' | 'url' | 'number' | 'toggle' | 'select';
 
-/** One input of a plugin's settings form. */
+/**
+ * One input of a plugin's settings form. `kind` is optional and defaults to `'field'` —
+ * a manifest declaring plain fields today needs no change to keep installing and rendering.
+ */
 export interface FieldDef {
+  kind?: 'field';
   key: string;
   type: FieldType;
   labelKey: string;
@@ -66,7 +70,41 @@ export interface FieldDef {
   /** Written to a column on the row itself rather than into its `settings` bag.
    *  Without this a declared field silently stops persisting an entity column. */
   topLevel?: boolean;
+  /**
+   * All optional, all authoring affordances checked by the renderer before it will save — not a
+   * trust boundary, since the settings endpoint behind this page is already admin-gated.
+   */
+  min?: number;
+  max?: number;
+  minLength?: number;
+  maxLength?: number;
 }
+
+/** Static explanatory text between fields — carries no value, renders no input. */
+export interface FormCaption {
+  kind: 'caption';
+  textKey: string;
+}
+
+/** A labelled section of input fields. One level only: `fields` is `FieldDef[]`, not
+ *  `FormItem[]`, so a group inside a group is impossible in the type, not just undocumented. */
+export interface FormGroup {
+  kind: 'group';
+  labelKey: string;
+  fields: FieldDef[];
+}
+
+/** A read-only line showing the current value of `plugin.<id>.<settingKey>` — whatever the
+ *  plugin last wrote there via `config.set`. Needs no route, so it still works stopped. */
+export interface FormStatus {
+  kind: 'status';
+  labelKey: string;
+  settingKey: string;
+}
+
+/** One item of a `form` page, in declared order. A bare field (no `kind`, or `kind: 'field'`)
+ *  is the input the page has always rendered. */
+export type FormItem = FieldDef | FormCaption | FormGroup | FormStatus;
 
 /** One `ui.configPages[]` entry — a form-backed settings page under `plugin.<id>.`. */
 /**
@@ -99,7 +137,7 @@ export type TableRowActionId = (typeof TABLE_ROW_ACTION_IDS)[number];
 
 export interface FormConfigPage extends ConfigPageBase {
   kind?: 'form';
-  fields: FieldDef[];
+  fields: FormItem[];
   /** Buttons core implements on the plugin's behalf. A `data` plugin executes no code of its
    *  own, so this is the only way it can offer an action at all. */
   actions?: { id: string; labelKey: string; actionId: FormActionId }[];

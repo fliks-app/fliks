@@ -77,6 +77,62 @@ describe('validateManifestShape()', () => {
     expectRefusal({ ...minimalDataManifest(), ui: { configPages: [{ id: 'general' }] } }, 'PLUGIN_BAD_UI_CONFIG_PAGES');
   });
 
+  it('accepts a form page mixing a field, a caption, a group and a status item', () => {
+    const manifest = minimalDataManifest({
+      ui: {
+        configPages: [
+          {
+            id: 'general',
+            labelKey: 'x.general',
+            fields: [
+              { key: 'endpoint_url', type: 'url', labelKey: 'x.endpoint' },
+              { kind: 'caption', textKey: 'x.blurb' },
+              { kind: 'group', labelKey: 'x.advanced', fields: [{ key: 'timeout', type: 'number', labelKey: 'x.timeout' }] },
+              { kind: 'status', labelKey: 'x.last_sync', settingKey: 'last_sync' },
+            ],
+          },
+        ],
+      },
+    });
+    expect(validateManifestShape(manifest).ok).toBe(true);
+  });
+
+  it('refuses a group nested inside a group', () => {
+    expectRefusal(
+      {
+        ...minimalDataManifest(),
+        ui: {
+          configPages: [
+            {
+              id: 'general',
+              labelKey: 'x.general',
+              fields: [
+                {
+                  kind: 'group',
+                  labelKey: 'x.outer',
+                  // Carries key/type too, so nothing but the `kind` guard can refuse it.
+                  fields: [
+                    { kind: 'group', key: 'inner', type: 'text', labelKey: 'x.inner', fields: [] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      'PLUGIN_BAD_UI_CONFIG_PAGES',
+    );
+  });
+
+  it('refuses a status item missing settingKey', () => {
+    expectRefusal(
+      { ...minimalDataManifest(), ui: { configPages: [{ id: 'general', labelKey: 'x', fields: [{ kind: 'status', labelKey: 'x.s' }] }] } },
+      'PLUGIN_BAD_UI_CONFIG_PAGES',
+    );
+  });
+
+
+
   it('refuses a ui.releasePicker missing a context', () => {
     const pair = { search: '/search', grab: '/grab' };
     expectRefusal({ ...minimalDataManifest(), ui: { releasePicker: { movie: pair, season: pair } } }, 'PLUGIN_BAD_UI_RELEASE_PICKER');
