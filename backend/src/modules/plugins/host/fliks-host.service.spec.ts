@@ -1294,9 +1294,11 @@ describe('FliksHostImpl', () => {
     it('writes under the derived prefix, never a bare key', async () => {
       const h = makeHarness('acme.tool');
       await h.host['config.set']({ key: 'foo', value: 'bar' });
+      // The third argument is the writer: it stops the config note echoing back to this plugin.
       expect(h.settings.set).toHaveBeenCalledWith(
         'plugin.acme.tool.foo',
         'bar',
+        'acme.tool',
       );
     });
   });

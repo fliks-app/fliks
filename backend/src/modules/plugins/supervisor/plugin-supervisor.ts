@@ -7,9 +7,11 @@ import { getPluginsSocketDir } from '../../../common/constants/paths';
 import type { OnApplicationShutdown } from '@nestjs/common';
 import { LogBufferService } from '../../scheduler/log-buffer.service';
 import { CURRENT_FLIKS_VERSION } from '../plugin-version';
+import { pluginDataDir } from '../plugin-paths';
 import type { PluginApi } from '../../../common/plugin-contract';
 
 type HelloReply = Awaited<ReturnType<PluginApi['hello']>>;
+type HealthReply = Awaited<ReturnType<PluginApi['health']>>;
 import { PLUGIN_API_VERSION, type Note, type PluginHostApi } from '../../../common/plugin-contract';
 import { RpcChannel } from './rpc-channel';
 import { NoteRingBuffer } from './note-ring-buffer';
@@ -255,6 +257,12 @@ export class PluginSupervisor implements OnApplicationShutdown {
     this.flushRing();
   }
 
+  /** Same ring buffer as `emitEvent` — `changed` are this plugin's own setting keys, unprefixed. */
+  emitConfigChanged(changed: string[]): void {
+    this.ring.push({ m: 'config', p: { changed } });
+    this.flushRing();
+  }
+
   async start(): Promise<void> {
     if (this.state !== 'stopped') return;
     this.stopRequested = false;
@@ -415,13 +423,15 @@ export class PluginSupervisor implements OnApplicationShutdown {
     this.lastExitSignal = null;
 
     this.setState('starting');
+    const dataDir = pluginDataDir(this.opts.id);
     const dropTo = this.dropTarget();
-    if (dropTo) prepareDirForDroppedChild(this.opts.dir, dropTo.uid, dropTo.gid);
-    else mkdirSync(join(this.opts.dir, 'data'), { recursive: true });
+    if (dropTo) prepareDirForDroppedChild(this.opts.dir, dataDir, dropTo.uid, dropTo.gid);
+    else mkdirSync(dataDir, { recursive: true });
     this.token = randomBytes(32).toString('hex');
 
     const plan = buildSpawnPlan({
       dir: this.opts.dir,
+      dataDir,
       memoryMb: this.opts.memoryMb,
       coreSockPath: this.coreSockPath,
       pluginSockPath: this.pluginSockPath,
@@ -550,7 +560,14 @@ export class PluginSupervisor implements OnApplicationShutdown {
     if (!this.pluginChannel) return;
     this.healthCheckCount++;
     try {
-      await this.pluginChannel.call('health', {}, this.opts.healthDeadlineMs);
+      const reply = await this.pluginChannel.call<HealthReply>('health', {}, this.opts.healthDeadlineMs);
+      if (!reply.ok) {
+        this.opts.logBuffer.warn(
+          `health check reported unhealthy: ${reply.detail || '(no detail)'}`,
+          `plugin:${this.opts.id}`,
+        );
+        throw new Error(reply.detail || 'health check reported unhealthy');
+      }
       this.consecutiveHealthMisses = 0;
       if (this.state === 'degraded') this.enterReady();
     } catch {

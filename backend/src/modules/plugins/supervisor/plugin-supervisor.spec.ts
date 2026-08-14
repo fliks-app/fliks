@@ -1,9 +1,10 @@
-import { existsSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { connect } from 'net';
 import { basename, dirname, join } from 'path';
 import { DEFAULT_SUPERVISOR_OPTIONS, PluginSupervisor, type PluginSupervisorOptions } from './plugin-supervisor';
 import { RpcChannel } from './rpc-channel';
 import { pidFilePath } from './pid-file';
+import { pluginDataDir } from '../plugin-paths';
 import { PLUGIN_API_VERSION, type PluginHostApi } from '../../../common/plugin-contract';
 import {
   delay,
@@ -181,6 +182,100 @@ describe('liveness', () => {
     await waitForState(sup, 'backoff');
     expect(seen).toEqual(expect.arrayContaining(['ready', 'degraded', 'crashed', 'backoff']));
     expect(seen.indexOf('degraded')).toBeLessThan(seen.lastIndexOf('crashed'));
+  }, 10_000);
+
+  it('an ok:false health reply counts as a miss on the same ladder, and its detail is logged', async () => {
+    const logBuffer = newLogBuffer();
+    const dir = makeFixtureDir('health-not-ok-after:1');
+    const runtimeDir = makeRuntimeDir();
+    dirsToClean.push(dir, runtimeDir);
+    const sup = new PluginSupervisor({
+      id: 'health-not-ok',
+      dir,
+      runtimeDir,
+      logBuffer,
+      handshakeDeadlineMs: 250,
+      healthIntervalMs: 60,
+      healthDeadlineMs: 30,
+      backoffLadderMs: [15, 30, 60, 120, 240, 400],
+      readyResetMs: 300,
+      breakerWindowMs: 600,
+      breakerMaxCrashes: 6,
+      shutdownRpcDeadlineMs: 100,
+      sigtermGraceMs: 80,
+    });
+    supervisorsToStop.push(sup);
+
+    const seen: string[] = [];
+    sup.onStateChange((s) => seen.push(s));
+    await sup.start();
+    await waitForState(sup, 'ready');
+    await waitForState(sup, 'degraded');
+    await waitForState(sup, 'backoff');
+
+    expect(seen.indexOf('degraded')).toBeLessThan(seen.lastIndexOf('crashed'));
+    expect(
+      logBuffer.getEntries({ q: 'fixture unhealthy' }).some((e) => e.level === 'warn'),
+    ).toBe(true);
+  }, 10_000);
+});
+
+describe('data directory', () => {
+  it('is keyed by plugin id outside the code dir, so it survives the code dir being wiped and recreated — as a restart\'s re-extraction does', async () => {
+    const id = 'data-persist';
+    const firstDir = makeFixtureDir('good');
+    const runtimeDir1 = makeRuntimeDir();
+    dirsToClean.push(firstDir, runtimeDir1);
+    const sup1 = new PluginSupervisor({
+      id,
+      dir: firstDir,
+      runtimeDir: runtimeDir1,
+      logBuffer: newLogBuffer(),
+      handshakeDeadlineMs: 250,
+      healthIntervalMs: 60,
+      healthDeadlineMs: 30,
+      backoffLadderMs: [15, 30],
+      readyResetMs: 300,
+      breakerWindowMs: 600,
+      breakerMaxCrashes: 6,
+      shutdownRpcDeadlineMs: 100,
+      sigtermGraceMs: 80,
+    });
+    supervisorsToStop.push(sup1);
+    await sup1.start();
+    await waitForState(sup1, 'ready');
+
+    const dataDir = pluginDataDir(id);
+    dirsToClean.push(dataDir);
+    expect(existsSync(dataDir)).toBe(true);
+    expect(existsSync(join(firstDir, 'data'))).toBe(false);
+    writeFileSync(join(dataDir, 'marker.txt'), 'hello');
+    await sup1.stop();
+
+    rmSync(firstDir, { recursive: true, force: true }); // promoteDir()'s rmSync(destDir), on every ordinary start
+    const secondDir = makeFixtureDir('good'); // a fresh extraction target, as materialise() builds
+    const runtimeDir2 = makeRuntimeDir();
+    dirsToClean.push(secondDir, runtimeDir2);
+    const sup2 = new PluginSupervisor({
+      id,
+      dir: secondDir,
+      runtimeDir: runtimeDir2,
+      logBuffer: newLogBuffer(),
+      handshakeDeadlineMs: 250,
+      healthIntervalMs: 60,
+      healthDeadlineMs: 30,
+      backoffLadderMs: [15, 30],
+      readyResetMs: 300,
+      breakerWindowMs: 600,
+      breakerMaxCrashes: 6,
+      shutdownRpcDeadlineMs: 100,
+      sigtermGraceMs: 80,
+    });
+    supervisorsToStop.push(sup2);
+    await sup2.start();
+    await waitForState(sup2, 'ready');
+
+    expect(readFileSync(join(dataDir, 'marker.txt'), 'utf8')).toBe('hello');
   }, 10_000);
 });
 

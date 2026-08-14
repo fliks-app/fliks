@@ -1,6 +1,6 @@
 import { spawnSync, type SpawnOptions } from 'child_process';
 import { chmodSync, chownSync, mkdirSync, readdirSync } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { type PluginSpawnEnv } from '../../../common/plugin-contract';
 
 /** The unprivileged identity a plugin child drops to when core runs as root. */
@@ -26,13 +26,22 @@ export function shouldDropPrivileges(platform: NodeJS.Platform, getuid?: () => n
 }
 
 /**
- * A dropped child must reach its own code and its scratch dir through the kernel,
- * not just through `--allow-fs-*`: extraction writes 0600 root-owned files into a
- * 0700 directory. Code stays root-owned and read-only to the child; only `data/`
- * changes hands.
+ * A dropped child must reach its own code and its data dir through the kernel, not just
+ * `--allow-fs-*`: extraction writes 0600 root-owned files into a 0700 directory. Code stays
+ * root-owned and read-only to the child; `dataDir` (outside the code tree, keyed by plugin id —
+ * see `pluginDataDir`) is what changes hands. Its shared parent is `0710`, group-owned by the
+ * drop gid: a dropped child can reach its own known path but not list a sibling plugin's.
  */
-export function prepareDirForDroppedChild(dir: string, uid = PLUGIN_CHILD_UID, gid = PLUGIN_CHILD_GID): void {
-  const dataDir = join(dir, 'data');
+export function prepareDirForDroppedChild(
+  dir: string,
+  dataDir: string,
+  uid = PLUGIN_CHILD_UID,
+  gid = PLUGIN_CHILD_GID,
+): void {
+  const dataParent = dirname(dataDir);
+  mkdirSync(dataParent, { recursive: true });
+  chmodSync(dataParent, 0o710);
+  chownSync(dataParent, -1, gid);
   mkdirSync(dataDir, { recursive: true });
   chmodSync(dir, 0o755);
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -44,6 +53,8 @@ export function prepareDirForDroppedChild(dir: string, uid = PLUGIN_CHILD_UID, g
 
 export interface SpawnPlanInput {
   dir: string;
+  /** `pluginDataDir(pluginId)` — outside `dir`, so it outlives this spawn's code tree. */
+  dataDir: string;
   memoryMb: number;
   coreSockPath: string;
   pluginSockPath: string;
@@ -78,10 +89,12 @@ function reKeyConfig(pluginId: string, config: Record<string, string>): Record<s
 
 /** Builds the exact argv/env from "The spawn call and the supervisor" — never `...process.env`. */
 export function buildSpawnPlan(input: SpawnPlanInput): SpawnPlan {
-  const homeDir = `${input.dir}/data`;
+  const homeDir = input.dataDir;
   const nodeArgv = [
     resolvePermissionFlag(),
     `--allow-fs-read=${input.dir}`,
+    // The data dir sits outside the code tree, so it needs its own read grant to be readable back.
+    `--allow-fs-read=${homeDir}`,
     `--allow-fs-write=${homeDir}`,
     `--max-old-space-size=${input.memoryMb}`,
     '--disable-proto=delete',

@@ -85,6 +85,14 @@
                 @if (row.status === 'failed' && row.statusReason) {
                   <p class="text-xs text-error/80 mt-1 max-w-[16rem]">{{ row.statusReason }}</p>
                 }
+                @if (row.statusMessage) {
+                  <details class="mt-1">
+                    <summary class="text-xs text-warning/80 cursor-pointer select-none">
+                      {{ 'settings.plugins.status_message_toggle' | translate }}
+                    </summary>
+                    <pre class="text-xs whitespace-pre-wrap break-words max-w-xs max-h-40 overflow-auto bg-base-200 rounded p-2 mt-1">{{ row.statusMessage }}</pre>
+                  </details>
+                }
               </td>
               <td>
                 <app-toggle-field

@@ -1,6 +1,6 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import { createHash } from 'crypto';
-import { existsSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { PluginInstallService, installedPluginDir } from './plugin-install.service';
 import { PluginInstallException } from './plugin-install.exception';
@@ -362,6 +362,57 @@ describe('PluginInstallService', () => {
         detail: expect.any(String),
       });
       expect(repo.rows.get(manifest.id)?.status).toBe('failed');
+    });
+
+    it('records a deliberate downgrade and installs it, leaving no older directory behind', async () => {
+      const { buffer: newer, manifest: newerManifest } = signedDataArchive({ id: 'fliks.downgradeguard', version: '1.1.0' });
+      const newerStage = await service.inspectUpload(newer);
+      await service.confirmImport({ stagingId: newerStage.stagingId!, sha256: newerStage.sha256! });
+
+      const warn = jest.spyOn((service as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn');
+      const { buffer: older } = signedDataArchive({ id: 'fliks.downgradeguard', version: '1.0.0' });
+      const olderStage = await service.inspectUpload(older);
+      await service.confirmImport({ stagingId: olderStage.stagingId!, sha256: olderStage.sha256! });
+
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('over the newer 1.1.0'));
+      expect(repo.rows.get(newerManifest.id)?.version).toBe('1.0.0');
+      expect(existsSync(installedPluginDir(newerManifest.id, '1.0.0'))).toBe(true);
+      expect(existsSync(installedPluginDir(newerManifest.id, '1.1.0'))).toBe(false);
+    });
+
+    it('reinstalling the exact same version still succeeds', async () => {
+      const { buffer, manifest } = signedDataArchive({ id: 'fliks.samereinstall', version: '1.0.0' });
+      const first = await service.inspectUpload(buffer);
+      await service.confirmImport({ stagingId: first.stagingId!, sha256: first.sha256! });
+
+      const second = await service.inspectUpload(buffer);
+      const result = await service.confirmImport({ stagingId: second.stagingId!, sha256: second.sha256! });
+
+      expect(result).toEqual({ pluginId: manifest.id, version: '1.0.0', status: 'active' });
+    });
+
+    it('VERDICT: an upgrade removes every older on-disk version of the same id, leaving other plugins untouched', async () => {
+      const { buffer: otherBuf, manifest: otherManifest } = signedDataArchive({ id: 'fliks.upgradesweepother', version: '1.0.0' });
+      const otherStage = await service.inspectUpload(otherBuf);
+      await service.confirmImport({ stagingId: otherStage.stagingId!, sha256: otherStage.sha256! });
+
+      const { buffer: firstBuf } = signedDataArchive({ id: 'fliks.upgradesweep', version: '1.0.0' });
+      const firstStage = await service.inspectUpload(firstBuf);
+      await service.confirmImport({ stagingId: firstStage.stagingId!, sha256: firstStage.sha256! });
+
+      // A directory no longer named by any row — what an interrupted upgrade leaves behind, and
+      // what removing only the immediately-previous version can never reach.
+      const stranded = installedPluginDir('fliks.upgradesweep', '0.9.0');
+      mkdirSync(stranded, { recursive: true });
+
+      const { buffer: nextBuf } = signedDataArchive({ id: 'fliks.upgradesweep', version: '1.1.0' });
+      const nextStage = await service.inspectUpload(nextBuf);
+      await service.confirmImport({ stagingId: nextStage.stagingId!, sha256: nextStage.sha256! });
+
+      expect(existsSync(stranded)).toBe(false);
+      expect(existsSync(installedPluginDir('fliks.upgradesweep', '1.0.0'))).toBe(false);
+      expect(existsSync(installedPluginDir('fliks.upgradesweep', '1.1.0'))).toBe(true);
+      expect(existsSync(installedPluginDir(otherManifest.id, '1.0.0'))).toBe(true);
     });
   });
 

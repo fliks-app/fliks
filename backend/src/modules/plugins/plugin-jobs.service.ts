@@ -12,7 +12,9 @@ function cronKey(pluginId: string, name: string): string {
   return `plugin:${pluginId}:${name}`;
 }
 
-export type PluginJobTriggerResult = { ok: true } | { ok: false; reason: 'unknown-job' | 'not-triggerable' };
+export type PluginJobTriggerResult =
+  | { ok: true }
+  | { ok: false; reason: 'unknown-job' | 'not-triggerable' | 'already-running' };
 
 /**
  * Core owns every plugin's cron schedule via `SchedulerRegistry` — the plugin only ever
@@ -23,6 +25,8 @@ export type PluginJobTriggerResult = { ok: true } | { ok: false; reason: 'unknow
 export class PluginJobsService {
   private readonly logger = new Logger(PluginJobsService.name);
   private readonly declared = new Map<string, readonly PluginJob[]>();
+  /** Keyed by `cronKey` — shared between a cron tick and a manual trigger so they can't overlap. */
+  private readonly inFlight = new Set<string>();
 
   constructor(
     private readonly schedulerRegistry: SchedulerRegistry,
@@ -76,21 +80,31 @@ export class PluginJobsService {
     const job = this.declaredJob(pluginId, name);
     if (!job) return { ok: false, reason: 'unknown-job' };
     if (!job.triggerable) return { ok: false, reason: 'not-triggerable' };
+    if (this.inFlight.has(cronKey(pluginId, name))) return { ok: false, reason: 'already-running' };
     void this.run(pluginId, name);
     return { ok: true };
   }
 
-  /** Skips, rather than awaits, a plugin that isn't ready — a leaked hang here would back up
-   *  every future tick of this same cron. */
+  /** Skips, rather than awaits, a plugin that isn't ready — a leaked hang here would back up every
+   *  future tick of this same cron. One run at a time per job: a tick and a trigger share the guard. */
   private async run(pluginId: string, name: string): Promise<void> {
-    if (this.processService.stateOf(pluginId) !== 'ready') {
-      this.logger.warn(`skipping job "${name}" for plugin "${pluginId}" — process is not ready`);
+    const key = cronKey(pluginId, name);
+    if (this.inFlight.has(key)) {
+      this.logger.warn(`skipping job "${name}" for plugin "${pluginId}" — previous run still in flight`);
       return;
     }
+    this.inFlight.add(key);
     try {
+      if (this.processService.stateOf(pluginId) !== 'ready') {
+        this.logger.warn(`skipping job "${name}" for plugin "${pluginId}" — process is not ready`);
+        return;
+      }
       await this.processService.callPlugin(pluginId, 'job', { name, jobId: randomUUID() }, JOB_CALL_DEADLINE_MS);
+      this.logger.log(`job "${name}" for plugin "${pluginId}" completed`);
     } catch (err) {
       this.logger.warn(`job "${name}" for plugin "${pluginId}" failed: ${(err as Error).message}`);
+    } finally {
+      this.inFlight.delete(key);
     }
   }
 }

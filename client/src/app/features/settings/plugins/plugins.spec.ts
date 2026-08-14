@@ -131,4 +131,19 @@ describe('PluginsSettingsComponent — enable/disable toggle', () => {
     expect(badges).toContain('settings.plugins.status_unavailable');
     expect(badges).not.toContain('settings.plugins.status_active');
   });
+
+  it('a row carrying a statusMessage renders the stderr tail', async () => {
+    const { fixture } = await createComponent([
+      { ...ROW, kind: 'process', processState: 'backoff', statusMessage: 'bad hello token\nexiting' },
+    ]);
+
+    const pre = (fixture.nativeElement as HTMLElement).querySelector('tbody details pre');
+    expect(pre?.textContent).toContain('bad hello token');
+  });
+
+  it('a row with no statusMessage renders no details toggle', async () => {
+    const { fixture } = await createComponent([{ ...ROW, statusMessage: '' }]);
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('tbody details')).toBeNull();
+  });
 });

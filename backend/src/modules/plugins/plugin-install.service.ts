@@ -3,7 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
 import { createHash } from 'crypto';
-import { closeSync, existsSync, fsyncSync, openSync, rmSync } from 'fs';
+import { closeSync, fsyncSync, openSync, readdirSync, rmSync } from 'fs';
+import { basename, dirname, join } from 'path';
 import * as semver from 'semver';
 import { PluginPackage, PluginPackageOrigin, PluginPackageStatus } from './entities/plugin-package.entity';
 import { PluginSource } from './entities/plugin-source.entity';
@@ -13,7 +14,7 @@ import { PluginStagingService } from './plugin-staging.service';
 import { PluginDatabaseService } from './plugin-database.service';
 import { SettingsService } from '../settings/settings.service';
 import { PluginInstallException } from './plugin-install.exception';
-import { installedPluginDir, promoteDir } from './plugin-paths';
+import { installedPluginDir, pluginDataDir, promoteDir } from './plugin-paths';
 import { unsignedProcessAllowlist } from '../../common/constants/plugin-flags';
 import {
   inspect,
@@ -243,6 +244,8 @@ export class PluginInstallService {
     }
     await this.packageRepo.remove(pkg);
     rmSync(installedPluginDir(pkg.pluginId, pkg.version), { recursive: true, force: true });
+    // Same reason as the settings wipe above: a reinstall must not inherit what this one wrote.
+    rmSync(pluginDataDir(pkg.pluginId), { recursive: true, force: true });
   }
 
   /** Every `plugin.<id>.*` app setting this plugin owns. Ids contain dots, so one id can be a
@@ -358,6 +361,16 @@ export class PluginInstallService {
   /** P2 (fsync + rename) -> P3 (upsert the row) -> P4a (register). A P4a refusal leaves the row `failed`, install stands. */
   private async promote(buffer: Buffer, result: InspectSuccess, origin: PluginPackageOrigin): Promise<PluginInstallResult> {
     const { manifest } = result;
+
+    const existing = await this.packageRepo.findOne({ where: { pluginId: manifest.id } });
+    // Going back is a legitimate operator choice and the only rollback there is, so it is recorded
+    // rather than refused — the catalogue list is ordered, so it cannot be reached by accident.
+    if (existing && semver.lt(manifest.version, existing.version)) {
+      this.logger.warn(
+        `installing "${manifest.id}" ${manifest.version} over the newer ${existing.version}`,
+      );
+    }
+
     const extracted = await extractToStaging(buffer, manifest);
     if (!extracted.ok) {
       throw new PluginInstallException(HttpStatus.UNPROCESSABLE_ENTITY, extracted.code, extracted.detail);
@@ -373,10 +386,7 @@ export class PluginInstallService {
       }
     }
 
-    const existing = await this.packageRepo.findOne({ where: { pluginId: manifest.id } });
     const targetDir = installedPluginDir(manifest.id, manifest.version);
-    const previousDir =
-      existing && existing.version !== manifest.version ? installedPluginDir(existing.pluginId, existing.version) : null;
 
     try {
       for (const file of extracted.files) fsyncPath(file.path);
@@ -405,7 +415,7 @@ export class PluginInstallService {
       throw new PluginInstallException(HttpStatus.INTERNAL_SERVER_ERROR, 'PLUGIN_INSTALL_FAILED', (err as Error).message);
     }
 
-    if (previousDir && existsSync(previousDir)) rmSync(previousDir, { recursive: true, force: true });
+    this.removeOtherVersionDirs(saved.pluginId, targetDir);
 
     // An upgrade over a disabled plugin stores the new archive and stays off: reactivating it
     // silently would undo the operator's decision behind a version bump.
@@ -436,6 +446,25 @@ export class PluginInstallService {
     }
 
     return { pluginId: saved.pluginId, version: saved.version, status: 'active' };
+  }
+
+  /** Removes every other on-disk version of this plugin id, e.g. leftovers from upgrades before this
+   *  guard existed. `installedPluginDir(id, '')` gives the exact `<id>@` prefix — never hand-built,
+   *  so an id that is a dot-prefix of another one's (`acme` vs `acme.hello`) can't collide. */
+  private removeOtherVersionDirs(pluginId: string, keepDir: string): void {
+    const root = dirname(keepDir);
+    const prefix = basename(installedPluginDir(pluginId, ''));
+    const keepName = basename(keepDir);
+    let entries: string[];
+    try {
+      entries = readdirSync(root);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry === keepName || !entry.startsWith(prefix)) continue;
+      rmSync(join(root, entry), { recursive: true, force: true });
+    }
   }
 
   private async fetchArchive(zipUrl: string): Promise<Buffer> {

@@ -12,16 +12,17 @@ export class SettingsService {
     private readonly events: EventsService,
   ) {}
 
-  private readonly changeListeners: Array<(key: string) => void> = [];
+  private readonly changeListeners: Array<(key: string, origin?: string) => void> = [];
 
-  addChangeListener(listener: (key: string) => void): void {
+  /** `origin` names whoever wrote the key, so a listener can skip echoing a change back to it. */
+  addChangeListener(listener: (key: string, origin?: string) => void): void {
     this.changeListeners.push(listener);
   }
 
-  private notifyChange(key: string): void {
+  private notifyChange(key: string, origin?: string): void {
     for (const l of this.changeListeners) {
       try {
-        l(key);
+        l(key, origin);
       } catch {
         /* listener errors must not break writes */
       }
@@ -39,7 +40,7 @@ export class SettingsService {
     return row?.value ?? null;
   }
 
-  async set(key: string, value: string | null): Promise<AppSetting> {
+  async set(key: string, value: string | null, origin?: string): Promise<AppSetting> {
     let row = await this.repo.findOne({ where: { key } });
     if (row) {
       row.value = value;
@@ -47,7 +48,7 @@ export class SettingsService {
       row = this.repo.create({ key, value });
     }
     const saved = await this.repo.save(row);
-    this.notifyChange(key);
+    this.notifyChange(key, origin);
     return saved;
   }
 
