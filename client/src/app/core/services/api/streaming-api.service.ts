@@ -10,6 +10,7 @@ import {
   DeviceProfile,
 } from '../browser-device-profile.service';
 import { SseService } from '../sse.service';
+import type { PreRollItem } from '../../plugin-ui/contribution.types';
 
 const SSE_CONNECTION_HEADER = 'X-Fliks-Sse-Connection';
 
@@ -104,6 +105,8 @@ export interface PlaybackInfoResponse {
   };
   /** Embedded chapters from the container (MKV/MP4). */
   chapters?: { startSeconds: number; endSeconds: number; title?: string }[];
+  /** Plugin-named items to play before the main video. Read at launch only. */
+  preRoll?: PreRollItem[];
   /** Server-issued live-session identifier. The client embeds it in every
    *  subsequent `PUT /api/playback/media/:id/state` (heartbeat) and on
    *  the `DELETE /api/stream/:mediaFileId/sessions` unload signal so the

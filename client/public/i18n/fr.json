@@ -39,6 +39,7 @@
     "play_from_start": "Depuis le début",
     "resume_at": "Reprendre à {{time}}",
     "skip_intro": "Passer l'intro",
+    "skip_pre_roll": "Passer",
     "pause": "Pause",
     "next_episode": "Épisode suivant",
     "play_next": "Lire la suite",
