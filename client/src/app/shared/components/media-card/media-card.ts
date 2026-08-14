@@ -18,7 +18,7 @@ import { PlayableMediaService } from '../../../core/services/playable-media.serv
 import { NavbarService } from '../../../core/services/navbar.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-evaluator';
-import type { UiContribution } from '../../../core/plugin-ui/contribution.types';
+import type { UiContribution } from '@fliks/plugin-contract/ui';
 import { resolveCardAction, type CardActionHandlers } from '../../../core/plugin-ui/card-action-registry';
 import { CORE_CARD_ACTIONS } from './core-card-actions';
 

@@ -1,4 +1,4 @@
-import type { FieldDef, TableColumn } from '../../../core/plugin-ui/contribution.types';
+import type { FieldDef, TableColumn } from '@fliks/plugin-contract/ui';
 
 /**
  * The generic shape a provider-list consumer's wire format already fits.

@@ -19,7 +19,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { BrowserDeviceProfileService, DeviceProfile } from '../../core/services/browser-device-profile.service';
-import type { PreRollItem } from '../../core/plugin-ui/contribution.types';
+import type { PreRollItem } from '@fliks/plugin-contract/ui';
 import { SseService } from '../../core/services/sse.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';

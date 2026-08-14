@@ -5,7 +5,7 @@ import { TvService } from '../services/tv.service';
 import { CORE_NAV_CONTRIBUTIONS, LIBRARIES_BLOCK_WEIGHT } from './core-contributions';
 import { PluginUiRegistryService } from './plugin-ui-registry.service';
 import { evaluateWhen, type WhenContext } from './when-evaluator';
-import type { SlotId, UiContribution } from './contribution.types';
+import type { SlotId, UiContribution } from '@fliks/plugin-contract/ui';
 
 /** A `nav.main` / `nav.acquisition` contribution resolved to something a
  *  template can render directly, with visibility and action already decided. */

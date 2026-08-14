@@ -39,7 +39,7 @@ import { AppUpdateService } from '../../core/services/app-update.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { SearchStateService } from '../../core/services/search-state.service';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
-import type { SlotId, UiContribution } from '../../core/plugin-ui/contribution.types';
+import type { SlotId, UiContribution } from '@fliks/plugin-contract/ui';
 
 // LayoutComponent reads `Capacitor.isNativePlatform()` at construction time to
 // decide sidebar vs. phone-dock rendering — mocked so fixtures can force either.

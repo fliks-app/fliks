@@ -63,7 +63,7 @@ import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-eva
 import type { MediaType } from '../../../core/enums/media-type.enum';
 import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { CORE_MEDIA_ACTIONS } from './core-media-actions';
-import type { UiContribution } from '../../../core/plugin-ui/contribution.types';
+import type { UiContribution } from '@fliks/plugin-contract/ui';
 
 /** One `media.actions` contribution resolved to something the template can
  *  render directly — visibility, handler and icon fallback already decided. */

@@ -14,7 +14,7 @@ import { DeviceService } from '../../../core/services/device.service';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
-import type { SlotId, UiContribution } from '../../../core/plugin-ui/contribution.types';
+import type { SlotId, UiContribution } from '@fliks/plugin-contract/ui';
 
 /**
  * Characterisation test for the card's contextual actions menu. Captures the

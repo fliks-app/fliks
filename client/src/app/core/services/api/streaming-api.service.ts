@@ -10,7 +10,7 @@ import {
   DeviceProfile,
 } from '../browser-device-profile.service';
 import { SseService } from '../sse.service';
-import type { PreRollItem } from '../../plugin-ui/contribution.types';
+import type { PreRollItem } from '@fliks/plugin-contract/ui';
 
 const SSE_CONNECTION_HEADER = 'X-Fliks-Sse-Connection';
 

@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { SchemaFormComponent } from './schema-form';
-import type { FieldDef, FormItem } from '../../../core/plugin-ui/contribution.types';
+import type { FieldDef, FormItem } from '@fliks/plugin-contract/ui';
 
 function createComponent(fields: readonly FormItem[], value: Record<string, unknown>) {
   TestBed.configureTestingModule({

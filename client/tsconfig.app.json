@@ -7,9 +7,11 @@
     "types": []
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "../backend/src/common/plugin-contract/ui-contribution.ts"
   ],
   "exclude": [
-    "src/**/*.spec.ts"
+    "src/**/*.spec.ts",
+    "../backend/src/common/plugin-contract/ui-contribution.ts"
   ]
 }
