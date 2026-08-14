@@ -58,6 +58,9 @@ import {
 } from '@lucide/angular';
 
 
+/** Coalesces a burst of count-bearing SSE events (e.g. a season-pack import) into one request. */
+const SIDEBAR_COUNTS_DEBOUNCE_MS = 400;
+
 @Component({
   selector: 'app-layout',
   imports: [
@@ -232,6 +235,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
     return (item.badgeKey && this.badgeCounts()[item.badgeKey]) || 0;
   }
 
+  private sidebarCountsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
   /** Refresh counts when relevant SSE events arrive */
   private readonly sseEffect = effect(() => {
     const event = this.sse.lastEvent();
@@ -244,7 +249,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
       case 'stalled.removed':
       case 'request.approved':
       case 'request.declined':
-        this.refreshSidebarCounts();
+        this.debouncedRefreshSidebarCounts();
         break;
     }
   });
@@ -303,6 +308,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     if (this.isNative) {
       Keyboard.removeAllListeners();
     }
+    if (this.sidebarCountsDebounceTimer) clearTimeout(this.sidebarCountsDebounceTimer);
   }
 
   async refreshCounts() {
@@ -327,6 +333,16 @@ export class LayoutComponent implements OnInit, OnDestroy {
       this.libraryCounts.set(counts.mediaByLibrary);
       this.badgeCounts.set({ ...counts.badgeCounts, pendingRequests: counts.pendingRequests });
     } catch { /* ignore */ }
+  }
+
+  /** Trailing debounce so a burst of SSE events (a season pack importing many
+   *  episodes) collapses into a single request, keeping only the final state. */
+  private debouncedRefreshSidebarCounts(): void {
+    if (this.sidebarCountsDebounceTimer) clearTimeout(this.sidebarCountsDebounceTimer);
+    this.sidebarCountsDebounceTimer = setTimeout(() => {
+      this.sidebarCountsDebounceTimer = null;
+      void this.refreshSidebarCounts();
+    }, SIDEBAR_COUNTS_DEBOUNCE_MS);
   }
 
   libraryUrl(lib: LibrarySummary): string {

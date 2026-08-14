@@ -181,8 +181,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
   private readonly downloadDetailModal =
     viewChild<DownloadDetailModalComponent>('downloadDetailModal');
-  /** Same SSE payload must run handlers once; `media` updates (e.g. after rescan) re-run this effect. */
-  private lastHandledSseEvent: SseEvent | null = null;
+  /** Same SSE payload must run handlers once; `media` updates (e.g. after rescan) re-run this effect.
+   *  Seeded from the service so a re-created instance doesn't replay an event from before it existed. */
+  private lastHandledSseEvent: SseEvent | null = this.sse.lastEvent();
 
   /**
    * Signal mirror of the route's paramMap. Angular reuses this component when

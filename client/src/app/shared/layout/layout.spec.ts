@@ -1,10 +1,11 @@
 import { CORE_NAV_CONTRIBUTIONS } from '../../core/plugin-ui/core-contributions';
-import { provideZonelessChangeDetection, NO_ERRORS_SCHEMA } from '@angular/core';
+import { provideZonelessChangeDetection, signal, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { RouterLink, RouterLinkActive, RouterOutlet, provideRouter } from '@angular/router';
 import { TranslateLoader, TranslateModule, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
+import { vi } from 'vitest';
 import {
   LucideMenu,
   LucideChevronLeft,
@@ -24,7 +25,7 @@ import { LibraryPrefsService } from '../../core/services/library-prefs.service';
 import { LibrariesApiService, type LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { CountsApiService } from '../../core/services/api/counts-api.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
-import { SseService } from '../../core/services/sse.service';
+import { SseService, type SseEvent } from '../../core/services/sse.service';
 import { CastService } from '../../core/services/cast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
@@ -61,6 +62,11 @@ interface Fixture {
   libraries: LibrarySummary[];
   pendingRequests: number;
   registry?: Partial<Record<SlotId, UiContribution[]>>;
+  /** Overrides the SSE `lastEvent` signal — a real writable signal, needed so
+   *  the component's `sseEffect` reacts to `.set()` calls made mid-test. */
+  sseLastEvent?: ReturnType<typeof signal<SseEvent | null>>;
+  /** Overrides `CountsApiService.get` — a spy, so tests can assert call counts. */
+  countsGet?: () => Promise<{ mediaByLibrary: Record<number, number>; badgeCounts: Record<string, number>; pendingRequests: number }>;
 }
 
 const lib = (id: number, name: string, opts: Partial<LibrarySummary> = {}): LibrarySummary => ({
@@ -96,16 +102,18 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
       {
         provide: CountsApiService,
         useValue: {
-          get: () =>
-            Promise.resolve({
-              mediaByLibrary: {},
-              badgeCounts: {},
-              pendingRequests: f.pendingRequests,
-            }),
+          get:
+            f.countsGet ??
+            (() =>
+              Promise.resolve({
+                mediaByLibrary: {},
+                badgeCounts: {},
+                pendingRequests: f.pendingRequests,
+              })),
         },
       },
       { provide: ServerConfigService, useValue: {} },
-      { provide: SseService, useValue: { lastEvent: () => null, connect: () => {} } },
+      { provide: SseService, useValue: { lastEvent: f.sseLastEvent ?? (() => null), connect: () => {} } },
       { provide: DownloadManagerService, useValue: {} },
       { provide: NavigationHistoryService, useValue: { resetNavHistory: () => {} } },
       { provide: AddToPlaylistService, useValue: { request: () => null, clear: () => {} } },
@@ -443,5 +451,47 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
 
     expect(downloads?.labelKey).toBe('downloads.title');
     expect(downloads?.shortLabelKey).toBe('nav.downloads');
+  });
+});
+
+describe('LayoutComponent sidebar counts — SSE debounce', () => {
+  afterEach(() => {
+    nativeState.value = false;
+  });
+
+  it('collapses a burst of count-bearing SSE events into a single trailing refresh', async () => {
+    const lastEvent = signal<SseEvent | null>(null);
+    const get = vi.fn(() =>
+      Promise.resolve({ mediaByLibrary: {}, badgeCounts: {}, pendingRequests: 0 }),
+    );
+    const fixture = await createFixture({
+      ...NON_ADMIN_NO_LIBRARIES,
+      sseLastEvent: lastEvent,
+      countsGet: get,
+    });
+    get.mockClear();
+
+    vi.useFakeTimers();
+    try {
+      lastEvent.set({ type: 'queue.updated' });
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(100);
+
+      lastEvent.set({ type: 'queue.updated' });
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(100);
+
+      lastEvent.set({ type: 'stalled.removed' });
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(100);
+
+      // Still inside the debounce window re-armed by the last event: no request yet.
+      expect(get).toHaveBeenCalledTimes(0);
+
+      await vi.advanceTimersByTimeAsync(400);
+      expect(get).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
