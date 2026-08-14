@@ -14,6 +14,8 @@ interface Fixtures {
   schemaOwner?: string;
   /** Names the fake probe resolves to a `public` `BASE TABLE` carrying an `id` column. */
   baseTables?: readonly string[];
+  /** Rows the fake catalog returns for `findUnsafeCoreRefFks`, in Postgres's own column shape. */
+  unsafeFkRows?: { constraint_name: string; table_name: string; referenced_table: string }[];
 }
 
 function makeRecorder(): Recorder {
@@ -73,7 +75,15 @@ function fakeQueryRunner(
 
 function fakeDataSource(recorder: Recorder, fixtures: Fixtures = {}, failCommit = false) {
   const respond = respondFor(fixtures);
-  return { createQueryRunner: jest.fn(() => fakeQueryRunner(recorder, respond, failCommit)) };
+  return {
+    createQueryRunner: jest.fn(() => fakeQueryRunner(recorder, respond, failCommit)),
+    // findUnsafeCoreRefFks queries the DataSource directly, not through a queryRunner.
+    query: jest.fn(async (sql: string, parameters: unknown[] = []) => {
+      recorder.events.push('query');
+      recorder.queries.push({ sql, parameters });
+      return fixtures.unsafeFkRows ?? [];
+    }),
+  };
 }
 
 function fakeConfig(overrides: Record<string, unknown> = {}) {
@@ -364,5 +374,38 @@ describe('PluginDatabaseService.deprovision', () => {
       'DROP SCHEMA IF EXISTS "plugin_acme_tool" CASCADE',
       'DROP ROLE IF EXISTS "plugin_acme_tool"',
     ]);
+  });
+});
+
+describe('PluginDatabaseService.findUnsafeCoreRefFks', () => {
+  it('scopes the catalog query to this plugin schema, binds it as a parameter, and excludes only CASCADE/SET NULL', async () => {
+    const recorder = makeRecorder();
+    await service(fakeDataSource(recorder)).findUnsafeCoreRefFks('acme.tool');
+
+    expect(recorder.queries).toHaveLength(1);
+    const sql = normalizeSql(recorder.queries[0].sql);
+    expect(sql).toContain('ns.nspname = $1');
+    expect(sql).toContain("con.confdeltype NOT IN ('c', 'n')");
+    expect(recorder.queries[0].parameters).toEqual(['plugin_acme_tool']);
+  });
+
+  it('maps every row the catalog returns onto the caller-facing shape', async () => {
+    const dataSource = fakeDataSource(makeRecorder(), {
+      unsafeFkRows: [
+        { constraint_name: 'zz_probe_media_id_fkey', table_name: 'zz_probe', referenced_table: 'media' },
+        { constraint_name: 'zz_setdefault_media_id_fkey', table_name: 'zz_setdefault', referenced_table: 'media' },
+      ],
+    });
+
+    const result = await service(dataSource).findUnsafeCoreRefFks('acme.tool');
+
+    expect(result).toEqual([
+      { constraint: 'zz_probe_media_id_fkey', table: 'zz_probe', referencedTable: 'media' },
+      { constraint: 'zz_setdefault_media_id_fkey', table: 'zz_setdefault', referencedTable: 'media' },
+    ]);
+  });
+
+  it('returns empty when the catalog has nothing to report', async () => {
+    await expect(service(fakeDataSource(makeRecorder())).findUnsafeCoreRefFks('acme.tool')).resolves.toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 import { existsSync, rmSync, writeFileSync } from 'fs';
 import { connect } from 'net';
-import { join } from 'path';
+import { basename, dirname, join } from 'path';
 import { DEFAULT_SUPERVISOR_OPTIONS, PluginSupervisor, type PluginSupervisorOptions } from './plugin-supervisor';
 import { RpcChannel } from './rpc-channel';
 import { pidFilePath } from './pid-file';
@@ -375,6 +375,64 @@ describe('shutdown', () => {
     expect(sup.getLastExitSignal()).toBe('SIGKILL');
     expect(existsSync(coreSockPath)).toBe(false);
     expect(existsSync(pluginSockPath)).toBe(false);
+  }, 10_000);
+});
+
+describe('socket path isolation', () => {
+  it('two supervisors built with the same id in the same runtime dir get different socket paths', () => {
+    const runtimeDir = makeRuntimeDir();
+    const dir = makeFixtureDir('good');
+    dirsToClean.push(dir, runtimeDir);
+    const opts: PluginSupervisorOptions = { id: 'dup-id', dir, runtimeDir, logBuffer: newLogBuffer() };
+    const a = new PluginSupervisor(opts);
+    const b = new PluginSupervisor(opts);
+    supervisorsToStop.push(a, b);
+
+    const pa = a.getSocketPaths();
+    const pb = b.getSocketPaths();
+    expect(pa.coreSockPath).not.toBe(pb.coreSockPath);
+    expect(pa.pluginSockPath).not.toBe(pb.pluginSockPath);
+  });
+
+  it('clears its own sockets from an earlier run, and leaves another plugin id alone', async () => {
+    const sup = makeSupervisor('good');
+    const { coreSockPath } = sup.getSocketPaths();
+    const runtimeDir = dirname(coreSockPath);
+    const id = basename(coreSockPath).split('.')[0];
+    const mine = join(runtimeDir, `${id}.0123456789abcdef.core.sock`);
+    const other = join(runtimeDir, `other-plugin.0123456789abcdef.core.sock`);
+    writeFileSync(mine, '');
+    writeFileSync(other, '');
+
+    await sup.start();
+    await waitForState(sup, 'ready');
+
+    expect(existsSync(mine)).toBe(false);
+    expect(existsSync(other)).toBe(true);
+  }, 10_000);
+});
+
+describe('runtime dir hardening', () => {
+  it('a chmod failure on the runtime dir warns and still reaches ready, never fails the plugin', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
+    const fs: typeof import('fs') = require('fs');
+    const spy = jest.spyOn(fs, 'chmodSync').mockImplementationOnce(() => {
+      throw new Error('EPERM: operation not permitted');
+    });
+    const logBuffer = newLogBuffer();
+    const warn = jest.spyOn(logBuffer, 'warn');
+    try {
+      const sup = makeSupervisor('good', { logBuffer });
+      await sup.start();
+      await waitForState(sup, 'ready');
+      expect(sup.getState()).toBe('ready');
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('could not harden runtime dir permissions'),
+        expect.stringContaining('plugin:'),
+      );
+    } finally {
+      spy.mockRestore();
+    }
   }, 10_000);
 });
 

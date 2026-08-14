@@ -2,7 +2,7 @@ import { Injectable, Optional, type OnApplicationShutdown } from '@nestjs/common
 import type { PluginPackage } from './entities/plugin-package.entity';
 import { installedPluginDir, promoteDir } from './plugin-paths';
 import { extractToStaging } from './archive';
-import { PluginDatabaseService } from './plugin-database.service';
+import { PluginDatabaseService, type UnsafeCoreRefFk } from './plugin-database.service';
 import {
   DEFAULT_SUPERVISOR_OPTIONS,
   PluginSupervisor,
@@ -22,9 +22,20 @@ interface RunningPlugin {
   supervisor: PluginSupervisor;
   pkg: PluginPackage;
   unsubscribe: () => void;
+  /** Non-fatal: this plugin's schema holds a core FK that blocks deleting the referenced rows. */
+  unsafeFkWarning: string;
 }
 
 const DEFAULT_FACTORY: PluginSupervisorFactory = (options) => new PluginSupervisor(options);
+
+/** One sentence: constraint, both tables and the remedy — the operator needs all four to act. */
+function unsafeCoreRefWarning(fk: UnsafeCoreRefFk): string {
+  return (
+    `constraint "${fk.constraint}" on "${fk.table}" references public."${fk.referencedTable}" ` +
+    `without ON DELETE CASCADE or SET NULL, which will block core deletion of that table's rows. ` +
+    `Declare ON DELETE CASCADE or SET NULL on it, or uninstall this plugin to drop its schema.`
+  );
+}
 
 /** States where the stderr tail is the diagnosis rather than routine output. */
 const DOWN_STATES: ReadonlySet<SupervisorState> = new Set(['crashed', 'backoff', 'failed', 'degraded']);
@@ -96,12 +107,36 @@ export class PluginProcessService implements OnApplicationShutdown {
     );
     // Registered before the handshake settles: a plugin stuck retrying its own backoff
     // ladder must stay observable and restartable, not vanish because it isn't ready yet.
-    this.running.set(pkg.pluginId, { supervisor, pkg, unsubscribe });
+    this.running.set(pkg.pluginId, { supervisor, pkg, unsubscribe, unsafeFkWarning: '' });
 
     await supervisor.start();
     const outcome = await this.waitForReadyOrGiveUp(supervisor);
+
+    // Probed only now: the plugin's own migrations run once it is up, so an earlier look
+    // cannot see a constraint this run just created.
+    const entry = this.running.get(pkg.pluginId);
+    if (entry) entry.unsafeFkWarning = await this.probeUnsafeCoreRefFks(pkg.pluginId);
+
     if (!outcome.ok) return { ok: false, reason: 'spawn-failed', detail: outcome.detail };
     return { ok: true };
+  }
+
+  /** Advisory only: a plugin -> public FK that blocks core deletes never gates the spawn. */
+  private async probeUnsafeCoreRefFks(pluginId: string): Promise<string> {
+    let unsafeFks: UnsafeCoreRefFk[];
+    try {
+      unsafeFks = await this.pluginDb.findUnsafeCoreRefFks(pluginId);
+    } catch (err) {
+      this.logBuffer.warn(`could not check core foreign keys: ${(err as Error).message}`, `plugin:${pluginId}`);
+      return '';
+    }
+    for (const fk of unsafeFks) this.logBuffer.warn(unsafeCoreRefWarning(fk), `plugin:${pluginId}`);
+    if (unsafeFks.length === 0) return '';
+    const names = unsafeFks.map((fk) => `"${fk.constraint}"`).join(', ');
+    return (
+      `${unsafeFks.length} foreign key(s) block core deletion (${names}) — ` +
+      `declare ON DELETE CASCADE or SET NULL on them.`
+    );
   }
 
   /** Idempotent — a no-op for a plugin that was never started, or already stopped. */
@@ -118,12 +153,13 @@ export class PluginProcessService implements OnApplicationShutdown {
   }
 
   statusMessageOf(pluginId: string): string {
-    const supervisor = this.running.get(pluginId)?.supervisor;
-    if (!supervisor) return '';
-    const breakerMessage = supervisor.getStatusMessage();
+    const entry = this.running.get(pluginId);
+    if (!entry) return '';
+    const breakerMessage = entry.supervisor.getStatusMessage();
     if (breakerMessage) return breakerMessage;
-    // The stderr tail explains a failure; a healthy plugin's own warnings are not its status.
-    return DOWN_STATES.has(supervisor.getState()) ? supervisor.getStderrTail() : '';
+    // A crash reason is more actionable than the standing FK warning — show it first when down.
+    if (DOWN_STATES.has(entry.supervisor.getState())) return entry.supervisor.getStderrTail();
+    return entry.unsafeFkWarning;
   }
 
   /** Passthrough so the HTTP proxy never touches a supervisor directly. */
