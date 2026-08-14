@@ -380,3 +380,32 @@ install.
 - **An upgrade over a disabled plugin stays disabled.**
 - A plugin that goes unreachable has its contributions filtered out server-side, so a frozen
   client never has to know about plugin health.
+
+---
+
+## Proposing an extension point
+
+Everything a plugin can reach is a closed set: the host methods in `host-methods.ts`, the scopes in
+`manifest.ts`, the UI slots in `ui-contribution.ts`, and the routes a manifest may declare. That is
+deliberate — a closed set is what makes a plugin's blast radius reviewable, and what lets core
+promise a plugin will keep working across a release.
+
+It also means "can my plugin do X?" has no answer a plugin author can reach alone. When X is not in
+one of those sets, open an issue. A proposal that can be acted on says:
+
+1. **What the plugin is trying to do**, in terms of the user-visible outcome — not the API you
+   imagined for it. The right extension point is frequently not the one proposed.
+2. **What you tried within the existing set**, and where it stopped. Often the answer is an existing
+   method used differently, and that is a faster outcome for everyone than a new one.
+3. **What core would have to trust you with.** A new host method is a new scope, or a widening of
+   one; say which, and what a hostile plugin holding it could do.
+4. **Whether it can be additive.** A new method, scope or slot is additive and can ship in a minor.
+   A change to an existing one's shape or meaning is a `pluginApi` major and orphans every plugin
+   that has not republished, so it waits for a scheduled break.
+
+Items 3 and 4 are what decide the answer. A proposal that is additive and whose worst case is
+bounded is a small change; one that widens an existing scope is a security review.
+
+`SUPPORTED_PLUGIN_API_VERSIONS` is what a break costs in practice: a bump adds an entry, a later
+release drops the oldest, and the window between the two is when authors republish. Proposals that
+fit inside the current entry ship far sooner than proposals that need a new one.
