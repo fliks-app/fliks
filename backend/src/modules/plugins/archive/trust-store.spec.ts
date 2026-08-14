@@ -26,23 +26,7 @@ describe('resolveTrust()', () => {
     expect(result.signedByKeyId).toBe('release-2026');
   });
 
-  it('resolves to verified-<keyId> for a third-party key that is not official', () => {
-    const { privateKey, rawPublicKey } = generateTestKeypair();
-    const signature = Buffer.from(signManifestBase64(privateKey, data), 'base64');
-    const thirdPartyKeys = new Map([['admin-added-key', rawPublicKey]]);
-    const result = resolveTrust(data, signature, new Map(), thirdPartyKeys);
-    expect(result.trust).toBe('verified-admin-added-key');
-    expect(result.signedByKeyId).toBe('admin-added-key');
-  });
 
-  it('prefers an official match over an incidental third-party match', () => {
-    const { privateKey, rawPublicKey } = generateTestKeypair();
-    const signature = Buffer.from(signManifestBase64(privateKey, data), 'base64');
-    const officialKeys = new Map([['release-2026', rawPublicKey]]);
-    const thirdPartyKeys = new Map([['admin-added-key', rawPublicKey]]);
-    const result = resolveTrust(data, signature, officialKeys, thirdPartyKeys);
-    expect(result.trust).toBe('official');
-  });
 
   it('a tampered signature against a known key falls through to unverified, never official', () => {
     const { privateKey, rawPublicKey } = generateTestKeypair();

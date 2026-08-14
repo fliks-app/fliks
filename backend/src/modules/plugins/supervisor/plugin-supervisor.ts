@@ -49,6 +49,7 @@ const SELF_DECLARED_WARN = /^(?:\[[^\]]*\]\s*)*WARN\b/;
 
 /** Every figure here is "The spawn call and the supervisor"'s, verbatim. Override only in tests. */
 export const DEFAULT_SUPERVISOR_OPTIONS = {
+  pluginApi: PLUGIN_API_VERSION,
   memoryMb: 256,
   handshakeDeadlineMs: 10_000,
   healthIntervalMs: 15_000,
@@ -65,6 +66,8 @@ export const DEFAULT_SUPERVISOR_OPTIONS = {
 
 export interface PluginSupervisorOptions {
   id: string;
+  /** The version this plugin's manifest declares — core answers it in that version, not the newest. */
+  pluginApi?: number;
   /** Directory already holding a materialized `plugin.js` (extraction is out of this PR's scope). */
   dir: string;
   /** Where the sockets and pid file live. Defaults to the `fliks-rt` directory,
@@ -424,6 +427,7 @@ export class PluginSupervisor implements OnApplicationShutdown {
       pluginSockPath: this.pluginSockPath,
       token: this.token,
       pluginId: this.opts.id,
+      pluginApi: this.opts.pluginApi,
       dbUrl: this.opts.dbUrl,
       config: this.opts.config,
     });
@@ -498,7 +502,7 @@ export class PluginSupervisor implements OnApplicationShutdown {
     try {
       const res = await channel.call<HelloReply>(
         'hello',
-        { pluginApi: PLUGIN_API_VERSION, coreVersion: CURRENT_FLIKS_VERSION, config: this.opts.config },
+        { pluginApi: this.opts.pluginApi, coreVersion: CURRENT_FLIKS_VERSION, config: this.opts.config },
         this.opts.handshakeDeadlineMs,
       );
       // The token never travels core->plugin; only a process holding the real FLIKS_PLUGIN_TOKEN

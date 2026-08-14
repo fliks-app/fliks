@@ -99,6 +99,7 @@ export class PluginProcessService implements OnApplicationShutdown {
       logBuffer: this.logBuffer,
       dbUrl,
       config,
+      pluginApi: manifest.pluginApi,
       memoryMb: manifest.memoryMb,
       hostApi: this.hostBinding?.bind(pkg.pluginId) ?? null,
     });
