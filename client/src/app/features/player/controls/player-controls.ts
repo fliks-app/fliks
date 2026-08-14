@@ -303,6 +303,8 @@ export class PlayerControlsComponent {
   readonly statsVisible = input(false);
   readonly showSkipIntro = input(false);
   readonly showNextCue = input(false);
+  /** Shown for the whole pre-roll item, not a timed cue — no sweep, no countdown. */
+  readonly showPreRollSkip = input(false);
   /** How long a floating cue stays up, in ms — drives the in-button progress
    *  sweep so it finishes exactly as the parent retracts the cue. */
   readonly cueDurationMs = input(6000);
@@ -315,6 +317,7 @@ export class PlayerControlsComponent {
   readonly cueFocused = signal(false);
   readonly togglePlay = output<void>();
   readonly skipIntro = output<void>();
+  readonly skipPreRoll = output<void>();
   readonly tapOverlay = output<void>();
   readonly seek = output<number>();
   readonly volumeChange = output<number>();

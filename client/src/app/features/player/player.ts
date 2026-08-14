@@ -18,7 +18,8 @@ import { Title } from '@angular/platform-browser';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
-import { BrowserDeviceProfileService } from '../../core/services/browser-device-profile.service';
+import { BrowserDeviceProfileService, DeviceProfile } from '../../core/services/browser-device-profile.service';
+import type { PreRollItem } from '../../core/plugin-ui/contribution.types';
 import { SseService } from '../../core/services/sse.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
@@ -431,6 +432,31 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly togglePlayCoalesceMs = 250;
   /** Tracks last episodeId we auto-skipped for to ensure we only auto-skip once per session. */
   private autoSkipFiredForEpisode: number | null = null;
+
+  // ── Pre-roll state ──
+  /** Item on screen; the single source of truth for every pre-roll gate. */
+  private readonly preRollCurrent = signal<PreRollItem | null>(null);
+  readonly preRollActive = computed(() => this.preRollCurrent() !== null);
+  /** Skippable unless the plugin explicitly opts out. */
+  readonly preRollSkippable = computed(() => {
+    const item = this.preRollCurrent();
+    return !!item && item.skippable !== false;
+  });
+  /** Title shown by the controls while a pre-roll item plays. */
+  readonly displayEpisodeTitle = computed(() => {
+    const key = this.preRollCurrent()?.labelKey;
+    return key ? this.translate.instant(key) : this.episodeTitle();
+  });
+  /** How long a pre-roll transition waits out an in-flight reload before giving up and remounting. */
+  private static readonly PRE_ROLL_RELOAD_WAIT_MS = 3_000;
+
+  /** Remaining items, consumed FIFO by {@link advancePreRoll}. */
+  private preRollRest: PreRollItem[] = [];
+  /** File to land on once the list is exhausted. */
+  private preRollMainFileId = 0;
+  /** Re-entry guard: the 'ended' latch and an error can both fire in the same tick. */
+  private preRollAdvancing = false;
+
   readonly spriteUrl = signal<string | null>(null);
   readonly spriteMetadata = signal<SpriteMetadata | null>(null);
   readonly activeSubtitleId = signal<string | null>(null);
@@ -1146,7 +1172,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
         // Await playback-info (kicked off in parallel with media load above)
         this.playbackInfo = await playbackInfoPromise!;
-        const pi = this.playbackInfo;
+        await this.maybeStartPreRoll(startTime, deviceProfile);
+        const pi = this.playbackInfo!;
         this.introMarker.set(pi.markers?.intro ?? null);
         this.outroMarker.set(pi.markers?.outro ?? null);
         this.chapters.set(pi.chapters ?? []);
@@ -1440,6 +1467,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           this.statsRefreshTick.update((n) => n + 1);
         }
       }, 1000);
+
     } catch (e: any) {
       console.error('[Player] Init error:', e?.code, e?.category, e?.data, e);
       const msg = e?.message ?? String(e);
@@ -1463,31 +1491,35 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         data: e?.data,
         message: msg,
       });
-      // TV / Tizen engine path: the AVPlay <object> + the hidden <video>
-      // both stay parked on top of the error overlay if the engine dies
-      // during load(). Force the player UI back into a visible-DOM state
-      // so the user can read what blew up instead of staring at the
-      // pre-paint bg-base-200 plane.
-      if ((this.isTizenEngine() || this.isDesktopNative || this.isNativeEngine()) && this.engine) {
-        document.documentElement.classList.remove('native-player-active');
-        const video = this.videoEl()?.nativeElement;
-        if (video) video.style.display = '';
-        try {
-          await this.engine.destroy();
-        } catch {
-          /* engine state may already be torn down — fine */
+      // preRollAdvanceEffect handles a pre-roll failure; this teardown would
+      // null the engine it needs, and the toast has no film-error to show.
+      if (!this.preRollActive()) {
+        // TV / Tizen engine path: the AVPlay <object> + the hidden <video>
+        // both stay parked on top of the error overlay if the engine dies
+        // during load(). Force the player UI back into a visible-DOM state
+        // so the user can read what blew up instead of staring at the
+        // pre-paint bg-base-200 plane.
+        if ((this.isTizenEngine() || this.isDesktopNative || this.isNativeEngine()) && this.engine) {
+          document.documentElement.classList.remove('native-player-active');
+          const video = this.videoEl()?.nativeElement;
+          if (video) video.style.display = '';
+          try {
+            await this.engine.destroy();
+          } catch {
+            /* engine state may already be torn down — fine */
+          }
+          this.engine = null;
+          this.isTizenEngine.set(false);
+          this.isNativeEngine.set(false);
         }
-        this.engine = null;
-        this.isTizenEngine.set(false);
-        this.isNativeEngine.set(false);
-      }
-      // Surface a toast on top of everything — fixed z-[9999], rendered
-      // by the always-mounted <app-toast-container>, so it survives even
-      // when the player-container itself isn't laying out correctly.
-      try {
-        this.toast.error(userMessage);
-      } catch {
-        /* toast service may not be ready during early init — ignore */
+        // Surface a toast on top of everything — fixed z-[9999], rendered
+        // by the always-mounted <app-toast-container>, so it survives even
+        // when the player-container itself isn't laying out correctly.
+        try {
+          this.toast.error(userMessage);
+        } catch {
+          /* toast service may not be ready during early init — ignore */
+        }
       }
     } finally {
       this.state.loading.set(false);
@@ -1558,6 +1590,103 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       window.removeEventListener('pipModeChanged', this.onPipModeChanged as EventListener);
       window.removeEventListener('pipAction', this.onPipAction as EventListener);
     }
+  }
+
+  // ── Pre-roll ──
+
+  /** Take over the launch with the plugin's pre-roll list when the response
+   *  carries one. No-op on resume, offline, Cast, or when nothing negotiates. */
+  private async maybeStartPreRoll(
+    startTime: number | undefined,
+    deviceProfile: DeviceProfile,
+  ): Promise<void> {
+    const items = this.playbackInfo?.preRoll ?? [];
+    if (!items.length) return;
+    if (startTime || this.isOfflinePlayback || this.castService.isConnected()) return;
+    if (this.route.snapshot.queryParams['noPreRoll'] === '1') return;
+
+    const mainFileId = this.mediaFileId;
+    const mainSid = this.playbackInfo!.sessionId;
+    const rest = [...items];
+    while (rest.length) {
+      const item = rest.shift()!;
+      const info = await this.streamingApi
+        .getPlaybackInfo(item.mediaFileId, deviceProfile, undefined, undefined, this.resolveStartQuality())
+        .catch(() => null);
+      if (!info) continue; // this candidate failed to negotiate — try the next
+      // Only stop the main session once a pre-roll item is committed: if every
+      // candidate fails, the launch is byte-identical to a plugin-free one.
+      await this.streamingApi.stopSessions(mainFileId, mainSid).catch(() => {});
+      this.preRollMainFileId = mainFileId;
+      this.preRollRest = rest;
+      this.preRollCurrent.set(item);
+      this.mediaFileId = item.mediaFileId;
+      this.playbackInfo = info;
+      this.state.duration.set(info.source?.durationSeconds ?? 0);
+      return;
+    }
+  }
+
+  /** Move past the item on screen: the next pre-roll item, else the main video.
+   *  Reuses {@link reloadForEpisode} for every transition, main item included. */
+  private async advancePreRoll(): Promise<void> {
+    if (!this.preRollActive() || this.preRollAdvancing) return;
+    this.preRollAdvancing = true;
+    try {
+      // `reloadForEpisode` refuses while another reload is in flight. Consuming the item first
+      // would strand the run on a finished one, with nothing left to re-trigger this.
+      const deadline = Date.now() + PlayerComponent.PRE_ROLL_RELOAD_WAIT_MS;
+      while (this.reloadingStream && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      const next = this.preRollRest.shift();
+      if (next) this.preRollCurrent.set(next);
+      const fileId = next ? next.mediaFileId : this.preRollMainFileId;
+      this.state.ended.set(false);
+      this.state.error.set(null);
+      await this.reloadForEpisode(fileId, this.mediaId, this.episodeId, { noResumeLookup: true });
+      // Any refusal above is silent, so the loaded file is the only proof it happened.
+      if (this.mediaFileId !== fileId) this.remountWithoutPreRoll();
+    } finally {
+      // Guards lift only once the main item is the loaded file — a chained
+      // failure re-enters this before landing there.
+      if (this.mediaFileId === this.preRollMainFileId) this.preRollCurrent.set(null);
+      this.preRollAdvancing = false;
+    }
+  }
+
+  /** Skip-button handler — drops the item on screen; any remaining items still play. */
+  skipPreRoll(): void {
+    void this.advancePreRoll();
+  }
+
+  /** Pre-roll chains unconditionally on end or error — autoplay settings don't
+   *  apply, and a failure must never be able to stop the main video. */
+  private readonly preRollAdvanceEffect = effect(() => {
+    if (!this.preRollActive()) return;
+    if (!this.state.ended() && !this.state.error()) return;
+    // Without an engine there is nothing to load into, so the run cannot continue in place.
+    if (!this.engine) {
+      this.remountWithoutPreRoll();
+      return;
+    }
+    void this.advancePreRoll();
+  });
+
+  /** Remount on the main item with `noPreRoll=1` so the fresh mount doesn't
+   *  retry a pre-roll that died before it could be advanced in place. */
+  private remountWithoutPreRoll(): void {
+    // The gate stays on until this component dies: teardown calls savePosition, and with it
+    // cleared the trailer's playhead would land on the main film's row.
+    const qp = { ...this.route.snapshot.queryParams, noPreRoll: '1' };
+    void this.router
+      .navigateByUrl('/', { skipLocationChange: true })
+      .then(() =>
+        this.router.navigate(['/watch', this.preRollMainFileId], {
+          queryParams: qp,
+          replaceUrl: true,
+        }),
+      );
   }
 
   // ── Engine factories ──
@@ -1992,6 +2121,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** True when the cursor is inside the detected intro window. */
   readonly inIntroRange = computed(() => {
+    if (this.preRollActive()) return false;
     const m = this.introMarker();
     if (!m) return false;
     const t = this.currentTime();
@@ -2125,7 +2255,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  next episode of the series queue). Null when nothing follows or there's no
    *  queue (a standalone film). Drives the skip control and auto-advance alike. */
   readonly upNext = computed<QueueItem | null>(() =>
-    this.queue.active() ? this.queue.peekNext() : null,
+    this.preRollActive() ? null : this.queue.active() ? this.queue.peekNext() : null,
   );
 
   /** Whether the current context advances automatically when a stream ends: the
@@ -2276,6 +2406,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     mediaFileId: number,
     mediaId: number,
     episodeId: number | undefined,
+    opts: { noResumeLookup?: boolean } = {},
   ): Promise<void> {
     if (!this.engine || this.reloadingStream || mediaFileId === this.mediaFileId) return;
     this.reloadingStream = true;
@@ -2318,13 +2449,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const knownDuration = (file?.streamInfo as any)?.durationSeconds;
       if (knownDuration && knownDuration > 0) this.state.duration.set(knownDuration);
 
-      // Resume point of the incoming episode (usually the start).
+      // Resume point of the incoming episode. Skipped for a pre-roll transition:
+      // mediaId/episodeId stay on the main film, so this would seek a trailer to it.
       let startTime: number | undefined;
-      const playbackState = await this.streamingApi
-        .getPlaybackState(this.mediaId, this.episodeId)
-        .catch(() => null);
-      if (playbackState && !playbackState.completed && playbackState.positionSeconds > 10) {
-        startTime = playbackState.positionSeconds;
+      if (!opts.noResumeLookup) {
+        const playbackState = await this.streamingApi
+          .getPlaybackState(this.mediaId, this.episodeId)
+          .catch(() => null);
+        if (playbackState && !playbackState.completed && playbackState.positionSeconds > 10) {
+          startTime = playbackState.positionSeconds;
+        }
       }
 
       // Audio preference for the new file (UI/state; the backend picks the
@@ -2421,7 +2555,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  past it (auto or manual) counts as watched.
    *  Backend threshold: position >= duration - 30s OR position >= duration * 0.9. */
   private async markCurrentComplete(): Promise<void> {
-    if (!this.mediaId) return;
+    if (!this.mediaId || this.preRollActive()) return;
     const dur =
       (this.castService.isConnected()
         ? this.castService.duration()
@@ -2509,7 +2643,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  Unlike {@link advance} it does NOT mark the current item watched — a jump
    *  isn't finishing — and it does not skip: the user chose this item. */
   async playQueueItem(index: number): Promise<void> {
-    if (this.advancing || this.reloadingStream) return;
+    if (this.advancing || this.reloadingStream || this.preRollActive()) return;
     if (index === this.queue.index()) return; // already playing it
     const item = this.queue.items()[index];
     if (!item) return;
@@ -2657,6 +2791,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.castService.isConnected()) {
       this.castService.disconnect();
       return;
+    }
+
+    // startCastFromPlayer builds from this.mediaFileId — drop straight to the
+    // main item first so a Cast connect can never cast the trailer.
+    if (this.preRollActive()) {
+      this.preRollRest = [];
+      await this.advancePreRoll();
     }
 
     const wasPlaying = this.engine && !this.engine.paused;
@@ -3207,6 +3348,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  backend (within 30s of the end, or past 90%). Drives the "back" target:
    *  a finished episode returns to the next one. */
   private episodeFinished(): boolean {
+    // A pre-roll item reading past 90% must not send "back" to the next episode.
+    if (this.preRollActive()) return false;
     const dur = this.duration();
     const pos = this.currentTime();
     return dur > 0 && (pos >= dur - 30 || pos >= dur * 0.9);
@@ -3994,7 +4137,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private lastSaveAt = 0;
 
   private async savePosition() {
-    if (!this.mediaId) return;
+    // mediaFileId is the pre-roll's while mediaId still names the film — an
+    // escaped write here would stamp the film's row with the trailer's position.
+    if (!this.mediaId || this.preRollActive()) return;
 
     let pos: number;
     let dur: number;

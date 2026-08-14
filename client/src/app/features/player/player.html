@@ -123,10 +123,10 @@
     [playbackRate]="playbackRate()"
     [mediaTitle]="mediaTitle()"
     [logoUrl]="mediaLogoUrl()"
-    [episodeTitle]="episodeTitle()"
+    [episodeTitle]="displayEpisodeTitle()"
     [hasNext]="upNext() !== null"
     [nextLabelKey]="nextLabelKey()"
-    [queueItems]="queueItems()"
+    [queueItems]="preRollActive() ? [] : queueItems()"
     [queueIndex]="queueIndex()"
     (selectQueueItem)="playQueueItem($event)"
     [activeQualityLabel]="activeQualityLabel()"
@@ -172,6 +172,8 @@
     [cueDurationMs]="cueRevealMs"
     (skipIntro)="skipIntro()"
     (next)="advance()"
+    [showPreRollSkip]="preRollSkippable()"
+    (skipPreRoll)="skipPreRoll()"
     (panelOpenChange)="onControlsPanelOpenChange($event)"
   />
   }

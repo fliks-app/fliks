@@ -278,7 +278,7 @@
     #skipIntroBtn
     type="button"
     class="btn btn-primary absolute right-6 z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
-    style="right: max(1.5rem, env(safe-area-inset-right)); bottom: max(var(--cue-bottom, 8rem), calc(var(--cue-bottom, 8rem) + env(safe-area-inset-bottom)));"
+    style="right: 1.5rem; bottom: 8rem; right: max(1.5rem, env(safe-area-inset-right)); bottom: max(var(--cue-bottom, 8rem), calc(var(--cue-bottom, 8rem) + env(safe-area-inset-bottom)));"
     (click)="skipIntro.emit()"
     (focus)="cueFocused.set(true)"
     (blur)="cueFocused.set(false)"
@@ -295,13 +295,28 @@
   </button>
 }
 
+<!-- ===== Pre-roll skip button — up for the whole item, no sweep/countdown ===== -->
+@if (showPreRollSkip()) {
+  <button
+    type="button"
+    class="btn btn-primary absolute right-6 z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
+    style="right: 1.5rem; bottom: 8rem; right: max(1.5rem, env(safe-area-inset-right)); bottom: max(var(--cue-bottom, 8rem), calc(var(--cue-bottom, 8rem) + env(safe-area-inset-bottom)));"
+    (click)="skipPreRoll.emit()"
+  >
+    <span class="relative flex items-center gap-2">
+      <svg lucideSkipForward class="h-4 w-4"></svg>
+      {{ 'player.skip_pre_roll' | translate }}
+    </span>
+  </button>
+}
+
 <!-- ===== Next item floating button (during outro) ===== -->
 @if (showNextCue()) {
   <button
     #nextEpisodeBtn
     type="button"
     class="btn btn-primary absolute right-6 z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
-    style="right: max(1.5rem, env(safe-area-inset-right)); bottom: max(var(--cue-bottom, 8rem), calc(var(--cue-bottom, 8rem) + env(safe-area-inset-bottom)));"
+    style="right: 1.5rem; bottom: 8rem; right: max(1.5rem, env(safe-area-inset-right)); bottom: max(var(--cue-bottom, 8rem), calc(var(--cue-bottom, 8rem) + env(safe-area-inset-bottom)));"
     (click)="next.emit()"
     (focus)="cueFocused.set(true)"
     (blur)="cueFocused.set(false)"
