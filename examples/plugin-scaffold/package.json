@@ -1,0 +1,19 @@
+{
+  "name": "fliks-plugin-scaffold",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "build": "esbuild src/plugin.ts --bundle --platform=node --target=node24 --outfile=dist/plugin.js",
+    "package": "npm run build && cp plugin.json logo.svg dist/ && node ../../backend/node_modules/.bin/ts-node ../../backend/scripts/package-plugin.ts dist -o scaffold.fkplugin",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fliks/plugin-contract": "file:../../backend/src/common/plugin-contract"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0",
+    "esbuild": "^0.25.0"
+  }
+}

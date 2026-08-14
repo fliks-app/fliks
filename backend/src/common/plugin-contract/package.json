@@ -11,7 +11,8 @@
   "types": "./index.ts",
   "exports": {
     ".": "./index.ts",
-    "./ui": "./ui-contribution.ts"
+    "./ui": "./ui-contribution.ts",
+    "./protocol": "./protocol.ts"
   },
   "peerDependencies": {
     "semver": ">=7"

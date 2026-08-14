@@ -1,4 +1,3 @@
-import * as semver from 'semver';
 /**
  * Wire protocol for the two unix sockets between core and a `process`
  * plugin: newline-delimited JSON, one object per line.
@@ -43,16 +42,6 @@ export const PLUGIN_API_VERSION = 1;
 export const SUPPORTED_PLUGIN_API_VERSIONS: readonly number[] = [0, 1];
 
 /**
- * The version a `fliks` range is matched against: a prerelease resolves as its own release, since
- * `3.0.0-rc.1` sorts *below* `3.0.0` and would otherwise satisfy no range that admits 3.0.0 —
- * leaving a release candidate unable to run any plugin, and the upgrade impossible to rehearse.
- */
-export function fliksRangeVersion(version: string): string {
-  const parsed = semver.parse(version);
-  return parsed ? `${parsed.major}.${parsed.minor}.${parsed.patch}` : version;
-}
-
-/**
  * Environment core sets on every spawn (see `supervisor/spawn-plan.ts`) — the only way in
  * for a `process` plugin, since core never passes `...process.env`. Every value here is a
  * plain string; only `FLIKS_API_VERSION` has a typed counterpart ({@link PLUGIN_API_VERSION}).
@@ -63,8 +52,9 @@ export interface PluginSpawnEnv {
   FLIKS_PLUGIN_TOKEN: string;
   /** Unix socket this plugin dials to make its `PluginHostApi` calls. */
   FLIKS_CORE_SOCK: string;
-  /** Unix socket this plugin listens on for core's `PluginApi` calls
-   *  (`hello`, `health`, `http`, `job`, `event`, `config`, `shutdown`). */
+  /** Unix socket this plugin dials to *receive* core's `PluginApi` calls
+   *  (`hello`, `health`, `http`, `job`, `event`, `config`, `shutdown`). Core listens on both
+   *  sockets; the plugin connects to both and never binds one of its own. */
   FLIKS_PLUGIN_SOCK: string;
   /** This plugin's own Postgres connection string; `''` when its manifest declared no schema. */
   FLIKS_DB_URL: string;

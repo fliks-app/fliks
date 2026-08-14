@@ -8,19 +8,31 @@ not put anything of core inside your plugin.
 npm install --save-dev @fliks/plugin-contract
 ```
 
-## Two entry points
+## Entry points
 
 ```ts
-import type { ProcessPluginManifest, HostMethod } from '@fliks/plugin-contract';
-import { PLUGIN_API_VERSION, PLUGIN_DEADLINES_MS } from '@fliks/plugin-contract';
+// Types — erased at build time, so the barrel costs nothing.
+import type { ProcessPluginManifest, PluginApi } from '@fliks/plugin-contract';
 
-// UI contributions alone — no dependencies, safe in a browser bundle.
+// Runtime values — import the leaf.
+import { MAX_FRAME_BYTES, PLUGIN_DEADLINES_MS } from '@fliks/plugin-contract/protocol';
+
+// UI contributions alone. No dependencies, safe in a browser bundle.
 import type { ConfigPage, UiContribution } from '@fliks/plugin-contract/ui';
 ```
 
-The root export covers the manifest, both method tables, the principal, the wire protocol and the
-UI contributions. `semver` is an optional peer dependency, needed only if you call the version
-helpers in `protocol`.
+| Specifier | |
+|---|---|
+| `@fliks/plugin-contract` | Everything: manifest, both method tables, principal, protocol, UI. |
+| `@fliks/plugin-contract/protocol` | Wire constants and frame types. Zero dependencies. |
+| `@fliks/plugin-contract/ui` | UI contributions. Zero dependencies. |
+
+The barrel also re-exports `fliksRangeVersion`, the one helper that needs `semver` — an optional
+peer dependency. Take a runtime value from the barrel and your bundler cannot drop it, which is why
+values come from a leaf.
+
+A `process` plugin ships as a single bundled `plugin.js`: an archive carries no `node_modules`, so
+an unbundled `require` of this package fails at spawn. See `examples/plugin-scaffold`.
 
 ## Versioning
 
