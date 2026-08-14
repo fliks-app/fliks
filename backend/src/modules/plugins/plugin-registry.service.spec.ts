@@ -8,7 +8,8 @@ import { generateTestKeypair, signManifestBase64 } from './archive/ed25519-test-
 import { minimalDataManifest, minimalProcessManifest } from './archive/test-manifests';
 import { svgLogo, pngLogo } from './archive/test-fixtures';
 import { OFFICIAL_KEYS } from './archive/trust-store';
-import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry, fakeCountsCache } from './plugin-registry.test-helpers';
+import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry,
+  fakeSourceRepo, fakeCountsCache } from './plugin-registry.test-helpers';
 import { FLIKS_PLUGINS_DISABLED_ENV } from '../../common/constants/plugin-flags';
 import { sweepOrphans } from './supervisor/pid-file';
 import { getPluginsSocketDir } from '../../common/constants/paths';
@@ -55,20 +56,27 @@ function repoMock(rows: PluginPackage[] = []) {
 }
 
 /** Every registry test but boot-load exercises `register()` directly, so the process side is always faked here. */
-function makeService(rows: PluginPackage[] = [], processResult: PluginProcessStartResult = { ok: true }) {
+function makeService(
+  rows: PluginPackage[] = [],
+  processResult: PluginProcessStartResult = { ok: true },
+  sources: Array<{ enabled: boolean; cachedCatalog: Record<string, unknown> | null }> = [],
+) {
   const repo = repoMock(rows);
+  // The shared helper honours `where`, so the enabled-only filter is the code's job, not the mock's.
+  const sourceRepo = fakeSourceRepo(sources as never);
   const registrationRepo = fakeRegistrationRepo();
   const processService = fakeProcessService(processResult);
   const pluginJobs = fakePluginJobsService();
   const service = new PluginRegistryService(
     repo as never,
+    sourceRepo as never,
     registrationRepo as never,
     processService as never,
     pluginJobs as never,
     fakeScheduledJobRegistry() as never,
     fakeCountsCache() as never,
   );
-  return { service, repo, registrationRepo, processService, pluginJobs };
+  return { service, repo, sourceRepo, registrationRepo, processService, pluginJobs };
 }
 
 describe('PluginRegistryService — boot load', () => {
@@ -247,6 +255,72 @@ describe('PluginRegistryService.register()', () => {
     expect(result).toEqual({ ok: true, pluginId: manifest.id });
   });
 
+  it('refuses to register a package an enabled source’s deny-list revokes, and the reason reaches the caller', async () => {
+    const { privateKey, rawPublicKey } = generateTestKeypair();
+    (OFFICIAL_KEYS as Map<string, Buffer>).set('release-2026', rawPublicKey);
+    const manifest = minimalDataManifest({ fliks: COMPATIBLE_RANGE });
+    const manifestBytes = Buffer.from(JSON.stringify(manifest), 'utf8');
+    const sig = signManifestBase64(privateKey, manifestBytes);
+    const archive = archiveFor(manifest, [{ name: 'plugin.json.sig', content: Buffer.from(sig, 'utf8') }]);
+    const pkg = makePackage(manifest, { archive, signature: 'official', verifiedByKeyId: 'release-2026' });
+    const source = {
+      enabled: true,
+      cachedCatalog: {
+        denyList: [{ pluginId: manifest.id, reason: 'known credential leak' }],
+        signedByKeyId: 'release-2026',
+      },
+    };
+    const { service } = makeService([], { ok: true }, [source]);
+
+    const result = await service.register(pkg);
+
+    expect(result).toEqual({ ok: false, pluginId: manifest.id, reason: 'revoked', detail: 'known credential leak' });
+    expect(service.get(manifest.id)).toBeUndefined();
+  });
+
+  it('ignores the deny-list of a source the operator disabled', async () => {
+    const { privateKey, rawPublicKey } = generateTestKeypair();
+    (OFFICIAL_KEYS as Map<string, Buffer>).set('release-2026', rawPublicKey);
+    const manifest = minimalDataManifest({ fliks: COMPATIBLE_RANGE });
+    const manifestBytes = Buffer.from(JSON.stringify(manifest), 'utf8');
+    const sig = signManifestBase64(privateKey, manifestBytes);
+    const archive = archiveFor(manifest, [{ name: 'plugin.json.sig', content: Buffer.from(sig, 'utf8') }]);
+    const pkg = makePackage(manifest, { archive, signature: 'official', verifiedByKeyId: 'release-2026' });
+    // Everything else matches, so only the disabled flag can keep this plugin installed.
+    const source = {
+      enabled: false,
+      cachedCatalog: {
+        denyList: [{ pluginId: manifest.id, reason: 'known credential leak' }],
+        signedByKeyId: 'release-2026',
+      },
+    };
+    const { service } = makeService([], { ok: true }, [source]);
+
+    await expect(service.register(pkg)).resolves.toEqual({ ok: true, pluginId: manifest.id });
+  });
+
+  it('does not revoke a package when the deny-list was signed by a different key than the one that verified the package', async () => {
+    const { privateKey, rawPublicKey } = generateTestKeypair();
+    (OFFICIAL_KEYS as Map<string, Buffer>).set('release-2026', rawPublicKey);
+    const manifest = minimalDataManifest({ fliks: COMPATIBLE_RANGE });
+    const manifestBytes = Buffer.from(JSON.stringify(manifest), 'utf8');
+    const sig = signManifestBase64(privateKey, manifestBytes);
+    const archive = archiveFor(manifest, [{ name: 'plugin.json.sig', content: Buffer.from(sig, 'utf8') }]);
+    const pkg = makePackage(manifest, { archive, signature: 'official', verifiedByKeyId: 'release-2026' });
+    const source = {
+      enabled: true,
+      cachedCatalog: {
+        denyList: [{ pluginId: manifest.id, reason: 'known credential leak' }],
+        signedByKeyId: 'some-other-source',
+      },
+    };
+    const { service } = makeService([], { ok: true }, [source]);
+
+    const result = await service.register(pkg);
+
+    expect(result).toEqual({ ok: true, pluginId: manifest.id });
+  });
+
   it('L4: does not register when pluginApi differs from PLUGIN_API_VERSION, with its own reason', async () => {
     const manifest = minimalDataManifest({ fliks: COMPATIBLE_RANGE, pluginApi: 99 });
     const pkg = makePackage(manifest);
@@ -318,6 +392,20 @@ describe('PluginRegistryService.register()', () => {
       expect(row?.manifest).toEqual(pkg.manifest);
     });
 
+
+    it('revoke() stops a running plugin’s process and tears its routes down like an untrusted plugin, not a merely-stopped one', async () => {
+      const pkg = processPackage({ id: 'fliks.processrevoked', routes: [{ method: 'GET', path: '/health', policy: 'read:Media' }] });
+      const { service, processService } = makeService();
+      await service.register(pkg);
+      expect(service.resolveRoute(pkg.pluginId, 'GET', '/health')).not.toBeNull();
+
+      await service.revoke(pkg.pluginId, 'known credential leak');
+
+      expect(processService.stopFor).toHaveBeenCalledWith(pkg.pluginId);
+      expect(service.get(pkg.pluginId)).toBeUndefined();
+      // 403, not 503: a revocation withdraws authority, it doesn't just take the process down.
+      expect(service.resolveRoute(pkg.pluginId, 'GET', '/health')).toBeNull();
+    });
 
     it('propagates a spawn failure reason and registers nothing', async () => {
       const pkg = processPackage({ id: 'fliks.processspawnfail' });

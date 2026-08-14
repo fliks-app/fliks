@@ -1,6 +1,7 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import { PluginCatalogClientService } from './plugin-catalog-client.service';
 import { PluginSource } from './entities/plugin-source.entity';
+import { PluginPackage } from './entities/plugin-package.entity';
 import { generateTestKeypair, signManifestBase64 } from './archive/ed25519-test-keys';
 import { OFFICIAL_KEYS } from './archive/trust-store';
 import type { CatalogDocument } from './catalog/catalog';
@@ -43,6 +44,15 @@ function repoStub() {
   return { save } as unknown as { save: jest.Mock };
 }
 
+/** No installed packages by default — nothing for `enforceDenyList` to act on. */
+function fakePackageRepo(rows: PluginPackage[] = []) {
+  return { find: jest.fn(async () => rows), save: jest.fn(async (row: PluginPackage) => row) };
+}
+
+function fakeRegistry() {
+  return { revoke: jest.fn(async () => undefined) };
+}
+
 /** Routes a GET by URL suffix — `catalog.json` and `catalog.json.sig` never collide since
  *  `endsWith` is exact. A value that is an `Error` rejects instead of resolving. */
 function adapterFor(responses: Record<string, Buffer | Error>) {
@@ -71,7 +81,7 @@ describe('PluginCatalogClientService', () => {
     axios.defaults.adapter = adapterFor({ 'catalog.json.sig': sig, 'catalog.json': bytes });
 
     const repo = repoStub();
-    const service = new PluginCatalogClientService(repo as never);
+    const service = new PluginCatalogClientService(repo as never, fakePackageRepo() as never, fakeRegistry() as never);
     const source = fakeSource({ publicKey: rawPublicKey });
 
     const result = await service.refreshSource(source);
@@ -80,6 +90,8 @@ describe('PluginCatalogClientService', () => {
     expect(source.lastRefreshError).toBeNull();
     expect(source.lastRefreshedAt).toBeInstanceOf(Date);
     expect(source.cachedCatalog).toEqual({
+      denyList: [],
+      signedByKeyId: 'source',
       plugins: [
         expect.objectContaining({
           id: 'fliks.test-plugin',
@@ -99,7 +111,7 @@ describe('PluginCatalogClientService', () => {
     axios.defaults.adapter = adapterFor({ 'catalog.json.sig': tamperedSig, 'catalog.json': bytes });
 
     const repo = repoStub();
-    const service = new PluginCatalogClientService(repo as never);
+    const service = new PluginCatalogClientService(repo as never, fakePackageRepo() as never, fakeRegistry() as never);
     const previousCatalog = { plugins: [{ id: 'old' }] };
     const source = fakeSource({
       publicKey: rawPublicKey,
@@ -123,7 +135,7 @@ describe('PluginCatalogClientService', () => {
     axios.defaults.adapter = adapterFor({ 'catalog.json.sig': sig, 'catalog.json': bytes });
 
     const repo = repoStub();
-    const service = new PluginCatalogClientService(repo as never);
+    const service = new PluginCatalogClientService(repo as never, fakePackageRepo() as never, fakeRegistry() as never);
     const source = fakeSource({ publicKey: sourceKeypair.rawPublicKey });
 
     const result = await service.refreshSource(source);
@@ -142,7 +154,7 @@ describe('PluginCatalogClientService', () => {
     mutableOfficialKeys.set('test-official', rawPublicKey);
     try {
       const repo = repoStub();
-      const service = new PluginCatalogClientService(repo as never);
+      const service = new PluginCatalogClientService(repo as never, fakePackageRepo() as never, fakeRegistry() as never);
       const source = fakeSource({ publicKey: null });
 
       const result = await service.refreshSource(source);
@@ -161,7 +173,7 @@ describe('PluginCatalogClientService', () => {
     axios.defaults.adapter = adapterFor({ 'catalog.json.sig': sig, 'catalog.json': bytes });
 
     const repo = repoStub();
-    const service = new PluginCatalogClientService(repo as never);
+    const service = new PluginCatalogClientService(repo as never, fakePackageRepo() as never, fakeRegistry() as never);
     const source = fakeSource({ publicKey: rawPublicKey });
 
     await service.refreshSource(source);
@@ -171,6 +183,65 @@ describe('PluginCatalogClientService', () => {
     expect(catalog.plugins[0].hidden).toEqual({ count: 1, minFliksVersion: '5.0.0' });
   });
 
+  it('stops and marks failed an installed package a landed revocation denies, immediately — not on next reboot', async () => {
+    const { privateKey, rawPublicKey } = generateTestKeypair();
+    const doc = { ...catalogWith(), denyList: [{ pluginId: 'fliks.test-plugin', reason: 'known credential leak' }] };
+    const bytes = Buffer.from(JSON.stringify(doc), 'utf8');
+    const sig = Buffer.from(signManifestBase64(privateKey, bytes), 'utf8');
+    axios.defaults.adapter = adapterFor({ 'catalog.json.sig': sig, 'catalog.json': bytes });
+
+    // `publicKey` pins this source's verification key to id 'source' — the same id the
+    // installed package's `verifiedByKeyId` must carry for the revocation to reach it.
+    const pkg = {
+      pluginId: 'fliks.test-plugin',
+      version: '1.0.0',
+      archive: Buffer.from('fake archive bytes'),
+      verifiedByKeyId: 'source',
+      status: 'active',
+      statusReason: null,
+    } as PluginPackage;
+    const packageRepo = fakePackageRepo([pkg]);
+    const registry = fakeRegistry();
+    const repo = repoStub();
+    const service = new PluginCatalogClientService(repo as never, packageRepo as never, registry as never);
+    const source = fakeSource({ publicKey: rawPublicKey });
+
+    const result = await service.refreshSource(source);
+
+    expect(result).toEqual({ ok: true });
+    expect(registry.revoke).toHaveBeenCalledWith('fliks.test-plugin', 'known credential leak');
+    expect(pkg.status).toBe('failed');
+    expect(pkg.statusReason).toBe('revoked: known credential leak');
+  });
+
+  it('leaves an installed package alone when the deny-list was signed by a different key', async () => {
+    const { privateKey, rawPublicKey } = generateTestKeypair();
+    const doc = { ...catalogWith(), denyList: [{ pluginId: 'fliks.test-plugin', reason: 'known credential leak' }] };
+    const bytes = Buffer.from(JSON.stringify(doc), 'utf8');
+    const sig = Buffer.from(signManifestBase64(privateKey, bytes), 'utf8');
+    axios.defaults.adapter = adapterFor({ 'catalog.json.sig': sig, 'catalog.json': bytes });
+
+    // This package was verified by the compiled-in official key, not this source's pinned key.
+    const pkg = {
+      pluginId: 'fliks.test-plugin',
+      version: '1.0.0',
+      archive: Buffer.from('fake archive bytes'),
+      verifiedByKeyId: 'release-2026',
+      status: 'active',
+      statusReason: null,
+    } as PluginPackage;
+    const packageRepo = fakePackageRepo([pkg]);
+    const registry = fakeRegistry();
+    const repo = repoStub();
+    const service = new PluginCatalogClientService(repo as never, packageRepo as never, registry as never);
+    const source = fakeSource({ publicKey: rawPublicKey });
+
+    await service.refreshSource(source);
+
+    expect(registry.revoke).not.toHaveBeenCalled();
+    expect(pkg.status).toBe('active');
+  });
+
   it('keeps the previous cachedCatalog and records the error on a network failure', async () => {
     axios.defaults.adapter = adapterFor({
       'catalog.json.sig': new Error('ECONNRESET'),
@@ -178,7 +249,7 @@ describe('PluginCatalogClientService', () => {
     });
 
     const repo = repoStub();
-    const service = new PluginCatalogClientService(repo as never);
+    const service = new PluginCatalogClientService(repo as never, fakePackageRepo() as never, fakeRegistry() as never);
     const previousCatalog = { plugins: [{ id: 'old' }] };
     const previousRefreshedAt = new Date('2026-01-01T00:00:00Z');
     const source = fakeSource({
@@ -202,7 +273,7 @@ describe('PluginCatalogClientService', () => {
     axios.defaults.adapter = adapterFor({ 'catalog.json.sig': sig, 'catalog.json': bytes });
 
     const repo = repoStub();
-    const service = new PluginCatalogClientService(repo as never);
+    const service = new PluginCatalogClientService(repo as never, fakePackageRepo() as never, fakeRegistry() as never);
     const source = fakeSource({ publicKey: rawPublicKey });
 
     await expect(service.refreshSource(source)).resolves.toEqual({
@@ -220,7 +291,7 @@ describe('PluginCatalogClientService', () => {
     };
 
     const repo = repoStub();
-    const service = new PluginCatalogClientService(repo as never);
+    const service = new PluginCatalogClientService(repo as never, fakePackageRepo() as never, fakeRegistry() as never);
     const source = fakeSource({ url: 'http://insecure.example.com/catalog.json' });
 
     const result = await service.refreshSource(source);
@@ -233,7 +304,7 @@ describe('PluginCatalogClientService', () => {
     it('refreshes every enabled source and never queries a disabled one', async () => {
       const enabledSource = fakeSource({ id: 1, enabled: true });
       const find = jest.fn().mockResolvedValue([enabledSource]);
-      const service = new PluginCatalogClientService({ find } as never);
+      const service = new PluginCatalogClientService({ find } as never, fakePackageRepo() as never, fakeRegistry() as never);
       jest.spyOn(service, 'refreshSource').mockResolvedValue({ ok: true });
 
       await service.refreshAll();

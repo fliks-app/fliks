@@ -34,6 +34,10 @@ function validateCoreRefNames(coreRefs: readonly string[]): string[] {
   return [...coreRefs];
 }
 
+function quoteIdent(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
 function randomHexPassword(): string {
   const password = randomBytes(24).toString('hex');
   if (!HEX_PASSWORD_PATTERN.test(password)) {
@@ -204,6 +208,121 @@ export class PluginDatabaseService {
       await queryRunner.query(`DROP SCHEMA IF EXISTS "${identifier}" CASCADE`);
       await queryRunner.query(`DROP ROLE IF EXISTS "${identifier}"`);
     } catch (err) {
+      throw asProvisionFailure(err);
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /** A leading underscore marks a table as the plugin's own bookkeeping — its migration ledger
+   *  above all, which records the schema version and must never be exported or written back. */
+  private static isBookkeeping(table: string): boolean {
+    return table.startsWith('_');
+  }
+
+  /** Base tables in this plugin's own schema, read from the catalogue — the only source export/import may take a table name from. */
+  async listSchemaTables(pluginId: string): Promise<string[]> {
+    const identifier = pluginDbIdentifier(pluginId);
+    const rows = await this.dataSource.query(
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_type = 'BASE TABLE' ORDER BY table_name`,
+      [identifier],
+    );
+    return (rows as { table_name: string }[])
+      .map((row) => row.table_name)
+      .filter((table) => !PluginDatabaseService.isBookkeeping(table));
+  }
+
+  /** True once any base table in this plugin's schema holds at least one row. */
+  async schemaHasRows(pluginId: string): Promise<boolean> {
+    const identifier = pluginDbIdentifier(pluginId);
+    for (const table of await this.listSchemaTables(pluginId)) {
+      const rows = await this.dataSource.query(`SELECT 1 FROM ${quoteIdent(identifier)}.${quoteIdent(table)} LIMIT 1`);
+      if (rows.length > 0) return true;
+    }
+    return false;
+  }
+
+  /** Every row of every base table in this plugin's own schema, keyed by table name. */
+  async exportSchemaRows(pluginId: string): Promise<Record<string, Record<string, unknown>[]>> {
+    const identifier = pluginDbIdentifier(pluginId);
+    const out: Record<string, Record<string, unknown>[]> = {};
+    for (const table of await this.listSchemaTables(pluginId)) {
+      out[table] = await this.dataSource.query(`SELECT * FROM ${quoteIdent(identifier)}.${quoteIdent(table)}`);
+    }
+    return out;
+  }
+
+  /**
+   * Restores previously exported rows into this plugin's own schema, one transaction for every
+   * table. Table and column names are re-checked against the live catalogue on every call, never
+   * trusted from `tables` — an unknown table or column throws instead of reaching SQL.
+   *
+   * ponytail: inserts each table in the document's own key order; a schema whose tables reference
+   * each other needs that order to already be dependency-safe. Upgrade to a topological sort over
+   * the schema's own FKs if a plugin ever needs one.
+   */
+  async restoreSchemaRows(pluginId: string, tables: Record<string, Record<string, unknown>[]>): Promise<void> {
+    const identifier = pluginDbIdentifier(pluginId);
+    const knownTables = new Set(await this.listSchemaTables(pluginId));
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      for (const [table, rows] of Object.entries(tables)) {
+        if (!knownTables.has(table)) {
+          throw new Error(`table ${JSON.stringify(table)} does not belong to plugin "${pluginId}"'s schema`);
+        }
+        if (!Array.isArray(rows) || rows.length === 0) continue;
+
+        const columnRows = await queryRunner.query(
+          `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2`,
+          [identifier, table],
+        );
+        const knownColumns = new Set((columnRows as { column_name: string }[]).map((row) => row.column_name));
+
+        for (const row of rows) {
+          if (typeof row !== 'object' || row === null) {
+            throw new Error(`a row in table ${JSON.stringify(table)} is not an object`);
+          }
+          const columns = Object.keys(row);
+          for (const column of columns) {
+            if (!knownColumns.has(column)) {
+              throw new Error(`column ${JSON.stringify(column)} does not belong to table ${JSON.stringify(table)}`);
+            }
+          }
+          if (columns.length === 0) continue;
+          const columnList = columns.map(quoteIdent).join(', ');
+          const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
+          await queryRunner.query(
+            `INSERT INTO ${quoteIdent(identifier)}.${quoteIdent(table)} (${columnList}) VALUES (${placeholders})`,
+            columns.map((column) => (row as Record<string, unknown>)[column]),
+          );
+        }
+      }
+      // Restored rows carry their original ids, so every serial is left behind them and the
+      // plugin's first insert would collide.
+      for (const table of Object.keys(tables)) {
+        if (!knownTables.has(table)) continue;
+        const serials = await queryRunner.query(
+          `SELECT column_name FROM information_schema.columns
+             WHERE table_schema = $1 AND table_name = $2
+               AND pg_get_serial_sequence($1 || '.' || $2, column_name) IS NOT NULL`,
+          [identifier, table],
+        );
+        for (const { column_name } of serials as { column_name: string }[]) {
+          await queryRunner.query(
+            `SELECT setval(
+               pg_get_serial_sequence($1 || '.' || $2, $3),
+               (SELECT COALESCE(MAX(${quoteIdent(column_name)}), 0) + 1 FROM ${quoteIdent(identifier)}.${quoteIdent(table)}),
+               false)`,
+            [identifier, table, column_name],
+          );
+        }
+      }
+      await queryRunner.commitTransaction();
+    } catch (err) {
+      if (queryRunner.isTransactionActive) await queryRunner.rollbackTransaction();
       throw asProvisionFailure(err);
     } finally {
       await queryRunner.release();

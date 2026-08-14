@@ -1,4 +1,12 @@
-import { parseCatalogDocument, filterCatalog, type CatalogDocument, type CatalogVersionEntry } from './catalog';
+import {
+  parseCatalogDocument,
+  filterCatalog,
+  findDenial,
+  extractCachedDenyList,
+  type CatalogDocument,
+  type CatalogVersionEntry,
+  type CatalogDenyEntry,
+} from './catalog';
 import { PLUGIN_API_VERSION, SUPPORTED_PLUGIN_API_VERSIONS } from '../../../common/plugin-contract';
 
 /** A `fliks` range every test can rely on matching this repo's own `package.json` version
@@ -56,6 +64,74 @@ describe('parseCatalogDocument()', () => {
 
     const badLogo = document({ logo: 42 as unknown as string });
     expect(parseCatalogDocument(Buffer.from(JSON.stringify(badLogo), 'utf8'))).toBeNull();
+  });
+
+  it('keeps a valid deny-list entry and silently drops a malformed sibling, never failing the document', () => {
+    const valid: CatalogDenyEntry = { pluginId: 'fliks.bad-actor', reason: 'known credential leak' };
+    const malformed = { pluginId: 'fliks.other' }; // missing required `reason`
+    const doc = { ...document(), denyList: [valid, malformed] };
+
+    const parsed = parseCatalogDocument(Buffer.from(JSON.stringify(doc), 'utf8'));
+
+    expect(parsed).not.toBeNull();
+    expect(parsed?.denyList).toEqual([valid]);
+  });
+
+  it('omits denyList entirely when the document never declared one', () => {
+    const parsed = parseCatalogDocument(Buffer.from(JSON.stringify(document()), 'utf8'));
+    expect(parsed?.denyList).toBeUndefined();
+  });
+});
+
+describe('findDenial()', () => {
+  const entry: CatalogDenyEntry = { pluginId: 'fliks.bad-actor', version: '1.0.0', reason: 'known credential leak' };
+  const pkg = { pluginId: 'fliks.bad-actor', version: '1.0.0', sha256: 'deadbeef', verifiedByKeyId: 'release-2026' };
+
+  it('denies a package whose verifiedByKeyId matches the key that signed the deny-list’s own catalogue', () => {
+    const result = findDenial(pkg, [{ denyList: [entry], signedByKeyId: 'release-2026' }]);
+    expect(result).toEqual({ reason: 'known credential leak' });
+  });
+
+  it('revokes nothing when the deny-list was signed by a different key than the one that signed the package', () => {
+    const result = findDenial(pkg, [{ denyList: [entry], signedByKeyId: 'some-other-source' }]);
+    expect(result).toBeNull();
+  });
+
+  it('narrows an entry carrying a sha256 to that exact build, not every archive of the version', () => {
+    const pinned: CatalogDenyEntry = { ...entry, sha256: 'deadbeef' };
+    expect(findDenial(pkg, [{ denyList: [pinned], signedByKeyId: 'release-2026' }])).toEqual({
+      reason: 'known credential leak',
+    });
+    // Same id and version, a different build: a hash-scoped entry must leave it alone.
+    const rebuilt = { ...pkg, sha256: 'cafebabe' };
+    expect(findDenial(rebuilt, [{ denyList: [pinned], signedByKeyId: 'release-2026' }])).toBeNull();
+  });
+
+  it('never revokes an unsigned/unverified package — nobody vouched for it, so nobody can pull it back', () => {
+    const unsigned = { ...pkg, verifiedByKeyId: null };
+    // The source itself lacks a resolvable key too (an unrefreshed/malformed cache reads this
+    // way) — without the explicit null guard, `null === null` would coincidentally match.
+    const result = findDenial(unsigned, [{ denyList: [entry], signedByKeyId: null }]);
+    expect(result).toBeNull();
+  });
+
+  it('leaves an unlisted version alone when the entry names a specific version', () => {
+    const otherVersion = { ...pkg, version: '2.0.0' };
+    const result = findDenial(otherVersion, [{ denyList: [entry], signedByKeyId: 'release-2026' }]);
+    expect(result).toBeNull();
+  });
+});
+
+describe('extractCachedDenyList()', () => {
+  it('defaults to an empty deny-list and no key for a null or shape-less cache', () => {
+    expect(extractCachedDenyList(null)).toEqual({ denyList: [], signedByKeyId: null });
+    expect(extractCachedDenyList({ plugins: [] })).toEqual({ denyList: [], signedByKeyId: null });
+  });
+
+  it('filters a malformed entry out of an otherwise-valid cached deny-list', () => {
+    const valid: CatalogDenyEntry = { pluginId: 'fliks.bad-actor', reason: 'known credential leak' };
+    const result = extractCachedDenyList({ denyList: [valid, { reason: 'no pluginId' }], signedByKeyId: 'release-2026' });
+    expect(result).toEqual({ denyList: [valid], signedByKeyId: 'release-2026' });
   });
 });
 

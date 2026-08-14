@@ -409,3 +409,206 @@ describe('PluginDatabaseService.findUnsafeCoreRefFks', () => {
     await expect(service(fakeDataSource(makeRecorder())).findUnsafeCoreRefFks('acme.tool')).resolves.toEqual([]);
   });
 });
+
+/** Export/import's own fixtures: table listing, per-table rows, per-table column lists — kept
+ *  separate from `respondFor` above since these methods query shapes provision/rotate never do. */
+function extractSchemaAndTable(sql: string): { schema: string; table: string } {
+  const match = normalizeSql(sql).match(/"([^"]+)"\."([^"]+)"/);
+  return { schema: match?.[1] ?? '', table: match?.[2] ?? '' };
+}
+
+interface ExportFixtures {
+  schemaTables?: string[];
+  tableRows?: Record<string, Record<string, unknown>[]>;
+  tableHasRows?: Record<string, boolean>;
+  tableColumns?: Record<string, string[]>;
+  failInsert?: boolean;
+}
+
+function fakeExportDataSource(fixtures: ExportFixtures = {}) {
+  const queries: { sql: string; parameters: unknown[] }[] = [];
+  const events: string[] = [];
+
+  function topLevelRespond(sql: string, parameters: unknown[]): unknown[] {
+    const norm = normalizeSql(sql);
+    if (norm.includes('FROM information_schema.tables')) {
+      return (fixtures.schemaTables ?? []).map((t) => ({ table_name: t }));
+    }
+    if (norm.startsWith('SELECT 1 FROM')) {
+      const { table } = extractSchemaAndTable(sql);
+      return fixtures.tableHasRows?.[table] ? [{ x: 1 }] : [];
+    }
+    if (norm.startsWith('SELECT * FROM')) {
+      const { table } = extractSchemaAndTable(sql);
+      return fixtures.tableRows?.[table] ?? [];
+    }
+    return [];
+  }
+
+  const runner = {
+    isTransactionActive: false,
+    connect: jest.fn(async () => {
+      events.push('connect');
+    }),
+    startTransaction: jest.fn(async () => {
+      events.push('startTransaction');
+      runner.isTransactionActive = true;
+    }),
+    commitTransaction: jest.fn(async () => {
+      events.push('commitTransaction');
+      runner.isTransactionActive = false;
+    }),
+    rollbackTransaction: jest.fn(async () => {
+      events.push('rollbackTransaction');
+      runner.isTransactionActive = false;
+    }),
+    release: jest.fn(async () => {
+      events.push('release');
+    }),
+    query: jest.fn(async (sql: string, parameters: unknown[] = []) => {
+      events.push('query');
+      queries.push({ sql, parameters });
+      const norm = normalizeSql(sql);
+      if (norm.includes('FROM information_schema.columns')) {
+        const table = parameters[1] as string;
+        return (fixtures.tableColumns?.[table] ?? []).map((c) => ({ column_name: c }));
+      }
+      if (norm.startsWith('INSERT INTO')) {
+        if (fixtures.failInsert) throw new Error('insert failed at the server');
+        return [];
+      }
+      return [];
+    }),
+  };
+
+  const dataSource = {
+    createQueryRunner: jest.fn(() => runner),
+    query: jest.fn(async (sql: string, parameters: unknown[] = []) => {
+      events.push('query');
+      queries.push({ sql, parameters });
+      return topLevelRespond(sql, parameters);
+    }),
+  };
+
+  return { dataSource, queries, events, runner };
+}
+
+describe('PluginDatabaseService.listSchemaTables / schemaHasRows / exportSchemaRows', () => {
+  it('scopes the table listing to this plugin schema alone, bound as a parameter — never a literal `public`', async () => {
+    const { dataSource, queries } = fakeExportDataSource({ schemaTables: ['notes'] });
+
+    await expect(service(dataSource as never).listSchemaTables('acme.tool')).resolves.toEqual(['notes']);
+
+    expect(queries).toHaveLength(1);
+    expect(normalizeSql(queries[0].sql)).toContain("table_schema = $1 AND table_type = 'BASE TABLE'");
+    expect(queries[0].parameters).toEqual(['plugin_acme_tool']);
+  });
+
+  it('a plugin id crafted to read `public` still resolves to a `plugin_`-prefixed schema, never `public` itself', async () => {
+    const { dataSource, queries } = fakeExportDataSource({ schemaTables: [] });
+
+    await service(dataSource as never).listSchemaTables('public');
+
+    expect(queries[0].parameters).toEqual(['plugin_public']);
+    expect(queries[0].parameters).not.toContain('public');
+  });
+
+  it('rejects an id provision could never have accepted before any query is issued', async () => {
+    const { dataSource, queries } = fakeExportDataSource();
+
+    await expect(service(dataSource as never).listSchemaTables('acme"; DROP SCHEMA public CASCADE; --')).rejects.toThrow();
+    await expect(service(dataSource as never).exportSchemaRows('acme"; DROP SCHEMA public CASCADE; --')).rejects.toThrow();
+    expect(queries).toHaveLength(0);
+  });
+
+  it('exports every row of every table, addressed as "schema"."table" for this plugin only', async () => {
+    const { dataSource, queries } = fakeExportDataSource({
+      schemaTables: ['notes', 'tags'],
+      tableRows: { notes: [{ id: 1, text: 'hi' }], tags: [] },
+    });
+
+    await expect(service(dataSource as never).exportSchemaRows('acme.tool')).resolves.toEqual({
+      notes: [{ id: 1, text: 'hi' }],
+      tags: [],
+    });
+
+    const selects = queries.filter((q) => normalizeSql(q.sql).startsWith('SELECT * FROM'));
+    expect(selects).toHaveLength(2);
+    for (const q of selects) {
+      expect(normalizeSql(q.sql)).toContain('"plugin_acme_tool".');
+      expect(normalizeSql(q.sql)).not.toMatch(/"public"/);
+    }
+  });
+
+  it('schemaHasRows is true once any table has a row, false when every table is empty', async () => {
+    const empty = fakeExportDataSource({ schemaTables: ['notes'], tableHasRows: {} });
+    await expect(service(empty.dataSource as never).schemaHasRows('acme.tool')).resolves.toBe(false);
+
+    const populated = fakeExportDataSource({ schemaTables: ['notes'], tableHasRows: { notes: true } });
+    await expect(service(populated.dataSource as never).schemaHasRows('acme.tool')).resolves.toBe(true);
+  });
+});
+
+describe('PluginDatabaseService.restoreSchemaRows', () => {
+  it('round-trips exported rows back through parameterised INSERTs, inside a committed transaction', async () => {
+    const { dataSource, queries, events } = fakeExportDataSource({
+      schemaTables: ['notes'],
+      tableColumns: { notes: ['id', 'text'] },
+    });
+
+    await service(dataSource as never).restoreSchemaRows('acme.tool', { notes: [{ id: 1, text: 'hi' }] });
+
+    const insert = queries.find((q) => normalizeSql(q.sql).startsWith('INSERT INTO'));
+    expect(insert).toBeDefined();
+    expect(normalizeSql(insert!.sql)).toBe('INSERT INTO "plugin_acme_tool"."notes" ("id", "text") VALUES ($1, $2)');
+    expect(insert!.parameters).toEqual([1, 'hi']);
+    expect(events).toContain('commitTransaction');
+    expect(events).not.toContain('rollbackTransaction');
+  });
+
+  it('rejects and rolls back a table name that is not in this plugin schema\'s own catalogue', async () => {
+    // `tableColumns` deliberately matches the row, so only the table-membership check (not the
+    // column check) can be what rejects this — proving that check independently.
+    const { dataSource, events, queries } = fakeExportDataSource({
+      schemaTables: ['notes'],
+      tableColumns: { other_plugins_table: ['id'] },
+    });
+
+    await expect(
+      service(dataSource as never).restoreSchemaRows('acme.tool', { other_plugins_table: [{ id: 1 }] }),
+    ).rejects.toThrow(PluginInstallException);
+
+    expect(events).toContain('rollbackTransaction');
+    expect(events).not.toContain('commitTransaction');
+    expect(queries.some((q) => normalizeSql(q.sql).startsWith('INSERT INTO'))).toBe(false);
+  });
+
+  it('rejects and rolls back a row carrying a column this table does not have', async () => {
+    const { dataSource, events } = fakeExportDataSource({
+      schemaTables: ['notes'],
+      tableColumns: { notes: ['id'] },
+    });
+
+    await expect(
+      service(dataSource as never).restoreSchemaRows('acme.tool', { notes: [{ id: 1, injected: 'x' }] }),
+    ).rejects.toThrow(PluginInstallException);
+
+    expect(events).toContain('rollbackTransaction');
+    expect(events).not.toContain('commitTransaction');
+  });
+
+  it('rolls back the whole transaction when a later row fails to insert, rather than leaving a partial restore', async () => {
+    const { dataSource, events } = fakeExportDataSource({
+      schemaTables: ['notes'],
+      tableColumns: { notes: ['id'] },
+      failInsert: true,
+    });
+
+    await expect(service(dataSource as never).restoreSchemaRows('acme.tool', { notes: [{ id: 1 }] })).rejects.toThrow(
+      PluginInstallException,
+    );
+
+    expect(events).toContain('rollbackTransaction');
+    expect(events).not.toContain('commitTransaction');
+  });
+});
