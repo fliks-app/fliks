@@ -24,6 +24,24 @@ export interface PluginSummary {
   statusMessage?: string;
 }
 
+/** Mirrors backend `ProcessPluginMetrics` (`supervisor/plugin-supervisor.ts`). */
+export interface ProcessPluginMetrics {
+  hostCallCount: number;
+  hostCallFailureCount: number;
+  hostCallP95Ms: number | null;
+  restartCount: number;
+  eventDropCount: number;
+  residentSetSizeBytes: number | null;
+}
+
+/** Mirrors backend `PluginMetricsEntry` (`plugins.controller.ts`). `metrics` is null for a `data`
+ *  plugin, or a `process` plugin that isn't running. */
+export interface PluginMetricsEntry {
+  pluginId: string;
+  kind: PluginKind;
+  metrics: ProcessPluginMetrics | null;
+}
+
 /** Mirrors backend `PluginInspectReport`. A refusal carries `refusalCode`/`detail` and nothing else. */
 export interface PluginInspectReport {
   installable: boolean;
@@ -99,6 +117,10 @@ export class PluginsApiService {
 
   list() {
     return firstValueFrom(this.http.get<PluginSummary[]>('/api/plugins'));
+  }
+
+  metrics() {
+    return firstValueFrom(this.http.get<PluginMetricsEntry[]>('/api/plugins/metrics'));
   }
 
   inspect(file: File) {

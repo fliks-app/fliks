@@ -8,7 +8,12 @@ import { getPluginsRuntimeDir } from '../../common/constants/paths';
 import { createHash } from 'crypto';
 import { minimalProcessManifest } from './archive/test-manifests';
 import type { PluginPackage } from './entities/plugin-package.entity';
-import type { PluginSupervisor, PluginSupervisorOptions, SupervisorState } from './supervisor/plugin-supervisor';
+import type {
+  PluginSupervisor,
+  PluginSupervisorOptions,
+  ProcessPluginMetrics,
+  SupervisorState,
+} from './supervisor/plugin-supervisor';
 import type { PluginHostBindingService } from './host/plugin-host-binding.service';
 import type { UnsafeCoreRefFk } from './plugin-database.service';
 
@@ -33,6 +38,14 @@ class FakeSupervisor {
   stopCalls = 0;
   emitEvent = jest.fn();
   emitConfigChanged = jest.fn();
+  metrics: ProcessPluginMetrics = {
+    hostCallCount: 0,
+    hostCallFailureCount: 0,
+    hostCallP95Ms: null,
+    restartCount: 0,
+    eventDropCount: 0,
+    residentSetSizeBytes: null,
+  };
   private listeners: ((s: SupervisorState) => void)[] = [];
 
   constructor(public readonly options: PluginSupervisorOptions) {}
@@ -45,6 +58,9 @@ class FakeSupervisor {
   }
   getStatusMessage(): string {
     return this.statusMessage;
+  }
+  getMetrics(): ProcessPluginMetrics {
+    return this.metrics;
   }
 
   onStateChange(cb: (s: SupervisorState) => void): () => void {
@@ -414,11 +430,19 @@ describe('PluginProcessService — lifecycle', () => {
     expect(service.stateOf(pkg.pluginId)).toBeNull();
   });
 
-  it('stateOf/statusMessageOf report unknown for a plugin never started', () => {
+  it('stateOf/statusMessageOf/metricsOf report unknown for a plugin never started', () => {
     const service = new PluginProcessService(fakePluginDb() as never, fakeLogBuffer() as never, fakeSettings() as never, makeFactory().factory);
 
     expect(service.stateOf('fliks.never-started')).toBeNull();
     expect(service.statusMessageOf('fliks.never-started')).toBe('');
+    expect(service.metricsOf('fliks.never-started')).toBeNull();
+  });
+
+  it('metricsOf reports the running supervisor’s counters', async () => {
+    const { service, pkg, instances } = await startedService();
+    instances[0].metrics = { ...instances[0].metrics, hostCallCount: 7 };
+
+    expect(service.metricsOf(pkg.pluginId)?.hostCallCount).toBe(7);
   });
 
   it('statusMessageOf falls back to the stderr tail of a plugin that is down', async () => {

@@ -20,9 +20,11 @@ import {
   PluginSummary,
   PluginInspectReport,
   PluginInstallResult,
+  PluginMetricsEntry,
 } from '../../../core/services/api/plugins-api.service';
 import { PluginInstallConsentComponent } from './plugin-install-consent/plugin-install-consent';
 import { PluginSourcesComponent } from './plugin-sources/plugin-sources';
+import { PluginMetricsPanelComponent } from './plugin-metrics-panel/plugin-metrics-panel';
 import { trustBadgeFor } from './plugin-trust';
 
 @Component({
@@ -35,6 +37,7 @@ import { trustBadgeFor } from './plugin-trust';
     ToggleFieldComponent,
     PluginInstallConsentComponent,
     PluginSourcesComponent,
+    PluginMetricsPanelComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugins.html',
@@ -51,6 +54,7 @@ export class PluginsSettingsComponent implements OnInit {
   private readonly sourcesDialog = viewChild<PluginSourcesComponent>('sourcesDialog');
 
   readonly rows = signal<PluginSummary[]>([]);
+  readonly metricsByPluginId = signal<Map<string, PluginMetricsEntry>>(new Map());
   readonly loading = signal(true);
   readonly listError = signal('');
   readonly uploading = signal(false);
@@ -72,6 +76,17 @@ export class PluginsSettingsComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
+    // Best-effort: a metrics fetch failure never blocks the row list above it depends on.
+    try {
+      const entries = await this.api.metrics();
+      this.metricsByPluginId.set(new Map(entries.map((e) => [e.pluginId, e])));
+    } catch {
+      this.metricsByPluginId.set(new Map());
+    }
+  }
+
+  metricsEntryFor(row: PluginSummary): PluginMetricsEntry {
+    return this.metricsByPluginId().get(row.pluginId) ?? { pluginId: row.pluginId, kind: row.kind, metrics: null };
   }
 
   logoUrl(pluginId: string): string {

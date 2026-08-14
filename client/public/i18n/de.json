@@ -2100,6 +2100,17 @@
       "disabled_toast": "Plugin disabled.",
       "enable_failed_but_kept": "\"{{id}}\" is enabled but could not start: {{reason}}",
       "toggle_error": "Unable to update the plugin state.",
+      "metrics": {
+        "toggle": "Metrics",
+        "host_calls": "Host calls",
+        "failed": "failed",
+        "p95": "p95 latency",
+        "restarts": "Restarts",
+        "event_drops": "Event drops",
+        "memory": "Memory (RSS)",
+        "unavailable": "Unavailable",
+        "not_applicable": "Not applicable — this plugin has no running process."
+      },
       "trust": {
         "official": "Official",
         "verified": "Verified — {{key}}",

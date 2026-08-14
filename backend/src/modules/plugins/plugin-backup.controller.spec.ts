@@ -10,8 +10,8 @@ function denyAll(): AppAbility {
   return { can: () => false } as unknown as AppAbility;
 }
 
-function allowOnly(action: Action): AppAbility {
-  return { can: (a: Action) => a === action } as unknown as AppAbility;
+function allowOnly(action: Action, subject: string): AppAbility {
+  return { can: (a: Action, s: string) => a === action && s === subject } as unknown as AppAbility;
 }
 
 function policiesFor(method: 'export' | 'import'): PolicyHandler[] {
@@ -36,7 +36,7 @@ describe('PluginBackupController — authorization', () => {
 
     const asCallback = handlers[0] as (ability: AppAbility) => boolean;
     expect(asCallback(denyAll())).toBe(false);
-    expect(asCallback(allowOnly(needed))).toBe(true);
+    expect(asCallback(allowOnly(needed, 'Settings'))).toBe(true);
   });
 });
 

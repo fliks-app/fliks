@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'child_process';
 import { createServer, type Server, type Socket } from 'net';
 import { randomBytes } from 'crypto';
-import { chmodSync, chownSync, mkdirSync, readdirSync, unlinkSync } from 'fs';
+import { chmodSync, chownSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { getPluginsSocketDir } from '../../../common/constants/paths';
 import type { OnApplicationShutdown } from '@nestjs/common';
@@ -23,6 +23,7 @@ import {
 } from '../../../common/plugin-contract';
 import { RpcChannel } from './rpc-channel';
 import { NoteRingBuffer } from './note-ring-buffer';
+import { LatencyWindow } from './latency-window';
 import {
   buildSpawnPlan,
   prepareDirForDroppedChild,
@@ -43,6 +44,17 @@ export type SupervisorState =
   | 'failed';
 
 const STDERR_TAIL_BYTES = 4 * 1024;
+
+export interface ProcessPluginMetrics {
+  hostCallCount: number;
+  hostCallFailureCount: number;
+  /** p95 over the most recent host calls (see `LatencyWindow`); null with no calls yet. */
+  hostCallP95Ms: number | null;
+  restartCount: number;
+  eventDropCount: number;
+  /** Null when unreadable: off Linux, or the child isn't up. Never a silent zero. */
+  residentSetSizeBytes: number | null;
+}
 
 /**
  * Host methods whose own work is not a lookup. `library.ingest` copies the release into the
@@ -177,6 +189,10 @@ export class PluginSupervisor implements OnApplicationShutdown {
   private readonly ring = new NoteRingBuffer();
   private ringBackpressured = false;
 
+  private hostCallCount = 0;
+  private hostCallFailureCount = 0;
+  private readonly hostCallLatencies = new LatencyWindow();
+
   private logWindowStart = Date.now();
   private logBytesThisMinute = 0;
   private logSuppressedThisWindow = false;
@@ -228,6 +244,32 @@ export class PluginSupervisor implements OnApplicationShutdown {
   }
   getSocketPaths(): { coreSockPath: string; pluginSockPath: string } {
     return { coreSockPath: this.coreSockPath, pluginSockPath: this.pluginSockPath };
+  }
+
+  /** One snapshot of this plugin's own counters, computed on request rather than polled. */
+  getMetrics(): ProcessPluginMetrics {
+    return {
+      hostCallCount: this.hostCallCount,
+      hostCallFailureCount: this.hostCallFailureCount,
+      hostCallP95Ms: this.hostCallLatencies.p95(),
+      restartCount: this.totalCrashes,
+      eventDropCount: this.ring.dropped,
+      residentSetSizeBytes: this.getResidentSetSizeBytes(),
+    };
+  }
+
+  /** `VmRSS` from `/proc/<pid>/status`: world-readable unlike `environ`, so no CAP_SYS_PTRACE, and
+   *  it states its own unit — `statm` would need this host's page size, which is not always 4 KiB. */
+  private getResidentSetSizeBytes(): number | null {
+    if (process.platform !== 'linux') return null;
+    const pid = this.child?.pid;
+    if (!pid) return null;
+    try {
+      const match = /^VmRSS:\s+(\d+) kB$/m.exec(readFileSync(`/proc/${pid}/status`, 'utf8'));
+      return match ? Number(match[1]) * 1024 : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Thin public wrapper around the private RPC channel, for the HTTP proxy. Rejects
@@ -397,13 +439,31 @@ export class PluginSupervisor implements OnApplicationShutdown {
    *  `hostCallTimeoutMs` both reject, so `RpcChannel` answers with an error frame
    *  instead of leaving the plugin's own 10s client to time out. */
   private dispatchHostCall(method: string, payload: unknown): Promise<unknown> {
+    const startedAt = performance.now();
     const api = this.opts.hostApi as Record<string, (p: unknown) => Promise<unknown>> | null;
     const fn = api?.[method];
-    if (!fn) return Promise.reject(new Error(`unknown host method "${method}"`));
     // Promise.resolve().then(...) folds a synchronous throw from `fn` into the same
     // rejection path as an async one, so both answer with an error frame, never crash.
     const deadlineMs = HOST_CALL_DEADLINE_OVERRIDES_MS[method] ?? this.opts.hostCallTimeoutMs;
-    return withDeadline(Promise.resolve().then(() => fn(payload)), deadlineMs, method);
+    const call = fn
+      ? withDeadline(Promise.resolve().then(() => fn(payload)), deadlineMs, method)
+      : Promise.reject(new Error(`unknown host method "${method}"`));
+    return call.then(
+      (result) => {
+        this.recordHostCall(performance.now() - startedAt, false);
+        return result;
+      },
+      (err: unknown) => {
+        this.recordHostCall(performance.now() - startedAt, true);
+        return Promise.reject(err);
+      },
+    );
+  }
+
+  private recordHostCall(durationMs: number, failed: boolean): void {
+    this.hostCallCount++;
+    if (failed) this.hostCallFailureCount++;
+    this.hostCallLatencies.push(durationMs);
   }
 
   private onPluginConnected(socket: Socket): void {
