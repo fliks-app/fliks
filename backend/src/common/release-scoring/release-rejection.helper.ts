@@ -335,6 +335,46 @@ function significantTokens(tokens: string[]): string[] {
   return filtered.length ? filtered : tokens;
 }
 
+export interface TitleExpectationIndex {
+  /** Significant tokens per readable reading; empty when nothing in the expectation is comparable. */
+  readings: string[][];
+  /** True when the expectation list was empty, which matches anything. */
+  vacuous: boolean;
+}
+
+/** Tokenises one media's expected titles once, so a scan over many release titles does not redo it. */
+export function indexTitleExpectations(expected: string | string[]): TitleExpectationIndex {
+  const candidates = (Array.isArray(expected) ? expected : [expected]).filter(
+    (s): s is string => !!s && s.trim().length > 0,
+  );
+  if (!candidates.length) return { readings: [], vacuous: true };
+  const readings: string[][] = [];
+  for (const cand of candidates) {
+    for (const reading of titleReadings(cand)) {
+      const tokens = significantTokens(reading);
+      if (tokens.length) readings.push(tokens);
+    }
+  }
+  return { readings, vacuous: false };
+}
+
+/** The release side of the same comparison, hoisted so it is computed once per release title. */
+export function releaseTitleTokens(releaseTitle: string): ReadonlySet<string> {
+  return new Set(titleReadings(releaseTitle).flat());
+}
+
+export function matchesIndexedExpectation(
+  releaseTokens: ReadonlySet<string>,
+  index: TitleExpectationIndex,
+  whenUnreadable: 'match' | 'no-match' = 'match',
+): boolean {
+  if (index.vacuous) return true;
+  for (const tokens of index.readings) {
+    if (tokens.every((t) => releaseTokens.has(t))) return true;
+  }
+  return index.readings.length === 0 && whenUnreadable === 'match';
+}
+
 /**
  * Return true when a release title plausibly matches *any* of the expected
  * titles. A candidate matches when, under either apostrophe reading, all of
@@ -354,21 +394,9 @@ export function titleMatchesExpectation(
    *  net must not veto what it cannot read, identification must not claim every release. */
   whenUnreadable: 'match' | 'no-match' = 'match',
 ): boolean {
-  const candidates = (Array.isArray(expected) ? expected : [expected]).filter(
-    (s): s is string => !!s && s.trim().length > 0,
-  );
-  if (!candidates.length) return true; // nothing meaningful to match
-  const releaseTokens = new Set(titleReadings(releaseTitle).flat());
-  let comparable = false;
-  for (const cand of candidates) {
-    for (const reading of titleReadings(cand)) {
-      const tokens = significantTokens(reading);
-      if (!tokens.length) continue; // no comparable tokens (e.g. a non-Latin title)
-      comparable = true;
-      if (tokens.every((t) => releaseTokens.has(t))) return true;
-    }
-  }
-  return !comparable && whenUnreadable === 'match';
+  const index = indexTitleExpectations(expected);
+  if (index.vacuous) return true;
+  return matchesIndexedExpectation(releaseTitleTokens(releaseTitle), index, whenUnreadable);
 }
 
 export function computeRejections(opts: {

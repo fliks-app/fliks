@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as releaseScoring from '../../../common/release-scoring/release-rejection.helper';
 import * as os from 'os';
 import * as path from 'path';
 import { FliksHostImpl } from './fliks-host.service';
@@ -574,6 +575,48 @@ describe('FliksHostImpl', () => {
   // ===========================================================================
 
   describe('releases.match', () => {
+    it('tokenises each library title once per call and each release title once, not once per pair', async () => {
+      const indexSpy = jest.spyOn(releaseScoring, 'indexTitleExpectations');
+      const releaseTokenSpy = jest.spyOn(releaseScoring, 'releaseTitleTokens');
+      try {
+        const h = makeHarness();
+        const library = Array.from({ length: 30 }, (_, i) => makeMedia({ id: i + 1, title: `Library Title ${i}` }));
+        h.mediaRepo.find.mockResolvedValue(library);
+
+        await h.host['releases.match']({
+          titles: Array.from({ length: 8 }, (_, i) => ({
+            id: `r${i}`,
+            title: `Zzqxvvm Plghmnd Wbbrtks ${i}`,
+            publishDate: new Date().toISOString(),
+          })),
+        });
+
+        expect(indexSpy).toHaveBeenCalledTimes(library.length);
+        expect(releaseTokenSpy).toHaveBeenCalledTimes(8);
+      } finally {
+        indexSpy.mockRestore();
+        releaseTokenSpy.mockRestore();
+      }
+    });
+
+    it('hands the event loop back between titles so a whole feed does not block core', async () => {
+      const h = makeHarness();
+      h.mediaRepo.find.mockResolvedValue([makeMedia({ title: 'Some Great Movie' })]);
+      const immediate = jest.spyOn(global, 'setImmediate');
+      try {
+        await h.host['releases.match']({
+          titles: Array.from({ length: 4 }, (_, i) => ({
+            id: `y${i}`,
+            title: `Zzqxvvm Plghmnd ${i}`,
+            publishDate: new Date().toISOString(),
+          })),
+        });
+        expect(immediate).toHaveBeenCalledTimes(4);
+      } finally {
+        immediate.mockRestore();
+      }
+    });
+
     it('reports unmatched, then grab, for a title that matches a missing monitored movie', async () => {
       const h = makeHarness();
       const media = makeMedia({ title: 'Some Great Movie' });
