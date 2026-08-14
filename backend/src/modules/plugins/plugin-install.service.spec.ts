@@ -1,4 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios';
+import { PLUGIN_UID_MIN } from './supervisor/spawn-plan';
 import { createHash } from 'crypto';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
@@ -790,7 +791,7 @@ describe('PluginInstallService', () => {
 
       await expect(service.restart(manifest.id)).resolves.toBeUndefined();
 
-      expect(processService.startFor).toHaveBeenCalledWith(expect.objectContaining({ pluginId: manifest.id }));
+      expect(processService.startFor).toHaveBeenCalledWith(expect.objectContaining({ pluginId: manifest.id }), PLUGIN_UID_MIN);
       expect(repo.rows.get(manifest.id)).toEqual(expect.objectContaining({ status: 'active', statusReason: null }));
     });
 

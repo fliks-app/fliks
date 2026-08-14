@@ -15,6 +15,7 @@ import type { SupervisorState } from './supervisor/plugin-supervisor';
 import { sweepOrphans } from './supervisor/pid-file';
 import { getPluginsSocketDir } from '../../common/constants/paths';
 import { PluginCountsCacheService } from './host/plugin-counts-cache.service';
+import { allocateChildUid } from './supervisor/spawn-plan';
 import { arePluginsDisabled, FLIKS_PLUGINS_DISABLED_ENV } from '../../common/constants/plugin-flags';
 import {
   SUPPORTED_PLUGIN_API_VERSIONS,
@@ -380,9 +381,19 @@ export class PluginRegistryService implements OnModuleInit {
       registration.manifest = manifest;
       registration.ingestRoots = manifest.ingestRoots;
     }
+    if (registration.childUid === null || registration.childUid === undefined) {
+      const taken = (await this.registrationRepo.find())
+        .map((r) => r.childUid)
+        .filter((uid): uid is number => uid !== null && uid !== undefined);
+      const allocated = allocateChildUid(taken);
+      if (allocated === null) {
+        return this.fail(pkg.pluginId, 'db-provision-failed', 'no unprivileged uid is free for this plugin');
+      }
+      registration.childUid = allocated;
+    }
     await this.registrationRepo.save(registration);
 
-    const result = await this.processService.startFor(pkg);
+    const result = await this.processService.startFor(pkg, registration.childUid);
     if (!result.ok) return this.fail(pkg.pluginId, result.reason, result.detail);
     return { ok: true };
   }

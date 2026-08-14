@@ -3,9 +3,26 @@ import { chmodSync, chownSync, mkdirSync, readdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { type PluginSpawnEnv } from '../../../common/plugin-contract';
 
-/** The unprivileged identity a plugin child drops to when core runs as root. */
+/** The unprivileged identity a plugin child drops to when core runs as root, used when no uid was
+ *  allocated for it. Sharing it is what lets one child read another's `/proc` entry. */
 export const PLUGIN_CHILD_UID = 65534;
+
+/** Shared by every child: the runtime directory is group-traversable so each can reach its own
+ *  socket, while the 0600 socket and 0700 data directory are owned by the plugin's own uid. */
 export const PLUGIN_CHILD_GID = 65534;
+
+/** Allocation range for per-plugin uids. Below `nobody`, above anything a base image assigns. */
+export const PLUGIN_UID_MIN = 60000;
+export const PLUGIN_UID_MAX = 64999;
+
+/** Lowest free uid in the range, or null when every one of them is taken. */
+export function allocateChildUid(taken: readonly number[]): number | null {
+  const used = new Set(taken);
+  for (let uid = PLUGIN_UID_MIN; uid <= PLUGIN_UID_MAX; uid++) {
+    if (!used.has(uid)) return uid;
+  }
+  return null;
+}
 
 let cachedPermissionFlag: string | null = null;
 
@@ -53,6 +70,8 @@ export function prepareDirForDroppedChild(
 
 export interface SpawnPlanInput {
   dir: string;
+  /** This plugin's own uid, so a sibling cannot read its `/proc` entry or open its socket. */
+  childUid: number;
   /** `pluginDataDir(pluginId)` — outside `dir`, so it outlives this spawn's code tree. */
   dataDir: string;
   memoryMb: number;
@@ -123,7 +142,7 @@ export function buildSpawnPlan(input: SpawnPlanInput): SpawnPlan {
     detached: false,
     windowsHide: true,
     env,
-    ...(root ? { uid: PLUGIN_CHILD_UID, gid: PLUGIN_CHILD_GID } : {}),
+    ...(root ? { uid: input.childUid, gid: PLUGIN_CHILD_GID } : {}),
   };
 
   const expectedCmdline = [process.execPath, ...nodeArgv];

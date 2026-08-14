@@ -5,6 +5,7 @@ import type { PluginProcessStartResult } from './plugin-process.service';
 
 export function fakeRegistrationRepo(): {
   rows: Map<string, PluginRegistration>;
+  find: jest.Mock;
   findOne: jest.Mock;
   create: jest.Mock;
   save: jest.Mock;
@@ -14,6 +15,7 @@ export function fakeRegistrationRepo(): {
   let nextId = 1;
   return {
     rows,
+    find: jest.fn(async () => [...rows.values()]),
     findOne: jest.fn(async ({ where: { pluginId } }: { where: { pluginId: string } }) => rows.get(pluginId) ?? null),
     create: jest.fn(
       (partial: Partial<PluginRegistration>) =>

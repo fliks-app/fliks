@@ -3,6 +3,8 @@ import { tmpdir } from 'os';
 import { dirname, join } from 'path';
 import { PLUGIN_API_VERSION, SUPPORTED_PLUGIN_API_VERSIONS } from '../../../common/plugin-contract';
 import {
+  PLUGIN_UID_MIN,
+  allocateChildUid,
   buildSpawnPlan,
   prepareDirForDroppedChild,
   resolvePermissionFlag,
@@ -53,7 +55,30 @@ describe('buildSpawnPlan', () => {
     token: 'the-token',
     pluginId: 'demo',
     pluginApi: PLUGIN_API_VERSION,
+    childUid: PLUGIN_UID_MIN,
   };
+
+  it('gives each plugin its own uid, and reuses one freed by an uninstall', () => {
+    expect(allocateChildUid([])).toBe(PLUGIN_UID_MIN);
+    expect(allocateChildUid([PLUGIN_UID_MIN])).toBe(PLUGIN_UID_MIN + 1);
+    // A gap left by an uninstalled plugin is filled before the range grows.
+    expect(allocateChildUid([PLUGIN_UID_MIN, PLUGIN_UID_MIN + 2])).toBe(PLUGIN_UID_MIN + 1);
+  });
+
+  it('refuses rather than colliding once the range is exhausted', () => {
+    const everyUid = Array.from({ length: 64999 - PLUGIN_UID_MIN + 1 }, (_, i) => PLUGIN_UID_MIN + i);
+    expect(allocateChildUid(everyUid)).toBeNull();
+  });
+
+  it('spawns the child under the uid it was given, not one shared with every other plugin', () => {
+    const plan = buildSpawnPlan({ ...baseInput, childUid: PLUGIN_UID_MIN + 7 });
+    // Only meaningful where core can actually drop privileges; the field is absent otherwise.
+    if (shouldDropPrivileges(process.platform, process.getuid?.bind(process))) {
+      expect(plan.options.uid).toBe(PLUGIN_UID_MIN + 7);
+    } else {
+      expect(plan.options.uid).toBeUndefined();
+    }
+  });
 
   it('never spreads process.env — the env is exactly the allowlist plus FLIKS_CFG_* re-keys', () => {
     process.env.PLUGIN_SUPERVISOR_TEST_LEAK = 'should-not-appear';

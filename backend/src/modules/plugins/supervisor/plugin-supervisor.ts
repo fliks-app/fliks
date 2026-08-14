@@ -56,6 +56,7 @@ const SELF_DECLARED_WARN = /^(?:\[[^\]]*\]\s*)*WARN\b/;
 /** Every figure here is "The spawn call and the supervisor"'s, verbatim. Override only in tests. */
 export const DEFAULT_SUPERVISOR_OPTIONS = {
   pluginApi: PLUGIN_API_VERSION,
+  childUid: PLUGIN_CHILD_UID,
   memoryMb: PLUGIN_DEFAULT_MEMORY_MB,
   handshakeDeadlineMs: PLUGIN_DEADLINES_MS.handshake,
   healthIntervalMs: PLUGIN_DEADLINES_MS.healthInterval,
@@ -74,6 +75,8 @@ export interface PluginSupervisorOptions {
   id: string;
   /** The version this plugin's manifest declares — core answers it in that version, not the newest. */
   pluginApi?: number;
+  /** The uid this plugin's child runs as. Distinct per plugin, so siblings stay separated. */
+  childUid?: number;
   /** Directory already holding a materialized `plugin.js` (extraction is out of this PR's scope). */
   dir: string;
   /** Where the sockets and pid file live. Defaults to the `fliks-rt` directory,
@@ -246,7 +249,7 @@ export class PluginSupervisor implements OnApplicationShutdown {
   /** Non-null only when the child will run as another uid, which is the only case needing a chown. */
   private dropTarget(): { uid: number; gid: number } | null {
     return shouldDropPrivileges(process.platform, process.getuid?.bind(process))
-      ? { uid: PLUGIN_CHILD_UID, gid: PLUGIN_CHILD_GID }
+      ? { uid: this.opts.childUid, gid: PLUGIN_CHILD_GID }
       : null;
   }
 
@@ -442,6 +445,7 @@ export class PluginSupervisor implements OnApplicationShutdown {
       token: this.token,
       pluginId: this.opts.id,
       pluginApi: this.opts.pluginApi,
+      childUid: this.opts.childUid,
       dbUrl: this.opts.dbUrl,
       config: this.opts.config,
     });

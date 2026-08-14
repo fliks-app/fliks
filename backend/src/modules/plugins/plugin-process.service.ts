@@ -80,7 +80,7 @@ export class PluginProcessService implements OnApplicationShutdown {
 
   /** Stop -> materialise -> provision-check -> rotate -> config -> spawn; each stage's failure
    *  carries its own reason. A slow handshake is reported but left running to retry on its own. */
-  async startFor(pkg: PluginPackage): Promise<PluginProcessStartResult> {
+  async startFor(pkg: PluginPackage, childUid?: number): Promise<PluginProcessStartResult> {
     const manifest = pkg.manifest;
     if (manifest.kind !== 'process') {
       throw new Error(`startFor() called for non-process plugin "${pkg.pluginId}"`);
@@ -114,6 +114,7 @@ export class PluginProcessService implements OnApplicationShutdown {
       dbUrl,
       config,
       pluginApi: manifest.pluginApi,
+      ...(childUid === undefined ? {} : { childUid }),
       memoryMb: manifest.memoryMb,
       hostApi: this.hostBinding?.bind(pkg.pluginId) ?? null,
     });
