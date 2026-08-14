@@ -898,10 +898,9 @@ export class FliksHostImpl implements PluginHostApi {
     key: string;
     value: string | null;
   }): Promise<void> {
-    await this.settings.set(
-      `plugin.${this.currentPluginId()}.${p.key}`,
-      p.value,
-    );
+    const pluginId = this.currentPluginId();
+    // Tagged with the writer so the config note is not echoed back to the plugin that made it.
+    await this.settings.set(`plugin.${pluginId}.${p.key}`, p.value, pluginId ?? undefined);
   }
 
   // ===========================================================================

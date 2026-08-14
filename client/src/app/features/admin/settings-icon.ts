@@ -1,5 +1,16 @@
 import { Component, ChangeDetectionStrategy, input } from '@angular/core';
-import { LucideBarChart3, LucideLayoutGrid, LucidePlay, LucideCircle } from '@lucide/angular';
+import {
+  LucideBarChart3,
+  LucideLayoutGrid,
+  LucidePlay,
+  LucideCircle,
+  LucideWebhook,
+  LucideDownload,
+  LucideSearch,
+  LucideServer,
+  LucideHistory,
+  LucideSettings,
+} from '@lucide/angular';
 
 /**
  * Renders a `settings.page` contribution's icon by name — a plugin can name
@@ -8,7 +19,18 @@ import { LucideBarChart3, LucideLayoutGrid, LucidePlay, LucideCircle } from '@lu
 @Component({
   selector: 'app-settings-icon',
   standalone: true,
-  imports: [LucideBarChart3, LucideLayoutGrid, LucidePlay, LucideCircle],
+  imports: [
+    LucideBarChart3,
+    LucideLayoutGrid,
+    LucidePlay,
+    LucideCircle,
+    LucideWebhook,
+    LucideDownload,
+    LucideSearch,
+    LucideServer,
+    LucideHistory,
+    LucideSettings,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './settings-icon.html',
   styles: [`:host { display: inline-flex; } svg { width: 100%; height: 100%; }`],

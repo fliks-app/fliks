@@ -97,8 +97,8 @@ export interface FilteredCatalogEntry {
   author: string;
   kind: PluginKind;
   logo?: string;
-  /** Only versions installable on this core build. A caller iterating this list can
-   *  never accidentally offer an incompatible version — there is no boolean to miss. */
+  /** Only versions installable on this core build, oldest to newest, so the last entry is the one
+   *  to offer as an update. A caller iterating this list cannot offer an incompatible version. */
   installable: CatalogVersionEntry[];
   /** Null when nothing is hidden. A plugin with an empty `installable` list still
    *  appears in the result, carrying this instead — never a bare empty page. */
@@ -144,6 +144,8 @@ export function filterCatalog(
       for (const version of entry.versions) {
         (isInstallable(version, supportedApiVersions, fliksVersion) ? installable : hidden).push(version);
       }
+      // A catalogue document lists versions in whatever order it likes; consumers read the last as newest.
+      installable.sort((a, b) => semver.compare(a.version, b.version));
       return {
         id: entry.id,
         name: entry.name,

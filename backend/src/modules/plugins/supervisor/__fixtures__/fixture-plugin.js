@@ -87,6 +87,13 @@ if (mode === 'never-connect') {
         const n = Number(mode.split(':')[1]);
         if (healthCount > n) return; // stop answering from here on
       }
+      if (mode.startsWith('health-not-ok-after:')) {
+        const n = Number(mode.split(':')[1]);
+        if (healthCount > n) {
+          send(sock, { i: req.i, r: { ok: false, detail: 'fixture unhealthy' } });
+          return;
+        }
+      }
       send(sock, { i: req.i, r: { ok: true } });
       return;
     }

@@ -32,6 +32,7 @@ class FakeSupervisor {
   startCalls = 0;
   stopCalls = 0;
   emitEvent = jest.fn();
+  emitConfigChanged = jest.fn();
   private listeners: ((s: SupervisorState) => void)[] = [];
 
   constructor(public readonly options: PluginSupervisorOptions) {}
@@ -97,11 +98,17 @@ function fakeLogBuffer() {
 }
 
 function fakeSettings(order: string[] = [], all: Record<string, string | null> = {}) {
+  const listeners: Array<(key: string) => void> = [];
   return {
     getAll: jest.fn(async () => {
       order.push('config');
       return all;
     }),
+    addChangeListener: jest.fn((cb: (key: string) => void) => {
+      listeners.push(cb);
+    }),
+    /** Test-only: fires every registered listener, exactly as `SettingsService.set` would. */
+    emitChange: (key: string) => listeners.forEach((cb) => cb(key)),
   };
 }
 
@@ -519,6 +526,36 @@ describe('PluginProcessService — lifecycle', () => {
     expect(instances[1].stopCalls).toBe(1);
     expect(service.stateOf(pkgA.pluginId)).toBeNull();
     expect(service.stateOf(pkgB.pluginId)).toBeNull();
+  });
+
+  it('saving a setting for plugin A pushes a config note naming only the changed key to A, and nothing to B', async () => {
+    const pluginDb = fakePluginDb();
+    const settings = fakeSettings();
+    const { factory, instances } = makeFactory();
+    const service = new PluginProcessService(pluginDb as never, fakeLogBuffer() as never, settings as never, factory);
+    const pkgA = fakePackage({}, { id: 'fliks.processsvc.a' });
+    const pkgB = fakePackage({}, { id: 'fliks.processsvc.b' });
+
+    const p1 = service.startFor(pkgA);
+    await waitForSupervisors(instances, 1);
+    instances[0].setState('ready');
+    await p1;
+    const p2 = service.startFor(pkgB);
+    await waitForSupervisors(instances, 2);
+    instances[1].setState('ready');
+    await p2;
+
+    settings.emitChange(`plugin.${pkgA.pluginId}.apiKey`);
+
+    expect(instances[0].emitConfigChanged).toHaveBeenCalledWith(['apiKey']);
+    expect(instances[1].emitConfigChanged).not.toHaveBeenCalled();
+  });
+
+  it('a settings key for a plugin that is not running is not an error', async () => {
+    const settings = fakeSettings();
+    const service = new PluginProcessService(fakePluginDb() as never, fakeLogBuffer() as never, settings as never, makeFactory().factory);
+
+    expect(() => settings.emitChange('plugin.fliks.never-started.apiKey')).not.toThrow();
   });
 
   it('emitToAll reaches every running supervisor regardless of state — the ring buffer decides queue vs. send', async () => {

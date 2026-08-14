@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   OnModuleInit,
@@ -25,7 +26,7 @@ import {
   buildSpriteLabel,
 } from '../streaming/thumbnail.service';
 import { MarkersService } from '../markers/markers.service';
-import { CoreSchedulerJobName } from '../../common/constants/core-scheduler-jobs';
+import { CORE_TRIGGER_ONLY_JOB_NAMES, CoreSchedulerJobName } from '../../common/constants/core-scheduler-jobs';
 import { PluginJobsService } from '../plugins/plugin-jobs.service';
 import { ScheduledJobRegistry } from './scheduled-job-registry.service';
 import { runAuditedCommand } from './command-audit.util';
@@ -181,7 +182,7 @@ export class SchedulerService implements OnModuleInit {
     return [...core, ...plugins];
   }
 
-  async triggerCommand(name: string): Promise<Command> {
+  async triggerCommand(name: string): Promise<Command | { ok: true }> {
     const known = [
       ...SchedulerService.SCHEDULERS.filter((s) => s.triggerable).map(
         (s) => s.name,
@@ -190,15 +191,21 @@ export class SchedulerService implements OnModuleInit {
         .list()
         .filter((j) => j.triggerable)
         .map((j) => j.name),
-      'RescanAll',
-      'RefreshMissingMetadata',
-      'RescanMissingFiles',
-      'GenerateSprites',
-      'GenerateMissingSprites',
-      'DetectMarkers',
-      'DetectMissingMarkers',
+      ...CORE_TRIGGER_ONLY_JOB_NAMES,
     ];
     if (!known.includes(name)) {
+      // Registration refuses every reserved core name, so a match here is a plugin's own job.
+      const declared = this.pluginJobs
+        .listDeclared()
+        .find((d) => d.job.name === name);
+      if (declared) {
+        const result = this.pluginJobs.trigger(declared.pluginId, name);
+        if (result.ok) return { ok: true };
+        if (result.reason === 'already-running') {
+          throw new ConflictException(`Job "${name}" is already running`);
+        }
+        throw new BadRequestException(`Job "${name}" is ${result.reason.replace('-', ' ')}`);
+      }
       // A caller-input error (unknown name, or a job its owning plugin just
       // dropped) — not a server fault, so 400 rather than an unhandled throw.
       throw new BadRequestException(

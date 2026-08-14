@@ -2221,7 +2221,8 @@
         "update_keeps_data": "Your settings are kept."
       },
       "status_disabled": "Disabled",
-      "status_unavailable": "Unavailable"
+      "status_unavailable": "Unavailable",
+      "status_message_toggle": "View details"
     }
   },
   "roles": {

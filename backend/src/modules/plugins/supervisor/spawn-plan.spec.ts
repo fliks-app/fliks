@@ -1,6 +1,6 @@
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { PLUGIN_API_VERSION, SUPPORTED_PLUGIN_API_VERSIONS } from '../../../common/plugin-contract';
 import {
   buildSpawnPlan,
@@ -46,6 +46,7 @@ describe('shouldDropPrivileges', () => {
 describe('buildSpawnPlan', () => {
   const baseInput = {
     dir: '/tmp/plugin-x',
+    dataDir: '/tmp/plugin-x-data/demo',
     memoryMb: 256,
     coreSockPath: '/tmp/plugin-x.core.sock',
     pluginSockPath: '/tmp/plugin-x.plugin.sock',
@@ -76,7 +77,7 @@ describe('buildSpawnPlan', () => {
     expect(older).toBeDefined();
     const plan = buildSpawnPlan({ ...baseInput, pluginApi: older as number });
     expect(plan.env.FLIKS_API_VERSION).toBe(String(older));
-    expect(plan.env.HOME).toBe(`${baseInput.dir}/data`);
+    expect(plan.env.HOME).toBe(baseInput.dataDir);
     expect(plan.env.NODE_ENV).toBe('production');
   });
 
@@ -96,7 +97,8 @@ describe('buildSpawnPlan', () => {
       process.execPath,
       resolvePermissionFlag(),
       `--allow-fs-read=${baseInput.dir}`,
-      `--allow-fs-write=${baseInput.dir}/data`,
+      `--allow-fs-read=${baseInput.dataDir}`,
+      `--allow-fs-write=${baseInput.dataDir}`,
       `--max-old-space-size=${baseInput.memoryMb}`,
       '--disable-proto=delete',
       `${baseInput.dir}/plugin.js`,
@@ -123,7 +125,7 @@ describe('buildSpawnPlan', () => {
 
   it('cwd is the plugin data dir, stdio never carries the RPC channel', () => {
     const plan = buildSpawnPlan(baseInput);
-    expect(plan.options.cwd).toBe(`${baseInput.dir}/data`);
+    expect(plan.options.cwd).toBe(baseInput.dataDir);
     expect(plan.options.stdio).toEqual(['ignore', 'pipe', 'pipe']);
   });
 });
@@ -134,11 +136,16 @@ describe('prepareDirForDroppedChild', () => {
   const uid = process.getuid!();
   const gid = process.getgid!();
   let dir: string;
+  let dataDir: string;
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'spawn-plan-perm-'));
+    dataDir = join(mkdtempSync(join(tmpdir(), 'spawn-plan-data-')), 'demo');
   });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(dirname(dataDir), { recursive: true, force: true });
+  });
 
   const mode = (p: string) => statSync(p).mode & 0o777;
 
@@ -148,28 +155,40 @@ describe('prepareDirForDroppedChild', () => {
     writeFileSync(join(dir, 'plugin.js'), 'x', { mode: 0o600 });
     writeFileSync(join(dir, 'logo.svg'), '<svg/>', { mode: 0o600 });
 
-    prepareDirForDroppedChild(dir, uid, gid);
+    prepareDirForDroppedChild(dir, dataDir, uid, gid);
 
     expect(mode(dir)).toBe(0o755);
     expect(mode(join(dir, 'plugin.js'))).toBe(0o644);
     expect(mode(join(dir, 'logo.svg'))).toBe(0o644);
   });
 
-  it('hands the scratch dir to the child and nothing else', () => {
-    prepareDirForDroppedChild(dir, uid, gid);
+  it('hands the data dir to the child and nothing else, outside the code dir', () => {
+    prepareDirForDroppedChild(dir, dataDir, uid, gid);
 
-    const data = statSync(join(dir, 'data'));
+    const data = statSync(dataDir);
     expect(data.isDirectory()).toBe(true);
     expect(data.uid).toBe(uid);
-    expect(mode(join(dir, 'data'))).toBe(0o700);
+    expect(mode(dataDir)).toBe(0o700);
+    expect(existsSync(join(dir, 'data'))).toBe(false);
+  });
+
+  it('survives the code dir being wiped and recreated, as a restart\'s re-extraction does', () => {
+    prepareDirForDroppedChild(dir, dataDir, uid, gid);
+    writeFileSync(join(dataDir, 'marker.txt'), 'hello');
+
+    rmSync(dir, { recursive: true, force: true }); // promoteDir()'s rmSync(destDir)
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    prepareDirForDroppedChild(dir, dataDir, uid, gid);
+
+    expect(existsSync(join(dataDir, 'marker.txt'))).toBe(true);
   });
 
   it('is idempotent across restarts', () => {
     writeFileSync(join(dir, 'plugin.js'), 'x', { mode: 0o600 });
-    prepareDirForDroppedChild(dir, uid, gid);
-    prepareDirForDroppedChild(dir, uid, gid);
+    prepareDirForDroppedChild(dir, dataDir, uid, gid);
+    prepareDirForDroppedChild(dir, dataDir, uid, gid);
 
     expect(mode(join(dir, 'plugin.js'))).toBe(0o644);
-    expect(mode(join(dir, 'data'))).toBe(0o700);
+    expect(mode(dataDir)).toBe(0o700);
   });
 });

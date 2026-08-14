@@ -2194,7 +2194,8 @@
         "update_keeps_data": "As tuas configurações são mantidas."
       },
       "status_disabled": "Desativado",
-      "status_unavailable": "Indisponível"
+      "status_unavailable": "Indisponível",
+      "status_message_toggle": "Ver os detalhes"
     }
   },
   "roles": {

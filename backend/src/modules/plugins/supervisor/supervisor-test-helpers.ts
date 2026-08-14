@@ -1,4 +1,4 @@
-import { mkdtempSync, copyFileSync, mkdirSync, writeFileSync } from 'fs';
+import { mkdtempSync, copyFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { EventEmitter } from 'events';
@@ -18,7 +18,6 @@ const FIXTURE_SOURCE = join(__dirname, '__fixtures__/fixture-plugin.js');
 /** A fresh `dir` with the real fixture plugin at `plugin.js` and its mode file next to it. */
 export function makeFixtureDir(mode: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'plugin-sup-dir-'));
-  mkdirSync(join(dir, 'data'), { recursive: true });
   copyFileSync(FIXTURE_SOURCE, join(dir, 'plugin.js'));
   writeFileSync(join(dir, 'FIXTURE_MODE'), mode);
   return dir;

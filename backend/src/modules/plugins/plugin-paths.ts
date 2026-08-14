@@ -12,6 +12,12 @@ export function installedPluginDir(pluginId: string, version: string): string {
   return join(getPluginsRuntimeDir(), 'installed', `${pluginId}@${version}`);
 }
 
+/** `${runtime dir}/data/<id>/` — keyed by id, not version, and outside `installed/`: a re-extraction
+ *  (every ordinary start) or an upgrade's new version directory never touches it. */
+export function pluginDataDir(pluginId: string): string {
+  return join(getPluginsRuntimeDir(), 'data', pluginId);
+}
+
 /** Same-filesystem rename when possible; copy+remove is the only option across devices. */
 export function promoteDir(srcDir: string, destDir: string): void {
   mkdirSync(dirname(destDir), { recursive: true });

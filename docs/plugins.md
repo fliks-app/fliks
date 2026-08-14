@@ -134,6 +134,17 @@ these, set once at spawn (`supervisor/spawn-plan.ts`):
   prepend `FLIKS_CFG_`. Not a fixed set — read whichever names your own manifest's settings
   resolve to.
 
+### Filesystem
+
+`--allow-fs-read` covers this plugin's own code directory; `--allow-fs-write`, `HOME` and the
+child's cwd are all one directory keyed by this plugin's `id` alone, outside that code tree.
+That split matters because the code directory does not survive: core re-extracts and replaces it
+from the signed archive on every ordinary start — boot, enable, an admin restart, install and
+upgrade alike, not just a crash respawn — so nothing written there outlives the next start. The
+data directory is never touched by that sweep, so it is the only place worth writing anything a
+restart, an upgrade, or a disable/re-enable needs to survive. Uninstall removes the code directory
+and (for a schema-owning plugin) the database schema; the data directory is not part of either.
+
 ### The handshake
 
 The first call core makes on a freshly spawned child is `hello`, with `{ pluginApi, coreVersion,
@@ -145,6 +156,22 @@ echoed back exactly. A wrong or missing token is a crash: core logs `plugin cras
 mismatch` against that plugin's own log stream and retries up the backoff ladder until the breaker
 trips. See `fk-plugin-download`'s `hello` handler in `src/plugin.ts` for a minimal implementation
 that gets both right.
+
+### Health
+
+Once ready, core calls `health` on `healthIntervalMs` (15s default) with no payload; reply with
+`{ ok: boolean, detail?: string }`. A reply of `ok: false` counts exactly like a timed-out or
+unanswered call — two consecutive misses mark the plugin `degraded`, four force a SIGTERM-then-
+SIGKILL respawn — so an unhealthy-but-reachable plugin can ask to be recycled without waiting out
+the deadline. `detail` is logged against this plugin's own log stream, so name what's wrong there.
+
+### Config changes
+
+When an admin saves one of this plugin's own `plugin.<id>.*` settings while it is running, core
+pushes a `config` note: `{ changed: string[] }`, one entry, the same unprefixed key shape
+`config.get` returns. It names what changed; it does not carry the new value — call `config.get`
+for that. A plugin that is not running is never a target, and a save for a namespace no running
+plugin owns raises nothing.
 
 ## Database
 

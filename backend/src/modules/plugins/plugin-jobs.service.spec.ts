@@ -126,4 +126,69 @@ describe('PluginJobsService', () => {
       expect(processService.callPlugin).not.toHaveBeenCalled();
     });
   });
+
+  describe('overlap guard', () => {
+    const flush = () => new Promise((r) => setImmediate(r));
+
+    it('logs once on a completed run', async () => {
+      const registry = trackedRegistry();
+      const processService = fakeProcessService('ready');
+      const service = new PluginJobsService(registry, processService as never);
+      const logSpy = jest.spyOn((service as unknown as { logger: { log: (m: string) => void } }).logger, 'log');
+      service.replaceFor('fliks.p', [job()]);
+
+      service.trigger('fliks.p', 'sync');
+      await flush();
+
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('completed'));
+    });
+
+    it('skips and warns a second tick while the first is still in flight', async () => {
+      const registry = trackedRegistry();
+      let resolveCall!: () => void;
+      const pending = new Promise((r) => {
+        resolveCall = () => r({ ok: true });
+      });
+      const processService = fakeProcessService('ready');
+      processService.callPlugin.mockReturnValue(pending);
+      const service = new PluginJobsService(registry, processService as never);
+      const warnSpy = jest.spyOn((service as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn');
+      service.replaceFor('fliks.p', [job()]);
+
+      service.trigger('fliks.p', 'sync');
+      expect(processService.callPlugin).toHaveBeenCalledTimes(1);
+
+      const second = service.trigger('fliks.p', 'sync');
+      expect(second).toEqual({ ok: false, reason: 'already-running' });
+      expect(processService.callPlugin).toHaveBeenCalledTimes(1);
+
+      // The warn belongs to the cron path: a manual trigger is refused before run() is entered.
+      for (const cron of registry.getCronJobs().values()) await cron.fireOnTick();
+      await flush();
+      expect(processService.callPlugin).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('in flight'));
+
+      resolveCall();
+      await flush();
+    });
+
+    it('releases the guard after a failure so the next tick runs', async () => {
+      const registry = trackedRegistry();
+      const processService = fakeProcessService('ready');
+      processService.callPlugin
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValueOnce({ ok: true });
+      const service = new PluginJobsService(registry, processService as never);
+      service.replaceFor('fliks.p', [job()]);
+
+      service.trigger('fliks.p', 'sync');
+      await flush();
+      expect(processService.callPlugin).toHaveBeenCalledTimes(1);
+
+      service.trigger('fliks.p', 'sync');
+      await flush();
+      expect(processService.callPlugin).toHaveBeenCalledTimes(2);
+    });
+  });
 });

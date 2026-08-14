@@ -15,3 +15,23 @@ export const CORE_SCHEDULER_JOB_NAMES = [
 ] as const;
 
 export type CoreSchedulerJobName = (typeof CORE_SCHEDULER_JOB_NAMES)[number];
+
+/**
+ * Core commands that have no cron but are triggerable by name from `POST /commands`. A plugin job
+ * sharing one of these names would never be reachable: the command dispatcher answers first.
+ */
+export const CORE_TRIGGER_ONLY_JOB_NAMES = [
+  'RescanAll',
+  'RefreshMissingMetadata',
+  'RescanMissingFiles',
+  'GenerateSprites',
+  'GenerateMissingSprites',
+  'DetectMarkers',
+  'DetectMissingMarkers',
+] as const;
+
+/** Every name a plugin job may not take, whether cron-driven or trigger-only. */
+export const RESERVED_CORE_JOB_NAMES: readonly string[] = [
+  ...CORE_SCHEDULER_JOB_NAMES,
+  ...CORE_TRIGGER_ONLY_JOB_NAMES,
+];

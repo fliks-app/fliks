@@ -38,7 +38,7 @@ import { PluginRouteTable, type ResolvedPluginRoute } from './proxy/plugin-route
 import { parseDeclaredPolicy } from './proxy/policy-vocabulary';
 import { parseObjectGuard } from './proxy/plugin-object-guards.service';
 import { PLUGIN_PERMISSION_NAME_PATTERN, pluginPermissionSubject } from '../../common/constants/plugin-permissions';
-import { CORE_SCHEDULER_JOB_NAMES } from '../../common/constants/core-scheduler-jobs';
+import { RESERVED_CORE_JOB_NAMES } from '../../common/constants/core-scheduler-jobs';
 
 const WEBHOOK_EVENT_NAMES: ReadonlySet<string> = new Set(PLUGIN_WEBHOOK_EVENT_NAMES);
 
@@ -63,7 +63,7 @@ const KNOWN_HTTP_METHODS: ReadonlySet<string> = new Set(['GET', 'POST', 'PUT', '
 /** Shared so a plugin with nothing declared doesn't cost an allocation per lookup. */
 const EMPTY_SUBJECT_SET: ReadonlySet<string> = new Set();
 
-const CORE_JOB_NAME_SET: ReadonlySet<string> = new Set(CORE_SCHEDULER_JOB_NAMES);
+const CORE_JOB_NAME_SET: ReadonlySet<string> = new Set(RESERVED_CORE_JOB_NAMES);
 
 const RELEASE_PICKER_CONTEXTS: readonly (keyof ReleasePickerRoutes)[] = ['movie', 'season', 'episode'];
 /** The method each `releasePicker` action's declared route must carry. */

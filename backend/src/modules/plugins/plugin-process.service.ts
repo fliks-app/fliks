@@ -62,6 +62,20 @@ export class PluginProcessService implements OnApplicationShutdown {
     this.supervisorFactory = supervisorFactory ?? DEFAULT_FACTORY;
     this.startupTimeoutMs = startupTimeoutMs ?? DEFAULT_SUPERVISOR_OPTIONS.handshakeDeadlineMs;
     this.hostBinding = hostBinding ?? null;
+    this.settings.addChangeListener((key, origin) => this.onSettingChanged(key, origin));
+  }
+
+  /** Notes the one running plugin whose `plugin.<id>.` namespace owns `key`, with that key
+   *  unprefixed as `config.get` returns it. Ids are dotted, so the longest matching id wins. */
+  private onSettingChanged(key: string, origin?: string): void {
+    const prefix = 'plugin.';
+    if (!key.startsWith(prefix)) return;
+    let owner = '';
+    for (const id of this.running.keys()) {
+      if (key.startsWith(`${prefix}${id}.`) && id.length > owner.length) owner = id;
+    }
+    if (!owner || owner === origin) return;
+    this.running.get(owner)?.supervisor.emitConfigChanged([key.slice(prefix.length + owner.length + 1)]);
   }
 
   /** Stop -> materialise -> provision-check -> rotate -> config -> spawn; each stage's failure
