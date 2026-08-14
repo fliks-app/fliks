@@ -311,7 +311,9 @@ describe('PluginViewComponent', () => {
           labelKey: 'x.title',
           list: '/queue',
           columns: [{ key: 'name', labelKey: 'x.col_name' }],
-          rowActions: [{ kind: 'action', labelKey: 'x.doit', actionId: 'core.unknown' }],
+          // Cast on purpose: a manifest is untrusted JSON, so an id outside the union is
+          // exactly what this asserts core refuses to render.
+          rowActions: [{ kind: 'action', labelKey: 'x.doit', actionId: 'core.unknown' as never }],
         }),
       },
     );

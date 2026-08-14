@@ -115,7 +115,7 @@ export interface ProcessPluginManifest extends PluginManifestBase {
   jobs?: PluginJob[];
   /** Legal on `process`, refused on `data`; item shape is the pre-existing baseline's. */
   permissions?: string[];
-  /** Legal on `process`, refused on `data`; item shape is the pre-existing baseline's. */
+  /** Accepted and ignored: core reads no checklist from a manifest. Dropped in the next major. */
   checklist?: string[];
 }
 

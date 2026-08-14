@@ -75,3 +75,7 @@ export function fakeScheduledJobRegistry(names: readonly string[] = []): { list:
     list: jest.fn(() => names.map((name) => ({ name, cron: '* * * * *', triggerable: true, run: jest.fn() }))),
   };
 }
+
+export function fakeCountsCache(): { forget: jest.Mock } {
+  return { forget: jest.fn() };
+}

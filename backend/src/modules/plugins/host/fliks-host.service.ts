@@ -56,6 +56,15 @@ import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
 import { PluginHostContext } from './plugin-host-context';
 import { DownloadProgressState } from '../../../common/constants/download-progress-state';
 
+/** The rate `progress.set` promises: at most one SSE emission per media per second. */
+const PROGRESS_MIN_INTERVAL_MS = 1_000;
+
+interface ProgressGate {
+  lastEmitMs: number;
+  pending: Parameters<PluginHostApi['progress.set']>[0] | null;
+  timer: NodeJS.Timeout | null;
+}
+
 /** `media.resolve`'s own bound, per the contract's doc comment. */
 const QUEUE_PAGE_SIZE_MAX = 100;
 
@@ -105,6 +114,8 @@ export class FliksHostImpl implements PluginHostApi {
     private readonly sseAudience: SseAudienceService,
     private readonly countsCache: PluginCountsCacheService,
   ) {}
+
+  private readonly progressGates = new Map<number, ProgressGate>();
 
   /** `PluginHostContext` (set only by `PluginHostBindingService`, never by a plugin's
    *  payload) wins when bound; the constructor value is the in-process default. */
@@ -802,7 +813,8 @@ export class FliksHostImpl implements PluginHostApi {
   // ===========================================================================
 
   private countsSet(p: { key: string; value: number }): Promise<void> {
-    this.countsCache.set(p.key, p.value);
+    const pluginId = this.currentPluginId();
+    if (pluginId) this.countsCache.set(pluginId, p.key, p.value);
     return Promise.resolve();
   }
 
@@ -840,9 +852,37 @@ export class FliksHostImpl implements PluginHostApi {
     etaSeconds?: number;
     state: DownloadProgressState;
   }): Promise<void> {
-    // ponytail: no server-side coalescing yet (plan asks for <=1/media/sec) —
-    // add a per-media debounce once a real caller exercises the frequency.
+    const gate = this.progressGates.get(p.mediaId);
+    const now = Date.now();
+    if (gate && now - gate.lastEmitMs < PROGRESS_MIN_INTERVAL_MS) {
+      // Newest wins: the trailing emit carries the latest state, so nothing is merely dropped.
+      gate.pending = p;
+      if (!gate.timer) {
+        gate.timer = setTimeout(
+          () => this.flushProgress(p.mediaId),
+          PROGRESS_MIN_INTERVAL_MS - (now - gate.lastEmitMs),
+        );
+        gate.timer.unref();
+      }
+      return;
+    }
+    this.progressGates.set(p.mediaId, { lastEmitMs: now, pending: null, timer: null });
     await this.pushProgress(p);
+  }
+
+  private flushProgress(mediaId: number): void {
+    const gate = this.progressGates.get(mediaId);
+    if (!gate) return;
+    gate.timer = null;
+    const pending = gate.pending;
+    gate.pending = null;
+    if (!pending) {
+      // Idle for a whole window: drop the gate so the map cannot grow with every media ever seen.
+      this.progressGates.delete(mediaId);
+      return;
+    }
+    gate.lastEmitMs = Date.now();
+    void this.pushProgress(pending);
   }
 
   private async pushProgress(p: {

@@ -1,7 +1,7 @@
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { minimalProcessManifest } from './archive/test-manifests';
-import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry } from './plugin-registry.test-helpers';
+import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry, fakeCountsCache } from './plugin-registry.test-helpers';
 import type { PluginManifest, PluginRoute, ReleasePickerRoutes } from '../../common/plugin-contract';
 
 const COMPATIBLE_RANGE = '>=1.0.0 <3.0.0';
@@ -49,6 +49,7 @@ function makeService(): PluginRegistryService {
     fakeProcessService() as never,
     fakePluginJobsService() as never,
     fakeScheduledJobRegistry() as never,
+    fakeCountsCache() as never,
   );
 }
 

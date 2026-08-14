@@ -201,6 +201,23 @@ anyone else is `unverified` and reaches an operator behind the consent sheet's a
 `process` plugin must be signed unless its id is in `FLIKS_UNSIGNED_PLUGINS`, which exists for local
 development only.
 
+### Deadlines and ceilings
+
+Core enforces these; exceeding one gets your call abandoned or your process killed. They are
+exported from the contract as `PLUGIN_DEADLINES_MS`, `HOST_CALL_DEADLINE_OVERRIDES_MS`,
+`PLUGIN_LOG_CAP_BYTES_PER_MINUTE`, `PLUGIN_DEFAULT_MEMORY_MB` and `MAX_FRAME_BYTES`, and a test
+fails if they ever stop matching what the supervisor applies.
+
+| What | Value | On breach |
+|---|---|---|
+| `hello` reply | 10 s | killed, restarted with backoff |
+| `health` reply | 3 s, asked every 15 s | 2 misses degrade, 4 recycle |
+| host call | 8 s | the call rejects; `library.ingest` is allowed 30 min |
+| `shutdown` reply | 3 s, then 2 s before SIGKILL | killed |
+| stdout+stderr | 64 KB/min | output dropped for the rest of the minute, once with a warning |
+| heap (`memoryMb`) | 256 MB default | V8 old space only — nothing caps process RSS |
+| one frame | 4 MiB | refused at the sender rather than breaking the connection |
+
 Catalogue sources are HTTPS documents listing each plugin's installable versions with a `sha256`
 per version; core refuses bytes whose hash does not match. Publishing a plugin means committing its
 built source into the catalogue repository, adding a version entry, and running its packaging

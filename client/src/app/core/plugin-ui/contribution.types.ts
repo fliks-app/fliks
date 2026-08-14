@@ -86,13 +86,26 @@ interface ConfigPageBase {
 }
 
 /** Rendered by `<app-schema-form>` over `app_settings`; omitting `kind` means this one. */
+/**
+ * Every `actionId` a `form` page's button may name. Core implements each one; an unknown value
+ * renders nothing, so this list is the whole vocabulary available to a manifest.
+ */
+export const FORM_ACTION_IDS = ['events.test-delivery'] as const;
+export type FormActionId = (typeof FORM_ACTION_IDS)[number];
+
+/**
+ * Every `actionId` a `table` row action may name, resolved by core against the row it sits on.
+ * Same rule: an unknown value renders nothing.
+ */
+export const TABLE_ROW_ACTION_IDS = ['table.open-media'] as const;
+export type TableRowActionId = (typeof TABLE_ROW_ACTION_IDS)[number];
+
 export interface FormConfigPage extends ConfigPageBase {
   kind?: 'form';
   fields: FieldDef[];
-  /** Buttons core implements on the plugin's behalf. `actionId` names a closed catalogue core
-   *  resolves; an unknown one renders nothing. A `data` plugin executes no code of its own, so
-   *  this is the only way it can offer an action at all. */
-  actions?: { id: string; labelKey: string; actionId: string }[];
+  /** Buttons core implements on the plugin's behalf. A `data` plugin executes no code of its
+   *  own, so this is the only way it can offer an action at all. */
+  actions?: { id: string; labelKey: string; actionId: FormActionId }[];
 }
 
 /** One search/grab pair the core release picker calls for a given context. */
@@ -179,7 +192,7 @@ export interface TableConfigPage extends ConfigPageBase {
   filters?: TableFilter[];
   rowActions?: (
     | { kind: 'route'; labelKey: string; path: string }
-    | { kind: 'action'; labelKey: string; actionId: string }
+    | { kind: 'action'; labelKey: string; actionId: TableRowActionId }
     | { kind: 'proxy'; labelKey: string; method: 'POST' | 'DELETE'; path: string; confirmKey?: string }
   )[];
   defaultSortKey?: string;

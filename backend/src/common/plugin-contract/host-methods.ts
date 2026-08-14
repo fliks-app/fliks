@@ -240,7 +240,8 @@ export interface PluginHostApi {
     payload: Record<string, unknown>;
   }) => Promise<void>;
 
-  /** The sidebar badge, pushed not polled. */
+  /** The sidebar badge, pushed not polled. Stored per plugin: two plugins pushing one key add up
+   *  rather than overwrite, and a stopped plugin stops counting. Core serves `queueActive`. */
   'counts.set': (p: { key: string; value: number }) => Promise<void>;
 
   /** Plugin-namespaced SSE. Core force-prefixes the type to `plugin.<id>.<type>`. */
@@ -252,7 +253,8 @@ export interface PluginHostApi {
 
   /**
    * Live acquisition progress. Plugin pushes; core emits the reserved
-   * `download.progress` SSE type. Coalesced server-side to <= 1/media/second.
+   * `download.progress` SSE type, coalesced to one emission per media per second: pushing faster
+   * is allowed, and the last value of a window is the one that goes out.
    */
   'progress.set': (p: {
     mediaId: number;

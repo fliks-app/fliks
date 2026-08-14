@@ -14,6 +14,7 @@ import { CURRENT_FLIKS_VERSION } from './plugin-version';
 import type { SupervisorState } from './supervisor/plugin-supervisor';
 import { sweepOrphans } from './supervisor/pid-file';
 import { getPluginsSocketDir } from '../../common/constants/paths';
+import { PluginCountsCacheService } from './host/plugin-counts-cache.service';
 import { arePluginsDisabled, FLIKS_PLUGINS_DISABLED_ENV } from '../../common/constants/plugin-flags';
 import {
   SUPPORTED_PLUGIN_API_VERSIONS,
@@ -178,6 +179,7 @@ export class PluginRegistryService implements OnModuleInit {
     private readonly processService: PluginProcessService,
     private readonly pluginJobs: PluginJobsService,
     private readonly scheduledJobs: ScheduledJobRegistry,
+    private readonly countsCache: PluginCountsCacheService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -333,6 +335,7 @@ export class PluginRegistryService implements OnModuleInit {
   async unregister(pluginId: string): Promise<void> {
     await this.processService.stopFor(pluginId);
     this.pluginJobs.dropFor(pluginId);
+    this.countsCache.forget(pluginId);
     this.registry.delete(pluginId);
     this.replaceWebhookDeclarations(pluginId, []);
   }

@@ -1288,6 +1288,43 @@ describe('FliksHostImpl', () => {
       );
     });
 
+    it('coalesces to one emission per media per second, and the trailing one carries the latest', async () => {
+      jest.useFakeTimers();
+      try {
+        const h = makeHarness();
+        h.mediaRepo.findOne.mockResolvedValue(makeMedia({ type: MediaType.SERIES }));
+        const push = (progress: number) =>
+          h.host['progress.set']({ mediaId: 7, ref: 'r', progress, state: 'active' });
+
+        await push(0.1);
+        await push(0.2);
+        await push(0.3);
+        expect(h.events.emitToUsers).toHaveBeenCalledTimes(1);
+
+        await jest.advanceTimersByTimeAsync(1_000);
+        expect(h.events.emitToUsers).toHaveBeenCalledTimes(2);
+        expect(h.events.emitToUsers).toHaveBeenLastCalledWith(
+          [9],
+          expect.objectContaining({ progress: 0.3 }),
+        );
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('does not hold one media behind another', async () => {
+      jest.useFakeTimers();
+      try {
+        const h = makeHarness();
+        h.mediaRepo.findOne.mockResolvedValue(makeMedia({ type: MediaType.SERIES }));
+        await h.host['progress.set']({ mediaId: 1, ref: 'r', progress: 0.1, state: 'active' });
+        await h.host['progress.set']({ mediaId: 2, ref: 'r', progress: 0.1, state: 'active' });
+        expect(h.events.emitToUsers).toHaveBeenCalledTimes(2);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('emits nothing when the audience is empty', async () => {
       const h = makeHarness();
       h.sseAudience.recipientsForMedia.mockResolvedValue([]);

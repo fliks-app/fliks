@@ -3,7 +3,7 @@ import { PluginRegistryService } from './plugin-registry.service';
 import { PluginJobsService } from './plugin-jobs.service';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { minimalProcessManifest } from './archive/test-manifests';
-import { fakeRegistrationRepo, fakeProcessService, fakeScheduledJobRegistry } from './plugin-registry.test-helpers';
+import { fakeRegistrationRepo, fakeProcessService, fakeScheduledJobRegistry, fakeCountsCache } from './plugin-registry.test-helpers';
 import { CORE_SCHEDULER_JOB_NAMES } from '../../common/constants/core-scheduler-jobs';
 import type { PluginJob, PluginManifest } from '../../common/plugin-contract';
 import type { PluginProcessStartResult } from './plugin-process.service';
@@ -67,6 +67,7 @@ function makeService(startResult?: PluginProcessStartResult, publishedJobNames: 
     processService as never,
     pluginJobs,
     scheduledJobs as never,
+    fakeCountsCache() as never,
   );
   return { service, registry, pluginJobs };
 }

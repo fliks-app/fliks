@@ -12,7 +12,15 @@ import type { PluginApi } from '../../../common/plugin-contract';
 
 type HelloReply = Awaited<ReturnType<PluginApi['hello']>>;
 type HealthReply = Awaited<ReturnType<PluginApi['health']>>;
-import { PLUGIN_API_VERSION, type Note, type PluginHostApi } from '../../../common/plugin-contract';
+import {
+  HOST_CALL_DEADLINE_OVERRIDES_MS,
+  PLUGIN_API_VERSION,
+  PLUGIN_DEADLINES_MS,
+  PLUGIN_DEFAULT_MEMORY_MB,
+  PLUGIN_LOG_CAP_BYTES_PER_MINUTE,
+  type Note,
+  type PluginHostApi,
+} from '../../../common/plugin-contract';
 import { RpcChannel } from './rpc-channel';
 import { NoteRingBuffer } from './note-ring-buffer';
 import {
@@ -42,28 +50,24 @@ const STDERR_TAIL_BYTES = 4 * 1024;
  * deadline only abandons the wait — core finished the copy, so the plugin recorded a failure for
  * an import that had landed.
  */
-const HOST_CALL_DEADLINE_OVERRIDES_MS: Readonly<Record<string, number>> = {
-  'library.ingest': 30 * 60_000,
-};
-
 /** `WARN` as the line's own level — after any bracketed prefixes, never inside the message. */
 const SELF_DECLARED_WARN = /^(?:\[[^\]]*\]\s*)*WARN\b/;
 
 /** Every figure here is "The spawn call and the supervisor"'s, verbatim. Override only in tests. */
 export const DEFAULT_SUPERVISOR_OPTIONS = {
   pluginApi: PLUGIN_API_VERSION,
-  memoryMb: 256,
-  handshakeDeadlineMs: 10_000,
-  healthIntervalMs: 15_000,
-  healthDeadlineMs: 3_000,
+  memoryMb: PLUGIN_DEFAULT_MEMORY_MB,
+  handshakeDeadlineMs: PLUGIN_DEADLINES_MS.handshake,
+  healthIntervalMs: PLUGIN_DEADLINES_MS.healthInterval,
+  healthDeadlineMs: PLUGIN_DEADLINES_MS.healthReply,
   backoffLadderMs: [1_000, 2_000, 4_000, 8_000, 16_000, 30_000],
   readyResetMs: 120_000,
   breakerWindowMs: 10 * 60_000,
   breakerMaxCrashes: 6,
-  shutdownRpcDeadlineMs: 3_000,
-  sigtermGraceMs: 2_000,
-  logCapBytesPerMinute: 64 * 1024,
-  hostCallTimeoutMs: 8_000,
+  shutdownRpcDeadlineMs: PLUGIN_DEADLINES_MS.shutdownRpc,
+  sigtermGraceMs: PLUGIN_DEADLINES_MS.sigtermGrace,
+  logCapBytesPerMinute: PLUGIN_LOG_CAP_BYTES_PER_MINUTE,
+  hostCallTimeoutMs: PLUGIN_DEADLINES_MS.hostCall,
 };
 
 export interface PluginSupervisorOptions {
