@@ -157,7 +157,17 @@ core at runtime. Two entry points: `@fliks/plugin-contract` for the whole surfac
 are what a browser bundle wants.
 
 The client consumes the same files through a tsconfig path mapping, so there is one declaration of
-each type in the tree and nothing to keep in sync.
+each type in the tree and nothing to keep in sync. That mapping points one level above `client/`, so
+anything that builds the client in a container has to bring the directory along — the image build
+copies it, and a dev container bind-mounting only `client/` needs the same:
+
+```yaml
+volumes:
+  - ./client:/app
+  - ./backend/src/common/plugin-contract:/backend/src/common/plugin-contract:ro
+```
+
+Without it the build stops at `TS2307: Cannot find module '@fliks/plugin-contract/ui'`.
 
 `examples/plugin-scaffold/` is the starting point: a `process` plugin that starts, answers all 7
 methods, serves a route and reads its own settings, under MIT. Its README carries the dev loop and
