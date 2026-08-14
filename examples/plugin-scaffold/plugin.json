@@ -1,0 +1,25 @@
+{
+  "id": "example.scaffold",
+  "pluginApi": 1,
+  "name": "Scaffold",
+  "version": "0.1.0",
+  "fliks": ">=2.0.0 <3.0.0",
+  "author": "you",
+  "description": "Starting point for a Fliks process plugin",
+  "license": "MIT",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "node",
+  "memoryMb": 128,
+  "files": {},
+  "database": { "schema": false, "coreRefs": [] },
+  "routes": [{ "method": "GET", "path": "/ping", "policy": "read:Settings" }],
+  "scopes": ["config:rw"],
+  "ingestRoots": [],
+  "ui": {
+    "configPages": [
+      { "kind": "form", "id": "main", "labelKey": "scaffold.settings", "fields": [] }
+    ]
+  },
+  "i18n": { "en": { "scaffold.settings": "Scaffold" } }
+}

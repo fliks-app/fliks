@@ -159,8 +159,12 @@ are what a browser bundle wants.
 The client consumes the same files through a tsconfig path mapping, so there is one declaration of
 each type in the tree and nothing to keep in sync.
 
-`fk-plugin-download` is the reference `process` plugin — a working implementation of everything
-in this section, with `src/plugin.ts` answering all 7 core-initiated methods.
+`examples/plugin-scaffold/` is the starting point: a `process` plugin that starts, answers all 7
+methods, serves a route and reads its own settings, under MIT. Its README carries the dev loop and
+the mistakes core refuses by name. `fk-plugin-download` is the full reference implementation.
+
+A `process` plugin ships as **one bundled `plugin.js`** — an archive carries no `node_modules`, so
+an unbundled `require` of any package, this one included, fails at spawn with `MODULE_NOT_FOUND`.
 
 ### Environment
 
