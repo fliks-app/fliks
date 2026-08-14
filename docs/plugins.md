@@ -137,7 +137,9 @@ these, set once at spawn (`supervisor/spawn-plan.ts`):
 ### The handshake
 
 The first call core makes on a freshly spawned child is `hello`, with `{ pluginApi, coreVersion,
-config }`. The reply must be `{ manifest, token }`: `manifest` is this archive's own
+config }`. That `pluginApi` — and the `FLIKS_API_VERSION` env var — is the value **your** manifest
+declares, not core's newest: core answers each plugin in the revision that plugin was written
+against, so comparing it for exact equality against the revision you built for is safe. The reply must be `{ manifest, token }`: `manifest` is this archive's own
 `plugin.json`, read fresh rather than baked into the bundle, and `token` is `FLIKS_PLUGIN_TOKEN`
 echoed back exactly. A wrong or missing token is a crash: core logs `plugin crashed: hello token
 mismatch` against that plugin's own log stream and retries up the backoff ladder until the breaker
@@ -166,9 +168,11 @@ An archive is a ZIP with a closed set of legal entry names, size caps, and an Ed
 over the manifest. Install is two steps: `inspect` verifies and stages, `confirm` promotes what was
 staged, and the consent sheet in between is the only place an unverified plugin is accepted.
 
-Signature outcomes are `official` (a catalogue release key), `verified`, `unverified`, or
-`unsigned`. A `process` plugin must be signed unless its id is in `FLIKS_UNSIGNED_PLUGINS`, which
-exists for local development only.
+Signature outcomes are `official` (a catalogue release key), `unverified`, or `unsigned`. Only the
+catalogue key verifies: there is no registry of third-party signing keys, so an archive signed by
+anyone else is `unverified` and reaches an operator behind the consent sheet's acknowledgement. A
+`process` plugin must be signed unless its id is in `FLIKS_UNSIGNED_PLUGINS`, which exists for local
+development only.
 
 Catalogue sources are HTTPS documents listing each plugin's installable versions with a `sha256`
 per version; core refuses bytes whose hash does not match. Publishing a plugin means committing its

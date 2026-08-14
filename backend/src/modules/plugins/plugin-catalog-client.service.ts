@@ -78,7 +78,7 @@ export class PluginCatalogClientService {
 
     const officialKeys = source.publicKey ? new Map([['source', source.publicKey]]) : OFFICIAL_KEYS;
     const signature = this.parseSignature(sigBytes);
-    const trust = resolveTrust(catalogBytes, signature, officialKeys, new Map());
+    const trust = resolveTrust(catalogBytes, signature, officialKeys);
     if (trust.trust === 'unsigned' || trust.trust === 'unverified') {
       return this.fail(source, 'bad-signature', `catalog signature did not verify (${trust.trust})`);
     }

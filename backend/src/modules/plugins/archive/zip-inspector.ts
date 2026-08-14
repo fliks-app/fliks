@@ -42,8 +42,6 @@ function hasControlChar(name: string): boolean {
 export interface InspectOptions {
   /** Test-only override of the compiled-in official key set. Defaults to {@link OFFICIAL_KEYS}. */
   officialKeys?: ReadonlyMap<string, Buffer>;
-  /** Admin-registered third-party keys (empty until Phase 7's key registry ships). */
-  thirdPartyKeys?: ReadonlyMap<string, Buffer>;
   /** `FLIKS_UNSIGNED_PLUGINS` ids — the only way a `process` plugin may ship unsigned. */
   unsignedProcessAllowlist?: readonly string[];
 }
@@ -218,7 +216,7 @@ export async function inspect(buffer: Buffer, options: InspectOptions = {}): Pro
     return refuse('PLUGIN_BAD_SIGNATURE', `signature is ${sigBytes.length} bytes, expected ${ED25519_SIGNATURE_LENGTH}`);
   }
   const officialKeys = options.officialKeys ?? OFFICIAL_KEYS;
-  const trust = resolveTrust(manifestBytes, sigBytes, officialKeys, options.thirdPartyKeys ?? new Map());
+  const trust = resolveTrust(manifestBytes, sigBytes, officialKeys);
 
   // V7 - only now is the manifest content itself read.
   const manifest = parseManifest(manifestBytes);

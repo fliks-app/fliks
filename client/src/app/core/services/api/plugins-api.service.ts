@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 
 export type PluginKind = 'data' | 'process';
 /** Mirrors backend `TrustOutcome` (`archive/trust-store.ts`). */
-export type PluginTrust = 'official' | `verified-${string}` | 'unverified' | 'unsigned';
+export type PluginTrust = 'official' | 'unverified' | 'unsigned';
 export type PluginOrigin = 'catalog' | 'manual';
 export type PluginStatus = 'active' | 'failed';
 

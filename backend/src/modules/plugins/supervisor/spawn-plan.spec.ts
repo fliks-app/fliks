@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { PLUGIN_API_VERSION } from '../../../common/plugin-contract';
+import { PLUGIN_API_VERSION, SUPPORTED_PLUGIN_API_VERSIONS } from '../../../common/plugin-contract';
 import {
   buildSpawnPlan,
   prepareDirForDroppedChild,
@@ -51,6 +51,7 @@ describe('buildSpawnPlan', () => {
     pluginSockPath: '/tmp/plugin-x.plugin.sock',
     token: 'the-token',
     pluginId: 'demo',
+    pluginApi: PLUGIN_API_VERSION,
   };
 
   it('never spreads process.env — the env is exactly the allowlist plus FLIKS_CFG_* re-keys', () => {
@@ -68,6 +69,13 @@ describe('buildSpawnPlan', () => {
     expect(plan.env.FLIKS_PLUGIN_TOKEN).toBe(baseInput.token);
     expect(plan.env.FLIKS_PLUGIN_ID).toBe(baseInput.pluginId);
     expect(plan.env.FLIKS_API_VERSION).toBe(String(PLUGIN_API_VERSION));
+  });
+
+  it('tells a plugin the revision its own manifest declares, not core\'s newest', () => {
+    const older = SUPPORTED_PLUGIN_API_VERSIONS.find((v) => v !== PLUGIN_API_VERSION);
+    expect(older).toBeDefined();
+    const plan = buildSpawnPlan({ ...baseInput, pluginApi: older as number });
+    expect(plan.env.FLIKS_API_VERSION).toBe(String(older));
     expect(plan.env.HOME).toBe(`${baseInput.dir}/data`);
     expect(plan.env.NODE_ENV).toBe('production');
   });

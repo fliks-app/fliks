@@ -1,7 +1,7 @@
 import { spawnSync, type SpawnOptions } from 'child_process';
 import { chmodSync, chownSync, mkdirSync, readdirSync } from 'fs';
 import { join } from 'path';
-import { PLUGIN_API_VERSION, type PluginSpawnEnv } from '../../../common/plugin-contract';
+import { type PluginSpawnEnv } from '../../../common/plugin-contract';
 
 /** The unprivileged identity a plugin child drops to when core runs as root. */
 export const PLUGIN_CHILD_UID = 65534;
@@ -49,6 +49,8 @@ export interface SpawnPlanInput {
   pluginSockPath: string;
   token: string;
   pluginId: string;
+  /** The version this plugin's manifest declares, which is the one core answers it in. */
+  pluginApi: number;
   dbUrl?: string;
   /** `plugin.<id>.*` admin settings, re-keyed to `FLIKS_CFG_*` env vars. */
   config?: Record<string, string>;
@@ -96,7 +98,7 @@ export function buildSpawnPlan(input: SpawnPlanInput): SpawnPlan {
     FLIKS_PLUGIN_SOCK: input.pluginSockPath,
     FLIKS_PLUGIN_TOKEN: input.token,
     FLIKS_PLUGIN_ID: input.pluginId,
-    FLIKS_API_VERSION: String(PLUGIN_API_VERSION),
+    FLIKS_API_VERSION: String(input.pluginApi),
     FLIKS_DB_URL: input.dbUrl ?? '',
     ...reKeyConfig(input.pluginId, input.config ?? {}),
   };

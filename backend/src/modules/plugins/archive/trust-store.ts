@@ -16,7 +16,7 @@ export const OFFICIAL_KEYS: ReadonlyMap<string, Buffer> = new Map([
   ],
 ]);
 
-export type TrustOutcome = 'official' | `verified-${string}` | 'unverified' | 'unsigned';
+export type TrustOutcome = 'official' | 'unverified' | 'unsigned';
 
 export interface SignatureVerification {
   trust: TrustOutcome;
@@ -45,27 +45,17 @@ function verifyWithRawKey(data: Buffer, signature: Buffer, rawPublicKey: Buffer)
 }
 
 /**
- * Classify a signature by trying every known key — official first, then
- * caller-supplied third-party keys — never the reverse: an official key
- * always wins the `official` badge over an incidental third-party match.
- * No signature at all is `unsigned`. A signature nothing recognises is
- * `unverified` — including the case where both stores are empty, which
- * must never crash and must never read as `official`.
+ * Classify a signature against the trusted key set. No signature at all is `unsigned`; a signature
+ * nothing recognises is `unverified` — including an empty store, which must never read as `official`.
  */
 export function resolveTrust(
   data: Buffer,
   signature: Buffer | null,
   officialKeys: ReadonlyMap<string, Buffer> = OFFICIAL_KEYS,
-  thirdPartyKeys: ReadonlyMap<string, Buffer> = new Map(),
 ): SignatureVerification {
   if (!signature) return { trust: 'unsigned' };
   for (const [keyId, rawKey] of officialKeys) {
     if (verifyWithRawKey(data, signature, rawKey)) return { trust: 'official', signedByKeyId: keyId };
-  }
-  for (const [keyId, rawKey] of thirdPartyKeys) {
-    if (verifyWithRawKey(data, signature, rawKey)) {
-      return { trust: `verified-${keyId}`, signedByKeyId: keyId };
-    }
   }
   return { trust: 'unverified' };
 }

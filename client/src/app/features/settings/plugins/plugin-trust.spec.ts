@@ -14,13 +14,6 @@ describe('trustBadgeFor', () => {
     expect(trustBadgeFor(undefined).labelKey).toBe('settings.plugins.trust.unverified');
   });
 
-  it('extracts the key id from a verified-<key> outcome', () => {
-    expect(trustBadgeFor('verified-acme-2026')).toEqual({
-      labelKey: 'settings.plugins.trust.verified',
-      params: { key: 'acme-2026' },
-      cssClass: 'badge-success',
-    });
-  });
 });
 
 describe('requiresAcknowledgement', () => {
@@ -30,8 +23,7 @@ describe('requiresAcknowledgement', () => {
     expect(requiresAcknowledgement(undefined)).toBe(true);
   });
 
-  it('does not require it once a key attributes the signature', () => {
+  it('does not require it for an official signature', () => {
     expect(requiresAcknowledgement('official')).toBe(false);
-    expect(requiresAcknowledgement('verified-acme-2026')).toBe(false);
   });
 });

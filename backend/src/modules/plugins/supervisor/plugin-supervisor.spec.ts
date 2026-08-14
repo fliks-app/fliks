@@ -4,7 +4,7 @@ import { basename, dirname, join } from 'path';
 import { DEFAULT_SUPERVISOR_OPTIONS, PluginSupervisor, type PluginSupervisorOptions } from './plugin-supervisor';
 import { RpcChannel } from './rpc-channel';
 import { pidFilePath } from './pid-file';
-import type { PluginHostApi } from '../../../common/plugin-contract';
+import { PLUGIN_API_VERSION, type PluginHostApi } from '../../../common/plugin-contract';
 import {
   delay,
   makeFixtureDir,
@@ -67,6 +67,7 @@ afterEach(async () => {
 describe('DEFAULT_SUPERVISOR_OPTIONS', () => {
   it('has these exact default values', () => {
     expect(DEFAULT_SUPERVISOR_OPTIONS).toEqual({
+      pluginApi: PLUGIN_API_VERSION,
       memoryMb: 256,
       handshakeDeadlineMs: 10_000,
       healthIntervalMs: 15_000,

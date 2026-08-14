@@ -2,7 +2,7 @@ import { PluginRegistryService } from './plugin-registry.service';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { minimalProcessManifest } from './archive/test-manifests';
 import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry } from './plugin-registry.test-helpers';
-import type { PluginManifest, PluginRoute } from '../../common/plugin-contract';
+import { SUPPORTED_PLUGIN_API_VERSIONS, type PluginManifest, type PluginRoute } from '../../common/plugin-contract';
 import type { PluginProcessStartResult } from './plugin-process.service';
 
 /** A `fliks` range every test can rely on matching this repo's own `package.json` version. */
@@ -180,7 +180,8 @@ describe('PluginRegistryService — route registration validation', () => {
     await service.register(makePackage(good));
     expect(service.resolveRoute(good.id, 'GET', '/queue')).not.toBeNull();
 
-    const incompatible = { ...processManifest(routes), pluginApi: good.pluginApi + 1 };
+    const unsupported = Math.max(...SUPPORTED_PLUGIN_API_VERSIONS) + 1;
+    const incompatible = { ...processManifest(routes), pluginApi: unsupported };
     const result = await service.register(makePackage(incompatible));
 
     expect(result).toMatchObject({ ok: false, reason: 'incompatible-api' });

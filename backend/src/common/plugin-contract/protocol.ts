@@ -29,17 +29,18 @@ export type Note<P = unknown> = { m: string; p?: P };
 export const MAX_FRAME_BYTES = 4 * 1024 * 1024;
 
 /**
- * What core sends a plugin at `hello`. Within one value the method set is additive-only; any
- * removal or semantic change bumps it.
+ * The newest version core speaks, and the one a new manifest should declare. Core answers each
+ * plugin in the version that plugin's own manifest declares, so a bump here orphans nobody.
+ * Within one value the method set is additive-only; any removal or semantic change bumps it.
  */
-export const PLUGIN_API_VERSION = 0;
+export const PLUGIN_API_VERSION = 1;
 
 /**
  * Every value core still accepts from a manifest, newest last. Retiring one is what orphans the
  * plugins that declare it, so a bump adds an entry and a later release drops the oldest — the
  * window in between is when authors republish.
  */
-export const SUPPORTED_PLUGIN_API_VERSIONS: readonly number[] = [0];
+export const SUPPORTED_PLUGIN_API_VERSIONS: readonly number[] = [0, 1];
 
 /**
  * The version a `fliks` range is matched against: a prerelease resolves as its own release, since

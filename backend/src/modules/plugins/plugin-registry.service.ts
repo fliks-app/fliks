@@ -722,7 +722,7 @@ export class PluginRegistryService implements OnModuleInit {
       }
       const signature = Buffer.from(sigText, 'base64');
       // Scope the check to exactly this one key by passing it as the sole candidate.
-      const result = resolveTrust(manifestBytes, signature, new Map([[pkg.verifiedByKeyId, key]]), new Map());
+      const result = resolveTrust(manifestBytes, signature, new Map([[pkg.verifiedByKeyId, key]]));
       if (result.trust !== 'official') {
         return { ok: false, detail: `signature no longer verifies against key "${pkg.verifiedByKeyId}"` };
       }
