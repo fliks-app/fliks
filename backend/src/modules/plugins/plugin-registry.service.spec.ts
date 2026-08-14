@@ -7,7 +7,7 @@ import { generateTestKeypair, signManifestBase64 } from './archive/ed25519-test-
 import { minimalDataManifest, minimalProcessManifest } from './archive/test-manifests';
 import { svgLogo, pngLogo } from './archive/test-fixtures';
 import { OFFICIAL_KEYS } from './archive/trust-store';
-import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry } from './plugin-registry.test-helpers';
+import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry, fakeCountsCache } from './plugin-registry.test-helpers';
 import { FLIKS_PLUGINS_DISABLED_ENV } from '../../common/constants/plugin-flags';
 import { sweepOrphans } from './supervisor/pid-file';
 import { getPluginsSocketDir } from '../../common/constants/paths';
@@ -65,6 +65,7 @@ function makeService(rows: PluginPackage[] = [], processResult: PluginProcessSta
     processService as never,
     pluginJobs as never,
     fakeScheduledJobRegistry() as never,
+    fakeCountsCache() as never,
   );
   return { service, repo, registrationRepo, processService, pluginJobs };
 }

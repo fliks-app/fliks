@@ -20,7 +20,19 @@ import {
 } from '../../shared/components/provider-list/provider-list.types';
 import { DataTableComponent } from '../../shared/components/data-table/data-table';
 import type { ListAction, RowAction, TableRow } from '../../shared/components/data-table/data-table.types';
-import type { FieldDef, FormConfigPage } from '../../core/plugin-ui/contribution.types';
+import {
+  FORM_ACTION_IDS,
+  TABLE_ROW_ACTION_IDS,
+  type FieldDef,
+  type FormActionId,
+  type FormConfigPage,
+  type TableRowActionId,
+} from '../../core/plugin-ui/contribution.types';
+
+/** A manifest is untrusted JSON, so the declared union has to be re-checked at runtime. */
+function isTableRowActionId(value: string): value is TableRowActionId {
+  return (TABLE_ROW_ACTION_IDS as readonly string[]).includes(value);
+}
 import { AnyConfigPage, ProvidersView, TableView, isFormView, isProvidersView, isTableView } from './view-kinds.types';
 
 type UnavailableReason = 'unknown_plugin' | 'unknown_view';
@@ -161,13 +173,13 @@ export class PluginViewComponent {
     }
   }
 
-  /** The closed catalogue of buttons core implements on a `form` page. An unknown id renders
-   *  nothing: a `data` plugin cannot ship code, so core is the only thing that can act. */
-  formActions(page: FormConfigPage): { id: string; labelKey: string; actionId: string }[] {
-    return (page.actions ?? []).filter((a) => a.actionId === 'events.test-delivery');
+  /** An unknown id renders nothing: a `data` plugin cannot ship code, so core is the only
+   *  thing that can act. `FormActionId` is the whole catalogue. */
+  formActions(page: FormConfigPage): { id: string; labelKey: string; actionId: FormActionId }[] {
+    return (page.actions ?? []).filter((a) => (FORM_ACTION_IDS as readonly string[]).includes(a.actionId));
   }
 
-  async runFormAction(action: { id: string; labelKey: string; actionId: string }): Promise<void> {
+  async runFormAction(action: { id: string; labelKey: string; actionId: FormActionId }): Promise<void> {
     this.formActionBusy.set(action.id);
     try {
       const res = await firstValueFrom(
@@ -297,10 +309,10 @@ export class PluginViewComponent {
     };
   }
 
-  /** Closed catalogue of `table` row actionIds core resolves — today just jumping to a row's
-   *  own media page via its `mediaId`/`mediaType` columns; anything else renders no button. */
+  /** Resolves a `TableRowActionId` against its row — today only jumping to that row's own media
+   *  page via its `mediaId`/`mediaType` columns; anything else renders no button. */
   tableResolveAction = (actionId: string, row: TableRow): (() => void) | undefined => {
-    if (actionId !== 'table.open-media') return undefined;
+    if (!isTableRowActionId(actionId)) return undefined;
     const id = row['mediaId'];
     const type = row['mediaType'];
     // Both columns or no button: guessing the type sends a series to a movie page.

@@ -18,6 +18,7 @@ import { PluginImportController } from './plugin-import.controller';
 import { PluginsController } from './plugins.controller';
 import { PluginUiController } from './plugin-ui.controller';
 import { PluginObjectGuardsService } from './proxy/plugin-object-guards.service';
+import { PluginCountsCacheModule } from './host/plugin-counts-cache.module';
 import { PluginRouteGuard } from './proxy/plugin-route.guard';
 import { PluginProxyController } from './proxy/plugin-proxy.controller';
 import { AuthModule } from '../auth/auth.module';
@@ -36,6 +37,7 @@ import { ScheduledJobRegistryModule } from '../scheduler/scheduled-job-registry.
     SettingsModule,
     LibrariesModule,
     ScheduledJobRegistryModule,
+    PluginCountsCacheModule,
   ],
   controllers: [
     PluginLogoController,

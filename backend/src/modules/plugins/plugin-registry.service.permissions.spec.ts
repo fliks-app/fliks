@@ -1,7 +1,7 @@
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { minimalProcessManifest } from './archive/test-manifests';
-import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry } from './plugin-registry.test-helpers';
+import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry, fakeCountsCache } from './plugin-registry.test-helpers';
 import type { PluginManifest, PluginRoute } from '../../common/plugin-contract';
 
 /** A `fliks` range every test can rely on matching this repo's own `package.json` version. */
@@ -36,6 +36,7 @@ function makeService(): PluginRegistryService {
     fakeProcessService() as never,
     fakePluginJobsService() as never,
     fakeScheduledJobRegistry() as never,
+    fakeCountsCache() as never,
   );
 }
 

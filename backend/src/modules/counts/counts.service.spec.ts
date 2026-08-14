@@ -46,7 +46,7 @@ describe('CountsService.getCounts', () => {
 
   it('reflects a value pushed to the shared cache, with no cache mock in the way', async () => {
     const { service, pluginCounts } = make({ canManageRequests: false });
-    pluginCounts.set('queueActive', 4);
+    pluginCounts.set('some.plugin', 'queueActive', 4);
     const counts = await service.getCounts(user);
     expect(counts.badgeCounts.queueActive).toBe(4);
   });
@@ -56,7 +56,7 @@ describe('CountsService.getCounts', () => {
       canManageRequests: false,
       canReadMedia: false,
     });
-    pluginCounts.set('queueActive', 4);
+    pluginCounts.set('some.plugin', 'queueActive', 4);
     const counts = await service.getCounts(user);
     expect(counts.badgeCounts).not.toHaveProperty('queueActive');
   });

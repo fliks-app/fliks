@@ -8,7 +8,7 @@ import { PluginStagingService } from './plugin-staging.service';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginUiController } from './plugin-ui.controller';
 import { PluginDatabaseService } from './plugin-database.service';
-import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry } from './plugin-registry.test-helpers';
+import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry, fakeCountsCache } from './plugin-registry.test-helpers';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { PluginSource } from './entities/plugin-source.entity';
 import { buildZip, ZipEntrySpec } from './archive/zip-builder';
@@ -177,6 +177,7 @@ describe('PluginInstallService', () => {
       processService as never,
       fakePluginJobsService() as never,
       fakeScheduledJobRegistry() as never,
+      fakeCountsCache() as never,
     );
     staging = new PluginStagingService();
     pluginDb = fakePluginDb();

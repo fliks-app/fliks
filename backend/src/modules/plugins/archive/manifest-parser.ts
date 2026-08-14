@@ -36,6 +36,7 @@ const PROCESS_KEYS = new Set([
   'ingestRoots',
   'jobs',
   'permissions',
+  // Accepted so an installed plugin declaring it keeps loading; nothing reads it.
   'checklist',
 ]);
 

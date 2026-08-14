@@ -85,3 +85,33 @@ export interface PluginSpawnEnv {
  * `[A-Z0-9_]` with `_`, and prepend `FLIKS_CFG_` (see `reKeyConfig` in `supervisor/spawn-plan.ts`).
  * Not a fixed set — read whichever `FLIKS_CFG_*` names your own manifest's settings resolve to.
  */
+
+/**
+ * The deadlines and ceilings a plugin must design against. Core enforces these; a plugin that
+ * exceeds one is killed or has its call abandoned, so they belong on the published surface rather
+ * than in core's private configuration. `supervisor-deadlines.spec.ts` fails if they drift from
+ * what the supervisor actually applies.
+ */
+export const PLUGIN_DEADLINES_MS = {
+  /** From spawn to a `hello` reply. Exceeded: the child is killed and restarted. */
+  handshake: 10_000,
+  /** Interval between `health` calls, and how long each has to answer. */
+  healthInterval: 15_000,
+  healthReply: 3_000,
+  /** Ceiling on one host call, unless the method appears in {@link HOST_CALL_DEADLINE_OVERRIDES_MS}. */
+  hostCall: 8_000,
+  /** After `shutdown` is answered (or not), before SIGTERM, then before SIGKILL. */
+  shutdownRpc: 3_000,
+  sigtermGrace: 2_000,
+} as const;
+
+/** Host methods whose own work is not a lookup, so they are allowed longer than {@link PLUGIN_DEADLINES_MS.hostCall}. */
+export const HOST_CALL_DEADLINE_OVERRIDES_MS: Readonly<Record<string, number>> = {
+  'library.ingest': 30 * 60_000,
+};
+
+/** Output above this, per minute, is dropped with one warning — a plugin must rate-limit its own logs. */
+export const PLUGIN_LOG_CAP_BYTES_PER_MINUTE = 64 * 1024;
+
+/** `memoryMb`'s default when a manifest declares none. It caps the V8 old space, not the process RSS. */
+export const PLUGIN_DEFAULT_MEMORY_MB = 256;
