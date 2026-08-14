@@ -3,11 +3,15 @@ import { DataSource } from 'typeorm';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 
 export type TransferMethod = 'copy' | 'move';
 
 const DEFAULT_COMPANION_EXTS =
   '.srt,.ass,.ssa,.vtt,.idx,.sub,.nfo,.jpg,.jpeg,.png,.webp';
+
+const TEMP_PREFIX = '.fliks-tmp-';
+const STALE_TEMP_AGE_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Filesystem helper shared by the disk-import flow and the torrent-completion
@@ -36,7 +40,7 @@ export class FileTransferService {
   ): Promise<void> {
     await fsp.mkdir(path.dirname(dest), { recursive: true });
     if (method === 'copy') {
-      await fsp.copyFile(src, dest);
+      await this.atomicCopy(src, dest);
       return;
     }
     try {
@@ -48,7 +52,7 @@ export class FileTransferService {
       // the unlink fails we still consider the operation successful — the
       // dest is materialised and the orphan source is observable by the
       // admin (and a follow-up move would no-op).
-      await fsp.copyFile(src, dest);
+      await this.atomicCopy(src, dest);
       try {
         await fsp.unlink(src);
       } catch (unlinkErr) {
@@ -56,6 +60,48 @@ export class FileTransferService {
           `Source unlink failed after cross-device move: ${src} — ${(unlinkErr as Error).message}`,
         );
       }
+    }
+  }
+
+  /** The temp name must sit in `dest`'s own directory, or the promoting rename is not atomic.
+   *  Fixed length, so a long destination basename cannot push it past NAME_MAX. */
+  private async atomicCopy(src: string, dest: string): Promise<void> {
+    const destDir = path.dirname(dest);
+    const tmp = path.join(destDir, `${TEMP_PREFIX}${randomUUID()}`);
+    try {
+      await fsp.copyFile(src, tmp);
+      // An overwrite would otherwise silently reset the destination's mode to the temp file's.
+      const existingMode = await fsp
+        .stat(dest)
+        .then((s) => s.mode)
+        .catch(() => null);
+      if (existingMode !== null) await fsp.chmod(tmp, existingMode);
+      const fh = await fsp.open(tmp, 'r+');
+      try {
+        await fh.sync();
+      } finally {
+        await fh.close();
+      }
+      await fsp.rename(tmp, dest);
+    } catch (err) {
+      await fsp.unlink(tmp).catch(() => {});
+      throw err;
+    }
+    void this.reapStaleTemps(destDir);
+  }
+
+  /** A copy killed mid-flight leaves its temp behind; only ones too old to be in flight are removed. */
+  private async reapStaleTemps(destDir: string): Promise<void> {
+    try {
+      const cutoff = Date.now() - STALE_TEMP_AGE_MS;
+      for (const name of await fsp.readdir(destDir)) {
+        if (!name.startsWith(TEMP_PREFIX)) continue;
+        const full = path.join(destDir, name);
+        const stat = await fsp.stat(full).catch(() => null);
+        if (stat && stat.mtimeMs < cutoff) await fsp.unlink(full).catch(() => {});
+      }
+    } catch {
+      // reaping is opportunistic; a transfer must never fail because of it
     }
   }
 

@@ -8,7 +8,7 @@ export class PluginRegistration extends BaseEntity {
   @Column({ unique: true })
   pluginId: string;
 
-  /** Allowlist `library.ingest` paths are checked against; admin-editable after install. */
+  /** Allowlist `library.ingest` paths are checked against; manifest-derived, re-read at every activation. */
   @Column({ type: 'text', array: true, default: () => "'{}'" })
   ingestRoots: string[];
 

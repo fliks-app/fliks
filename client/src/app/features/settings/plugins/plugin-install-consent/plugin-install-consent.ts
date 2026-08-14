@@ -65,7 +65,8 @@ export class PluginInstallConsentComponent {
     this.dialogRef().nativeElement.close();
   }
 
-  /** `ui:<slot>` / `config:<id>` / `scope:<name>` / `job:<name>` / `webhook` — see `deriveCapabilities` on the backend. */
+  /** `ui:<slot>` / `config:<id>` / `scope:<name>` / `ingestroot:<path>` / `job:<name>` / `webhook`
+   *  — see `deriveCapabilities` on the backend. */
   capabilityLabel(capability: string): string {
     const separator = capability.indexOf(':');
     const prefix = separator === -1 ? capability : capability.slice(0, separator);
@@ -77,6 +78,8 @@ export class PluginInstallConsentComponent {
         return this.translate.instant('settings.plugins.consent.capability.config', { value });
       case 'scope':
         return this.translate.instant('settings.plugins.consent.capability.scope', { value });
+      case 'ingestroot':
+        return this.translate.instant('settings.plugins.consent.capability.ingestroot', { value });
       case 'job':
         return this.translate.instant('settings.plugins.consent.capability.job', { value });
       case 'webhook':

@@ -318,6 +318,7 @@ function deriveCapabilities(manifest: PluginManifest): string[] {
   if (manifest.events?.length) caps.push('webhook');
   if (manifest.kind === 'process') {
     for (const s of manifest.scopes) caps.push(`scope:${s}`);
+    for (const r of manifest.ingestRoots) caps.push(`ingestroot:${r}`);
     for (const j of manifest.jobs ?? []) caps.push(`job:${j.name}`);
   }
   return caps;

@@ -22,6 +22,11 @@ export class NoteRingBuffer {
     return this.items.shift();
   }
 
+  /** A note refused at encode time never reaches the queue, but it is still a drop. */
+  countDrop(): void {
+    this.droppedCount++;
+  }
+
   get size(): number {
     return this.items.length;
   }

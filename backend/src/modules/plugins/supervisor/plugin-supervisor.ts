@@ -392,6 +392,10 @@ export class PluginSupervisor implements OnApplicationShutdown {
     this.pluginSocketRef = socket;
     const channel = new RpcChannel(socket);
     channel.onViolation((err) => this.onViolation(err));
+    channel.onNoteDropped((note, err) => {
+      this.ring.countDrop();
+      this.opts.logBuffer.warn(`dropped note "${note.m}": ${err.message}`, `plugin:${this.opts.id}`);
+    });
     this.pluginChannel = channel;
     void this.attemptHandshake(channel);
   }
