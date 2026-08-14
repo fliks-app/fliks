@@ -274,6 +274,23 @@ read at delivery. Either way core checks https, refuses an internal address, and
 every attempt, because a name that passed at install can be repointed afterwards. Delivery is
 at-most-once with no retry; a plugin that needs retries is `process` and does its own.
 
+## Metrics
+
+`GET /plugins/metrics` (admin-gated the same way as the rest of `/plugins`) answers one entry per
+installed plugin: `{ pluginId, kind, metrics }`. `metrics` is `null` for a `data` plugin — it has no
+supervisor — and for a `process` plugin that isn't currently running: never a row of zeros that
+reads like a healthy process. For a running `process` plugin it carries:
+
+- `hostCallCount` / `hostCallFailureCount` — every inbound call across the plugin's 15 host
+  methods, counted once in `dispatchHostCall`, the single funnel all of them share.
+- `hostCallP95Ms` — p95 duration over the most recent 256 host calls, not a time window, so a
+  plugin that has been up for weeks still reports a bounded, recent figure. `null` before the first call.
+- `restartCount` — crash-triggered respawns since this plugin's supervisor last started.
+- `eventDropCount` — notes core could not deliver because the outbound ring to this plugin was full.
+- `residentSetSizeBytes` — the child's resident memory, read from `/proc/<pid>/statm` when the
+  endpoint is called, not polled in the background. `null`, never `0`, off Linux or if the child
+  isn't up — a gauge that always silently reads zero is worse than one that admits it can't answer.
+
 ## Trust and installation
 
 An archive is a ZIP with a closed set of legal entry names, size caps, and an Ed25519 signature

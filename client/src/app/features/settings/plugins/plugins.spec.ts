@@ -50,6 +50,8 @@ async function createComponent(rows: PluginSummary[] = [ROW]) {
   http.expectOne({ url: '/api/plugins', method: 'GET' }).flush(rows);
   http.expectOne({ url: '/api/plugins/sources', method: 'GET' }).flush([]);
   await settle(fixture);
+  http.expectOne({ url: '/api/plugins/metrics', method: 'GET' }).flush(rows.map((r) => ({ pluginId: r.pluginId, kind: r.kind, metrics: null })));
+  await settle(fixture);
   return { fixture, http };
 }
 
@@ -106,6 +108,8 @@ describe('PluginsSettingsComponent — enable/disable toggle', () => {
     await settle(fixture);
     http.expectOne({ url: '/api/plugins', method: 'GET' }).flush([]);
     await settle(fixture);
+    http.expectOne({ url: '/api/plugins/metrics', method: 'GET' }).flush([]);
+    await settle(fixture);
 
     // Without this the pages stay linked in the admin sidebar until a full page load.
     http.expectOne({ url: '/api/plugins/ui', method: 'GET' }).flush([]);
@@ -141,9 +145,9 @@ describe('PluginsSettingsComponent — enable/disable toggle', () => {
     expect(pre?.textContent).toContain('bad hello token');
   });
 
-  it('a row with no statusMessage renders no details toggle', async () => {
+  it('a row with no statusMessage renders no status-message details toggle', async () => {
     const { fixture } = await createComponent([{ ...ROW, statusMessage: '' }]);
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('tbody details')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('tbody details.status-message-details')).toBeNull();
   });
 });

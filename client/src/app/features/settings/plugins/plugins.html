@@ -41,7 +41,7 @@
     <p class="text-center py-12 text-base-content/50">{{ 'settings.plugins.empty' | translate }}</p>
   } @else {
     <div class="overflow-x-auto rounded-lg border border-base-200">
-      <table class="table table-zebra table-sm">
+      <table class="table table-sm">
         <thead>
           <tr>
             <th>{{ 'settings.plugins.col_plugin' | translate }}</th>
@@ -86,7 +86,7 @@
                   <p class="text-xs text-error/80 mt-1 max-w-[16rem]">{{ row.statusReason }}</p>
                 }
                 @if (row.statusMessage) {
-                  <details class="mt-1">
+                  <details class="mt-1 status-message-details">
                     <summary class="text-xs text-warning/80 cursor-pointer select-none">
                       {{ 'settings.plugins.status_message_toggle' | translate }}
                     </summary>
@@ -109,6 +109,20 @@
                 </button>
               </td>
             </tr>
+            @if (row.kind === 'process') {
+            <tr>
+              <td colspan="7" class="pt-0">
+                <details class="metrics-details">
+                  <summary class="text-xs text-base-content/60 cursor-pointer select-none">
+                    {{ 'settings.plugins.metrics.toggle' | translate }}
+                  </summary>
+                  <div class="mt-1">
+                    <app-plugin-metrics-panel [entry]="metricsEntryFor(row)" />
+                  </div>
+                </details>
+              </td>
+            </tr>
+            }
           }
         </tbody>
       </table>

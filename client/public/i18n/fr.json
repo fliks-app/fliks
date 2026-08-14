@@ -2127,6 +2127,17 @@
       "disabled_toast": "Plugin désactivé.",
       "enable_failed_but_kept": "« {{id}} » est activé mais n'a pas pu démarrer : {{reason}}",
       "toggle_error": "Impossible de mettre à jour l'état du plugin.",
+      "metrics": {
+        "toggle": "Métriques",
+        "host_calls": "Appels hôte",
+        "failed": "en échec",
+        "p95": "Latence p95",
+        "restarts": "Redémarrages",
+        "event_drops": "Événements perdus",
+        "memory": "Mémoire (RSS)",
+        "unavailable": "Indisponible",
+        "not_applicable": "Non applicable — ce plugin n'a pas de processus en cours d'exécution."
+      },
       "trust": {
         "official": "Officiel",
         "verified": "Vérifié — {{key}}",

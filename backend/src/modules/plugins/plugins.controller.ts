@@ -5,6 +5,16 @@ import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
 import { PluginWebhookDispatcherService, type WebhookTestResult } from './plugin-webhook-dispatcher.service';
 import { PluginInstallService, PluginSummary } from './plugin-install.service';
+import { PluginProcessService } from './plugin-process.service';
+import type { ProcessPluginMetrics } from './supervisor/plugin-supervisor';
+import type { PluginKind } from '../../common/plugin-contract';
+
+export interface PluginMetricsEntry {
+  pluginId: string;
+  kind: PluginKind;
+  /** Null for a `data` plugin (no supervisor) or a `process` plugin that isn't running. */
+  metrics: ProcessPluginMetrics | null;
+}
 
 @Controller('plugins')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
@@ -12,12 +22,26 @@ export class PluginsController {
   constructor(
     private readonly installService: PluginInstallService,
     private readonly dispatcher: PluginWebhookDispatcherService,
+    private readonly processService: PluginProcessService,
   ) {}
 
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   async list(): Promise<PluginSummary[]> {
     return this.installService.listInstalled();
+  }
+
+  /** Own route rather than a wider `PluginSummary`: that shape is polled by the admin list and
+   *  parsed by several clients, and must stay stable. */
+  @Get('metrics')
+  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  async metrics(): Promise<PluginMetricsEntry[]> {
+    const installed = await this.installService.listInstalled();
+    return installed.map((row) => ({
+      pluginId: row.pluginId,
+      kind: row.kind,
+      metrics: row.kind === 'process' ? this.processService.metricsOf(row.pluginId) : null,
+    }));
   }
 
   /** `process` only — flips `plugin_registrations.enabled` and starts or stops the process to match. */

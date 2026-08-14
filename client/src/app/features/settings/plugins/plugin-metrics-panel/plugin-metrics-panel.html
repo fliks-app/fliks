@@ -1,0 +1,20 @@
+@if (entry().metrics; as m) {
+  <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+    <dt class="text-base-content/60">{{ 'settings.plugins.metrics.host_calls' | translate }}</dt>
+    <dd>{{ m.hostCallCount }} ({{ m.hostCallFailureCount }} {{ 'settings.plugins.metrics.failed' | translate }})</dd>
+
+    <dt class="text-base-content/60">{{ 'settings.plugins.metrics.p95' | translate }}</dt>
+    <dd>{{ m.hostCallP95Ms !== null ? (m.hostCallP95Ms + ' ms') : ('settings.plugins.metrics.unavailable' | translate) }}</dd>
+
+    <dt class="text-base-content/60">{{ 'settings.plugins.metrics.restarts' | translate }}</dt>
+    <dd>{{ m.restartCount }}</dd>
+
+    <dt class="text-base-content/60">{{ 'settings.plugins.metrics.event_drops' | translate }}</dt>
+    <dd>{{ m.eventDropCount }}</dd>
+
+    <dt class="text-base-content/60">{{ 'settings.plugins.metrics.memory' | translate }}</dt>
+    <dd>{{ m.residentSetSizeBytes !== null ? formatBytes(m.residentSetSizeBytes) : ('settings.plugins.metrics.unavailable' | translate) }}</dd>
+  </dl>
+} @else {
+  <p class="text-xs text-base-content/50">{{ 'settings.plugins.metrics.not_applicable' | translate }}</p>
+}

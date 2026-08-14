@@ -598,6 +598,80 @@ describe('host call dispatch', () => {
     expect(sup.getState()).toBe('ready');
     client.destroy();
   }, 10_000);
+
+  it('counts a successful call and times it', async () => {
+    const hostApi = {
+      'config.get': jest.fn(() => new Promise((resolve) => setTimeout(() => resolve({ ok: true }), 20))),
+    } as unknown as PluginHostApi;
+    const sup = makeSupervisor('good', { hostApi });
+    await sup.start();
+    await waitForState(sup, 'ready');
+
+    const client = await connectAsPlugin(sup.getSocketPaths().coreSockPath);
+    await client.call('config.get', {}, 2_000);
+    client.destroy();
+
+    const metrics = sup.getMetrics();
+    expect(metrics.hostCallCount).toBe(1);
+    expect(metrics.hostCallFailureCount).toBe(0);
+    expect(metrics.hostCallP95Ms).not.toBeNull();
+    expect(metrics.hostCallP95Ms as number).toBeGreaterThanOrEqual(15);
+  }, 10_000);
+
+  it('counts a failing call as a failure and still times it', async () => {
+    const hostApi = {
+      'config.get': jest.fn().mockRejectedValue(new Error('boom')),
+    } as unknown as PluginHostApi;
+    const sup = makeSupervisor('good', { hostApi });
+    await sup.start();
+    await waitForState(sup, 'ready');
+
+    const client = await connectAsPlugin(sup.getSocketPaths().coreSockPath);
+    await expect(client.call('config.get', {}, 2_000)).rejects.toThrow(/boom/);
+    client.destroy();
+
+    const metrics = sup.getMetrics();
+    expect(metrics.hostCallCount).toBe(1);
+    expect(metrics.hostCallFailureCount).toBe(1);
+    expect(metrics.hostCallP95Ms).not.toBeNull();
+  }, 10_000);
+});
+
+describe('getMetrics — resident set size', () => {
+  it('reads a live child\'s resident size on Linux, never as a silent zero', async () => {
+    if (process.platform !== 'linux') return;
+    const sup = makeSupervisor('good');
+    await sup.start();
+    await waitForState(sup, 'ready');
+
+    const bytes = sup.getMetrics().residentSetSizeBytes;
+    expect(bytes).not.toBeNull();
+
+    // Against the kernel's own figure: `> 0` alone would pass just as happily on VmSize, which is
+    // virtual address space and runs to gigabytes for the same child.
+    const pid = (sup as unknown as { child: { pid: number } }).child.pid;
+    const status = readFileSync(`/proc/${pid}/status`, 'utf8');
+    const expectedKb = Number(/^VmRSS:\s+(\d+) kB$/m.exec(status)![1]);
+    const virtualKb = Number(/^VmSize:\s+(\d+) kB$/m.exec(status)![1]);
+    expect(virtualKb).toBeGreaterThan(expectedKb * 4); // the two are never confusable on this child
+
+    // Resident size moves under its own feet, so allow drift but not a different quantity.
+    expect(Math.abs((bytes as number) / 1024 - expectedKb)).toBeLessThan(expectedKb * 0.5);
+  }, 10_000);
+
+  it('reports unavailable rather than zero off Linux', async () => {
+    const sup = makeSupervisor('good');
+    await sup.start();
+    await waitForState(sup, 'ready');
+
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      expect(sup.getMetrics().residentSetSizeBytes).toBeNull();
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  }, 10_000);
 });
 
 describe('protocol violations', () => {

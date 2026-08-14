@@ -7,6 +7,7 @@ import {
   DEFAULT_SUPERVISOR_OPTIONS,
   PluginSupervisor,
   type PluginSupervisorOptions,
+  type ProcessPluginMetrics,
   type SupervisorState,
 } from './supervisor/plugin-supervisor';
 import { LogBufferService } from '../scheduler/log-buffer.service';
@@ -166,6 +167,11 @@ export class PluginProcessService implements OnApplicationShutdown {
 
   stateOf(pluginId: string): SupervisorState | null {
     return this.running.get(pluginId)?.supervisor.getState() ?? null;
+  }
+
+  /** Null for a plugin with no running supervisor — not started, or `data`, which has none. */
+  metricsOf(pluginId: string): ProcessPluginMetrics | null {
+    return this.running.get(pluginId)?.supervisor.getMetrics() ?? null;
   }
 
   statusMessageOf(pluginId: string): string {
