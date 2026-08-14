@@ -81,3 +81,11 @@ export function fakeScheduledJobRegistry(names: readonly string[] = []): { list:
 export function fakeCountsCache(): { forget: jest.Mock } {
   return { forget: jest.fn() };
 }
+
+/** Stands in for the `PluginSource` repo — empty by default, so a test only wires it up when the
+ *  deny-list it is asserting on actually needs one. */
+export function fakeSourceRepo(rows: Array<{ enabled: boolean; cachedCatalog: Record<string, unknown> | null }> = []): {
+  find: jest.Mock;
+} {
+  return { find: jest.fn(async ({ where }: { where?: { enabled?: boolean } } = {}) => (where?.enabled === undefined ? rows : rows.filter((r) => r.enabled === where.enabled))) };
+}

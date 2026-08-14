@@ -3,11 +3,13 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
+import { createHash } from 'crypto';
 import { PluginSource } from './entities/plugin-source.entity';
+import { PluginPackage } from './entities/plugin-package.entity';
 import { OFFICIAL_KEYS, resolveTrust, MAX_SIGNATURE_BYTES } from './archive';
 import { SUPPORTED_PLUGIN_API_VERSIONS } from '../../common/plugin-contract';
-import { CURRENT_FLIKS_VERSION } from './plugin-registry.service';
-import { parseCatalogDocument, filterCatalog, type FilteredCatalog } from './catalog/catalog';
+import { CURRENT_FLIKS_VERSION, PluginRegistryService } from './plugin-registry.service';
+import { parseCatalogDocument, filterCatalog, findDenial, type FilteredCatalog } from './catalog/catalog';
 
 const CATALOG_REQUEST_TIMEOUT_MS = 10_000;
 /** A catalog is a small JSON index of plugin metadata, nowhere near the 8 MiB
@@ -33,6 +35,9 @@ export class PluginCatalogClientService {
   constructor(
     @InjectRepository(PluginSource)
     private readonly sourceRepo: Repository<PluginSource>,
+    @InjectRepository(PluginPackage)
+    private readonly packageRepo: Repository<PluginPackage>,
+    private readonly registry: PluginRegistryService,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
@@ -89,11 +94,44 @@ export class PluginCatalogClientService {
     }
 
     const filtered: FilteredCatalog = filterCatalog(document, SUPPORTED_PLUGIN_API_VERSIONS, CURRENT_FLIKS_VERSION);
-    source.cachedCatalog = filtered as unknown as Record<string, unknown>;
+    const signedByKeyId = trust.signedByKeyId ?? null;
+    source.cachedCatalog = { ...filtered, signedByKeyId } as unknown as Record<string, unknown>;
     source.lastRefreshedAt = new Date();
     source.lastRefreshError = null;
     await this.sourceRepo.save(source);
+    if (source.enabled) await this.enforceDenyList(filtered.denyList, signedByKeyId);
     return { ok: true };
+  }
+
+  /**
+   * A revocation that just landed must not wait for a reboot: every installed package this
+   * catalogue's key vouched for is re-checked immediately, and a match is stopped and marked
+   * `failed` right away rather than merely blocked at the next install.
+   */
+  private async enforceDenyList(
+    denyList: FilteredCatalog['denyList'],
+    signedByKeyId: string | null,
+  ): Promise<void> {
+    if (denyList.length === 0 || !signedByKeyId) return;
+    const source = [{ denyList, signedByKeyId }];
+    for (const pkg of await this.packageRepo.find()) {
+      const sha256 = createHash('sha256').update(pkg.archive).digest('hex');
+      const denial = findDenial(
+        { pluginId: pkg.pluginId, version: pkg.version, sha256, verifiedByKeyId: pkg.verifiedByKeyId },
+        source,
+      );
+      if (!denial) continue;
+      this.logger.warn(`plugin "${pkg.pluginId}" revoked by catalog: ${denial.reason}`);
+      try {
+        await this.registry.revoke(pkg.pluginId, denial.reason);
+        pkg.status = 'failed';
+        pkg.statusReason = `revoked: ${denial.reason}`;
+        await this.packageRepo.save(pkg);
+      } catch (err) {
+        // One package must not abort the refresh, nor the rest of the nightly loop.
+        this.logger.warn(`could not revoke "${pkg.pluginId}": ${(err as Error).message}`);
+      }
+    }
   }
 
   private async fail(

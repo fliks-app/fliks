@@ -14,6 +14,7 @@ import { PluginPackage } from './entities/plugin-package.entity';
 import { PluginSource } from './entities/plugin-source.entity';
 import { buildZip, ZipEntrySpec } from './archive/zip-builder';
 import { generateTestKeypair, signManifestBase64 } from './archive/ed25519-test-keys';
+import { OFFICIAL_KEYS } from './archive/trust-store';
 import { minimalDataManifest, minimalProcessManifest } from './archive/test-manifests';
 import { pngLogo, sha256Hex, svgLogo } from './archive/test-fixtures';
 import { getPluginsRuntimeDir } from '../../common/constants/paths';
@@ -27,6 +28,23 @@ function signedDataArchive(overrides: Partial<DataPluginManifest> = {}): { buffe
   const manifest = minimalDataManifest({ fliks: COMPATIBLE_RANGE, ...overrides });
   const manifestBytes = Buffer.from(JSON.stringify(manifest), 'utf8');
   const { privateKey } = generateTestKeypair();
+  const sig = signManifestBase64(privateKey, manifestBytes);
+  const buffer = buildZip([
+    { name: 'plugin.json', content: manifestBytes },
+    { name: 'plugin.json.sig', content: Buffer.from(sig, 'utf8') },
+    { name: 'logo.svg', content: svgLogo() },
+  ]);
+  return { buffer, manifest };
+}
+
+/** Same shape as `signedDataArchive`, but signed with a caller-supplied key so the test can
+ *  register it as an official one and get a `signedByKeyId` the deny-list can match. */
+function signedDataArchiveWithKey(
+  privateKey: ReturnType<typeof generateTestKeypair>['privateKey'],
+  overrides: Partial<DataPluginManifest> = {},
+): { buffer: Buffer; manifest: DataPluginManifest } {
+  const manifest = minimalDataManifest({ fliks: COMPATIBLE_RANGE, ...overrides });
+  const manifestBytes = Buffer.from(JSON.stringify(manifest), 'utf8');
   const sig = signManifestBase64(privateKey, manifestBytes);
   const buffer = buildZip([
     { name: 'plugin.json', content: manifestBytes },
@@ -125,6 +143,11 @@ function fakeSource(cachedCatalog: Record<string, unknown> | null): PluginSource
   } as PluginSource;
 }
 
+/** Empty unless a test seeds `rows` with a source whose cached catalog carries a deny-list. */
+function fakeSourceRepo(rows: PluginSource[] = []) {
+  return { find: jest.fn(async () => rows.filter((s) => s.enabled)) };
+}
+
 /** Routes a GET by URL suffix, mirroring `plugin-catalog-client.service.spec.ts`'s adapter. */
 function adapterFor(responses: Record<string, Buffer | Error>) {
   return (config: AxiosRequestConfig) => {
@@ -157,6 +180,7 @@ describe('PluginInstallService', () => {
   let staging: PluginStagingService;
   let pluginDb: ReturnType<typeof fakePluginDb>;
   let settings: ReturnType<typeof fakeSettingsService>;
+  let sourceRepo: ReturnType<typeof fakeSourceRepo>;
   let service: PluginInstallService;
   const originalAdapter = axios.defaults.adapter;
 
@@ -172,8 +196,10 @@ describe('PluginInstallService', () => {
     // deletes it, so two separate fakes would make either assertion vacuous.
     registrationRepo = fakeRegistrationRepo();
     processService = fakeProcessService();
+    sourceRepo = fakeSourceRepo();
     registry = new PluginRegistryService(
       repo as never,
+      sourceRepo as never,
       registrationRepo as never,
       processService as never,
       fakePluginJobsService() as never,
@@ -186,6 +212,7 @@ describe('PluginInstallService', () => {
     service = new PluginInstallService(
       repo as never,
       registrationRepo as never,
+      sourceRepo as never,
       registry,
       staging,
       pluginDb as unknown as PluginDatabaseService,
@@ -286,6 +313,31 @@ describe('PluginInstallService', () => {
         422,
         'PLUGIN_CONTROL_CHAR',
       );
+    });
+
+    it('refuses to install a version an enabled source’s deny-list revokes, and the publisher’s reason reaches the caller', async () => {
+      const { privateKey, rawPublicKey } = generateTestKeypair();
+      (OFFICIAL_KEYS as Map<string, Buffer>).set('release-2026', rawPublicKey);
+      try {
+        const { buffer, manifest } = signedDataArchiveWithKey(privateKey, { id: 'fliks.denied' });
+        sourceRepo.find.mockResolvedValue([
+          fakeSource({ denyList: [{ pluginId: manifest.id, reason: 'known credential leak' }], signedByKeyId: 'release-2026' }),
+        ]);
+        const { stagingId, sha256 } = await service.inspectUpload(buffer);
+
+        const err = await service.confirmImport({ stagingId: stagingId!, sha256: sha256! }).catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(PluginInstallException);
+        expect((err as PluginInstallException).getStatus()).toBe(403);
+        expect((err as PluginInstallException).code).toBe('PLUGIN_DENIED');
+        expect((err as PluginInstallException).getResponse()).toEqual({
+          code: 'PLUGIN_DENIED',
+          message: 'known credential leak',
+        });
+        expect(repo.rows.get(manifest.id)).toBeUndefined();
+      } finally {
+        (OFFICIAL_KEYS as Map<string, Buffer>).clear();
+      }
     });
 
     it('promotes on success: a plugin_packages row exists and the registry has the plugin', async () => {

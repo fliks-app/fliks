@@ -26,12 +26,36 @@ export interface CatalogPluginEntry {
   versions: CatalogVersionEntry[];
 }
 
+/**
+ * A publisher-issued revocation. Absent `version` denies every version of `pluginId`; absent
+ * `sha256` denies by version alone. See docs/plugins.md for the authority rule this enforces.
+ */
+export interface CatalogDenyEntry {
+  pluginId: string;
+  version?: string;
+  sha256?: string;
+  reason: string;
+}
+
 export interface CatalogDocument {
   plugins: CatalogPluginEntry[];
+  denyList?: CatalogDenyEntry[];
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function isDenyEntry(v: unknown): v is CatalogDenyEntry {
+  return (
+    isRecord(v) &&
+    typeof v.pluginId === 'string' &&
+    v.pluginId.length > 0 &&
+    (v.version === undefined || typeof v.version === 'string') &&
+    (v.sha256 === undefined || typeof v.sha256 === 'string') &&
+    typeof v.reason === 'string' &&
+    v.reason.length > 0
+  );
 }
 
 function isVersionEntry(v: unknown): v is CatalogVersionEntry {
@@ -76,7 +100,13 @@ export function parseCatalogDocument(bytes: Buffer): CatalogDocument | null {
   if (!isRecord(json) || !Array.isArray(json.plugins) || !json.plugins.every(isPluginEntry)) {
     return null;
   }
-  return json as unknown as CatalogDocument;
+  const document: CatalogDocument = { plugins: json.plugins as CatalogPluginEntry[] };
+  // A denyList entry is untrusted the same as everything else here; a garbled one is dropped,
+  // never allowed to fail the whole (already signature-verified) document.
+  if (Array.isArray(json.denyList)) {
+    document.denyList = json.denyList.filter(isDenyEntry);
+  }
+  return document;
 }
 
 export interface HiddenVersionsSummary {
@@ -107,6 +137,9 @@ export interface FilteredCatalogEntry {
 
 export interface FilteredCatalog {
   plugins: FilteredCatalogEntry[];
+  /** Carried through unfiltered by compatibility — a denied version is denied regardless of
+   *  whether this core could otherwise install it. Always an array, never absent. */
+  denyList: CatalogDenyEntry[];
 }
 
 function isInstallable(v: CatalogVersionEntry, supportedApiVersions: readonly number[], fliksVersion: string): boolean {
@@ -138,6 +171,7 @@ export function filterCatalog(
   fliksVersion: string,
 ): FilteredCatalog {
   return {
+    denyList: document.denyList ?? [],
     plugins: document.plugins.map((entry) => {
       const installable: CatalogVersionEntry[] = [];
       const hidden: CatalogVersionEntry[] = [];
@@ -158,4 +192,48 @@ export function filterCatalog(
       };
     }),
   };
+}
+
+/** One source's cached deny-list plus the key that verified the catalogue carrying it —
+ *  the pair {@link findDenial} needs to enforce the authority rule below. */
+export interface DenyListSource {
+  denyList: CatalogDenyEntry[];
+  signedByKeyId: string | null;
+}
+
+/**
+ * Pulls `denyList`/`signedByKeyId` back out of a `PluginSource.cachedCatalog` blob — opaque
+ * jsonb, so re-validated defensively rather than trusted as already-shaped `FilteredCatalog`.
+ */
+export function extractCachedDenyList(cachedCatalog: Record<string, unknown> | null): DenyListSource {
+  if (!cachedCatalog) return { denyList: [], signedByKeyId: null };
+  const denyList = Array.isArray(cachedCatalog.denyList) ? cachedCatalog.denyList.filter(isDenyEntry) : [];
+  const signedByKeyId = typeof cachedCatalog.signedByKeyId === 'string' ? cachedCatalog.signedByKeyId : null;
+  return { denyList, signedByKeyId };
+}
+
+export interface DeniedPackage {
+  pluginId: string;
+  version: string;
+  sha256: string;
+  verifiedByKeyId: string | null;
+}
+
+/**
+ * Revocation authority is signing authority: an entry only denies a package whose
+ * `verifiedByKeyId` is the same key that verified the catalogue carrying the entry. A package
+ * nobody vouched for (`verifiedByKeyId: null`) matches no source and so is never denied.
+ */
+export function findDenial(pkg: DeniedPackage, sources: readonly DenyListSource[]): { reason: string } | null {
+  if (!pkg.verifiedByKeyId) return null;
+  for (const source of sources) {
+    if (source.signedByKeyId !== pkg.verifiedByKeyId) continue;
+    for (const entry of source.denyList) {
+      if (entry.pluginId !== pkg.pluginId) continue;
+      if (entry.version !== undefined && entry.version !== pkg.version) continue;
+      if (entry.sha256 !== undefined && entry.sha256 !== pkg.sha256) continue;
+      return { reason: entry.reason };
+    }
+  }
+  return null;
 }

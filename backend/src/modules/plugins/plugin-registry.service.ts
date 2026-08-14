@@ -3,9 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as net from 'net';
 import * as semver from 'semver';
+import { createHash } from 'crypto';
 import { pathToRegexp, type Keys } from 'path-to-regexp';
 import { CronExpressionParser } from 'cron-parser';
 import { PluginPackage, type PluginPackageStatus } from './entities/plugin-package.entity';
+import { PluginSource } from './entities/plugin-source.entity';
 import { PluginRegistration } from './entities/plugin-registration.entity';
 import { PluginProcessService, type PluginProcessStartResult } from './plugin-process.service';
 import { PluginJobsService } from './plugin-jobs.service';
@@ -34,6 +36,7 @@ import {
   type ConfigPage,
 } from '../../common/plugin-contract';
 import { OFFICIAL_KEYS, resolveTrust, readArchiveEntries, type TrustOutcome } from './archive';
+import { extractCachedDenyList, findDenial } from './catalog/catalog';
 import { i18nRoot } from './archive/manifest-parser';
 import { isInternalAddress } from './internal-address';
 import type { DomainEvent } from '../scheduler/events.service';
@@ -89,6 +92,7 @@ export interface RegisteredPlugin {
 
 export type PluginRegistrationFailureReason =
   | 'untrusted'
+  | 'revoked'
   | 'incompatible-api'
   | 'incompatible-fliks'
   | 'invalid-webhook-event'
@@ -188,6 +192,8 @@ export class PluginRegistryService implements OnModuleInit {
   constructor(
     @InjectRepository(PluginPackage)
     private readonly packageRepo: Repository<PluginPackage>,
+    @InjectRepository(PluginSource)
+    private readonly sourceRepo: Repository<PluginSource>,
     @InjectRepository(PluginRegistration)
     private readonly registrationRepo: Repository<PluginRegistration>,
     private readonly processService: PluginProcessService,
@@ -248,6 +254,9 @@ export class PluginRegistryService implements OnModuleInit {
     // L2
     const trust = await this.reverifyTrust(pkg);
     if (!trust.ok) return this.fail(pkg.pluginId, 'untrusted', trust.detail);
+
+    const denial = await this.checkDenial(pkg);
+    if (denial) return this.fail(pkg.pluginId, 'revoked', denial.reason);
 
     // L3 (re-hash plugin.js from the loaded fd) happens inside `PluginProcessService.startFor`, below.
     // L4
@@ -780,6 +789,23 @@ export class PluginRegistryService implements OnModuleInit {
       this.replacePlayer(pluginId, undefined);
     }
     return { ok: false, pluginId, reason, detail };
+  }
+
+  /** Called when a catalog refresh lands a denial for a package already registered: stops its
+   *  process and tears its live state down the same way a failed `register()` would. */
+  async revoke(pluginId: string, reason: string): Promise<void> {
+    await this.unregister(pluginId);
+    this.fail(pluginId, 'revoked', reason);
+  }
+
+  /** `enabled` catalog sources only — a disabled source's cached signature is stale trust, not authority. */
+  private async checkDenial(pkg: PluginPackage): Promise<{ reason: string } | null> {
+    const sources = await this.sourceRepo.find({ where: { enabled: true } });
+    const sha256 = createHash('sha256').update(pkg.archive).digest('hex');
+    return findDenial(
+      { pluginId: pkg.pluginId, version: pkg.version, sha256, verifiedByKeyId: pkg.verifiedByKeyId },
+      sources.map((s) => extractCachedDenyList(s.cachedCatalog)),
+    );
   }
 
   /**

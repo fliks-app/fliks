@@ -227,6 +227,45 @@ grants on the core tables it declared. It runs its own migrations. Core never re
 
 Uninstalling drops the role and the schema. Disabling does not.
 
+### Export and import
+
+`GET /api/plugins/:id/export` returns one JSON document: the plugin id, its installed version,
+every `plugin.<id>.*` setting, and every row of every table in the plugin's own schema (`data`
+plugins have no schema, so `tables` is empty). Column and table names are read from the database
+catalogue on every call, never trusted from anywhere else, and the schema queried is always
+`plugin_<id>` — never `public` and never another plugin's schema.
+
+**A table whose name begins with an underscore is yours, and core leaves it alone.** It is never
+exported, never written back, and never counted when deciding whether a schema is empty. That is
+what a migration ledger like `_migrations` is: it records which migrations have run, so restoring an
+older copy of it over a freshly-migrated schema would misstate the schema's own version.
+
+**This document is a credential-bearing artifact.** It contains whatever the plugin stored,
+including anything an operator typed into a `secret` field on a config page. Nothing is stripped
+or masked — a partial export that looks complete is worse than one that's honest about carrying
+secrets. Handle it like any other credential dump.
+
+`POST /api/plugins/:id/import` restores that document, and refuses rather than merges:
+
+- **Version mismatch** (`PLUGIN_EXPORT_VERSION_MISMATCH`, 409): the export's `pluginVersion` must
+  equal the installed version. There is no migration-diff engine here — a plugin's schema and its
+  setting keys are shaped by its own migrations, so replaying an old export onto a newer (or
+  older) version risks writing rows or keys that no longer match. Install the matching version
+  first.
+- **Schema already has rows** (`PLUGIN_SCHEMA_NOT_EMPTY`, 409): import refuses if any table in the
+  plugin's schema already holds a row, bookkeeping tables aside — a plugin that has merely migrated
+  counts as empty, which is the state a restore is meant for. A silent merge into a half-populated schema would look like
+  a complete restore without being one; uninstall and reinstall the plugin (which wipes its
+  schema) before importing.
+- **Not yet activated** (`PLUGIN_NOT_READY`, 409): the installed plugin's last activation must have
+  succeeded, since that's what proves its own migrations have run.
+
+A restore writes rows carrying their original ids, so every serial column's sequence is moved past
+the highest restored value in the same transaction. Without that the plugin's first insert after an
+apparently successful import fails on a duplicate key.
+
+Both routes are admin-only, gated the same way as the rest of `/plugins`.
+
 ## Events
 
 `events[]` names domain events. For a `data` plugin, `webhook` is either an absolute https URL or
@@ -281,6 +320,34 @@ Catalogue sources are HTTPS documents listing each plugin's installable versions
 per version; core refuses bytes whose hash does not match. Publishing a plugin means committing its
 built source into the catalogue repository, adding a version entry, and running its packaging
 workflow, which signs with the catalogue key and records the published archive's hash.
+
+## Revocation
+
+A catalogue document may also carry a `denyList`: entries of `{ pluginId, version?, sha256?, reason }`.
+Omitting `version` denies every version of `pluginId`; adding `sha256` narrows an entry to one exact
+build rather than every archive ever published under that version string. A malformed entry is
+dropped rather than failing the whole (already signature-verified) refresh.
+
+**Revocation authority is signing authority.** An entry only revokes a package whose
+`verifiedByKeyId` equals the key id that verified the deny-list's own catalogue document. A
+catalogue signed by the compiled-in release key revokes anything that key signed; a source with its
+own pinned key revokes only what *that* key signed — nothing, today, since no plugin ships signed by
+a source key yet; and an unsigned or manually-imported package (`verifiedByKeyId: null`) is
+revocable by nobody, because nobody vouched for it in the first place. This falls out of the
+existing trust model with no migration and no new authority to reason about: a catalogue's key is
+already the thing an operator chose to trust when they added the source.
+
+A denied version cannot be installed — refused with `PLUGIN_DENIED` (403), carrying the publisher's
+`reason` — and cannot register, at boot or on hot-reload, with its own `revoked` failure reason.
+Like `untrusted`, `revoked` is **not** treated as "installed but not running": its routes are torn
+down rather than left answering 503, because a revocation withdraws the authority to run at all —
+it is not reporting an outage.
+
+Latency: a revocation reaches an already-running plugin the moment the catalogue that names it
+refreshes — the daily 4am cron, or immediately on a manual refresh — never waiting for a reboot. The
+refresh that lands a new deny-list entry stops any matching installed package's process and marks
+its row `failed` with the publisher's reason right there, rather than merely blocking the next
+install.
 
 ## Operator semantics worth knowing before you rely on them
 

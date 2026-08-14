@@ -28,7 +28,7 @@ import {
 } from './archive';
 import { validateManifestShape } from './manifest-shape.validator';
 import type { TrustOutcome } from './archive/trust-store';
-import type { CatalogVersionEntry, FilteredCatalog, FilteredCatalogEntry } from './catalog/catalog';
+import { extractCachedDenyList, findDenial, type CatalogVersionEntry, type FilteredCatalog, type FilteredCatalogEntry } from './catalog/catalog';
 import { SUPPORTED_PLUGIN_API_VERSIONS, fliksRangeVersion, type PluginKind, type PluginManifest } from '../../common/plugin-contract';
 import type { ConfirmImportDto } from './dto/confirm-import.dto';
 import type { SupervisorState } from './supervisor/plugin-supervisor';
@@ -130,6 +130,8 @@ export class PluginInstallService {
     private readonly packageRepo: Repository<PluginPackage>,
     @InjectRepository(PluginRegistration)
     private readonly registrationRepo: Repository<PluginRegistration>,
+    @InjectRepository(PluginSource)
+    private readonly sourceRepo: Repository<PluginSource>,
     private readonly registry: PluginRegistryService,
     private readonly staging: PluginStagingService,
     private readonly pluginDb: PluginDatabaseService,
@@ -362,6 +364,11 @@ export class PluginInstallService {
   private async promote(buffer: Buffer, result: InspectSuccess, origin: PluginPackageOrigin): Promise<PluginInstallResult> {
     const { manifest } = result;
 
+    const denial = await this.checkDenial(manifest.id, manifest.version, result.sha256, result.signedByKeyId ?? null);
+    if (denial) {
+      throw new PluginInstallException(HttpStatus.FORBIDDEN, 'PLUGIN_DENIED', denial.reason);
+    }
+
     const existing = await this.packageRepo.findOne({ where: { pluginId: manifest.id } });
     // Going back is a legitimate operator choice and the only rollback there is, so it is recorded
     // rather than refused — the catalogue list is ordered, so it cannot be reached by accident.
@@ -465,6 +472,21 @@ export class PluginInstallService {
       if (entry === keepName || !entry.startsWith(prefix)) continue;
       rmSync(join(root, entry), { recursive: true, force: true });
     }
+  }
+
+  /** Every enabled catalog source's cached deny-list, checked against the package this install
+   *  would produce — before anything is written to disk or to `plugin_packages`. */
+  private async checkDenial(
+    pluginId: string,
+    version: string,
+    sha256: string,
+    verifiedByKeyId: string | null,
+  ): Promise<{ reason: string } | null> {
+    const sources = await this.sourceRepo.find({ where: { enabled: true } });
+    return findDenial(
+      { pluginId, version, sha256, verifiedByKeyId },
+      sources.map((s) => extractCachedDenyList(s.cachedCatalog)),
+    );
   }
 
   private async fetchArchive(zipUrl: string): Promise<Buffer> {

@@ -32,6 +32,7 @@ function repoMock(): { find: jest.Mock } {
 function makeService(): PluginRegistryService {
   return new PluginRegistryService(
     repoMock() as never,
+    { find: jest.fn().mockResolvedValue([]) } as never,
     fakeRegistrationRepo() as never,
     fakeProcessService() as never,
     fakePluginJobsService() as never,

@@ -63,6 +63,7 @@ function makeService(startResult?: PluginProcessStartResult, publishedJobNames: 
   const scheduledJobs = fakeScheduledJobRegistry(publishedJobNames);
   const service = new PluginRegistryService(
     { find: jest.fn().mockResolvedValue([]) } as never,
+    { find: jest.fn().mockResolvedValue([]) } as never,
     fakeRegistrationRepo() as never,
     processService as never,
     pluginJobs,

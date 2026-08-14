@@ -16,6 +16,8 @@ import { PluginDatabaseService } from './plugin-database.service';
 import { PluginLogoController } from './plugin-logo.controller';
 import { PluginSourcesController } from './plugin-sources.controller';
 import { PluginImportController } from './plugin-import.controller';
+import { PluginBackupController } from './plugin-backup.controller';
+import { PluginBackupService } from './plugin-backup.service';
 import { PluginsController } from './plugins.controller';
 import { PluginUiController } from './plugin-ui.controller';
 import { PluginObjectGuardsService } from './proxy/plugin-object-guards.service';
@@ -44,6 +46,7 @@ import { ScheduledJobRegistryModule } from '../scheduler/scheduled-job-registry.
     PluginLogoController,
     PluginSourcesController,
     PluginImportController,
+    PluginBackupController,
     PluginsController,
     PluginUiController,
     // Last: its `*splat` wildcard must never shadow the concrete routes above.
@@ -59,6 +62,7 @@ import { ScheduledJobRegistryModule } from '../scheduler/scheduled-job-registry.
     PluginStagingService,
     PluginInstallService,
     PluginDatabaseService,
+    PluginBackupService,
     PluginObjectGuardsService,
     PluginRouteGuard,
     PluginPreRollService,
