@@ -1,4 +1,4 @@
-import type { UiContribution } from './contribution.types';
+import type { UiContribution } from '@fliks/plugin-contract/ui';
 
 // `WhenPredicate` (mirrored from the backend contract) only lists the
 // positive spellings; the evaluator's documented "!" negation isn't part of

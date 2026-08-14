@@ -5,7 +5,7 @@ import { TvService } from '../../core/services/tv.service';
 import { CORE_SETTINGS_SECTIONS } from '../../core/plugin-ui/core-contributions';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen, type WhenContext } from '../../core/plugin-ui/when-evaluator';
-import type { UiContribution } from '../../core/plugin-ui/contribution.types';
+import type { UiContribution } from '@fliks/plugin-contract/ui';
 
 export interface ResolvedSettingsItem {
   id: string;

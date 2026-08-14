@@ -1,0 +1,28 @@
+{
+  "name": "@fliks/plugin-contract",
+  "version": "1.0.0",
+  "description": "Type definitions and protocol constants for Fliks plugins",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fliks-app/fliks.git",
+    "directory": "backend/src/common/plugin-contract"
+  },
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./ui": "./ui-contribution.ts"
+  },
+  "peerDependencies": {
+    "semver": ">=7"
+  },
+  "peerDependenciesMeta": {
+    "semver": {
+      "optional": true
+    }
+  },
+  "files": [
+    "*.ts",
+    "README.md"
+  ]
+}

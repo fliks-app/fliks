@@ -2,7 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom, of } from 'rxjs';
 import { catchError, timeout } from 'rxjs/operators';
-import type { ConfigPage, ReleasePickerRoutes, SlotId, UiContribution } from './contribution.types';
+import type { ConfigPage, ReleasePickerRoutes, SlotId, UiContribution } from '@fliks/plugin-contract/ui';
 import type { PluginUiEntry } from './plugin-ui-response';
 
 /** Bounds the boot-blocking wait: a dead plugin endpoint must never hold the splash. */

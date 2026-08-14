@@ -28,7 +28,7 @@ import {
   type FormConfigPage,
   type FormItem,
   type TableRowActionId,
-} from '../../core/plugin-ui/contribution.types';
+} from '@fliks/plugin-contract/ui';
 
 /** A manifest is untrusted JSON, so the declared union has to be re-checked at runtime. */
 function isTableRowActionId(value: string): value is TableRowActionId {

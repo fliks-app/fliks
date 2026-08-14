@@ -1,4 +1,4 @@
-import type { UiContribution } from '../../../core/plugin-ui/contribution.types';
+import type { UiContribution } from '@fliks/plugin-contract/ui';
 
 /**
  * Core's own `card.actions` items, expressed as contributions so they merge

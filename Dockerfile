@@ -8,6 +8,8 @@ WORKDIR /app
 COPY client/package.json client/package-lock.json ./
 RUN npm ci
 COPY client/ .
+# The client resolves @fliks/plugin-contract here, one level above its own root — see client/tsconfig.json.
+COPY backend/src/common/plugin-contract /backend/src/common/plugin-contract
 RUN npx ng build --configuration=production
 
 # --- Stage 2: Build backend ---

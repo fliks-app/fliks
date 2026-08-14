@@ -149,16 +149,18 @@ calls it makes, one for the notes core sends it (`hello`, `health`, `event`, `co
 release scoring, library ingest constrained to declared `ingestRoots`, event publication with a
 forced `<pluginId>.` prefix, settings read/write scoped to its own namespace.
 
-The contract types live in `backend/src/common/plugin-contract/` and are **restated** in each
-plugin repository, because a spawned plugin cannot import from core at runtime. Two guards keep
-the copies honest: a CI job diffs the client mirror against the backend's, and each plugin repo
-runs a drift checker against a sibling checkout. Compare **declarations, not just names** — a
-field that matches by name and differs by type compiles and misbehaves.
+The contract types are the `@fliks/plugin-contract` package, whose source is
+`backend/src/common/plugin-contract/`. Depend on it rather than restating it — the types are
+erased at build time, so a spawned plugin still ships no core code and still cannot import from
+core at runtime. Two entry points: `@fliks/plugin-contract` for the whole surface, and
+`@fliks/plugin-contract/ui` for the UI-contribution types alone, which pull in no dependencies and
+are what a browser bundle wants.
+
+The client consumes the same files through a tsconfig path mapping, so there is one declaration of
+each type in the tree and nothing to keep in sync.
 
 `fk-plugin-download` is the reference `process` plugin — a working implementation of everything
-in this section. Its `src/plugin.ts` answers all 7 core-initiated methods, `src/host-methods.ts`
-and `src/protocol.ts` are its own hand-kept mirrors of the contract, and
-`scripts/check-contract-drift.ts` is how it checks itself against a sibling core checkout.
+in this section, with `src/plugin.ts` answering all 7 core-initiated methods.
 
 ### Environment
 

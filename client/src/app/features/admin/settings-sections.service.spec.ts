@@ -6,7 +6,7 @@ import { DeviceService } from '../../core/services/device.service';
 import { TvService } from '../../core/services/tv.service';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
 import type { PluginUiEntry } from '../../core/plugin-ui/plugin-ui-response';
-import type { UiContribution } from '../../core/plugin-ui/contribution.types';
+import type { UiContribution } from '@fliks/plugin-contract/ui';
 
 const contribution = (id: string, weight: number, overrides: Partial<UiContribution> = {}): UiContribution => ({
   id,

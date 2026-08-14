@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
-import type { ReleasePickerPair, ReleasePickerRoutes } from '../../core/plugin-ui/contribution.types';
+import type { ReleasePickerPair, ReleasePickerRoutes } from '@fliks/plugin-contract/ui';
 
 export interface MovieRelease {
   title: string;
