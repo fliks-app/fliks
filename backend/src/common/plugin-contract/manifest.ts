@@ -1,4 +1,4 @@
-import type { UiContribution, ConfigPage, ReleasePickerRoutes } from './ui-contribution';
+import type { UiContribution, ConfigPage, ReleasePickerRoutes, PlayerDeclaration } from './ui-contribution';
 import type { PluginScope } from './principal';
 
 /**
@@ -87,6 +87,8 @@ interface PluginManifestBase {
     /** Fills core's release picker. Every route here must also be declared in
      *  `provides.routes[]`, so it carries a policy like any other. */
     releasePicker?: ReleasePickerRoutes;
+    /** `preRollRoute` must equally be one of this manifest's own `routes[]` (POST). */
+    player?: PlayerDeclaration;
   };
   /** `data`-tier outbound notifications only. */
   events?: PluginWebhookDeclaration[];

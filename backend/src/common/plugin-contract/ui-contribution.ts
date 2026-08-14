@@ -175,6 +175,24 @@ export interface ProvidersConfigPage extends ConfigPageBase {
   };
 }
 
+/** Cap on how many `preRoll` items core will ever forward from one `playback-info` call —
+ *  a plugin's route may answer more, but everything past this is dropped. */
+export const PRE_ROLL_ITEMS_MAX = 5;
+
+/** One pre-roll candidate a plugin's route may offer. It names a library file — there is no
+ *  URL and no path here — so core resolves and ACL-checks it the same way as the main item. */
+export interface PreRollItem {
+  mediaFileId: number;
+  labelKey?: string;
+  skippable?: boolean;
+}
+
+/** `ui.player` — the one POST route, declared in the manifest's own `routes[]` like
+ *  `releasePicker`'s, that core calls before playback to ask for pre-roll candidates. */
+export interface PlayerDeclaration {
+  preRollRoute: string;
+}
+
 /** One `table` filter — its current value is sent to `list` as a query param named by
  *  `key`; an empty value is omitted. Filtering itself is the plugin's job, core only forwards it. */
 export type TableFilter =
