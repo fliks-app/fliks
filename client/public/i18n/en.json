@@ -2381,6 +2381,13 @@
     "webhook_test_unconfigured": "No endpoint configured yet — nothing was sent.",
     "webhook_test_failed": "Test delivery failed: {{detail}}"
   },
+  "schema_form": {
+    "min_value": "Must be at least {{min}}.",
+    "max_value": "Must be at most {{max}}.",
+    "min_length": "Must be at least {{min}} characters.",
+    "max_length": "Must be at most {{max}} characters.",
+    "status_unset": "Not set yet"
+  },
   "provider_list": {
     "new": "New",
     "col_name": "Name",

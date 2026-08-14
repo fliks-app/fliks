@@ -2353,6 +2353,13 @@
     "webhook_test_unconfigured": "Noch kein Endpunkt konfiguriert — es wurde nichts gesendet.",
     "webhook_test_failed": "Testzustellung fehlgeschlagen: {{detail}}"
   },
+  "schema_form": {
+    "min_value": "Muss mindestens {{min}} sein.",
+    "max_value": "Darf höchstens {{max}} sein.",
+    "min_length": "Muss mindestens {{min}} Zeichen lang sein.",
+    "max_length": "Darf höchstens {{max}} Zeichen lang sein.",
+    "status_unset": "Noch nicht festgelegt"
+  },
   "provider_list": {
     "new": "Neu",
     "col_name": "Name",

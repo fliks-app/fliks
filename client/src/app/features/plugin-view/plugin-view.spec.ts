@@ -82,6 +82,69 @@ describe('PluginViewComponent', () => {
     http.verify();
   });
 
+  it('loads a `status` item from settings but never writes it back on save', async () => {
+    const { fixture, http } = createComponent(
+      { pluginId: 'fliks.a', view: 'settings' },
+      {
+        hasPlugin: () => true,
+        configPage: () => ({
+          id: 'settings',
+          labelKey: 'x',
+          fields: [
+            { key: 'apiKey', type: 'text', labelKey: 'y' },
+            { kind: 'status', labelKey: 'x.last_sync', settingKey: 'last_sync' },
+          ],
+        }),
+      },
+    );
+    fixture.detectChanges();
+    http.expectOne({ url: '/api/settings', method: 'GET' }).flush({
+      'plugin.fliks.a.apiKey': 'stored',
+      'plugin.fliks.a.last_sync': '2026-08-14',
+    });
+    await settle(fixture);
+
+    expect(fixture.componentInstance.formValue()['last_sync']).toBe('2026-08-14');
+    expect(fixture.nativeElement.textContent).toContain('x.last_sync');
+    expect(fixture.nativeElement.textContent).toContain('2026-08-14');
+
+    void fixture.componentInstance.saveForm();
+    const req = http.expectOne({ url: '/api/settings', method: 'PUT' });
+    // `last_sync` came from the same value() bag as `apiKey` but is never a declared field — a
+    // save that forwarded it anyway would race whatever the plugin itself writes there.
+    expect(req.request.body).toEqual({ data: { 'plugin.fliks.a.apiKey': 'stored' } });
+    req.flush({ ok: true });
+    await settle(fixture);
+    http.verify();
+  });
+
+  it('disables Save while a declared constraint is violated, and re-enables once it is met', async () => {
+    const { fixture, http } = createComponent(
+      { pluginId: 'fliks.a', view: 'settings' },
+      {
+        hasPlugin: () => true,
+        configPage: () => ({
+          id: 'settings',
+          labelKey: 'x',
+          fields: [{ key: 'code', type: 'text', labelKey: 'x.code', maxLength: 3 }],
+        }),
+      },
+    );
+    fixture.detectChanges();
+    http.expectOne({ url: '/api/settings', method: 'GET' }).flush({ 'plugin.fliks.a.code': 'nope' });
+    await settle(fixture);
+
+    const saveButton = Array.from(fixture.nativeElement.querySelectorAll('button')).find((b) =>
+      (b as HTMLButtonElement).textContent?.includes('common.save'),
+    ) as HTMLButtonElement;
+    expect(saveButton.disabled).toBe(true);
+
+    fixture.componentInstance.formValue.set({ code: 'ABC' });
+    fixture.detectChanges();
+    expect(saveButton.disabled).toBe(false);
+    http.verify();
+  });
+
   it('VERDICT: types a stored setting by its declared field kind — "false" is off, not a truthy string', async () => {
     const { fixture, http } = createComponent(
       { pluginId: 'fliks.a', view: 'settings' },

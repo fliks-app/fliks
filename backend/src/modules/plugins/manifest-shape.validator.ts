@@ -25,8 +25,38 @@ function isWellShapedContribution(v: unknown): boolean {
   );
 }
 
+/** A bare field carries no `kind` (or explicitly `'field'`) — anything else is a different
+ *  form item, and must not slip through as a field just because it also has key/type/labelKey. */
 function isWellShapedField(v: unknown): boolean {
-  return isRecord(v) && typeof v.key === 'string' && typeof v.type === 'string' && typeof v.labelKey === 'string';
+  return (
+    isRecord(v) &&
+    (v.kind === undefined || v.kind === 'field') &&
+    typeof v.key === 'string' &&
+    typeof v.type === 'string' &&
+    typeof v.labelKey === 'string'
+  );
+}
+
+function isWellShapedCaption(v: unknown): boolean {
+  return isRecord(v) && typeof v.textKey === 'string';
+}
+
+function isWellShapedStatus(v: unknown): boolean {
+  return isRecord(v) && typeof v.settingKey === 'string' && typeof v.labelKey === 'string';
+}
+
+/** One level only: a group's own fields must be plain input fields — `isWellShapedField`
+ *  rejects anything carrying a `kind` of its own, so a nested group is refused here. */
+function isWellShapedGroup(v: unknown): boolean {
+  return isRecord(v) && typeof v.labelKey === 'string' && Array.isArray(v.fields) && v.fields.every(isWellShapedField);
+}
+
+function isWellShapedFormItem(v: unknown): boolean {
+  if (!isRecord(v)) return false;
+  if (v.kind === 'caption') return isWellShapedCaption(v);
+  if (v.kind === 'group') return isWellShapedGroup(v);
+  if (v.kind === 'status') return isWellShapedStatus(v);
+  return isWellShapedField(v);
 }
 
 /** Each `kind` carries its own required key: the client binds them without a guard. */
@@ -34,7 +64,7 @@ function isWellShapedConfigPage(v: unknown): boolean {
   if (!isRecord(v) || typeof v.id !== 'string' || typeof v.labelKey !== 'string') return false;
   if (v.kind === 'table') return typeof v.list === 'string' && Array.isArray(v.columns);
   if (v.kind === 'providers') return typeof v.list === 'string' && typeof v.implementations === 'string';
-  return Array.isArray(v.fields) && v.fields.every(isWellShapedField);
+  return Array.isArray(v.fields) && v.fields.every(isWellShapedFormItem);
 }
 
 function isWellShapedEvent(v: unknown): boolean {

@@ -26,6 +26,7 @@ import {
   type FieldDef,
   type FormActionId,
   type FormConfigPage,
+  type FormItem,
   type TableRowActionId,
 } from '../../core/plugin-ui/contribution.types';
 
@@ -50,6 +51,21 @@ interface PluginTestConnectionResponse {
  * string "false" renders checked, and a `number` handed "60" is a string in a numeric field.
  * An unset number stays empty rather than becoming 0 — that is what "no cleanup" means.
  */
+/** A `status` item has no `fields`/`kind: 'group'` of its own to recurse into — only a bare
+ *  field or a group's own fields are operator-editable settings. */
+function flattenFields(items: readonly FormItem[]): FieldDef[] {
+  const out: FieldDef[] = [];
+  for (const item of items) {
+    if (item.kind === 'group') out.push(...item.fields);
+    else if (item.kind === undefined || item.kind === 'field') out.push(item);
+  }
+  return out;
+}
+
+function statusSettingKeys(items: readonly FormItem[]): string[] {
+  return items.filter((item) => item.kind === 'status').map((item) => item.settingKey);
+}
+
 function typedSetting(field: FieldDef, raw: string | null | undefined): string | number | boolean {
   if (field.type === 'toggle') {
     return raw === undefined || raw === null || raw === '' ? Boolean(field.default) : raw === 'true';
@@ -160,13 +176,15 @@ export class PluginViewComponent {
     });
   }
 
-  private async loadFormValue(fields: readonly FieldDef[]): Promise<void> {
+  private async loadFormValue(items: readonly FormItem[]): Promise<void> {
     this.formLoading.set(true);
     try {
       const all = await this.settingsApi.getAll();
       const prefix = `plugin.${this.pluginId()}.`;
       const value: SchemaFormValue = {};
-      for (const field of fields) value[field.key] = typedSetting(field, all[prefix + field.key]);
+      for (const field of flattenFields(items)) value[field.key] = typedSetting(field, all[prefix + field.key]);
+      // Read-only: whatever the plugin last wrote via `config.set`, keyed by its own settingKey.
+      for (const key of statusSettingKeys(items)) value[key] = all[prefix + key] ?? '';
       this.formValue.set(value);
     } finally {
       this.formLoading.set(false);
@@ -204,9 +222,14 @@ export class PluginViewComponent {
   async saveForm(): Promise<void> {
     this.formSaving.set(true);
     try {
+      const editableKeys = new Set(flattenFields(this.formPage()?.fields ?? []).map((f) => f.key));
       const prefix = `plugin.${this.pluginId()}.`;
       const patch: Record<string, string> = {};
-      for (const [k, v] of Object.entries(this.formValue())) patch[prefix + k] = String(v);
+      // A `status` key is loaded into the same value bag for display, but the plugin owns
+      // it — writing it back here would race whatever it writes via `config.set`.
+      for (const [k, v] of Object.entries(this.formValue())) {
+        if (editableKeys.has(k)) patch[prefix + k] = String(v);
+      }
       await this.settingsApi.setBulk(patch);
     } finally {
       this.formSaving.set(false);

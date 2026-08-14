@@ -148,12 +148,20 @@ export type PluginRegistrationResult = PluginRegistrationSuccess | PluginRegistr
  * tiers (P4a). L1 (`state.json` quarantine) still has no home; L3
  * (re-hashing `plugin.js` from the loaded fd) is `PluginProcessService`'s.
  */
-/** Keys a plugin declares on its `form` pages — the only values an operator can set for it. */
+/** Keys a plugin declares on its `form` pages — the only values an operator can set for it.
+ *  A `group`'s nested fields count too; `caption` and `status` carry no operator-settable key. */
 function formFieldKeys(pages: ConfigPage[]): ReadonlySet<string> {
   const keys = new Set<string>();
   for (const page of pages) {
     if (page.kind && page.kind !== 'form') continue;
-    for (const field of page.fields ?? []) if (typeof field?.key === 'string') keys.add(field.key);
+    for (const item of page.fields ?? []) {
+      if (!item) continue;
+      if (item.kind === 'group') {
+        for (const field of item.fields ?? []) if (typeof field?.key === 'string') keys.add(field.key);
+      } else if (item.kind !== 'caption' && item.kind !== 'status' && typeof item.key === 'string') {
+        keys.add(item.key);
+      }
+    }
   }
   return keys;
 }
