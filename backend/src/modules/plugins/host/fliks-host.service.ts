@@ -44,7 +44,10 @@ import {
   rankFromQualityString,
   resolveSearchTitles,
   scoreAndSortReleases,
-  titleMatchesExpectation,
+  indexTitleExpectations,
+  matchesIndexedExpectation,
+  releaseTitleTokens,
+  type TitleExpectationIndex,
   type ReleaseCandidate,
 } from '../../../common/release-scoring';
 import { parseSeasonEpisode } from '../../../common/release-parsing';
@@ -298,16 +301,24 @@ export class FliksHostImpl implements PluginHostApi {
     minAgeMinutes?: number;
   }): Promise<ReleaseMatchResult[]> {
     const library = await this.mediaRepo.find({ where: { monitored: true } });
+    // Tokenised once for the whole batch: doing it per release title is what made a full feed
+    // tens of seconds of blocking CPU.
+    const indexed = library.map((media) => ({
+      media,
+      titles: indexTitleExpectations([media.title, media.originalTitle ?? '', ...(media.alternativeTitles ?? [])]),
+    }));
     const out: ReleaseMatchResult[] = [];
     for (const entry of p.titles) {
-      out.push(await this.matchOneRelease(entry, library, p.minAgeMinutes));
+      out.push(await this.matchOneRelease(entry, indexed, p.minAgeMinutes));
+      // The unmatched path never awaits, so without this a whole feed holds core's event loop.
+      await new Promise<void>((resolve) => setImmediate(resolve));
     }
     return out;
   }
 
   private async matchOneRelease(
     entry: { id: string; title: string; publishDate: string },
-    library: Media[],
+    library: { media: Media; titles: TitleExpectationIndex }[],
     minAgeMinutes: number | undefined,
   ): Promise<ReleaseMatchResult> {
     const se = parseSeasonEpisode(entry.title);
@@ -326,13 +337,8 @@ export class FliksHostImpl implements PluginHostApi {
 
     // Identification: a title this tokenizer cannot read must claim nothing, or the first such
     // row in the library answers for every release that matches nothing else.
-    const media = library.find((m) =>
-      titleMatchesExpectation(
-        entry.title,
-        [m.title, m.originalTitle ?? '', ...(m.alternativeTitles ?? [])],
-        'no-match',
-      ),
-    );
+    const releaseTokens = releaseTitleTokens(entry.title);
+    const media = library.find((m) => matchesIndexedExpectation(releaseTokens, m.titles, 'no-match'))?.media;
     if (!media) return skip('unmatched');
     if (!media.monitored) return skip('not-monitored', media.id);
 
