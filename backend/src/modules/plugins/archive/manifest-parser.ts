@@ -1,3 +1,4 @@
+import * as path from 'path';
 import type {
   DataPluginManifest,
   PluginManifest,
@@ -108,6 +109,13 @@ export function i18nRoot(manifest: PluginManifest): string | null {
   return null;
 }
 
+/** Absolute, normalised, never a volume root. The flavour comes from the value, never from the host:
+ *  a manifest is signed once and must resolve identically wherever core runs. */
+function isValidIngestRoot(root: string): boolean {
+  const flavour = /^[a-zA-Z]:[\\/]/.test(root) ? path.win32 : path.posix;
+  return flavour.isAbsolute(root) && root === flavour.normalize(root) && flavour.dirname(root) !== root;
+}
+
 function isRouteArray(v: unknown): v is PluginRoute[] {
   return (
     Array.isArray(v) &&
@@ -136,7 +144,7 @@ function hasRequiredProcessFields(json: Record<string, unknown>): boolean {
     json.scopes.length > 0 &&
     json.scopes.every((s) => typeof s === 'string' && PLUGIN_SCOPES.has(s)) &&
     Array.isArray(json.ingestRoots) &&
-    json.ingestRoots.every((r) => typeof r === 'string')
+    json.ingestRoots.every((r) => typeof r === 'string' && isValidIngestRoot(r))
   );
 }
 

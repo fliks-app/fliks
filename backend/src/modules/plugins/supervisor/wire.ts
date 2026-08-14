@@ -10,9 +10,22 @@ export class ProtocolViolationError extends Error {
   }
 }
 
-/** One JSON object per line. */
+/** Raised when a frame we're about to send would breach MAX_FRAME_BYTES — our own fault, not the peer's. */
+export class FrameTooLargeError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = 'FrameTooLargeError';
+  }
+}
+
+/** One JSON object per line. Refuses past MAX_FRAME_BYTES rather than breaching the peer's reader. */
 export function encodeFrame(frame: Frame): Buffer {
-  return Buffer.from(JSON.stringify(frame) + '\n', 'utf8');
+  const json = JSON.stringify(frame);
+  const size = Buffer.byteLength(json, 'utf8');
+  if (size > MAX_FRAME_BYTES) {
+    throw new FrameTooLargeError(`frame of ${size} bytes exceeds the ${MAX_FRAME_BYTES} byte limit`);
+  }
+  return Buffer.from(json + '\n', 'utf8');
 }
 
 /**

@@ -67,6 +67,7 @@ describe('inspect() — happy path', () => {
     const files = { 'plugin.js': sha256Hex(pluginJs), 'logo.png': sha256Hex(logo) };
     const manifest = minimalProcessManifest(files, {
       jobs: [{ name: 'sync', cron: '0 * * * *', triggerable: true, labelKey: 'jobs.sync' }],
+      ingestRoots: ['/media/downloads'],
     });
     const { entries } = signedManifestEntries(manifest);
     const buffer = buildZip([
@@ -81,6 +82,7 @@ describe('inspect() — happy path', () => {
     expect(result.kind).toBe('process');
     expect(result.capabilities).toContain('scope:media:read');
     expect(result.capabilities).toContain('job:sync');
+    expect(result.capabilities).toContain('ingestroot:/media/downloads');
   });
 });
 

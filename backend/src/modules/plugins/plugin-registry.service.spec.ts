@@ -301,17 +301,18 @@ describe('PluginRegistryService.register()', () => {
       );
     });
 
-    it('refreshes the cached manifest on a second registration without resetting admin-edited fields', async () => {
-      const pkg = processPackage({ id: 'fliks.processreload' });
+    it('refreshes the cached manifest on a second registration, and resyncs ingestRoots so a narrower upgrade takes effect', async () => {
+      const pkg = processPackage({ id: 'fliks.processreload', ingestRoots: ['/media'] });
       const { service, registrationRepo } = makeService();
       await service.register(pkg);
-      registrationRepo.rows.get(pkg.pluginId)!.ingestRoots = ['/media/custom'];
+      // Simulates the wider grant a previous, un-narrowed version left on the row.
+      registrationRepo.rows.get(pkg.pluginId)!.ingestRoots = ['/media', '/downloads'];
 
       const second = await service.register(pkg);
 
       expect(second).toEqual({ ok: true, pluginId: pkg.pluginId });
       const row = registrationRepo.rows.get(pkg.pluginId);
-      expect(row?.ingestRoots).toEqual(['/media/custom']);
+      expect(row?.ingestRoots).toEqual(['/media']);
       expect(row?.manifest).toEqual(pkg.manifest);
     });
 

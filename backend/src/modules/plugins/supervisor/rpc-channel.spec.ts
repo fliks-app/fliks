@@ -2,6 +2,7 @@ import { createServer, connect, type Server, type Socket } from 'net';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { MAX_FRAME_BYTES } from '../../../common/plugin-contract';
 import { RpcChannel } from './rpc-channel';
 
 interface Pair {
@@ -87,6 +88,52 @@ describe('RpcChannel', () => {
     const pending = pair.client.call('health', {}, 5_000);
     pair.server.destroy();
     await expect(pending).rejects.toThrow(/closed/);
+  });
+
+  it('rejects a locally oversize request without writing it to the wire', async () => {
+    const pair = await makePair();
+    cleanup = () => teardown(pair);
+    let received = false;
+    pair.server.onRequest(async () => {
+      received = true;
+      return {};
+    });
+    const huge = 'a'.repeat(MAX_FRAME_BYTES);
+    await expect(pair.client.call('big', huge, 1_000)).rejects.toThrow(/exceeds the \d+ byte limit/);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(received).toBe(false);
+  });
+
+  it('answers an oversize result with an error frame, and the channel stays open', async () => {
+    const pair = await makePair();
+    cleanup = () => teardown(pair);
+    const huge = 'a'.repeat(MAX_FRAME_BYTES);
+    pair.server.onRequest(async () => ({ blob: huge }));
+    await expect(pair.client.call('big', {}, 1_000)).rejects.toThrow(/^ERR_RESULT_TOO_LARGE: /);
+
+    pair.server.onRequest(async () => ({ ok: true }));
+    await expect(pair.client.call('small', {}, 1_000)).resolves.toEqual({ ok: true });
+  });
+
+  it('reports an oversize note to the drop handler instead of throwing', async () => {
+    const pair = await makePair();
+    cleanup = () => teardown(pair);
+    const dropped: string[] = [];
+    pair.client.onNoteDropped((note) => dropped.push(note.m));
+    let noteReceived = false;
+    pair.server.onNote(() => {
+      noteReceived = true;
+    });
+
+    const huge = 'a'.repeat(MAX_FRAME_BYTES);
+    expect(() => pair.client.sendNote({ m: 'huge', p: huge })).not.toThrow();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(noteReceived).toBe(false);
+    expect(dropped).toEqual(['huge']);
+
+    const received = new Promise((resolve) => pair.server.onNote(resolve));
+    pair.client.sendNote({ m: 'small', p: {} });
+    await expect(received).resolves.toEqual({ m: 'small', p: {} });
   });
 
   describe('error frame codes', () => {

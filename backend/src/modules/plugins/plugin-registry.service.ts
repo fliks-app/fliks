@@ -373,7 +373,9 @@ export class PluginRegistryService implements OnModuleInit {
         manifest,
       });
     } else {
+      // Manifest-derived, and re-read at every activation: no admin edit path writes this column.
       registration.manifest = manifest;
+      registration.ingestRoots = manifest.ingestRoots;
     }
     await this.registrationRepo.save(registration);
 

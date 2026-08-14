@@ -2144,6 +2144,7 @@
           "ui": "Ajouter un élément d'interface « {{value}} »",
           "config": "Ajouter une page de réglages « {{value}} »",
           "scope": "Accès : {{value}}",
+          "ingestroot": "Ajouter des fichiers dans : {{value}}",
           "job": "Exécuter une tâche planifiée : {{value}}",
           "webhook": "S'abonner aux événements du serveur"
         },

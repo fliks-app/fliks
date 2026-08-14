@@ -2144,6 +2144,7 @@
           "ui": "Add a \"{{value}}\" interface element",
           "config": "Add a \"{{value}}\" settings page",
           "scope": "Access: {{value}}",
+          "ingestroot": "Add files under: {{value}}",
           "job": "Run a scheduled job: {{value}}",
           "webhook": "Subscribe to server events"
         },

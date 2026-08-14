@@ -120,3 +120,33 @@ describe('parseManifest — i18n namespace ownership', () => {
     expect(parseManifest(bytesOf(manifest))).not.toBeNull();
   });
 });
+
+describe('parseManifest — ingestRoots floor', () => {
+  function processManifest(ingestRoots: unknown) {
+    return {
+      ...minimalProcessManifest({ 'plugin.js': 'x', 'logo.png': 'x' }),
+      ingestRoots,
+    };
+  }
+
+  it('refuses the whole-filesystem root', () => {
+    expect(parseManifest(bytesOf(processManifest(['/'])))).toBeNull();
+  });
+
+  it('refuses a relative root', () => {
+    expect(parseManifest(bytesOf(processManifest(['media'])))).toBeNull();
+  });
+
+  it('refuses a root with a parent-directory segment', () => {
+    expect(parseManifest(bytesOf(processManifest(['/media/../etc'])))).toBeNull();
+  });
+
+  it('refuses an empty string', () => {
+    expect(parseManifest(bytesOf(processManifest(['']))))
+      .toBeNull();
+  });
+
+  it('accepts a normal absolute root', () => {
+    expect(parseManifest(bytesOf(processManifest(['/media/downloads'])))).not.toBeNull();
+  });
+});

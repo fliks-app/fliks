@@ -1,11 +1,32 @@
 import { MAX_FRAME_BYTES } from '../../../common/plugin-contract';
-import { encodeFrame, FrameReader, parseFrame, ProtocolViolationError } from './wire';
+import { encodeFrame, FrameReader, FrameTooLargeError, parseFrame, ProtocolViolationError } from './wire';
+
+/** Pads `p` so the encoded frame lands at exactly `totalBytes`. */
+function noteOfSize(totalBytes: number): { m: string; p: string } {
+  const base = { m: 'x', p: '' };
+  const baseLen = Buffer.byteLength(JSON.stringify(base), 'utf8');
+  return { m: 'x', p: 'a'.repeat(totalBytes - baseLen) };
+}
 
 describe('encodeFrame / parseFrame', () => {
   it('round-trips a Req through one line', () => {
     const line = encodeFrame({ i: 1, m: 'health', p: {} }).toString('utf8');
     expect(line.endsWith('\n')).toBe(true);
     expect(parseFrame(line.slice(0, -1))).toEqual({ i: 1, m: 'health', p: {} });
+  });
+
+  it('accepts a frame sitting right at MAX_FRAME_BYTES', () => {
+    const frame = noteOfSize(MAX_FRAME_BYTES);
+    const buf = encodeFrame(frame);
+    expect(buf.length).toBe(MAX_FRAME_BYTES + 1); // + trailing newline
+  });
+
+  it('refuses a frame one byte over MAX_FRAME_BYTES, naming the size and the limit', () => {
+    const frame = noteOfSize(MAX_FRAME_BYTES + 1);
+    expect(() => encodeFrame(frame)).toThrow(FrameTooLargeError);
+    expect(() => encodeFrame(frame)).toThrow(
+      new RegExp(`frame of ${MAX_FRAME_BYTES + 1} bytes exceeds the ${MAX_FRAME_BYTES} byte limit`),
+    );
   });
 
   it('rejects a malformed line', () => {

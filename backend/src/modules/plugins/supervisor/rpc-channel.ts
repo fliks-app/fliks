@@ -1,5 +1,12 @@
 import type { Socket } from 'net';
-import { encodeFrame, FrameReader, parseFrame, ProtocolViolationError, type Frame } from './wire';
+import {
+  encodeFrame,
+  FrameReader,
+  FrameTooLargeError,
+  parseFrame,
+  ProtocolViolationError,
+  type Frame,
+} from './wire';
 import type { Req, Res, Note } from '../../../common/plugin-contract';
 
 interface PendingCall {
@@ -52,6 +59,7 @@ export class RpcChannel {
   private requestHandler: RequestHandler | null = null;
   private noteHandler: ((note: Note) => void) | null = null;
   private violationHandler: ((err: Error) => void) | null = null;
+  private dropHandler: ((note: Note, err: FrameTooLargeError) => void) | null = null;
   private closed = false;
 
   constructor(private readonly socket: Socket) {
@@ -112,7 +120,9 @@ export class RpcChannel {
       this.write({ i: req.i, r });
     } catch (err) {
       const e = err as Error;
-      this.write({ i: req.i, e: { c: classifyHostError(e), m: e.message } });
+      const code = e instanceof FrameTooLargeError ? 'ERR_RESULT_TOO_LARGE' : classifyHostError(e);
+      // Bounded: the reason for refusing an oversize frame must not itself be one.
+      this.write({ i: req.i, e: { c: code, m: e.message.slice(0, 4096) } });
     }
   }
 
@@ -144,13 +154,31 @@ export class RpcChannel {
         reject(new Error(`timeout waiting for "${method}"`));
       }, deadlineMs);
       this.pending.set(i, { resolve: resolve as (v: unknown) => void, reject, timer });
-      this.write({ i, m: method, p: payload });
+      try {
+        this.write({ i, m: method, p: payload });
+      } catch (err) {
+        this.pending.delete(i);
+        clearTimeout(timer);
+        throw err;
+      }
     });
   }
 
-  /** Fire-and-forget. Returns false when the socket is applying backpressure (caller must queue, not retry). */
+  /** Fire-and-forget. Returns false when the socket is applying backpressure (caller must queue, not retry).
+   *  A dropped note reports true: nothing was queued, so there is no drain to wait for. */
   sendNote(note: Note): boolean {
-    return this.write(note);
+    try {
+      return this.write(note);
+    } catch (err) {
+      if (!(err instanceof FrameTooLargeError)) throw err;
+      this.dropHandler?.(note, err);
+      return true;
+    }
+  }
+
+  /** Notified when a note is refused at encode time, so the drop is counted where drops are counted. */
+  onNoteDropped(cb: (note: Note, err: FrameTooLargeError) => void): void {
+    this.dropHandler = cb;
   }
 
   destroy(): void {
