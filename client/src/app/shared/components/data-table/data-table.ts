@@ -122,6 +122,8 @@ export class DataTableComponent implements OnInit {
   }
 
   private async applyFilterChange(): Promise<void> {
+    // Disarms a still-pending debounce so an immediate caller (e.g. a select) can't double-fire it.
+    if (this.searchDebounce) clearTimeout(this.searchDebounce);
     this.page.set(1);
     await this.loadRows();
   }

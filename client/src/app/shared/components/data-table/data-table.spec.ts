@@ -297,6 +297,31 @@ describe('DataTableComponent — declared filters', () => {
     expect(fixture.componentInstance.cellLabel(fixture.componentInstance.columns()[0], 'other')).toBe('other');
   });
 
+  it('VERDICT: a select change inside the search debounce window does not double-fire the request', async () => {
+    const get = vi.fn(() => of({ data: [{ id: 1, name: 'A' }], total: 40, page: 1, pageSize: 20 }));
+    const fixture = await createComponent({ http: { get }, paged: true, filters: [SEARCH, STATUS] });
+    get.mockClear();
+
+    vi.useFakeTimers();
+    try {
+      const input = fixture.nativeElement.querySelector('input[type="search"]') as HTMLInputElement;
+      input.value = 'abc';
+      input.dispatchEvent(new Event('input'));
+
+      const select = fixture.nativeElement.querySelector('select') as HTMLSelectElement;
+      select.value = 'failed';
+      select.dispatchEvent(new Event('change'));
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The select's own reload already ran; the still-armed search timer must not fire a second one.
+      await vi.advanceTimersByTimeAsync(350);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
   it('renders no control for an unrecognised filter kind (fail closed)', async () => {
     const fixture = await createComponent({
       http: { get: () => of([{ id: 1, name: 'A' }]) },
