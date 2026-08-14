@@ -1,4 +1,4 @@
-import { deflateRawSync } from 'zlib';
+import { crc32, deflateRawSync } from 'zlib';
 
 /**
  * Byte-level ZIP assembler for the guard spec suite. Several guards
@@ -10,6 +10,8 @@ import { deflateRawSync } from 'zlib';
 export interface ZipEntrySpec {
   name: string;
   content: Buffer;
+  /** Overrides the computed checksum — only a corruption fixture needs a wrong one. */
+  declaredCrc32?: number;
   /** 0 = store, 8 = deflate. Default 0. */
   compressionMethod?: number;
   /** Default 0x0800 (UTF-8 flag) — set explicit bits to test the data-descriptor/encryption bits. */
@@ -52,6 +54,11 @@ function encodeExtraFields(fields: { id: number; data: Buffer }[]): Buffer {
   );
 }
 
+/** A real checksum unless a spec pins one: a fixture may need a deliberately wrong value. */
+function entryCrc(spec: ZipEntrySpec): number {
+  return (spec.declaredCrc32 ?? crc32(spec.content)) >>> 0;
+}
+
 function buildLocalHeader(e: BuiltEntry): Buffer {
   const { spec, nameBuf, extraBuf, compressedData } = e;
   const compressionMethod = spec.compressionMethod ?? 0;
@@ -64,7 +71,7 @@ function buildLocalHeader(e: BuiltEntry): Buffer {
   header.writeUInt16LE(compressionMethod, 8);
   header.writeUInt16LE(0, 10); // mod time
   header.writeUInt16LE(0x21, 12); // mod date — an arbitrary valid DOS date
-  header.writeUInt32LE(0, 14); // crc32 — not checked on the read path used here
+  header.writeUInt32LE(entryCrc(spec), 14);
   header.writeUInt32LE(compressedSize >>> 0, 18);
   header.writeUInt32LE(uncompressedSize >>> 0, 22);
   header.writeUInt16LE(nameBuf.length, 26);
@@ -85,7 +92,7 @@ function buildCentralDirectoryRecord(e: BuiltEntry): Buffer {
   header.writeUInt16LE(compressionMethod, 10);
   header.writeUInt16LE(0, 12); // mod time
   header.writeUInt16LE(0x21, 14); // mod date
-  header.writeUInt32LE(0, 16); // crc32
+  header.writeUInt32LE(entryCrc(spec), 16);
   header.writeUInt32LE(compressedSize >>> 0, 20);
   header.writeUInt32LE(uncompressedSize >>> 0, 24);
   header.writeUInt16LE(nameBuf.length, 28);

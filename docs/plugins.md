@@ -201,6 +201,19 @@ anyone else is `unverified` and reaches an operator behind the consent sheet's a
 `process` plugin must be signed unless its id is in `FLIKS_UNSIGNED_PLUGINS`, which exists for local
 development only.
 
+### Packaging
+
+`npm run package-plugin -- <built-plugin-dir> [-o out.fkplugin]` (from `backend/`) turns a build
+output directory — `plugin.json`, `plugin.js` for a `process` plugin, an optional `logo.svg` or
+`logo.png` — into an archive the inspector above will accept. It recomputes every `files` sha256
+itself rather than trusting the manifest, and refuses early, by name, on anything the inspector
+would refuse later: a missing `plugin.js` for a `process` manifest, a `plugin.js` present on a
+`data` one, a `logo` field that doesn't match what's on disk or whose bytes are not the format its
+name claims, a bad id or version, an oversized entry, and any file an archive may not carry (rather
+than dropping it silently and leaving you to find out at runtime). The archive it writes is always unsigned; a `process` plugin built this way installs only
+when its id is in the installing core's `FLIKS_UNSIGNED_PLUGINS`. Signing an archive for real
+distribution is a separate, later step this tool does not perform.
+
 ### Deadlines and ceilings
 
 Core enforces these; exceeding one gets your call abandoned or your process killed. They are
