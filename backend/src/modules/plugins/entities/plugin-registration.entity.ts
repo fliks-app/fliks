@@ -12,6 +12,10 @@ export class PluginRegistration extends BaseEntity {
   @Column({ type: 'text', array: true, default: () => "'{}'" })
   ingestRoots: string[];
 
+  /** The unprivileged uid this plugin's child runs as. Stable: its data directory is owned by it. */
+  @Column({ type: 'int', nullable: true, unique: true })
+  childUid: number | null;
+
   /** Scopes consented to at install, a subset of the manifest's declared `scopes`. */
   @Column({ type: 'text', array: true, default: () => "'{}'" })
   scopes: PluginScope[];

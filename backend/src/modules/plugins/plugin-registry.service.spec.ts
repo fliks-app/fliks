@@ -1,6 +1,7 @@
 jest.mock('./supervisor/pid-file', () => ({ sweepOrphans: jest.fn() }));
 
 import { PluginRegistryService } from './plugin-registry.service';
+import { PLUGIN_UID_MIN } from './supervisor/spawn-plan';
 import { PluginPackage } from './entities/plugin-package.entity';
 import { buildZip, ZipEntrySpec } from './archive/zip-builder';
 import { generateTestKeypair, signManifestBase64 } from './archive/ed25519-test-keys';
@@ -294,7 +295,7 @@ describe('PluginRegistryService.register()', () => {
       const result = await service.register(pkg);
 
       expect(result).toEqual({ ok: true, pluginId: pkg.pluginId });
-      expect(processService.startFor).toHaveBeenCalledWith(pkg);
+      expect(processService.startFor).toHaveBeenCalledWith(pkg, PLUGIN_UID_MIN);
       expect(service.get(pkg.pluginId)).toBeDefined();
       const row = registrationRepo.rows.get(pkg.pluginId);
       expect(row).toEqual(

@@ -6,6 +6,7 @@ import { RpcChannel } from './rpc-channel';
 import { pidFilePath } from './pid-file';
 import { pluginDataDir } from '../plugin-paths';
 import { PLUGIN_API_VERSION, type PluginHostApi } from '../../../common/plugin-contract';
+import { PLUGIN_CHILD_UID } from './spawn-plan';
 import {
   delay,
   makeFixtureDir,
@@ -69,6 +70,7 @@ describe('DEFAULT_SUPERVISOR_OPTIONS', () => {
   it('has these exact default values', () => {
     expect(DEFAULT_SUPERVISOR_OPTIONS).toEqual({
       pluginApi: PLUGIN_API_VERSION,
+      childUid: PLUGIN_CHILD_UID,
       memoryMb: 256,
       handshakeDeadlineMs: 10_000,
       healthIntervalMs: 15_000,
