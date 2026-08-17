@@ -27,7 +27,7 @@ export class NotificationsService {
     const row = this.repo.create({
       name: dto.name,
       type: dto.type as any,
-      settings: dto.settings ?? {},
+      settings: this.normalizeSettings(dto.type, dto.settings ?? {}),
       events: (dto.events ?? []) as NotificationEvent[],
       enabled: dto.enabled ?? true,
     });
@@ -52,7 +52,11 @@ export class NotificationsService {
     const conn = await this.findOne(id);
     if (dto.name !== undefined) conn.name = dto.name;
     if (dto.type !== undefined) conn.type = dto.type as any;
-    if (dto.settings !== undefined) conn.settings = dto.settings;
+    if (dto.settings !== undefined)
+      conn.settings = this.normalizeSettings(
+        dto.type ?? conn.type,
+        dto.settings,
+      );
     if (dto.events !== undefined)
       conn.events = dto.events as NotificationEvent[];
     if (dto.enabled !== undefined) conn.enabled = dto.enabled;
@@ -142,11 +146,14 @@ export class NotificationsService {
         case 'ntfy': {
           const url = String(s.url ?? '').replace(/\/$/, '');
           const topic = String(s.topic ?? 'fliks');
+          if (!url) throw new Error('url not configured');
           await axios.post(
             `${url}/${topic}`,
             this.formatMessage(event, payload),
             {
-              headers: { Title: `Fliks — ${event}` },
+              // Axios drops non-latin1 characters from header values, so a
+              // fancier dash here reaches ntfy as a gap. Keep it ASCII.
+              headers: { Title: `Fliks - ${event}` },
             },
           );
           break;
@@ -160,6 +167,19 @@ export class NotificationsService {
       );
       throw e;
     }
+  }
+
+  /** Only Discord and Slack address a webhook; the rest read `url`. Older
+   *  clients sent every endpoint as `webhookUrl`, so fold it in on write —
+   *  a stale cached SPA still saves a usable row. */
+  private normalizeSettings(
+    type: string,
+    settings: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (type === 'discord' || type === 'slack') return settings;
+    if (!('webhookUrl' in settings)) return settings;
+    const { webhookUrl, ...rest } = settings;
+    return { ...rest, url: rest.url ?? webhookUrl };
   }
 
   private formatMessage(
