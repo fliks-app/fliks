@@ -152,9 +152,14 @@ forced `<pluginId>.` prefix, settings read/write scoped to its own namespace.
 The contract types are the `@fliks/plugin-contract` package, whose source is
 `backend/src/common/plugin-contract/`. Depend on it rather than restating it — the types are
 erased at build time, so a spawned plugin still ships no core code and still cannot import from
-core at runtime. Two entry points: `@fliks/plugin-contract` for the whole surface, and
-`@fliks/plugin-contract/ui` for the UI-contribution types alone, which pull in no dependencies and
-are what a browser bundle wants.
+core at runtime. Three entry points: the barrel for the whole surface, `/protocol` for wire
+constants and `/ui` for the UI-contribution types, the last two dependency-free.
+
+It is deliberately **not** on any registry: compile-time-only types need no publishing step, and
+none of this repository depends on one. Each GitHub release carries the package as an installable
+tarball stamped with that release's version (`.github/workflows/plugin-contract-asset.yml`), and an
+author who already keeps a core checkout beside their plugin can point `paths` at it instead. The
+package README states both.
 
 The client consumes the same files through a tsconfig path mapping, so there is one declaration of
 each type in the tree and nothing to keep in sync. That mapping points one level above `client/`, so
