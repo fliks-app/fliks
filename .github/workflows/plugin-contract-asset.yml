@@ -1,0 +1,87 @@
+# Attaches the plugin contract to each GitHub release as an npm-installable
+# tarball, so a plugin author can depend on the types without this project
+# publishing to any registry:
+#
+#   npm i -D https://github.com/fliks-app/fliks/releases/download/v3.0.0/fliks-plugin-contract-3.0.0.tgz
+#
+# The tarball carries the CORE release version, not PLUGIN_API_VERSION: it is
+# the number an author already reasons about (their manifest's `fliks` range is
+# a core range), and it makes each asset traceable to the tree that produced it.
+# The rewrite happens here only — the committed package.json is left alone.
+#
+# Triggered by the release `published` event, which release-please raises with a
+# PAT so it can reach other workflows. `workflow_dispatch` exists to re-attach
+# an asset to an existing release without cutting a new one.
+name: Plugin contract asset
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to attach the tarball to (e.g. v3.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Resolve the release tag and version
+        id: v
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          if [ -z "$TAG" ]; then echo "::error::no release tag resolved"; exit 1; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Pack the contract at the release version
+        id: pack
+        working-directory: backend/src/common/plugin-contract
+        run: |
+          npm version --no-git-tag-version --allow-same-version "${{ steps.v.outputs.version }}"
+          npm pack --pack-destination /tmp
+          echo "tarball=/tmp/fliks-plugin-contract-${{ steps.v.outputs.version }}.tgz" >> "$GITHUB_OUTPUT"
+
+      # An asset nobody can install is worse than no asset: install it into a
+      # throwaway project outside the repo and typecheck all three entry points.
+      - name: Verify an outside project can consume it
+        run: |
+          mkdir -p /tmp/probe/src && cd /tmp/probe
+          echo '{ "name": "probe", "private": true }' > package.json
+          cat > tsconfig.json <<'EOF'
+          {
+            "compilerOptions": {
+              "strict": true, "noEmit": true, "target": "ES2022",
+              "module": "nodenext", "moduleResolution": "nodenext",
+              "allowImportingTsExtensions": true, "skipLibCheck": true
+            },
+            "include": ["src"]
+          }
+          EOF
+          cat > src/probe.ts <<'EOF'
+          import type { ProcessPluginManifest, PluginApi } from '@fliks/plugin-contract';
+          import { MAX_FRAME_BYTES, PLUGIN_API_VERSION } from '@fliks/plugin-contract/protocol';
+          import type { ConfigPage } from '@fliks/plugin-contract/ui';
+
+          export const manifest: Partial<ProcessPluginManifest> = { kind: 'process', pluginApi: PLUGIN_API_VERSION };
+          export const frameLimit: number = MAX_FRAME_BYTES;
+          export const page: ConfigPage = { kind: 'form', id: 'p', labelKey: 'p.t', fields: [] };
+          export type Api = PluginApi;
+          EOF
+          npm install --no-audit --no-fund "${{ steps.pack.outputs.tarball }}" semver @types/semver typescript
+          npx tsc --noEmit -p tsconfig.json
+
+      - name: Attach it to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ steps.v.outputs.tag }}" "${{ steps.pack.outputs.tarball }}" --clobber --repo "$GITHUB_REPOSITORY"

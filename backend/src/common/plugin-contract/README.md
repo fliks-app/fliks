@@ -1,11 +1,26 @@
 # @fliks/plugin-contract
 
 Type definitions and protocol constants for Fliks plugins. Types and constants only — no runtime
-wiring, no core code. Everything here is erased at build time, so depending on this package does
-not put anything of core inside your plugin.
+wiring, no core code. Everything here is erased at build time, so depending on it puts nothing of
+core inside your plugin.
+
+Not published to any registry, and it does not need to be: you need these at compile time only and
+never ship them. Two ways to get them.
+
+**The tarball attached to each release.** Pinned to the core version that produced it, so the number
+means something:
 
 ```bash
-npm install --save-dev @fliks/plugin-contract
+npm i -D https://github.com/fliks-app/fliks/releases/download/v3.0.0/fliks-plugin-contract-3.0.0.tgz
+```
+
+**A path mapping onto a checkout**, if you already keep the core repo beside your plugin:
+
+```json
+{ "compilerOptions": { "paths": {
+  "@fliks/plugin-contract": ["../fliks/backend/src/common/plugin-contract/index.ts"],
+  "@fliks/plugin-contract/*": ["../fliks/backend/src/common/plugin-contract/*.ts"]
+} } }
 ```
 
 ## Entry points
@@ -36,10 +51,13 @@ an unbundled `require` of this package fails at spawn. See `examples/plugin-scaf
 
 ## Versioning
 
-The package version tracks `PLUGIN_API_VERSION`, the contract revision core answers a plugin in.
-A plugin declares the revision it speaks as `pluginApi` in its manifest; core refuses a manifest
-whose revision it does not support. A new major here means a breaking change to a frozen item —
-see `docs/plugins.md` in the core repository for what is frozen and what may still move.
+Each release's tarball carries that **core** release's version — the number your manifest's `fliks`
+range already talks about. The committed `version` here is a placeholder; CI stamps the real one
+when it packs (`.github/workflows/plugin-contract-asset.yml`).
+
+What decides compatibility is `PLUGIN_API_VERSION`, the contract revision core answers a plugin in.
+A plugin declares the revision it speaks as `pluginApi`; core refuses a manifest whose revision it
+does not support, and `SUPPORTED_PLUGIN_API_VERSIONS` is the window in which you republish.
 
 ## Source
 
