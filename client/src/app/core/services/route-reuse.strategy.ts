@@ -2,6 +2,9 @@ import { Injectable } from '@angular/core';
 import { ActivatedRouteSnapshot, DetachedRouteHandle, Route, RouteReuseStrategy } from '@angular/router';
 import { Observable, Subject } from 'rxjs';
 
+/** Cap on live detached trees; a handful of libraries visited in one tab, bounding the pathological per-param leak. */
+const MAX_CACHE_SIZE = 10;
+
 /**
  * Detaches and caches the DOM of routes flagged with `data: { reuse: true }`.
  *
@@ -54,6 +57,15 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
     return `${this.idFor(cfg)}::${params}`;
   }
 
+  /** DetachedRouteHandle is opaque with no public API; componentRef is the only way to run ngOnDestroy. */
+  private destroyHandle(handle: DetachedRouteHandle): void {
+    try {
+      (handle as { componentRef?: { destroy(): void } }).componentRef?.destroy();
+    } catch {
+      // Shape mismatch must not break navigation.
+    }
+  }
+
   private idFor(route: Route): string {
     let id = this.routeIds.get(route);
     if (!id) {
@@ -71,7 +83,16 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
     const key = this.keyFor(route);
     if (!key) return;
     if (handle) {
+      const existing = this.cache.get(key);
+      if (existing && existing !== handle) this.destroyHandle(existing);
+      this.cache.delete(key);
       this.cache.set(key, handle);
+      while (this.cache.size > MAX_CACHE_SIZE) {
+        const oldestKey = this.cache.keys().next().value as string;
+        const oldest = this.cache.get(oldestKey);
+        this.cache.delete(oldestKey);
+        if (oldest && oldest !== handle) this.destroyHandle(oldest);
+      }
       this.detachedSubject.next(key);
     } else {
       this.cache.delete(key);
@@ -88,6 +109,9 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
     if (!key) return null;
     const handle = this.cache.get(key) ?? null;
     if (handle) {
+      // Re-insert to mark most-recently-used for the LRU eviction in store().
+      this.cache.delete(key);
+      this.cache.set(key, handle);
       // Microtask so the outlet has finished attaching before subscribers run
       // their refresh / focus-restore work.
       queueMicrotask(() => this.attachedSubject.next(key));
@@ -110,6 +134,7 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
 
   /** Drop every cached page (call on logout / user switch). */
   clear(): void {
+    for (const handle of this.cache.values()) this.destroyHandle(handle);
     this.cache.clear();
   }
 }
