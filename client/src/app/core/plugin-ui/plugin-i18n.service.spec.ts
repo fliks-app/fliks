@@ -79,6 +79,37 @@ describe('PluginI18nService', () => {
     expect(translate.instant('nav.plugin_item')).toBe('Item');
   });
 
+  // The merge writes through TranslateStore, which fires `onTranslationChange`. Subscribing to that
+  // here — rather than to `onLangChange` only — is what would make a language switch re-enter forever.
+  it('VERDICT: a language switch never re-enters the merge', async () => {
+    loaderData['en'] = { nav: { home: 'Home' } };
+    loaderData['fr'] = { nav: { home: 'Accueil' } };
+    const { translate, i18n } = setup({ en: { 'p.a': 'A' }, fr: { 'p.a': 'Aa' } });
+
+    let calls = 0;
+    let depth = 0;
+    let maxDepth = 0;
+    const merge = i18n.mergeIntoLang.bind(i18n);
+    i18n.mergeIntoLang = (lang: string) => {
+      calls++;
+      depth++;
+      maxDepth = Math.max(maxDepth, depth);
+      if (calls > 50) throw new Error(`runaway merge: ${calls} calls`);
+      try {
+        merge(lang);
+      } finally {
+        depth--;
+      }
+    };
+
+    i18n.init();
+    await firstValueFrom(translate.use('fr'));
+
+    expect(maxDepth).toBe(1);
+    expect(calls).toBeLessThan(10);
+    expect(translate.instant('p.a')).toBe('Aa');
+  });
+
   it('init() merges whatever is already loaded without awaiting the network', () => {
     loaderData['en'] = { nav: { home: 'Home' } };
     const { translate, i18n } = setup({ en: { 'nav.plugin_item': 'Item' } });

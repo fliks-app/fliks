@@ -311,7 +311,55 @@ export class FliksHostImpl implements PluginHostApi {
     titles: { id: string; title: string; publishDate: string }[];
     minAgeMinutes?: number;
   }): Promise<ReleaseMatchResult[]> {
-    const library = await this.mediaRepo.find({ where: { monitored: true } });
+    // createQueryBuilder, not find(): find() still joins all 4 `eager: true`
+    // Media relations even under `select`, which dominates this call's cost.
+    const rows = await this.mediaRepo
+      .createQueryBuilder('media')
+      .leftJoin('media.qualityProfile', 'qualityProfile')
+      .leftJoin('media.languageProfile', 'languageProfile')
+      .select('media.id', 'id')
+      .addSelect('media.monitored', 'monitored')
+      .addSelect('media.type', 'type')
+      .addSelect('media.title', 'title')
+      .addSelect('media.originalTitle', 'originalTitle')
+      .addSelect('media.alternativeTitles', 'alternativeTitles')
+      .addSelect('media.qualityProfileId', 'qualityProfileId')
+      .addSelect('qualityProfile.cutoff', 'qualityProfileCutoff')
+      .addSelect('qualityProfile.upgradeAllowed', 'qualityProfileUpgradeAllowed')
+      .addSelect('media.languageProfileId', 'languageProfileId')
+      .where('media.monitored = :monitored', { monitored: true })
+      .getRawMany<{
+        id: number;
+        monitored: boolean;
+        type: MediaType;
+        title: string;
+        originalTitle: string | null;
+        alternativeTitles: string[] | null;
+        qualityProfileId: number | null;
+        qualityProfileCutoff: number | null;
+        qualityProfileUpgradeAllowed: boolean | null;
+        languageProfileId: number | null;
+      }>();
+    const library: Media[] = rows.map(
+      (r) =>
+        ({
+          id: r.id,
+          monitored: r.monitored,
+          type: r.type,
+          title: r.title,
+          originalTitle: r.originalTitle,
+          alternativeTitles: r.alternativeTitles ?? [],
+          qualityProfile:
+            r.qualityProfileId == null
+              ? null
+              : {
+                  cutoff: r.qualityProfileCutoff,
+                  upgradeAllowed: r.qualityProfileUpgradeAllowed,
+                },
+          languageProfile:
+            r.languageProfileId == null ? null : { id: r.languageProfileId },
+        }) as unknown as Media,
+    );
     // Tokenised once for the whole batch: doing it per release title is what made a full feed
     // tens of seconds of blocking CPU.
     const indexed = library.map((media) => ({

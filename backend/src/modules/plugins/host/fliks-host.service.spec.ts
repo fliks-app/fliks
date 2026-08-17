@@ -33,6 +33,8 @@ function fakeQueryBuilder(rawMany: unknown[] = [], one: unknown = null) {
     'andWhere',
     'groupBy',
     'orderBy',
+    'leftJoin',
+    'innerJoin',
   ]) {
     qb[m] = jest.fn(() => qb);
   }
@@ -51,6 +53,27 @@ function fakeRepo() {
     create: jest.fn((x: unknown) => x),
     createQueryBuilder: jest.fn(() => fakeQueryBuilder()),
   };
+}
+
+/** `releases.match` reads its library via a raw query builder projection, not
+ *  `find()` — this shapes fixture `Media` objects into that raw row format. */
+function mockMonitoredLibrary(
+  mediaRepo: ReturnType<typeof fakeRepo>,
+  media: Media[],
+): void {
+  const rawMany = media.map((m) => ({
+    id: m.id,
+    monitored: m.monitored,
+    type: m.type,
+    title: m.title,
+    originalTitle: m.originalTitle,
+    alternativeTitles: m.alternativeTitles,
+    qualityProfileId: m.qualityProfile?.id ?? null,
+    qualityProfileCutoff: m.qualityProfile?.cutoff ?? null,
+    qualityProfileUpgradeAllowed: m.qualityProfile?.upgradeAllowed ?? null,
+    languageProfileId: m.languageProfile?.id ?? null,
+  }));
+  mediaRepo.createQueryBuilder.mockReturnValue(fakeQueryBuilder(rawMany));
 }
 
 function makeMedia(overrides: Record<string, unknown> = {}): Media {
@@ -581,7 +604,7 @@ describe('FliksHostImpl', () => {
       try {
         const h = makeHarness();
         const library = Array.from({ length: 30 }, (_, i) => makeMedia({ id: i + 1, title: `Library Title ${i}` }));
-        h.mediaRepo.find.mockResolvedValue(library);
+        mockMonitoredLibrary(h.mediaRepo, library);
 
         await h.host['releases.match']({
           titles: Array.from({ length: 8 }, (_, i) => ({
@@ -601,7 +624,7 @@ describe('FliksHostImpl', () => {
 
     it('hands the event loop back between titles so a whole feed does not block core', async () => {
       const h = makeHarness();
-      h.mediaRepo.find.mockResolvedValue([makeMedia({ title: 'Some Great Movie' })]);
+      mockMonitoredLibrary(h.mediaRepo, [makeMedia({ title: 'Some Great Movie' })]);
       const immediate = jest.spyOn(global, 'setImmediate');
       try {
         await h.host['releases.match']({
@@ -620,7 +643,7 @@ describe('FliksHostImpl', () => {
     it('reports unmatched, then grab, for a title that matches a missing monitored movie', async () => {
       const h = makeHarness();
       const media = makeMedia({ title: 'Some Great Movie' });
-      h.mediaRepo.find.mockResolvedValue([media]);
+      mockMonitoredLibrary(h.mediaRepo, [media]);
       h.mediaFileRepo.find.mockResolvedValue([]);
       h.autoGrab.classifyForSearch.mockReturnValue({
         mode: 'missing',
@@ -658,7 +681,7 @@ describe('FliksHostImpl', () => {
       const h = makeHarness();
       // Wholly non-Latin: it tokenizes to nothing, so it can be told apart from no release at all.
       const media = makeMedia({ title: '\u6211\u4e0d\u8fc7\u662f\u4e2a\u5927\u7f57\u91d1\u4ed9' });
-      h.mediaRepo.find.mockResolvedValue([media]);
+      mockMonitoredLibrary(h.mediaRepo, [media]);
       h.mediaFileRepo.find.mockResolvedValue([]);
       h.autoGrab.classifyForSearch.mockReturnValue({ mode: 'missing', minRankExclusive: 0, maxRankInclusive: 100 });
 
@@ -672,7 +695,7 @@ describe('FliksHostImpl', () => {
     it('skips a release fresher than minAgeMinutes', async () => {
       const h = makeHarness();
       const media = makeMedia({ title: 'Fresh Movie' });
-      h.mediaRepo.find.mockResolvedValue([media]);
+      mockMonitoredLibrary(h.mediaRepo, [media]);
       h.mediaFileRepo.find.mockResolvedValue([]);
       h.autoGrab.classifyForSearch.mockReturnValue({
         mode: 'missing',
@@ -700,7 +723,7 @@ describe('FliksHostImpl', () => {
     it('skips on-disk and unprofiled decisions with the matching reason', async () => {
       const h = makeHarness();
       const media = makeMedia({ title: 'Owned Movie' });
-      h.mediaRepo.find.mockResolvedValue([media]);
+      mockMonitoredLibrary(h.mediaRepo, [media]);
       h.mediaFileRepo.find.mockResolvedValue([]);
 
       h.autoGrab.classifyForSearch.mockReturnValue({ mode: 'skip' });
@@ -731,7 +754,7 @@ describe('FliksHostImpl', () => {
     it('flags a series episode that does not exist yet as not-available', async () => {
       const h = makeHarness();
       const media = makeMedia({ title: 'A Show', type: MediaType.SERIES });
-      h.mediaRepo.find.mockResolvedValue([media]);
+      mockMonitoredLibrary(h.mediaRepo, [media]);
       h.seasonRepo.findOne.mockResolvedValue(makeSeason());
       h.episodeRepo.findOne.mockResolvedValue(null);
 

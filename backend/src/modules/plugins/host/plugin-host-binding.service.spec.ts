@@ -17,12 +17,18 @@ function sleep(ms: number): Promise<void> {
 }
 
 function fakeRepo() {
+  const qb: Record<string, jest.Mock> = {};
+  for (const m of ['select', 'addSelect', 'where', 'leftJoin']) {
+    qb[m] = jest.fn(() => qb);
+  }
+  qb.getRawMany = jest.fn().mockResolvedValue([]);
   return {
     find: jest.fn().mockResolvedValue([]),
     findOne: jest.fn().mockResolvedValue(null),
     count: jest.fn().mockResolvedValue(0),
     save: jest.fn(),
     create: jest.fn((x: unknown) => x),
+    createQueryBuilder: jest.fn(() => qb),
   };
 }
 
