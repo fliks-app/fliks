@@ -6,7 +6,8 @@
   "private": true,
   "license": "AGPL-3.0-or-later",
   "scripts": {
-    "build": "nest build",
+    "build": "nest build && npm run verify:entrypoint",
+    "verify:entrypoint": "node -e \"require('fs').accessSync('dist/main.js')\"",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch --no-shell",
