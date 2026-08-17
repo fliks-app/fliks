@@ -62,19 +62,13 @@ describe('NotificationsSettingsComponent — endpoint settings key', () => {
     c.formToken.set('tok');
 
     c.formType.set('ntfy');
-    expect(settingsOf(c)).toEqual({
-      url: 'https://ntfy.example.com',
-      topic: 'media',
-    });
+    expect(settingsOf(c)).toMatchObject({ url: 'https://ntfy.example.com' });
 
     c.formType.set('gotify');
-    expect(settingsOf(c)).toEqual({
-      url: 'https://ntfy.example.com',
-      token: 'tok',
-    });
+    expect(settingsOf(c)).toMatchObject({ url: 'https://ntfy.example.com' });
 
     c.formType.set('webhook');
-    expect(settingsOf(c)).toEqual({ url: 'https://ntfy.example.com' });
+    expect(settingsOf(c)).toMatchObject({ url: 'https://ntfy.example.com' });
   });
 
   it('keeps discord and slack on webhookUrl', async () => {
@@ -123,5 +117,68 @@ describe('NotificationsSettingsComponent — endpoint settings key', () => {
       url: 'https://legacy.example.com',
       topic: 'old',
     });
+  });
+});
+
+describe('NotificationsSettingsComponent — provider tokens', () => {
+  it('offers a token only to the providers that can use one', async () => {
+    const c = await createComponent();
+    for (const type of ['webhook', 'gotify', 'ntfy'] as const) {
+      c.formType.set(type);
+      expect(c.supportsToken()).toBe(true);
+    }
+    for (const type of ['discord', 'slack'] as const) {
+      c.formType.set(type);
+      expect(c.supportsToken()).toBe(false);
+    }
+  });
+
+  it('sends the token for ntfy and webhook when one is set', async () => {
+    const c = await createComponent();
+    c.formWebhookUrl.set('https://ntfy.example.com');
+    c.formTopic.set('media');
+    c.formToken.set('tk_secret');
+
+    c.formType.set('ntfy');
+    expect(settingsOf(c)).toEqual({
+      url: 'https://ntfy.example.com',
+      topic: 'media',
+      token: 'tk_secret',
+    });
+
+    c.formType.set('webhook');
+    expect(settingsOf(c)).toEqual({
+      url: 'https://ntfy.example.com',
+      token: 'tk_secret',
+    });
+  });
+
+  it('omits a blank token so a public topic stores no credential', async () => {
+    const c = await createComponent();
+    c.formWebhookUrl.set('https://ntfy.sh');
+    c.formTopic.set('media');
+    c.formToken.set('   ');
+    c.formType.set('ntfy');
+
+    expect(settingsOf(c)).toEqual({ url: 'https://ntfy.sh', topic: 'media' });
+  });
+
+  it('round-trips a stored token back into the editor', async () => {
+    const c = await createComponent();
+    c.openEdit({
+      id: 1,
+      name: 'Ntfy',
+      type: 'ntfy',
+      enabled: true,
+      events: [],
+      settings: {
+        url: 'https://ntfy.example.com',
+        topic: 'media',
+        token: 'tk_secret',
+      },
+    });
+
+    expect(c.formToken()).toBe('tk_secret');
+    expect(settingsOf(c)).toMatchObject({ token: 'tk_secret' });
   });
 });

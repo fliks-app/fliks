@@ -1651,6 +1651,7 @@
       "field_webhook_url": "URL del webhook",
       "field_server_url": "URL del servidor ntfy",
       "field_token": "Token",
+      "field_token_optional": "(opcional)",
       "field_topic": "Topic",
       "field_events": "Eventos disparadores",
       "field_enabled": "Conexión activa",

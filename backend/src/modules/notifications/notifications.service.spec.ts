@@ -1,7 +1,11 @@
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
+import axios from 'axios';
 import { NotificationsService } from './notifications.service';
 import { CreateNotificationConnectionDto } from './dto/create-notification-connection.dto';
+
+jest.mock('axios');
+const mockedAxios = jest.mocked(axios);
 
 describe('NotificationsService settings normalization', () => {
   const saved: Record<string, unknown>[] = [];
@@ -114,5 +118,77 @@ describe('CreateNotificationConnectionDto validation', () => {
       settings: { webhookUrl: '   ' },
     });
     expect(errors).toContain('ntfy requires a non-empty settings.url');
+  });
+});
+
+describe('NotificationsService provider authentication', () => {
+  const serviceFor = (row: Record<string, unknown>) =>
+    new NotificationsService({
+      findOne: () => Promise.resolve({ id: 1, events: [], ...row }),
+    } as never);
+
+  const lastCall = () => {
+    const [url, body, config] = mockedAxios.post.mock.calls.at(-1) as [
+      string,
+      unknown,
+      { headers?: Record<string, string> },
+    ];
+    return { url, body, headers: config?.headers ?? {} };
+  };
+
+  beforeEach(() => {
+    mockedAxios.post.mockReset();
+    mockedAxios.post.mockResolvedValue({ status: 200 } as never);
+  });
+
+  it('authenticates an ntfy push when a token is configured', async () => {
+    const service = serviceFor({
+      type: 'ntfy',
+      settings: {
+        url: 'https://ntfy.example.com',
+        topic: 'media',
+        token: 'tk_secret',
+      },
+    });
+
+    await expect(service.testConnection(1)).resolves.toMatchObject({
+      ok: true,
+    });
+    const { url, headers } = lastCall();
+    expect(url).toBe('https://ntfy.example.com/media');
+    expect(headers.Authorization).toBe('Bearer tk_secret');
+  });
+
+  it('omits the header entirely on a public ntfy topic', async () => {
+    const service = serviceFor({
+      type: 'ntfy',
+      settings: { url: 'https://ntfy.sh', topic: 'media' },
+    });
+
+    await service.testConnection(1);
+    expect(lastCall().headers).not.toHaveProperty('Authorization');
+  });
+
+  it('keeps the ntfy title ASCII so axios does not strip it', async () => {
+    const service = serviceFor({
+      type: 'ntfy',
+      settings: { url: 'https://ntfy.sh', topic: 'media' },
+    });
+
+    await service.testConnection(1);
+    const title = lastCall().headers.Title;
+    expect(title).toBe('Fliks - health.issue');
+    // eslint-disable-next-line no-control-regex
+    expect(title).toMatch(/^[\x00-\x7F]*$/);
+  });
+
+  it('sends a bearer token on a generic webhook', async () => {
+    const service = serviceFor({
+      type: 'webhook',
+      settings: { url: 'https://hook.example.com', token: 'wh_secret' },
+    });
+
+    await service.testConnection(1);
+    expect(lastCall().headers.Authorization).toBe('Bearer wh_secret');
   });
 });

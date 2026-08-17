@@ -147,13 +147,18 @@ export class NotificationsService {
           const url = String(s.url ?? '').replace(/\/$/, '');
           const topic = String(s.topic ?? 'fliks');
           if (!url) throw new Error('url not configured');
+          const token = typeof s.token === 'string' ? s.token : '';
           await axios.post(
             `${url}/${topic}`,
             this.formatMessage(event, payload),
             {
-              // Axios drops non-latin1 characters from header values, so a
-              // fancier dash here reaches ntfy as a gap. Keep it ASCII.
-              headers: { Title: `Fliks - ${event}` },
+              headers: {
+                // Axios drops non-latin1 characters from header values, so a
+                // fancier dash here reaches ntfy as a gap. Keep it ASCII.
+                Title: `Fliks - ${event}`,
+                // A reserved topic or a deny-all server 403s without this.
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
             },
           );
           break;
