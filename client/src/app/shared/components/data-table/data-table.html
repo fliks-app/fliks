@@ -63,7 +63,7 @@
     <p class="text-center py-12 text-base-content/50">{{ emptyKey() | translate }}</p>
   } @else {
     <div class="overflow-x-auto rounded-lg border border-base-200" [class.opacity-50]="loading()">
-      <table class="table table-zebra table-sm">
+      <table class="table table-zebra">
         <thead>
           <tr>
             @for (col of columns(); track col.key) {
