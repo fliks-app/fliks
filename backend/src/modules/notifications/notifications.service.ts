@@ -27,7 +27,7 @@ export class NotificationsService {
     const row = this.repo.create({
       name: dto.name,
       type: dto.type as any,
-      settings: dto.settings ?? {},
+      settings: this.normalizeSettings(dto.type, dto.settings ?? {}),
       events: (dto.events ?? []) as NotificationEvent[],
       enabled: dto.enabled ?? true,
     });
@@ -52,7 +52,8 @@ export class NotificationsService {
     const conn = await this.findOne(id);
     if (dto.name !== undefined) conn.name = dto.name;
     if (dto.type !== undefined) conn.type = dto.type as any;
-    if (dto.settings !== undefined) conn.settings = dto.settings;
+    if (dto.settings !== undefined)
+      conn.settings = this.normalizeSettings(dto.type, dto.settings);
     if (dto.events !== undefined)
       conn.events = dto.events as NotificationEvent[];
     if (dto.enabled !== undefined) conn.enabled = dto.enabled;
@@ -141,12 +142,15 @@ export class NotificationsService {
         }
         case 'ntfy': {
           const url = String(s.url ?? '').replace(/\/$/, '');
-          const topic = String(s.topic ?? 'fliks');
+          const topic = String(s.topic || 'fliks');
+          if (!url) throw new Error('url not configured');
           await axios.post(
             `${url}/${topic}`,
             this.formatMessage(event, payload),
             {
-              headers: { Title: `Fliks — ${event}` },
+              // Axios drops non-latin1 characters from header values, so a
+              // fancier dash here reaches ntfy as a gap. Keep it ASCII.
+              headers: { Title: `Fliks - ${event}` },
             },
           );
           break;
@@ -160,6 +164,24 @@ export class NotificationsService {
       );
       throw e;
     }
+  }
+
+  /** Discord and Slack address a webhook, the others a server read from `url`.
+   *  A `webhookUrl` from any client is folded onto the key its sender reads. */
+  private normalizeSettings(
+    type: string,
+    settings: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const out = Object.fromEntries(
+      Object.entries(settings).map(([key, value]) => [
+        key,
+        typeof value === 'string' ? value.trim() : value,
+      ]),
+    );
+    if (type === 'discord' || type === 'slack') return out;
+    const { webhookUrl, ...rest } = out;
+    if (webhookUrl === undefined) return out;
+    return { ...rest, url: rest.url || webhookUrl };
   }
 
   private formatMessage(

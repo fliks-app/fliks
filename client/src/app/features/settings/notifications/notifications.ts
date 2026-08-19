@@ -20,6 +20,7 @@ interface NotificationConnection {
   type: string;
   enabled: boolean;
   events: string[];
+  settings?: Record<string, unknown>;
 }
 
 interface CreateNotificationBody {
@@ -106,9 +107,10 @@ export class NotificationsSettingsComponent implements OnInit {
     this.formName.set(nc.name);
     this.formType.set(nc.type as CreateNotificationBody['type']);
     this.formEnabled.set(nc.enabled);
-    this.formWebhookUrl.set('');
-    this.formToken.set('');
-    this.formTopic.set('');
+    const s = nc.settings ?? {};
+    this.formWebhookUrl.set(String(s['webhookUrl'] ?? s['url'] ?? ''));
+    this.formToken.set(String(s['token'] ?? ''));
+    this.formTopic.set(String(s['topic'] ?? ''));
     this.formEvents.set([...nc.events]);
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
@@ -126,14 +128,18 @@ export class NotificationsSettingsComponent implements OnInit {
 
   private buildSettings(): Record<string, unknown> {
     const type = this.formType();
-    if (type === 'discord' || type === 'slack' || type === 'webhook') {
+    if (type === 'discord' || type === 'slack') {
       return { webhookUrl: this.formWebhookUrl() };
     }
+    // These three read `url` server-side.
+    if (type === 'webhook') {
+      return { url: this.formWebhookUrl() };
+    }
     if (type === 'gotify') {
-      return { webhookUrl: this.formWebhookUrl(), token: this.formToken() };
+      return { url: this.formWebhookUrl(), token: this.formToken() };
     }
     if (type === 'ntfy') {
-      return { webhookUrl: this.formWebhookUrl(), topic: this.formTopic() };
+      return { url: this.formWebhookUrl(), topic: this.formTopic() };
     }
     return {};
   }
