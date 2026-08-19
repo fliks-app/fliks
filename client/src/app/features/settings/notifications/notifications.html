@@ -135,6 +135,11 @@
               [ngModel]="formToken()"
               (ngModelChange)="formToken.set($event)"
             />
+            @if (editingId() !== null) {
+              <span class="label-text-alt text-base-content/50">
+                {{ 'settings.notifications.token_hint' | translate }}
+              </span>
+            }
           </label>
         }
 

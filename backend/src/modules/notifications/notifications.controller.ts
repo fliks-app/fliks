@@ -9,7 +9,10 @@ import {
   UseGuards,
   ParseIntPipe,
 } from '@nestjs/common';
-import { NotificationsService } from './notifications.service';
+import {
+  NotificationsService,
+  redactNotificationSecrets,
+} from './notifications.service';
 import { CreateNotificationConnectionDto } from './dto/create-notification-connection.dto';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
@@ -23,29 +26,31 @@ export class NotificationsController {
 
   @Post()
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  create(@Body() dto: CreateNotificationConnectionDto) {
-    return this.service.create(dto);
+  async create(@Body() dto: CreateNotificationConnectionDto) {
+    return redactNotificationSecrets(await this.service.create(dto));
   }
 
+  // Redacted here, not in the service: the service's own reads are what
+  // authenticate against the provider and need the real credential.
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
-  findAll() {
-    return this.service.findAll();
+  async findAll() {
+    return (await this.service.findAll()).map(redactNotificationSecrets);
   }
 
   @Get(':id')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    return redactNotificationSecrets(await this.service.findOne(id));
   }
 
   @Put(':id')
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  update(
+  async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CreateNotificationConnectionDto,
   ) {
-    return this.service.update(id, dto);
+    return redactNotificationSecrets(await this.service.update(id, dto));
   }
 
   @Delete(':id')

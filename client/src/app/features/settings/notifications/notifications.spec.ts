@@ -62,13 +62,23 @@ describe('NotificationsSettingsComponent — endpoint settings key', () => {
     c.formToken.set('tok');
 
     c.formType.set('ntfy');
-    expect(settingsOf(c)).toMatchObject({ url: 'https://ntfy.example.com' });
+    expect(settingsOf(c)).toEqual({
+      url: 'https://ntfy.example.com',
+      topic: 'media',
+      token: 'tok',
+    });
 
     c.formType.set('gotify');
-    expect(settingsOf(c)).toMatchObject({ url: 'https://ntfy.example.com' });
+    expect(settingsOf(c)).toEqual({
+      url: 'https://ntfy.example.com',
+      token: 'tok',
+    });
 
     c.formType.set('webhook');
-    expect(settingsOf(c)).toMatchObject({ url: 'https://ntfy.example.com' });
+    expect(settingsOf(c)).toEqual({
+      url: 'https://ntfy.example.com',
+      token: 'tok',
+    });
   });
 
   it('keeps discord and slack on webhookUrl', async () => {
@@ -133,26 +143,6 @@ describe('NotificationsSettingsComponent — provider tokens', () => {
     }
   });
 
-  it('sends the token for ntfy and webhook when one is set', async () => {
-    const c = await createComponent();
-    c.formWebhookUrl.set('https://ntfy.example.com');
-    c.formTopic.set('media');
-    c.formToken.set('tk_secret');
-
-    c.formType.set('ntfy');
-    expect(settingsOf(c)).toEqual({
-      url: 'https://ntfy.example.com',
-      topic: 'media',
-      token: 'tk_secret',
-    });
-
-    c.formType.set('webhook');
-    expect(settingsOf(c)).toEqual({
-      url: 'https://ntfy.example.com',
-      token: 'tk_secret',
-    });
-  });
-
   it('omits a blank token so a public topic stores no credential', async () => {
     const c = await createComponent();
     c.formWebhookUrl.set('https://ntfy.sh');
@@ -163,7 +153,7 @@ describe('NotificationsSettingsComponent — provider tokens', () => {
     expect(settingsOf(c)).toEqual({ url: 'https://ntfy.sh', topic: 'media' });
   });
 
-  it('round-trips a stored token back into the editor', async () => {
+  it('leaves the token blank on edit, so saving keeps the stored one', async () => {
     const c = await createComponent();
     c.openEdit({
       id: 1,
@@ -171,14 +161,10 @@ describe('NotificationsSettingsComponent — provider tokens', () => {
       type: 'ntfy',
       enabled: true,
       events: [],
-      settings: {
-        url: 'https://ntfy.example.com',
-        topic: 'media',
-        token: 'tk_secret',
-      },
+      settings: { url: 'https://ntfy.example.com', topic: 'media' },
     });
 
-    expect(c.formToken()).toBe('tk_secret');
-    expect(settingsOf(c)).toMatchObject({ token: 'tk_secret' });
+    expect(c.formToken()).toBe('');
+    expect(settingsOf(c)).not.toHaveProperty('token');
   });
 });

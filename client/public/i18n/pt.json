@@ -1652,6 +1652,7 @@
       "field_server_url": "URL do servidor ntfy",
       "field_token": "Token",
       "field_token_optional": "(opcional)",
+      "token_hint": "Deixe vazio para manter o token guardado.",
       "field_topic": "Topic",
       "field_events": "Eventos acionadores",
       "field_enabled": "Ligação ativa",

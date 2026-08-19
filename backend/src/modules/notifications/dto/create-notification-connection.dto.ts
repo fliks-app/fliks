@@ -48,16 +48,12 @@ class NotificationSettingsConstraint implements ValidatorConstraintInterface {
     // Either key is accepted: the service folds `webhookUrl` onto `url` for the
     // types whose sender reads `url`.
     const endpoint = key === 'url' ? s.url || s.webhookUrl : s.webhookUrl;
-    if (!/^https?:\/\//i.test(asText(endpoint))) return false;
-    return type !== 'gotify' || Boolean(asText(s.token));
+    return /^https?:\/\//i.test(asText(endpoint));
   }
 
   defaultMessage(args: ValidationArguments): string {
     const { type } = args.object as CreateNotificationConnectionDto;
-    const key = ENDPOINT_KEY[type] ?? 'url';
-    if (type === 'gotify')
-      return `gotify requires settings.${key} to be an http(s) URL and a non-empty settings.token`;
-    return `${type} requires settings.${key} to be an http(s) URL`;
+    return `${type} requires settings.${ENDPOINT_KEY[type] ?? 'url'} to be an http(s) URL`;
   }
 }
 
