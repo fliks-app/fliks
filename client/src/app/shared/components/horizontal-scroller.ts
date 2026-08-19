@@ -77,7 +77,9 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
 
   updateArrows() {
     const el = this.scrollerEl()?.nativeElement;
-    if (!el) return;
+    // attached$ is not route-scoped, so rails of pages still held by the reuse
+    // cache get here too — reading their extents is a forced layout for nothing.
+    if (!el || !el.isConnected) return;
     this.atStart.set(el.scrollLeft <= 0);
     this.atEnd.set(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
   }

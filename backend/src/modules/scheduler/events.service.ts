@@ -227,6 +227,9 @@ interface SseEnvelope {
   event: SseEvent;
 }
 
+/** Short enough to beat the ~60s idle cut of mobile carriers and proxies. */
+const PING_INTERVAL_MS = 30_000;
+
 @Injectable()
 export class EventsService {
   private readonly log = new Logger(EventsService.name);
@@ -318,7 +321,14 @@ export class EventsService {
         subscriber.next({ data: JSON.stringify(env.event) } as MessageEvent);
       });
 
+      // Named and data-less: no client dispatches it (the spec drops an event with
+      // an empty data buffer), but the write still surfaces a dead socket.
+      const ping = setInterval(() => {
+        subscriber.next({ type: 'ping', data: '' } as MessageEvent);
+      }, PING_INTERVAL_MS);
+
       return () => {
+        clearInterval(ping);
         sub.unsubscribe();
         this.connections.delete(connectionId);
       };

@@ -1525,6 +1525,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.loading.set(false);
     }
 
+    // Everything above awaits, so a back-out mid-launch runs ngOnDestroy first and
+    // its removals would miss the listeners registered below.
+    if (this.destroyed) return;
+
     // Keyboard shortcuts
     document.addEventListener('keydown', this.onKeyDown);
 

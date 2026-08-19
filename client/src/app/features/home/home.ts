@@ -328,14 +328,11 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.detached = true;
       this.scrollMemory.deactivateIf(HomeComponent.SCROLL_KEY);
     });
-    // Native app-resume: when the app returns to the foreground after a spell
-    // in the background and home is the page on screen, refresh it. Same
-    // two-pass SWR as the reuse-attach path — cached signals stay visible for
-    // an instant repaint, then a forced round-trip pulls fresh data.
+    // Native app-resume: refresh home when it is the page on screen. Forced only
+    // — its signals are still rendered, so a cache-first pass would repaint nothing.
     this.resumeSub = this.appResume.resume$.subscribe(() => {
       if (this.detached) return;
-      void this.loadAllSections();
-      queueMicrotask(() => void this.loadAllSections({ force: true }));
+      void this.loadAllSections({ force: true });
     });
   }
 
