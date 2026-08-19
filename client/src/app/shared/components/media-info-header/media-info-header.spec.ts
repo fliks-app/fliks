@@ -74,6 +74,9 @@ interface MediaFixture {
    *  default) — profile/library editing and deletion requests don't exist at
    *  per-episode granularity. When true, those two inputs are left unset here too. */
   episodeInstance?: boolean;
+  /** Playback-state rows keyed by episodeId (0 = media-level), served to the
+   *  header's `getPlaybackState` stub. Absent key → no row, like the API. */
+  playbackStates?: Record<number, { positionSeconds: number; durationSeconds: number; completed: boolean; mediaFileId: number } | undefined>;
 }
 
 async function createFixture(
@@ -138,7 +141,13 @@ async function createFixture(
       },
       { provide: TrackManagerService, useValue: { saveAudioSelection: () => {}, saveSubtitleSelection: () => {} } },
       { provide: PlayableMediaService, useValue: { loadWatchedState: () => Promise.resolve(watched) } },
-      { provide: StreamingApiService, useValue: { getPlaybackState: () => Promise.resolve(null) } },
+      {
+        provide: StreamingApiService,
+        useValue: {
+          getPlaybackState: (_mediaId: number, episodeId?: number) =>
+            Promise.resolve(media.playbackStates?.[episodeId ?? 0] ?? null),
+        },
+      },
       {
         provide: PluginUiRegistryService,
         useValue: { contributionsFor: (slot: SlotId) => media.registry?.[slot] ?? [] },
@@ -597,5 +606,34 @@ describe('MediaInfoHeaderComponent — release-picker actions are plugin-contrib
       releasesLoading: true,
     });
     expect(dropdownButtons(busy.nativeElement)[grabIdx].disabled).toBe(true);
+  });
+});
+
+describe('MediaInfoHeaderComponent — resume state across an episode switch', () => {
+  const SERIES_EPISODE: MediaFixture = {
+    mediaType: 'series',
+    episodeId: 3,
+    selectedFileId: null,
+    monitored: true,
+    qualityProfileName: 'HD-1080p',
+    episodeInstance: true,
+    // Only episode 3 was ever played: 33:12 of a 61-minute episode.
+    playbackStates: {
+      3: { positionSeconds: 1992, durationSeconds: 3660, completed: false, mediaFileId: 30 },
+    },
+  };
+
+  it('drops the previous episode progress when the header switches episode', async () => {
+    const fixture = await createFixture(OWNER, SERIES_EPISODE);
+    expect(fixture.componentInstance.resumePositionSeconds()).toBe(1992);
+
+    fixture.componentRef.setInput('episodeId', 4);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // Episode 4 has no playback row — nothing to resume, no progress bar.
+    expect(fixture.componentInstance.resumePositionSeconds()).toBeNull();
+    expect(fixture.componentInstance.durationSeconds()).toBeNull();
   });
 });
