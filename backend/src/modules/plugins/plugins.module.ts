@@ -10,6 +10,7 @@ import { PluginProcessService } from './plugin-process.service';
 import { PluginJobsService } from './plugin-jobs.service';
 import { PluginProcessEventDispatcherService } from './plugin-process-event-dispatcher.service';
 import { PluginCatalogClientService } from './plugin-catalog-client.service';
+import { PluginAutoUpdateService } from './plugin-auto-update.service';
 import { PluginStagingService } from './plugin-staging.service';
 import { PluginInstallService } from './plugin-install.service';
 import { PluginDatabaseService } from './plugin-database.service';
@@ -59,6 +60,7 @@ import { ScheduledJobRegistryModule } from '../scheduler/scheduled-job-registry.
     PluginJobsService,
     PluginProcessEventDispatcherService,
     PluginCatalogClientService,
+    PluginAutoUpdateService,
     PluginStagingService,
     PluginInstallService,
     PluginDatabaseService,
@@ -74,6 +76,7 @@ import { ScheduledJobRegistryModule } from '../scheduler/scheduled-job-registry.
     PluginJobsService,
     PluginPreRollService,
     PluginCatalogClientService,
+    PluginAutoUpdateService,
   ],
 })
 export class PluginsModule {}

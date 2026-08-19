@@ -24,6 +24,7 @@ import {
 } from '../../../core/services/api/plugins-api.service';
 import { PluginInstallConsentComponent } from './plugin-install-consent/plugin-install-consent';
 import { PluginSourcesComponent } from './plugin-sources/plugin-sources';
+import { PluginSettingsComponent } from './plugin-settings/plugin-settings';
 import { PluginMetricsPanelComponent } from './plugin-metrics-panel/plugin-metrics-panel';
 import { trustBadgeFor } from './plugin-trust';
 
@@ -36,6 +37,7 @@ import { trustBadgeFor } from './plugin-trust';
     DropdownMenuComponent,
     ToggleFieldComponent,
     PluginInstallConsentComponent,
+    PluginSettingsComponent,
     PluginSourcesComponent,
     PluginMetricsPanelComponent,
   ],
@@ -52,6 +54,7 @@ export class PluginsSettingsComponent implements OnInit {
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
   private readonly consentSheet = viewChild<PluginInstallConsentComponent>('consentSheet');
   private readonly sourcesDialog = viewChild<PluginSourcesComponent>('sourcesDialog');
+  private readonly settingsDialog = viewChild<PluginSettingsComponent>('settingsDialog');
 
   readonly rows = signal<PluginSummary[]>([]);
   readonly metricsByPluginId = signal<Map<string, PluginMetricsEntry>>(new Map());
@@ -123,6 +126,10 @@ export class PluginsSettingsComponent implements OnInit {
 
   openSources(): void {
     this.sourcesDialog()?.open();
+  }
+
+  openSettings(): void {
+    void this.settingsDialog()?.open();
   }
 
   async onInstalled(result: PluginInstallResult): Promise<void> {

@@ -20,6 +20,9 @@
         <button type="button" class="dropdown-item text-white" (click)="openSources()">
           {{ 'settings.plugins.sources.manage_button' | translate }}
         </button>
+        <button type="button" class="dropdown-item text-white" (click)="openSettings()">
+          {{ 'settings.plugins.settings.title' | translate }}
+        </button>
         <button type="button" class="dropdown-item text-white" [disabled]="uploading()" (click)="pickFile()">
           @if (uploading()) {
             <span class="loading loading-spinner loading-xs"></span>
@@ -130,6 +133,7 @@
   }
 
   <app-plugin-sources #sourcesDialog />
+  <app-plugin-settings #settingsDialog />
 </div>
 
 <app-plugin-install-consent #consentSheet (installed)="onInstalled($event)" />

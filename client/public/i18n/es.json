@@ -2220,7 +2220,14 @@
       },
       "status_disabled": "Desactivado",
       "status_unavailable": "No disponible",
-      "status_message_toggle": "Ver los detalles"
+      "status_message_toggle": "Ver los detalles",
+      "settings": {
+        "title": "Ajustes",
+        "subtitle": "Gestión de los plugins instalados por Fliks.",
+        "auto_update": "Actualizar los plugins automáticamente",
+        "auto_update_hint": "Una vez al día, tras actualizar las fuentes, instala la versión más reciente ofrecida para un plugin instalado. Solo se instala sin intervención un archivo firmado por el catálogo de la fuente: el resto requiere tu confirmación.",
+        "saved": "Ajustes de plugins guardados"
+      }
     }
   },
   "roles": {

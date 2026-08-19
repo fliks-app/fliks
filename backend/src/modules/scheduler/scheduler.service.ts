@@ -30,6 +30,7 @@ import { CORE_TRIGGER_ONLY_JOB_NAMES, CoreSchedulerJobName, PLUGIN_SOURCE_REFRES
 import { PluginJobsService } from '../plugins/plugin-jobs.service';
 import { ScheduledJobRegistry } from './scheduled-job-registry.service';
 import { PluginCatalogClientService } from '../plugins/plugin-catalog-client.service';
+import { PluginAutoUpdateService } from '../plugins/plugin-auto-update.service';
 import { runAuditedCommand } from './command-audit.util';
 
 /** Yield the event loop so HTTP requests aren't starved by bulk tasks. */
@@ -58,6 +59,7 @@ export class SchedulerService implements OnModuleInit {
     private readonly pluginJobs: PluginJobsService,
     private readonly jobRegistry: ScheduledJobRegistry,
     private readonly catalogClient: PluginCatalogClientService,
+    private readonly pluginAutoUpdate: PluginAutoUpdateService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -129,9 +131,11 @@ export class SchedulerService implements OnModuleInit {
    *  like every other scheduled job. */
   @Cron(PLUGIN_SOURCE_REFRESH_CRON)
   async refreshPluginSources(): Promise<void> {
-    return this.runCommand('RefreshPluginSources', 'scheduled', () =>
-      this.catalogClient.refreshAll(),
-    );
+    return this.runCommand('RefreshPluginSources', 'scheduled', async () => {
+      await this.catalogClient.refreshAll();
+      // Reads the freshly cached catalogs; a no-op unless an admin opted in.
+      await this.pluginAutoUpdate.run();
+    });
   }
 
   // ---------------------------------------------------------------------------
