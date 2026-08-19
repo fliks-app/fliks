@@ -2220,7 +2220,14 @@
       },
       "status_disabled": "Desativado",
       "status_unavailable": "Indisponível",
-      "status_message_toggle": "Ver os detalhes"
+      "status_message_toggle": "Ver os detalhes",
+      "settings": {
+        "title": "Definições",
+        "subtitle": "Como o Fliks gere os plugins instalados.",
+        "auto_update": "Atualizar os plugins automaticamente",
+        "auto_update_hint": "Uma vez por dia, após atualizar as fontes, instala a versão mais recente oferecida para um plugin instalado. Sem intervenção só é instalado um arquivo assinado pelo catálogo da fonte: o resto continua a exigir a tua confirmação.",
+        "saved": "Definições dos plugins guardadas"
+      }
     }
   },
   "roles": {

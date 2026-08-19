@@ -1,0 +1,43 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-xl">
+    <div class="flex justify-between items-start gap-4">
+      <div>
+        <h2 class="text-lg font-bold">{{ 'settings.plugins.settings.title' | translate }}</h2>
+        <p class="text-sm text-base-content/60 mt-1">{{ 'settings.plugins.settings.subtitle' | translate }}</p>
+      </div>
+      <button type="button" class="btn btn-sm btn-ghost btn-circle" (click)="close()"
+        [attr.aria-label]="'common.close' | translate">
+        <svg lucideX class="h-4 w-4"></svg>
+      </button>
+    </div>
+
+    @if (loading()) {
+      <div class="flex justify-center py-10">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else {
+      <label class="label cursor-pointer justify-start gap-3 mt-6 items-start">
+        <input
+          type="checkbox"
+          class="toggle mt-0.5"
+          [disabled]="saving()"
+          [ngModel]="autoUpdate()"
+          (ngModelChange)="toggleAutoUpdate($event)"
+        />
+        <span>
+          <span class="label-text text-base">{{ 'settings.plugins.settings.auto_update' | translate }}</span>
+          <span class="block text-sm text-base-content/60 mt-1">
+            {{ 'settings.plugins.settings.auto_update_hint' | translate }}
+          </span>
+        </span>
+      </label>
+    }
+
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="close()">{{ 'common.close' | translate }}</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="close()" [attr.aria-label]="'common.close' | translate">close</button>
+  </form>
+</dialog>
