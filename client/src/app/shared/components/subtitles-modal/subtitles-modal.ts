@@ -608,7 +608,10 @@ export class SubtitlesModalComponent {
     this.lastSseEvent = event;
 
     const automatic = event['automatic'] === true;
-    if (event.type === 'subtitle.synced') {
+    if (event.type === 'subtitle.list_changed') {
+      // Carries no outcome to announce — it says the list moved, nothing more.
+      void this.loadSubtitles(mediaId);
+    } else if (event.type === 'subtitle.synced') {
       if (!automatic) this.toast.success(this.translate.instant('sse.subtitle_synced'));
       void this.loadSubtitles(mediaId);
     } else if (event.type === 'subtitle.downloaded') {

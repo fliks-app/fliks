@@ -45,6 +45,13 @@ export type SseEvent =
       automatic?: boolean;
     }
   | {
+      // A media's subtitle list gained or lost a row without any client having asked for it:
+      // an import storing embedded tracks, an OCR run creating its PROCESSING placeholder.
+      // Carries no title and raises no toast — it exists so the list stops being stale.
+      type: 'subtitle.list_changed';
+      mediaId: number;
+    }
+  | {
       // Machine-translation progress for a PROCESSING subtitle row. `progress`
       // is 0–100; `subtitleId` is the placeholder row the client shows.
       type: 'subtitle.translation_progress';
