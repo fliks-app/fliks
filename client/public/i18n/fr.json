@@ -1510,7 +1510,6 @@
       "metadata_region": "Région des métadonnées",
       "metadata_region_hint": "Région utilisée pour les dates de sortie et les prochaines sorties. Peut être surchargée par bibliothèque.",
       "section_automation": "Automatisation",
-      "auto_grab_on_approval": "Télécharger automatiquement après l'approbation d'une demande",
       "auto_detect_markers_on_import": "Détecter les intros / génériques à l'import des séries",
       "saved": "Paramètres enregistrés.",
       "save_error": "Impossible d'enregistrer.",

@@ -42,7 +42,6 @@ export class GeneralSettingsComponent implements OnInit {
   readonly metadataRegionOptions = metadataRegionOptions(this.translate.currentLang);
 
   // Automation
-  readonly autoGrabOnApproval = signal('true');
   readonly autoDetectMarkersOnImport = signal('true');
   readonly companionFileExtensions = signal('');
   readonly savingAutomation = signal(false);
@@ -58,7 +57,6 @@ export class GeneralSettingsComponent implements OnInit {
       this.publicUrl.set(map['public_url'] ?? '');
       this.metadataLanguage.set(map['metadata_language'] ?? 'en');
       this.metadataRegion.set(map['metadata_region'] ?? 'US');
-      this.autoGrabOnApproval.set(map['requests_auto_grab_on_approval'] ?? 'true');
       this.autoDetectMarkersOnImport.set(map['markers_auto_detect_on_import'] ?? 'true');
       this.postImportScript.set(map['post_import_script'] ?? '');
       this.companionFileExtensions.set(
@@ -98,7 +96,6 @@ export class GeneralSettingsComponent implements OnInit {
     this.savingAutomation.set(true);
     try {
       await this.api.setBulk({
-        requests_auto_grab_on_approval: this.autoGrabOnApproval(),
         markers_auto_detect_on_import: this.autoDetectMarkersOnImport(),
         companion_file_extensions: this.companionFileExtensions(),
       });

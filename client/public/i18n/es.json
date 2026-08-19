@@ -1500,7 +1500,6 @@
       "metadata_region": "Región de los metadatos",
       "metadata_region_hint": "Región utilizada para las fechas de estreno y los próximos estrenos. Puede sobrescribirse por biblioteca.",
       "section_automation": "Automatización",
-      "auto_grab_on_approval": "Descargar automáticamente tras la aprobación de una solicitud",
       "auto_detect_markers_on_import": "Detectar las intros / créditos al importar las series",
       "saved": "Ajustes guardados.",
       "save_error": "No se puede guardar.",

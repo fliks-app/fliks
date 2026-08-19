@@ -1510,7 +1510,6 @@
       "metadata_region": "Metadata region",
       "metadata_region_hint": "Region used for release dates and upcoming releases. Can be overridden per library.",
       "section_automation": "Automation",
-      "auto_grab_on_approval": "Automatically download after a request is approved",
       "auto_detect_markers_on_import": "Detect intros / credits when importing series",
       "saved": "Settings saved.",
       "save_error": "Unable to save.",

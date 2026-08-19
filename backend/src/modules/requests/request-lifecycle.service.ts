@@ -77,10 +77,6 @@ export class RequestLifecycleService
    * Admin-toggleable from the General settings page; defaults to `true`
    * (an unset key reads as enabled) to preserve behaviour on existing installs.
    */
-  private async autoGrabOnApproval(): Promise<boolean> {
-    return (await this.settings.get('requests_auto_grab_on_approval')) !== 'false';
-  }
-
   onModuleInit(): void {
     // Files landing on disk is the canonical "request might be
     // available now" trigger. Subscribing here keeps the recompute
@@ -174,11 +170,9 @@ export class RequestLifecycleService
     }
     if (touched.length) await this.requestRepo.save(touched);
 
-    // If the import actually satisfied at least one request, kick off
-    // an immediate SearchMissing for that media so the user doesn't
-    // wait up to 6 h for the next scheduled tick. Fire-and-forget;
-    // failures (no release source configured, etc.) are logged by whoever searches.
-    if (touched.length && (await this.autoGrabOnApproval())) {
+    // An import satisfying a request is worth announcing: whoever owns acquisition can act
+    // on it immediately instead of waiting for its own next tick.
+    if (touched.length) {
       this.events.emitDomain({
         type: 'media.acquisition.requested',
         mediaIds: [media.id],

@@ -119,16 +119,6 @@
           <input
             type="checkbox"
             class="toggle toggle-sm"
-            [ngModel]="autoGrabOnApproval() === 'true'"
-            (ngModelChange)="autoGrabOnApproval.set($event ? 'true' : 'false')"
-          />
-          <span class="label-text">{{ 'settings.general.auto_grab_on_approval' | translate }}</span>
-        </label>
-
-        <label class="label cursor-pointer justify-start gap-3 max-w-max">
-          <input
-            type="checkbox"
-            class="toggle toggle-sm"
             [ngModel]="autoDetectMarkersOnImport() === 'true'"
             (ngModelChange)="autoDetectMarkersOnImport.set($event ? 'true' : 'false')"
           />
