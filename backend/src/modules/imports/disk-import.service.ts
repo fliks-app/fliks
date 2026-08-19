@@ -309,7 +309,7 @@ export class DiskImportService {
       }
     }
     if (!media) {
-      throw new BadRequestException('Média introuvable après import');
+      throw new BadRequestException('Media not found after import');
     }
     if (media.library && media.library.id !== dto.libraryId) {
       throw new BadRequestException(
@@ -340,7 +340,7 @@ export class DiskImportService {
                 }
               : this.naming.parseEpisodeNumbers(filename);
           if (!epNums) {
-            errors.push(`${filename}: aucun motif SxxEyy détecté`);
+            errors.push(`${filename}: no SxxEyy pattern found`);
             continue;
           }
           const ep = await this.mediaService.ensureSeriesEpisode(media, epNums);
@@ -521,7 +521,7 @@ export class DiskImportService {
           fs.statSync(entry.filePath);
         } catch {
           errors.push(
-            `${path.basename(entry.filePath)}: fichier source introuvable`,
+            `${path.basename(entry.filePath)}: source file not found`,
           );
           continue;
         }

@@ -168,7 +168,7 @@ export class MediaRescanService {
     const { media, absPath } = p;
     const relativePath = relativePathUnderMediaRoot(media.path, absPath);
     if (!relativePath) {
-      return { error: 'fichier en dehors du dossier du média' };
+      return { error: 'file outside the media folder' };
     }
 
     const existing = await this.mediaFileRepo.findOne({
@@ -188,7 +188,7 @@ export class MediaRescanService {
     if (media.type === MediaType.SERIES) {
       const epNums = p.epNums ?? this.naming.parseEpisodeNumbers(filename);
       if (!epNums) {
-        return { error: 'aucun motif SxxEyy détecté' };
+        return { error: 'no SxxEyy pattern found' };
       }
       const { ep, created: c } = await this.ensureSeasonAndEpisode(
         media,
