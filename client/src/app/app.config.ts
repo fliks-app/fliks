@@ -68,12 +68,9 @@ export const appConfig: ApplicationConfig = {
     provideRouter(
       routes,
       withInMemoryScrolling({ scrollPositionRestoration: 'top' }),
-      // Enables document.startViewTransition() around every navigation. Browsers
-      // without VT support (Safari < 18, iOS WebKit) get a no-op fallback —
-      // Angular feature-detects internally. Combined with view-transition-name
-      // on the card poster + the matching detail-page hero, this morphs the
-      // poster between list and detail rather than cross-fading the page.
-      withViewTransitions(),
+      // Poster→hero morph. Off on Capacitor: its WebView never completes a snapshot
+      // capture for a launch-created document, so every navigation waits Chrome's 4s timeout.
+      ...(Capacitor.isNativePlatform() ? [] : [withViewTransitions()]),
     ),
     { provide: RouteReuseStrategy, useExisting: CachingReuseStrategy },
     provideHttpClient(

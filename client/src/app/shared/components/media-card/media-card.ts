@@ -265,12 +265,9 @@ export class MediaCardComponent {
   }
 
   protected flagPosterForTransition() {
-    // Skip on engines without View Transitions API (Chromium <111,
-    // Tizen 5.5 WebKit, webOS 5 Chromium 79). Angular's
-    // `withViewTransitions()` already feature-detects, but the
-    // imperative DOM stamping below would mutate styles for nothing on
-    // those targets and adds a querySelectorAll per click.
-    if (!('startViewTransition' in document)) return;
+    // Pointless where the router runs no transition (Capacitor) or the engine has
+    // none (Chromium <111, Tizen 5.5 WebKit, webOS 5) — and it costs a querySelectorAll per click.
+    if (this.isNative || !('startViewTransition' in document)) return;
     const id = this.resolveMediaId();
     const img = this.imgRef()?.nativeElement;
     if (id == null || !img) return;
