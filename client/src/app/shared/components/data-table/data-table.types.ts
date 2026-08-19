@@ -32,7 +32,7 @@ export interface TableColumn {
   /** A second line of values under the cell's own. */
   subValues?: TableSubValue[];
   /** Another field of the row; when it has a value the cell opens a dialog showing it. */
-  detailKey?: string;
+  detailField?: string;
   /** Title of that dialog; falls back to the column's `labelKey`. */
   detailTitleKey?: string;
 }

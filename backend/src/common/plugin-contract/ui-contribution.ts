@@ -204,10 +204,10 @@ export interface TableColumn {
   /** A second line under the cell's own value. A release's quality and tracker belong with
    *  its name; as columns of their own they cost width the title needed. */
   subValues?: TableSubValue[];
-  /** Names another field of the row. When that field has a value, the cell becomes a button
-   *  opening a dialog that shows it — a long diagnostic message reads there instead of
-   *  stretching a column across every row. */
-  detailKey?: string;
+  /** Names another field of the row — not a translation key, hence no `Key` suffix. When that
+   *  field has a value, the cell becomes a button opening a dialog that shows it: a long
+   *  diagnostic message reads there instead of stretching a column across every row. */
+  detailField?: string;
   /** Title of that dialog. Falls back to the column's own `labelKey`. */
   detailTitleKey?: string;
 }

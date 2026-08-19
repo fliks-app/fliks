@@ -339,7 +339,7 @@ describe('DataTableComponent — declared filters', () => {
           key: 'status',
           labelKey: 'x.status',
           badges: { failed: 'error', completed: 'success' },
-          detailKey: 'statusMessage',
+          detailField: 'statusMessage',
           detailTitleKey: 'x.detail_title',
         },
       ],
