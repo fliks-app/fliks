@@ -26,9 +26,10 @@ import {
   buildSpriteLabel,
 } from '../streaming/thumbnail.service';
 import { MarkersService } from '../markers/markers.service';
-import { CORE_TRIGGER_ONLY_JOB_NAMES, CoreSchedulerJobName } from '../../common/constants/core-scheduler-jobs';
+import { CORE_TRIGGER_ONLY_JOB_NAMES, CoreSchedulerJobName, PLUGIN_SOURCE_REFRESH_CRON } from '../../common/constants/core-scheduler-jobs';
 import { PluginJobsService } from '../plugins/plugin-jobs.service';
 import { ScheduledJobRegistry } from './scheduled-job-registry.service';
+import { PluginCatalogClientService } from '../plugins/plugin-catalog-client.service';
 import { runAuditedCommand } from './command-audit.util';
 
 /** Yield the event loop so HTTP requests aren't starved by bulk tasks. */
@@ -56,6 +57,7 @@ export class SchedulerService implements OnModuleInit {
     private readonly markers: MarkersService,
     private readonly pluginJobs: PluginJobsService,
     private readonly jobRegistry: ScheduledJobRegistry,
+    private readonly catalogClient: PluginCatalogClientService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -77,6 +79,12 @@ export class SchedulerService implements OnModuleInit {
       cron: CronExpression.EVERY_DAY_AT_4AM,
       triggerable: true,
       labelKey: 'system.cmd_refresh_metadata',
+    },
+    {
+      name: 'RefreshPluginSources',
+      cron: PLUGIN_SOURCE_REFRESH_CRON,
+      triggerable: true,
+      labelKey: 'system.cmd_refresh_plugin_sources',
     },
     {
       name: 'SubtitleSearch',
@@ -113,6 +121,16 @@ export class SchedulerService implements OnModuleInit {
   async refreshMetadata(): Promise<void> {
     return this.runCommand('RefreshMetadata', 'scheduled', () =>
       this.doRefreshMetadata(),
+    );
+  }
+
+  /** Re-fetch every enabled plugin source's catalog once a day. Driven from here rather than
+   *  from a bare `@Cron` on the catalog client so the run is listed, triggerable and recorded
+   *  like every other scheduled job. */
+  @Cron(PLUGIN_SOURCE_REFRESH_CRON)
+  async refreshPluginSources(): Promise<void> {
+    return this.runCommand('RefreshPluginSources', 'scheduled', () =>
+      this.catalogClient.refreshAll(),
     );
   }
 

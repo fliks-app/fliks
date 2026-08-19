@@ -1213,6 +1213,7 @@
     "device_client_version": "v{{version}}",
     "commands_title": "Trigger a task",
     "cmd_refresh_metadata": "Refresh metadata",
+    "cmd_refresh_plugin_sources": "Refresh plugin sources",
     "cmd_refresh_missing_metadata": "Reload missing metadata",
     "cmd_rescan_all": "Rescan all files",
     "cmd_rescan_missing_files": "Rescan missing files",
@@ -2061,15 +2062,6 @@
       "trigger": "Trigger manually",
       "triggered": "Task {{ name }} triggered.",
       "never": "Never",
-      "names": {
-        "SearchMissing": "Search for missing media",
-        "RefreshMetadata": "Refresh metadata",
-        "RssSync": "RSS sync",
-        "ImportCompleted": "Import downloads",
-        "CleanStalled": "Cleanup stalled torrents",
-        "SubtitleSearch": "Subtitle search",
-        "SubtitleUpgrade": "Subtitle upgrade"
-      },
       "status": {
         "completed": "Completed",
         "running": "Running",

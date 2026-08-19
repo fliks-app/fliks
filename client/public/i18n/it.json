@@ -1205,6 +1205,7 @@
     "device_client_version": "v{{version}}",
     "commands_title": "Avvia un'attività",
     "cmd_refresh_metadata": "Aggiorna i metadati",
+    "cmd_refresh_plugin_sources": "Aggiorna le sorgenti dei plugin",
     "cmd_refresh_missing_metadata": "Ricarica i metadati mancanti",
     "cmd_rescan_all": "Riscansiona tutti i file",
     "cmd_rescan_missing_files": "Riscansiona i file mancanti",
@@ -2034,15 +2035,6 @@
       "trigger": "Avvia manualmente",
       "triggered": "Attività {{ name }} avviata.",
       "never": "Mai",
-      "names": {
-        "SearchMissing": "Ricerca dei file multimediali mancanti",
-        "RefreshMetadata": "Aggiornamento dei metadati",
-        "RssSync": "Sincronizzazione RSS",
-        "ImportCompleted": "Import dei download",
-        "CleanStalled": "Pulizia dei torrent bloccati",
-        "SubtitleSearch": "Ricerca di sottotitoli",
-        "SubtitleUpgrade": "Miglioramento dei sottotitoli"
-      },
       "status": {
         "completed": "Completato",
         "running": "In corso",

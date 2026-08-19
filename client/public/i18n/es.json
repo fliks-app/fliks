@@ -1205,6 +1205,7 @@
     "device_client_version": "v{{version}}",
     "commands_title": "Iniciar una tarea",
     "cmd_refresh_metadata": "Actualizar los metadatos",
+    "cmd_refresh_plugin_sources": "Actualizar las fuentes de plugins",
     "cmd_refresh_missing_metadata": "Recargar los metadatos faltantes",
     "cmd_rescan_all": "Reescanear todos los archivos",
     "cmd_rescan_missing_files": "Reescanear los archivos faltantes",
@@ -2034,15 +2035,6 @@
       "trigger": "Activar manualmente",
       "triggered": "Tarea {{ name }} activada.",
       "never": "Nunca",
-      "names": {
-        "SearchMissing": "Búsqueda de los medios faltantes",
-        "RefreshMetadata": "Actualización de los metadatos",
-        "RssSync": "Sincronización RSS",
-        "ImportCompleted": "Importación de las descargas",
-        "CleanStalled": "Limpieza de los torrents bloqueados",
-        "SubtitleSearch": "Búsqueda de subtítulos",
-        "SubtitleUpgrade": "Mejora de los subtítulos"
-      },
       "status": {
         "completed": "Terminado",
         "running": "En curso",

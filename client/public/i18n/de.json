@@ -1205,6 +1205,7 @@
     "device_client_version": "v{{version}}",
     "commands_title": "Eine Aufgabe auslösen",
     "cmd_refresh_metadata": "Metadaten aktualisieren",
+    "cmd_refresh_plugin_sources": "Plugin-Quellen aktualisieren",
     "cmd_refresh_missing_metadata": "Fehlende Metadaten neu laden",
     "cmd_rescan_all": "Alle Dateien erneut scannen",
     "cmd_rescan_missing_files": "Fehlende Dateien erneut scannen",
@@ -2034,15 +2035,6 @@
       "trigger": "Manuell auslösen",
       "triggered": "Aufgabe {{ name }} ausgelöst.",
       "never": "Nie",
-      "names": {
-        "SearchMissing": "Suche nach fehlenden Medien",
-        "RefreshMetadata": "Aktualisierung der Metadaten",
-        "RssSync": "RSS-Synchronisierung",
-        "ImportCompleted": "Import der Downloads",
-        "CleanStalled": "Bereinigung blockierter Torrents",
-        "SubtitleSearch": "Untertitelsuche",
-        "SubtitleUpgrade": "Verbesserung der Untertitel"
-      },
       "status": {
         "completed": "Abgeschlossen",
         "running": "Läuft",

@@ -1213,6 +1213,7 @@
     "device_client_version": "v{{version}}",
     "commands_title": "Déclencher une tâche",
     "cmd_refresh_metadata": "Rafraîchir les métadonnées",
+    "cmd_refresh_plugin_sources": "Rafraîchir les sources de plugins",
     "cmd_refresh_missing_metadata": "Recharger les métadonnées manquantes",
     "cmd_rescan_all": "Rescanner tous les fichiers",
     "cmd_rescan_missing_files": "Rescanner les fichiers manquants",
@@ -2061,15 +2062,6 @@
       "trigger": "Déclencher manuellement",
       "triggered": "Tâche {{ name }} déclenchée.",
       "never": "Jamais",
-      "names": {
-        "SearchMissing": "Recherche des médias manquants",
-        "RefreshMetadata": "Rafraîchissement des métadonnées",
-        "RssSync": "Synchronisation RSS",
-        "ImportCompleted": "Import des téléchargements",
-        "CleanStalled": "Nettoyage des torrents bloqués",
-        "SubtitleSearch": "Recherche de sous-titres",
-        "SubtitleUpgrade": "Amélioration des sous-titres"
-      },
       "status": {
         "completed": "Terminé",
         "running": "En cours",
