@@ -325,6 +325,67 @@ describe('DataTableComponent — declared filters', () => {
     expect(badges[0].className).toContain('badge-error');
   });
 
+  it('VERDICT: a cell with a detail opens a dialog showing it, and one without is not a button', async () => {
+    const fixture = await createComponent({
+      http: {
+        get: () =>
+          of([
+            { id: 1, status: 'failed', statusMessage: 'tracker refused: 403' },
+            { id: 2, status: 'completed', statusMessage: null },
+          ]),
+      },
+      columns: [
+        {
+          key: 'status',
+          labelKey: 'x.status',
+          badges: { failed: 'error', completed: 'success' },
+          detailKey: 'statusMessage',
+          detailTitleKey: 'x.detail_title',
+        },
+      ],
+    });
+    const c = fixture.componentInstance;
+    const [status] = c.columns();
+    const rows = c.rows();
+
+    expect(c.detailText(status, rows[0])).toBe('tracker refused: 403');
+    // Nothing to show: the badge stays inert rather than opening an empty dialog.
+    expect(c.detailText(status, rows[1])).toBe('');
+    expect(fixture.nativeElement.querySelectorAll('tbody button').length).toBe(1);
+
+    c.openDetail(status, rows[1]);
+    expect(c.detail()).toBeNull();
+
+    c.openDetail(status, rows[0]);
+    expect(c.detail()).toEqual({ titleKey: 'x.detail_title', text: 'tracker refused: 403' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('dialog pre').textContent).toContain('403');
+
+    c.closeDetail();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('dialog')).toBeNull();
+  });
+
+  it('renders declared sub-values under the cell, skipping the ones the row has no value for', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of([{ id: 1, title: 'A Release', quality: 'WEBDL-1080p', source: '' }]) },
+      columns: [
+        {
+          key: 'title',
+          labelKey: 'x.title',
+          subValues: [
+            { key: 'quality', badges: { '*': 'ghost' } },
+            { key: 'source', badges: { '*': 'neutral' } },
+          ],
+        },
+      ],
+    });
+    const badges = fixture.nativeElement.querySelectorAll('tbody td span.badge');
+    // `source` is empty on this row: no badge for it, rather than an empty one.
+    expect(badges.length).toBe(1);
+    expect(badges[0].textContent.trim()).toBe('WEBDL-1080p');
+  });
+
   it('keeps formatted, badged and declared-nowrap cells on one line', async () => {
     const fixture = await createComponent({
       http: { get: () => of([{ id: 1, size: 1024, status: 'failed', source: 'x', title: 'A' }]) },

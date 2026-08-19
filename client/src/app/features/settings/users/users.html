@@ -32,7 +32,7 @@
               <td class="font-medium">
                 <a [routerLink]="['/admin/users', user.id]" class="link link-hover">{{ user.username }}</a>
                 @if (auth.user()?.id === user.id) {
-                  <span class="badge badge-primary badge-xs ml-2">{{ 'settings.users.you' | translate }}</span>
+                  <span class="badge badge-primary badge-sm ml-2">{{ 'settings.users.you' | translate }}</span>
                 }
               </td>
               <td>

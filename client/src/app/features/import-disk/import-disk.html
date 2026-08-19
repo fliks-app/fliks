@@ -111,13 +111,13 @@
                     <p class="truncate text-sm font-mono" [title]="row.candidate.filePath">
                       {{ row.candidate.filename }}
                     </p>
-                    <div class="flex flex-wrap items-center gap-2 mt-1 text-xs text-base-content/60">
+                    <div class="flex flex-wrap items-center gap-2 mt-1 text-sm text-base-content/60">
                       <span class="badge badge-ghost badge-sm">{{ row.candidate.qualityName }}</span>
                       <span class="tabular-nums">{{ formatBytes(row.candidate.size) }}</span>
                     </div>
                     @if (row.candidate.existingQuality && !row.force) {
                       <div class="flex items-center gap-2 mt-1">
-                        <span class="text-xs text-warning">
+                        <span class="text-sm text-warning">
                           {{ 'import_disk.existing_quality' | translate:{ quality: row.candidate.existingQuality } }}
                         </span>
                         <button

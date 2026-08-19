@@ -48,7 +48,7 @@
                 class="link link-hover block truncate"
               >{{ entry.mediaTitle }}</a>
               @if (episodeLabel(entry)) {
-                <p class="text-xs font-normal text-base-content/60 truncate" [title]="episodeLabel(entry)">
+                <p class="text-sm font-normal text-base-content/60 truncate" [title]="episodeLabel(entry)">
                   @if (entry.episodeId != null) {
                     <a
                       [routerLink]="['/series', entry.mediaId, 'episode', entry.episodeId]"
@@ -66,10 +66,10 @@
             <td class="text-center">
               <span class="badge badge-sm" [ngClass]="subStatusClass(entry.status)">{{ entry.status }}</span>
             </td>
-            <td class="text-center text-xs">
-              @if (entry.forced) { <span class="badge badge-xs badge-outline mr-1">F</span> }
-              @if (entry.hearingImpaired) { <span class="badge badge-xs badge-outline">HI</span> }
-              @if (entry.synced) { <span class="badge badge-xs badge-info ml-1">Synced</span> }
+            <td class="text-center text-sm">
+              @if (entry.forced) { <span class="badge badge-sm badge-outline mr-1">F</span> }
+              @if (entry.hearingImpaired) { <span class="badge badge-sm badge-outline">HI</span> }
+              @if (entry.synced) { <span class="badge badge-sm badge-info ml-1">Synced</span> }
             </td>
           </tr>
         }

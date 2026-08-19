@@ -36,7 +36,7 @@
               <tr>
                 <td class="text-sm">
                   <div class="max-w-[13rem] sm:max-w-[20rem] truncate" [title]="r.title">{{ r.title }}</div>
-                  <div class="sm:hidden mt-1 flex items-center gap-2 text-xs">
+                  <div class="sm:hidden mt-1 flex items-center gap-2 text-sm">
                     <progress
                       class="progress w-14 h-1.5"
                       [class.progress-success]="r.score >= 80"
@@ -47,10 +47,10 @@
                     ></progress>
                     <span class="tabular-nums">{{ r.score }}%</span>
                     @if (r.forced) {
-                      <span class="badge badge-xs badge-outline">F</span>
+                      <span class="badge badge-sm badge-outline">F</span>
                     }
                     @if (r.hearingImpaired) {
-                      <span class="badge badge-xs badge-outline">HI</span>
+                      <span class="badge badge-sm badge-outline">HI</span>
                     }
                   </div>
                 </td>
@@ -64,21 +64,21 @@
                       [value]="r.score"
                       max="100"
                     ></progress>
-                    <span class="tabular-nums text-xs w-9 text-right">{{ r.score }}%</span>
+                    <span class="tabular-nums text-sm w-9 text-right">{{ r.score }}%</span>
                   </div>
                 </td>
-                <td class="text-center text-xs hidden sm:table-cell">
+                <td class="text-center text-sm hidden sm:table-cell">
                   @if (r.forced) {
-                    <span class="badge badge-xs badge-outline mr-1">F</span>
+                    <span class="badge badge-sm badge-outline mr-1">F</span>
                   }
                   @if (r.hearingImpaired) {
-                    <span class="badge badge-xs badge-outline">HI</span>
+                    <span class="badge badge-sm badge-outline">HI</span>
                   }
                 </td>
                 <td class="text-sm">
                   {{ r.providerName }}
                   @if (r.downloadCount) {
-                    <span class="block text-xs text-base-content/50 whitespace-nowrap">{{ 'media_detail.subtitle_downloads' | translate: { count: r.downloadCount } }}</span>
+                    <span class="block text-sm text-base-content/50 whitespace-nowrap">{{ 'media_detail.subtitle_downloads' | translate: { count: r.downloadCount } }}</span>
                   }
                 </td>
                 <td>

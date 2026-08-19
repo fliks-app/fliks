@@ -22,10 +22,10 @@
     <tbody>
       @for (entry of logs(); track entry.timestamp + entry.message) {
         <tr [class.text-warning]="entry.level === 'warn'" [class.text-error]="entry.level === 'error'" [class.text-info]="entry.level === 'debug'">
-          <td class="text-xs tabular-nums whitespace-nowrap">{{ entry.timestamp | date:'HH:mm:ss.SSS' }}</td>
-          <td><span class="badge badge-xs" [ngClass]="{'badge-success': entry.level === 'log', 'badge-warning': entry.level === 'warn', 'badge-error': entry.level === 'error', 'badge-info': entry.level === 'debug'}">{{ entry.level }}</span></td>
-          <td class="text-xs truncate max-w-32">{{ entry.context }}</td>
-          <td class="text-xs whitespace-pre-wrap break-all">{{ entry.message }}</td>
+          <td class="text-sm tabular-nums whitespace-nowrap">{{ entry.timestamp | date:'HH:mm:ss.SSS' }}</td>
+          <td><span class="badge badge-sm" [ngClass]="{'badge-success': entry.level === 'log', 'badge-warning': entry.level === 'warn', 'badge-error': entry.level === 'error', 'badge-info': entry.level === 'debug'}">{{ entry.level }}</span></td>
+          <td class="text-sm truncate max-w-32">{{ entry.context }}</td>
+          <td class="text-sm whitespace-pre-wrap break-all">{{ entry.message }}</td>
         </tr>
       }
     </tbody>
