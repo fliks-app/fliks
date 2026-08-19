@@ -28,6 +28,7 @@ import {
   RelinkResult,
 } from './dto/orphan-scan.dto';
 import { NfoMetadataService } from './nfo-metadata.service';
+import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { MediaService } from '../media/media.service';
 import { MediaMetadataService } from '../media/media-service/media-metadata.service';
 import { NamingService } from '../scheduler/naming.service';
@@ -53,6 +54,56 @@ export interface ScanCandidate {
   episodeId: number | null;
   episodeTitle: string | null;
   existingQuality: string | null;
+}
+
+/** The scan shares a 30-connection pool with everything else the server is
+ *  serving; unbounded fan-out starved it and the UI stalled until the scan ended. */
+const SCAN_CONCURRENCY = 8;
+
+export interface NormalizedTitles {
+  normTitle: string;
+  normOriginal: string;
+}
+
+type ScanMedia = Pick<
+  Media,
+  'id' | 'title' | 'originalTitle' | 'year' | 'type'
+> &
+  NormalizedTitles;
+
+export function normalizeTitle(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Pure so the scan can hoist normalization out of its per-file loop. */
+export function matchMedia<T extends NormalizedTitles>(
+  extractedTitle: string,
+  allMedia: readonly T[],
+): T | null {
+  const target = normalizeTitle(extractedTitle);
+  if (!target) return null;
+
+  // Exact match
+  let match = allMedia.find(
+    (m) => m.normTitle === target || m.normOriginal === target,
+  );
+  if (match) return match;
+
+  // Target starts with media title (e.g. "inception 2010" -> "inception")
+  match = allMedia.find(
+    (m) => m.normTitle.length >= 2 && target.startsWith(m.normTitle),
+  );
+  if (match) return match;
+
+  // Media title starts with target
+  match = allMedia.find(
+    (m) => m.normTitle.length >= 3 && m.normTitle.startsWith(target),
+  );
+  return match ?? null;
 }
 
 @Injectable()
@@ -92,7 +143,7 @@ export class DiskImportService {
     const root = path.resolve(library.path!);
     this.logger.log(`Orphan scan started — library #${libraryId} root="${root}"`);
 
-    const allFiles = this.collectVideoFiles(root, 0);
+    const allFiles = await this.collectVideoFiles(root, 0);
 
     // Build the set of absolute paths already linked in this library.
     const linkedRows = await this.fileRepo.find({
@@ -126,7 +177,7 @@ export class DiskImportService {
       const { quality } = parseReleaseQuality(filename);
       let size = 0;
       try {
-        size = fs.statSync(abs).size;
+        size = (await fsp.stat(abs)).size;
       } catch {
         /* ignore */
       }
@@ -258,7 +309,7 @@ export class DiskImportService {
       }
     }
     if (!media) {
-      throw new BadRequestException('Média introuvable après import');
+      throw new BadRequestException('Media not found after import');
     }
     if (media.library && media.library.id !== dto.libraryId) {
       throw new BadRequestException(
@@ -289,7 +340,7 @@ export class DiskImportService {
                 }
               : this.naming.parseEpisodeNumbers(filename);
           if (!epNums) {
-            errors.push(`${filename}: aucun motif SxxEyy détecté`);
+            errors.push(`${filename}: no SxxEyy pattern found`);
             continue;
           }
           const ep = await this.mediaService.ensureSeriesEpisode(media, epNums);
@@ -383,7 +434,7 @@ export class DiskImportService {
     this.logger.log(`Disk library scan started — folder="${resolved}"`);
     let stat: fs.Stats;
     try {
-      stat = fs.statSync(resolved);
+      stat = await fsp.stat(resolved);
     } catch {
       throw new BadRequestException(
         `Path "${resolved}" does not exist or is not accessible`,
@@ -393,20 +444,29 @@ export class DiskImportService {
       throw new BadRequestException(`Path "${resolved}" is not a directory`);
     }
 
-    const videoFiles = this.collectVideoFiles(resolved, 0);
+    const videoFiles = await this.collectVideoFiles(resolved, 0);
     if (!videoFiles.length) return [];
 
-    const allMedia = await this.mediaRepo.find({
+    const rows = await this.mediaRepo.find({
       select: ['id', 'title', 'originalTitle', 'year', 'type'],
     });
+    // Normalize once: matchMedia scans the whole list per file, and re-running
+    // the regexes there made the scan O(files x media) in regex work alone.
+    const allMedia: ScanMedia[] = rows.map((m) => ({
+      ...m,
+      normTitle: normalizeTitle(m.title),
+      normOriginal: normalizeTitle(m.originalTitle ?? ''),
+    }));
 
     // `buildCandidate` may invent a fresh season / episode slot for any file
     // that references one we haven't pulled metadata for yet. Collect the
     // owning media so we can backfill those rows (titles, overviews, stills)
     // via the shared series refresh, instead of leaving them bare in the UI.
     const dirty = new Set<number>();
-    const candidates = await Promise.all(
-      videoFiles.map((f) => this.buildCandidate(f, allMedia, dirty)),
+    const candidates = await mapWithConcurrency(
+      videoFiles,
+      SCAN_CONCURRENCY,
+      (f) => this.buildCandidate(f, allMedia, dirty),
     );
     for (const mediaId of dirty) {
       try {
@@ -461,7 +521,7 @@ export class DiskImportService {
           fs.statSync(entry.filePath);
         } catch {
           errors.push(
-            `${path.basename(entry.filePath)}: fichier source introuvable`,
+            `${path.basename(entry.filePath)}: source file not found`,
           );
           continue;
         }
@@ -536,19 +596,22 @@ export class DiskImportService {
 
   // ---------------------------------------------------------------------------
 
-  private collectVideoFiles(dir: string, depth: number): string[] {
+  private async collectVideoFiles(
+    dir: string,
+    depth: number,
+  ): Promise<string[]> {
     if (depth > 3) return [];
     const files: string[] = [];
     let entries: fs.Dirent[];
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      entries = await fsp.readdir(dir, { withFileTypes: true });
     } catch {
       return [];
     }
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        files.push(...this.collectVideoFiles(fullPath, depth + 1));
+        files.push(...(await this.collectVideoFiles(fullPath, depth + 1)));
       } else if (VIDEO_EXTS.has(path.extname(entry.name).toLowerCase())) {
         files.push(fullPath);
       }
@@ -558,13 +621,13 @@ export class DiskImportService {
 
   private async buildCandidate(
     filePath: string,
-    allMedia: Pick<Media, 'id' | 'title' | 'originalTitle' | 'year' | 'type'>[],
+    allMedia: ScanMedia[],
     dirtyMediaIds?: Set<number>,
   ): Promise<ScanCandidate> {
     const filename = path.basename(filePath);
     let size = 0;
     try {
-      size = fs.statSync(filePath).size;
+      size = (await fsp.stat(filePath)).size;
     } catch {
       /* ignore */
     }
@@ -572,7 +635,7 @@ export class DiskImportService {
     const { quality } = parseReleaseQuality(filename);
     const epNums = this.naming.parseEpisodeNumbers(filename);
     const extractedTitle = this.extractTitle(filename);
-    const matched = this.matchMedia(extractedTitle, allMedia);
+    const matched = matchMedia(extractedTitle, allMedia);
 
     let episodeId: number | null = null;
     let episodeTitle: string | null = null;
@@ -649,38 +712,4 @@ export class DiskImportService {
     return name.trim().toLowerCase();
   }
 
-  private matchMedia(
-    extractedTitle: string,
-    allMedia: Pick<Media, 'id' | 'title' | 'originalTitle' | 'year' | 'type'>[],
-  ): Pick<Media, 'id' | 'title' | 'originalTitle' | 'year' | 'type'> | null {
-    const norm = (s: string) =>
-      s
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-    const target = norm(extractedTitle);
-    if (!target) return null;
-
-    // Exact match
-    let match = allMedia.find(
-      (m) => norm(m.title) === target || norm(m.originalTitle ?? '') === target,
-    );
-    if (match) return match;
-
-    // Target starts with media title (e.g. "inception 2010" -> "inception")
-    match = allMedia.find((m) => {
-      const mt = norm(m.title);
-      return mt.length >= 2 && target.startsWith(mt);
-    });
-    if (match) return match;
-
-    // Media title starts with target
-    match = allMedia.find((m) => {
-      const mt = norm(m.title);
-      return mt.length >= 3 && mt.startsWith(target);
-    });
-    return match ?? null;
-  }
 }

@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { Media } from '../entities/media.entity';
 import { MediaFile } from '../entities/media-file.entity';
@@ -35,6 +36,17 @@ import { relativePathUnderMediaRoot } from '../../../common/utils/media-path.uti
 import { VIDEO_EXTS } from '../../../common/constants/video-extensions';
 
 type ProbeResult = Awaited<ReturnType<FfprobeService['detectMediaFileInfo']>>;
+
+/** Sync fs on the event loop stalled every other request for the length of a
+ *  scan — worse on the network mounts these libraries usually live on. */
+async function pathExists(target: string): Promise<boolean> {
+  try {
+    await fsp.access(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 @Injectable()
 export class MediaRescanService {
@@ -78,14 +90,14 @@ export class MediaRescanService {
     const normPath = dbFile.relativePath?.replace(/\\/g, '/');
     if (!normPath) return;
     const absPath = path.join(mediaDir, normPath);
-    if (!fs.existsSync(absPath)) {
+    if (!(await pathExists(absPath))) {
       this.log.warn(`enrichMediaFileFromDisk: file not on disk — "${absPath}"`);
       return;
     }
 
     let diskSize: number;
     try {
-      diskSize = fs.statSync(absPath).size;
+      diskSize = (await fsp.stat(absPath)).size;
     } catch (err) {
       this.log.warn(
         `enrichMediaFileFromDisk: cannot stat "${absPath}"`,
@@ -156,7 +168,7 @@ export class MediaRescanService {
     const { media, absPath } = p;
     const relativePath = relativePathUnderMediaRoot(media.path, absPath);
     if (!relativePath) {
-      return { error: 'fichier en dehors du dossier du média' };
+      return { error: 'file outside the media folder' };
     }
 
     const existing = await this.mediaFileRepo.findOne({
@@ -176,7 +188,7 @@ export class MediaRescanService {
     if (media.type === MediaType.SERIES) {
       const epNums = p.epNums ?? this.naming.parseEpisodeNumbers(filename);
       if (!epNums) {
-        return { error: 'aucun motif SxxEyy détecté' };
+        return { error: 'no SxxEyy pattern found' };
       }
       const { ep, created: c } = await this.ensureSeasonAndEpisode(
         media,
@@ -189,7 +201,7 @@ export class MediaRescanService {
 
     let size = 0;
     try {
-      size = fs.statSync(absPath).size;
+      size = (await fsp.stat(absPath)).size;
     } catch {
       /* keep 0 — enrich re-stats anyway */
     }
@@ -346,7 +358,7 @@ export class MediaRescanService {
         mediaDir,
         file.relativePath.replace(/\\/g, '/'),
       );
-      if (!fs.existsSync(absPath)) {
+      if (!(await pathExists(absPath))) {
         this.log.warn(
           `analyzeMedia[#${mediaId}]: file off-disk, skipping "${absPath}"`,
         );
@@ -415,7 +427,7 @@ export class MediaRescanService {
     }
 
     const mediaDir = path.resolve(media.path);
-    if (!fs.existsSync(mediaDir)) {
+    if (!(await pathExists(mediaDir))) {
       try {
         fs.mkdirSync(mediaDir, { recursive: true });
         this.log.warn(
@@ -434,7 +446,11 @@ export class MediaRescanService {
     );
 
     // 1. Collect all video files on disk
-    const rawDiskFiles = this.collectVideoFilesRecursive(mediaDir, 0, mediaId);
+    const rawDiskFiles = await this.collectVideoFilesRecursive(
+      mediaDir,
+      0,
+      mediaId,
+    );
     const diskFiles: string[] = [];
     const diskRelPaths = new Set<string>();
     for (const f of rawDiskFiles) {
@@ -514,7 +530,7 @@ export class MediaRescanService {
 
       let diskSize: number;
       try {
-        diskSize = fs.statSync(absPath).size;
+        diskSize = (await fsp.stat(absPath)).size;
       } catch (err) {
         this.log.warn(
           `Rescan[media #${mediaId}]: cannot stat file for refresh (skipped) — path="${absPath}" relativePath="${normPath}"`,
@@ -637,7 +653,7 @@ export class MediaRescanService {
 
       let size = 0;
       try {
-        size = fs.statSync(absPath).size;
+        size = (await fsp.stat(absPath)).size;
       } catch (err) {
         this.log.error(
           `Rescan[media #${mediaId}]: cannot stat new file — path="${absPath}"`,
@@ -916,11 +932,11 @@ export class MediaRescanService {
     return { streamInfo, quality };
   }
 
-  private collectVideoFilesRecursive(
+  private async collectVideoFilesRecursive(
     dir: string,
     depth: number,
     mediaId: number,
-  ): string[] {
+  ): Promise<string[]> {
     if (depth > 3) {
       this.log.warn(
         `Rescan[media #${mediaId}]: skipping subfolder (max depth 3) — "${dir}"`,
@@ -930,7 +946,7 @@ export class MediaRescanService {
     const files: string[] = [];
     let entries: fs.Dirent[];
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      entries = await fsp.readdir(dir, { withFileTypes: true });
     } catch (err) {
       this.log.error(
         `Rescan[media #${mediaId}]: cannot read directory (permissions, missing path, or I/O) — "${dir}"`,
@@ -942,7 +958,11 @@ export class MediaRescanService {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         files.push(
-          ...this.collectVideoFilesRecursive(fullPath, depth + 1, mediaId),
+          ...(await this.collectVideoFilesRecursive(
+            fullPath,
+            depth + 1,
+            mediaId,
+          )),
         );
       } else if (VIDEO_EXTS.has(path.extname(entry.name).toLowerCase())) {
         files.push(fullPath);
