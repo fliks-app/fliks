@@ -2252,7 +2252,7 @@
         "title": "Paramètres",
         "subtitle": "Gestion des plugins installés par Fliks.",
         "auto_update": "Mettre à jour automatiquement les plugins",
-        "auto_update_hint": "Une fois par jour, après le rafraîchissement des sources, installe la version la plus récente proposée pour un plugin installé. Seule une archive signée par le catalogue de la source est installée sans intervention : le reste demande toujours une validation.",
+        "auto_update_hint": "Activé par défaut. Une fois par jour, après le rafraîchissement des sources, installe la version la plus récente proposée pour un plugin installé. Seule une archive signée par le catalogue de la source est installée sans intervention : le reste demande toujours une validation.",
         "saved": "Paramètres des plugins enregistrés"
       }
     }

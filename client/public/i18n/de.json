@@ -2225,7 +2225,7 @@
         "title": "Einstellungen",
         "subtitle": "Wie Fliks installierte Plugins verwaltet.",
         "auto_update": "Plugins automatisch aktualisieren",
-        "auto_update_hint": "Installiert einmal täglich, nach dem Aktualisieren der Quellen, die neueste angebotene Version eines installierten Plugins. Unbeaufsichtigt wird nur ein Archiv installiert, das der Quellkatalog signiert hat; alles andere braucht weiterhin deine Bestätigung.",
+        "auto_update_hint": "Standardmäßig aktiviert. Installiert einmal täglich, nach dem Aktualisieren der Quellen, die neueste angebotene Version eines installierten Plugins. Unbeaufsichtigt wird nur ein Archiv installiert, das der Quellkatalog signiert hat; alles andere braucht weiterhin deine Bestätigung.",
         "saved": "Plugin-Einstellungen gespeichert"
       }
     }

@@ -40,16 +40,24 @@ const PKG = [{ pluginId: 'a.plugin', version: '1.0.0' }] as Partial<PluginPackag
 const SRC = [{ id: 1, cachedCatalog: catalogWith('a.plugin', ['1.0.0', '2.0.0']) }] as unknown as Partial<PluginSource>[];
 
 describe('PluginAutoUpdateService', () => {
-  it('does nothing at all while the setting is off', async () => {
-    const { service, inspect } = makeService({ setting: null, packages: PKG, sources: SRC });
+  it('VERDICT: does nothing at all once an admin turned it off', async () => {
+    const { service, inspect } = makeService({ setting: 'false', packages: PKG, sources: SRC });
     expect(await service.run()).toEqual({ updated: [], skipped: [] });
     expect(inspect).not.toHaveBeenCalled();
   });
 
-  it('reads the opt-in from its own key', async () => {
-    const { service } = makeService({ setting: 'true' });
-    expect(await service.enabled()).toBe(true);
+  it("VERDICT: an unset key reads as on — only the dialog's explicit 'false' disables it", async () => {
     expect(PLUGIN_AUTO_UPDATE_SETTING).toBe('plugins.auto_update');
+    expect(await makeService({ setting: null }).service.enabled()).toBe(true);
+    expect(await makeService({ setting: 'true' }).service.enabled()).toBe(true);
+    expect(await makeService({ setting: 'false' }).service.enabled()).toBe(false);
+
+    // Unset, so the pass runs and installs without anyone having opened the dialog.
+    const { service, confirm } = makeService({ setting: null, packages: PKG, sources: SRC });
+    expect((await service.run()).updated).toEqual([
+      { pluginId: 'a.plugin', from: '1.0.0', to: '2.0.0' },
+    ]);
+    expect(confirm).toHaveBeenCalled();
   });
 
   it('installs the newest offered version when it is newer than the installed one', async () => {

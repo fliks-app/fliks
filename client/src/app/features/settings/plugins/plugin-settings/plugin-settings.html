@@ -16,21 +16,15 @@
         <span class="loading loading-spinner loading-lg"></span>
       </div>
     } @else {
-      <label class="label cursor-pointer justify-start gap-3 mt-6 items-start">
-        <input
-          type="checkbox"
-          class="toggle mt-0.5"
+      <div class="mt-6">
+        <app-toggle-field
+          [value]="autoUpdate()"
+          (valueChange)="toggleAutoUpdate($event)"
           [disabled]="saving()"
-          [ngModel]="autoUpdate()"
-          (ngModelChange)="toggleAutoUpdate($event)"
+          [label]="'settings.plugins.settings.auto_update' | translate"
+          [hint]="'settings.plugins.settings.auto_update_hint' | translate"
         />
-        <span>
-          <span class="label-text text-base">{{ 'settings.plugins.settings.auto_update' | translate }}</span>
-          <span class="block text-sm text-base-content/60 mt-1">
-            {{ 'settings.plugins.settings.auto_update_hint' | translate }}
-          </span>
-        </span>
-      </label>
+      </div>
     }
 
     <div class="modal-action">
