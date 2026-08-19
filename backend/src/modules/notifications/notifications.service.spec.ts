@@ -1,7 +1,10 @@
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import axios from 'axios';
-import { NotificationsService } from './notifications.service';
+import {
+  NotificationsService,
+  redactNotificationSecrets,
+} from './notifications.service';
 import { CreateNotificationConnectionDto } from './dto/create-notification-connection.dto';
 
 jest.mock('axios');
@@ -15,19 +18,26 @@ describe('NotificationsService settings normalization', () => {
       saved.push(row);
       return Promise.resolve({ id: 1, ...row });
     },
-    findOne: () =>
-      Promise.resolve({ id: 1, type: 'ntfy', settings: {}, events: [] }),
+    findOne: () => Promise.resolve({ id: 1, events: [], ...stored }),
   };
   const service = new NotificationsService(repo as never);
+  let stored: { type: string; settings: Record<string, unknown> };
 
-  beforeEach(() => (saved.length = 0));
+  beforeEach(() => {
+    saved.length = 0;
+    stored = { type: 'ntfy', settings: {} };
+  });
 
   it('folds a legacy webhookUrl onto url for server-addressed types', async () => {
     for (const type of ['webhook', 'gotify', 'ntfy']) {
       await service.create({
         name: type,
         type,
-        settings: { webhookUrl: 'https://ntfy.example.com', topic: 'media' },
+        settings: {
+          webhookUrl: 'https://ntfy.example.com',
+          topic: 'media',
+          token: 'tk',
+        },
       });
     }
     for (const row of saved) {
@@ -64,6 +74,48 @@ describe('NotificationsService settings normalization', () => {
     });
     expect(saved[0].settings).toEqual({
       url: 'https://ntfy.example.com',
+      topic: 'media',
+    });
+  });
+
+  it('rejects a gotify connection with no token', async () => {
+    await expect(
+      service.create({
+        name: 'Gotify',
+        type: 'gotify',
+        settings: { url: 'https://gotify.example.com' },
+      }),
+    ).rejects.toThrow('gotify requires a non-empty settings.token');
+  });
+
+  it('keeps the stored token when the editor saves a blank one', async () => {
+    stored = {
+      type: 'gotify',
+      settings: { url: 'https://gotify.example.com', token: 'tk_stored' },
+    };
+    await service.update(1, {
+      name: 'Gotify',
+      type: 'gotify',
+      settings: { url: 'https://gotify.example.com', token: '' },
+    });
+    expect(saved[0].settings).toEqual({
+      url: 'https://gotify.example.com',
+      token: 'tk_stored',
+    });
+  });
+
+  it('drops the stored token when the connection changes provider', async () => {
+    stored = {
+      type: 'gotify',
+      settings: { url: 'https://gotify.example.com', token: 'tk_stored' },
+    };
+    await service.update(1, {
+      name: 'Moved',
+      type: 'ntfy',
+      settings: { url: 'https://ntfy.sh', topic: 'media' },
+    });
+    expect(saved[0].settings).toEqual({
+      url: 'https://ntfy.sh',
       topic: 'media',
     });
   });
@@ -112,17 +164,6 @@ describe('CreateNotificationConnectionDto validation', () => {
     ).toEqual([]);
   });
 
-  it('requires a token for gotify', async () => {
-    const errors = await check({
-      name: 'Gotify',
-      type: 'gotify',
-      settings: { url: 'https://gotify.example.com' },
-    });
-    expect(errors).toContain(
-      'gotify requires settings.url to be an http(s) URL and a non-empty settings.token',
-    );
-  });
-
   it('rejects a blank endpoint', async () => {
     const errors = await check({
       name: 'Ntfy',
@@ -142,20 +183,110 @@ describe('CreateNotificationConnectionDto validation', () => {
   });
 });
 
-describe('NotificationsService ntfy dispatch', () => {
-  const serviceFor = (settings: Record<string, unknown>) =>
+describe('NotificationsService provider authentication', () => {
+  const serviceFor = (row: Record<string, unknown>) =>
     new NotificationsService({
-      findOne: () =>
-        Promise.resolve({ id: 1, type: 'ntfy', events: [], settings }),
+      findOne: () => Promise.resolve({ id: 1, events: [], ...row }),
     } as never);
+
+  const lastCall = () => {
+    const [url, body, config] = mockedAxios.post.mock.calls.at(-1) as [
+      string,
+      unknown,
+      { headers?: Record<string, string> },
+    ];
+    return { url, body, headers: config?.headers ?? {} };
+  };
 
   beforeEach(() => {
     mockedAxios.post.mockReset();
     mockedAxios.post.mockResolvedValue({ status: 200 } as never);
   });
 
+  it('authenticates an ntfy push when a token is configured', async () => {
+    const service = serviceFor({
+      type: 'ntfy',
+      settings: {
+        url: 'https://ntfy.example.com',
+        topic: 'media',
+        token: 'tk_secret',
+      },
+    });
+
+    await expect(service.testConnection(1)).resolves.toMatchObject({
+      ok: true,
+    });
+    const { url, headers } = lastCall();
+    expect(url).toBe('https://ntfy.example.com/media');
+    expect(headers.Authorization).toBe('Bearer tk_secret');
+  });
+
+  it('omits the header entirely on a public ntfy topic', async () => {
+    const service = serviceFor({
+      type: 'ntfy',
+      settings: { url: 'https://ntfy.sh', topic: 'media' },
+    });
+
+    await service.testConnection(1);
+    expect(lastCall().headers).not.toHaveProperty('Authorization');
+  });
+
+  it('keeps the ntfy title ASCII so axios does not strip it', async () => {
+    const service = serviceFor({
+      type: 'ntfy',
+      settings: { url: 'https://ntfy.sh', topic: 'media' },
+    });
+
+    await service.testConnection(1);
+    const title = lastCall().headers.Title;
+    expect(title).toBe('Fliks - health.issue');
+    // eslint-disable-next-line no-control-regex
+    expect(title).toMatch(/^[\x00-\x7F]*$/);
+  });
+
   it('falls back to the default topic when none is stored', async () => {
-    await serviceFor({ url: 'https://ntfy.sh', topic: '' }).testConnection(1);
-    expect(mockedAxios.post.mock.calls[0][0]).toBe('https://ntfy.sh/fliks');
+    const service = serviceFor({
+      type: 'ntfy',
+      settings: { url: 'https://ntfy.sh', topic: '' },
+    });
+
+    await service.testConnection(1);
+    expect(lastCall().url).toBe('https://ntfy.sh/fliks');
+  });
+
+  it('escapes the gotify token it puts in the query string', async () => {
+    const service = serviceFor({
+      type: 'gotify',
+      settings: { url: 'https://gotify.example.com', token: 'a b&c' },
+    });
+
+    await service.testConnection(1);
+    expect(lastCall().url).toBe(
+      'https://gotify.example.com/message?token=a%20b%26c',
+    );
+  });
+
+  it('sends a bearer token on a generic webhook', async () => {
+    const service = serviceFor({
+      type: 'webhook',
+      settings: { url: 'https://hook.example.com', token: 'wh_secret' },
+    });
+
+    await service.testConnection(1);
+    expect(lastCall().headers.Authorization).toBe('Bearer wh_secret');
+  });
+});
+
+describe('redactNotificationSecrets', () => {
+  it('strips the token but keeps the endpoint the editor has to show', () => {
+    const conn = {
+      id: 1,
+      type: 'ntfy',
+      settings: { url: 'https://ntfy.sh', topic: 'media', token: 'tk_secret' },
+    };
+    expect(redactNotificationSecrets(conn as never).settings).toEqual({
+      url: 'https://ntfy.sh',
+      topic: 'media',
+    });
   });
 });

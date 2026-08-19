@@ -65,6 +65,7 @@ describe('NotificationsSettingsComponent — endpoint settings key', () => {
     expect(settingsOf(c)).toEqual({
       url: 'https://ntfy.example.com',
       topic: 'media',
+      token: 'tok',
     });
 
     c.formType.set('gotify');
@@ -74,7 +75,10 @@ describe('NotificationsSettingsComponent — endpoint settings key', () => {
     });
 
     c.formType.set('webhook');
-    expect(settingsOf(c)).toEqual({ url: 'https://ntfy.example.com' });
+    expect(settingsOf(c)).toEqual({
+      url: 'https://ntfy.example.com',
+      token: 'tok',
+    });
   });
 
   it('keeps discord and slack on webhookUrl', async () => {
@@ -123,5 +127,44 @@ describe('NotificationsSettingsComponent — endpoint settings key', () => {
       url: 'https://legacy.example.com',
       topic: 'old',
     });
+  });
+});
+
+describe('NotificationsSettingsComponent — provider tokens', () => {
+  it('offers a token only to the providers that can use one', async () => {
+    const c = await createComponent();
+    for (const type of ['webhook', 'gotify', 'ntfy'] as const) {
+      c.formType.set(type);
+      expect(c.supportsToken()).toBe(true);
+    }
+    for (const type of ['discord', 'slack'] as const) {
+      c.formType.set(type);
+      expect(c.supportsToken()).toBe(false);
+    }
+  });
+
+  it('omits a blank token so a public topic stores no credential', async () => {
+    const c = await createComponent();
+    c.formWebhookUrl.set('https://ntfy.sh');
+    c.formTopic.set('media');
+    c.formToken.set('   ');
+    c.formType.set('ntfy');
+
+    expect(settingsOf(c)).toEqual({ url: 'https://ntfy.sh', topic: 'media' });
+  });
+
+  it('leaves the token blank on edit, so saving keeps the stored one', async () => {
+    const c = await createComponent();
+    c.openEdit({
+      id: 1,
+      name: 'Ntfy',
+      type: 'ntfy',
+      enabled: true,
+      events: [],
+      settings: { url: 'https://ntfy.example.com', topic: 'media' },
+    });
+
+    expect(c.formToken()).toBe('');
+    expect(settingsOf(c)).not.toHaveProperty('token');
   });
 });

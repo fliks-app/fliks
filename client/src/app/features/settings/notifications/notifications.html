@@ -119,15 +119,27 @@
           />
         </label>
 
-        @if (formType() === 'gotify') {
+        @if (supportsToken()) {
           <label class="form-control w-full">
-            <span class="label-text">{{ 'settings.notifications.field_token' | translate }}</span>
+            <span class="label-text">
+              {{ 'settings.notifications.field_token' | translate }}
+              @if (formType() !== 'gotify') {
+                <span class="opacity-60">
+                  {{ 'settings.notifications.field_token_optional' | translate }}
+                </span>
+              }
+            </span>
             <input
               type="password"
               class="input input-bordered input-sm w-full"
               [ngModel]="formToken()"
               (ngModelChange)="formToken.set($event)"
             />
+            @if (editingId() !== null) {
+              <span class="label-text-alt text-base-content/50">
+                {{ 'settings.notifications.token_hint' | translate }}
+              </span>
+            }
           </label>
         }
 

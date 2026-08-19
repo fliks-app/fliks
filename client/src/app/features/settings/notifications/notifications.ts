@@ -2,6 +2,7 @@ import {
   Component,
   ChangeDetectionStrategy,
   ElementRef,
+  computed,
   signal,
   inject,
   OnInit,
@@ -71,6 +72,11 @@ export class NotificationsSettingsComponent implements OnInit {
 
   readonly connectionTypes = ['discord', 'slack', 'webhook', 'gotify', 'ntfy'] as const;
 
+  /** Discord and Slack authenticate through the webhook URL itself. */
+  readonly supportsToken = computed(
+    () => this.formType() !== 'discord' && this.formType() !== 'slack',
+  );
+
   ngOnInit() {
     this.reloadAll();
   }
@@ -109,7 +115,7 @@ export class NotificationsSettingsComponent implements OnInit {
     this.formEnabled.set(nc.enabled);
     const s = nc.settings ?? {};
     this.formWebhookUrl.set(String(s['webhookUrl'] ?? s['url'] ?? ''));
-    this.formToken.set(String(s['token'] ?? ''));
+    this.formToken.set('');
     this.formTopic.set(String(s['topic'] ?? ''));
     this.formEvents.set([...nc.events]);
     this.testResult.set(null);
@@ -132,14 +138,19 @@ export class NotificationsSettingsComponent implements OnInit {
       return { webhookUrl: this.formWebhookUrl() };
     }
     // These three read `url` server-side.
+    const token = this.formToken().trim();
     if (type === 'webhook') {
-      return { url: this.formWebhookUrl() };
+      return { url: this.formWebhookUrl(), ...(token ? { token } : {}) };
     }
     if (type === 'gotify') {
-      return { url: this.formWebhookUrl(), token: this.formToken() };
+      return { url: this.formWebhookUrl(), token };
     }
     if (type === 'ntfy') {
-      return { url: this.formWebhookUrl(), topic: this.formTopic() };
+      return {
+        url: this.formWebhookUrl(),
+        topic: this.formTopic(),
+        ...(token ? { token } : {}),
+      };
     }
     return {};
   }
