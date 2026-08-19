@@ -2225,7 +2225,7 @@
         "title": "Definições",
         "subtitle": "Como o Fliks gere os plugins instalados.",
         "auto_update": "Atualizar os plugins automaticamente",
-        "auto_update_hint": "Uma vez por dia, após atualizar as fontes, instala a versão mais recente oferecida para um plugin instalado. Sem intervenção só é instalado um arquivo assinado pelo catálogo da fonte: o resto continua a exigir a tua confirmação.",
+        "auto_update_hint": "Ativado por predefinição. Uma vez por dia, após atualizar as fontes, instala a versão mais recente oferecida para um plugin instalado. Sem intervenção só é instalado um arquivo assinado pelo catálogo da fonte: o resto continua a exigir a tua confirmação.",
         "saved": "Definições dos plugins guardadas"
       }
     }

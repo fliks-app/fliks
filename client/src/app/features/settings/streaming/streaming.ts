@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { StreamsApiService } from '../../../core/services/api/streams-api.service';
@@ -9,7 +10,7 @@ import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-streaming-settings',
-  imports: [FormsModule, TranslateModule],
+  imports: [FormsModule, TranslateModule, ToggleFieldComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './streaming.html',
 })

@@ -2225,7 +2225,7 @@
         "title": "Impostazioni",
         "subtitle": "Come Fliks gestisce i plugin installati.",
         "auto_update": "Aggiorna automaticamente i plugin",
-        "auto_update_hint": "Una volta al giorno, dopo l’aggiornamento delle sorgenti, installa la versione più recente offerta per un plugin installato. Senza intervento viene installato solo un archivio firmato dal catalogo della sorgente: il resto richiede la tua conferma.",
+        "auto_update_hint": "Attivo per impostazione predefinita. Una volta al giorno, dopo l’aggiornamento delle sorgenti, installa la versione più recente offerta per un plugin installato. Senza intervento viene installato solo un archivio firmato dal catalogo della sorgente: il resto richiede la tua conferma.",
         "saved": "Impostazioni dei plugin salvate"
       }
     }

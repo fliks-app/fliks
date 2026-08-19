@@ -24,6 +24,8 @@ import { BaseEntity } from '../../../common/entities/base.entity';
  *     OpenAI-compatible endpoint (Groq, OpenRouter, Ollama…)
  *   subtitle_translation_libretranslate_url / _libretranslate_api_key —
  *     self-hosted LibreTranslate server
+ *   plugins.auto_update  — "false" disables the daily plugin update pass; absent or
+ *     anything else means on. Not a `plugin.<id>.*` key, so an uninstall never clears it.
  */
 @Entity('app_settings')
 export class AppSetting extends BaseEntity {

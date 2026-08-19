@@ -8,7 +8,8 @@ import { PluginPackage } from './entities/plugin-package.entity';
 import { PluginSource } from './entities/plugin-source.entity';
 import type { FilteredCatalog, FilteredCatalogEntry } from './catalog/catalog';
 
-/** Off unless an admin turned it on: an unattended install is opt-in, never a default. */
+/** On unless an admin turned it off — an unset key reads as enabled, so an instance that
+ *  never opened the dialog still gets signed updates. */
 export const PLUGIN_AUTO_UPDATE_SETTING = 'plugins.auto_update';
 
 export interface AutoUpdateOutcome {
@@ -34,8 +35,9 @@ export class PluginAutoUpdateService {
     private readonly installService: PluginInstallService,
   ) {}
 
+  /** Only the explicit `'false'` the dialog writes disables it; unset means on. */
   async enabled(): Promise<boolean> {
-    return (await this.settings.get(PLUGIN_AUTO_UPDATE_SETTING)) === 'true';
+    return (await this.settings.get(PLUGIN_AUTO_UPDATE_SETTING)) !== 'false';
   }
 
   async run(): Promise<AutoUpdateOutcome> {

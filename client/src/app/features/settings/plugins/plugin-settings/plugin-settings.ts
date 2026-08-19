@@ -6,9 +6,9 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucideX } from '@lucide/angular';
+import { ToggleFieldComponent } from '../../../../shared/components/forms/toggle-field/toggle-field';
 import { SettingsApiService } from '../../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 
@@ -17,7 +17,7 @@ const AUTO_UPDATE_KEY = 'plugins.auto_update';
 
 @Component({
   selector: 'app-plugin-settings',
-  imports: [FormsModule, TranslateModule, LucideX],
+  imports: [TranslateModule, LucideX, ToggleFieldComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-settings.html',
 })
@@ -28,7 +28,8 @@ export class PluginSettingsComponent {
 
   private readonly dialogRef = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
 
-  readonly autoUpdate = signal(false);
+  /** On unless the stored value is the explicit 'false' — mirrors the backend's own reading. */
+  readonly autoUpdate = signal(true);
   readonly loading = signal(true);
   readonly saving = signal(false);
 
@@ -38,9 +39,9 @@ export class PluginSettingsComponent {
     this.loading.set(true);
     try {
       const row = await this.settings.get(AUTO_UPDATE_KEY);
-      this.autoUpdate.set(row?.value === 'true');
+      this.autoUpdate.set(row?.value !== 'false');
     } catch {
-      this.autoUpdate.set(false);
+      this.autoUpdate.set(true);
     } finally {
       this.loading.set(false);
     }
