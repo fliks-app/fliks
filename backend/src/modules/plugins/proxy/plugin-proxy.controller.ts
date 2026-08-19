@@ -1,12 +1,15 @@
-import { All, Controller, HttpStatus, Param, Req, Res, UseGuards } from '@nestjs/common';
+import { All, Controller, HttpStatus, Logger, Param, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
+import { PLUGIN_DEADLINES_MS } from '../../../common/plugin-contract';
 import { JwtOrApiKeyGuard } from '../../auth/guards/jwt-or-api-key.guard';
+import { RpcTimeoutError } from '../supervisor/wire';
 import { PluginRegistryService } from '../plugin-registry.service';
 import { PluginProcessService } from '../plugin-process.service';
 import { PluginInstallException } from '../plugin-install.exception';
 import { PluginRouteGuard, pluginRequestPath, type PluginRouteRequest } from './plugin-route.guard';
 
-const CALL_DEADLINE_MS = 30_000;
+/** A route fanning out to third-party upstreams (indexer search) is allowed to be slow. */
+const CALL_DEADLINE_MS = PLUGIN_DEADLINES_MS.pluginCall;
 
 /** Everything a data response needs, and nothing that steers the browser's session or
  *  navigation — a plugin must never be able to set `Set-Cookie`, `Location` or `Authorization`. */
@@ -41,6 +44,8 @@ interface PluginHttpResult {
 @Controller()
 @UseGuards(JwtOrApiKeyGuard, PluginRouteGuard)
 export class PluginProxyController {
+  private readonly log = new Logger(PluginProxyController.name);
+
   constructor(
     private readonly registry: PluginRegistryService,
     private readonly processService: PluginProcessService,
@@ -76,7 +81,11 @@ export class PluginProxyController {
         CALL_DEADLINE_MS,
       );
     } catch (err) {
-      throw new PluginInstallException(HttpStatus.SERVICE_UNAVAILABLE, 'PLUGIN_UNAVAILABLE', (err as Error).message);
+      // The reason is internal RPC vocabulary and reaches a modal verbatim: log it, answer a key.
+      this.log.warn(`plugin "${pluginId}" ${req.method} ${pluginRequestPath(req)}: ${(err as Error).message}`);
+      throw err instanceof RpcTimeoutError
+        ? new PluginInstallException(HttpStatus.GATEWAY_TIMEOUT, 'PLUGIN_TIMEOUT', 'errors.plugin_timeout')
+        : new PluginInstallException(HttpStatus.SERVICE_UNAVAILABLE, 'PLUGIN_UNAVAILABLE', 'errors.plugin_unavailable');
     }
 
     res.status(clampStatus(result.status));

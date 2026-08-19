@@ -879,6 +879,7 @@
     "analyze_launch_error": "No se puede iniciar el análisis",
     "not_found": "Contenido no encontrado",
     "download_section": "Descarga",
+    "releases_title": "Releases disponibles",
     "download_detail_title": "Detalles de la descarga",
     "download_pack": "Pack",
     "quality_profile_label": "Perfil de calidad",
@@ -2250,6 +2251,8 @@
     "502": "Puerta de enlace o proxy no válido",
     "503": "Servicio temporalmente no disponible",
     "504": "Se agotó el tiempo de espera del servidor",
+    "plugin_timeout": "El plugin tardó demasiado en responder. Su búsqueda puede seguir en curso — inténtalo de nuevo en un momento.",
+    "plugin_unavailable": "El plugin no respondió. Comprueba que está en marcha en Ajustes › Plugins.",
     "unknown": "Error {{code}}"
   },
   "media_card": {

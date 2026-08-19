@@ -74,6 +74,7 @@ import {
 } from './media-detail.utils';
 import type { MediaFileRow } from './media-detail.utils';
 import { isUnprofiledReleaseError, releaseGrabBody } from './media-detail-release.utils';
+import { serverMessage } from '../../core/utils/server-message';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
 import { SseService, type SseEvent } from '../../core/services/sse.service';
@@ -1076,11 +1077,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.draftLanguageProfileId.set(updated.languageProfile?.id ?? null);
       this.profilesOk.set(this.translate.instant('media_detail.profiles_saved'));
     } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      this.profilesErr.set(
-        httpErr.error?.message ??
-          this.translate.instant('media_detail.profiles_save_error'),
-      );
+      this.profilesErr.set(serverMessage(err, this.translate, 'media_detail.profiles_save_error'));
     } finally {
       this.profilesSaveLoading.set(false);
     }
@@ -1106,11 +1103,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       if (isUnprofiledReleaseError(err)) {
         this.releasesEmptyMessage.set('media_detail.no_quality_profile');
       } else {
-        const httpErr = err as { error?: { message?: string } };
-        this.releasesError.set(
-          httpErr.error?.message ??
-            this.translate.instant('media_detail.releases_error'),
-        );
+        this.releasesError.set(serverMessage(err, this.translate, 'media_detail.releases_error'));
       }
     } finally {
       this.releasesLoading.set(false);
@@ -1200,11 +1193,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         this.translate.instant('media_detail.refresh_launched'),
       );
     } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      this.toast.error(
-        httpErr.error?.message ??
-          this.translate.instant('media_detail.refresh_error'),
-      );
+      this.toast.error(serverMessage(err, this.translate, 'media_detail.refresh_error'));
     }
   }
 
@@ -1546,10 +1535,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       if (isUnprofiledReleaseError(err)) {
         this.epReleasesEmptyMessage.set('media_detail.no_quality_profile');
       } else {
-        const httpErr = err as { error?: { message?: string } };
-        this.epReleasesError.set(
-          httpErr.error?.message ?? this.translate.instant('media_detail.releases_error'),
-        );
+        this.epReleasesError.set(serverMessage(err, this.translate, 'media_detail.releases_error'));
       }
     } finally {
       this.epReleasesLoading.set(false);
@@ -1598,10 +1584,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       if (isUnprofiledReleaseError(err)) {
         this.seasonReleasesEmptyMessage.set('media_detail.no_quality_profile');
       } else {
-        const httpErr = err as { error?: { message?: string } };
-        this.seasonReleasesError.set(
-          httpErr.error?.message ?? this.translate.instant('media_detail.releases_error'),
-        );
+        this.seasonReleasesError.set(serverMessage(err, this.translate, 'media_detail.releases_error'));
       }
     } finally {
       this.seasonReleasesLoading.set(false);
