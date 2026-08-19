@@ -32,6 +32,7 @@ const CACHEABLE_PREFIXES = [
   '/api/profiles/language',
   // Title details barely change; the request-poster fallback (rows without
   // stored local art) re-fetches them on every cold page open otherwise.
+  // Only the pure provider reads — see EXCLUDED_PATTERNS for the rest.
   '/api/metadata',
 ];
 
@@ -49,6 +50,10 @@ const EXCLUDED_PREFIXES = [
 // background, so the caller never sees the real response.
 const EXCLUDED_PATTERNS = [
   /\/api\/media\/\d+\/subtitles\/search/,
+  // These carry existingMediaId — library state, not provider metadata. Caching it
+  // pins a title to "not in the library" long after it was added, so the card keeps
+  // its add badge and routes to the add page instead of the library one.
+  /^\/api\/metadata\/(search|trending|popular|upcoming|discover)\//,
 ];
 
 const DETAIL_PATTERN = /^\/api\/media\/\d+$/;
