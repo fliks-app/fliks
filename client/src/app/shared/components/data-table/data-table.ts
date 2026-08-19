@@ -1,16 +1,21 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
-import { formatBytes } from '../../utils/download-format';
+import { formatBytes, formatSpeed } from '../../utils/download-format';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { SseService } from '../../../core/services/sse.service';
 import { PaginationComponent } from '../pagination/pagination';
 import { BadgeTone, CellValue, ListAction, PagedResult, RowAction, TableColumn, TableFilter, TableRow, TableSubValue } from './data-table.types';
 
 /** Keystroke-to-request debounce for a `search` filter — see `onSearchInput`. */
 const SEARCH_DEBOUNCE_MS = 300;
+
+/** Mirrors the contract's `TABLE_REFRESH_MIN_MS`: one refetch per viewer per this window,
+ *  whatever the declared interval or the rate of the events driving it. */
+const REFRESH_MIN_MS = 2000;
 
 /** The only classes a declared badge can resolve to. A `badges` entry is JSON from a
  *  manifest, so it is looked up here and never interpolated into the rendered `class`. */
@@ -63,6 +68,10 @@ export class DataTableComponent implements OnInit {
   readonly pageSize = input(20);
   /** Declared `search`/`select` filters, rendered above the table. */
   readonly filters = input<readonly TableFilter[]>([]);
+  /** Poll the list this often while the page is on screen; 0 disables it. */
+  readonly refreshMs = input(0);
+  /** SSE event types that reload the list as they arrive. */
+  readonly refreshOn = input<readonly string[]>([]);
 
   readonly rows = signal<TableRow[]>([]);
   readonly loading = signal(true);
@@ -81,21 +90,66 @@ export class DataTableComponent implements OnInit {
   readonly filterValues = signal<Record<string, string>>({});
   private searchDebounce: ReturnType<typeof setTimeout> | null = null;
   private loadSeq = 0;
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  private trailingRefresh: ReturnType<typeof setTimeout> | null = null;
+  private lastRefreshAt = 0;
 
   constructor() {
+    const sse = inject(SseService);
+    effect(() => {
+      const event = sse.lastEvent();
+      if (!event || !this.refreshOn().includes(event.type)) return;
+      untracked(() => this.requestRefresh());
+    });
     inject(DestroyRef).onDestroy(() => {
       if (this.searchDebounce) clearTimeout(this.searchDebounce);
+      if (this.refreshTimer) clearInterval(this.refreshTimer);
+      if (this.trailingRefresh) clearTimeout(this.trailingRefresh);
     });
   }
 
   ngOnInit(): void {
     void this.loadRows();
+    const declared = this.refreshMs();
+    if (declared > 0) {
+      this.refreshTimer = setInterval(() => this.requestRefresh(), Math.max(declared, REFRESH_MIN_MS));
+    }
   }
 
-  async loadRows(): Promise<void> {
+  /** The button: the user asked, so the reload shows itself. */
+  async refreshNow(): Promise<void> {
+    this.lastRefreshAt = Date.now();
+    await this.loadRows();
+  }
+
+  /**
+   * Every automatic trigger — a poll tick, an event the page declared — funnels here, so a
+   * burst of events costs one fetch. The trailing timer keeps the last trigger rather than
+   * dropping it, which is what would leave the table showing a state the server has left.
+   * Nothing fires while the tab is hidden: a backgrounded queue is not being read.
+   */
+  private requestRefresh(): void {
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+    const waitMs = REFRESH_MIN_MS - (Date.now() - this.lastRefreshAt);
+    if (waitMs > 0) {
+      if (!this.trailingRefresh) {
+        this.trailingRefresh = setTimeout(() => {
+          this.trailingRefresh = null;
+          this.requestRefresh();
+        }, waitMs);
+      }
+      return;
+    }
+    this.lastRefreshAt = Date.now();
+    void this.loadRows({ silent: true });
+  }
+
+  /** `silent` keeps the spinner and the dimming off — an automatic reload must not make the
+   *  table flicker under someone reading it. */
+  async loadRows(opts?: { silent?: boolean }): Promise<void> {
     // Only the newest reload may write: a filtered scan can resolve after a later, narrower one.
     const seq = ++this.loadSeq;
-    this.loading.set(true);
+    if (!opts?.silent) this.loading.set(true);
     this.listError.set('');
     try {
       let params = new HttpParams();
@@ -116,7 +170,7 @@ export class DataTableComponent implements OnInit {
     } catch {
       if (seq === this.loadSeq) this.listError.set(this.translate.instant(this.loadErrorKey()));
     } finally {
-      if (seq === this.loadSeq) this.loading.set(false);
+      if (seq === this.loadSeq && !opts?.silent) this.loading.set(false);
     }
   }
 
@@ -166,6 +220,10 @@ export class DataTableComponent implements OnInit {
     return typeof value === 'number' ? `${Math.round(value)}%` : String(value ?? '');
   }
 
+  cellSpeed(value: CellValue): string {
+    return typeof value === 'number' ? formatSpeed(value) : String(value ?? '');
+  }
+
   /**
    * The badge class for a cell, or null to render it as text. `*` catches every value the
    * column didn't name; an unknown tone falls back to `ghost` rather than reaching the DOM.
@@ -204,13 +262,17 @@ export class DataTableComponent implements OnInit {
         return this.cellBytes(value);
       case 'percent':
         return this.cellPercent(value);
+      case 'speed':
+        return this.cellSpeed(value);
       default:
         return this.cellLabel(sub, value);
     }
   }
 
-  /** A formatted value, a badge and a declared `nowrap` are all atomic — none should wrap. */
+  /** A formatted value, a badge and a declared `nowrap` are all atomic — none should wrap.
+   *  A truncated cell clips instead, so it must not claim the row's whole width. */
   cellNowrap(col: TableColumn): boolean {
+    if (col.truncate) return false;
     return col.nowrap === true || col.format !== undefined || col.badges !== undefined;
   }
 

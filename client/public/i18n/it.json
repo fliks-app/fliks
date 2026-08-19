@@ -2417,6 +2417,7 @@
   },
   "data_table": {
     "load_error": "Impossibile caricare l'elenco.",
-    "empty": "Niente da visualizzare."
+    "empty": "Niente da visualizzare.",
+    "refresh": "Aggiorna"
   }
 }

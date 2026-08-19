@@ -55,6 +55,8 @@
         [defaultSortKey]="view.defaultSortKey ?? null"
         [paged]="view.paged ?? false"
         [pageSize]="view.pageSize ?? 20"
+        [refreshMs]="view.refreshMs ?? 0"
+        [refreshOn]="view.refreshOn ?? []"
         [resolveAction]="tableResolveAction"
       />
     } @else if (formPage(); as page) {

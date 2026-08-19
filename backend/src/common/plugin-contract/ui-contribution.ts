@@ -183,7 +183,7 @@ export type BadgeTone =
  *  in the type rather than merely undocumented. */
 export interface TableSubValue {
   key: string;
-  format?: 'date' | 'bytes' | 'percent';
+  format?: 'date' | 'bytes' | 'percent' | 'speed';
   labelKeys?: Record<string, string>;
   badges?: Record<string, BadgeTone>;
 }
@@ -192,7 +192,7 @@ export interface TableSubValue {
 export interface TableColumn {
   key: string;
   labelKey: string;
-  format?: 'date' | 'bytes' | 'percent';
+  format?: 'date' | 'bytes' | 'percent' | 'speed';
   /** Maps a cell value to a translate key — a status column renders its raw enum otherwise. */
   labelKeys?: Record<string, string>;
   /** Renders the cell as a badge, the value picking its tone. `*` covers every other value,
@@ -201,6 +201,9 @@ export interface TableColumn {
   badges?: Record<string, BadgeTone>;
   /** Keeps the cell on one line. Implied for `format`ted and badged cells. */
   nowrap?: boolean;
+  /** Clips the value to one line with an ellipsis, full text on hover. For the one column
+   *  carrying free text (a release name), which otherwise wraps a row over several lines. */
+  truncate?: boolean;
   /** A second line under the cell's own value. A release's quality and tracker belong with
    *  its name; as columns of their own they cost width the title needed. */
   subValues?: TableSubValue[];
@@ -273,6 +276,10 @@ export interface PlayerDeclaration {
   preRollRoute: string;
 }
 
+/** Floor for both `refreshMs` and the coalescing of `refreshOn`: a list refetch is a round
+ *  trip per viewer, and no queue reads usefully faster than this. */
+export const TABLE_REFRESH_MIN_MS = 2000;
+
 /** One `table` filter — its current value is sent to `list` as a query param named by
  *  `key`; an empty value is omitted. Filtering itself is the plugin's job, core only forwards it. */
 export type TableFilter =
@@ -295,6 +302,13 @@ export interface TableConfigPage extends ConfigPageBase {
    *  paged resource renders empty against an array-only reader. */
   paged?: boolean;
   pageSize?: number;
+  /** Re-fetch this often while the page is on screen, for a list whose values move on
+   *  their own. Clamped to {@link TABLE_REFRESH_MIN_MS}; polling stops while the tab is
+   *  hidden. Prefer `refreshOn` — this is for values no event announces. */
+  refreshMs?: number;
+  /** Core SSE event types that re-fetch the list as they arrive, coalesced to at most one
+   *  fetch per {@link TABLE_REFRESH_MIN_MS}. */
+  refreshOn?: string[];
   /** List-scope actions (clear-all and the like), distinct from `rowActions`. */
   listActions?: {
     labelKey: string;
