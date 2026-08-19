@@ -26,6 +26,7 @@ export class InfiniteScrollList<T extends { id: number }> {
   private idPrefix = '';
   private letterBoundaries: { letter: string; itemId: number; index: number }[] = [];
   private scrollHandler: (() => void) | null = null;
+  private unlockOnScroll: (() => void) | null = null;
   private scrollLock = false;
   private scrollLockTimeout: ReturnType<typeof setTimeout> | null = null;
   private readonly idIndex = new Map<number, number>();
@@ -257,19 +258,22 @@ export class InfiniteScrollList<T extends { id: number }> {
   /** Release the scroll lock once the smooth scroll settles (shared by the
    *  windowed and non-windowed scrollToLetter paths). */
   private armScrollUnlock() {
-    const unlockOnScroll = () => {
-      if (this.scrollLockTimeout) clearTimeout(this.scrollLockTimeout);
-      this.scrollLockTimeout = setTimeout(() => {
-        this.scrollLock = false;
-        window.removeEventListener('scroll', unlockOnScroll);
-      }, 150);
-    };
-    window.addEventListener('scroll', unlockOnScroll, { passive: true });
-    // Fallback if already at position (no scroll event fires).
-    this.scrollLockTimeout = setTimeout(() => {
+    // Re-arming clears the pending timer, so the previous closure has to be
+    // dropped here or it stays bound to window with nothing left to remove it.
+    if (this.unlockOnScroll) window.removeEventListener('scroll', this.unlockOnScroll);
+    const release = () => {
       this.scrollLock = false;
       window.removeEventListener('scroll', unlockOnScroll);
-    }, 150);
+      if (this.unlockOnScroll === unlockOnScroll) this.unlockOnScroll = null;
+    };
+    const unlockOnScroll = () => {
+      if (this.scrollLockTimeout) clearTimeout(this.scrollLockTimeout);
+      this.scrollLockTimeout = setTimeout(release, 150);
+    };
+    this.unlockOnScroll = unlockOnScroll;
+    window.addEventListener('scroll', unlockOnScroll, { passive: true });
+    // Fallback if already at position (no scroll event fires).
+    this.scrollLockTimeout = setTimeout(release, 150);
   }
 
   /** Bind to a sentinel element via @ViewChild setter. */
@@ -289,6 +293,7 @@ export class InfiniteScrollList<T extends { id: number }> {
   /** Start tracking scroll position to update activeLetter. Call once after init. */
   trackScroll(idPrefix: string) {
     this.idPrefix = idPrefix;
+    if (this.scrollHandler) window.removeEventListener('scroll', this.scrollHandler);
     this.scrollHandler = () => {
       this.onWindowScroll();
       this.onScroll();
@@ -301,6 +306,10 @@ export class InfiniteScrollList<T extends { id: number }> {
     this.observer?.disconnect();
     if (this.scrollHandler) {
       window.removeEventListener('scroll', this.scrollHandler);
+    }
+    if (this.unlockOnScroll) {
+      window.removeEventListener('scroll', this.unlockOnScroll);
+      this.unlockOnScroll = null;
     }
     if (this.windowRaf !== null) {
       cancelAnimationFrame(this.windowRaf);
