@@ -181,8 +181,8 @@ export class DataTableComponent implements OnInit {
   /** The row's detail text for this column, or '' when there is none to open. A cell only
    *  becomes a button when it has something to show. */
   detailText(col: TableColumn, row: TableRow): string {
-    if (!col.detailKey) return '';
-    return String(row[col.detailKey] ?? '').trim();
+    if (!col.detailField) return '';
+    return String(row[col.detailField] ?? '').trim();
   }
 
   openDetail(col: TableColumn, row: TableRow): void {
