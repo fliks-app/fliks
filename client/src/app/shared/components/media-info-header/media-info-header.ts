@@ -301,6 +301,11 @@ export class MediaInfoHeaderComponent {
 
   // ── Load playback state + watched when media/episode changes ──
 
+  /** `mediaId:episodeId` of the last playback-state load. Angular reuses this
+   *  component between two episodes of the same show, so the identity has to
+   *  be tracked to drop the previous episode's resume state. */
+  private lastPlaybackKey: string | null = null;
+
   private readonly loadPlaybackEffect = effect(() => {
     const mediaId = this.mediaId();
     // A series page has no episode context of its own, but it does know which
@@ -309,6 +314,15 @@ export class MediaInfoHeaderComponent {
     // episode-specific label.
     const episodeId = this.episodeId() ?? this.resumeEpisodeId();
     if (!mediaId) return;
+
+    const key = `${mediaId}:${episodeId ?? 0}`;
+    const switched = key !== this.lastPlaybackKey;
+    this.lastPlaybackKey = key;
+    if (switched) {
+      this.resumePositionSeconds.set(null);
+      this.durationSeconds.set(null);
+    }
+
 
     // Watched state: for a series without an episode context, derive from the
     // aggregate `seriesFullyWatched` input (see parent). Otherwise, read the
@@ -321,22 +335,19 @@ export class MediaInfoHeaderComponent {
 
     // Load resume position
     this.streamingApi.getPlaybackState(mediaId, episodeId).then(ps => {
-      if (ps) {
-        // Pre-select last-played file
-        if (ps.mediaFileId) {
-          const files = this.files();
-          if (files.some(f => f.id === ps.mediaFileId)) {
-            this.selectedFileIdChange.emit(ps.mediaFileId);
-          }
-        }
-        if (!ps.completed && ps.positionSeconds > 10) {
-          this.resumePositionSeconds.set(ps.positionSeconds);
-          this.durationSeconds.set(ps.durationSeconds);
-        } else {
-          this.resumePositionSeconds.set(null);
-          this.durationSeconds.set(null);
-        }
+      // A faster episode switch already superseded this request.
+      if (this.lastPlaybackKey !== key) return;
+      if (!ps || ps.completed || ps.positionSeconds <= 10) {
+        this.resumePositionSeconds.set(null);
+        this.durationSeconds.set(null);
+        return;
       }
+      // Pre-select last-played file
+      if (ps.mediaFileId && this.files().some(f => f.id === ps.mediaFileId)) {
+        this.selectedFileIdChange.emit(ps.mediaFileId);
+      }
+      this.resumePositionSeconds.set(ps.positionSeconds);
+      this.durationSeconds.set(ps.durationSeconds);
     }).catch(() => {});
   });
 
