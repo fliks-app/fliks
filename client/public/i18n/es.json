@@ -446,7 +446,8 @@
     "sub_bottom_margin": "Posición del borde inferior",
     "sub_bottom_margin_hint": "Define la posición vertical de los subtítulos respecto a la parte inferior de la pantalla.",
     "sub_top_margin": "Posición del borde superior",
-    "sub_top_margin_hint": "Define la posición vertical máxima permitida respecto a la parte superior de la pantalla. Esta función se usa cuando los subtítulos contienen instrucciones de posicionamiento en la parte superior de la pantalla."
+    "sub_top_margin_hint": "Define la posición vertical máxima permitida respecto a la parte superior de la pantalla. Esta función se usa cuando los subtítulos contienen instrucciones de posicionamiento en la parte superior de la pantalla.",
+    "lang_any": "Sin preferencia"
   },
   "import_disk": {
     "title": "Importación manual desde el disco",
@@ -1730,7 +1731,24 @@
       "name": "Nombre",
       "name_required": "El nombre es obligatorio.",
       "icon": "Icono",
+      "icon_default": "Por defecto (biblioteca)",
+      "icons": {
+        "book": "Libro",
+        "clapperboard": "Claqueta",
+        "film": "Película",
+        "folder": "Carpeta",
+        "games": "Juegos",
+        "globe": "Globo",
+        "heart": "Corazón",
+        "monitor": "Pantalla",
+        "music": "Música",
+        "popcorn": "Palomitas",
+        "star": "Estrella",
+        "swords": "Espadas",
+        "users": "Usuarios"
+      },
       "color": "Color",
+      "color_default": "Por defecto (primary)",
       "media_types": "Tipos de medios",
       "media_type_required": "Seleccione al menos un tipo de medio.",
       "path": "Ruta raíz",

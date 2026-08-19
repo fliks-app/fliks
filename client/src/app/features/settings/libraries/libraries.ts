@@ -24,6 +24,10 @@ import {
 } from '../../../core/services/api/profiles.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { FolderPickerService } from '../../../core/services/folder-picker.service';
+import {
+  LIBRARY_COLOR_OPTIONS,
+  LIBRARY_ICON_OPTIONS,
+} from '../../../core/constants/library-appearance';
 import { METADATA_PROVIDER_OPTIONS_LIBRARY } from '../../../core/constants/metadata-providers';
 
 @Component({
@@ -67,34 +71,8 @@ export class LibrariesSettingsComponent implements OnInit {
   readonly formUserIds = signal<Set<number>>(new Set());
   readonly saveError = signal('');
 
-  readonly iconOptions = [
-    { value: null, label: 'Par défaut (bibliothèque)' },
-    { value: 'film', label: 'Film' },
-    { value: 'tv', label: 'TV' },
-    { value: 'popcorn', label: 'Popcorn' },
-    { value: 'clapperboard', label: 'Clap' },
-    { value: 'book', label: 'Livre' },
-    { value: 'gamepad-2', label: 'Jeux' },
-    { value: 'music', label: 'Musique' },
-    { value: 'heart', label: 'Cœur' },
-    { value: 'star', label: 'Étoile' },
-    { value: 'globe', label: 'Globe' },
-    { value: 'monitor', label: 'Écran' },
-    { value: 'users', label: 'Utilisateurs' },
-    { value: 'folder', label: 'Dossier' },
-    { value: 'swords', label: 'Épées' },
-  ];
-
-  readonly colorOptions = [
-    { value: null, label: 'Par défaut (primary)' },
-    { value: 'primary', label: 'Primary' },
-    { value: 'secondary', label: 'Secondary' },
-    { value: 'accent', label: 'Accent' },
-    { value: 'info', label: 'Info' },
-    { value: 'success', label: 'Success' },
-    { value: 'warning', label: 'Warning' },
-    { value: 'error', label: 'Error' },
-  ];
+  readonly iconOptions = LIBRARY_ICON_OPTIONS;
+  readonly colorOptions = LIBRARY_COLOR_OPTIONS;
 
   readonly providerOptions = METADATA_PROVIDER_OPTIONS_LIBRARY;
 

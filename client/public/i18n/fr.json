@@ -451,7 +451,8 @@
     "sub_bottom_margin": "Position du bord inférieur",
     "sub_bottom_margin_hint": "Définit la position verticale des sous-titres par rapport au bas de l'écran.",
     "sub_top_margin": "Position du bord supérieur",
-    "sub_top_margin_hint": "Définit la position verticale maximale autorisée par rapport au haut de l'écran. Cette fonction est utilisée lorsque les sous-titres contiennent des instructions de positionnement en haut de l'écran."
+    "sub_top_margin_hint": "Définit la position verticale maximale autorisée par rapport au haut de l'écran. Cette fonction est utilisée lorsque les sous-titres contiennent des instructions de positionnement en haut de l'écran.",
+    "lang_any": "Aucune préférence"
   },
   "import_disk": {
     "title": "Import manuel depuis le disque",
@@ -1747,7 +1748,24 @@
       "name": "Nom",
       "name_required": "Le nom est obligatoire.",
       "icon": "Icône",
+      "icon_default": "Par défaut (bibliothèque)",
+      "icons": {
+        "book": "Livre",
+        "clapperboard": "Clap",
+        "film": "Film",
+        "folder": "Dossier",
+        "games": "Jeux",
+        "globe": "Globe",
+        "heart": "Cœur",
+        "monitor": "Écran",
+        "music": "Musique",
+        "popcorn": "Popcorn",
+        "star": "Étoile",
+        "swords": "Épées",
+        "users": "Utilisateurs"
+      },
       "color": "Couleur",
+      "color_default": "Par défaut (primary)",
       "media_types": "Types de médias",
       "media_type_required": "Sélectionnez au moins un type de média.",
       "path": "Chemin racine",

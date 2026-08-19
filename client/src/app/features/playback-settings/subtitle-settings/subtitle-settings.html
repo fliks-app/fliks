@@ -4,7 +4,7 @@
     <label class="form-control w-full max-w-xs">
       <div class="label"><span class="label-text font-medium">{{ 'playback_settings.sub_preferred_lang' | translate }}</span></div>
       <select class="select select-bordered w-full" [ngModel]="preferredSubtitleLanguage()" (ngModelChange)="preferredSubtitleLanguage.set($event)">
-        @for (l of languageOptions; track l.value) { <option [value]="l.value">{{ l.label }}</option> }
+        @for (l of languageOptions; track l.value) { <option [value]="l.value">{{ l.labelKey ? (l.labelKey | translate) : l.label }}</option> }
       </select>
     </label>
 

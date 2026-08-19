@@ -12,7 +12,7 @@ import { ToastService } from '../../../core/services/toast.service';
 import { SetupChecklistComponent } from '../../../shared/components/setup-checklist/setup-checklist';
 import {
   METADATA_LANGUAGE_OPTIONS,
-  METADATA_REGION_OPTIONS,
+  metadataRegionOptions,
 } from '../../../core/constants/metadata-locale';
 
 @Component({
@@ -39,7 +39,7 @@ export class GeneralSettingsComponent implements OnInit {
   readonly metadataRegion = signal('US');
   readonly savingMetadataLanguage = signal(false);
   readonly metadataLanguageOptions = METADATA_LANGUAGE_OPTIONS;
-  readonly metadataRegionOptions = METADATA_REGION_OPTIONS;
+  readonly metadataRegionOptions = metadataRegionOptions(this.translate.currentLang);
 
   // Automation
   readonly autoGrabOnApproval = signal('true');

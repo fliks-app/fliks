@@ -451,7 +451,8 @@
     "sub_bottom_margin": "Bottom edge position",
     "sub_bottom_margin_hint": "Sets the vertical position of subtitles relative to the bottom of the screen.",
     "sub_top_margin": "Top edge position",
-    "sub_top_margin_hint": "Sets the maximum vertical position allowed relative to the top of the screen. This is used when subtitles contain positioning instructions at the top of the screen."
+    "sub_top_margin_hint": "Sets the maximum vertical position allowed relative to the top of the screen. This is used when subtitles contain positioning instructions at the top of the screen.",
+    "lang_any": "No preference"
   },
   "import_disk": {
     "title": "Manual import from disk",
@@ -1747,7 +1748,24 @@
       "name": "Name",
       "name_required": "The name is required.",
       "icon": "Icon",
+      "icon_default": "Default (library)",
+      "icons": {
+        "book": "Book",
+        "clapperboard": "Clapperboard",
+        "film": "Film",
+        "folder": "Folder",
+        "games": "Games",
+        "globe": "Globe",
+        "heart": "Heart",
+        "monitor": "Screen",
+        "music": "Music",
+        "popcorn": "Popcorn",
+        "star": "Star",
+        "swords": "Swords",
+        "users": "Users"
+      },
       "color": "Color",
+      "color_default": "Default (primary)",
       "media_types": "Media types",
       "media_type_required": "Select at least one media type.",
       "path": "Root path",

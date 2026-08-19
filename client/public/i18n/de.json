@@ -446,7 +446,8 @@
     "sub_bottom_margin": "Position des unteren Rands",
     "sub_bottom_margin_hint": "Legt die vertikale Position der Untertitel relativ zum unteren Bildschirmrand fest.",
     "sub_top_margin": "Position des oberen Rands",
-    "sub_top_margin_hint": "Legt die maximal erlaubte vertikale Position relativ zum oberen Bildschirmrand fest. Diese Funktion wird verwendet, wenn die Untertitel Positionierungsanweisungen für den oberen Bildschirmrand enthalten."
+    "sub_top_margin_hint": "Legt die maximal erlaubte vertikale Position relativ zum oberen Bildschirmrand fest. Diese Funktion wird verwendet, wenn die Untertitel Positionierungsanweisungen für den oberen Bildschirmrand enthalten.",
+    "lang_any": "Keine Präferenz"
   },
   "import_disk": {
     "title": "Manueller Import vom Datenträger",
@@ -1730,7 +1731,24 @@
       "name": "Name",
       "name_required": "Der Name ist erforderlich.",
       "icon": "Symbol",
+      "icon_default": "Standard (Bibliothek)",
+      "icons": {
+        "book": "Buch",
+        "clapperboard": "Filmklappe",
+        "film": "Film",
+        "folder": "Ordner",
+        "games": "Spiele",
+        "globe": "Globus",
+        "heart": "Herz",
+        "monitor": "Bildschirm",
+        "music": "Musik",
+        "popcorn": "Popcorn",
+        "star": "Stern",
+        "swords": "Schwerter",
+        "users": "Benutzer"
+      },
       "color": "Farbe",
+      "color_default": "Standard (primary)",
       "media_types": "Medientypen",
       "media_type_required": "Wählen Sie mindestens einen Medientyp aus.",
       "path": "Stammpfad",

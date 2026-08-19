@@ -19,7 +19,7 @@
           <select class="select select-bordered w-full"
             [ngModel]="state.formIcon()" (ngModelChange)="state.formIcon.set($event || null)">
             @for (opt of iconOptions; track opt.value) {
-              <option [ngValue]="opt.value">{{ opt.label }}</option>
+              <option [ngValue]="opt.value">{{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}</option>
             }
           </select>
         </label>
@@ -30,7 +30,7 @@
           <select class="select select-bordered w-full"
             [ngModel]="state.formColor()" (ngModelChange)="state.formColor.set($event || null)">
             @for (opt of colorOptions; track opt.value) {
-              <option [ngValue]="opt.value">{{ opt.label }}</option>
+              <option [ngValue]="opt.value">{{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}</option>
             }
           </select>
         </label>
