@@ -20,23 +20,38 @@ export const METADATA_LANGUAGE_OPTIONS: readonly MetadataLocaleOption[] = [
 ];
 
 /** Regions driving release dates / upcoming (ISO 3166-1). */
-export const METADATA_REGION_OPTIONS: readonly MetadataLocaleOption[] = [
-  { code: 'US', label: 'États-Unis' },
-  { code: 'GB', label: 'Royaume-Uni' },
-  { code: 'FR', label: 'France' },
-  { code: 'DE', label: 'Allemagne' },
-  { code: 'ES', label: 'Espagne' },
-  { code: 'IT', label: 'Italie' },
-  { code: 'PT', label: 'Portugal' },
-  { code: 'BR', label: 'Brésil' },
-  { code: 'NL', label: 'Pays-Bas' },
-  { code: 'PL', label: 'Pologne' },
-  { code: 'RU', label: 'Russie' },
-  { code: 'JP', label: 'Japon' },
-  { code: 'KR', label: 'Corée du Sud' },
-  { code: 'CN', label: 'Chine' },
-  { code: 'CA', label: 'Canada' },
-  { code: 'AU', label: 'Australie' },
-  { code: 'MX', label: 'Mexique' },
-  { code: 'IN', label: 'Inde' },
-];
+const METADATA_REGION_CODES = [
+  'US',
+  'GB',
+  'FR',
+  'DE',
+  'ES',
+  'IT',
+  'PT',
+  'BR',
+  'NL',
+  'PL',
+  'RU',
+  'JP',
+  'KR',
+  'CN',
+  'CA',
+  'AU',
+  'MX',
+  'IN',
+] as const;
+
+/** Region names come from the platform (`Intl.DisplayNames`) so they follow the
+ *  UI language instead of shipping 18 names × 6 locales. */
+export function metadataRegionOptions(lang: string): MetadataLocaleOption[] {
+  let display: Intl.DisplayNames | null = null;
+  try {
+    display = new Intl.DisplayNames([lang || 'en'], { type: 'region' });
+  } catch {
+    /* unsupported locale data — fall back to the raw code */
+  }
+  return METADATA_REGION_CODES.map((code) => ({
+    code,
+    label: display?.of(code) ?? code,
+  }));
+}

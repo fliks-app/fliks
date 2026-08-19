@@ -446,7 +446,8 @@
     "sub_bottom_margin": "Posição da margem inferior",
     "sub_bottom_margin_hint": "Define a posição vertical das legendas em relação à parte inferior do ecrã.",
     "sub_top_margin": "Posição da margem superior",
-    "sub_top_margin_hint": "Define a posição vertical máxima permitida em relação ao topo do ecrã. Esta função é usada quando as legendas contêm instruções de posicionamento no topo do ecrã."
+    "sub_top_margin_hint": "Define a posição vertical máxima permitida em relação ao topo do ecrã. Esta função é usada quando as legendas contêm instruções de posicionamento no topo do ecrã.",
+    "lang_any": "Sem preferência"
   },
   "import_disk": {
     "title": "Importação manual a partir do disco",
@@ -1730,7 +1731,24 @@
       "name": "Nome",
       "name_required": "O nome é obrigatório.",
       "icon": "Ícone",
+      "icon_default": "Predefinido (biblioteca)",
+      "icons": {
+        "book": "Livro",
+        "clapperboard": "Claquete",
+        "film": "Filme",
+        "folder": "Pasta",
+        "games": "Jogos",
+        "globe": "Globo",
+        "heart": "Coração",
+        "monitor": "Ecrã",
+        "music": "Música",
+        "popcorn": "Pipocas",
+        "star": "Estrela",
+        "swords": "Espadas",
+        "users": "Utilizadores"
+      },
       "color": "Cor",
+      "color_default": "Predefinido (primary)",
       "media_types": "Tipos de media",
       "media_type_required": "Selecione pelo menos um tipo de media.",
       "path": "Caminho raiz",

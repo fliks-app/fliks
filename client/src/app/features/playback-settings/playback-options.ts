@@ -1,7 +1,13 @@
 /** Shared option lists for playback settings pages. */
 
-export const LANGUAGE_OPTIONS = [
-  { value: '', label: 'Aucune préférence' },
+export interface PlaybackOption {
+  value: string;
+  label?: string;
+  labelKey?: string;
+}
+
+export const LANGUAGE_OPTIONS: readonly PlaybackOption[] = [
+  { value: '', labelKey: 'playback_settings.lang_any' },
   { value: 'fra', label: 'Français' },
   { value: 'eng', label: 'English' },
   { value: 'jpn', label: '日本語 (Japanese)' },
@@ -60,7 +66,7 @@ export const QUALITY_OPTIONS = [
 ];
 
 export const AUDIO_CHANNEL_OPTIONS = [
-  { value: 2, label: 'Stéréo (2.0)' },
+  { value: 2, label: 'Stereo (2.0)' },
   { value: 6, label: 'Surround 5.1' },
   { value: 8, label: 'Surround 7.1' },
 ];

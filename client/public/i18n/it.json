@@ -446,7 +446,8 @@
     "sub_bottom_margin": "Posizione del bordo inferiore",
     "sub_bottom_margin_hint": "Definisce la posizione verticale dei sottotitoli rispetto al basso dello schermo.",
     "sub_top_margin": "Posizione del bordo superiore",
-    "sub_top_margin_hint": "Definisce la posizione verticale massima consentita rispetto all'alto dello schermo. Questa funzione viene usata quando i sottotitoli contengono istruzioni di posizionamento in alto sullo schermo."
+    "sub_top_margin_hint": "Definisce la posizione verticale massima consentita rispetto all'alto dello schermo. Questa funzione viene usata quando i sottotitoli contengono istruzioni di posizionamento in alto sullo schermo.",
+    "lang_any": "Nessuna preferenza"
   },
   "import_disk": {
     "title": "Import manuale dal disco",
@@ -1730,7 +1731,24 @@
       "name": "Nome",
       "name_required": "Il nome è obbligatorio.",
       "icon": "Icona",
+      "icon_default": "Predefinito (libreria)",
+      "icons": {
+        "book": "Libro",
+        "clapperboard": "Ciak",
+        "film": "Film",
+        "folder": "Cartella",
+        "games": "Giochi",
+        "globe": "Globo",
+        "heart": "Cuore",
+        "monitor": "Schermo",
+        "music": "Musica",
+        "popcorn": "Popcorn",
+        "star": "Stella",
+        "swords": "Spade",
+        "users": "Utenti"
+      },
       "color": "Colore",
+      "color_default": "Predefinito (primary)",
       "media_types": "Tipi di file multimediali",
       "media_type_required": "Seleziona almeno un tipo di file multimediale.",
       "path": "Percorso radice",

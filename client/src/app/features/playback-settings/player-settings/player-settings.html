@@ -8,7 +8,7 @@
       [hint]="'playback_settings.player_preferred_lang_hint' | translate"
     >
       @for (l of languageOptions; track l.value) {
-        <option [value]="l.value">{{ l.label }}</option>
+        <option [value]="l.value">{{ l.labelKey ? (l.labelKey | translate) : l.label }}</option>
       }
     </app-select-field>
 
