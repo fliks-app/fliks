@@ -1,13 +1,16 @@
 <button
   type="button"
-  class="flex items-center gap-2 cursor-pointer text-lg font-bold"
+  class="flex w-full items-center gap-2 cursor-pointer text-lg font-bold text-left"
   [attr.aria-expanded]="open()"
+  [title]="heading()"
   (click)="toggle()"
 >
-  {{ heading() }}
+  <!-- text-left undoes the button's centred UA default, which only showed once a
+       long heading wrapped; truncate keeps it on one line and the chevron beside it. -->
+  <span class="truncate">{{ heading() }}</span>
   <svg
     lucideChevronDown
-    class="h-4 w-4 opacity-60 transition-transform duration-200"
+    class="h-4 w-4 shrink-0 opacity-60 transition-transform duration-200"
     [class.rotate-180]="open()"
     aria-hidden="true"
   ></svg>
