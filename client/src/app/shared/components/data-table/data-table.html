@@ -3,7 +3,9 @@
     @if (titleKey()) {
       <h2 class="card-title text-lg">{{ titleKey() | translate }}</h2>
     }
-    <div class="flex gap-2 shrink-0">
+    <!-- ms-auto, not justify-between: a page passing no title leaves this block as the row's
+         only child, which lands it on the left. -->
+    <div class="flex gap-2 shrink-0 justify-end ms-auto">
       <button
         type="button"
         class="btn btn-outline btn-sm"
