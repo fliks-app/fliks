@@ -1,9 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-/** The settings editor saved every endpoint as `webhookUrl`, but the webhook,
- *  gotify and ntfy senders read `url` — those three silently posted to a
- *  relative path and failed with "Invalid URL". Fold the stored key onto the
- *  one the senders read so existing connections work without being re-saved. */
+/** The webhook, gotify and ntfy senders read `settings.url`; fold a stored
+ *  `webhookUrl` onto it so existing connections resolve without a re-save. */
 export class NormalizeNotificationEndpointKey1783900000000 implements MigrationInterface {
   name = 'NormalizeNotificationEndpointKey1783900000000';
 
