@@ -1500,7 +1500,6 @@
       "metadata_region": "Region der Metadaten",
       "metadata_region_hint": "Region für Veröffentlichungsdaten und kommende Veröffentlichungen. Kann pro Bibliothek überschrieben werden.",
       "section_automation": "Automatisierung",
-      "auto_grab_on_approval": "Nach Genehmigung einer Anfrage automatisch herunterladen",
       "auto_detect_markers_on_import": "Intros / Vorspanne beim Import von Serien erkennen",
       "saved": "Einstellungen gespeichert.",
       "save_error": "Speichern nicht möglich.",

@@ -74,11 +74,6 @@ export class RequestsService {
 
   private readonly logger = new Logger(RequestsService.name);
 
-  /** Admin-toggleable from the General settings page; an unset key reads as enabled. */
-  private async autoGrabOnApproval(): Promise<boolean> {
-    return (await this.settings.get('requests_auto_grab_on_approval')) !== 'false';
-  }
-
   /** Aligné sur PoliciesGuard / CaslAbilityFactory (manage:all → Manage sur tout). */
   private canManageRequests(user: User): boolean {
     return this.caslAbilityFactory
@@ -811,13 +806,13 @@ export class RequestsService {
         linked.media = media;
         await this.requestRepo.save(linked);
       }
-      if (await this.autoGrabOnApproval()) {
-        this.events.emitDomain({
-          type: 'media.acquisition.requested',
-          mediaIds: [media.id],
-          reason: 'request-approved',
-        });
-      }
+      // States the fact, unconditionally: whether it leads to a grab is the acquisition
+      // owner's decision, and core no longer holds one to make.
+      this.events.emitDomain({
+        type: 'media.acquisition.requested',
+        mediaIds: [media.id],
+        reason: 'request-approved',
+      });
     }
 
     this.events.emitDomain({
