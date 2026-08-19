@@ -150,9 +150,10 @@ export class SseService implements OnDestroy {
       case 'subtitle.synced':
       case 'subtitle.downloaded':
       case 'subtitle.failed':
-        // These land asynchronously (e.g. an OCR or sync finishing minutes after
-        // the request returned), so no client mutation invalidated the cached
-        // subtitle list — drop the media cache here so the next fetch is fresh.
+      case 'subtitle.list_changed':
+        // These land asynchronously (an import storing embedded tracks, an OCR run starting
+        // or ending minutes after the request returned), so no client mutation invalidated
+        // the cached subtitle list — drop the media cache here so the next fetch is fresh.
         void invalidatePrefix('/api/media');
         // Toasts are handled by the media-detail component (only on the right page).
         break;

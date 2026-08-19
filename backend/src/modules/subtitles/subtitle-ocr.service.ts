@@ -148,6 +148,10 @@ export class SubtitleOcrService {
       sourceStreamIndex: source.streamIndex,
     } as any);
 
+    // The row exists as PROCESSING from here; without this the UI only learns of the run
+    // when it ends, so a long OCR looks like nothing is happening.
+    this.events.emit({ type: 'subtitle.list_changed', mediaId: source.mediaId });
+
     void this.runOcr(placeholder.id, source, options.automatic).catch((err) => {
       this.log.error(`OCR run crashed for sub #${subtitleId}: ${err}`);
     });

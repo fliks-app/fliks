@@ -8,6 +8,7 @@ import { MediaFile } from '../media/entities/media-file.entity';
 import { FfprobeService } from './ffprobe.service';
 import { SettingsService } from '../settings/settings.service';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
+import { EventsService } from '../scheduler/events.service';
 
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
 
@@ -24,6 +25,7 @@ export class EmbeddedSubtitleService {
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly settings: SettingsService,
+    private readonly events: EventsService,
   ) {}
 
   async detectAndStore(
@@ -97,6 +99,9 @@ export class EmbeddedSubtitleService {
     this.logger.log(
       `Refreshed embedded subtitles for mediaFile #${mediaFileId}: ${created.length} stored`,
     );
+    // An import runs this on its own; nothing the client did invalidated the subtitle list it
+    // already holds, so without this the image tracks stay invisible until the TTL lapses.
+    this.events.emit({ type: 'subtitle.list_changed', mediaId });
 
     return created;
   }
