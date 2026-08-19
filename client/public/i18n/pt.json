@@ -879,6 +879,7 @@
     "analyze_launch_error": "Não foi possível iniciar a análise",
     "not_found": "Conteúdo não encontrado",
     "download_section": "Transferência",
+    "releases_title": "Releases disponíveis",
     "download_detail_title": "Detalhes da transferência",
     "download_pack": "Pack",
     "quality_profile_label": "Perfil de qualidade",
@@ -2250,6 +2251,8 @@
     "502": "Gateway ou proxy inválido",
     "503": "Serviço temporariamente indisponível",
     "504": "Tempo de espera do servidor esgotado",
+    "plugin_timeout": "O plugin demorou demasiado a responder. A pesquisa pode ainda estar a decorrer — tenta novamente dentro de um momento.",
+    "plugin_unavailable": "O plugin não respondeu. Verifica se está em execução em Definições › Plugins.",
     "unknown": "Erro {{code}}"
   },
   "media_card": {

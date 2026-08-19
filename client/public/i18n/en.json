@@ -884,6 +884,7 @@
     "analyze_launch_error": "Unable to start the analysis",
     "not_found": "Content not found",
     "download_section": "Downloading",
+    "releases_title": "Available releases",
     "download_detail_title": "Download details",
     "download_pack": "Pack",
     "quality_profile_label": "Quality profile",
@@ -2277,6 +2278,8 @@
     "502": "Invalid gateway or proxy",
     "503": "Service temporarily unavailable",
     "504": "Server timed out",
+    "plugin_timeout": "The plugin took too long to answer. Its search may still be running — try again in a moment.",
+    "plugin_unavailable": "The plugin did not answer. Check that it is running in Settings › Plugins.",
     "unknown": "Error {{code}}"
   },
   "media_card": {

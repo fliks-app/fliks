@@ -10,6 +10,15 @@ export class ProtocolViolationError extends Error {
   }
 }
 
+/** Raised when a call gets no reply before its deadline. Typed so a caller can tell a
+ *  slow plugin from an unreachable one without matching on message text. */
+export class RpcTimeoutError extends Error {
+  constructor(public readonly method: string, deadlineMs: number) {
+    super(`no reply to "${method}" within ${deadlineMs}ms`);
+    this.name = 'RpcTimeoutError';
+  }
+}
+
 /** Raised when a frame we're about to send would breach MAX_FRAME_BYTES — our own fault, not the peer's. */
 export class FrameTooLargeError extends Error {
   constructor(reason: string) {

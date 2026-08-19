@@ -1,7 +1,9 @@
 import { HttpStatus } from '@nestjs/common';
+import { PLUGIN_DEADLINES_MS } from '../../../common/plugin-contract';
 import type { Response } from 'express';
 import { PluginProxyController } from './plugin-proxy.controller';
 import { PluginInstallException } from '../plugin-install.exception';
+import { RpcTimeoutError } from '../supervisor/wire';
 import type { PluginRouteRequest } from './plugin-route.guard';
 
 function fakeResponse(): Response & { status: jest.Mock; setHeader: jest.Mock; send: jest.Mock } {
@@ -64,8 +66,22 @@ describe('PluginProxyController — plugin availability', () => {
     expect(err.message).toContain('fliks.testplugin');
   });
 
-  it('503 PLUGIN_UNAVAILABLE when the RPC call itself rejects (e.g. a hung plugin past the deadline)', async () => {
-    const callPlugin = jest.fn().mockRejectedValue(new Error('timeout waiting for "http"'));
+  it('504 PLUGIN_TIMEOUT with a translatable key when the plugin does not answer in time', async () => {
+    const callPlugin = jest.fn().mockRejectedValue(new RpcTimeoutError('http', 180_000));
+    const { controller } = makeController('ready', callPlugin);
+    const req = fakeRequest();
+    const res = fakeResponse();
+
+    const err = await captureThrown(() => controller.proxy('fliks.testplugin', req, res));
+    expect(err).toBeInstanceOf(PluginInstallException);
+    expect(err.code).toBe('PLUGIN_TIMEOUT');
+    expect(err.getStatus()).toBe(HttpStatus.GATEWAY_TIMEOUT);
+    // Never the RPC's own wording: it lands in a modal verbatim.
+    expect(err.message).toBe('errors.plugin_timeout');
+  });
+
+  it('503 PLUGIN_UNAVAILABLE, message-free, when the RPC call rejects for any other reason', async () => {
+    const callPlugin = jest.fn().mockRejectedValue(new Error('connection closed'));
     const { controller } = makeController('ready', callPlugin);
     const req = fakeRequest();
     const res = fakeResponse();
@@ -74,6 +90,7 @@ describe('PluginProxyController — plugin availability', () => {
     expect(err).toBeInstanceOf(PluginInstallException);
     expect(err.code).toBe('PLUGIN_UNAVAILABLE');
     expect(err.getStatus()).toBe(HttpStatus.SERVICE_UNAVAILABLE);
+    expect(err.message).toBe('errors.plugin_unavailable');
   });
 
   it('forwards the request\'s own path (not the declared pattern), method, query, body and delegated principal', async () => {
@@ -100,7 +117,7 @@ describe('PluginProxyController — plugin availability', () => {
         body: { grab: true },
         principal: { kind: 'delegated', userId: 9 },
       },
-      30_000,
+      PLUGIN_DEADLINES_MS.pluginCall,
     );
   });
 });

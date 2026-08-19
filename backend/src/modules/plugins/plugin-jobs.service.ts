@@ -3,10 +3,10 @@ import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { randomUUID } from 'crypto';
 import { PluginProcessService } from './plugin-process.service';
-import type { PluginJob } from '../../common/plugin-contract';
+import { PLUGIN_DEADLINES_MS, type PluginJob } from '../../common/plugin-contract';
 
-/** Deadline for one `job` call — mirrors `PluginProxyController`'s `CALL_DEADLINE_MS`. */
-const JOB_CALL_DEADLINE_MS = 30_000;
+/** A scheduled search fans out to the same slow upstreams as its interactive counterpart. */
+const JOB_CALL_DEADLINE_MS = PLUGIN_DEADLINES_MS.pluginCall;
 
 function cronKey(pluginId: string, name: string): string {
   return `plugin:${pluginId}:${name}`;

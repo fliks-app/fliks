@@ -879,6 +879,7 @@
     "analyze_launch_error": "Impossibile avviare l'analisi",
     "not_found": "Contenuto non trovato",
     "download_section": "Download",
+    "releases_title": "Release disponibili",
     "download_detail_title": "Dettagli del download",
     "download_pack": "Pack",
     "quality_profile_label": "Profilo di qualità",
@@ -2250,6 +2251,8 @@
     "502": "Gateway o proxy non valido",
     "503": "Servizio temporaneamente non disponibile",
     "504": "Timeout del server superato",
+    "plugin_timeout": "Il plugin ha tardato troppo a rispondere. La sua ricerca potrebbe essere ancora in corso — riprova tra un momento.",
+    "plugin_unavailable": "Il plugin non ha risposto. Verifica che sia in esecuzione in Impostazioni › Plugin.",
     "unknown": "Errore {{code}}"
   },
   "media_card": {

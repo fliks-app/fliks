@@ -4,6 +4,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { MAX_FRAME_BYTES } from '../../../common/plugin-contract';
 import { RpcChannel } from './rpc-channel';
+import { RpcTimeoutError } from './wire';
 
 interface Pair {
   srv: Server;
@@ -61,7 +62,7 @@ describe('RpcChannel', () => {
   it('rejects with a timeout when nothing answers', async () => {
     const pair = await makePair();
     cleanup = () => teardown(pair);
-    await expect(pair.client.call('health', {}, 30)).rejects.toThrow(/timeout/);
+    await expect(pair.client.call('health', {}, 30)).rejects.toThrow(RpcTimeoutError);
   });
 
   it('delivers a fire-and-forget note with no reply expected', async () => {

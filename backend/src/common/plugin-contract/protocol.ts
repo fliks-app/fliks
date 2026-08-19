@@ -90,6 +90,10 @@ export const PLUGIN_DEADLINES_MS = {
   healthReply: 3_000,
   /** Ceiling on one host call, unless the method appears in {@link HOST_CALL_DEADLINE_OVERRIDES_MS}. */
   hostCall: 8_000,
+  /** Ceiling on one call core makes into the plugin — a proxied `http` route or a `job`.
+   *  A route fanning out to third-party upstreams is allowed to be slow, so the plugin's
+   *  own per-upstream timeouts have to fit under this. */
+  pluginCall: 180_000,
   /** After `shutdown` is answered (or not), before SIGTERM, then before SIGKILL. */
   shutdownRpc: 3_000,
   sigtermGrace: 2_000,

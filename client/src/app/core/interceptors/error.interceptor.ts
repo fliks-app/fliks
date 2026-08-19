@@ -3,6 +3,7 @@ import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from '../services/toast.service';
+import { translatedServerMessage } from '../utils/server-message';
 
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
@@ -58,13 +59,8 @@ function extractMessage(
   }
 
   if (body?.message && !isFrameworkNotFound(err.status, body.message)) {
-    if (Array.isArray(body.message)) return body.message.join(', ');
-    // Backends may return an i18n key for user-facing validation errors
-    // (English-only rule keeps the copy out of the API); translate it when
-    // known, otherwise show the message as-is.
-    const msg = body.message as string;
-    const translated = translate.instant(msg);
-    return translated !== msg ? translated : msg;
+    const message = translatedServerMessage(body.message, translate);
+    if (message) return message;
   }
 
   // A plugin route answers `{error:{key,detail}}`; its keys are merged into the catalogue on

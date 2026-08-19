@@ -884,6 +884,7 @@
     "analyze_launch_error": "Impossible de lancer l'analyse",
     "not_found": "Contenu introuvable",
     "download_section": "Téléchargement",
+    "releases_title": "Releases disponibles",
     "download_detail_title": "Détails du téléchargement",
     "download_pack": "Pack",
     "quality_profile_label": "Profil de qualité",
@@ -2277,6 +2278,8 @@
     "502": "Passerelle ou proxy invalide",
     "503": "Service temporairement indisponible",
     "504": "Délai d'attente du serveur dépassé",
+    "plugin_timeout": "Le plugin a mis trop de temps à répondre. Sa recherche est peut-être encore en cours — réessaie dans un instant.",
+    "plugin_unavailable": "Le plugin n'a pas répondu. Vérifie qu'il est démarré dans Réglages › Plugins.",
     "unknown": "Erreur {{code}}"
   },
   "media_card": {

@@ -5,6 +5,7 @@ import {
   FrameTooLargeError,
   parseFrame,
   ProtocolViolationError,
+  RpcTimeoutError,
   type Frame,
 } from './wire';
 import type { Req, Res, Note } from '../../../common/plugin-contract';
@@ -151,7 +152,7 @@ export class RpcChannel {
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(i);
-        reject(new Error(`timeout waiting for "${method}"`));
+        reject(new RpcTimeoutError(method, deadlineMs));
       }, deadlineMs);
       this.pending.set(i, { resolve: resolve as (v: unknown) => void, reject, timer });
       try {
