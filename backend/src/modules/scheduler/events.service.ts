@@ -110,11 +110,6 @@ export type SseEvent =
       connectionId: string;
     }
   | {
-      // Keepalive. Nest disables the socket idle timeout, so without a periodic
-      // write a half-open mobile connection is never detected or unregistered.
-      type: 'sse.ping';
-    }
-  | {
       type: 'player.command';
       sessionId: string;
       mediaFileId: number;
@@ -326,10 +321,10 @@ export class EventsService {
         subscriber.next({ data: JSON.stringify(env.event) } as MessageEvent);
       });
 
+      // Named and data-less: no client dispatches it (the spec drops an event with
+      // an empty data buffer), but the write still surfaces a dead socket.
       const ping = setInterval(() => {
-        subscriber.next({
-          data: JSON.stringify({ type: 'sse.ping' } satisfies SseEvent),
-        } as MessageEvent);
+        subscriber.next({ type: 'ping', data: '' } as MessageEvent);
       }, PING_INTERVAL_MS);
 
       return () => {

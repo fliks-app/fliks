@@ -88,7 +88,6 @@ export class SseService implements OnDestroy {
     this.eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as SseEvent;
-        if (data.type === 'sse.ping') return;
         if (data.type === 'sse.connected') {
           const id = data['connectionId'];
           if (typeof id === 'string' && id) {
