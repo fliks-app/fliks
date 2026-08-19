@@ -1,9 +1,26 @@
+/** Mirrors the contract's `BadgeTone`: the renderer maps a name to a class and falls back to
+ *  `ghost`, so a declared string never reaches the rendered `class`. */
+export type BadgeTone =
+  | 'neutral'
+  | 'primary'
+  | 'secondary'
+  | 'accent'
+  | 'info'
+  | 'success'
+  | 'warning'
+  | 'error'
+  | 'ghost';
+
 export interface TableColumn {
   key: string;
   labelKey: string;
   format?: 'date' | 'bytes' | 'percent';
   /** Maps a cell value to a translate key — a status column renders its raw enum otherwise. */
   labelKeys?: Record<string, string>;
+  /** Renders the cell as a badge, the value picking its tone; `*` covers every other value. */
+  badges?: Record<string, BadgeTone>;
+  /** Keeps the cell on one line. Implied for `format`ted and badged cells. */
+  nowrap?: boolean;
 }
 
 /** `TableConfigPage.filters[]` — value sent to `list` as a query param named by `key`. */

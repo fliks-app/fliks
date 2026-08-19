@@ -7,10 +7,24 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { formatBytes } from '../../utils/download-format';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { PaginationComponent } from '../pagination/pagination';
-import { CellValue, ListAction, PagedResult, RowAction, TableColumn, TableFilter, TableRow } from './data-table.types';
+import { BadgeTone, CellValue, ListAction, PagedResult, RowAction, TableColumn, TableFilter, TableRow } from './data-table.types';
 
 /** Keystroke-to-request debounce for a `search` filter — see `onSearchInput`. */
 const SEARCH_DEBOUNCE_MS = 300;
+
+/** The only classes a declared badge can resolve to. A `badges` entry is JSON from a
+ *  manifest, so it is looked up here and never interpolated into the rendered `class`. */
+const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
+  neutral: 'badge-neutral',
+  primary: 'badge-primary',
+  secondary: 'badge-secondary',
+  accent: 'badge-accent',
+  info: 'badge-info',
+  success: 'badge-success',
+  warning: 'badge-warning',
+  error: 'badge-error',
+  ghost: 'badge-ghost',
+};
 
 /**
  * The `table` view kind: declared columns, declared row actions, no
@@ -145,6 +159,23 @@ export class DataTableComponent implements OnInit {
 
   cellPercent(value: CellValue): string {
     return typeof value === 'number' ? `${Math.round(value)}%` : String(value ?? '');
+  }
+
+  /**
+   * The badge class for a cell, or null to render it as text. `*` catches every value the
+   * column didn't name; an unknown tone falls back to `ghost` rather than reaching the DOM.
+   */
+  badgeClass(col: TableColumn, value: CellValue): string | null {
+    const tones = col.badges;
+    if (!tones) return null;
+    const tone = tones[String(value ?? '')] ?? tones['*'];
+    if (!tone) return null;
+    return BADGE_CLASSES[tone] ?? BADGE_CLASSES.ghost;
+  }
+
+  /** A formatted value, a badge and a declared `nowrap` are all atomic — none should wrap. */
+  cellNowrap(col: TableColumn): boolean {
+    return col.nowrap === true || col.format !== undefined || col.badges !== undefined;
   }
 
   /** An undeclared value renders as itself rather than as a missing translate key. */

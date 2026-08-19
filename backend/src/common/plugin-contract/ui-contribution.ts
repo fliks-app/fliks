@@ -165,6 +165,19 @@ export interface ReleasePickerRoutes {
   episode: ReleasePickerPair;
 }
 
+/** daisyUI badge tones. Closed: core maps a name to a class and falls back to `ghost`,
+ *  so a manifest can never put a string of its own into the rendered `class`. */
+export type BadgeTone =
+  | 'neutral'
+  | 'primary'
+  | 'secondary'
+  | 'accent'
+  | 'info'
+  | 'success'
+  | 'warning'
+  | 'error'
+  | 'ghost';
+
 /** One column of a declared table — a `table` page's rows, or a row action's result. */
 export interface TableColumn {
   key: string;
@@ -172,6 +185,12 @@ export interface TableColumn {
   format?: 'date' | 'bytes' | 'percent';
   /** Maps a cell value to a translate key — a status column renders its raw enum otherwise. */
   labelKeys?: Record<string, string>;
+  /** Renders the cell as a badge, the value picking its tone. `*` covers every other value,
+   *  which is how an open-ended column (a quality name) gets one uniform tone. A `format`ted
+   *  cell is never badged. */
+  badges?: Record<string, BadgeTone>;
+  /** Keeps the cell on one line. Implied for `format`ted and badged cells. */
+  nowrap?: boolean;
 }
 
 /** One proxied route lists instances, another lists the implementations and their fields. */

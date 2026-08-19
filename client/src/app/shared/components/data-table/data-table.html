@@ -78,12 +78,18 @@
           @for (row of rows(); track $index) {
             <tr>
               @for (col of columns(); track col.key) {
-                <td>
+                <td [class.whitespace-nowrap]="cellNowrap(col)">
                   @switch (col.format) {
                     @case ('date') { {{ cellDate(row[col.key]) | localeDate }} }
                     @case ('bytes') { {{ cellBytes(row[col.key]) }} }
                     @case ('percent') { {{ cellPercent(row[col.key]) }} }
-                    @default { {{ cellLabel(col, row[col.key]) }} }
+                    @default {
+                      @if (badgeClass(col, row[col.key]); as badge) {
+                        <span class="badge badge-sm" [class]="badge">{{ cellLabel(col, row[col.key]) }}</span>
+                      } @else {
+                        {{ cellLabel(col, row[col.key]) }}
+                      }
+                    }
                   }
                 </td>
               }
