@@ -11,6 +11,17 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ServerConfigService, KnownServer } from '../../core/services/server-config.service';
 import { AuthService } from '../../core/services/auth.service';
 
+/**
+ * Bases to probe, in order. An http host that 301s to https is unusable from the
+ * native app: the redirect carries no CORS headers, so the XHR dies before it can
+ * be followed. Probing https directly is the only way to reach such a server.
+ */
+export function withHttpsFallback(base: string): string[] {
+  return base.startsWith('http://')
+    ? [base, `https://${base.slice('http://'.length)}`]
+    : [base];
+}
+
 @Component({
   selector: 'app-setup',
   imports: [FormsModule, TranslateModule],
@@ -39,19 +50,26 @@ export class SetupComponent {
     this.testing.set(true);
     this.testResult.set(null);
     try {
-      // /api/auth/me returns 401 if not logged in, but proves the server is reachable
-      await firstValueFrom(this.http.get(`${raw}/api/auth/me`, { responseType: 'json' }));
-      this.testResult.set({ ok: true, message: 'setup.test_success' });
-    } catch (err: unknown) {
-      const status = (err as { status?: number })?.status;
-      // 401 = server reachable but not authenticated — that's fine
-      if (status === 401) {
-        this.testResult.set({ ok: true, message: 'setup.test_success' });
-      } else {
-        this.testResult.set({ ok: false, message: 'setup.test_error' });
+      for (const base of withHttpsFallback(raw)) {
+        if (await this.reachable(base)) {
+          this.url.set(base);
+          this.testResult.set({ ok: true, message: 'setup.test_success' });
+          return;
+        }
       }
+      this.testResult.set({ ok: false, message: 'setup.test_error' });
     } finally {
       this.testing.set(false);
+    }
+  }
+
+  /** 401 counts as reachable: the server answered, we're just not logged in. */
+  private async reachable(base: string): Promise<boolean> {
+    try {
+      await firstValueFrom(this.http.get(`${base}/api/auth/me`, { responseType: 'json' }));
+      return true;
+    } catch (err: unknown) {
+      return (err as { status?: number })?.status === 401;
     }
   }
 
