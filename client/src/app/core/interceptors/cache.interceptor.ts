@@ -69,6 +69,11 @@ let dbPromise: Promise<IDBDatabase> | null = null;
  *  flight for the previous account must not land in the new one's cache. */
 let cacheGeneration = 0;
 
+/** Past this, an entry is dead weight: too old to be a useful offline fallback,
+ *  still scanned by every invalidation. Swept once per app start. */
+const MAX_AGE = 7 * 24 * 60 * 60_000;
+let pruned = false;
+
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
@@ -78,10 +83,28 @@ function openDb(): Promise<IDBDatabase> {
         req.result.createObjectStore(STORE_NAME, { keyPath: 'url' });
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => { resolve(req.result); prune(req.result); };
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
+}
+
+/** Entries expire on read but are never deleted there, so a long-lived install
+ *  keeps every URL it ever fetched and every invalidation pays for them. */
+function prune(db: IDBDatabase): void {
+  if (pruned) return;
+  pruned = true;
+  try {
+    const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
+    const cutoff = Date.now() - MAX_AGE;
+    const req = store.openCursor();
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) return;
+      if ((cursor.value as CacheEntry).timestamp < cutoff) cursor.delete();
+      cursor.continue();
+    };
+  } catch { /* ignore */ }
 }
 
 /**
@@ -103,6 +126,7 @@ export function clearRequestCache(): Promise<void> {
         })
     : Promise.resolve();
   dbPromise = null;
+  pruned = false;
   return closeExisting.then(() => {
     return new Promise<void>((resolve) => {
       let settled = false;
@@ -155,11 +179,13 @@ export async function invalidatePrefix(prefix: string): Promise<void> {
     const db = await openDb();
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
-    const req = store.openCursor();
+    // Key cursor, not openCursor: only the key is read here, and deserializing
+    // every cached body to drop it cost 5x more on a mid-size store.
+    const req = store.openKeyCursor();
     req.onsuccess = () => {
       const cursor = req.result;
       if (!cursor) return;
-      if ((cursor.key as string).startsWith(prefix)) cursor.delete();
+      if ((cursor.key as string).startsWith(prefix)) store.delete(cursor.key);
       cursor.continue();
     };
   } catch { /* ignore */ }
