@@ -77,7 +77,8 @@ export class ProviderListComponent implements OnInit {
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
   private readonly resultDialog = viewChild<ElementRef<HTMLDialogElement>>('resultDialog');
 
-  readonly titleKey = input.required<string>();
+  /** Empty renders no heading — a plugin page carries its own page-level title. */
+  readonly titleKey = input('');
   readonly listUrl = input.required<string>();
   readonly implementations = input.required<readonly ProviderImplementation[]>();
   /** The wire field naming the implementation — `type` for subtitle providers, `implementation` elsewhere. */

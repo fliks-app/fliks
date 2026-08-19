@@ -118,6 +118,8 @@ interface ConfigPageBase {
   id: string;
   labelKey: string;
   icon?: string;
+  /** One explanatory line under the page title, like every core settings page carries. */
+  subtitleKey?: string;
 }
 
 /** Rendered by `<app-schema-form>` over `app_settings`; omitting `kind` means this one. */

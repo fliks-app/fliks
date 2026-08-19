@@ -1,7 +1,9 @@
 <div class="flex flex-col gap-4">
   <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-    <h2 class="card-title text-lg">{{ titleKey() | translate }}</h2>
-    <div class="flex gap-2 shrink-0 self-start">
+    @if (titleKey()) {
+      <h2 class="card-title text-lg">{{ titleKey() | translate }}</h2>
+    }
+    <div class="flex gap-2 shrink-0 self-start sm:ml-auto">
       @for (action of listActions(); track action.labelKey) {
         <button
           type="button"
