@@ -88,6 +88,7 @@ export class SseService implements OnDestroy {
     this.eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as SseEvent;
+        if (data.type === 'sse.ping') return;
         if (data.type === 'sse.connected') {
           const id = data['connectionId'];
           if (typeof id === 'string' && id) {
@@ -118,8 +119,16 @@ export class SseService implements OnDestroy {
         window.addEventListener('online', this.onOnline, { once: true });
         return;
       }
-      // Exponential backoff: 5s → 10s → 20s → 30s max
-      this.retryHandle = setTimeout(() => this.connect(), this.retryDelay);
+      // Exponential backoff: 5s → 10s → 20s → 30s max. On native the token is
+      // baked into the URL, so rotate it first or a long background leaves every
+      // retry replaying the same expired one.
+      this.retryHandle = setTimeout(() => {
+        if (this.serverConfig.isNative && this.auth.refreshToken) {
+          void this.auth.refreshAccessToken().finally(() => this.connect());
+        } else {
+          this.connect();
+        }
+      }, this.retryDelay);
       this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
     };
   }

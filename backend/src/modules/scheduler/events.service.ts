@@ -110,6 +110,11 @@ export type SseEvent =
       connectionId: string;
     }
   | {
+      // Keepalive. Nest disables the socket idle timeout, so without a periodic
+      // write a half-open mobile connection is never detected or unregistered.
+      type: 'sse.ping';
+    }
+  | {
       type: 'player.command';
       sessionId: string;
       mediaFileId: number;
@@ -227,6 +232,9 @@ interface SseEnvelope {
   event: SseEvent;
 }
 
+/** Short enough to beat the ~60s idle cut of mobile carriers and proxies. */
+const PING_INTERVAL_MS = 30_000;
+
 @Injectable()
 export class EventsService {
   private readonly log = new Logger(EventsService.name);
@@ -318,7 +326,14 @@ export class EventsService {
         subscriber.next({ data: JSON.stringify(env.event) } as MessageEvent);
       });
 
+      const ping = setInterval(() => {
+        subscriber.next({
+          data: JSON.stringify({ type: 'sse.ping' } satisfies SseEvent),
+        } as MessageEvent);
+      }, PING_INTERVAL_MS);
+
       return () => {
+        clearInterval(ping);
         sub.unsubscribe();
         this.connections.delete(connectionId);
       };
