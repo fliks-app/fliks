@@ -297,6 +297,52 @@ describe('DataTableComponent — declared filters', () => {
     expect(fixture.componentInstance.cellLabel(fixture.componentInstance.columns()[0], 'other')).toBe('other');
   });
 
+  it('VERDICT: a declared badge renders as a badge span, and an undeclared tone cannot reach the class', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of([{ id: 1, status: 'failed', quality: 'WEBDL-1080p', title: 'A' }]) },
+      columns: [
+        { key: 'status', labelKey: 'x.status', badges: { failed: 'error', completed: 'success' } },
+        { key: 'quality', labelKey: 'x.quality', badges: { '*': 'ghost' } },
+        { key: 'title', labelKey: 'x.title' },
+      ],
+    });
+    const c = fixture.componentInstance;
+    const [status, quality, title] = c.columns();
+
+    expect(c.badgeClass(status, 'failed')).toBe('badge-error');
+    expect(c.badgeClass(status, 'completed')).toBe('badge-success');
+    // Not named and no `*`: text, not a badge with an empty tone.
+    expect(c.badgeClass(status, 'importing')).toBeNull();
+    // `*` gives an open-ended column one uniform tone.
+    expect(c.badgeClass(quality, 'WEBDL-1080p')).toBe('badge-ghost');
+    expect(c.badgeClass(title, 'A')).toBeNull();
+    // A manifest is untrusted JSON: an unknown tone resolves to a known class, never itself.
+    const hostile = { key: 'status', labelKey: 'x.status', badges: { failed: 'error" onmouseover="x' } } as unknown as TableColumn;
+    expect(c.badgeClass(hostile, 'failed')).toBe('badge-ghost');
+
+    const badges = fixture.nativeElement.querySelectorAll('td span.badge');
+    expect(badges.length).toBe(2);
+    expect(badges[0].className).toContain('badge-error');
+  });
+
+  it('keeps formatted, badged and declared-nowrap cells on one line', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of([{ id: 1, size: 1024, status: 'failed', source: 'x', title: 'A' }]) },
+      columns: [
+        { key: 'size', labelKey: 'x.size', format: 'bytes' },
+        { key: 'status', labelKey: 'x.status', badges: { failed: 'error' } },
+        { key: 'source', labelKey: 'x.source', nowrap: true },
+        { key: 'title', labelKey: 'x.title' },
+      ],
+    });
+    const c = fixture.componentInstance;
+    expect(c.columns().map((col) => c.cellNowrap(col))).toEqual([true, true, true, false]);
+
+    const cells = fixture.nativeElement.querySelectorAll('tbody tr td');
+    expect(cells[3].className).not.toContain('whitespace-nowrap');
+    expect(cells[0].className).toContain('whitespace-nowrap');
+  });
+
   it('VERDICT: a select change inside the search debounce window does not double-fire the request', async () => {
     const get = vi.fn(() => of({ data: [{ id: 1, name: 'A' }], total: 40, page: 1, pageSize: 20 }));
     const fixture = await createComponent({ http: { get }, paged: true, filters: [SEARCH, STATUS] });
