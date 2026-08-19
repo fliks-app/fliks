@@ -53,10 +53,7 @@ export class NotificationsService {
     if (dto.name !== undefined) conn.name = dto.name;
     if (dto.type !== undefined) conn.type = dto.type as any;
     if (dto.settings !== undefined)
-      conn.settings = this.normalizeSettings(
-        dto.type ?? conn.type,
-        dto.settings,
-      );
+      conn.settings = this.normalizeSettings(dto.type, dto.settings);
     if (dto.events !== undefined)
       conn.events = dto.events as NotificationEvent[];
     if (dto.enabled !== undefined) conn.enabled = dto.enabled;
@@ -145,7 +142,7 @@ export class NotificationsService {
         }
         case 'ntfy': {
           const url = String(s.url ?? '').replace(/\/$/, '');
-          const topic = String(s.topic ?? 'fliks');
+          const topic = String(s.topic || 'fliks');
           if (!url) throw new Error('url not configured');
           await axios.post(
             `${url}/${topic}`,
@@ -169,17 +166,22 @@ export class NotificationsService {
     }
   }
 
-  /** Only Discord and Slack address a webhook; the rest read `url`. Older
-   *  clients sent every endpoint as `webhookUrl`, so fold it in on write —
-   *  a stale cached SPA still saves a usable row. */
+  /** Discord and Slack address a webhook, the others a server read from `url`.
+   *  A `webhookUrl` from any client is folded onto the key its sender reads. */
   private normalizeSettings(
     type: string,
     settings: Record<string, unknown>,
   ): Record<string, unknown> {
-    if (type === 'discord' || type === 'slack') return settings;
-    if (!('webhookUrl' in settings)) return settings;
-    const { webhookUrl, ...rest } = settings;
-    return { ...rest, url: rest.url ?? webhookUrl };
+    const out = Object.fromEntries(
+      Object.entries(settings).map(([key, value]) => [
+        key,
+        typeof value === 'string' ? value.trim() : value,
+      ]),
+    );
+    if (type === 'discord' || type === 'slack') return out;
+    const { webhookUrl, ...rest } = out;
+    if (webhookUrl === undefined) return out;
+    return { ...rest, url: rest.url || webhookUrl };
   }
 
   private formatMessage(

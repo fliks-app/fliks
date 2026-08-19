@@ -1,7 +1,11 @@
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
+import axios from 'axios';
 import { NotificationsService } from './notifications.service';
 import { CreateNotificationConnectionDto } from './dto/create-notification-connection.dto';
+
+jest.mock('axios');
+const mockedAxios = jest.mocked(axios);
 
 describe('NotificationsService settings normalization', () => {
   const saved: Record<string, unknown>[] = [];
@@ -52,6 +56,18 @@ describe('NotificationsService settings normalization', () => {
     expect(saved[0].settings).toEqual({ url: 'https://new.test' });
   });
 
+  it('trims a pasted endpoint so axios can resolve it', async () => {
+    await service.create({
+      name: 'n',
+      type: 'ntfy',
+      settings: { url: '  https://ntfy.example.com  ', topic: ' media ' },
+    });
+    expect(saved[0].settings).toEqual({
+      url: 'https://ntfy.example.com',
+      topic: 'media',
+    });
+  });
+
   it('normalizes on update too', async () => {
     await service.update(1, {
       name: 'n',
@@ -76,7 +92,7 @@ describe('CreateNotificationConnectionDto validation', () => {
       type: 'ntfy',
       settings: { topic: 'media' },
     });
-    expect(errors).toContain('ntfy requires a non-empty settings.url');
+    expect(errors).toContain('ntfy requires settings.url to be an http(s) URL');
   });
 
   it('accepts either the canonical or the legacy endpoint key', async () => {
@@ -103,16 +119,43 @@ describe('CreateNotificationConnectionDto validation', () => {
       settings: { url: 'https://gotify.example.com' },
     });
     expect(errors).toContain(
-      'gotify requires a non-empty settings.url and settings.token',
+      'gotify requires settings.url to be an http(s) URL and a non-empty settings.token',
     );
   });
 
-  it('rejects a blank endpoint, which is what the editor used to save', async () => {
+  it('rejects a blank endpoint', async () => {
     const errors = await check({
       name: 'Ntfy',
       type: 'ntfy',
       settings: { webhookUrl: '   ' },
     });
-    expect(errors).toContain('ntfy requires a non-empty settings.url');
+    expect(errors).toContain('ntfy requires settings.url to be an http(s) URL');
+  });
+
+  it('rejects an endpoint with no scheme, which axios cannot resolve', async () => {
+    const errors = await check({
+      name: 'Ntfy',
+      type: 'ntfy',
+      settings: { url: 'ntfy.example.com' },
+    });
+    expect(errors).toContain('ntfy requires settings.url to be an http(s) URL');
+  });
+});
+
+describe('NotificationsService ntfy dispatch', () => {
+  const serviceFor = (settings: Record<string, unknown>) =>
+    new NotificationsService({
+      findOne: () =>
+        Promise.resolve({ id: 1, type: 'ntfy', events: [], settings }),
+    } as never);
+
+  beforeEach(() => {
+    mockedAxios.post.mockReset();
+    mockedAxios.post.mockResolvedValue({ status: 200 } as never);
+  });
+
+  it('falls back to the default topic when none is stored', async () => {
+    await serviceFor({ url: 'https://ntfy.sh', topic: '' }).testConnection(1);
+    expect(mockedAxios.post.mock.calls[0][0]).toBe('https://ntfy.sh/fliks');
   });
 });
