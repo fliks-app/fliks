@@ -1205,6 +1205,7 @@
     "device_client_version": "v{{version}}",
     "commands_title": "Acionar uma tarefa",
     "cmd_refresh_metadata": "Atualizar os metadados",
+    "cmd_refresh_plugin_sources": "Atualizar as fontes de plugins",
     "cmd_refresh_missing_metadata": "Recarregar os metadados em falta",
     "cmd_rescan_all": "Reanalisar todos os ficheiros",
     "cmd_rescan_missing_files": "Reanalisar os ficheiros em falta",
@@ -2034,15 +2035,6 @@
       "trigger": "Acionar manualmente",
       "triggered": "Tarefa {{ name }} acionada.",
       "never": "Nunca",
-      "names": {
-        "SearchMissing": "Pesquisa dos medias em falta",
-        "RefreshMetadata": "Atualização dos metadados",
-        "RssSync": "Sincronização RSS",
-        "ImportCompleted": "Importação das transferências",
-        "CleanStalled": "Limpeza dos torrents bloqueados",
-        "SubtitleSearch": "Pesquisa de legendas",
-        "SubtitleUpgrade": "Melhoria das legendas"
-      },
       "status": {
         "completed": "Concluído",
         "running": "Em curso",

@@ -29,6 +29,7 @@ function makeService(pluginJobs: ReturnType<typeof fakePluginJobs>, jobRegistry:
     unused,
     pluginJobs as unknown as PluginJobsService,
     jobRegistry as unknown as ScheduledJobRegistry,
+    unused,
   );
 }
 

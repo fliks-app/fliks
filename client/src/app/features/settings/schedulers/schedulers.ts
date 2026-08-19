@@ -17,6 +17,9 @@ import { SseService } from '../../../core/services/sse.service';
 
 interface SchedulerInfo {
   name: string;
+  /** Supplied by the API: core's own key for a core job, the declaring plugin's for one it
+   *  owns. The page never names a job itself — it would have to know every publisher. */
+  labelKey: string;
   cron: string;
   triggerable: boolean;
   lastRun: string | null;

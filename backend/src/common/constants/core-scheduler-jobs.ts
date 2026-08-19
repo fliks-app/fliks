@@ -8,8 +8,13 @@
  * `scheduler.service.ts` types `SCHEDULERS[number].name` against this same array, so adding a
  * core job there without adding its name here fails to typecheck.
  */
+/** Once a day, an hour before the metadata refresh, so a source that publishes a new
+ *  version is already cached when anything looks at the catalog. */
+export const PLUGIN_SOURCE_REFRESH_CRON = '0 3 * * *';
+
 export const CORE_SCHEDULER_JOB_NAMES = [
   'RefreshMetadata',
+  'RefreshPluginSources',
   'SubtitleSearch',
   'SubtitleUpgrade',
 ] as const;

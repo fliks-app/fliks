@@ -40,7 +40,8 @@ export class PluginCatalogClientService {
     private readonly registry: PluginRegistryService,
   ) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_4AM)
+  /** Driven by `SchedulerService`'s `RefreshPluginSources` job, so the run is listed,
+   *  triggerable and recorded — a bare `@Cron` here was none of those. */
   async refreshAll(): Promise<void> {
     const sources = await this.sourceRepo.find({ where: { enabled: true } });
     for (const source of sources) {

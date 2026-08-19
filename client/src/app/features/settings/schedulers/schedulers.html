@@ -24,7 +24,7 @@
         <tbody>
           @for (s of schedulers(); track s.name) {
             <tr>
-              <td class="font-medium text-sm">{{ 'settings.schedulers.names.' + s.name | translate }}</td>
+              <td class="font-medium text-sm">{{ s.labelKey | translate }}</td>
               <td class="text-sm text-base-content/60 font-mono">{{ s.cron }}</td>
               <td class="text-sm text-base-content/60">
                 @if (s.lastRun) {
