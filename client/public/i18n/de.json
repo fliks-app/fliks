@@ -2417,6 +2417,7 @@
   },
   "data_table": {
     "load_error": "Liste konnte nicht geladen werden.",
-    "empty": "Nichts anzuzeigen."
+    "empty": "Nichts anzuzeigen.",
+    "refresh": "Aktualisieren"
   }
 }

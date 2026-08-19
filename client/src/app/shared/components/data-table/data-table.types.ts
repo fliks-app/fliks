@@ -14,7 +14,7 @@ export type BadgeTone =
 /** One value rendered under a cell's own. One level only: it carries no `subValues`. */
 export interface TableSubValue {
   key: string;
-  format?: 'date' | 'bytes' | 'percent';
+  format?: 'date' | 'bytes' | 'percent' | 'speed';
   labelKeys?: Record<string, string>;
   badges?: Record<string, BadgeTone>;
 }
@@ -22,13 +22,15 @@ export interface TableSubValue {
 export interface TableColumn {
   key: string;
   labelKey: string;
-  format?: 'date' | 'bytes' | 'percent';
+  format?: 'date' | 'bytes' | 'percent' | 'speed';
   /** Maps a cell value to a translate key — a status column renders its raw enum otherwise. */
   labelKeys?: Record<string, string>;
   /** Renders the cell as a badge, the value picking its tone; `*` covers every other value. */
   badges?: Record<string, BadgeTone>;
   /** Keeps the cell on one line. Implied for `format`ted and badged cells. */
   nowrap?: boolean;
+  /** One line, clipped with an ellipsis, full text on hover — for the free-text column. */
+  truncate?: boolean;
   /** A second line of values under the cell's own. */
   subValues?: TableSubValue[];
   /** Another field of the row; when it has a value the cell opens a dialog showing it. */

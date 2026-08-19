@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { WritableSignal, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
@@ -7,6 +7,7 @@ import { Subject, of } from 'rxjs';
 import { vi } from 'vitest';
 import { DataTableComponent } from './data-table';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { SseService } from '../../../core/services/sse.service';
 import { ListAction, RowAction, TableColumn, TableFilter, TableRow } from './data-table.types';
 
 const COLUMNS: TableColumn[] = [{ key: 'name', labelKey: 'x.name' }];
@@ -27,6 +28,9 @@ async function createComponent(opts: {
   defaultSortKey?: string;
   paged?: boolean;
   pageSize?: number;
+  refreshMs?: number;
+  refreshOn?: string[];
+  sseEvent?: WritableSignal<{ type: string } | null>;
 }) {
   TestBed.configureTestingModule({
     providers: [
@@ -38,6 +42,10 @@ async function createComponent(opts: {
       { provide: HttpClient, useValue: opts.http as unknown as HttpClient },
       { provide: Router, useValue: { navigateByUrl: vi.fn() } },
       { provide: ConfirmationService, useValue: { confirm: () => Promise.resolve(true) } },
+      {
+        provide: SseService,
+        useValue: { lastEvent: opts.sseEvent ?? signal(null) } as unknown as SseService,
+      },
     ],
   });
   const fixture = TestBed.createComponent(DataTableComponent);
@@ -51,6 +59,8 @@ async function createComponent(opts: {
   if (opts.defaultSortKey) fixture.componentRef.setInput('defaultSortKey', opts.defaultSortKey);
   if (opts.paged) fixture.componentRef.setInput('paged', opts.paged);
   if (opts.pageSize) fixture.componentRef.setInput('pageSize', opts.pageSize);
+  if (opts.refreshMs) fixture.componentRef.setInput('refreshMs', opts.refreshMs);
+  if (opts.refreshOn) fixture.componentRef.setInput('refreshOn', opts.refreshOn);
   fixture.detectChanges();
   await fixture.whenStable();
   await new Promise((r) => setTimeout(r, 0));
@@ -435,5 +445,104 @@ describe('DataTableComponent — declared filters', () => {
       filters: [{ kind: 'bogus' } as unknown as TableFilter],
     });
     expect(fixture.nativeElement.querySelectorAll('input[type="search"], select')).toHaveLength(0);
+  });
+});
+
+describe('DataTableComponent — formatting the moving values', () => {
+  it('states the unit on a speed, so a number is not read as a size', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of([{ id: 1, bytesPerSecond: 1536 }]) },
+      columns: [{ key: 'bytesPerSecond', labelKey: 'x.speed', format: 'speed' }],
+    });
+    expect(fixture.nativeElement.textContent).toContain('1.5 KB/s');
+  });
+
+  it('leaves a non-numeric speed alone rather than printing NaN/s', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of([{ id: 1, bytesPerSecond: null }]) },
+      columns: [{ key: 'bytesPerSecond', labelKey: 'x.speed', format: 'speed' }],
+    });
+    expect(fixture.nativeElement.textContent).not.toContain('/s');
+  });
+
+  it('clips a truncated cell to one line and keeps the full text reachable', async () => {
+    const long = 'A release name long enough to wrap a phone over several lines';
+    const fixture = await createComponent({
+      http: { get: () => of([{ id: 1, title: long }]) },
+      columns: [{ key: 'title', labelKey: 'x.title', truncate: true }],
+    });
+    const span = fixture.nativeElement.querySelector('td span.truncate') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.getAttribute('title')).toBe(long);
+    // A truncated cell must not also be nowrap: that would size the column to the
+    // content and there would be nothing left to clip.
+    expect(fixture.componentInstance.cellNowrap({ key: 'title', labelKey: 'x', truncate: true })).toBe(false);
+  });
+});
+
+describe('DataTableComponent — refreshing', () => {
+  it('reloads on demand', async () => {
+    const get = vi.fn(() => of([{ id: 1 }]));
+    const fixture = await createComponent({ http: { get } });
+    const before = get.mock.calls.length;
+    await fixture.componentInstance.refreshNow();
+    expect(get.mock.calls.length).toBe(before + 1);
+  });
+
+  it('coalesces a burst of events into one fetch, then catches up with the last', async () => {
+    const get = vi.fn(() => of([{ id: 1 }]));
+    const event = signal<{ type: string } | null>(null);
+    // The component has to exist before the clock is frozen: creating it awaits a real timer.
+    const fixture = await createComponent({
+      http: { get },
+      refreshOn: ['queue.updated'],
+      sseEvent: event,
+    });
+    vi.useFakeTimers();
+    try {
+      const before = get.mock.calls.length;
+
+      event.set({ type: 'queue.updated' });
+      fixture.detectChanges();
+      expect(get.mock.calls.length).toBe(before + 1);
+
+      // Same window: the second and third must not each cost a round trip...
+      event.set({ type: 'queue.updated', ...{ n: 2 } });
+      fixture.detectChanges();
+      event.set({ type: 'queue.updated', ...{ n: 3 } });
+      fixture.detectChanges();
+      expect(get.mock.calls.length).toBe(before + 1);
+
+      // ...but the last one must still land, or the table keeps a state the server left.
+      await vi.advanceTimersByTimeAsync(2100);
+      expect(get.mock.calls.length).toBe(before + 2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores an event type the page did not declare', async () => {
+    const get = vi.fn(() => of([{ id: 1 }]));
+    const event = signal<{ type: string } | null>(null);
+    const fixture = await createComponent({ http: { get }, refreshOn: ['queue.updated'], sseEvent: event });
+    const before = get.mock.calls.length;
+    event.set({ type: 'something.else' });
+    fixture.detectChanges();
+    expect(get.mock.calls.length).toBe(before);
+  });
+
+  it('refreshes nothing while nobody is looking at the page', async () => {
+    const get = vi.fn(() => of([{ id: 1 }]));
+    const event = signal<{ type: string } | null>(null);
+    const fixture = await createComponent({ http: { get }, refreshOn: ['queue.updated'], sseEvent: event });
+    const spy = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    try {
+      const before = get.mock.calls.length;
+      event.set({ type: 'queue.updated' });
+      fixture.detectChanges();
+      expect(get.mock.calls.length).toBe(before);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

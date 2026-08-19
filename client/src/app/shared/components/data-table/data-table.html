@@ -3,8 +3,20 @@
     @if (titleKey()) {
       <h2 class="card-title text-lg">{{ titleKey() | translate }}</h2>
     }
-    @if (listActions().length) {
-      <div class="flex gap-2 shrink-0">
+    <div class="flex gap-2 shrink-0">
+      <button
+        type="button"
+        class="btn btn-outline btn-sm"
+        (click)="refreshNow()"
+        [disabled]="loading()"
+        [attr.aria-label]="'data_table.refresh' | translate"
+      >
+        @if (loading()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ 'data_table.refresh' | translate }}
+      </button>
+      @if (listActions().length) {
         @for (action of listActions(); track action.path) {
           <button
             type="button"
@@ -18,8 +30,8 @@
             {{ action.labelKey | translate }}
           </button>
         }
-      </div>
-    }
+      }
+    </div>
   </div>
 
   @if (filters().length) {
@@ -83,8 +95,16 @@
                     @case ('date') { {{ cellDate(row[col.key]) | localeDate }} }
                     @case ('bytes') { {{ cellBytes(row[col.key]) }} }
                     @case ('percent') { {{ cellPercent(row[col.key]) }} }
+                    @case ('speed') { {{ cellSpeed(row[col.key]) }} }
                     @default {
-                      @if (detailText(col, row); as detail) {
+                      @if (col.truncate) {
+                        <!-- The width cap is what makes the ellipsis appear: a table cell sizes
+                             to its content otherwise, however narrow the viewport. -->
+                        <span
+                          class="block truncate max-w-[12rem] sm:max-w-xs lg:max-w-md"
+                          [title]="cellLabel(col, row[col.key])"
+                        >{{ cellLabel(col, row[col.key]) }}</span>
+                      } @else if (detailText(col, row); as detail) {
                         <button type="button" class="link link-hover" (click)="openDetail(col, row)"
                           [attr.aria-label]="(col.detailTitleKey ?? col.labelKey) | translate">
                           @if (badgeClass(col, row[col.key]); as badge) {
