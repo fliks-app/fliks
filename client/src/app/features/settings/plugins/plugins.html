@@ -63,7 +63,7 @@
                   </span>
                   <div class="min-w-0">
                     <p class="font-medium truncate">{{ row.name }}</p>
-                    <p class="text-xs text-base-content/50 truncate">{{ row.pluginId }}</p>
+                    <p class="text-sm text-base-content/50 truncate">{{ row.pluginId }}</p>
                   </div>
                 </div>
               </td>
@@ -83,14 +83,14 @@
                   {{ statusBadgeFor(row).labelKey | translate }}
                 </span>
                 @if (row.status === 'failed' && row.statusReason) {
-                  <p class="text-xs text-error/80 mt-1 max-w-[16rem]">{{ row.statusReason }}</p>
+                  <p class="text-sm text-error/80 mt-1 max-w-[16rem]">{{ row.statusReason }}</p>
                 }
                 @if (row.statusMessage) {
                   <details class="mt-1 status-message-details">
-                    <summary class="text-xs text-warning/80 cursor-pointer select-none">
+                    <summary class="text-sm text-warning/80 cursor-pointer select-none">
                       {{ 'settings.plugins.status_message_toggle' | translate }}
                     </summary>
-                    <pre class="text-xs whitespace-pre-wrap break-words max-w-xs max-h-40 overflow-auto bg-base-200 rounded p-2 mt-1">{{ row.statusMessage }}</pre>
+                    <pre class="text-sm whitespace-pre-wrap break-words max-w-xs max-h-40 overflow-auto bg-base-200 rounded p-2 mt-1">{{ row.statusMessage }}</pre>
                   </details>
                 }
               </td>
@@ -113,7 +113,7 @@
             <tr>
               <td colspan="7" class="pt-0">
                 <details class="metrics-details">
-                  <summary class="text-xs text-base-content/60 cursor-pointer select-none">
+                  <summary class="text-sm text-base-content/60 cursor-pointer select-none">
                     {{ 'settings.plugins.metrics.toggle' | translate }}
                   </summary>
                   <div class="mt-1">

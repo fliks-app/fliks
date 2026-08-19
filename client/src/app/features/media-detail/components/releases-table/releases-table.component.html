@@ -49,12 +49,12 @@
                     </div>
                   }
                   @if (showCfScore() && r.customFormatScore !== 0) {
-                    <span class="text-xs" [class]="r.customFormatScore > 0 ? 'text-success font-medium' : 'text-error'">
+                    <span class="text-sm" [class]="r.customFormatScore > 0 ? 'text-success font-medium' : 'text-error'">
                       CF {{ r.customFormatScore > 0 ? '+' : '' }}{{ r.customFormatScore }}
                     </span>
                   }
                 </div>
-                <div class="flex gap-3 text-xs tabular-nums text-base-content/70">
+                <div class="flex gap-3 text-sm tabular-nums text-base-content/70">
                   <span>{{ formatBytes(r.size) }}</span>
                   <span>
                     <span class="text-success">▲{{ r.seeders }}</span>

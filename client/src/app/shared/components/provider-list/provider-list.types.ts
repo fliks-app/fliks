@@ -30,6 +30,9 @@ export interface ProviderTestResult {
 export interface ProviderDraft {
   implementation: string;
   settings: Record<string, unknown>;
+  /** The row being edited, absent when the draft is new. Lets the resource resolve a blank
+   *  secret against what it already stored instead of making the user retype it. */
+  id?: number;
 }
 
 /** A list-scope action (`ProvidersConfigPage.actions[].scope: 'list'`) — rendered

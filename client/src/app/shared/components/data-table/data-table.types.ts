@@ -11,6 +11,14 @@ export type BadgeTone =
   | 'error'
   | 'ghost';
 
+/** One value rendered under a cell's own. One level only: it carries no `subValues`. */
+export interface TableSubValue {
+  key: string;
+  format?: 'date' | 'bytes' | 'percent';
+  labelKeys?: Record<string, string>;
+  badges?: Record<string, BadgeTone>;
+}
+
 export interface TableColumn {
   key: string;
   labelKey: string;
@@ -21,6 +29,12 @@ export interface TableColumn {
   badges?: Record<string, BadgeTone>;
   /** Keeps the cell on one line. Implied for `format`ted and badged cells. */
   nowrap?: boolean;
+  /** A second line of values under the cell's own. */
+  subValues?: TableSubValue[];
+  /** Another field of the row; when it has a value the cell opens a dialog showing it. */
+  detailKey?: string;
+  /** Title of that dialog; falls back to the column's `labelKey`. */
+  detailTitleKey?: string;
 }
 
 /** `TableConfigPage.filters[]` — value sent to `list` as a query param named by `key`. */

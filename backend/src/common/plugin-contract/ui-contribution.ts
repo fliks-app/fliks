@@ -178,6 +178,16 @@ export type BadgeTone =
   | 'error'
   | 'ghost';
 
+/** One value rendered under a cell's own, as a badge or as plain text. One level only:
+ *  it carries no `subValues` of its own, so a sub-value under a sub-value is impossible
+ *  in the type rather than merely undocumented. */
+export interface TableSubValue {
+  key: string;
+  format?: 'date' | 'bytes' | 'percent';
+  labelKeys?: Record<string, string>;
+  badges?: Record<string, BadgeTone>;
+}
+
 /** One column of a declared table — a `table` page's rows, or a row action's result. */
 export interface TableColumn {
   key: string;
@@ -191,6 +201,15 @@ export interface TableColumn {
   badges?: Record<string, BadgeTone>;
   /** Keeps the cell on one line. Implied for `format`ted and badged cells. */
   nowrap?: boolean;
+  /** A second line under the cell's own value. A release's quality and tracker belong with
+   *  its name; as columns of their own they cost width the title needed. */
+  subValues?: TableSubValue[];
+  /** Names another field of the row. When that field has a value, the cell becomes a button
+   *  opening a dialog that shows it — a long diagnostic message reads there instead of
+   *  stretching a column across every row. */
+  detailKey?: string;
+  /** Title of that dialog. Falls back to the column's own `labelKey`. */
+  detailTitleKey?: string;
 }
 
 /** One proxied route lists instances, another lists the implementations and their fields. */
@@ -198,8 +217,10 @@ export interface ProvidersConfigPage extends ConfigPageBase {
   kind: 'providers';
   list: string;
   implementations: string;
-  /** Tests the unsaved draft — POSTs `{implementation, settings}` before any row is
-   *  saved. Distinct from `actions[]`: there is no row yet, so no `:id` to substitute. */
+  /** Tests the unsaved draft — POSTs `{implementation, settings, id?}` before it is saved.
+   *  Distinct from `actions[]`: there is no route parameter, and on a new draft no row exists
+   *  at all. A blank secret is omitted from `settings`, and `id` names the row being edited,
+   *  so the resource resolves it against what it stored rather than asking the user again. */
   testConnection?: { route: string };
   /** `method` is explicit: encoding it into `route` left the caller POSTing to a
    *  string that contained the verb. Every `scope: 'row'` entry renders its own button —

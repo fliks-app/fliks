@@ -165,8 +165,23 @@ describe('ProviderListComponent — characterisation', () => {
 
     await fixture.componentInstance.runTestConnection();
 
-    expect(run).toHaveBeenCalledWith({ implementation: 'demo', settings: { url: 'http://x', apiKey: '' } });
+    // A new draft carries no id, and the blank secret is omitted rather than sent as ''.
+    expect(run).toHaveBeenCalledWith({ implementation: 'demo', settings: { url: 'http://x' } });
     expect(fixture.componentInstance.testResult()).toEqual({ ok: true, message: 'ok' });
+  });
+
+  it('VERDICT: testing an edit sends the row id and no blank secret, so the stored one is reusable', async () => {
+    const run = vi.fn(() => Promise.resolve({ ok: true, message: 'ok' }));
+    const fixture = await createComponent({
+      get: () => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: { url: 'http://x' } }]),
+    });
+    fixture.componentRef.setInput('testConnection', run);
+    fixture.detectChanges();
+    fixture.componentInstance.openEdit(fixture.componentInstance.rows()[0]);
+
+    await fixture.componentInstance.runTestConnection();
+
+    expect(run).toHaveBeenCalledWith({ implementation: 'demo', settings: { url: 'http://x' }, id: 7 });
   });
 
   it('deletes after confirmation and reloads', async () => {

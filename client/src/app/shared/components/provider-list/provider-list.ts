@@ -234,6 +234,16 @@ export class ProviderListComponent implements OnInit {
     return { settings, topLevel };
   }
 
+  /** Blank means "leave the stored secret alone" — never round-trip it as ''. Applied to the
+   *  test draft as well as the save body, so testing an edit doesn't demand the key again. */
+  private withoutBlankSecrets(settings: Record<string, unknown>): Record<string, unknown> {
+    const out = { ...settings };
+    for (const f of this.currentImplementation()?.fields ?? []) {
+      if (f.secret && out[f.key] === '') delete out[f.key];
+    }
+    return out;
+  }
+
   async runTestConnection(): Promise<void> {
     const run = this.testConnection();
     if (!run) return;
@@ -241,7 +251,14 @@ export class ProviderListComponent implements OnInit {
     this.testLoading.set(true);
     try {
       const { settings } = this.splitDraft();
-      this.testResult.set(await run({ implementation: this.draftImplementation(), settings }));
+      const id = this.editingId();
+      this.testResult.set(
+        await run({
+          implementation: this.draftImplementation(),
+          settings: this.withoutBlankSecrets(settings),
+          ...(id == null ? {} : { id }),
+        }),
+      );
     } catch {
       this.testResult.set({ ok: false, message: this.translate.instant('provider_list.test_network_error') });
     } finally {
@@ -254,17 +271,13 @@ export class ProviderListComponent implements OnInit {
     if (!name || this.requiredFieldMissing()) return;
 
     const { settings, topLevel } = this.splitDraft();
-    // Blank means "leave the stored secret alone" — never round-trip it as ''.
-    for (const f of this.currentImplementation()?.fields ?? []) {
-      if (f.secret && settings[f.key] === '') delete settings[f.key];
-    }
     let body: Record<string, unknown> = {
       name,
       [this.implementationKey()]: this.draftImplementation(),
       priority: this.draftPriority(),
       enabled: this.draftEnabled(),
       ...topLevel,
-      settings,
+      settings: this.withoutBlankSecrets(settings),
     };
     const transform = this.beforeSave();
     if (transform) body = transform(body);

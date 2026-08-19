@@ -151,7 +151,7 @@
                         class="link link-hover block truncate"
                       >{{ r.mediaTitle }}</a>
                       @if (episodeLabel(r)) {
-                        <span class="block text-xs font-normal text-base-content/60 truncate" [title]="episodeLabel(r)">
+                        <span class="block text-sm font-normal text-base-content/60 truncate" [title]="episodeLabel(r)">
                           @if (r.episodeId != null) {
                             <a
                               [routerLink]="['/series', r.mediaId, 'episode', r.episodeId]"

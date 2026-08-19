@@ -7,7 +7,7 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { formatBytes } from '../../utils/download-format';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { PaginationComponent } from '../pagination/pagination';
-import { BadgeTone, CellValue, ListAction, PagedResult, RowAction, TableColumn, TableFilter, TableRow } from './data-table.types';
+import { BadgeTone, CellValue, ListAction, PagedResult, RowAction, TableColumn, TableFilter, TableRow, TableSubValue } from './data-table.types';
 
 /** Keystroke-to-request debounce for a `search` filter — see `onSearchInput`. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -34,6 +34,7 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
 @Component({
   selector: 'app-data-table',
   imports: [TranslateModule, LocaleDatePipe, PaginationComponent],
+  providers: [LocaleDatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './data-table.html',
 })
@@ -42,6 +43,7 @@ export class DataTableComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly localeDate = inject(LocaleDatePipe);
 
   /** Empty renders no heading — an embedded table (a row action's result) carries its own. */
   readonly titleKey = input('');
@@ -67,6 +69,9 @@ export class DataTableComponent implements OnInit {
   readonly listError = signal('');
   readonly busy = signal<string | null>(null);
   readonly listActionBusy = signal<string | null>(null);
+
+  /** The open detail dialog's title key and text, or null when it is closed. */
+  readonly detail = signal<{ titleKey: string; text: string } | null>(null);
 
   readonly page = signal(1);
   readonly total = signal(0);
@@ -165,12 +170,43 @@ export class DataTableComponent implements OnInit {
    * The badge class for a cell, or null to render it as text. `*` catches every value the
    * column didn't name; an unknown tone falls back to `ghost` rather than reaching the DOM.
    */
-  badgeClass(col: TableColumn, value: CellValue): string | null {
+  badgeClass(col: Pick<TableColumn, 'badges'>, value: CellValue): string | null {
     const tones = col.badges;
     if (!tones) return null;
     const tone = tones[String(value ?? '')] ?? tones['*'];
     if (!tone) return null;
     return BADGE_CLASSES[tone] ?? BADGE_CLASSES.ghost;
+  }
+
+  /** The row's detail text for this column, or '' when there is none to open. A cell only
+   *  becomes a button when it has something to show. */
+  detailText(col: TableColumn, row: TableRow): string {
+    if (!col.detailKey) return '';
+    return String(row[col.detailKey] ?? '').trim();
+  }
+
+  openDetail(col: TableColumn, row: TableRow): void {
+    const text = this.detailText(col, row);
+    if (!text) return;
+    this.detail.set({ titleKey: col.detailTitleKey ?? col.labelKey, text });
+  }
+
+  closeDetail(): void {
+    this.detail.set(null);
+  }
+
+  /** Sub-values render as their own badge or text, reusing the column rules one level down. */
+  subValueText(sub: TableSubValue, value: CellValue): string {
+    switch (sub.format) {
+      case 'date':
+        return this.localeDate.transform(this.cellDate(value));
+      case 'bytes':
+        return this.cellBytes(value);
+      case 'percent':
+        return this.cellPercent(value);
+      default:
+        return this.cellLabel(sub, value);
+    }
   }
 
   /** A formatted value, a badge and a declared `nowrap` are all atomic — none should wrap. */
@@ -179,7 +215,7 @@ export class DataTableComponent implements OnInit {
   }
 
   /** An undeclared value renders as itself rather than as a missing translate key. */
-  cellLabel(col: TableColumn, value: CellValue): string {
+  cellLabel(col: Pick<TableColumn, 'labelKeys'>, value: CellValue): string {
     const raw = String(value ?? '');
     const key = col.labelKeys?.[raw];
     return key ? this.translate.instant(key) : raw;
