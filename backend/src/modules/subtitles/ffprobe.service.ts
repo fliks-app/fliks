@@ -17,6 +17,16 @@ export interface EmbeddedSubtitleStream {
   isImageBased: boolean;
 }
 
+/**
+ * Separates "this file carries no subtitle stream" from "ffprobe could not tell us": both
+ * arrive as an empty list, and the caller deletes the file's stored rows on the first while
+ * a timeout or an unreadable mount must leave them alone.
+ */
+export interface EmbeddedSubtitleProbe {
+  ok: boolean;
+  streams: EmbeddedSubtitleStream[];
+}
+
 export interface MediaStream {
   streamIndex: number;
   type: 'audio' | 'subtitle';
@@ -262,7 +272,7 @@ export class FfprobeService {
 
   async detectEmbeddedSubtitles(
     videoPath: string,
-  ): Promise<EmbeddedSubtitleStream[]> {
+  ): Promise<EmbeddedSubtitleProbe> {
     try {
       const { stdout } = await execFileAsync(
         'ffprobe',
@@ -282,19 +292,22 @@ export class FfprobeService {
       const parsed = JSON.parse(stdout) as { streams?: FfprobeStream[] };
       const streams = parsed.streams ?? [];
 
-      return streams.map((s) => ({
-        streamIndex: s.index,
-        codec: s.codec_name ?? 'unknown',
-        language: resolveStreamLanguage(s),
-        forced: s.disposition?.forced === 1,
-        hearingImpaired: s.disposition?.hearing_impaired === 1,
-        isImageBased: isImageBasedSubtitleCodec(s.codec_name),
-      }));
+      return {
+        ok: true,
+        streams: streams.map((s) => ({
+          streamIndex: s.index,
+          codec: s.codec_name ?? 'unknown',
+          language: resolveStreamLanguage(s),
+          forced: s.disposition?.forced === 1,
+          hearingImpaired: s.disposition?.hearing_impaired === 1,
+          isImageBased: isImageBasedSubtitleCodec(s.codec_name),
+        })),
+      };
     } catch (err) {
       this.logger.warn(
         `ffprobe failed for "${videoPath}": ${(err as Error).message}`,
       );
-      return [];
+      return { ok: false, streams: [] };
     }
   }
 

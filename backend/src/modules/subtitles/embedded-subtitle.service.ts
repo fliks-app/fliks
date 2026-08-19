@@ -36,13 +36,16 @@ export class EmbeddedSubtitleService {
     const videoPath = await this.resolveVideoPath(mediaId, mediaFileId);
     if (!videoPath) return [];
 
-    const streams = await this.ffprobe.detectEmbeddedSubtitles(videoPath);
-    if (!streams.length) {
-      this.logger.debug(
-        `No embedded subtitles in "${path.basename(videoPath)}"`,
+    const probe = await this.ffprobe.detectEmbeddedSubtitles(videoPath);
+    // An unreadable file answers the same empty list as one with no subtitle track. Wiping the
+    // stored rows on that would lose a whole file's tracks to one ffprobe timeout.
+    if (!probe.ok) {
+      this.logger.warn(
+        `Keeping stored embedded subtitles for mediaFile #${mediaFileId}: ffprobe could not read "${path.basename(videoPath)}"`,
       );
       return [];
     }
+    const streams = probe.streams;
 
     this.logger.log(
       `Found ${streams.length} embedded subtitle(s) in "${path.basename(videoPath)}"`,
@@ -66,8 +69,10 @@ export class EmbeddedSubtitleService {
       );
     }
 
-    // Remove all existing embedded subs for this file, then recreate
-    await this.subtitleFileRepo.delete({
+    // Remove all existing embedded subs for this file, then recreate. Callers rely on this
+    // to retire tracks a remux dropped, which is why an empty (but successful) probe must
+    // reach it rather than return early.
+    const removed = await this.subtitleFileRepo.delete({
       mediaFile: { id: mediaFileId },
       providerType: SubtitleProviderType.EMBEDDED,
     });
@@ -101,7 +106,11 @@ export class EmbeddedSubtitleService {
     );
     // An import runs this on its own; nothing the client did invalidated the subtitle list it
     // already holds, so without this the image tracks stay invisible until the TTL lapses.
-    this.events.emit({ type: 'subtitle.list_changed', mediaId });
+    // Silent when the refresh was a no-op — a rescan sweeps every file and must not wake
+    // every client once per file.
+    if (created.length || removed.affected) {
+      this.events.emit({ type: 'subtitle.list_changed', mediaId });
+    }
 
     return created;
   }
