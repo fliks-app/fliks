@@ -26,17 +26,18 @@ import {
 
 /** Debounce window for DB writes — heartbeat fires every 10 s but we
  *  flush playback state on a coarser cadence to avoid hammering
- *  `playback_states` on a busy household. State transitions and the
- *  "completed" threshold short-circuit the debounce. */
+ *  `playback_states` on a busy household. State transitions, the
+ *  "completed" threshold and a seek short-circuit the debounce. */
 const STATE_DB_WRITE_INTERVAL_MS = 30_000;
 
 @Controller('playback')
 @UseGuards(JwtOrApiKeyGuard)
 export class PlaybackController {
-  /** When the last DB write happened per `(userId, mediaId, episodeId)`
-   *  tuple. Drives the debounce above. In-memory map — moves to a
-   *  shared store the day Fliks runs across multiple backend instances. */
-  private readonly lastDbWriteAt = new Map<string, number>();
+  /** When the last DB write happened, and at which position, per
+   *  `(userId, mediaId, episodeId)` tuple. Drives the debounce above.
+   *  In-memory map — moves to a shared store the day Fliks runs across
+   *  multiple backend instances. */
+  private readonly lastDbWriteAt = new Map<string, { at: number; pos: number }>();
 
   constructor(
     private readonly playbackService: PlaybackService,
@@ -230,25 +231,30 @@ export class PlaybackController {
 
     const dbKey = `${user.id}:${mediaId}:${body.episodeId ?? 0}`;
     const now = Date.now();
-    const lastWrite = this.lastDbWriteAt.get(dbKey) ?? 0;
+    const last = this.lastDbWriteAt.get(dbKey);
     const dur = body.durationSeconds ?? 0;
     const pos = body.positionSeconds ?? 0;
     const wouldCompleteRow = dur > 0 && (pos >= dur - 30 || pos >= dur * 0.9);
+    // A position the debounce window can't explain by plain playback is a
+    // seek: flush it now, or leaving the player right after loses the jump.
+    const seeked =
+      !last || Math.abs(pos - last.pos) > STATE_DB_WRITE_INTERVAL_MS / 1000;
     const shouldFlushDb =
       stateChanged ||
       wouldCompleteRow ||
-      now - lastWrite >= STATE_DB_WRITE_INTERVAL_MS;
+      seeked ||
+      now - (last?.at ?? 0) >= STATE_DB_WRITE_INTERVAL_MS;
 
     if (!shouldFlushDb) {
       return sessionLost ? { sessionLost: true } : null;
     }
-    this.lastDbWriteAt.set(dbKey, now);
+    this.lastDbWriteAt.set(dbKey, { at: now, pos });
     // Drop debounce entries for playbacks idle past a few write intervals so
     // the map can't grow unbounded over the process lifetime — a pruned entry
     // only gated the next write, which simply re-creates it.
     const staleBefore = now - STATE_DB_WRITE_INTERVAL_MS * 10;
-    for (const [key, ts] of this.lastDbWriteAt) {
-      if (ts < staleBefore) this.lastDbWriteAt.delete(key);
+    for (const [key, entry] of this.lastDbWriteAt) {
+      if (entry.at < staleBefore) this.lastDbWriteAt.delete(key);
     }
     const state = await this.playbackService.updateState(user.id, mediaId, {
       positionSeconds: body.positionSeconds,
