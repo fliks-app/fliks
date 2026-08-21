@@ -246,7 +246,7 @@ export interface SessionContext {
    *  instead of a generic 1000-nit reference. */
   hdrMetadata?: import('./codec/types').HdrStaticMetadata;
   /** Dolby Vision profile + base-layer compat id, threaded from streamInfo so
-   *  ffmpeg-args can gate the P5 libplacebo tonemap (#636). */
+   *  ffmpeg-args can gate the P5 `tonemap_opencl=apply_dovi` tone-map. */
   sourceDvProfile?: number;
   sourceDvBlSignalCompatId?: number;
 }

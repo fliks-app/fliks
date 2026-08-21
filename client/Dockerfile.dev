@@ -1,0 +1,8 @@
+# Dev-only image for `ng serve`. Deps live at /src/node_modules — the parent of
+# the bind-mounted /src/client, so the mount can't shadow them and `up` never
+# reinstalls. Rebuild when package.json changes.
+FROM node:24-bookworm-slim
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN npm ci
+WORKDIR /src/client

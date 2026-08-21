@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile);
  *  surfaces on the GPU (D3D11 Video Processor), keeping the AMF pipeline
  *  zero-copy end to end (d3d11 decode → scale_d3d11 → AMF encode). The filter
  *  only exists in FFmpeg ≥ 8.1; on older bundles the probe fails and the AMF
- *  path takes the CPU scale (or the libplacebo path). Fail-closed. */
+ *  path takes the CPU scale. Fail-closed. */
 let probedOnce = false;
 let enabled = false;
 

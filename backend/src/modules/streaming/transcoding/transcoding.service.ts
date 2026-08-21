@@ -187,10 +187,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     if (this.detectedHwAccel === 'amf') {
       void runScaleD3d11Probe(this.log);
     }
-    // Vulkan/libplacebo Dolby Vision P5 tonemap. Vendor-agnostic, so probe on
-    // any non-macOS host; a GPU-less server fails device init fast (fail-closed).
-    if (this.detectedHwAccel !== 'videotoolbox') {
-      }
 
     // Tight cleanup cadence — paired with the live-session 30 s TTL +
     // 60 s job grace, this puts ffmpeg death within ~100 s of the last

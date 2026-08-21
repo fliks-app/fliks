@@ -285,8 +285,8 @@ export interface BuildFfmpegArgsOptions {
    *  display tonemaps to the real peak luminance; the encoders fall back to a
    *  generic 1000-nit reference when absent. */
   sourceHdrMetadata?: HdrStaticMetadata;
-  /** Dolby Vision profile + base-layer compat id — gate the P5 libplacebo
-   *  tonemap (#636). */
+  /** Dolby Vision profile + base-layer compat id — gates the P5
+   *  `tonemap_opencl=apply_dovi` RPU tone-map. */
   sourceDvProfile?: number;
   sourceDvBlSignalCompatId?: number;
   /** Audio output decision — see {@link SessionContext.audioPlan}. When
@@ -549,8 +549,8 @@ function buildAudioAndMuxerArgs(opts: {
  * Decode stage: resolve the decoder (how the source is brought into memory —
  * HW device init + `-hwaccel`) via the registry, then emit the matching input
  * args and the tone-map device bridges: OpenCL for the VAAPI / NVENC / AMF
- * chains, the Windows QSV D3D11→OpenCL zero-copy repoint, and Vulkan for the
- * Dolby Vision libplacebo path. Returns the input args to append plus the
+ * chains and the Windows QSV D3D11→OpenCL zero-copy repoint. Returns the
+ * input args to append plus the
  * resolved `decoder` and whether the VideoToolbox Metal fast path is active —
  * both consumed downstream by the encoder stage.
  */
