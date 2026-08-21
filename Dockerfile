@@ -108,6 +108,14 @@ COPY --from=vobsub-ocr-build /opt/subtile-ocr/bin/subtile-ocr /usr/local/bin/sub
 RUN mkdir -p /etc/OpenCL/vendors \
   && echo 'libnvidia-opencl.so.1' > /etc/OpenCL/vendors/nvidia.icd
 
+# Dev stage for docker-compose: deps in the image at /src, sources bind-mounted
+# at /src/backend. Rebuild the image when package.json changes.
+FROM runtime-base AS dev
+WORKDIR /src
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci
+WORKDIR /src/backend
+
 FROM runtime-base AS runtime
 
 WORKDIR /app
@@ -147,11 +155,3 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||4848)+'/api/system/liveness',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 CMD ["node", "dist/main"]
-
-# Dev stage for docker-compose: deps in the image at /src, sources bind-mounted
-# at /src/backend. Rebuild the image when package.json changes.
-FROM runtime-base AS dev
-WORKDIR /src
-COPY backend/package.json backend/package-lock.json ./
-RUN npm ci
-WORKDIR /src/backend

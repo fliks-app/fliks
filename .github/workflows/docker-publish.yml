@@ -83,6 +83,9 @@ jobs:
         with:
           context: .
           file: Dockerfile
+          # Named, not implied: without it the build takes whatever stage ends the
+          # file, and a stage appended after `runtime` ships as the release image.
+          target: runtime
           platforms: ${{ matrix.target.platform }}
           # push-by-digest: each matrix job pushes its single-arch image
           # under a content-addressable digest only (no human tag). The
