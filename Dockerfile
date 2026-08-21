@@ -34,7 +34,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/* "$HOME/.cargo/registry" "$HOME/.rustup"
 
 # --- Stage 3: Production runtime ---
-FROM ubuntu:24.04
+# Runtime toolchain (node + jellyfin-ffmpeg + subtitle/OCR tools). Split out so
+# the dev compose can build it as-is with `target: runtime-base`.
+FROM ubuntu:24.04 AS runtime-base
 
 # Populated by Docker buildx with the target platform's arch (amd64,
 # arm64, ...). Used below to skip x86-only packages on arm64 builds.
@@ -57,12 +59,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 # RPU tone-map) — that stays, amd64-only. The jellyfin-ffmpeg deb is per-arch;
 # on arm64 there's no Intel HW so the image is CPU-only (libx264) + ffsubsync.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  bash \
   postgresql-client \
   procps \
   python3 \
   python3-pip \
-  python3-venv \
   libchromaprint-tools \
   mkvtoolnix \
   tesseract-ocr \
@@ -108,6 +108,8 @@ COPY --from=vobsub-ocr-build /opt/subtile-ocr/bin/subtile-ocr /usr/local/bin/sub
 RUN mkdir -p /etc/OpenCL/vendors \
   && echo 'libnvidia-opencl.so.1' > /etc/OpenCL/vendors/nvidia.icd
 
+FROM runtime-base AS runtime
+
 WORKDIR /app
 
 # Copy backend production dependencies
@@ -145,3 +147,11 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||4848)+'/api/system/liveness',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 CMD ["node", "dist/main"]
+
+# Dev stage for docker-compose: deps in the image at /src, sources bind-mounted
+# at /src/backend. Rebuild the image when package.json changes.
+FROM runtime-base AS dev
+WORKDIR /src
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci
+WORKDIR /src/backend

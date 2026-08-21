@@ -1,0 +1,85 @@
+# Dev stack: NestJS + Angular in watch mode on the mounted sources.
+# Copy to `docker-compose.yml` (gitignored), point the media paths at your own
+# library, then `docker compose up` → UI on http://localhost:4500.
+# node_modules live in the images at /src, above the bind-mounted sources:
+# `docker compose build` after any package.json change.
+
+services:
+  backend:
+    build:
+      context: .
+      target: dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Uncomment for Intel QSV/VAAPI. The render node is root:render and the
+    # non-root user below is not in that group, so both lines are needed or the
+    # probe fails and transcodes fall back to CPU.
+    # Your gid: `getent group render | cut -d: -f3`.
+    # devices:
+    #   - /dev/dri:/dev/dri
+    # group_add: ['${FLIKS_RENDER_GID:-990}']
+    working_dir: /src/backend
+    # Build output lands in the mounted sources (backend/dist, client/.angular);
+    # as root it would make the host's own build fail on EACCES.
+    user: '${FLIKS_UID:-1000}:${FLIKS_GID:-1000}'
+    command: npm run start:dev
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      CORS_ORIGIN: http://localhost:4500
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: fliks
+      DB_PASSWORD: password
+      DB_NAME: fliks
+      JWT_SECRET: dev-secret
+      # TMDB_API_KEY: ''
+      # TVDB_API_KEY: ''
+      # Throwaway cache, container-only: /src is root-owned in the image, so the
+      # non-root user it runs as needs a path it can actually write.
+      FLIKS_TRANSCODE_DIR: /tmp/transcode
+      FLIKS_IMAGES_DIR: /src/images
+    ports:
+      - '3000:3000'
+    # Keeps the host's own node_modules out of the container.
+    tmpfs:
+      - /src/backend/node_modules
+    volumes:
+      - ./backend:/src/backend
+      - ./.dev/downloads:/downloads
+      - ./.dev/medias:/medias
+      - ./.dev/images:/src/images
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.dev
+    working_dir: /src/client
+    user: '${FLIKS_UID:-1000}:${FLIKS_GID:-1000}'
+    command: npm run start:docker
+    ports:
+      - '4500:4500'
+    tmpfs:
+      - /src/client/node_modules
+    volumes:
+      - ./client:/src/client
+      # client/tsconfig.json resolves @fliks/plugin-contract/ui from ../backend.
+      - ./backend/src/common/plugin-contract:/src/backend/src/common/plugin-contract:ro
+
+  postgres:
+    image: postgres:18.3-alpine
+    environment:
+      POSTGRES_DB: fliks
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: fliks
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fliks']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres:/var/lib/postgresql/18/docker
+
+volumes:
+  postgres:

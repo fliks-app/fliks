@@ -68,6 +68,9 @@ plans/
 /docs/*
 !/docs/plugins.md
 docker-compose.yml
+
+# Dev-stack bind mounts (media library, downloads, images, transcode cache).
+.dev/
 docker-compose.prod.yml
 .worktrees/
 .claude/
