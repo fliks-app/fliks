@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.1.0](https://github.com/fliks-app/fliks/compare/v3.0.0...v3.1.0) (2026-08-21)
+
+
+### Features
+
+* **docker:** add a compose dev stack, and drop the Dockerfiles it replaces ([#1028](https://github.com/fliks-app/fliks/issues/1028)) ([421aec5](https://github.com/fliks-app/fliks/commit/421aec58c08528e9da631d612d21e62ce2262f69))
+* **libraries:** replace the creation modal with a 3-step wizard page ([#1031](https://github.com/fliks-app/fliks/issues/1031)) ([f94b12d](https://github.com/fliks-app/fliks/commit/f94b12dabec0bb0c676649a1f8d160a410ce0436))
+
+
+### Bug Fixes
+
+* **docker:** publish the runtime stage, not whatever ends the Dockerfile ([#1030](https://github.com/fliks-app/fliks/issues/1030)) ([cf51c75](https://github.com/fliks-app/fliks/commit/cf51c75b70cb315fa02f01ae40da009c8ad7bf91))
+
 ## [3.0.0](https://github.com/fliks-app/fliks/compare/v2.0.1...v3.0.0) (2026-08-19)
 
 
