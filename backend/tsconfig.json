@@ -15,6 +15,9 @@
     "outDir": "./dist",
     "baseUrl": "./",
     "incremental": true,
+    // Inside outDir: nest-cli's deleteOutDir wipes dist on every start, and a buildinfo
+    // that outlives it makes tsc emit nothing at all ("Cannot find module dist/main").
+    "tsBuildInfoFile": "./dist/tsconfig.build.tsbuildinfo",
     "skipLibCheck": true,
     "strictNullChecks": true,
     "forceConsistentCasingInFileNames": true,
