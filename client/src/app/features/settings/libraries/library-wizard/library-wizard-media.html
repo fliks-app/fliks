@@ -1,0 +1,32 @@
+<div class="card bg-base-100 border border-base-200">
+  <div class="card-body gap-5">
+    <h2 class="card-title text-lg">{{ 'settings.libraries.section_storage' | translate }}</h2>
+
+    <div class="flex flex-wrap items-end gap-3">
+      <label class="form-control flex-1 min-w-64">
+        <div class="label">
+          <span class="label-text text-base">{{ 'settings.libraries.path' | translate }}</span>
+        </div>
+        <input type="text" class="input input-bordered w-full font-mono"
+          [ngModel]="state.formPath()" (ngModelChange)="state.formPath.set($event)"
+          placeholder="/medias/movies" />
+        <div class="label">
+          <span class="label-text-alt text-sm text-base-content/50">{{ 'settings.libraries.path_hint' | translate }}</span>
+        </div>
+      </label>
+      <button type="button" class="btn btn-outline mb-6" (click)="browsePath()">
+        {{ 'common.browse' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary mb-6"
+        (click)="scan()" [disabled]="!state.formPath().trim()">
+        {{ 'settings.libraries.scan_folder' | translate }}
+      </button>
+    </div>
+
+    @if (!scanned()) {
+      <p class="text-sm text-base-content/60">{{ 'settings.libraries.scan_required' | translate }}</p>
+    }
+
+    <app-orphan-scan-panel #panel [deferLink]="true" />
+  </div>
+</div>

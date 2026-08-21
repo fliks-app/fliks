@@ -27,6 +27,7 @@ import { MediaMutationService } from './media-service/media-mutation.service';
 import { MediaRescanService } from './media-service/media-rescan.service';
 import { Library } from '../libraries/entities/library.entity';
 import { LibrariesModule } from '../libraries/libraries.module';
+import { MEDIA_SERVICE } from './media-service.token';
 import { FliksSchedulerModule } from '../scheduler/scheduler.module';
 import { ImageModule } from '../images/image.module';
 import { StreamingModule } from '../streaming/streaming.module';
@@ -57,6 +58,7 @@ import { StreamingModule } from '../streaming/streaming.module';
   ],
   controllers: [MediaController],
   providers: [
+    { provide: MEDIA_SERVICE, useExisting: MediaService },
     MediaService,
     MediaImportService,
     MediaMetadataService,
@@ -70,6 +72,7 @@ import { StreamingModule } from '../streaming/streaming.module';
   ],
   exports: [
     MediaService,
+    MEDIA_SERVICE,
     MediaMetadataService,
     AutoGrabPipelineService,
     AcquisitionCandidatesService,

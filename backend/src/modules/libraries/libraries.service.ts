@@ -4,12 +4,15 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import * as fs from 'fs';
 import { Library } from './entities/library.entity';
 import { LibraryUserAccess } from './entities/library-user-access.entity';
 import { Media } from '../media/entities/media.entity';
+import type { MediaService } from '../media/media.service';
+import { MEDIA_SERVICE } from '../media/media-service.token';
 import { User } from '../users/entities/user.entity';
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { LanguageProfile } from '../profiles/entities/language-profile.entity';
@@ -41,6 +44,7 @@ export class LibrariesService {
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
     private readonly dataSource: DataSource,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -143,6 +147,8 @@ export class LibrariesService {
           color: dto.color ?? null,
           mediaTypes: dto.mediaTypes ?? [MediaType.MOVIE, MediaType.SERIES],
           preferredProvider: dto.preferredProvider ?? null,
+          metadataLanguage: dto.metadataLanguage || null,
+          metadataRegion: dto.metadataRegion || null,
           defaultQualityProfile: dto.defaultQualityProfileId
             ? ({ id: dto.defaultQualityProfileId } as QualityProfile)
             : null,
@@ -220,19 +226,34 @@ export class LibrariesService {
     return this.findOne(id);
   }
 
+  /** Resolved lazily, at call time: a DI edge here would close a module cycle
+   *  back through the media module. */
+  private mediaService(): MediaService {
+    return this.moduleRef.get<MediaService>(MEDIA_SERVICE, { strict: false });
+  }
+
+  /**
+   * Drop the library and every DB row that hung off it. Files on disk are
+   * kept: `MediaService.remove` returns the folder for the caller to delete
+   * and we deliberately ignore it.
+   */
   async remove(id: number): Promise<void> {
     const lib = await this.repo.findOne({ where: { id } });
     if (!lib) throw new NotFoundException(`Library #${id} not found`);
-    const mediaCount = await this.mediaRepo.count({
+
+    const media = await this.mediaRepo.find({
       where: { library: { id } },
+      select: ['id'],
     });
-    if (mediaCount > 0) {
-      throw new BadRequestException(
-        `Library still contains ${mediaCount} media item(s). Remove all media before deleting the library.`,
-      );
+    for (const m of media) {
+      await this.mediaService().remove(m.id);
     }
+
     // Cascade handles library_user_access; path lives on the row itself.
     await this.repo.remove(lib);
+    this.log.log(
+      `Library #${id} deleted — ${media.length} media row(s) removed, files kept`,
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -356,9 +377,13 @@ export class LibrariesService {
     await m.update(Library, { [flag]: true }, { [flag]: false });
   }
 
-  private diskInfo(path: string): { freeSpace: number; totalSpace: number } {
+  /** Async on purpose: a statfs on a slow network mount would otherwise
+   *  block the event loop for every other request. */
+  private async diskInfo(
+    path: string,
+  ): Promise<{ freeSpace: number; totalSpace: number }> {
     try {
-      const stats = fs.statfsSync(path);
+      const stats = await fs.promises.statfs(path);
       return {
         freeSpace: Number(stats.bfree) * Number(stats.bsize),
         totalSpace: Number(stats.blocks) * Number(stats.bsize),
@@ -369,16 +394,17 @@ export class LibrariesService {
   }
 
   private async enrich(lib: Library): Promise<LibraryWithDetails> {
-    let disk: DiskMetrics | null = null;
-    if (lib.path) {
-      const info = this.diskInfo(lib.path);
-      disk = {
-        freeSpace: info.freeSpace,
-        totalSpace: info.totalSpace,
-        accessible: info.freeSpace !== -1,
-      };
-    }
-    const userIds = await this.getUserAccess(lib.id);
+    const [info, userIds] = await Promise.all([
+      lib.path ? this.diskInfo(lib.path) : null,
+      this.getUserAccess(lib.id),
+    ]);
+    const disk: DiskMetrics | null = info
+      ? {
+          freeSpace: info.freeSpace,
+          totalSpace: info.totalSpace,
+          accessible: info.freeSpace !== -1,
+        }
+      : null;
     return { ...lib, disk, userIds };
   }
 

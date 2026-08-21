@@ -14,6 +14,9 @@
           <span class="label-text-alt text-sm text-base-content/50">{{ 'settings.libraries.path_hint' | translate }}</span>
         </div>
       </label>
+      <button type="button" class="btn btn-outline mb-6" (click)="browsePath()">
+        {{ 'common.browse' | translate }}
+      </button>
       <button type="button" class="btn btn-primary mb-6" (click)="save()" [disabled]="state.saving()">
         @if (state.saving()) { <span class="loading loading-spinner loading-sm"></span> }
         {{ 'common.save' | translate }}

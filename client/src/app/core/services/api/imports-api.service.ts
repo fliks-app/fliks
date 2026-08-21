@@ -34,12 +34,17 @@ export interface OrphanGroup {
 }
 
 export interface OrphanScanResult {
-  libraryId: number;
   libraryPath: string;
   groups: OrphanGroup[];
   looseFiles: OrphanFileEntry[];
   scannedFiles: number;
   orphanCount: number;
+}
+
+export interface PreviewOrphansBody {
+  path: string;
+  mediaTypes?: MediaType[];
+  preferredProvider?: string | null;
 }
 
 export interface RelinkFile {
@@ -77,6 +82,23 @@ export class ImportsApiService {
       this.http.post<OrphanScanResult>(
         `/api/imports/library/${libraryId}/orphans/scan`,
         {},
+      ),
+    );
+  }
+
+  /** Scan a bare folder, for a library that does not exist yet. */
+  previewOrphans(body: PreviewOrphansBody) {
+    return firstValueFrom(
+      this.http.post<OrphanScanResult>('/api/imports/orphans/preview', body),
+    );
+  }
+
+  /** Queue every group of a scan; the server imports them in the background. */
+  relinkOrphansBatch(items: RelinkOrphansBody[]) {
+    return firstValueFrom(
+      this.http.post<{ queued: number }>(
+        '/api/imports/library/orphans/relink-batch',
+        { items },
       ),
     );
   }

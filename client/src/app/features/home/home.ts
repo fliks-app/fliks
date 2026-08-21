@@ -40,6 +40,7 @@ import { TvSectionDirective } from '../../shared/directives/tv-section.directive
 import { AuthService } from '../../core/services/auth.service';
 import { RequestCardComponent } from '../requests/request-card/request-card';
 import { RequestDeclineModalComponent } from '../requests/request-decline-modal/request-decline-modal.component';
+import { libraryColorVar } from '../../core/constants/library-appearance';
 
 /**
  * # Home page
@@ -261,12 +262,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     return `/libraries/${encodeURIComponent(lib.name)}`;
   }
 
-  /** CSS color for library card. DaisyUI 5 names → var(--color-<name>). */
   libraryColor(lib: LibrarySummary): string {
-    const c = lib.color || 'primary';
-    const daisyColors = ['primary', 'secondary', 'accent', 'info', 'success', 'warning', 'error'];
-    if (daisyColors.includes(c)) return `var(--color-${c})`;
-    return c;
+    return libraryColorVar(lib.color);
   }
 
   openPlaylist(id: number): void {

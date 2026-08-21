@@ -1,0 +1,126 @@
+import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
+import { of } from 'rxjs';
+import { OrphanScanPanelComponent } from './orphan-scan-panel';
+import {
+  ImportsApiService,
+  OrphanScanResult,
+  RelinkOrphansBody,
+} from '../../../../../core/services/api/imports-api.service';
+import {
+  MetadataService,
+  MetadataSearchResult,
+} from '../../../../../core/services/api/metadata.service';
+import { ToastService } from '../../../../../core/services/toast.service';
+
+const result = (tmdbId: number, title: string): MetadataSearchResult => ({
+  tmdbId,
+  provider: 'tmdb',
+  title,
+  originalTitle: title,
+  overview: '',
+  year: 2001,
+  posterUrl: null,
+  rating: 0,
+  genres: [],
+  mediaType: 'movie',
+  existingMediaId: null,
+  existingMediaType: null,
+});
+
+const scanResult = (folders: string[]): OrphanScanResult => ({
+  libraryPath: '/medias',
+  groups: folders.map((folderName) => ({
+    groupKey: `movie:${folderName}`,
+    mediaType: 'movie',
+    folderName,
+    guessTitle: folderName,
+    guessYear: 2001,
+    nfo: null,
+    suggestedProvider: 'tmdb',
+    files: [
+      {
+        filePath: `/medias/${folderName}/a.mkv`,
+        filename: 'a.mkv',
+        size: 1,
+        qualityName: 'HDTV-720p',
+        qualityId: 1,
+        seasonNumber: null,
+        episodeNumber: null,
+        episodeEnd: null,
+      },
+    ],
+  })),
+  looseFiles: [],
+  scannedFiles: folders.length,
+  orphanCount: folders.length,
+});
+
+function setup(folders: string[]) {
+  const relinked: RelinkOrphansBody[] = [];
+  const importsApi = {
+    previewOrphans: () => Promise.resolve(scanResult(folders)),
+    relinkOrphansBatch: (items: RelinkOrphansBody[]) => {
+      relinked.push(...items);
+      return Promise.resolve({ queued: items.length });
+    },
+  };
+  const metadata = {
+    searchMovie: () => Promise.resolve([result(11, 'First'), result(22, 'Second')]),
+    searchTv: () => Promise.resolve([]),
+  };
+
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideTranslateService({
+        lang: 'en',
+        loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+      }),
+      { provide: ImportsApiService, useValue: importsApi as unknown as ImportsApiService },
+      { provide: MetadataService, useValue: metadata as unknown as MetadataService },
+      { provide: ToastService, useValue: { success: () => undefined } },
+    ],
+  });
+  const fixture = TestBed.createComponent(OrphanScanPanelComponent);
+  return { panel: fixture.componentInstance, relinked };
+}
+
+describe('OrphanScanPanelComponent.importAll', () => {
+  it('queues every detected group, defaulting to the first result', async () => {
+    const { panel, relinked } = setup(['Alpha', 'Beta']);
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+
+    expect(await panel.importAll(7)).toBe(2);
+    expect(relinked.map((b) => [b.folderName, b.externalId, b.libraryId])).toEqual([
+      ['Alpha', '11', 7],
+      ['Beta', '11', 7],
+    ]);
+  });
+
+  it('keeps an explicit pick over the first result', async () => {
+    const { panel, relinked } = setup(['Alpha']);
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    panel.pick(0, result(22, 'Second'));
+
+    await panel.importAll(7);
+    expect(relinked[0].externalId).toBe('22');
+  });
+});
+
+describe('OrphanScanPanelComponent pagination', () => {
+  it('pages the groups and only searches the visible ones', async () => {
+    const folders = Array.from({ length: 25 }, (_, i) => `F${i}`);
+    const { panel } = setup(folders);
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+
+    expect(panel.pageCount()).toBe(2);
+    expect(panel.pagedGroups().length).toBe(20);
+    expect(panel.groups().filter((g) => g.searched).length).toBe(20);
+
+    await panel.goToPage(2);
+    expect(panel.pagedGroups().length).toBe(5);
+    expect(panel.groups().filter((g) => g.searched).length).toBe(25);
+  });
+});

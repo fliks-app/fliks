@@ -1,4 +1,6 @@
-@if (state.library(); as lib) {
+@if (state.loading()) {
+  <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+} @else if (state.library(); as lib) {
   <div class="flex flex-col gap-6">
 
     <!-- Header -->
@@ -40,18 +42,18 @@
       <a
         role="tab"
         class="tab"
-        [routerLink]="['/admin/settings/libraries', state.libraryId(), 'media']"
-        routerLinkActive="tab-active"
-      >
-        {{ 'settings.libraries.tab_media' | translate }}
-      </a>
-      <a
-        role="tab"
-        class="tab"
         [routerLink]="['/admin/settings/libraries', state.libraryId(), 'users']"
         routerLinkActive="tab-active"
       >
         {{ 'settings.libraries.tab_users' | translate }}
+      </a>
+      <a
+        role="tab"
+        class="tab"
+        [routerLink]="['/admin/settings/libraries', state.libraryId(), 'media']"
+        routerLinkActive="tab-active"
+      >
+        {{ 'settings.libraries.tab_media' | translate }}
       </a>
     </div>
 

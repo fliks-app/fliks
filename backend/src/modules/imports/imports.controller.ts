@@ -15,6 +15,8 @@ import { User } from '../users/entities/user.entity';
 import { Action } from '../auth/casl/actions.enum';
 import { Media } from '../media/entities/media.entity';
 import { RelinkOrphansDto } from './dto/relink-orphans.dto';
+import { PreviewOrphansDto } from './dto/preview-orphans.dto';
+import { RelinkOrphansBatchDto } from './dto/relink-orphans-batch.dto';
 import { EventsService } from '../scheduler/events.service';
 import { ImportRadarrService, ApiImportResult } from './radarr.service';
 import { ImportSonarrService } from './sonarr.service';
@@ -169,6 +171,34 @@ export class ImportsController {
   @CheckPolicies((ability) => ability.can(Action.Create, Media))
   scanOrphans(@Param('libraryId', ParseIntPipe) libraryId: number) {
     return this.diskImport.scanLibraryOrphans(libraryId);
+  }
+
+  @Post('orphans/preview')
+  @CheckPolicies((ability) => ability.can(Action.Create, Media))
+  previewOrphans(@Body() dto: PreviewOrphansDto) {
+    return this.diskImport.previewOrphans(dto);
+  }
+
+  /**
+   * Fire-and-forget: the creation wizard navigates away as soon as the
+   * library exists, so a folder of hundreds of media must not hold the
+   * socket open. Failures land in the logs, per group.
+   */
+  @Post('library/orphans/relink-batch')
+  @CheckPolicies((ability) => ability.can(Action.Create, Media))
+  relinkOrphansBatch(
+    @Body() dto: RelinkOrphansBatchDto,
+    @CurrentUser() user: User,
+  ) {
+    void this.diskImport
+      .relinkOrphansBatch(dto.items, user?.id ?? null)
+      .catch((err) => {
+        this.log.error(
+          `Orphan batch import failed — ${(err as Error).message}`,
+          err instanceof Error ? err.stack : err,
+        );
+      });
+    return { queued: dto.items.length };
   }
 
   @Post('library/orphans/relink')

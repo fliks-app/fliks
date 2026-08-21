@@ -30,7 +30,6 @@ export interface OrphanGroup {
 }
 
 export interface OrphanScanResult {
-  libraryId: number;
   libraryPath: string;
   groups: OrphanGroup[];
   /** Video files directly at the library root — not re-linkable in V1. */
