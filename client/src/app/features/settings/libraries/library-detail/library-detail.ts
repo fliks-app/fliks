@@ -39,24 +39,30 @@ export class LibraryDetailComponent implements OnInit {
     const id = Number(this.route.snapshot.paramMap.get('id'));
     if (!Number.isFinite(id) || id < 1) {
       this.state.library.set(null);
+      this.state.loading.set(false);
       return;
     }
     this.state.libraryId.set(id);
 
+    // Options only feed the tab selects — the page renders without them.
+    const options = Promise.all([
+      this.usersApi.list().catch(() => [] as UserRow[]),
+      this.profilesApi.getQualityProfiles().catch(() => [] as QualityProfile[]),
+      this.profilesApi.getLanguageProfiles().catch(() => [] as LanguageProfile[]),
+    ]);
+
     try {
-      const [lib, users, qp, lp] = await Promise.all([
-        this.api.get(id),
-        this.usersApi.list().catch(() => [] as UserRow[]),
-        this.profilesApi.getQualityProfiles().catch(() => [] as QualityProfile[]),
-        this.profilesApi.getLanguageProfiles().catch(() => [] as LanguageProfile[]),
-      ]);
-      this.state.users.set(users);
-      this.state.qualityProfiles.set(qp);
-      this.state.languageProfiles.set(lp);
-      this.state.hydrate(lib);
+      this.state.hydrate(await this.api.get(id));
     } catch {
       this.state.library.set(null);
+    } finally {
+      this.state.loading.set(false);
     }
+
+    const [users, qp, lp] = await options;
+    this.state.users.set(users);
+    this.state.qualityProfiles.set(qp);
+    this.state.languageProfiles.set(lp);
   }
 
   async remove() {

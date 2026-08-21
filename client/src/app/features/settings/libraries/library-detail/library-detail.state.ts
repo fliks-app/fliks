@@ -2,6 +2,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import {
   Library,
   LibrariesApiService,
+  UpdateLibraryBody,
 } from '../../../../core/services/api/libraries-api.service';
 import { UserRow } from '../../../../core/services/api/users-api.service';
 import {
@@ -23,10 +24,11 @@ export class LibraryDetailState {
   readonly qualityProfiles = signal<QualityProfile[]>([]);
   readonly languageProfiles = signal<LanguageProfile[]>([]);
   readonly libraryId = signal(0);
+  readonly loading = signal(true);
   readonly saving = signal(false);
   readonly saveError = signal('');
 
-  // Editable form fields, shared across the General and Users tabs.
+  // Editable form fields, shared by the detail tabs and the creation wizard.
   readonly formName = signal('');
   readonly formIcon = signal<string | null>(null);
   readonly formColor = signal<string | null>(null);
@@ -69,53 +71,91 @@ export class LibraryDetailState {
     this.formUserIds.set(next);
   }
 
-  async save(): Promise<boolean> {
-    const id = this.libraryId();
-    if (!id) return false;
-
-    const name = this.formName().trim();
-    if (!name) {
+  /** Reject an incomplete form, surfacing the reason in `saveError`. */
+  validate(): boolean {
+    if (!this.formName().trim()) {
       this.saveError.set(this.translate.instant('settings.libraries.name_required'));
       return false;
     }
-    const mediaTypes: ('movie' | 'series')[] = [];
-    if (this.formMovies()) mediaTypes.push('movie');
-    if (this.formSeries()) mediaTypes.push('series');
-    if (mediaTypes.length === 0) {
+    if (this.mediaTypes().length === 0) {
       this.saveError.set(this.translate.instant('settings.libraries.media_type_required'));
       return false;
     }
+    this.saveError.set('');
+    return true;
+  }
+
+  async create(): Promise<number | null> {
+    if (!this.validate()) return null;
 
     this.saving.set(true);
-    this.saveError.set('');
     try {
-      await this.api.update(id, {
-        name,
-        icon: this.formIcon(),
-        color: this.formColor(),
-        mediaTypes,
-        preferredProvider: this.formProvider(),
-        metadataLanguage: this.formMetadataLanguage(),
-        metadataRegion: this.formMetadataRegion(),
-        defaultQualityProfileId: this.formQualityProfileId(),
-        defaultLanguageProfileId: this.formLanguageProfileId(),
-        isDefaultForMovies: this.formDefaultMovies(),
-        isDefaultForSeries: this.formDefaultSeries(),
-        path: this.formPath().trim(),
+      const lib = await this.api.create({
+        ...this.payload(),
+        name: this.formName().trim(),
+        userIds: [...this.formUserIds()],
       });
+      this.libraryId.set(lib.id);
+      this.hydrate(lib);
+      this.toast.success(this.translate.instant('settings.libraries.saved'));
+      return lib.id;
+    } catch (err: unknown) {
+      this.saveError.set(this.httpMessage(err));
+      return null;
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  async save(): Promise<boolean> {
+    const id = this.libraryId();
+    if (!id) return false;
+    if (!this.validate()) return false;
+
+    this.saving.set(true);
+    try {
+      await this.api.update(id, this.payload());
       await this.api.setAccess(id, [...this.formUserIds()]);
       this.library.set(await this.api.get(id));
       this.toast.success(this.translate.instant('settings.libraries.saved'));
       return true;
     } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string | string[] } };
-      const msg = Array.isArray(httpErr.error?.message)
-        ? httpErr.error.message.join(', ')
-        : httpErr.error?.message;
-      this.saveError.set(msg ?? this.translate.instant('settings.libraries.save_error'));
+      this.saveError.set(this.httpMessage(err));
       return false;
     } finally {
       this.saving.set(false);
     }
+  }
+
+  mediaTypes(): ('movie' | 'series')[] {
+    const types: ('movie' | 'series')[] = [];
+    if (this.formMovies()) types.push('movie');
+    if (this.formSeries()) types.push('series');
+    return types;
+  }
+
+  private payload(): UpdateLibraryBody {
+    return {
+      name: this.formName().trim(),
+      icon: this.formIcon(),
+      color: this.formColor(),
+      mediaTypes: this.mediaTypes(),
+      preferredProvider: this.formProvider(),
+      metadataLanguage: this.formMetadataLanguage(),
+      metadataRegion: this.formMetadataRegion(),
+      defaultQualityProfileId: this.formQualityProfileId(),
+      defaultLanguageProfileId: this.formLanguageProfileId(),
+      isDefaultForMovies: this.formDefaultMovies(),
+      isDefaultForSeries: this.formDefaultSeries(),
+      path: this.formPath().trim(),
+    };
+  }
+
+  private httpMessage(err: unknown): string {
+    const httpErr = err as { error?: { message?: string | string[] } };
+    const msg = Array.isArray(httpErr.error?.message)
+      ? httpErr.error.message.join(', ')
+      : httpErr.error?.message;
+    return msg ?? this.translate.instant('settings.libraries.save_error');
   }
 }

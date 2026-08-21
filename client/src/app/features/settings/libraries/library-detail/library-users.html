@@ -1,40 +1,7 @@
 <div class="flex flex-col gap-4">
   <div class="card bg-base-100 border border-base-200">
     <div class="card-body gap-5">
-      <h2 class="card-title text-lg">{{ 'settings.libraries.user_access' | translate }}</h2>
-      <p class="text-sm text-base-content/50 -mt-3">{{ 'settings.libraries.user_access_hint' | translate }}</p>
-
-      @if (state.users().length === 0) {
-        <p class="text-base text-base-content/50 italic">—</p>
-      } @else {
-        <div class="overflow-x-auto">
-          <table class="table">
-            <thead>
-              <tr>
-                <th class="w-12">{{ 'settings.libraries.user_has_access' | translate }}</th>
-                <th>{{ 'settings.libraries.user_name' | translate }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (u of state.users(); track u.id) {
-                <tr class="hover">
-                  <td>
-                    <input type="checkbox" class="checkbox checkbox-sm"
-                      [checked]="state.formUserIds().has(u.id)"
-                      (change)="state.toggleUser(u.id)" />
-                  </td>
-                  <td>
-                    <span>{{ u.username }}</span>
-                    @if (u.isAdmin) {
-                      <span class="badge badge-ghost badge-sm ml-2">admin</span>
-                    }
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      }
+      <app-library-user-picker />
 
       @if (state.saveError()) {
         <div role="alert" class="alert alert-error text-base">{{ state.saveError() }}</div>

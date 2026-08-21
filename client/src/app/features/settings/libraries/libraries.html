@@ -4,9 +4,9 @@
       <h1 class="text-2xl font-bold">{{ 'settings.libraries.title' | translate }}</h1>
       <p class="text-sm text-base-content/60 mt-1">{{ 'settings.libraries.subtitle' | translate }}</p>
     </div>
-    <button type="button" class="btn btn-primary self-start sm:self-auto" (click)="openCreate()">
+    <a routerLink="new" class="btn btn-primary self-start sm:self-auto">
       {{ 'settings.libraries.add' | translate }}
-    </button>
+    </a>
   </div>
 
   @if (loading()) {
@@ -57,9 +57,9 @@
                 }
               </div>
               <div class="flex gap-1 shrink-0">
-                <button type="button" class="btn btn-ghost btn-sm" (click)="openEdit(lib)">
+                <a [routerLink]="[lib.id]" class="btn btn-ghost btn-sm">
                   {{ 'settings.libraries.consult' | translate }}
-                </button>
+                </a>
               </div>
             </div>
           </div>
@@ -69,150 +69,3 @@
   }
 </div>
 
-<dialog #editorDialog class="modal">
-  <div class="modal-box max-w-2xl">
-    <h2 class="text-lg font-bold mb-4">{{ 'settings.libraries.editor_title' | translate }}</h2>
-
-    <div class="flex flex-col gap-4">
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.libraries.name' | translate }}</span>
-        <input type="text" class="input input-bordered input-sm w-full"
-          [ngModel]="formName()" (ngModelChange)="formName.set($event)" />
-      </label>
-
-      <div class="flex gap-4">
-        <label class="form-control flex-1">
-          <span class="label-text">{{ 'settings.libraries.icon' | translate }}</span>
-          <select class="select select-bordered select-sm w-full"
-            [ngModel]="formIcon()" (ngModelChange)="formIcon.set($event || null)">
-            @for (opt of iconOptions; track opt.value) {
-              <option [ngValue]="opt.value">{{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}</option>
-            }
-          </select>
-        </label>
-        <label class="form-control flex-1">
-          <span class="label-text">{{ 'settings.libraries.color' | translate }}</span>
-          <select class="select select-bordered select-sm w-full"
-            [ngModel]="formColor()" (ngModelChange)="formColor.set($event || null)">
-            @for (opt of colorOptions; track opt.value) {
-              <option [ngValue]="opt.value">{{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}</option>
-            }
-          </select>
-        </label>
-      </div>
-
-      <div>
-        <span class="label-text">{{ 'settings.libraries.media_types' | translate }}</span>
-        <div class="flex gap-4 mt-2">
-          <label class="label cursor-pointer gap-2">
-            <input type="checkbox" class="checkbox checkbox-sm"
-              [ngModel]="formMovies()" (ngModelChange)="formMovies.set($event)" />
-            <span class="label-text">{{ 'settings.libraries.media_type_movie' | translate }}</span>
-          </label>
-          <label class="label cursor-pointer gap-2">
-            <input type="checkbox" class="checkbox checkbox-sm"
-              [ngModel]="formSeries()" (ngModelChange)="formSeries.set($event)" />
-            <span class="label-text">{{ 'settings.libraries.media_type_series' | translate }}</span>
-          </label>
-        </div>
-      </div>
-
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.libraries.path' | translate }}</span>
-        <div class="flex gap-2">
-          <input type="text" class="input input-bordered input-sm w-full font-mono"
-            [ngModel]="formPath()" (ngModelChange)="formPath.set($event)"
-            placeholder="/medias/movies" />
-          <button type="button" class="btn btn-outline btn-sm" (click)="browsePath()">
-            {{ 'common.browse' | translate }}
-          </button>
-        </div>
-        <span class="label-text-alt text-base-content/50 mt-1">{{ 'settings.libraries.path_hint' | translate }}</span>
-      </label>
-
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.libraries.preferred_provider' | translate }}</span>
-        <select class="select select-bordered select-sm w-full"
-          [ngModel]="formProvider()" (ngModelChange)="formProvider.set($event || null)">
-          @for (opt of providerOptions; track opt.value) {
-            <option [ngValue]="opt.value">{{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}</option>
-          }
-        </select>
-      </label>
-
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.libraries.default_quality_profile' | translate }}</span>
-        <select class="select select-bordered select-sm w-full"
-          [ngModel]="formQualityProfileId()" (ngModelChange)="formQualityProfileId.set($event)">
-          <option [ngValue]="null">—</option>
-          @for (qp of qualityProfiles(); track qp.id) {
-            <option [ngValue]="qp.id">{{ qp.name }}</option>
-          }
-        </select>
-      </label>
-
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.libraries.default_language_profile' | translate }}</span>
-        <select class="select select-bordered select-sm w-full"
-          [ngModel]="formLanguageProfileId()" (ngModelChange)="formLanguageProfileId.set($event)">
-          <option [ngValue]="null">—</option>
-          @for (lp of languageProfiles(); track lp.id) {
-            <option [ngValue]="lp.id">{{ lp.name }}</option>
-          }
-        </select>
-      </label>
-
-      <div class="flex gap-4">
-        <label class="label cursor-pointer gap-2">
-          <input type="checkbox" class="checkbox checkbox-sm"
-            [ngModel]="formDefaultMovies()" (ngModelChange)="formDefaultMovies.set($event)" />
-          <span class="label-text">{{ 'settings.libraries.default_for_movies' | translate }}</span>
-        </label>
-        <label class="label cursor-pointer gap-2">
-          <input type="checkbox" class="checkbox checkbox-sm"
-            [ngModel]="formDefaultSeries()" (ngModelChange)="formDefaultSeries.set($event)" />
-          <span class="label-text">{{ 'settings.libraries.default_for_series' | translate }}</span>
-        </label>
-      </div>
-
-      <!-- User access -->
-      <div>
-        <span class="label-text">{{ 'settings.libraries.user_access' | translate }}</span>
-        <div class="flex flex-col gap-1 mt-2 max-h-40 overflow-auto border border-base-200 rounded p-2">
-          @for (u of users(); track u.id) {
-            <label class="label cursor-pointer gap-2 justify-start py-1">
-              <input type="checkbox" class="checkbox checkbox-sm"
-                [checked]="formUserIds().has(u.id)"
-                (change)="toggleUser(u.id)" />
-              <span class="label-text">{{ u.username }}</span>
-              @if (u.isAdmin) {
-                <span class="badge badge-ghost badge-xs">admin</span>
-              }
-            </label>
-          }
-          @if (users().length === 0) {
-            <p class="text-xs text-base-content/50 italic">—</p>
-          }
-        </div>
-        <p class="text-xs text-base-content/50 mt-1">{{ 'settings.libraries.user_access_hint' | translate }}</p>
-      </div>
-
-      @if (saveError()) {
-        <div role="alert" class="alert alert-error text-sm">{{ saveError() }}</div>
-      }
-    </div>
-
-    <div class="modal-action mt-6">
-      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
-        {{ 'common.cancel' | translate }}
-      </button>
-      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
-        @if (saving()) { <span class="loading loading-spinner loading-sm"></span> }
-        {{ 'common.save' | translate }}
-      </button>
-    </div>
-  </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">close</button>
-  </form>
-</dialog>

@@ -1,0 +1,392 @@
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { UpperCasePipe } from '@angular/common';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { LucideChevronsDownUp, LucideChevronsUpDown } from '@lucide/angular';
+import { MediaType } from '../../../../../core/enums/media-type.enum';
+import { PaginationComponent } from '../../../../../shared/components/pagination/pagination';
+import { ResolveUrlPipe } from '../../../../../core/pipes/resolve-url.pipe';
+import { ToastService } from '../../../../../core/services/toast.service';
+import {
+  MetadataService,
+  MetadataSearchResult,
+} from '../../../../../core/services/api/metadata.service';
+import {
+  ImportsApiService,
+  OrphanGroup,
+  OrphanScanResult,
+  RelinkOrphansBody,
+} from '../../../../../core/services/api/imports-api.service';
+
+const PAGE_SIZE = 20;
+
+interface GroupVM {
+  group: OrphanGroup;
+  query: string;
+  year: number | null;
+  results: MetadataSearchResult[];
+  searching: boolean;
+  searched: boolean;
+  pick: MetadataSearchResult | null;
+  fromNfo: boolean;
+  linking: boolean;
+  done: boolean;
+  error: string;
+  collapsed: boolean;
+}
+
+@Component({
+  selector: 'app-orphan-scan-panel',
+  imports: [
+    FormsModule,
+    UpperCasePipe,
+    TranslateModule,
+    ResolveUrlPipe,
+    LucideChevronsDownUp,
+    LucideChevronsUpDown,
+    PaginationComponent,
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  templateUrl: './orphan-scan-panel.html',
+  host: { class: 'flex flex-col min-h-0 flex-1' },
+})
+export class OrphanScanPanelComponent {
+  private readonly importsApi = inject(ImportsApiService);
+  private readonly metadata = inject(MetadataService);
+  private readonly toast = inject(ToastService);
+  private readonly translate = inject(TranslateService);
+
+  /** Collect picks without linking — the library does not exist yet. */
+  readonly deferLink = input(false);
+
+  private libraryId = 0;
+  readonly anyLinked = signal(false);
+
+  /** Nothing to render before the first scan runs. */
+  readonly started = signal(false);
+  readonly scanning = signal(false);
+  readonly scanError = signal('');
+  readonly scannedFiles = signal(0);
+  readonly orphanCount = signal(0);
+  readonly looseCount = signal(0);
+  readonly groups = signal<GroupVM[]>([]);
+
+  readonly page = signal(1);
+  /** Groups imported so far / to import, for the creation wizard's progress. */
+  readonly imported = signal(0);
+  readonly importTotal = signal(0);
+  readonly autoImporting = signal(false);
+  /** Move + rename files into the naming layout instead of linking in place. */
+  readonly reorganize = signal(true);
+
+  readonly pendingGroups = computed(() =>
+    this.groups().filter((g) => !g.done && g.pick && !g.linking),
+  );
+
+  readonly hasLinkable = computed(() =>
+    this.groups().some((g) => !g.done),
+  );
+
+  readonly pageCount = computed(() =>
+    Math.max(1, Math.ceil(this.groups().length / PAGE_SIZE)),
+  );
+
+  /** Current page, each entry keeping its absolute index into `groups()`. */
+  readonly pagedGroups = computed(() => {
+    const start = (this.page() - 1) * PAGE_SIZE;
+    return this.groups()
+      .map((vm, i) => ({ vm, i }))
+      .slice(start, start + PAGE_SIZE);
+  });
+
+  readonly allExpanded = computed(
+    () => this.groups().length > 0 && this.groups().every((g) => !g.collapsed),
+  );
+
+  toggleCollapse(index: number) {
+    this.patch(index, { collapsed: !this.groups()[index].collapsed });
+  }
+
+  toggleAll() {
+    const collapse = this.allExpanded();
+    this.groups.update((list) =>
+      list.map((g) => ({ ...g, collapsed: collapse })),
+    );
+  }
+
+  async scanLibrary(libraryId: number) {
+    this.libraryId = libraryId;
+    await this.load(() => this.importsApi.scanOrphans(libraryId));
+  }
+
+  /** Scan a bare folder for a library that is not created yet. */
+  async scanPath(path: string, mediaTypes: MediaType[], provider: string | null) {
+    this.libraryId = 0;
+    await this.load(() =>
+      this.importsApi.previewOrphans({ path, mediaTypes, preferredProvider: provider }),
+    );
+  }
+
+  private async load(scan: () => Promise<OrphanScanResult>) {
+    this.started.set(true);
+    this.anyLinked.set(false);
+    this.scanError.set('');
+    this.groups.set([]);
+    this.scannedFiles.set(0);
+    this.orphanCount.set(0);
+    this.looseCount.set(0);
+
+    this.page.set(1);
+    this.imported.set(0);
+    this.importTotal.set(0);
+
+    this.scanning.set(true);
+    try {
+      const res = await scan();
+      this.scannedFiles.set(res.scannedFiles);
+      this.orphanCount.set(res.orphanCount);
+      this.looseCount.set(res.looseFiles.length);
+      this.groups.set(
+        res.groups.map((group) => ({
+          group,
+          query: group.guessTitle ?? group.folderName,
+          year: group.guessYear,
+          results: [],
+          searching: false,
+          searched: false,
+          pick: null,
+          fromNfo: false,
+          linking: false,
+          done: false,
+          error: '',
+          collapsed: false,
+        })),
+      );
+      await this.searchPage();
+    } catch {
+      this.scanError.set(this.translate.instant('settings.libraries.scan_error'));
+    } finally {
+      this.scanning.set(false);
+    }
+  }
+
+  async goToPage(page: number) {
+    if (page < 1 || page > this.pageCount() || page === this.page()) return;
+    this.page.set(page);
+    await this.searchPage();
+  }
+
+  /** Search the groups shown on the current page that have no results yet. */
+  private async searchPage() {
+    await Promise.all(
+      this.pagedGroups()
+        .filter(({ vm }) => !vm.searched && !vm.searching)
+        .map(({ i }) => this.search(i)),
+    );
+  }
+
+  /**
+   * Queue every detected group for import into a library that now exists.
+   * A group the admin left untouched takes the provider's first result.
+   * Returns immediately: the server imports in the background.
+   */
+  async importAll(libraryId: number): Promise<number> {
+    this.imported.set(0);
+    this.importTotal.set(this.groups().filter((g) => !g.done).length);
+
+    const items: RelinkOrphansBody[] = [];
+    for (let i = 0; i < this.groups().length; i++) {
+      if (this.groups()[i].done) continue;
+      if (!this.groups()[i].searched) await this.search(i);
+      const vm = this.groups()[i];
+      const pick = vm.pick ?? vm.results[0] ?? null;
+      if (pick) {
+        this.patch(i, { pick });
+        items.push(this.relinkBody(libraryId, vm.group, pick));
+      }
+      this.imported.update((n) => n + 1);
+    }
+    if (!items.length) return 0;
+    await this.importsApi.relinkOrphansBatch(items);
+    return items.length;
+  }
+
+  private relinkBody(
+    libraryId: number,
+    group: OrphanGroup,
+    pick: MetadataSearchResult,
+  ): RelinkOrphansBody {
+    return {
+      libraryId,
+      type: group.mediaType,
+      externalId:
+        pick.provider === 'tvdb' && pick.tvdbId != null
+          ? String(pick.tvdbId)
+          : String(pick.tmdbId),
+      provider: pick.provider,
+      folderName: group.folderName,
+      reorganize: this.reorganize(),
+      files: group.files.map((f) => ({
+        filePath: f.filePath,
+        seasonNumber: f.seasonNumber ?? undefined,
+        episodeNumber: f.episodeNumber ?? undefined,
+        episodeEnd: f.episodeEnd ?? undefined,
+      })),
+    };
+  }
+
+  private patch(index: number, partial: Partial<GroupVM>) {
+    this.groups.update((list) =>
+      list.map((g, i) => (i === index ? { ...g, ...partial } : g)),
+    );
+  }
+
+  async search(index: number) {
+    const vm = this.groups()[index];
+    if (!vm) return;
+    const query = vm.query.trim();
+    if (!query) return;
+    this.patch(index, { searching: true, error: '' });
+    try {
+      const provider = vm.group.suggestedProvider;
+      const results =
+        vm.group.mediaType === 'series'
+          ? await this.metadata.searchTv(query, vm.year ?? undefined, provider)
+          : await this.metadata.searchMovie(query, vm.year ?? undefined, provider);
+
+      // Auto-select the match referenced by the .nfo id, if any.
+      const nfo = vm.group.nfo;
+      const auto = nfo
+        ? results.find(
+            (r) =>
+              (nfo.tmdbId != null && r.tmdbId === nfo.tmdbId) ||
+              (nfo.tvdbId != null && r.tvdbId === nfo.tvdbId),
+          )
+        : undefined;
+      this.patch(index, {
+        results,
+        searching: false,
+        searched: true,
+        pick: auto ?? null,
+        fromNfo: !!auto,
+      });
+    } catch {
+      this.patch(index, {
+        searching: false,
+        searched: true,
+        error: this.translate.instant('settings.libraries.scan_error'),
+      });
+    }
+  }
+
+  pick(index: number, result: MetadataSearchResult) {
+    const current = this.groups()[index]?.pick;
+    const same = current?.provider === result.provider && current?.tmdbId === result.tmdbId;
+    this.patch(index, { pick: same ? null : result, fromNfo: false });
+  }
+
+  async link(index: number) {
+    const vm = this.groups()[index];
+    if (!vm?.pick || vm.linking || vm.done) return;
+    const pick = vm.pick;
+    this.patch(index, { linking: true, error: '' });
+    try {
+      const res = await this.importsApi.relinkOrphans(
+        this.relinkBody(this.libraryId, vm.group, pick),
+      );
+      if (res.linked > 0) {
+        this.anyLinked.set(true);
+        this.patch(index, { linking: false, done: true });
+        this.toast.success(
+          this.translate.instant('settings.libraries.scan_linked', {
+            count: res.linked,
+          }),
+        );
+      } else {
+        // Nothing linked — typically a duplicate of a file already attached
+        // to the media. Surface it on the group instead of marking it done.
+        this.patch(index, {
+          linking: false,
+          error:
+            res.errors[0] ??
+            this.translate.instant('settings.libraries.scan_nothing_linked'),
+        });
+      }
+    } catch (err: unknown) {
+      const httpErr = err as { error?: { message?: string } };
+      this.patch(index, {
+        linking: false,
+        error:
+          httpErr.error?.message ??
+          this.translate.instant('settings.libraries.scan_error'),
+      });
+    }
+  }
+
+  async linkAll() {
+    const indices = this.groups()
+      .map((g, i) => ({ g, i }))
+      .filter(({ g }) => !g.done && g.pick && !g.linking)
+      .map(({ i }) => i);
+    for (const i of indices) {
+      await this.link(i);
+    }
+  }
+
+  /**
+   * Pick the most accurate match for every remaining group and link it.
+   * "Most accurate" = best year + title score; ties keep the provider's own
+   * relevance order (earliest result wins).
+   */
+  async autoImportAll() {
+    this.autoImporting.set(true);
+    try {
+      // Each group resolves independently — search, pick, link run
+      // concurrently so the whole batch isn't gated on the slowest item.
+      await Promise.all(this.groups().map((_, i) => this.autoLinkOne(i)));
+    } finally {
+      this.autoImporting.set(false);
+    }
+  }
+
+  private async autoLinkOne(index: number) {
+    const vm = this.groups()[index];
+    if (vm.done || vm.linking) return;
+    if (!vm.searched) await this.search(index);
+    const best = this.bestMatch(this.groups()[index]);
+    if (!best) return;
+    this.patch(index, { pick: best });
+    await this.link(index);
+  }
+
+  private bestMatch(vm: GroupVM): MetadataSearchResult | null {
+    if (!vm.results.length) return null;
+    const norm = (s: string | null | undefined) =>
+      (s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const query = norm(vm.query);
+    let best: MetadataSearchResult | null = null;
+    let bestScore = -Infinity;
+    vm.results.forEach((r, idx) => {
+      let score = 0;
+      if (vm.year != null && r.year === vm.year) score += 100;
+      const title = norm(r.title);
+      if (query && title === query) score += 50;
+      else if (query && (title.startsWith(query) || query.startsWith(title)))
+        score += 20;
+      // Keep provider relevance as the tie-breaker (earlier = better).
+      score -= idx * 0.01;
+      if (score > bestScore) {
+        bestScore = score;
+        best = r;
+      }
+    });
+    return best;
+  }
+}

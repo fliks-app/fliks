@@ -403,6 +403,7 @@ export const routes: Routes = [
           },
           { path: 'data-imports', loadComponent: () => import('./features/settings/data-imports/data-imports').then((m) => m.DataImportsSettingsComponent) },
           { path: 'libraries', loadComponent: () => import('./features/settings/libraries/libraries').then((m) => m.LibrariesSettingsComponent) },
+          { path: 'libraries/new', loadComponent: () => import('./features/settings/libraries/library-wizard/library-wizard').then((m) => m.LibraryWizardComponent) },
           {
             path: 'libraries/:id',
             loadComponent: () => import('./features/settings/libraries/library-detail/library-detail').then((m) => m.LibraryDetailComponent),

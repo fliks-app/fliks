@@ -21,6 +21,7 @@ import { MediaType } from '../../common/enums';
 import { parseReleaseQuality, extractMediaTitle } from '../../common/release-parsing';
 import { ImportFileEntry } from './dto/confirm-disk-import.dto';
 import { RelinkOrphansDto } from './dto/relink-orphans.dto';
+import { PreviewOrphansDto } from './dto/preview-orphans.dto';
 import {
   OrphanScanResult,
   OrphanGroup,
@@ -140,12 +141,8 @@ export class DiskImportService {
    */
   async scanLibraryOrphans(libraryId: number): Promise<OrphanScanResult> {
     const library = await this.libraries.requirePathFor(libraryId);
-    const root = path.resolve(library.path!);
-    this.logger.log(`Orphan scan started — library #${libraryId} root="${root}"`);
 
-    const allFiles = await this.collectVideoFiles(root, 0);
-
-    // Build the set of absolute paths already linked in this library.
+    // Absolute paths already linked in this library — never offered again.
     const linkedRows = await this.fileRepo.find({
       where: { media: { library: { id: libraryId } } },
       relations: ['media', 'media.library'],
@@ -158,7 +155,50 @@ export class DiskImportService {
       );
     }
 
-    const suggestedProvider = library.preferredProvider ?? 'tmdb';
+    return this.scanOrphansUnder(
+      library.path!,
+      library.mediaTypes ?? [],
+      library.preferredProvider ?? 'tmdb',
+      linkedSet,
+      `library #${libraryId}`,
+    );
+  }
+
+  /**
+   * Same scan against a bare folder, for a library that does not exist yet:
+   * the creation wizard picks its matches before the library is written.
+   */
+  async previewOrphans(dto: PreviewOrphansDto): Promise<OrphanScanResult> {
+    const root = path.resolve(dto.path);
+    let stat: fs.Stats;
+    try {
+      stat = await fsp.stat(root);
+    } catch {
+      throw new BadRequestException(`Path not found: ${root}`);
+    }
+    if (!stat.isDirectory()) {
+      throw new BadRequestException(`Not a directory: ${root}`);
+    }
+    return this.scanOrphansUnder(
+      root,
+      dto.mediaTypes ?? [MediaType.MOVIE, MediaType.SERIES],
+      dto.preferredProvider ?? 'tmdb',
+      new Set<string>(),
+      `path "${root}"`,
+    );
+  }
+
+  private async scanOrphansUnder(
+    rootPath: string,
+    mediaTypes: MediaType[],
+    suggestedProvider: string,
+    linkedSet: Set<string>,
+    label: string,
+  ): Promise<OrphanScanResult> {
+    const root = path.resolve(rootPath);
+    this.logger.log(`Orphan scan started — ${label} root="${root}"`);
+
+    const allFiles = await this.collectVideoFiles(root, 0);
     const groups = new Map<string, OrphanGroup>();
     const looseFiles: OrphanFileEntry[] = [];
     let orphanCount = 0;
@@ -171,7 +211,7 @@ export class DiskImportService {
       // Skip files whose inferred type the library doesn't accept (e.g. a
       // series file under a movies-only library) — they can't be re-linked here.
       const inferredType = epNums ? MediaType.SERIES : MediaType.MOVIE;
-      if (!library.mediaTypes?.includes(inferredType)) continue;
+      if (!mediaTypes.includes(inferredType)) continue;
       orphanCount++;
 
       const { quality } = parseReleaseQuality(filename);
@@ -239,16 +279,46 @@ export class DiskImportService {
     }
 
     this.logger.log(
-      `Orphan scan finished — library #${libraryId} scanned=${allFiles.length} orphans=${orphanCount} groups=${groups.size} loose=${looseFiles.length}`,
+      `Orphan scan finished — ${label} scanned=${allFiles.length} orphans=${orphanCount} groups=${groups.size} loose=${looseFiles.length}`,
     );
     return {
-      libraryId,
-      libraryPath: library.path!,
+      libraryPath: root,
       groups: [...groups.values()],
       looseFiles,
       scannedFiles: allFiles.length,
       orphanCount,
     };
+  }
+
+  /**
+   * Import every group of one scan, sequentially — a single relink hammers
+   * TMDB and the naming pipeline hard enough that parallelism buys nothing.
+   * Called in the background: one slow group must not fail the others.
+   */
+  async relinkOrphansBatch(
+    items: RelinkOrphansDto[],
+    userId: number | null,
+  ): Promise<{ groups: number; created: number; linked: number; failed: number }> {
+    let created = 0;
+    let linked = 0;
+    let failed = 0;
+    for (const item of items) {
+      try {
+        const res = await this.relinkOrphans(item, userId);
+        if (res.created) created++;
+        linked += res.linked;
+        if (res.linked === 0) failed++;
+      } catch (e) {
+        failed++;
+        this.logger.warn(
+          `Orphan batch: "${item.folderName}" failed — ${(e as Error).message}`,
+        );
+      }
+    }
+    this.logger.log(
+      `Orphan batch finished — library #${items[0]?.libraryId} groups=${items.length} created=${created} linked=${linked} failed=${failed}`,
+    );
+    return { groups: items.length, created, linked, failed };
   }
 
   /**

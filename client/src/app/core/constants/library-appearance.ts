@@ -24,7 +24,6 @@ export const LIBRARY_ICON_OPTIONS: readonly LibraryAppearanceOption[] = [
 
 /** daisyUI role names — proper nouns of the theme, not translated. */
 export const LIBRARY_COLOR_OPTIONS: readonly LibraryAppearanceOption[] = [
-  { value: null, labelKey: 'settings.libraries.color_default' },
   { value: 'primary', label: 'Primary' },
   { value: 'secondary', label: 'Secondary' },
   { value: 'accent', label: 'Accent' },
@@ -33,3 +32,11 @@ export const LIBRARY_COLOR_OPTIONS: readonly LibraryAppearanceOption[] = [
   { value: 'warning', label: 'Warning' },
   { value: 'error', label: 'Error' },
 ] as const;
+
+const DAISY_COLORS = ['primary', 'secondary', 'accent', 'info', 'success', 'warning', 'error'];
+
+/** CSS color for a library color: daisyUI role names map to their theme variable. */
+export function libraryColorVar(color: string | null | undefined): string {
+  const c = color || 'primary';
+  return DAISY_COLORS.includes(c) ? `var(--color-${c})` : c;
+}

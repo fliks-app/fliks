@@ -1,0 +1,59 @@
+<div class="flex flex-col gap-6">
+
+  <div class="flex items-center gap-4 min-w-0">
+    <a routerLink="/admin/settings/libraries" class="btn btn-ghost btn-sm btn-circle">
+      <svg lucideChevronLeft class="h-5 w-5"></svg>
+    </a>
+    <div class="min-w-0">
+      <h1 class="text-2xl font-bold">{{ 'settings.libraries.editor_title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.libraries.wizard_subtitle' | translate }}</p>
+    </div>
+  </div>
+
+  <ul class="steps w-full">
+    <li class="step" [class.step-primary]="step() >= 1">{{ 'settings.libraries.step_infos' | translate }}</li>
+    <li class="step" [class.step-primary]="step() >= 2">{{ 'settings.libraries.step_users' | translate }}</li>
+    <li class="step" [class.step-primary]="step() >= 3">{{ 'settings.libraries.step_media' | translate }}</li>
+  </ul>
+
+  @switch (step()) {
+    @case (1) {
+      <div class="card bg-base-100 border border-base-200">
+        <div class="card-body gap-5">
+          <app-library-form-fields />
+        </div>
+      </div>
+    }
+    @case (2) {
+      <div class="card bg-base-100 border border-base-200">
+        <div class="card-body gap-5">
+          <app-library-user-picker />
+        </div>
+      </div>
+    }
+    @default {
+      <app-library-wizard-media #mediaStep />
+    }
+  }
+
+  @if (state.saveError()) {
+    <div role="alert" class="alert alert-error text-base">{{ state.saveError() }}</div>
+  }
+
+  <div class="flex justify-between gap-3">
+    <button type="button" class="btn btn-ghost" (click)="back()" [disabled]="step() === 1 || state.saving()">
+      {{ 'settings.libraries.wizard_back' | translate }}
+    </button>
+    @if (step() === 3) {
+      <button type="button" class="btn btn-primary" (click)="submit()" [disabled]="!canSubmit()">
+        @if (state.saving()) { <span class="loading loading-spinner loading-sm"></span> }
+        {{ 'settings.libraries.wizard_create' | translate }}
+      </button>
+    } @else {
+      <button type="button" class="btn btn-primary" (click)="next()">
+        {{ 'settings.libraries.wizard_next' | translate }}
+      </button>
+    }
+  </div>
+
+</div>
