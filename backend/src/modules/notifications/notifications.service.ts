@@ -8,9 +8,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
 import {
+  ENDPOINT_KEY,
   NOTIFICATION_EVENTS,
   NotificationConnection,
   NotificationEvent,
+  NotificationType,
 } from './entities/notification-connection.entity';
 import { CreateNotificationConnectionDto } from './dto/create-notification-connection.dto';
 import {
@@ -133,36 +135,39 @@ export class NotificationsService {
     }
   }
 
+  /** Read through the one endpoint-key map, so a sender cannot drift from what the DTO validated. */
+  private endpointOf(conn: NotificationConnection): string {
+    return String(conn.settings[ENDPOINT_KEY[conn.type]] ?? '');
+  }
+
   private async send(
     conn: NotificationConnection,
     event: NotificationEvent,
     payload: Record<string, unknown>,
   ): Promise<void> {
     const s = conn.settings;
+    const endpoint = this.endpointOf(conn);
     try {
       switch (conn.type) {
         case 'discord': {
-          const webhookUrl = String(s.webhookUrl ?? '');
-          if (!webhookUrl) throw new Error('webhookUrl not configured');
-          await axios.post(webhookUrl, {
+          if (!endpoint) throw new Error('webhookUrl not configured');
+          await axios.post(endpoint, {
             username: String(s.username ?? 'Fliks'),
             content: this.formatMessage(event, payload),
           });
           break;
         }
         case 'slack': {
-          const webhookUrl = String(s.webhookUrl ?? '');
-          if (!webhookUrl) throw new Error('webhookUrl not configured');
-          await axios.post(webhookUrl, {
+          if (!endpoint) throw new Error('webhookUrl not configured');
+          await axios.post(endpoint, {
             text: this.formatMessage(event, payload),
           });
           break;
         }
         case 'webhook': {
-          const url = String(s.url ?? '');
-          if (!url) throw new Error('url not configured');
+          if (!endpoint) throw new Error('url not configured');
           await axios.post(
-            url,
+            endpoint,
             { event, ...payload },
             {
               headers: s.token ? { Authorization: `Bearer ${s.token}` } : {},
@@ -171,7 +176,8 @@ export class NotificationsService {
           break;
         }
         case 'gotify': {
-          const url = String(s.url ?? '').replace(/\/$/, '');
+          // These two append a path, so a trailing slash would double the separator.
+          const url = endpoint.replace(/\/$/, '');
           const token = String(s.token ?? '');
           if (!url || !token) throw new Error('url and token required');
           await axios.post(
@@ -185,7 +191,7 @@ export class NotificationsService {
           break;
         }
         case 'ntfy': {
-          const url = String(s.url ?? '').replace(/\/$/, '');
+          const url = endpoint.replace(/\/$/, '');
           const topic = String(s.topic || 'fliks');
           if (!url) throw new Error('url not configured');
           const token = typeof s.token === 'string' ? s.token : '';
@@ -228,8 +234,9 @@ export class NotificationsService {
         typeof value === 'string' ? value.trim() : value,
       ]),
     );
-    // Merged even though these two carry no token: it is what drops the read-only marker.
-    if (type === 'discord' || type === 'slack')
+    // Merged even though a webhook-addressed type carries no token: it is what drops the
+    // read-only marker.
+    if (ENDPOINT_KEY[type as NotificationType] === 'webhookUrl')
       return mergeSecretFields(undefined, trimmed, NOTIFICATION_SECRET_FIELDS);
     const { webhookUrl, ...rest } = trimmed;
     const folded =

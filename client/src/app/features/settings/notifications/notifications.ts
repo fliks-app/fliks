@@ -17,6 +17,12 @@ import { SECRETS_SET_KEY } from '@fliks/plugin-contract/ui';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SECRET_MASK } from '../../../shared/components/schema-form/schema-form';
 
+/** The types this editor knows how to render fields for — adding one server-side is not enough,
+ *  each needs its own field set below. */
+const NOTIFICATION_TYPES = ['discord', 'slack', 'webhook', 'gotify', 'ntfy'] as const;
+
+type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
 interface NotificationConnection {
   id: number;
   name: string;
@@ -28,7 +34,7 @@ interface NotificationConnection {
 
 interface CreateNotificationBody {
   name: string;
-  type: 'discord' | 'slack' | 'webhook' | 'gotify' | 'ntfy';
+  type: NotificationType;
   settings: Record<string, unknown>;
   events?: string[];
   enabled?: boolean;
@@ -56,7 +62,7 @@ export class NotificationsSettingsComponent implements OnInit {
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
 
   readonly formName = signal('');
-  readonly formType = signal<CreateNotificationBody['type']>('discord');
+  readonly formType = signal<NotificationType>('discord');
   readonly formEnabled = signal(true);
   readonly formWebhookUrl = signal('');
   readonly formToken = signal('');
@@ -69,7 +75,7 @@ export class NotificationsSettingsComponent implements OnInit {
   /** Advertised by the API rather than restated here, so an event added server-side shows up. */
   readonly allEvents = signal<string[]>([]);
 
-  readonly connectionTypes = ['discord', 'slack', 'webhook', 'gotify', 'ntfy'] as const;
+  readonly connectionTypes = NOTIFICATION_TYPES;
   readonly secretMask = SECRET_MASK;
 
   /** Discord and Slack authenticate through the webhook URL itself. */
@@ -125,7 +131,7 @@ export class NotificationsSettingsComponent implements OnInit {
   openEdit(nc: NotificationConnection) {
     this.editingId.set(nc.id);
     this.formName.set(nc.name);
-    this.formType.set(nc.type as CreateNotificationBody['type']);
+    this.formType.set(nc.type as NotificationType);
     this.formEnabled.set(nc.enabled);
     const s = nc.settings ?? {};
     this.formWebhookUrl.set(String(s['webhookUrl'] ?? s['url'] ?? ''));

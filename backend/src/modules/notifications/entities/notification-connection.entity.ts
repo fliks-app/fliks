@@ -1,12 +1,19 @@
 import { Entity, Column } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
-export type NotificationType =
-  | 'discord'
-  | 'slack'
-  | 'webhook'
-  | 'gotify'
-  | 'ntfy';
+export const NOTIFICATION_TYPES = ['discord', 'slack', 'webhook', 'gotify', 'ntfy'] as const;
+
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+/** Where each sender reads its endpoint from: Discord and Slack address a webhook, the rest a
+ *  server. Read by the sender and by the DTO that validates it, so there is one map, not two. */
+export const ENDPOINT_KEY: Record<NotificationType, 'webhookUrl' | 'url'> = {
+  discord: 'webhookUrl',
+  slack: 'webhookUrl',
+  webhook: 'url',
+  gotify: 'url',
+  ntfy: 'url',
+};
 
 /** The one event vocabulary: the DTO validates against it and the editor lists what the API
  *  advertises from it, so an event added here needs no second or third copy. */
