@@ -5,7 +5,11 @@ import { of } from 'rxjs';
 import { SchemaFormComponent } from './schema-form';
 import type { FieldDef, FormItem } from '@fliks/plugin-contract/ui';
 
-function createComponent(fields: readonly FormItem[], value: Record<string, unknown>) {
+function createComponent(
+  fields: readonly FormItem[],
+  value: Record<string, unknown>,
+  secretsSet: readonly string[] = [],
+) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -18,6 +22,7 @@ function createComponent(fields: readonly FormItem[], value: Record<string, unkn
   const fixture = TestBed.createComponent(SchemaFormComponent);
   fixture.componentRef.setInput('fields', fields);
   fixture.componentRef.setInput('value', value);
+  fixture.componentRef.setInput('secretsSet', secretsSet);
   fixture.detectChanges();
   return fixture;
 }
@@ -86,6 +91,37 @@ describe('SchemaFormComponent — secret fields never re-send an unchanged value
 
     setInputAndDispatch(input, '');
     expect('password' in fixture.componentInstance.value()).toBe(false);
+  });
+
+  it('offers no erase action for a secret the server does not report as set', () => {
+    const fixture = createComponent([secretField], {});
+    const input = fixture.nativeElement.querySelector('input[type="password"]') as HTMLInputElement;
+
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    expect(input.placeholder).toBe('');
+  });
+
+  it('masks a stored secret and erases it with an explicit null, the merge-patch spelling', () => {
+    const fixture = createComponent([secretField], {}, ['password']);
+    const input = fixture.nativeElement.querySelector('input[type="password"]') as HTMLInputElement;
+    expect(input.placeholder).toBe('●●●●●●●●');
+
+    (fixture.nativeElement.querySelector('button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.value()['password']).toBeNull();
+
+    // Undoing puts it back to "unchanged", not to blank.
+    (fixture.nativeElement.querySelector('button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect('password' in fixture.componentInstance.value()).toBe(false);
+  });
+
+  it('cancels a pending erase as soon as a replacement is typed', () => {
+    const fixture = createComponent([secretField], { password: null }, ['password']);
+    const input = fixture.nativeElement.querySelector('input[type="password"]') as HTMLInputElement;
+
+    setInputAndDispatch(input, 'newpass');
+    expect(fixture.componentInstance.value()['password']).toBe('newpass');
   });
 
   it('does not enforce required on a secret field — blank is ambiguous, not invalid', () => {

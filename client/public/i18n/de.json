@@ -1305,7 +1305,10 @@
     "saved": "Gespeichert",
     "selections_cleared": "Auswahl gelöscht",
     "retry": "Erneut versuchen",
-    "offline_banner": "Offline-Modus — die angezeigten Daten sind möglicherweise nicht aktuell"
+    "offline_banner": "Offline-Modus — die angezeigten Daten sind möglicherweise nicht aktuell",
+    "secret_clear": "Gespeicherten Wert löschen",
+    "secret_keep": "Beibehalten",
+    "secret_will_clear": "Der gespeicherte Wert wird beim Speichern entfernt."
   },
   "pagination": {
     "label": "Seitennummerierung",

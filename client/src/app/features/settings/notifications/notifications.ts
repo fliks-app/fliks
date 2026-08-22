@@ -13,7 +13,9 @@ import { HttpClient } from '@angular/common/http';
 import { LucideX } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
+import { SECRETS_SET_KEY } from '@fliks/plugin-contract/ui';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { SECRET_MASK } from '../../../shared/components/schema-form/schema-form';
 
 interface NotificationConnection {
   id: number;
@@ -58,6 +60,9 @@ export class NotificationsSettingsComponent implements OnInit {
   readonly formEnabled = signal(true);
   readonly formWebhookUrl = signal('');
   readonly formToken = signal('');
+  /** The connection stores a token the response never carries; `●●●●` stands in for it. */
+  readonly tokenStored = signal(false);
+  readonly formTokenCleared = signal(false);
   readonly formTopic = signal('');
   readonly formEvents = signal<string[]>([]);
 
@@ -71,11 +76,15 @@ export class NotificationsSettingsComponent implements OnInit {
   ];
 
   readonly connectionTypes = ['discord', 'slack', 'webhook', 'gotify', 'ntfy'] as const;
+  readonly secretMask = SECRET_MASK;
 
   /** Discord and Slack authenticate through the webhook URL itself. */
   readonly supportsToken = computed(
     () => this.formType() !== 'discord' && this.formType() !== 'slack',
   );
+
+  /** gotify cannot send without a token, so erasing one is never offered there. */
+  readonly canClearToken = computed(() => this.tokenStored() && this.formType() !== 'gotify');
 
   ngOnInit() {
     this.reloadAll();
@@ -102,6 +111,8 @@ export class NotificationsSettingsComponent implements OnInit {
     this.formEnabled.set(true);
     this.formWebhookUrl.set('');
     this.formToken.set('');
+    this.tokenStored.set(false);
+    this.formTokenCleared.set(false);
     this.formTopic.set('');
     this.formEvents.set([...this.allEvents]);
     this.testResult.set(null);
@@ -116,6 +127,9 @@ export class NotificationsSettingsComponent implements OnInit {
     const s = nc.settings ?? {};
     this.formWebhookUrl.set(String(s['webhookUrl'] ?? s['url'] ?? ''));
     this.formToken.set('');
+    const secretsSet = s[SECRETS_SET_KEY];
+    this.tokenStored.set(Array.isArray(secretsSet) && secretsSet.includes('token'));
+    this.formTokenCleared.set(false);
     this.formTopic.set(String(s['topic'] ?? ''));
     this.formEvents.set([...nc.events]);
     this.testResult.set(null);
@@ -124,6 +138,11 @@ export class NotificationsSettingsComponent implements OnInit {
 
   closeEditor() {
     this.editorDialog()?.nativeElement.close();
+  }
+
+  onTokenInput(value: string) {
+    this.formToken.set(value);
+    if (value.trim()) this.formTokenCleared.set(false);
   }
 
   toggleEvent(event: string) {
@@ -137,19 +156,21 @@ export class NotificationsSettingsComponent implements OnInit {
     if (type === 'discord' || type === 'slack') {
       return { webhookUrl: this.formWebhookUrl() };
     }
-    // These three read `url` server-side.
-    const token = this.formToken().trim();
-    if (type === 'webhook') {
-      return { url: this.formWebhookUrl(), ...(token ? { token } : {}) };
-    }
+    // These three read `url` server-side. A blank token means "unchanged"; `null` erases the
+    // stored one, the way JSON Merge Patch spells removal.
+    const token = this.formTokenCleared() ? null : this.formToken().trim();
     if (type === 'gotify') {
       return { url: this.formWebhookUrl(), token };
+    }
+    const optionalToken = token === null || token ? { token } : {};
+    if (type === 'webhook') {
+      return { url: this.formWebhookUrl(), ...optionalToken };
     }
     if (type === 'ntfy') {
       return {
         url: this.formWebhookUrl(),
         topic: this.formTopic(),
-        ...(token ? { token } : {}),
+        ...optionalToken,
       };
     }
     return {};

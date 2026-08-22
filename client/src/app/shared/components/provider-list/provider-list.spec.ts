@@ -184,6 +184,32 @@ describe('ProviderListComponent — characterisation', () => {
     expect(run).toHaveBeenCalledWith({ implementation: 'demo', settings: { url: 'http://x' }, id: 7 });
   });
 
+  it('carries the erase of a stored secret through to the save body as an explicit null', async () => {
+    const put = vi.fn((_url: string, _body: unknown) => of({}));
+    const fixture = await createComponent({
+      get: () =>
+        of([
+          {
+            id: 7,
+            name: 'A',
+            implementation: 'demo',
+            enabled: true,
+            priority: 1,
+            settings: { url: 'http://x', secretsSet: ['apiKey'] },
+          },
+        ]),
+      put,
+    });
+    fixture.componentInstance.openEdit(fixture.componentInstance.rows()[0]);
+    expect(fixture.componentInstance.secretsSet()).toEqual(['apiKey']);
+
+    fixture.componentInstance.draftValue.update((v) => ({ ...v, apiKey: null }));
+    await fixture.componentInstance.save();
+
+    const [, body] = put.mock.calls[0] as [string, Record<string, unknown>];
+    expect((body['settings'] as Record<string, unknown>)['apiKey']).toBeNull();
+  });
+
   it('deletes after confirmation and reloads', async () => {
     const del = vi.fn(() => of(undefined));
     const fixture = await createComponent({ get: () => of([]), delete: del });

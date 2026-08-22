@@ -6,11 +6,30 @@
           [type]="inputType(field)"
           [label]="field.labelKey | translate"
           [hint]="field.hint ? (field.hint | translate) : ''"
-          [placeholder]="field.placeholder ? (field.placeholder | translate) : ''"
+          [placeholder]="secretMask(field) || (field.placeholder ? (field.placeholder | translate) : '')"
           [disabled]="disabled()"
           [value]="fieldValue(field)"
           (valueChange)="setValue(field, $event)"
         />
+        @if (isSecretStored(field)) {
+          @if (isCleared(field)) {
+            <p class="text-warning text-xs">
+              {{ 'common.secret_will_clear' | translate }}
+              <button type="button" class="link link-hover font-medium" (click)="setValue(field, '')">
+                {{ 'common.secret_keep' | translate }}
+              </button>
+            </p>
+          } @else {
+            <button
+              type="button"
+              class="link link-hover text-xs self-start text-base-content/60"
+              [disabled]="disabled()"
+              (click)="clearSecret(field)"
+            >
+              {{ 'common.secret_clear' | translate }}
+            </button>
+          }
+        }
         @for (err of fieldErrors(field); track err.key) {
           <p class="text-error text-xs">{{ err.key | translate: err.params }}</p>
         }

@@ -1315,7 +1315,10 @@
     "saved": "Enregistré",
     "selections_cleared": "Sélections effacées",
     "retry": "Réessayer",
-    "offline_banner": "Mode hors-ligne — les données affichées peuvent ne pas être à jour"
+    "offline_banner": "Mode hors-ligne — les données affichées peuvent ne pas être à jour",
+    "secret_clear": "Effacer la valeur enregistrée",
+    "secret_keep": "La conserver",
+    "secret_will_clear": "La valeur enregistrée sera supprimée à l'enregistrement."
   },
   "pagination": {
     "label": "Pagination",

@@ -218,7 +218,9 @@ export class NotificationsService {
         typeof value === 'string' ? value.trim() : value,
       ]),
     );
-    if (type === 'discord' || type === 'slack') return trimmed;
+    // Merged even though these two carry no token: it is what drops the read-only marker.
+    if (type === 'discord' || type === 'slack')
+      return mergeSecretFields(undefined, trimmed, NOTIFICATION_SECRET_FIELDS);
     const { webhookUrl, ...rest } = trimmed;
     const folded =
       webhookUrl === undefined

@@ -48,6 +48,13 @@ export interface UiContribution {
   action: { kind: 'route'; path: string } | { kind: 'action'; actionId: string };
 }
 
+/**
+ * Key a read response adds to `settings` to name the `secret: true` fields that hold a stored
+ * value — the editor renders those masked and offers to erase them. Read-only: a resource must
+ * strip it on write rather than persist it.
+ */
+export const SECRETS_SET_KEY = 'secretsSet';
+
 /** The seven field kinds `<app-schema-form>` renders, over three form components. */
 export type FieldType = 'text' | 'email' | 'password' | 'url' | 'number' | 'toggle' | 'select';
 
@@ -63,7 +70,12 @@ export interface FieldDef {
   hint?: string;
   placeholder?: string;
   required?: boolean;
-  /** Stripped from every read response; only written back when non-empty. */
+  /**
+   * Stripped from every read response; only written back when non-empty. A resource honouring
+   * this lists its set keys under `SECRETS_SET_KEY` so the editor can mask a stored value it
+   * never receives, and treats an incoming `null` as "erase it" — blank already means
+   * "unchanged", so removal needs a spelling of its own (the one JSON Merge Patch uses).
+   */
   secret?: boolean;
   default?: string | number | boolean;
   options?: { value: string; labelKey: string }[];

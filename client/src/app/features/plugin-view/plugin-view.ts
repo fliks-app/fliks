@@ -228,7 +228,8 @@ export class PluginViewComponent {
       // A `status` key is loaded into the same value bag for display, but the plugin owns
       // it — writing it back here would race whatever it writes via `config.set`.
       for (const [k, v] of Object.entries(this.formValue())) {
-        if (editableKeys.has(k)) patch[prefix + k] = String(v);
+        // `null` is the value bag's erase marker; these settings are text, so it stores as blank.
+        if (editableKeys.has(k)) patch[prefix + k] = v === null ? '' : String(v);
       }
       await this.settingsApi.setBulk(patch);
     } finally {
