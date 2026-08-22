@@ -1315,7 +1315,10 @@
     "saved": "Saved",
     "selections_cleared": "Selections cleared",
     "retry": "Retry",
-    "offline_banner": "Offline mode — the data shown may be out of date"
+    "offline_banner": "Offline mode — the data shown may be out of date",
+    "secret_clear": "Clear stored value",
+    "secret_keep": "Keep it",
+    "secret_will_clear": "The stored value will be removed on save."
   },
   "pagination": {
     "label": "Pagination",

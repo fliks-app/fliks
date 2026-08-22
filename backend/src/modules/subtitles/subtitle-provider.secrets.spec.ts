@@ -21,11 +21,18 @@ describe('subtitle provider credentials', () => {
       provider({ username: 'someone', password: 'secret', apiKey: 'k', language: 'fr' }),
     );
 
-    expect(redacted.settings).toEqual({ username: 'someone', language: 'fr' });
+    expect(redacted.settings).toEqual({
+      username: 'someone',
+      language: 'fr',
+      secretsSet: ['password', 'apiKey'],
+    });
   });
 
   it('leaves a provider carrying no credential untouched', () => {
-    expect(redactProviderSecrets(provider({ language: 'fr' })).settings).toEqual({ language: 'fr' });
+    expect(redactProviderSecrets(provider({ language: 'fr' })).settings).toEqual({
+      language: 'fr',
+      secretsSet: [],
+    });
   });
 
   it('keeps the stored credential when a save omits it, since no response ever returned it', async () => {
@@ -46,6 +53,25 @@ describe('subtitle provider credentials', () => {
     const saved = await service.update(1, { settings: { username: 'someone', password: 'fresh' } } as never);
 
     expect(saved.settings).toEqual({ username: 'someone', password: 'fresh' });
+  });
+
+  it('erases the stored credential when the client sends an explicit null', async () => {
+    const repo = fakeRepo(provider({ username: 'someone', password: 'stored-secret' }));
+    const service = new SubtitleProviderService(repo as never, {} as never);
+
+    const saved = await service.update(1, { settings: { username: 'someone', password: null } } as never);
+
+    expect(saved.settings).toEqual({ username: 'someone' });
+  });
+
+  it('drops a null credential on create instead of storing it', async () => {
+    const repo = fakeRepo(provider({}));
+    repo.create = jest.fn((p) => p as never);
+    const service = new SubtitleProviderService(repo as never, {} as never);
+
+    const saved = await service.create({ name: 'p', type: 'opensubtitles', settings: { apiKey: null } } as never);
+
+    expect(saved.settings).toEqual({});
   });
 
   it('does not redact inside the service, because that is the path that authenticates', async () => {

@@ -30,7 +30,7 @@ export class SubtitleProviderService {
     const provider = this.repo.create({
       name: dto.name,
       type: dto.type,
-      settings: dto.settings ?? {},
+      settings: mergeSecretFields(undefined, dto.settings ?? {}, SUBTITLE_PROVIDER_SECRET_FIELDS),
       enabled: dto.enabled ?? true,
       priority: dto.priority ?? 25,
     });
@@ -63,7 +63,7 @@ export class SubtitleProviderService {
     if (dto.name !== undefined) provider.name = dto.name;
     if (dto.type !== undefined) provider.type = dto.type;
     // A response never carries the stored credential, so an incoming blank means
-    // "unchanged" rather than "erase" — otherwise every save would wipe it.
+    // "unchanged"; an explicit null is how a client erases it.
     if (dto.settings !== undefined) {
       provider.settings = mergeSecretFields(provider.settings, dto.settings, SUBTITLE_PROVIDER_SECRET_FIELDS);
     }

@@ -8,7 +8,10 @@ import { ToggleFieldComponent } from '../forms/toggle-field/toggle-field';
 
 /** Keyed by `FieldDef.key`; a select/text/number value is always a string here, coerced on read.
  *  A `status` item's current value is keyed by its own `settingKey` in this same bag. */
-export type SchemaFormValue = Record<string, string | number | boolean>;
+export type SchemaFormValue = Record<string, string | number | boolean | null>;
+
+/** Shown in place of a stored credential the server never echoes back. */
+export const SECRET_MASK = '●●●●●●●●';
 
 type FieldKind = 'input' | 'toggle' | 'select';
 type ItemKind = 'field' | 'caption' | 'group' | 'status';
@@ -30,6 +33,10 @@ interface FieldError {
  * never echoes a secret back, so "blank" and "untouched" are indistinguishable
  * on purpose. `required` is not enforced on secret fields: the component has
  * no create/edit context to know whether blank means "unset" or "keep as is".
+ *
+ * `secretsSet` names the keys that already hold a stored value: those render
+ * masked, with an erase action that writes `null` — the JSON Merge Patch
+ * (RFC 7396) spelling of "remove this member".
  */
 @Component({
   selector: 'app-schema-form',
@@ -41,6 +48,8 @@ export class SchemaFormComponent {
   readonly fields = input.required<readonly FormItem[]>();
   readonly value = model.required<SchemaFormValue>();
   readonly disabled = input(false);
+  /** Keys of `secret: true` fields the server reports as already set. */
+  readonly secretsSet = input<readonly string[]>([]);
 
   /** True while a value breaks a declared constraint. A `required` field left empty is shown as a
    *  hint but does not hold here: clearing one is how an operator unsets it. */
@@ -100,6 +109,24 @@ export class SchemaFormComponent {
 
   protected inputType(field: FieldDef): InputFieldType {
     return field.type as InputFieldType;
+  }
+
+  protected isSecretStored(field: FieldDef): boolean {
+    return Boolean(field.secret) && this.secretsSet().includes(field.key);
+  }
+
+  /** `null` is the pending erase; a typed value or an undo replaces it. */
+  protected isCleared(field: FieldDef): boolean {
+    return this.value()[field.key] === null;
+  }
+
+  protected clearSecret(field: FieldDef): void {
+    this.value.set({ ...this.value(), [field.key]: null });
+  }
+
+  /** Empty unless a stored credential is standing in for a real value. */
+  protected secretMask(field: FieldDef): string {
+    return this.isSecretStored(field) && !this.isCleared(field) ? SECRET_MASK : '';
   }
 
   protected fieldValue(field: FieldDef): string {

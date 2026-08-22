@@ -134,7 +134,7 @@
       }
 
       @if (currentImplementation(); as impl) {
-        <app-schema-form [fields]="impl.fields" [(value)]="draftValue" />
+        <app-schema-form [fields]="impl.fields" [(value)]="draftValue" [secretsSet]="secretsSet()" />
       } @else if (draftImplementation()) {
         <p class="text-sm text-warning">{{ 'provider_list.unknown_implementation' | translate }}</p>
       }

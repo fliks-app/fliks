@@ -153,6 +153,54 @@ describe('NotificationsSettingsComponent — provider tokens', () => {
     expect(settingsOf(c)).toEqual({ url: 'https://ntfy.sh', topic: 'media' });
   });
 
+  it('sends an explicit null once the stored token is erased, and only where erasing is allowed', async () => {
+    const c = await createComponent();
+    c.openEdit({
+      id: 1,
+      name: 'Ntfy',
+      type: 'ntfy',
+      enabled: true,
+      events: [],
+      settings: { url: 'https://ntfy.sh', topic: 'media', secretsSet: ['token'] },
+    });
+    expect(c.tokenStored()).toBe(true);
+    expect(c.canClearToken()).toBe(true);
+
+    c.formTokenCleared.set(true);
+    expect(settingsOf(c)).toEqual({ url: 'https://ntfy.sh', topic: 'media', token: null });
+
+    // gotify cannot send without one, so the affordance is not offered there.
+    c.formType.set('gotify');
+    expect(c.canClearToken()).toBe(false);
+  });
+
+  it('cancels a pending erase as soon as a replacement token is typed', async () => {
+    const c = await createComponent();
+    c.formType.set('ntfy');
+    c.formWebhookUrl.set('https://ntfy.sh');
+    c.formTopic.set('media');
+    c.formTokenCleared.set(true);
+
+    c.onTokenInput('fresh');
+
+    expect(c.formTokenCleared()).toBe(false);
+    expect(settingsOf(c)).toEqual({ url: 'https://ntfy.sh', topic: 'media', token: 'fresh' });
+  });
+
+  it('reports no stored token when the response lists none', async () => {
+    const c = await createComponent();
+    c.openEdit({
+      id: 1,
+      name: 'Ntfy',
+      type: 'ntfy',
+      enabled: true,
+      events: [],
+      settings: { url: 'https://ntfy.sh', secretsSet: [] },
+    });
+    expect(c.tokenStored()).toBe(false);
+    expect(c.canClearToken()).toBe(false);
+  });
+
   it('leaves the token blank on edit, so saving keeps the stored one', async () => {
     const c = await createComponent();
     c.openEdit({

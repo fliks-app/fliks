@@ -104,6 +104,56 @@ describe('NotificationsService settings normalization', () => {
     });
   });
 
+  it('erases the stored token when the editor sends an explicit null', async () => {
+    stored = {
+      type: 'ntfy',
+      settings: { url: 'https://ntfy.sh', topic: 'media', token: 'tk_stored' },
+    };
+    await service.update(1, {
+      name: 'Ntfy',
+      type: 'ntfy',
+      settings: { url: 'https://ntfy.sh', topic: 'media', token: null },
+    });
+    expect(saved[0].settings).toEqual({ url: 'https://ntfy.sh', topic: 'media' });
+    expect(saved[0].settings).not.toHaveProperty('token');
+  });
+
+  it('refuses to erase a gotify token, since that connection cannot send without one', async () => {
+    stored = {
+      type: 'gotify',
+      settings: { url: 'https://gotify.example.com', token: 'tk_stored' },
+    };
+    await expect(
+      service.update(1, {
+        name: 'Gotify',
+        type: 'gotify',
+        settings: { url: 'https://gotify.example.com', token: null },
+      }),
+    ).rejects.toThrow('gotify requires a non-empty settings.token');
+  });
+
+  it('never persists the read-only secretsSet marker the editor received', async () => {
+    stored = {
+      type: 'ntfy',
+      settings: { url: 'https://ntfy.sh', token: 'tk_stored' },
+    };
+    await service.update(1, {
+      name: 'Ntfy',
+      type: 'ntfy',
+      settings: { url: 'https://ntfy.sh', secretsSet: ['token'] },
+    });
+    expect(saved[0].settings).toEqual({ url: 'https://ntfy.sh', token: 'tk_stored' });
+  });
+
+  it('never persists the marker on discord either, which bypasses the token merge', async () => {
+    await service.create({
+      name: 'd',
+      type: 'discord',
+      settings: { webhookUrl: 'https://discord.test/hook', secretsSet: [] },
+    });
+    expect(saved[0].settings).toEqual({ webhookUrl: 'https://discord.test/hook' });
+  });
+
   it('drops the stored token when the connection changes provider', async () => {
     stored = {
       type: 'gotify',
@@ -287,6 +337,15 @@ describe('redactNotificationSecrets', () => {
     expect(redactNotificationSecrets(conn as never).settings).toEqual({
       url: 'https://ntfy.sh',
       topic: 'media',
+      secretsSet: ['token'],
+    });
+  });
+
+  it('reports no set secret when the connection stores none', () => {
+    const conn = { id: 1, type: 'ntfy', settings: { url: 'https://ntfy.sh' } };
+    expect(redactNotificationSecrets(conn as never).settings).toEqual({
+      url: 'https://ntfy.sh',
+      secretsSet: [],
     });
   });
 });

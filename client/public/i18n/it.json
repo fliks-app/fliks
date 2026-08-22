@@ -1305,7 +1305,10 @@
     "saved": "Salvato",
     "selections_cleared": "Selezioni cancellate",
     "retry": "Riprova",
-    "offline_banner": "Modalità offline — i dati mostrati potrebbero non essere aggiornati"
+    "offline_banner": "Modalità offline — i dati mostrati potrebbero non essere aggiornati",
+    "secret_clear": "Cancella il valore salvato",
+    "secret_keep": "Mantienilo",
+    "secret_will_clear": "Il valore salvato verrà rimosso al salvataggio."
   },
   "pagination": {
     "label": "Impaginazione",

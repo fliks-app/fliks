@@ -132,10 +132,32 @@
             <input
               type="password"
               class="input input-bordered input-sm w-full"
+              [placeholder]="tokenStored() && !formTokenCleared() ? secretMask : ''"
               [ngModel]="formToken()"
-              (ngModelChange)="formToken.set($event)"
+              (ngModelChange)="onTokenInput($event)"
             />
-            @if (editingId() !== null) {
+            @if (canClearToken()) {
+              @if (formTokenCleared()) {
+                <span class="label-text-alt text-warning">
+                  {{ 'common.secret_will_clear' | translate }}
+                  <button
+                    type="button"
+                    class="link link-hover font-medium"
+                    (click)="formTokenCleared.set(false)"
+                  >
+                    {{ 'common.secret_keep' | translate }}
+                  </button>
+                </span>
+              } @else {
+                <button
+                  type="button"
+                  class="link link-hover label-text-alt self-start text-base-content/60"
+                  (click)="formTokenCleared.set(true)"
+                >
+                  {{ 'common.secret_clear' | translate }}
+                </button>
+              }
+            } @else if (editingId() !== null) {
               <span class="label-text-alt text-base-content/50">
                 {{ 'settings.notifications.token_hint' | translate }}
               </span>

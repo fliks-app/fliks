@@ -117,6 +117,8 @@ export class ProviderListComponent implements OnInit {
   readonly draftEnabled = signal(true);
   readonly draftImplementation = signal('');
   readonly draftValue = signal<SchemaFormValue>({});
+  /** Which credentials the row already stores, straight from the redacted response. */
+  readonly secretsSet = signal<readonly string[]>([]);
 
   readonly testLoading = signal(false);
   readonly testResult = signal<ProviderTestResult | null>(null);
@@ -192,6 +194,7 @@ export class ProviderListComponent implements OnInit {
     this.draftPriority.set(this.defaultPriority());
     this.draftEnabled.set(this.defaultEnabled());
     this.draftValue.set(impl ? this.seedValue(null, impl) : {});
+    this.secretsSet.set([]);
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -205,8 +208,14 @@ export class ProviderListComponent implements OnInit {
     this.draftImplementation.set(implValue);
     const impl = this.currentImplementation();
     this.draftValue.set(impl ? this.seedValue(row, impl) : {});
+    this.secretsSet.set(this.storedSecrets(row));
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
+  }
+
+  private storedSecrets(row: ProviderInstance): readonly string[] {
+    const set = (row.settings as Record<string, unknown> | undefined)?.['secretsSet'];
+    return Array.isArray(set) ? set.map(String) : [];
   }
 
   onImplementationChange(value: string): void {
