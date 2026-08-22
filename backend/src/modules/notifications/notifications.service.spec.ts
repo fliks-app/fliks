@@ -3,8 +3,11 @@ import { plainToInstance } from 'class-transformer';
 import axios from 'axios';
 import {
   NotificationsService,
+  SUBSCRIBABLE_NOTIFICATION_EVENTS,
   redactNotificationSecrets,
 } from './notifications.service';
+import { NOTIFICATION_EVENTS } from './entities/notification-connection.entity';
+import { NotificationsController } from './notifications.controller';
 import { CreateNotificationConnectionDto } from './dto/create-notification-connection.dto';
 
 jest.mock('axios');
@@ -233,6 +236,38 @@ describe('CreateNotificationConnectionDto validation', () => {
   });
 });
 
+describe('notification event vocabulary', () => {
+  const dtoErrors = async (events: string[]) => {
+    const dto = plainToInstance(CreateNotificationConnectionDto, {
+      name: 'n',
+      type: 'ntfy',
+      settings: { url: 'https://ntfy.sh' },
+      events,
+    });
+    return (await validate(dto)).flatMap((e) => Object.values(e.constraints ?? {}));
+  };
+
+  it('validates every event it dispatches — the subtitle four used to 400', async () => {
+    expect(await dtoErrors([...NOTIFICATION_EVENTS])).toEqual([]);
+  });
+
+  it('still rejects an event nothing knows about', async () => {
+    expect(await dtoErrors(['subtitle.teleported'])).not.toEqual([]);
+  });
+
+  it('declares GET events before GET :id, which is what keeps it off the ParseIntPipe', () => {
+    const methods = Object.getOwnPropertyNames(NotificationsController.prototype);
+    expect(methods.indexOf('events')).toBeLessThan(methods.indexOf('findOne'));
+  });
+
+  it('advertises everything something dispatches, and not the test-only one', async () => {
+    expect(SUBSCRIBABLE_NOTIFICATION_EVENTS).not.toContain('health.issue');
+    expect(SUBSCRIBABLE_NOTIFICATION_EVENTS).toHaveLength(NOTIFICATION_EVENTS.length - 1);
+    // An advertised event has to be storable, or the editor offers a checkbox the API refuses.
+    expect(await dtoErrors([...SUBSCRIBABLE_NOTIFICATION_EVENTS])).toEqual([]);
+  });
+});
+
 describe('NotificationsService provider authentication', () => {
   const serviceFor = (row: Record<string, unknown>) =>
     new NotificationsService({
@@ -251,6 +286,26 @@ describe('NotificationsService provider authentication', () => {
   beforeEach(() => {
     mockedAxios.post.mockReset();
     mockedAxios.post.mockResolvedValue({ status: 200 } as never);
+  });
+
+  it('renders a subtitle event as a sentence rather than dumping its payload', async () => {
+    const service = new NotificationsService({
+      find: () =>
+        Promise.resolve([
+          {
+            id: 1,
+            name: 'D',
+            type: 'discord',
+            enabled: true,
+            events: ['subtitle.downloaded'],
+            settings: { webhookUrl: 'https://discord.test/hook' },
+          },
+        ]),
+    } as never);
+
+    await service.dispatch('subtitle.downloaded', { title: 'Some Title', language: 'fr' });
+
+    expect((lastCall().body as { content: string }).content).toBe('Subtitle downloaded: Some Title [fr]');
   });
 
   it('authenticates an ntfy push when a token is configured', async () => {

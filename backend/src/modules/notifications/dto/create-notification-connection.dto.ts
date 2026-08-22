@@ -10,31 +10,12 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from 'class-validator';
-
-const VALID_TYPES = ['discord', 'slack', 'webhook', 'gotify', 'ntfy'];
-const VALID_EVENTS = [
-  'request.created',
-  'request.approved',
-  'request.declined',
-  'request.processing',
-  'request.available',
-  'request.delete.created',
-  'request.delete.approved',
-  'request.delete.declined',
-  'grab.started',
-  'download.complete',
-  'health.issue',
-];
-
-/** Where each sender reads its endpoint from. Discord and Slack address a
- *  webhook; the rest address a server. Kept in step with `NotificationsService.send`. */
-const ENDPOINT_KEY: Record<string, 'webhookUrl' | 'url'> = {
-  discord: 'webhookUrl',
-  slack: 'webhookUrl',
-  webhook: 'url',
-  gotify: 'url',
-  ntfy: 'url',
-};
+import {
+  ENDPOINT_KEY,
+  NOTIFICATION_EVENTS,
+  NOTIFICATION_TYPES,
+  NotificationType,
+} from '../entities/notification-connection.entity';
 
 const asText = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 
@@ -42,7 +23,7 @@ const asText = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 class NotificationSettingsConstraint implements ValidatorConstraintInterface {
   validate(settings: unknown, args: ValidationArguments): boolean {
     const { type } = args.object as CreateNotificationConnectionDto;
-    const key = ENDPOINT_KEY[type];
+    const key = ENDPOINT_KEY[type as NotificationType];
     if (!key) return true; // unknown type: @IsIn already rejected it
     const s = (settings ?? {}) as Record<string, unknown>;
     // Either key is accepted: the service folds `webhookUrl` onto `url` for the
@@ -53,7 +34,7 @@ class NotificationSettingsConstraint implements ValidatorConstraintInterface {
 
   defaultMessage(args: ValidationArguments): string {
     const { type } = args.object as CreateNotificationConnectionDto;
-    return `${type} requires settings.${ENDPOINT_KEY[type] ?? 'url'} to be an http(s) URL`;
+    return `${type} requires settings.${ENDPOINT_KEY[type as NotificationType] ?? 'url'} to be an http(s) URL`;
   }
 }
 
@@ -61,7 +42,7 @@ export class CreateNotificationConnectionDto {
   @IsString()
   name: string;
 
-  @IsIn(VALID_TYPES)
+  @IsIn(NOTIFICATION_TYPES)
   type: string;
 
   @IsObject()
@@ -69,7 +50,7 @@ export class CreateNotificationConnectionDto {
   settings: Record<string, unknown>;
 
   @IsArray()
-  @IsIn(VALID_EVENTS, { each: true })
+  @IsIn(NOTIFICATION_EVENTS, { each: true })
   @IsOptional()
   events?: string[];
 
