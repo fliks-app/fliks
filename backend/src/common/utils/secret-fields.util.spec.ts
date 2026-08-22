@@ -1,5 +1,5 @@
-import { redactSecretFields, mergeSecretFields, SECRETS_SET_KEY } from './secret-fields.util';
-import { FieldDef } from '../plugin-contract/ui-contribution';
+import { redactSecretFields, mergeSecretFields } from './secret-fields.util';
+import { FieldDef, SECRETS_SET_KEY } from '../plugin-contract/ui-contribution';
 
 const FIELDS: FieldDef[] = [
   { key: 'apiKey', type: 'text', labelKey: 'x', secret: true },

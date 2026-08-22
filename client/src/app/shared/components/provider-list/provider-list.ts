@@ -20,6 +20,7 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { InputFieldComponent } from '../forms/input-field/input-field';
 import { ToggleFieldComponent } from '../forms/toggle-field/toggle-field';
 import { SelectFieldComponent } from '../forms/select-field/select-field';
+import { SECRETS_SET_KEY } from '@fliks/plugin-contract/ui';
 import { SchemaFormComponent, SchemaFormValue } from '../schema-form/schema-form';
 import {
   ProviderDraft,
@@ -214,7 +215,7 @@ export class ProviderListComponent implements OnInit {
   }
 
   private storedSecrets(row: ProviderInstance): readonly string[] {
-    const set = (row.settings as Record<string, unknown> | undefined)?.['secretsSet'];
+    const set = (row.settings as Record<string, unknown> | undefined)?.[SECRETS_SET_KEY];
     return Array.isArray(set) ? set.map(String) : [];
   }
 

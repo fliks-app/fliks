@@ -1,10 +1,6 @@
-import { FieldDef } from '../plugin-contract/ui-contribution';
+import { FieldDef, SECRETS_SET_KEY } from '../plugin-contract/ui-contribution';
 
 type SecretKeyed = Pick<FieldDef, 'key' | 'secret'>;
-
-/** Names the secret fields that hold a stored value, so an editor can show `●●●●` without the
- *  value itself. Read-only: writes strip it back out rather than persisting it. */
-export const SECRETS_SET_KEY = 'secretsSet';
 
 /** Strips every `secret: true` field's value from `settings`, by schema key, and reports which
  *  of them are set under `SECRETS_SET_KEY`. */

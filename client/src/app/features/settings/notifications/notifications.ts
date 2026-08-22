@@ -13,6 +13,7 @@ import { HttpClient } from '@angular/common/http';
 import { LucideX } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
+import { SECRETS_SET_KEY } from '@fliks/plugin-contract/ui';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SECRET_MASK } from '../../../shared/components/schema-form/schema-form';
 
@@ -126,7 +127,7 @@ export class NotificationsSettingsComponent implements OnInit {
     const s = nc.settings ?? {};
     this.formWebhookUrl.set(String(s['webhookUrl'] ?? s['url'] ?? ''));
     this.formToken.set('');
-    const secretsSet = s['secretsSet'];
+    const secretsSet = s[SECRETS_SET_KEY];
     this.tokenStored.set(Array.isArray(secretsSet) && secretsSet.includes('token'));
     this.formTokenCleared.set(false);
     this.formTopic.set(String(s['topic'] ?? ''));
