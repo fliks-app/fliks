@@ -19,7 +19,7 @@ beforeAll(() => {
   }
 });
 
-async function createComponent() {
+async function createComponent(events: string[] = []) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -32,7 +32,9 @@ async function createComponent() {
       }),
       {
         provide: HttpClient,
-        useValue: { get: () => of([]) } as unknown as HttpClient,
+        useValue: {
+          get: (url: string) => of(url.endsWith('/events') ? events : []),
+        } as unknown as HttpClient,
       },
       {
         provide: ConfirmationService,
@@ -127,6 +129,19 @@ describe('NotificationsSettingsComponent — endpoint settings key', () => {
       url: 'https://legacy.example.com',
       topic: 'old',
     });
+  });
+});
+
+describe('NotificationsSettingsComponent — event vocabulary', () => {
+  it('lists what the API advertises rather than a hardcoded set', async () => {
+    const c = await createComponent(['request.created', 'subtitle.downloaded']);
+    expect(c.allEvents()).toEqual(['request.created', 'subtitle.downloaded']);
+  });
+
+  it('pre-checks every advertised event on a new connection', async () => {
+    const c = await createComponent(['request.created', 'subtitle.downloaded']);
+    c.openCreate();
+    expect(c.formEvents()).toEqual(['request.created', 'subtitle.downloaded']);
   });
 });
 

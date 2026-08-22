@@ -181,7 +181,7 @@
         <div>
           <p class="label-text mb-2">{{ 'settings.notifications.field_events' | translate }}</p>
           <div class="flex flex-wrap gap-2">
-            @for (event of allEvents; track event) {
+            @for (event of allEvents(); track event) {
               <label class="label cursor-pointer gap-2 justify-start">
                 <input
                   type="checkbox"

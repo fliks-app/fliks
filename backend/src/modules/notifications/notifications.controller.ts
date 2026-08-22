@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import {
   NotificationsService,
+  SUBSCRIBABLE_NOTIFICATION_EVENTS,
   redactNotificationSecrets,
 } from './notifications.service';
 import { CreateNotificationConnectionDto } from './dto/create-notification-connection.dto';
@@ -36,6 +37,13 @@ export class NotificationsController {
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   async findAll() {
     return (await this.service.findAll()).map(redactNotificationSecrets);
+  }
+
+  /** Declared before `:id` — Nest matches in order, and `events` is not an id. */
+  @Get('events')
+  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  events(): readonly string[] {
+    return SUBSCRIBABLE_NOTIFICATION_EVENTS;
   }
 
   @Get(':id')

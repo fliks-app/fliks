@@ -10,21 +10,9 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from 'class-validator';
+import { NOTIFICATION_EVENTS } from '../entities/notification-connection.entity';
 
 const VALID_TYPES = ['discord', 'slack', 'webhook', 'gotify', 'ntfy'];
-const VALID_EVENTS = [
-  'request.created',
-  'request.approved',
-  'request.declined',
-  'request.processing',
-  'request.available',
-  'request.delete.created',
-  'request.delete.approved',
-  'request.delete.declined',
-  'grab.started',
-  'download.complete',
-  'health.issue',
-];
 
 /** Where each sender reads its endpoint from. Discord and Slack address a
  *  webhook; the rest address a server. Kept in step with `NotificationsService.send`. */
@@ -69,7 +57,7 @@ export class CreateNotificationConnectionDto {
   settings: Record<string, unknown>;
 
   @IsArray()
-  @IsIn(VALID_EVENTS, { each: true })
+  @IsIn(NOTIFICATION_EVENTS, { each: true })
   @IsOptional()
   events?: string[];
 

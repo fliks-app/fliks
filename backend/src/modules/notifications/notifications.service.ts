@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
 import {
+  NOTIFICATION_EVENTS,
   NotificationConnection,
   NotificationEvent,
 } from './entities/notification-connection.entity';
@@ -16,6 +17,15 @@ import {
   mergeSecretFields,
   redactSecretFields,
 } from '../../common/utils/secret-fields.util';
+
+/** Sent by `testConnection` alone — nothing dispatches it, so subscribing to it would only ever
+ *  deliver the test. Still a valid stored value: connections predate this list. */
+const TEST_ONLY_EVENTS: readonly NotificationEvent[] = ['health.issue'];
+
+/** What a client can usefully subscribe to: every event something actually dispatches. */
+export const SUBSCRIBABLE_NOTIFICATION_EVENTS = NOTIFICATION_EVENTS.filter(
+  (event) => !TEST_ONLY_EVENTS.includes(event),
+);
 
 /** The only credential a connection stores; the endpoint is an address, not a secret. */
 export const NOTIFICATION_SECRET_FIELDS = [
@@ -265,6 +275,15 @@ export class NotificationsService {
         return `Download complete: ${title}`;
       case 'health.issue':
         return String(payload.message ?? 'Health issue detected');
+      case 'subtitle.downloaded':
+        return `Subtitle downloaded: ${title} [${String(payload.language ?? '')}]`;
+      case 'subtitle.upgraded':
+        return `Subtitle upgraded: ${title} [${String(payload.language ?? '')}]`;
+      case 'subtitle.failed':
+        return `Subtitle download failed: ${title} [${String(payload.language ?? '')}]`;
+      // Dispatched from the sync path, which knows the subtitle, not the media it belongs to.
+      case 'subtitle.synced':
+        return `Subtitle synced [${String(payload.language ?? '')}]`;
       default:
         return `${event}: ${JSON.stringify(payload)}`;
     }

@@ -66,14 +66,8 @@ export class NotificationsSettingsComponent implements OnInit {
   readonly formTopic = signal('');
   readonly formEvents = signal<string[]>([]);
 
-  readonly allEvents = [
-    'request.created',
-    'request.approved',
-    'request.declined',
-    'grab.started',
-    'download.complete',
-    'health.issue',
-  ];
+  /** Advertised by the API rather than restated here, so an event added server-side shows up. */
+  readonly allEvents = signal<string[]>([]);
 
   readonly connectionTypes = ['discord', 'slack', 'webhook', 'gotify', 'ntfy'] as const;
   readonly secretMask = SECRET_MASK;
@@ -88,6 +82,15 @@ export class NotificationsSettingsComponent implements OnInit {
 
   ngOnInit() {
     this.reloadAll();
+    void this.loadEvents();
+  }
+
+  private async loadEvents() {
+    try {
+      this.allEvents.set(await firstValueFrom(this.http.get<string[]>('/api/notifications/events')));
+    } catch {
+      this.listError.set(this.translate.instant('settings.notifications.load_error'));
+    }
   }
 
   async reloadAll() {
@@ -114,7 +117,7 @@ export class NotificationsSettingsComponent implements OnInit {
     this.tokenStored.set(false);
     this.formTokenCleared.set(false);
     this.formTopic.set('');
-    this.formEvents.set([...this.allEvents]);
+    this.formEvents.set([...this.allEvents()]);
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
