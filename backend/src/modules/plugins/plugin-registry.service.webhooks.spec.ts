@@ -4,8 +4,9 @@ import { minimalDataManifest, minimalProcessManifest } from './archive/test-mani
 import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry, fakeCountsCache } from './plugin-registry.test-helpers';
 import type { PluginManifest, PluginWebhookDeclaration } from '../../common/plugin-contract';
 
-/** A `fliks` range every test can rely on matching this repo's own `package.json` version. */
-const COMPATIBLE_RANGE = '>=1.0.0 <3.0.0';
+/** A `fliks` range every test can rely on matching this repo's own `package.json` version —
+ *  deliberately unbounded above, so a release bump can never make the fixture incompatible. */
+const COMPATIBLE_RANGE = '>=1.0.0';
 
 function makePackage(manifest: PluginManifest, overrides: Partial<PluginPackage> = {}): PluginPackage {
   return {

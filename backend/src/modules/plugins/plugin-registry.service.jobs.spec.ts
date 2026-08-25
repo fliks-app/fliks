@@ -8,8 +8,9 @@ import { CORE_SCHEDULER_JOB_NAMES } from '../../common/constants/core-scheduler-
 import type { PluginJob, PluginManifest } from '../../common/plugin-contract';
 import type { PluginProcessStartResult } from './plugin-process.service';
 
-/** A `fliks` range every test can rely on matching this repo's own `package.json` version. */
-const COMPATIBLE_RANGE = '>=1.0.0 <3.0.0';
+/** A `fliks` range every test can rely on matching this repo's own `package.json` version —
+ *  deliberately unbounded above, so a release bump can never make the fixture incompatible. */
+const COMPATIBLE_RANGE = '>=1.0.0';
 /** Never fires during a test run — the point of every test here is the registry entry itself. */
 const FAR_FUTURE_CRON = '0 0 1 1 *';
 

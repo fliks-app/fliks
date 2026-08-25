@@ -18,8 +18,9 @@ import type { PluginProcessStartResult } from './plugin-process.service';
 
 const sweepOrphansMock = jest.mocked(sweepOrphans);
 
-/** A `fliks` range every test can rely on matching this repo's own `package.json` version. */
-const COMPATIBLE_RANGE = '>=1.0.0 <3.0.0';
+/** A `fliks` range every test can rely on matching this repo's own `package.json` version —
+ *  deliberately unbounded above, so a release bump can never make the fixture incompatible. */
+const COMPATIBLE_RANGE = '>=1.0.0';
 
 function archiveFor(manifest: PluginManifest, extraEntries: ZipEntrySpec[] = []): Buffer {
   const entries: ZipEntrySpec[] = [
