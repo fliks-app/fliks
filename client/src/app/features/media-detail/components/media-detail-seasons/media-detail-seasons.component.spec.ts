@@ -58,6 +58,7 @@ interface FixtureOpts {
   seasonReleasesOpenId?: number | null;
   seasonGrabBusy?: string | null;
   media?: Media;
+  seasonGrabBestBusyIds?: ReadonlySet<number>;
 }
 
 async function createFixture(opts: FixtureOpts = {}): Promise<ComponentFixture<MediaDetailSeasonsComponent>> {
@@ -90,6 +91,7 @@ async function createFixture(opts: FixtureOpts = {}): Promise<ComponentFixture<M
   fixture.componentRef.setInput('seasonReleasesLoading', opts.seasonReleasesLoading ?? false);
   fixture.componentRef.setInput('seasonReleasesOpenId', opts.seasonReleasesOpenId ?? null);
   fixture.componentRef.setInput('seasonGrabBusy', opts.seasonGrabBusy ?? null);
+  fixture.componentRef.setInput('seasonGrabBestBusyIds', opts.seasonGrabBestBusyIds ?? new Set<number>());
 
   fixture.detectChanges();
   await fixture.whenStable();
@@ -183,5 +185,22 @@ describe('MediaDetailSeasonsComponent — media.season.actions is plugin-only', 
     const busyGrab = await createFixture({ registry: SEASON_ACTIONS_REGISTRY, seasonGrabBusy: 'best' });
     expect(seasonDropdownItems(busyGrab.nativeElement)[grabIdx].disabled).toBe(true);
     expect(seasonDropdownItems(busyGrab.nativeElement)[searchIdx].disabled).toBe(false);
+  });
+
+  it('VERDICT: a grab-best running on another season leaves this one clickable', async () => {
+    const idle = await createFixture({ registry: SEASON_ACTIONS_REGISTRY });
+    const grabIdx = seasonDropdownLabels(idle.nativeElement).indexOf('x.grab_best');
+
+    const own = await createFixture({
+      registry: SEASON_ACTIONS_REGISTRY,
+      seasonGrabBestBusyIds: new Set([SEASON.id]),
+    });
+    expect(seasonDropdownItems(own.nativeElement)[grabIdx].disabled).toBe(true);
+
+    const other = await createFixture({
+      registry: SEASON_ACTIONS_REGISTRY,
+      seasonGrabBestBusyIds: new Set([SEASON.id + 1]),
+    });
+    expect(seasonDropdownItems(other.nativeElement)[grabIdx].disabled).toBe(false);
   });
 });

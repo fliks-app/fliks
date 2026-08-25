@@ -97,6 +97,8 @@ export class MediaDetailSeasonsComponent {
   readonly seasonReleasesLoading = input(false);
   readonly seasonReleasesOpenId = input<number | null>(null);
   readonly seasonGrabBusy = input<string | null>(null);
+  /** Season ids with a grab-best in flight, so one running season never locks the others. */
+  readonly seasonGrabBestBusyIds = input<ReadonlySet<number>>(new Set());
   readonly seasonBusyId = input<number | null>(null);
   readonly watchedEpisodeIds = input<Set<number>>(new Set());
   readonly episodeProgress = input<Record<number, number>>({});
@@ -176,12 +178,15 @@ export class MediaDetailSeasonsComponent {
     return items;
   });
 
-  /** Busy/disabled state per actionId: a search only spins for the season it opened,
-   *  a grab locks every row while one is in flight. */
+  /** Busy/disabled state per actionId: both a search and a grab only spin for the
+   *  season they were started on, so grabs on other seasons can run alongside. */
   seasonActionPending(actionId: CoreSeasonActionId): boolean {
+    const selectedId = this.selectedSeason()?.id;
     if (actionId === 'season.search-releases') {
-      return this.seasonReleasesLoading() && this.seasonReleasesOpenId() === this.selectedSeason()?.id;
+      return this.seasonReleasesLoading() && this.seasonReleasesOpenId() === selectedId;
     }
+    if (selectedId != null && this.seasonGrabBestBusyIds().has(selectedId)) return true;
+    // A release picked by hand in the modal still locks the row it was picked from.
     return this.seasonGrabBusy() !== null;
   }
 
