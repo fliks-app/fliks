@@ -889,7 +889,6 @@
     "download_pack": "Pack",
     "quality_profile_label": "Profil de qualité",
     "no_quality_profile": "Aucun profil de qualité ou de langue : attribuez les deux (ou réimportez) pour activer la recherche de releases.",
-    "grab_best": "Télécharger la meilleure version",
     "grab_one": "Télécharger",
     "grab_rejected_confirm_title": "Télécharger malgré tout ?",
     "grab_rejected_confirm": "Cette release ne correspond pas au profil de qualité :\n{{reason}}",

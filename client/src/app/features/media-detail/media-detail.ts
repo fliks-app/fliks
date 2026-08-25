@@ -9,6 +9,7 @@ import {
   inject,
   signal,
   untracked,
+  type WritableSignal,
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -632,6 +633,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly grabBusy = signal<string | null>(null);
   readonly grabToast = signal('');
   readonly grabState = signal<Map<string, 'ok' | 'error'>>(new Map());
+  /** Movie ids with a grab-best in flight. A set, not a flag: the component
+   *  outlives navigation, so a flag would follow the user to the next title. */
+  readonly movieGrabBestBusy = signal<ReadonlySet<number>>(new Set());
+  /** Only this movie's own grab-best spins; a modal release grab still locks it. */
+  readonly movieHeaderGrabBusy = computed(() =>
+    this.movieGrabBestBusy().has(this.media()?.id ?? 0) ? 'best' : this.grabBusy(),
+  );
 
   readonly qualityProfileOptions = signal<{ id: number; name: string }[]>([]);
   readonly languageProfiles = signal<LanguageProfile[]>([]);
@@ -722,10 +730,18 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly epGrabBusy = signal<string | null>(null);
   readonly epGrabToast = signal('');
   readonly epGrabState = signal<Map<string, 'ok' | 'error'>>(new Map());
+  /** Episode ids with a grab-best in flight — several may run at once. */
+  readonly epGrabBestBusy = signal<ReadonlySet<number>>(new Set());
+  /** Only the focused episode's own grab-best spins here. */
+  readonly epHeaderGrabBusy = computed(() =>
+    this.epGrabBestBusy().has(this.focusedEpisode()?.id ?? 0) ? 'best' : this.epGrabBusy(),
+  );
 
   // Season grab
   readonly seasonGrabBusy = signal<string | null>(null);
   readonly seasonReleaseGrabState = signal<Map<string, 'ok' | 'error'>>(new Map());
+  /** Season ids with a grab-best in flight — several may run at once. */
+  readonly seasonGrabBestBusy = signal<ReadonlySet<number>>(new Set());
   readonly seasonReleasesOpen = signal<number | null>(null);
   readonly seasonForReleases = signal<Season | null>(null);
   readonly seasonReleases = signal<MovieRelease[]>([]);
@@ -1110,19 +1126,36 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Runs one grab-best, tracked by target id so a grab on another movie, episode
+   *  or season neither spins nor disables this one. Re-entry on the same id is
+   *  dropped, which is what stops a double-click grabbing twice. */
+  private async runGrabBest(
+    busy: WritableSignal<ReadonlySet<number>>,
+    id: number,
+    grab: () => Promise<void>,
+  ): Promise<void> {
+    if (busy().has(id)) return;
+    busy.update((s) => new Set(s).add(id));
+    try {
+      await grab();
+      this.toast.success(this.translate.instant('media_detail.grab_success'));
+    } catch {
+      /* error toast surfaced by the global interceptor */
+    } finally {
+      busy.update((s) => {
+        const next = new Set(s);
+        next.delete(id);
+        return next;
+      });
+    }
+  }
+
   async grabBest() {
     const m = this.media();
     if (!m || m.type !== 'movie') return;
-    this.grabBusy.set('best');
-    try {
-      await this.releasePickerApi.grabMovie(m.id, {});
-      this.grabState.update((s) => new Map(s).set('best', 'ok'));
-      this.toast.success(this.translate.instant('media_detail.grab_success'));
-    } catch {
-      this.grabState.update((s) => new Map(s).set('best', 'error'));
-    } finally {
-      this.grabBusy.set(null);
-    }
+    await this.runGrabBest(this.movieGrabBestBusy, m.id, () =>
+      this.releasePickerApi.grabMovie(m.id, {}),
+    );
   }
 
   async toggleMonitored() {
@@ -1543,16 +1576,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   async grabEpisodeBest(mediaId: number, episodeId: number) {
-    this.epGrabBusy.set('best');
-    try {
-      await this.releasePickerApi.grabEpisode(mediaId, episodeId, {});
-      this.epGrabState.update((s) => new Map(s).set('best', 'ok'));
-      this.toast.success(this.translate.instant('media_detail.grab_success'));
-    } catch {
-      this.epGrabState.update((s) => new Map(s).set('best', 'error'));
-    } finally {
-      this.epGrabBusy.set(null);
-    }
+    await this.runGrabBest(this.epGrabBestBusy, episodeId, () =>
+      this.releasePickerApi.grabEpisode(mediaId, episodeId, {}),
+    );
   }
 
   async grabEpisodeRelease(mediaId: number, episodeId: number, r: MovieRelease, index: number) {
@@ -1592,15 +1618,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   async grabSeasonAuto(mediaId: number, season: Season) {
-    this.seasonGrabBusy.set('best');
-    try {
-      await this.releasePickerApi.grabSeason(mediaId, season.id, {});
-      this.toast.success(this.translate.instant('media_detail.grab_success'));
-    } catch {
-      /* error toast surfaced by the global interceptor */
-    } finally {
-      this.seasonGrabBusy.set(null);
-    }
+    await this.runGrabBest(this.seasonGrabBestBusy, season.id, () =>
+      this.releasePickerApi.grabSeason(mediaId, season.id, {}),
+    );
   }
 
   onGrabSeasonReleaseFromModal(mediaId: number, r: MovieRelease, index: number) {

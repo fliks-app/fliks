@@ -889,7 +889,6 @@
     "download_pack": "Pack",
     "quality_profile_label": "Quality profile",
     "no_quality_profile": "No quality or language profile: assign both (or re-import) to enable release search.",
-    "grab_best": "Download the best version",
     "grab_one": "Download",
     "grab_rejected_confirm_title": "Download anyway?",
     "grab_rejected_confirm": "This release doesn't match the quality profile:\n{{reason}}",

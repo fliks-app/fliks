@@ -7,22 +7,6 @@
           <button class="btn btn-sm btn-circle btn-ghost">✕</button>
         </form>
       </div>
-
-      @if (showGrabBest() && canGrab()) {
-        <div class="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            class="btn btn-primary btn-xs"
-            (click)="grabBest.emit()"
-            [disabled]="grabBestDisabled() || grabBusy() !== null"
-          >
-            @if (grabBestBusy()) {
-              <span class="loading loading-spinner loading-xs"></span>
-            }
-            {{ 'media_detail.grab_best' | translate }}
-          </button>
-        </div>
-      }
     </div>
 
     <div class="flex-1 overflow-y-auto px-4 sm:px-6">
