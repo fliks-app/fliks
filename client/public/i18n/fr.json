@@ -1059,7 +1059,8 @@
       "SIZE_TOO_HIGH": "Taille trop élevée\n({{actual}} MB > {{max}} MB)",
       "SIZE_NOT_PREFERRED": "Taille éloignée du recommandé\n({{actual}} MB ≠ {{preferred}} MB)",
       "MIN_SEEDERS": "Seeders insuffisants\n({{actual}} < {{min}})",
-      "TITLE_MISMATCH": "Titre ne correspond pas au média"
+      "TITLE_MISMATCH": "Titre ne correspond pas au média",
+      "EPISODE_MISMATCH": "La release ne correspond pas à {{expected}} (trouvé {{actual}})"
     }
   },
   "requests": {

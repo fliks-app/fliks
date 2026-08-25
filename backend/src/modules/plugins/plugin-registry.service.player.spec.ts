@@ -4,7 +4,7 @@ import { minimalProcessManifest } from './archive/test-manifests';
 import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry, fakeCountsCache } from './plugin-registry.test-helpers';
 import type { PluginManifest, PluginRoute, PlayerDeclaration } from '../../common/plugin-contract';
 
-const COMPATIBLE_RANGE = '>=1.0.0 <3.0.0';
+const COMPATIBLE_RANGE = '>=1.0.0';
 
 const ROUTES: PluginRoute[] = [{ method: 'POST', path: '/pre-roll', policy: 'read:Media' }];
 

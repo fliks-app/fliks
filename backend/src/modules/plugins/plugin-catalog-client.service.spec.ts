@@ -7,7 +7,7 @@ import { OFFICIAL_KEYS } from './archive/trust-store';
 import type { CatalogDocument } from './catalog/catalog';
 import { PLUGIN_API_VERSION } from '../../common/plugin-contract';
 
-const COMPATIBLE_RANGE = '>=1.0.0 <3.0.0';
+const COMPATIBLE_RANGE = '>=1.0.0';
 
 function fakeSource(overrides: Partial<PluginSource> = {}): PluginSource {
   return {

@@ -5,8 +5,9 @@ import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeSc
 import { SUPPORTED_PLUGIN_API_VERSIONS, type PluginManifest, type PluginRoute } from '../../common/plugin-contract';
 import type { PluginProcessStartResult } from './plugin-process.service';
 
-/** A `fliks` range every test can rely on matching this repo's own `package.json` version. */
-const COMPATIBLE_RANGE = '>=1.0.0 <3.0.0';
+/** A `fliks` range every test can rely on matching this repo's own `package.json` version —
+ *  deliberately unbounded above, so a release bump can never make the fixture incompatible. */
+const COMPATIBLE_RANGE = '>=1.0.0';
 
 function makePackage(manifest: PluginManifest, overrides: Partial<PluginPackage> = {}): PluginPackage {
   return {

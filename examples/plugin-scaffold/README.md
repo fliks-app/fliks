@@ -64,7 +64,7 @@ Core answers with a `reason` and a `detail` naming the field, visible on the plu
   `requests:progress`, `ingest:write`, `events:emit`, `config:rw`) and may not be empty.
 - A route `policy` is `action:subject`, in that order — `read:Settings`, not `Settings:read`.
 - `i18n` keys must share a single root, and no key may be a prefix of another.
-- `fliks` needs an upper bound: `">=2.0.0 <3.0.0"`, never `">=2.0.0"`.
+- `fliks` needs an upper bound: `">=3.0.0 <4.0.0"`, never `">=3.0.0"`. Bump it when a new Fliks major ships and the plugin has been checked against it.
 
 ## Logging and failure
 

@@ -9,9 +9,10 @@ import {
 } from './catalog';
 import { PLUGIN_API_VERSION, SUPPORTED_PLUGIN_API_VERSIONS } from '../../../common/plugin-contract';
 
-/** A `fliks` range every test can rely on matching this repo's own `package.json` version
- *  (same convention as `plugin-registry.service.spec.ts`'s `COMPATIBLE_RANGE`). */
-const COMPATIBLE_RANGE = '>=1.0.0 <3.0.0';
+/** A `fliks` range every test can rely on matching this repo's own `package.json` version —
+ *  unbounded above, so a release bump can never make the fixture incompatible (same
+ *  convention as `plugin-registry.service.spec.ts`'s `COMPATIBLE_RANGE`). */
+const COMPATIBLE_RANGE = '>=1.0.0';
 
 function version(overrides: Partial<CatalogVersionEntry> = {}): CatalogVersionEntry {
   return { version: '1.0.0', pluginApi: PLUGIN_API_VERSION, fliks: COMPATIBLE_RANGE, ...overrides };

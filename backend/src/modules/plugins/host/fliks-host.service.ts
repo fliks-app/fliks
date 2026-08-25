@@ -536,6 +536,8 @@ export class FliksHostImpl implements PluginHostApi {
         sourceUnknownLang,
         runtimeMinutes: media.runtime ?? 0,
         expectedTitle: expectedTitles,
+        expectedSeason: p.seasonNumber,
+        expectedEpisode: p.episodeNumber,
       },
       {
         scoreCustomFormats: (title, meta) =>
