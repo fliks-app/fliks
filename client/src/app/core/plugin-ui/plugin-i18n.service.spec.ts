@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { ApplicationRef, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   TranslateLoader,
@@ -18,6 +18,13 @@ describe('PluginI18nService', () => {
   });
 
   function setup(pluginI18n: Record<string, Record<string, string>>) {
+    // Signal-backed like the real registry, so `install()` reproduces what a
+    // runtime `registry.load()` does to every consumer that reads it.
+    const dicts = signal(pluginI18n);
+    const fakeRegistry = {
+      i18nFor: (lang: string) => dicts()[lang],
+      pluginEntries: () => Object.keys(dicts()),
+    };
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -29,12 +36,13 @@ describe('PluginI18nService', () => {
             useValue: { getTranslation: (lang: string) => of(loaderData[lang] ?? {}) },
           },
         }),
-        { provide: PluginUiRegistryService, useValue: { i18nFor: (lang: string) => pluginI18n[lang] } },
+        { provide: PluginUiRegistryService, useValue: fakeRegistry },
       ],
     });
     return {
       translate: TestBed.inject(TranslateService),
       i18n: TestBed.inject(PluginI18nService),
+      install: (next: Record<string, Record<string, string>>) => dicts.set(next),
     };
   }
 
@@ -128,5 +136,20 @@ describe('PluginI18nService', () => {
     // 'fr' has no plugin dict at all; ngx-translate's own fallbackLang picks
     // up the key from 'en', where the plugin's merge landed at init.
     expect(translate.instant('fliks.foo.title')).toBe('Foo');
+  });
+
+  // Installing a plugin reloads the registry mid-session; before this the merge only
+  // ran from the app initializer, so its labels stayed raw until a full page reload.
+  it('VERDICT: a plugin installed after boot resolves its labels with no page reload', async () => {
+    loaderData['en'] = { nav: { home: 'Home' } };
+    const { translate, i18n, install } = setup({});
+    i18n.init();
+    expect(translate.instant('acme.hello')).toBe('acme.hello');
+
+    install({ en: { 'acme.hello': 'Hello' } });
+    await TestBed.inject(ApplicationRef).whenStable();
+
+    expect(translate.instant('acme.hello')).toBe('Hello');
+    expect(translate.instant('nav.home')).toBe('Home');
   });
 });

@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, effect, inject } from '@angular/core';
 import { TranslateService, TranslateStore, insertValue, mergeDeep, type TranslationObject } from '@ngx-translate/core';
 import { PluginUiRegistryService } from './plugin-ui-registry.service';
 
@@ -22,6 +22,15 @@ export class PluginI18nService {
     // including a later runtime language switch.
     this.translate.onLangChange.subscribe(({ lang }) => this.mergeIntoLang(lang));
     this.translate.onFallbackLangChange.subscribe(({ lang }) => this.mergeIntoLang(lang));
+
+    // Installing, enabling or disabling a plugin reloads the registry; without this
+    // its labels stay unresolved until the next full page load. The entries read is
+    // the dependency — `getLangs()` can be empty, so relying on `mergeIntoLang` to
+    // register it would leave the effect subscribed to nothing.
+    effect(() => {
+      this.registry.pluginEntries();
+      for (const lang of this.translate.getLangs()) this.mergeIntoLang(lang);
+    });
   }
 
   /** Called once from the app initializer, after the registry has loaded.
