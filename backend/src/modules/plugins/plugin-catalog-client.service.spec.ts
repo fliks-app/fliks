@@ -312,5 +312,80 @@ describe('PluginCatalogClientService', () => {
       expect(find).toHaveBeenCalledWith({ where: { enabled: true } });
       expect(service.refreshSource).toHaveBeenCalledWith(enabledSource);
     });
+
+    it('one source throwing does not abort the rest of the run', async () => {
+      const bad = fakeSource({ id: 1 });
+      const good = fakeSource({ id: 2 });
+      const find = jest.fn().mockResolvedValue([bad, good]);
+      const service = new PluginCatalogClientService({ find } as never, fakePackageRepo() as never, fakeRegistry() as never);
+      jest
+        .spyOn(service, 'refreshSource')
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValueOnce({ ok: true });
+
+      await service.refreshAll();
+
+      expect(service.refreshSource).toHaveBeenCalledTimes(2);
+      expect(service.refreshSource).toHaveBeenLastCalledWith(good);
+    });
+  });
+
+  describe('boot refresh', () => {
+    function serviceWith(sources: PluginSource[]) {
+      const find = jest.fn().mockResolvedValue(sources);
+      const service = new PluginCatalogClientService({ find } as never, fakePackageRepo() as never, fakeRegistry() as never);
+      jest.spyOn(service, 'refreshSource').mockResolvedValue({ ok: true });
+      return service;
+    }
+
+    // The regression: a migration-seeded source has no cached catalog, so before this
+    // the catalogue stayed empty until the 3am job ran.
+    it('VERDICT: refreshes a source that has never been fetched', async () => {
+      const service = serviceWith([fakeSource({ cachedCatalog: null, lastRefreshedAt: null })]);
+
+      await service.refreshAll({ staleOnly: true });
+
+      expect(service.refreshSource).toHaveBeenCalledTimes(1);
+    });
+
+    it('refreshes a cached catalog that has gone stale', async () => {
+      const old = new Date(Date.now() - 7 * 60 * 60 * 1000);
+      const service = serviceWith([fakeSource({ cachedCatalog: {}, lastRefreshedAt: old })]);
+
+      await service.refreshAll({ staleOnly: true });
+
+      expect(service.refreshSource).toHaveBeenCalledTimes(1);
+    });
+
+    // A crash-restart loop must not hammer a public catalog host.
+    it('VERDICT: leaves a freshly cached catalog alone, so restarts do not refetch', async () => {
+      const recent = new Date(Date.now() - 60 * 1000);
+      const service = serviceWith([fakeSource({ cachedCatalog: {}, lastRefreshedAt: recent })]);
+
+      await service.refreshAll({ staleOnly: true });
+
+      expect(service.refreshSource).not.toHaveBeenCalled();
+    });
+
+    // Without this the hook could be deleted and every test above would still pass.
+    it('VERDICT: the bootstrap hook is what triggers the stale-only refresh', async () => {
+      const service = serviceWith([fakeSource({ cachedCatalog: null, lastRefreshedAt: null })]);
+      const refreshAll = jest.spyOn(service, 'refreshAll');
+
+      service.onApplicationBootstrap();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(refreshAll).toHaveBeenCalledWith({ staleOnly: true });
+      expect(service.refreshSource).toHaveBeenCalledTimes(1);
+    });
+
+    it('the scheduled run still refetches everything, stale or not', async () => {
+      const recent = new Date(Date.now() - 60 * 1000);
+      const service = serviceWith([fakeSource({ cachedCatalog: {}, lastRefreshedAt: recent })]);
+
+      await service.refreshAll();
+
+      expect(service.refreshSource).toHaveBeenCalledTimes(1);
+    });
   });
 });
