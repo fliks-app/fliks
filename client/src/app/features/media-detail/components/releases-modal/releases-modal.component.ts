@@ -32,12 +32,6 @@ export class ReleasesModalComponent {
   readonly grabPrefix = input('r');
   readonly showCfScore = input(true);
 
-  /** Show a "Grab Best" button (episode releases). */
-  readonly showGrabBest = input(false);
-  readonly grabBestDisabled = input(false);
-  readonly grabBestBusy = input(false);
-  readonly grabBest = output<void>();
-
   readonly grab = output<{ release: MovieRelease; index: number }>();
 
   private readonly dismissStack = inject(DismissableStackService);
