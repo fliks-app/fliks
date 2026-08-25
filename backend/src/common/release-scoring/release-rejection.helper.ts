@@ -399,6 +399,16 @@ export function titleMatchesExpectation(
   return matchesIndexedExpectation(releaseTitleTokens(releaseTitle), index, whenUnreadable);
 }
 
+/** `S04E03`, `S04`, or `?` — the display params of an EPISODE_MISMATCH. */
+function formatSeasonEpisode(
+  season: number | null | undefined,
+  episode: number | null | undefined,
+): string {
+  const n = (v: number) => String(v).padStart(2, '0');
+  if (season == null) return episode == null ? '?' : `E${n(episode)}`;
+  return episode == null ? `S${n(season)}` : `S${n(season)}E${n(episode)}`;
+}
+
 export function computeRejections(opts: {
   qualityId: number;
   allowed: Set<number>;
@@ -419,6 +429,12 @@ export function computeRejections(opts: {
    *  with TMDB / TVDB alternative titles so that releases indexed under a
    *  localised name still pass; otherwise they get `TITLE_MISMATCH`. */
   expectedTitle?: string | string[];
+  /** Season the request targets. A release naming a different season is
+   *  rejected; a title with no readable season number is left alone. */
+  expectedSeason?: number;
+  /** Episode the request targets. A release naming a different episode is
+   *  rejected; a full-season pack still satisfies it. */
+  expectedEpisode?: number;
 }): ReleaseRejection[] {
   const out: ReleaseRejection[] = [];
 
@@ -428,6 +444,30 @@ export function computeRejections(opts: {
     !titleMatchesExpectation(opts.releaseTitle, opts.expectedTitle)
   ) {
     out.push({ code: 'TITLE_MISMATCH' });
+  }
+
+  if (
+    opts.releaseTitle &&
+    (opts.expectedSeason != null || opts.expectedEpisode != null)
+  ) {
+    const se = parseSeasonEpisode(opts.releaseTitle);
+    const wrongSeason =
+      opts.expectedSeason != null &&
+      se.season != null &&
+      se.season !== opts.expectedSeason;
+    const wrongEpisode =
+      opts.expectedEpisode != null &&
+      se.episode != null &&
+      se.episode !== opts.expectedEpisode;
+    if (wrongSeason || wrongEpisode) {
+      out.push({
+        code: 'EPISODE_MISMATCH',
+        params: {
+          expected: formatSeasonEpisode(opts.expectedSeason, opts.expectedEpisode),
+          actual: formatSeasonEpisode(se.season, se.episode),
+        },
+      });
+    }
   }
 
   if (!opts.allowed.has(opts.qualityId)) {
@@ -507,14 +547,16 @@ export function computeRejections(opts: {
  * 4. Alive (seeders > 0) > dead — a zero-seeder release can't be downloaded,
  *    so it sinks below every live release regardless of quality.
  * 5. Quality rank (higher = better)
- * 6. Freeleech bonus
- * 7. Custom format score (higher = better)
- * 8. Seeders (more = better, log scale to avoid over-weighting)
- * 9. Leechers (more = better, same scale) — breaks seeder ties toward the
+ * 6. Full-season pack (`preferFullSeason` only) — one pack beats loose
+ *    episodes of the same quality, but never outranks a better quality.
+ * 7. Freeleech bonus
+ * 8. Custom format score (higher = better)
+ * 9. Seeders (more = better, log scale to avoid over-weighting)
+ * 10. Leechers (more = better, same scale) — breaks seeder ties toward the
  *    busier swarm.
- * 10. Size closer to preferred (less deviation = better)
+ * 11. Size closer to preferred (less deviation = better)
  *
- * Availability (4, 8, 9) outranks quality only at the dead/alive boundary;
+ * Availability (4, 9, 10) outranks quality only at the dead/alive boundary;
  * between two live releases quality wins, and seeders/leechers order releases
  * within the same quality tier ahead of the weaker size-proximity signal.
  */
@@ -530,8 +572,9 @@ export function sortReleasesByRelevance<
     leechers: number;
     freeleech: boolean;
     sizeDeviation?: number | null;
+    isFullSeason?: boolean;
   },
->(rows: T[]): T[] {
+>(rows: T[], opts?: { preferFullSeason?: boolean }): T[] {
   // log2 gap that counts as a real difference (~19%); smaller gaps are noise
   // and fall through to the next tiebreak rather than flipping the order.
   const SWARM_EPSILON = 0.25;
@@ -558,24 +601,28 @@ export function sortReleasesByRelevance<
     // 5. Quality rank desc
     if (a.rank !== b.rank) return b.rank - a.rank;
 
-    // 6. Freeleech bonus
+    // 6. One pack over loose episodes, but only at equal quality.
+    if (opts?.preferFullSeason && !!a.isFullSeason !== !!b.isFullSeason)
+      return a.isFullSeason ? -1 : 1;
+
+    // 7. Freeleech bonus
     if (a.freeleech !== b.freeleech) return a.freeleech ? -1 : 1;
 
-    // 7. Custom format score desc
+    // 8. Custom format score desc
     if (a.customFormatScore !== b.customFormatScore)
       return b.customFormatScore - a.customFormatScore;
 
-    // 8. Seeders desc (log scale)
+    // 9. Seeders desc (log scale)
     const aSeed = swarmScore(a.seeders);
     const bSeed = swarmScore(b.seeders);
     if (Math.abs(aSeed - bSeed) > SWARM_EPSILON) return bSeed - aSeed;
 
-    // 9. Leechers desc (log scale) — tie-break toward the busier swarm.
+    // 10. Leechers desc (log scale) — tie-break toward the busier swarm.
     const aLeech = swarmScore(a.leechers);
     const bLeech = swarmScore(b.leechers);
     if (Math.abs(aLeech - bLeech) > SWARM_EPSILON) return bLeech - aLeech;
 
-    // 10. Closer to preferred size wins (only when both rows expose it
+    // 11. Closer to preferred size wins (only when both rows expose it
     //     and the gap is big enough to matter — within 5% of each other
     //     counts as tied, otherwise tiny noise would flip the order).
     if (a.sizeDeviation != null && b.sizeDeviation != null) {
@@ -640,6 +687,10 @@ export async function scoreAndSortReleases(
      *  doesn't contain the significant tokens of *any* candidate are
      *  flagged TITLE_MISMATCH. */
     expectedTitle?: string | string[];
+    /** Season / episode the search targets, when it is episode-scoped —
+     *  releases naming another one are flagged EPISODE_MISMATCH. */
+    expectedSeason?: number;
+    expectedEpisode?: number;
   },
   deps: ReleaseScorerDeps,
 ): Promise<ScoredRelease[]> {
@@ -671,6 +722,8 @@ export async function scoreAndSortReleases(
         sourceMinSeeders: opts.sourceMinSeeders,
         releaseTitle: r.title,
         expectedTitle: opts.expectedTitle,
+        expectedSeason: opts.expectedSeason,
+        expectedEpisode: opts.expectedEpisode,
       });
       return {
         ...r,
@@ -696,5 +749,9 @@ export async function scoreAndSortReleases(
       };
     }),
   );
-  return sortReleasesByRelevance(rows);
+  // Season-scoped search (a season, not one episode): prefer a pack.
+  return sortReleasesByRelevance(rows, {
+    preferFullSeason:
+      opts.expectedSeason != null && opts.expectedEpisode == null,
+  });
 }

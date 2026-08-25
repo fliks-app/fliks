@@ -1,4 +1,5 @@
 import {
+  computeRejections,
   releaseMatchesMedia,
   resolveSearchTitles,
   sortReleasesByRelevance,
@@ -231,5 +232,104 @@ describe('resolveSearchTitles + titleMatchesExpectation', () => {
         '東京 Tokyo Story',
       ]),
     ).toBe(true);
+  });
+});
+
+describe('computeRejections — episode targeting', () => {
+  const reject = (releaseTitle: string, expectedSeason?: number, expectedEpisode?: number) =>
+    computeRejections({
+      qualityId: 1,
+      allowed: new Set([1]),
+      languageId: 1,
+      allowedLangs: new Set<number>(),
+      isBlocklisted: false,
+      sizeBytes: 0,
+      runtimeMinutes: 30,
+      sizeByQuality: new Map(),
+      seeders: 10,
+      sourceId: 0,
+      sourceMinSeeders: new Map(),
+      releaseTitle,
+      expectedSeason,
+      expectedEpisode,
+    }).map((r) => r.code);
+
+  it('rejects a release for another episode of the same season', () => {
+    expect(reject('Some.Show.S04E02.1080p.WEB-DL.x264', 4, 3)).toEqual([
+      'EPISODE_MISMATCH',
+    ]);
+  });
+
+  it('accepts the requested episode', () => {
+    expect(reject('Some.Show.S04E03.1080p.WEB-DL.x264', 4, 3)).toEqual([]);
+  });
+
+  it('accepts a full-season pack covering the requested episode', () => {
+    expect(reject('Some.Show.S04.COMPLETE.1080p.WEB-DL', 4, 3)).toEqual([]);
+  });
+
+  it('rejects a pack from another season', () => {
+    expect(reject('Some.Show.S03.COMPLETE.1080p.WEB-DL', 4, 3)).toEqual([
+      'EPISODE_MISMATCH',
+    ]);
+  });
+
+  it('names both sides in the rejection params', () => {
+    const [rejection] = computeRejections({
+      qualityId: 1,
+      allowed: new Set([1]),
+      languageId: 1,
+      allowedLangs: new Set<number>(),
+      isBlocklisted: false,
+      sizeBytes: 0,
+      runtimeMinutes: 30,
+      sizeByQuality: new Map(),
+      seeders: 10,
+      sourceId: 0,
+      sourceMinSeeders: new Map(),
+      releaseTitle: 'Some.Show.S04E02.1080p.WEB-DL.x264',
+      expectedSeason: 4,
+      expectedEpisode: 3,
+    });
+    expect(rejection.params).toEqual({ expected: 'S04E03', actual: 'S04E02' });
+  });
+
+  it('leaves an unreadable title alone rather than guessing', () => {
+    expect(reject('Some.Show.1080p.WEB-DL.x264', 4, 3)).toEqual([]);
+  });
+
+  it('ignores episode numbers when no episode is targeted', () => {
+    expect(reject('Some.Show.S04E02.1080p.WEB-DL.x264')).toEqual([]);
+  });
+});
+
+describe('sortReleasesByRelevance — season-scoped pack preference', () => {
+  const pack = (over: Partial<Row> & { id: string }) =>
+    row({ isFullSeason: true, ...over });
+
+  it('prefers a pack over a single episode of the same quality', () => {
+    const single = row({ id: 'single', seeders: 5000 });
+    const seasonPack = pack({ id: 'pack', seeders: 20 });
+    expect(
+      sortReleasesByRelevance([single, seasonPack], {
+        preferFullSeason: true,
+      }).map((r) => r.id),
+    ).toEqual(['pack', 'single']);
+  });
+
+  it('keeps a better-quality single episode above a weaker pack', () => {
+    const single = row({ id: 'single-1080p', rank: 200 });
+    const seasonPack = pack({ id: 'pack-720p', rank: 100 });
+    expect(
+      sortReleasesByRelevance([seasonPack, single], {
+        preferFullSeason: true,
+      }).map((r) => r.id),
+    ).toEqual(['single-1080p', 'pack-720p']);
+  });
+
+  it('ignores pack status when the search is not season-scoped', () => {
+    const single = row({ id: 'single', seeders: 5000 });
+    const seasonPack = pack({ id: 'pack', seeders: 20 });
+    expect(order([single, seasonPack])).toEqual(['single', 'pack']);
   });
 });
