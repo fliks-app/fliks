@@ -1,5 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
@@ -15,6 +14,10 @@ const CATALOG_REQUEST_TIMEOUT_MS = 10_000;
 /** A catalog is a small JSON index of plugin metadata, nowhere near the 8 MiB
  *  archive cap (`archive/limits.ts`) — generous versus today's few-KB catalogs. */
 const CATALOG_MAX_RESPONSE_BYTES = 1024 * 1024;
+/** How old a cached catalog may be before boot refetches it. Short enough that a
+ *  restart picks up a day-old catalog, long enough that a crash-restart loop does
+ *  not hammer a public host. */
+const STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 
 export type CatalogRefreshFailureReason = 'insecure-url' | 'network-error' | 'bad-signature' | 'malformed-catalog';
 
@@ -29,7 +32,7 @@ export type CatalogRefreshResult = { ok: true } | { ok: false; reason: CatalogRe
  * checks share a shape but not a trust boundary, so they stay separate on purpose.
  */
 @Injectable()
-export class PluginCatalogClientService {
+export class PluginCatalogClientService implements OnApplicationBootstrap {
   private readonly logger = new Logger(PluginCatalogClientService.name);
 
   constructor(
@@ -40,13 +43,40 @@ export class PluginCatalogClientService {
     private readonly registry: PluginRegistryService,
   ) {}
 
+  /**
+   * A source seeded by migration starts with no cached catalog, and until this ran
+   * only the 3am job filled it — a fresh install browsed an empty catalogue for up
+   * to a day. Refreshing what is stale at boot closes that window.
+   *
+   * Never awaited and never fatal: an unreachable catalog must not delay startup.
+   */
+  onApplicationBootstrap(): void {
+    void this.refreshAll({ staleOnly: true }).catch((err: unknown) =>
+      this.logger.warn(`boot catalog refresh failed: ${(err as Error).message}`),
+    );
+  }
+
   /** Driven by `SchedulerService`'s `RefreshPluginSources` job, so the run is listed,
-   *  triggerable and recorded — a bare `@Cron` here was none of those. */
-  async refreshAll(): Promise<void> {
+   *  triggerable and recorded — a bare `@Cron` here was none of those. `staleOnly`
+   *  is what boot passes; the scheduled run always refetches everything. */
+  async refreshAll(opts: { staleOnly?: boolean } = {}): Promise<void> {
     const sources = await this.sourceRepo.find({ where: { enabled: true } });
+    const now = Date.now();
     for (const source of sources) {
-      await this.refreshSource(source);
+      if (opts.staleOnly && !this.isStale(source, now)) continue;
+      try {
+        await this.refreshSource(source);
+      } catch (err) {
+        // `refreshSource` reports its own expected failures; this catches the
+        // unexpected ones so a single bad source cannot abort the whole run.
+        this.logger.warn(`catalog refresh threw for source #${source.id}: ${(err as Error).message}`);
+      }
     }
+  }
+
+  private isStale(source: PluginSource, now: number): boolean {
+    if (!source.cachedCatalog || !source.lastRefreshedAt) return true;
+    return now - source.lastRefreshedAt.getTime() > STALE_AFTER_MS;
   }
 
   /**
