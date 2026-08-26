@@ -343,3 +343,44 @@ describe('sortReleasesByRelevance — season-scoped pack preference', () => {
     expect(order([single, seasonPack])).toEqual(['single', 'pack']);
   });
 });
+
+/**
+ * `resolutionUpgradeOnly` survived the acquisition split as data and nothing else: core shipped
+ * `want.minResolution` over the seam, the plugin's own note assumed core folded it into the
+ * rejections, and core never did. The toggle was inert for every profile.
+ */
+describe('computeRejections — resolution upgrade only', () => {
+  const base = {
+    qualityId: 9,
+    allowed: new Set([9]),
+    languageId: 1,
+    allowedLangs: new Set<number>(),
+    isBlocklisted: false,
+    sizeBytes: 0,
+    runtimeMinutes: 0,
+    sizeByQuality: new Map(),
+    seeders: 10,
+    sourceId: 0,
+    sourceMinSeeders: new Map<number, number>(),
+  };
+
+  const codes = (releaseTitle: string, minResolution?: number) =>
+    computeRejections({ ...base, releaseTitle, minResolution }).map((r) => r.code);
+
+  it('VERDICT: refuses a same-resolution release when only a resolution upgrade is allowed', () => {
+    expect(codes('Show.S01E01.1080p.BluRay.x264', 1080)).toEqual(['RESOLUTION_NOT_UPGRADED']);
+  });
+
+  it('accepts a higher resolution', () => {
+    expect(codes('Show.S01E01.2160p.WEB-DL.x265', 1080)).toEqual([]);
+  });
+
+  it('refuses a lower resolution too, not just an equal one', () => {
+    expect(codes('Show.S01E01.720p.WEB-DL.x264', 1080)).toEqual(['RESOLUTION_NOT_UPGRADED']);
+  });
+
+  it('does not apply when the profile asks nothing — a missing grab must stay open', () => {
+    expect(codes('Show.S01E01.1080p.BluRay.x264', 0)).toEqual([]);
+    expect(codes('Show.S01E01.1080p.BluRay.x264', undefined)).toEqual([]);
+  });
+});

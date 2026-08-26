@@ -102,5 +102,16 @@ export function parseReleaseQuality(title: string): ParsedReleaseQuality {
     fuzzy.find((q) => q.source === source) ??
     fuzzy[fuzzy.length - 1] ??
     APP_QUALITIES[0];
+  // A resolution above every known bucket — 4320p/8K — matched nothing, so `fuzzy` was empty and
+  // the last resort read WORKPRINT: the lowest rank in the table, shown to the user as the quality
+  // of an 8K file. The label is corrected to the nearest bucket for display; the quality itself is
+  // deliberately left off the table, so no profile can allow it and `QUALITY_NOT_ALLOWED` stays the
+  // honest verdict. Mapping it onto 2160p would make it pass a 4K profile at several times the size.
+  if (resolution > 0 && !fuzzy.length) {
+    const nearest = APP_QUALITIES.reduce((best, q) =>
+      q.resolution > best.resolution && q.resolution <= resolution ? q : best,
+    );
+    return { quality: fallback, label: `${resolution}p (${nearest.name})` };
+  }
   return { quality: fallback, label: fallback.name };
 }

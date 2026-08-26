@@ -1058,7 +1058,8 @@
       "MIN_SEEDERS": "Seeders insuficientes\n({{actual}} < {{min}})",
       "TITLE_MISMATCH": "El título no coincide con el medio",
       "EPISODE_MISMATCH": "La release no corresponde a {{expected}} (encontrado {{actual}})",
-      "FULL_SEASON_FOR_EPISODE": "Temporada completa, pero solo se necesita {{expected}}"
+      "FULL_SEASON_FOR_EPISODE": "Temporada completa, pero solo se necesita {{expected}}",
+      "RESOLUTION_NOT_UPGRADED": "No mejora la resolución ({{actual}}p, se necesita más de {{min}}p)"
     }
   },
   "requests": {
