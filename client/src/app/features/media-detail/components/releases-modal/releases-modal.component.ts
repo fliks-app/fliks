@@ -12,6 +12,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
+import { LucideSearchX } from '@lucide/angular';
 import { MovieRelease } from '../../media-detail-release-picker.service';
 import { IndexerRosterEntry } from '../../release-search-stream.service';
 import { ReleasesTableComponent } from '../releases-table/releases-table.component';
@@ -31,7 +32,7 @@ type IndexerSearchStateOrAll = IndexerRosterEntry['state'] | 'all';
 
 @Component({
   selector: 'app-releases-modal',
-  imports: [FormsModule, TranslateModule, ReleasesTableComponent],
+  imports: [FormsModule, TranslateModule, ReleasesTableComponent, LucideSearchX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './releases-modal.component.html',
 })
@@ -96,6 +97,12 @@ export class ReleasesModalComponent {
   /** Rows and progress coexist: the full-panel spinner is only for a search with nothing
    *  back yet. */
   readonly showSpinnerPanel = computed(() => this.loading() && this.releases().length === 0);
+
+  /** An open indexer tab explains itself; otherwise the whole search speaks, which the caller
+   *  narrows (no quality profile, for instance). */
+  readonly emptyKey = computed(() =>
+    this.activeTab() !== null ? 'media_detail.releases_empty_indexer' : this.emptyMessage(),
+  );
 
   showModal() {
     this.activeTab.set(null);

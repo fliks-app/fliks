@@ -900,7 +900,7 @@
     "blocklisted": "Bloccato",
     "releases_empty": "Nessuna release trovata. Verifica le tue fonti configurate.",
     "releases_tab_all": "Tutti",
-    "releases_empty_indexer": "Questo indicizzatore non ha restituito nulla per questa ricerca.",
+    "releases_empty_indexer": "Nessun risultato per questo indicizzatore.",
     "indexer_failed": "Questo indicizzatore non ha risposto in tempo",
     "indexer_cooldown": "Ignorato — questo indicizzatore è in pausa dopo un errore",
     "releases_error": "Impossibile caricare le release.",
