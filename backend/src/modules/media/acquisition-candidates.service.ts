@@ -44,6 +44,16 @@ export interface SeasonPackTarget {
  * from SchedulerService so the query + filter logic can be exercised without
  * the cron/torznab/qBittorrent machinery around it.
  */
+/** `{at-cutoff: 24, upgrades-disabled: 2}` → `"24 at cutoff, 2 upgrades disabled"`. */
+function describeExclusions(reasons: string[]): string {
+  const counts = new Map<string, number>();
+  for (const r of reasons) counts.set(r, (counts.get(r) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, n]) => `${n} ${reason.replace(/-/g, ' ')}`)
+    .join(', ');
+}
+
 @Injectable()
 export class AcquisitionCandidatesService {
   private readonly log = new Logger(AcquisitionCandidatesService.name);
@@ -58,7 +68,7 @@ export class AcquisitionCandidatesService {
     private readonly autoGrab: AutoGrabPipelineService,
   ) {}
 
-  async listMovieTargets(mediaIds?: number[]): Promise<MovieTarget[]> {
+  async listMovieTargets(mediaIds?: number[], quiet = false): Promise<MovieTarget[]> {
     const qb = this.mediaRepo
       .createQueryBuilder('m')
       .leftJoinAndSelect('m.qualityProfile', 'qp')
@@ -71,19 +81,23 @@ export class AcquisitionCandidatesService {
       qb.andWhere('m.id IN (:...mediaIds)', { mediaIds });
     }
     const allCandidates = await qb.getMany();
-    const candidates = allCandidates.filter((m) =>
-      this.autoGrab.shouldSearchMissing(m, m.files ?? []),
-    );
-    if (allCandidates.length !== candidates.length) {
+    const candidates: Media[] = [];
+    const excluded: string[] = [];
+    for (const m of allCandidates) {
+      const reason = this.autoGrab.searchExclusionReason(m, m.files ?? []);
+      if (reason) excluded.push(reason);
+      else candidates.push(m);
+    }
+    if (excluded.length && !quiet) {
       this.log.log(
-        `SearchMissing[movies]: ${candidates.length}/${allCandidates.length} need a search (${allCandidates.length - candidates.length} at cutoff, unprofiled, or upgrades disabled)`,
+        `SearchMissing[movies]: ${candidates.length} need a search, ${excluded.length} excluded (${describeExclusions(excluded)})`,
       );
     }
 
     return candidates.map((media) => ({ media, files: media.files ?? [] }));
   }
 
-  async listEpisodeTargets(mediaIds?: number[]): Promise<EpisodeTarget[]> {
+  async listEpisodeTargets(mediaIds?: number[], quiet = false): Promise<EpisodeTarget[]> {
     const today = new Date().toISOString().slice(0, 10);
 
     const qb = this.episodeRepo
@@ -160,17 +174,24 @@ export class AcquisitionCandidatesService {
     const episodeFiles = (ep: Episode): { quality: string | null }[] =>
       ep.hasFile ? [{ quality: fileQualityByEpId.get(ep.id) ?? null }] : [];
 
-    const allEpisodes = episodes;
-    const filteredEpisodes = allEpisodes.filter((ep) => {
-      const media = (ep as unknown as { season: Season }).season
-        .media as Media;
-      return this.autoGrab.shouldSearchMissing(media, episodeFiles(ep));
-    });
-    if (allEpisodes.length !== filteredEpisodes.length) {
-      this.log.log(
-        `SearchMissing[episodes]: ${filteredEpisodes.length}/${allEpisodes.length} need a search (${allEpisodes.length - filteredEpisodes.length} at cutoff, unprofiled, or upgrades disabled)`,
-      );
+    const filteredEpisodes: Episode[] = [];
+    const excluded: string[] = [];
+    for (const ep of episodes) {
+      const media = (ep as unknown as { season: Season }).season.media as Media;
+      const reason = this.autoGrab.searchExclusionReason(media, episodeFiles(ep));
+      if (reason) excluded.push(reason);
+      else filteredEpisodes.push(ep);
     }
+    // The count above only ever saw rows the query returned, so "0 need a search" read as
+    // "nothing is missing" when it could equally mean the query never offered the missing
+    // episodes. Reporting what the query itself left out is what tells those two apart.
+    const ineligible = quiet ? 0 : await this.countIneligibleEpisodes(mediaIds);
+    if (!quiet)
+      this.log.log(
+      `SearchMissing[episodes]: ${filteredEpisodes.length} need a search` +
+        (excluded.length ? `, ${excluded.length} excluded (${describeExclusions(excluded)})` : '') +
+        (ineligible ? `; ${ineligible} monitored episode(s) not eligible at all (already on disk, unaired, or no air date)` : ''),
+    );
     episodes = filteredEpisodes;
 
     return episodes.map((ep) => {
@@ -178,6 +199,29 @@ export class AcquisitionCandidatesService {
       const media = (season as unknown as { media: Media }).media;
       return { media, season, episode: ep, files: episodeFiles(ep) };
     });
+  }
+
+  /**
+   * Monitored, aired episodes the candidate query itself refuses — content already on disk,
+   * or no air date at all. Counted so a run reporting nothing to search says which of the two
+   * it is: an operator can act on "47 have no air date", not on silence.
+   */
+  private async countIneligibleEpisodes(mediaIds?: number[]): Promise<number> {
+    const today = new Date().toISOString().slice(0, 10);
+    const qb = this.episodeRepo
+      .createQueryBuilder('ep')
+      .innerJoin('ep.season', 'season')
+      .innerJoin('season.media', 'media')
+      .where('media.monitored = true')
+      .andWhere('media.type = :type', { type: MediaType.SERIES })
+      .andWhere('season.monitored = true')
+      .andWhere('ep.monitored = true')
+      .andWhere(
+        `(ep."airDate" IS NULL OR ep."airDate" > :today OR ${onDiskSql('ep')})`,
+        { today },
+      );
+    if (mediaIds?.length) qb.andWhere('media.id IN (:...mediaIds)', { mediaIds });
+    return qb.getCount();
   }
 
   async groupIntoSeasonPacks(

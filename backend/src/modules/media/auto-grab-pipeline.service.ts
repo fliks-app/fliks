@@ -28,6 +28,9 @@ export type SearchDecision =
       minRankExclusive: number;
       /** Releases must have `rank <= maxRankInclusive`. +Infinity for "missing". */
       maxRankInclusive: number;
+      /** Which of the three routes to `skip` was taken. A log that ORs them together cannot
+       *  tell an operator whether to change a profile, a cutoff, or nothing at all. */
+      skipReason?: 'at-cutoff' | 'upgrades-disabled' | 'no-cutoff-configured';
     };
 
 /**
@@ -97,11 +100,11 @@ export class AutoGrabPipelineService {
     // manual search can score releases even though auto-grab has nothing to do.
     const maxRankInclusive = cutoffRank ?? Number.POSITIVE_INFINITY;
     if (!profile.upgradeAllowed)
-      return { mode: 'skip', minRankExclusive: currentRank, maxRankInclusive };
+      return { mode: 'skip', minRankExclusive: currentRank, maxRankInclusive, skipReason: 'upgrades-disabled' };
     if (cutoffRank == null)
-      return { mode: 'skip', minRankExclusive: currentRank, maxRankInclusive };
+      return { mode: 'skip', minRankExclusive: currentRank, maxRankInclusive, skipReason: 'no-cutoff-configured' };
     if (currentRank >= cutoffRank)
-      return { mode: 'skip', minRankExclusive: currentRank, maxRankInclusive: cutoffRank };
+      return { mode: 'skip', minRankExclusive: currentRank, maxRankInclusive: cutoffRank, skipReason: 'at-cutoff' };
     return {
       mode: 'upgrade',
       minRankExclusive: currentRank,
@@ -117,5 +120,16 @@ export class AutoGrabPipelineService {
   ): boolean {
     const decision = this.classifyForSearch(media, files);
     return decision.mode === 'missing' || decision.mode === 'upgrade';
+  }
+
+  /** Why a row was left out, in the vocabulary an operator can act on. */
+  searchExclusionReason(
+    media: Media,
+    files: { quality?: string | null }[],
+  ): string | null {
+    const decision = this.classifyForSearch(media, files);
+    if (decision.mode === 'unprofiled') return 'unprofiled';
+    if (decision.mode === 'skip') return decision.skipReason ?? 'skip';
+    return null;
   }
 }

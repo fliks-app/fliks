@@ -71,6 +71,11 @@ const QUEUE_PAGE_SIZE_MAX = 100;
 /** `acquisition.candidates`'s own bound, per the contract's doc comment. */
 const MAX_CANDIDATES_LIMIT = 500;
 
+/** How long a paginated candidate walk may reuse the list it started from. A walk takes seconds;
+ *  this only has to outlive one, and re-enumerating mid-walk was never a consistency guarantee —
+ *  the offset cursor would skip or repeat rows whenever the set shifted underneath it. */
+const CANDIDATES_PAGE_CACHE_MS = 60_000;
+
 type ReleaseMatchResult = Awaited<
   ReturnType<PluginHostApi['releases.match']>
 >[number];
@@ -116,6 +121,10 @@ export class FliksHostImpl implements PluginHostApi {
   ) {}
 
   private readonly progressGates = new Map<number, ProgressGate>();
+
+  /** The enumerated list a cursor walks. One entry: a walk is sequential, and a second caller
+   *  starting its own walk simply re-enumerates rather than reading someone else's page. */
+  private candidatesPage: { key: string; at: number; targets: AcquisitionTarget[] } | null = null;
 
   /** `PluginHostContext` (set only by `PluginHostBindingService`, never by a plugin's
    *  payload) wins when bound; the constructor value is the in-process default. */
@@ -245,6 +254,17 @@ export class FliksHostImpl implements PluginHostApi {
       Math.max(Math.trunc(p.limit) || 1, 1),
       MAX_CANDIDATES_LIMIT,
     );
+    const cacheKey = JSON.stringify([
+      p.kind ?? null,
+      p.mediaIds ? [...p.mediaIds].sort((a, b) => a - b) : null,
+      p.availableOn,
+    ]);
+    // A continuation reuses what the first page enumerated. Without this every page re-ran the
+    // whole enumeration — five identical log lines in one second were the visible half of it.
+    const cached = p.cursor ? this.candidatesPage : null;
+    if (cached && cached.key === cacheKey && Date.now() - cached.at < CANDIDATES_PAGE_CACHE_MS) {
+      return this.pageOf(cached.targets, p.cursor, limit);
+    }
     const wantMovies = p.kind !== 'series';
     const wantSeries = p.kind !== 'movie';
     const targets: AcquisitionTarget[] = [];
@@ -252,6 +272,9 @@ export class FliksHostImpl implements PluginHostApi {
     if (wantMovies) {
       const movieTargets = await this.acquisitionCandidates.listMovieTargets(
         p.mediaIds,
+        // Every page re-enumerates, so only the first one narrates: five identical lines in one
+        // second told an operator nothing except that pagination happened.
+        Boolean(p.cursor),
       );
       for (const t of movieTargets) {
         if (!this.isAvailable(t.media, p.availableOn)) continue;
@@ -262,23 +285,25 @@ export class FliksHostImpl implements PluginHostApi {
 
     if (wantSeries) {
       const episodeTargets = (
-        await this.acquisitionCandidates.listEpisodeTargets(p.mediaIds)
+        await this.acquisitionCandidates.listEpisodeTargets(p.mediaIds, Boolean(p.cursor))
       ).filter((t) => !t.episode.airDate || t.episode.airDate <= p.availableOn);
       const packs =
         await this.acquisitionCandidates.groupIntoSeasonPacks(episodeTargets);
-      const packedSeasonIds = new Set(packs.map((pk) => pk.season.id));
-      const singles = episodeTargets.filter(
-        (t) => !packedSeasonIds.has(t.season.id),
-      );
       const episodeCountBySeason = await this.episodeCountsBySeasons([
-        ...new Set(singles.map((t) => t.season.id)),
+        ...new Set(episodeTargets.map((t) => t.season.id)),
       ]);
 
+      // A season with two or more wanted episodes yields BOTH its pack and every episode in it.
+      // Enumeration reports what is wanted; whether a pack beats loose episodes is only knowable
+      // once releases are scored, so the caller decides — the sort below hands it the pack first.
+      // Suppressing the episodes here also blinded the two other readers of this method: the
+      // season-grab fallback found nothing to fall back to, and an RSS match on a loose episode
+      // could not recover its episode id.
       for (const pk of packs) {
         const target = this.buildFromSeasonPackTarget(pk);
         if (target) targets.push(target);
       }
-      for (const t of singles) {
+      for (const t of episodeTargets) {
         const target = this.buildFromEpisodeTarget(
           t,
           episodeCountBySeason.get(t.season.id) ?? 1,
@@ -294,13 +319,21 @@ export class FliksHostImpl implements PluginHostApi {
         (a.episode?.id ?? 0) - (b.episode?.id ?? 0),
     );
 
-    const offset = p.cursor ? Math.max(0, parseInt(p.cursor, 10) || 0) : 0;
+    this.candidatesPage = { key: cacheKey, at: Date.now(), targets };
+    return this.pageOf(targets, p.cursor, limit);
+  }
+
+  private pageOf(
+    targets: AcquisitionTarget[],
+    cursor: string | undefined,
+    limit: number,
+  ): { items: AcquisitionTarget[]; cursor: string | null } {
+    const offset = cursor ? Math.max(0, parseInt(cursor, 10) || 0) : 0;
     const items = targets.slice(offset, offset + limit);
-    const cursor =
-      offset + items.length < targets.length
-        ? String(offset + items.length)
-        : null;
-    return { items, cursor };
+    return {
+      items,
+      cursor: offset + items.length < targets.length ? String(offset + items.length) : null,
+    };
   }
 
   // ===========================================================================
