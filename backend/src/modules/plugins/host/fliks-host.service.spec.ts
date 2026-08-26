@@ -39,6 +39,7 @@ function fakeQueryBuilder(rawMany: unknown[] = [], one: unknown = null) {
     qb[m] = jest.fn(() => qb);
   }
   qb.getRawMany = jest.fn().mockResolvedValue(rawMany);
+  qb.getRawOne = jest.fn().mockResolvedValue(null);
   qb.getOne = jest.fn().mockResolvedValue(one);
   qb.getCount = jest.fn().mockResolvedValue(0);
   return qb;
@@ -999,6 +1000,70 @@ describe('FliksHostImpl', () => {
       expect(h.mediaRepo.findOne).toHaveBeenCalledTimes(1);
       // Every release is still scored — the reads were hoisted, not skipped.
       expect(h.customFormats.scoreReleaseWith).toHaveBeenCalledTimes(50);
+    });
+
+    // `media.runtime` comes from TMDB's `episode_run_time`, empty for a great many series. A
+    // runtime of 0 disables the size rule in both directions, which is how a 19 GB season pack
+    // passed for a single missing episode. Episodes carry their own runtime; use it.
+    it('VERDICT: judges a series against its episodes runtime, not the empty series one', async () => {
+      const h = makeHarness();
+      h.mediaRepo.findOne.mockResolvedValue(
+        makeMedia({ id: 1, type: MediaType.SERIES, runtime: null as unknown as number }),
+      );
+      h.profiles.resolveAllowedForMedia.mockReturnValue({ allowed: new Set([9]), allowedLangs: new Set() });
+      h.qualityDefs.getSizeLimitsMap.mockResolvedValue(new Map());
+      const qb = fakeQueryBuilder();
+      qb.getRawOne = jest.fn().mockResolvedValue({ total: '55' });
+      h.episodeRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await h.host['releases.score']({
+        mediaId: 1,
+        seasonNumber: 4,
+        episodeNumber: 3,
+        releases: [
+          {
+            id: 'r1',
+            title: 'Show S04E03 1080p WEB-DL',
+            size: 2_000_000_000,
+            seeders: 10,
+            leechers: 1,
+            publishDate: new Date(0).toISOString(),
+            sourceRef: 'a',
+            blocked: false,
+          },
+        ],
+      });
+
+      // Scoped to the one episode asked for, so the size ceiling is that episode's.
+      expect(qb.andWhere).toHaveBeenCalledWith('ep.episodeNumber = :episodeNumber', { episodeNumber: 3 });
+    });
+
+    it('reports an unmeasurable size as unknown rather than as a perfect match', async () => {
+      const h = makeHarness();
+      h.mediaRepo.findOne.mockResolvedValue(
+        makeMedia({ id: 1, type: MediaType.MOVIE, runtime: null as unknown as number }),
+      );
+      h.profiles.resolveAllowedForMedia.mockReturnValue({ allowed: new Set([9]), allowedLangs: new Set() });
+      h.qualityDefs.getSizeLimitsMap.mockResolvedValue(new Map());
+
+      const [row] = await h.host['releases.score']({
+        mediaId: 1,
+        releases: [
+          {
+            id: 'r1',
+            title: 'A Movie 2020 1080p WEB-DL',
+            size: 4_000_000_000,
+            seeders: 10,
+            leechers: 1,
+            publishDate: new Date(0).toISOString(),
+            sourceRef: 'a',
+            blocked: false,
+          },
+        ],
+      });
+
+      // 0 claims the size is exactly preferred, which promoted it at the last tiebreak.
+      expect(row.sizeDeviation).toBeNull();
     });
 
     it("returns [] for an unknown media id, and carries a rejection's params across the boundary", async () => {

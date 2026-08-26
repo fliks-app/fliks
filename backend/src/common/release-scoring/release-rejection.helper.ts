@@ -468,6 +468,18 @@ export function computeRejections(opts: {
         },
       });
     }
+    // A pack answers a request for one episode by fetching the whole season. Stated as its own
+    // rule rather than left to the size limits: those need a runtime, and a series whose provider
+    // gives none has no size ceiling at all — which is how a 19 GB season pack was taken to fill
+    // a single missing episode.
+    if (opts.expectedEpisode != null && se.isFullSeason) {
+      out.push({
+        code: 'FULL_SEASON_FOR_EPISODE',
+        params: {
+          expected: formatSeasonEpisode(opts.expectedSeason, opts.expectedEpisode),
+        },
+      });
+    }
   }
 
   if (!opts.allowed.has(opts.qualityId)) {

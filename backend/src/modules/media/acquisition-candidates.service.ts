@@ -54,6 +54,10 @@ function describeExclusions(reasons: string[]): string {
     .join(', ');
 }
 
+/** Below this share of a season wanted, a pack fetches mostly what is already on disk. Two
+ *  missing episodes of twenty-four is a gap to fill, not a season to acquire. */
+const SEASON_PACK_MIN_WANTED_SHARE = 0.5;
+
 @Injectable()
 export class AcquisitionCandidatesService {
   private readonly log = new Logger(AcquisitionCandidatesService.name);
@@ -233,6 +237,24 @@ export class AcquisitionCandidatesService {
     return qb.getCount();
   }
 
+  /** Episodes of these seasons that have not aired yet — a season with any is one no full-season
+   *  release exists for, whatever an indexer answers. */
+  private async unairedCountsBySeasons(
+    seasonIds: number[],
+  ): Promise<Map<number, number>> {
+    if (!seasonIds.length) return new Map();
+    const today = new Date().toISOString().slice(0, 10);
+    const rows = await this.episodeRepo
+      .createQueryBuilder('ep')
+      .select('ep.seasonId', 'seasonId')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('ep.seasonId IN (:...seasonIds)', { seasonIds })
+      .andWhere('(ep."airDate" IS NULL OR ep."airDate" > :today)', { today })
+      .groupBy('ep.seasonId')
+      .getRawMany<{ seasonId: number; cnt: string }>();
+    return new Map(rows.map((r) => [Number(r.seasonId), Number(r.cnt)]));
+  }
+
   async groupIntoSeasonPacks(
     targets: EpisodeTarget[],
   ): Promise<SeasonPackTarget[]> {
@@ -267,8 +289,26 @@ export class AcquisitionCandidatesService {
     const episodeCountBySeason = new Map(
       counts.map((c) => [Number(c.seasonId), Number(c.cnt)]),
     );
+    const unairedBySeason = await this.unairedCountsBySeasons(
+      multi.map((g) => g.season.id),
+    );
 
-    return multi.map((group) => {
+    // Two gates a bare "two or more wanted" could not express. A season still airing has no full
+    // release to find, so its pack is a query that cannot match; and a season wanted only in part
+    // would fetch mostly what is already on disk.
+    const worthAPack = multi.filter((g) => {
+      if ((unairedBySeason.get(g.season.id) ?? 0) > 0) return false;
+      const total = episodeCountBySeason.get(g.season.id) ?? g.targets.length;
+      return g.targets.length >= total * SEASON_PACK_MIN_WANTED_SHARE;
+    });
+    if (multi.length !== worthAPack.length) {
+      this.log.log(
+        `SearchMissing[packs]: ${worthAPack.length}/${multi.length} season(s) worth a pack (rest still airing, or wanted only in part)`,
+      );
+    }
+    if (!worthAPack.length) return [];
+
+    return worthAPack.map((group) => {
       // Cutoff gate for the pack. The per-episode path hands each file's
       // quality to classifyForSearch so an at-cutoff episode is skipped; the
       // pack must do the same or it re-grabs whole seasons already at cutoff.

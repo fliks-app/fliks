@@ -264,13 +264,23 @@ describe('computeRejections — episode targeting', () => {
     expect(reject('Some.Show.S04E03.1080p.WEB-DL.x264', 4, 3)).toEqual([]);
   });
 
-  it('accepts a full-season pack covering the requested episode', () => {
-    expect(reject('Some.Show.S04.COMPLETE.1080p.WEB-DL', 4, 3)).toEqual([]);
+  // A pack has no episode number, so the season/episode comparison alone never objected to one
+  // — and the size limits, the only other thing that would have, need a runtime the provider
+  // often does not give for a series. Hence a rule of its own.
+  it('VERDICT: rejects a full-season pack when one episode was asked for', () => {
+    expect(reject('Some.Show.S04.COMPLETE.1080p.WEB-DL', 4, 3)).toEqual([
+      'FULL_SEASON_FOR_EPISODE',
+    ]);
   });
 
-  it('rejects a pack from another season', () => {
+  it('leaves a pack alone when the request is the season itself', () => {
+    expect(reject('Some.Show.S04.COMPLETE.1080p.WEB-DL', 4, undefined)).toEqual([]);
+  });
+
+  it('rejects a pack from another season on both counts', () => {
     expect(reject('Some.Show.S03.COMPLETE.1080p.WEB-DL', 4, 3)).toEqual([
       'EPISODE_MISMATCH',
+      'FULL_SEASON_FOR_EPISODE',
     ]);
   });
 

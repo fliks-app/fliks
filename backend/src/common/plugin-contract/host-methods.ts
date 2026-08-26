@@ -62,7 +62,9 @@ export interface ScoredRelease {
   languageName: string | null;
   languageAllowed: boolean;
   isFullSeason: boolean;
-  sizeDeviation: number;
+  /** Null when the media carries no runtime to judge against — distinct from 0, which claims the
+   *  size is exactly the preferred one. */
+  sizeDeviation: number | null;
   videoCodec: string | null;
   /** `params` is interpolated into the frontend's own `rejection.<code>` string —
    *  flattening it to a message here would strip the numbers out of the reason. */

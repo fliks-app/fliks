@@ -1057,7 +1057,8 @@
       "SIZE_NOT_PREFERRED": "Dimensione lontana da quella consigliata\n({{actual}} MB ≠ {{preferred}} MB)",
       "MIN_SEEDERS": "Seeder insufficienti\n({{actual}} < {{min}})",
       "TITLE_MISMATCH": "Il titolo non corrisponde al file multimediale",
-      "EPISODE_MISMATCH": "La release non corrisponde a {{expected}} (trovato {{actual}})"
+      "EPISODE_MISMATCH": "La release non corrisponde a {{expected}} (trovato {{actual}})",
+      "FULL_SEASON_FOR_EPISODE": "Stagione completa, ma serve solo {{expected}}"
     }
   },
   "requests": {

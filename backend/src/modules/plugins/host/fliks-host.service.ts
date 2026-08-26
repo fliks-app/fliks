@@ -574,7 +574,7 @@ export class FliksHostImpl implements PluginHostApi {
         sizeByQuality,
         sourceMinSeeders,
         sourceUnknownLang,
-        runtimeMinutes: media.runtime ?? 0,
+        runtimeMinutes: await this.scoringRuntimeMinutes(media, p.seasonNumber, p.episodeNumber),
         expectedTitle: expectedTitles,
         expectedSeason: p.seasonNumber,
         expectedEpisode: p.episodeNumber,
@@ -600,10 +600,51 @@ export class FliksHostImpl implements PluginHostApi {
       languageName: row.languageName,
       languageAllowed: row.languageAllowed,
       isFullSeason: row.isFullSeason,
-      sizeDeviation: row.sizeDeviation ?? 0,
+      // Kept null rather than flattened to 0: without a runtime the deviation is unknown, and 0
+      // reads as a perfect size match — which promoted an unmeasurable release at the last tiebreak.
+      sizeDeviation: row.sizeDeviation ?? null,
       videoCodec: row.videoCodec,
       rejections: row.rejections.map((r) => ({ code: r.code, params: r.params })),
     }));
+  }
+
+  /**
+   * The runtime the size limits are judged against. `media.runtime` comes from TMDB's
+   * `episode_run_time`, which is empty for a great many series — and a runtime of zero disables
+   * the size rule entirely, in both directions. Episodes carry their own, so an episode-scoped
+   * request uses that one and a season-scoped request sums the season's.
+   */
+  private async scoringRuntimeMinutes(
+    media: Media,
+    seasonNumber?: number,
+    episodeNumber?: number,
+  ): Promise<number> {
+    if (media.type !== MediaType.SERIES || seasonNumber == null) return media.runtime ?? 0;
+
+    const qb = this.episodeRepo
+      .createQueryBuilder('ep')
+      .innerJoin('ep.season', 'season')
+      .select('COALESCE(SUM(ep.runtime), 0)', 'total')
+      .where('season.mediaId = :mediaId', { mediaId: media.id })
+      .andWhere('season.seasonNumber = :seasonNumber', { seasonNumber });
+    if (episodeNumber != null) {
+      qb.andWhere('ep.episodeNumber = :episodeNumber', { episodeNumber });
+    }
+    const row = await qb.getRawOne<{ total: string }>();
+    const total = Number(row?.total ?? 0);
+    if (total > 0) return total;
+
+    // No per-episode runtime either: fall back to the series figure, scaled for a pack so a
+    // whole season is not judged against one episode's ceiling.
+    const perEpisode = media.runtime ?? 0;
+    if (perEpisode <= 0 || episodeNumber != null) return perEpisode;
+    const count = await this.episodeRepo
+      .createQueryBuilder('ep')
+      .innerJoin('ep.season', 'season')
+      .where('season.mediaId = :mediaId', { mediaId: media.id })
+      .andWhere('season.seasonNumber = :seasonNumber', { seasonNumber })
+      .getCount();
+    return perEpisode * Math.max(count, 1);
   }
 
   // ===========================================================================

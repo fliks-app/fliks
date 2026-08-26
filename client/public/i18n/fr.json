@@ -1065,7 +1065,8 @@
       "SIZE_NOT_PREFERRED": "Taille éloignée du recommandé\n({{actual}} MB ≠ {{preferred}} MB)",
       "MIN_SEEDERS": "Seeders insuffisants\n({{actual}} < {{min}})",
       "TITLE_MISMATCH": "Titre ne correspond pas au média",
-      "EPISODE_MISMATCH": "La release ne correspond pas à {{expected}} (trouvé {{actual}})"
+      "EPISODE_MISMATCH": "La release ne correspond pas à {{expected}} (trouvé {{actual}})",
+      "FULL_SEASON_FOR_EPISODE": "Saison complète alors que seul {{expected}} est voulu"
     }
   },
   "requests": {
