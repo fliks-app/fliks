@@ -43,7 +43,7 @@
       @if (error()) {
         <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
       } @else if (showSpinnerPanel()) {
-        <div class="flex min-h-48 flex-col items-center justify-center gap-3 py-8 text-center">
+        <div class="flex min-h-64 flex-col items-center justify-center gap-3 pt-16 pb-10 text-center">
           <span class="loading loading-spinner loading-lg text-base-content/40"></span>
           <p class="max-w-sm text-sm text-base-content/60">{{ 'media_detail.releases_searching' | translate }}</p>
         </div>
@@ -58,7 +58,7 @@
           (grab)="grab.emit($event)"
         />
       } @else if (activeTab() !== null || searched() || !loading()) {
-        <div class="flex min-h-48 flex-col items-center justify-center gap-3 py-8 text-center">
+        <div class="flex min-h-64 flex-col items-center justify-center gap-3 pt-16 pb-10 text-center">
           @switch (emptyPanel().icon) {
             @case ('failed') {
               <svg lucideTriangleAlert class="h-10 w-10 text-warning/60"></svg>
