@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import * as fs from 'fs';
@@ -119,6 +119,8 @@ export class FliksHostImpl implements PluginHostApi {
     private readonly sseAudience: SseAudienceService,
     private readonly countsCache: PluginCountsCacheService,
   ) {}
+
+  private readonly logger = new Logger(FliksHostImpl.name);
 
   private readonly progressGates = new Map<number, ProgressGate>();
 
@@ -1050,7 +1052,16 @@ export class FliksHostImpl implements PluginHostApi {
     decision: SearchDecision | null,
     files: { quality?: string | null }[],
   ): AcquisitionTarget | null {
-    if (media.libraryId == null) return null;
+    // `libraryId` is a `@RelationId`, so it is only populated when the relation is joined —
+    // `library.id` covers the query that selects the relation instead. Silence here is what let
+    // every series candidate vanish unreported, so a drop now says so.
+    const libraryId = media.libraryId ?? media.library?.id ?? null;
+    if (libraryId == null) {
+      this.logger.warn(
+        `candidate #${media.id} "${media.title}" dropped — no library id on the loaded media`,
+      );
+      return null;
+    }
     const { searchTitle, expectedTitles } = resolveSearchTitles(media);
     return {
       mediaId: media.id,
@@ -1063,7 +1074,7 @@ export class FliksHostImpl implements PluginHostApi {
       imdbId: media.imdbId ?? null,
       tmdbId: media.tmdbId ?? null,
       tvdbId: media.tvdbId ?? null,
-      libraryId: media.libraryId,
+      libraryId,
       want: this.buildWant(media, decision, files),
       expectedTitles,
       searchTitle,
