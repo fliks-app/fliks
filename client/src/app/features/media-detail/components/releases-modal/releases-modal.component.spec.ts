@@ -99,6 +99,33 @@ describe('ReleasesModalComponent — per-indexer tabs', () => {
     expect(tabs.map((t) => !!t.querySelector('.loading'))).toEqual([false, false, true, false]);
   });
 
+  it('VERDICT: All spins while the search runs — progress lives in the strip, not the modal title', async () => {
+    const fixture = await createFixture({
+      releases: [release(1, 'a')],
+      indexers: ROSTER,
+      loading: true,
+    });
+    const tabs = [...fixture.nativeElement.querySelectorAll('[role="tab"]')] as HTMLElement[];
+    expect(!!tabs[0].querySelector('.loading')).toBe(true);
+    expect(fixture.nativeElement.querySelector('h3 .loading')).toBeNull();
+  });
+
+  it('a spinner gives way to the count badge in the same slot, so the strip does not shift', async () => {
+    const fixture = await createFixture({ releases: [release(1, 'a')], indexers: ROSTER, loading: true });
+    const slotOf = (i: number) =>
+      [...fixture.nativeElement.querySelectorAll('[role="tab"] .tab-count')][i] as HTMLElement;
+
+    expect(slotOf(0).querySelector('.loading')).not.toBeNull();
+    expect(slotOf(0).querySelector('.badge')).toBeNull();
+
+    fixture.componentRef.setInput('loading', false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(slotOf(0).querySelector('.loading')).toBeNull();
+    expect(slotOf(0).querySelector('.badge')?.textContent?.trim()).toBe('1');
+  });
+
   it('counts an answered indexer, and leaves a pending one uncounted rather than showing 0', async () => {
     const fixture = await createFixture({
       releases: [release(1, 'a'), release(1, 'b')],
