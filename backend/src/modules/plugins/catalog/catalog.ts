@@ -142,8 +142,29 @@ export interface FilteredCatalog {
   denyList: CatalogDenyEntry[];
 }
 
+/** What a catalog publishes on a version whose archive has not been built and signed yet. It is
+ *  valid lowercase hex, so no format check tells it apart from a real checksum. */
+const PLACEHOLDER_SHA256 = '0'.repeat(64);
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+
+/**
+ * A version core could not verify if it downloaded it. `zipUrl`/`sha256` are install-pipeline
+ * fields, read here because "can this be installed" is this function's question: an entry whose
+ * checksum is a placeholder or malformed fails its checksum check on every attempt, so offering
+ * it turns a publisher's mid-release state into an error the admin has no way to act on.
+ */
+function hasVerifiableArchive(v: CatalogVersionEntry): boolean {
+  const { zipUrl, sha256 } = v as { zipUrl?: unknown; sha256?: unknown };
+  if (typeof zipUrl !== 'string' || zipUrl.length === 0) return false;
+  return typeof sha256 === 'string' && SHA256_PATTERN.test(sha256) && sha256 !== PLACEHOLDER_SHA256;
+}
+
 function isInstallable(v: CatalogVersionEntry, supportedApiVersions: readonly number[], fliksVersion: string): boolean {
-  return supportedApiVersions.includes(v.pluginApi) && semver.satisfies(fliksRangeVersion(fliksVersion), v.fliks);
+  return (
+    supportedApiVersions.includes(v.pluginApi) &&
+    semver.satisfies(fliksRangeVersion(fliksVersion), v.fliks) &&
+    hasVerifiableArchive(v)
+  );
 }
 
 function summarizeHidden(
