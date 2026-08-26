@@ -43,8 +43,9 @@
       @if (error()) {
         <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
       } @else if (showSpinnerPanel()) {
-        <div class="flex justify-center py-8">
-          <span class="loading loading-spinner loading-lg"></span>
+        <div class="flex min-h-48 flex-col items-center justify-center gap-3 py-8 text-center">
+          <span class="loading loading-spinner loading-lg text-base-content/40"></span>
+          <p class="max-w-sm text-sm text-base-content/60">{{ 'media_detail.releases_searching' | translate }}</p>
         </div>
       } @else if (visibleReleases().length) {
         <app-releases-table
@@ -58,8 +59,18 @@
         />
       } @else if (activeTab() !== null || searched() || !loading()) {
         <div class="flex min-h-48 flex-col items-center justify-center gap-3 py-8 text-center">
-          <svg lucideSearchX class="h-10 w-10 text-base-content/25"></svg>
-          <p class="max-w-sm text-sm text-base-content/60">{{ emptyKey() | translate }}</p>
+          @switch (emptyPanel().icon) {
+            @case ('failed') {
+              <svg lucideTriangleAlert class="h-10 w-10 text-warning/60"></svg>
+            }
+            @case ('skipped') {
+              <svg lucideCirclePause class="h-10 w-10 text-base-content/25"></svg>
+            }
+            @default {
+              <svg lucideSearchX class="h-10 w-10 text-base-content/25"></svg>
+            }
+          }
+          <p class="max-w-sm text-sm text-base-content/60">{{ emptyPanel().key | translate }}</p>
         </div>
       }
     </div>
