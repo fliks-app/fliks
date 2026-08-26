@@ -12,8 +12,9 @@ const TRANSLATIONS = {
     releases_tab_all: 'All',
     releases_empty: 'No releases found.',
     releases_empty_indexer: 'No results for this indexer.',
-    indexer_failed: 'No answer in time',
-    indexer_cooldown: 'Cooling down',
+    indexer_failed: 'This indexer did not answer.',
+    indexer_cooldown: 'Skipped — cooling down after an error.',
+    releases_searching: 'Searching…',
   },
 };
 
@@ -164,6 +165,70 @@ describe('ReleasesModalComponent — per-indexer tabs', () => {
     expect(fixture.nativeElement.querySelector('app-releases-table')).toBeNull();
   });
 
+  it('VERDICT: a tab whose indexer is still running says so instead of claiming no results', async () => {
+    // bravo is `pending`: it has nothing yet, which is not the same as having nothing.
+    const fixture = await createFixture({ releases: [release(1, 'a')], indexers: ROSTER, loading: true });
+    fixture.componentInstance.activeTab.set(2);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.textContent).toContain('Searching…');
+    expect(fixture.nativeElement.textContent).not.toContain('No results for this indexer.');
+  });
+
+  it('a skipped indexer says it is cooling down, not that it found nothing', async () => {
+    // charlie is `skipped`: it never ran, so "no results" would be a lie — and the search
+    // still being in flight must not turn its tab into a spinner that never resolves.
+    const fixture = await createFixture({ releases: [release(1, 'a')], indexers: ROSTER, loading: true });
+    fixture.componentInstance.activeTab.set(3);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.textContent).toContain('cooling down');
+    expect(fixture.nativeElement.textContent).not.toContain('Searching…');
+    expect(fixture.nativeElement.querySelector('svg[lucideCirclePause]')).not.toBeNull();
+  });
+
+  it('VERDICT: a failed indexer is not reported as an empty one — the fixes differ', async () => {
+    const roster: IndexerRosterEntry[] = [
+      { id: 1, name: 'alpha', state: 'done' },
+      { id: 2, name: 'bravo', state: 'failed' },
+    ];
+    const fixture = await createFixture({ releases: [release(1, 'a')], indexers: roster, searched: true });
+    fixture.componentInstance.activeTab.set(2);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.textContent).toContain('This indexer did not answer.');
+    expect(fixture.nativeElement.textContent).not.toContain('No results for this indexer.');
+    expect(fixture.nativeElement.querySelector('svg[lucideTriangleAlert]')).not.toBeNull();
+  });
+
+  it('an answered indexer with no hits still reports no results', async () => {
+    const roster: IndexerRosterEntry[] = [
+      { id: 1, name: 'alpha', state: 'done' },
+      { id: 2, name: 'bravo', state: 'done' },
+    ];
+    const fixture = await createFixture({ releases: [release(1, 'a')], indexers: roster, searched: true });
+    fixture.componentInstance.activeTab.set(2);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.textContent).toContain('No results for this indexer.');
+    expect(fixture.nativeElement.querySelector('svg[lucideSearchX]')).not.toBeNull();
+  });
+
+  it('rows beat the spinner on a tab whose indexer is still running', async () => {
+    const roster: IndexerRosterEntry[] = [{ id: 1, name: 'alpha', state: 'pending' }];
+    const fixture = await createFixture({ releases: [release(1, 'a')], indexers: roster, loading: true });
+    fixture.componentInstance.activeTab.set(1);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('app-releases-table')).not.toBeNull();
+    expect(fixture.componentInstance.showSpinnerPanel()).toBe(false);
+  });
+
   it('falls back to All when the open tab is missing from a later roster', async () => {
     const fixture = await createFixture({ releases: [release(1, 'a')], indexers: ROSTER });
     fixture.componentInstance.activeTab.set(3);
@@ -190,7 +255,7 @@ describe('ReleasesModalComponent — per-indexer tabs', () => {
 
   it('the whole-search empty message uses the same centred block', async () => {
     const fixture = await createFixture({ releases: [], indexers: ROSTER, searched: true });
-    expect(fixture.componentInstance.emptyKey()).toBe('media_detail.releases_empty');
+    expect(fixture.componentInstance.emptyPanel().key).toBe('media_detail.releases_empty');
     expect(fixture.nativeElement.textContent).toContain('No releases found.');
     expect(fixture.nativeElement.querySelector('svg[lucideSearchX]')).not.toBeNull();
   });

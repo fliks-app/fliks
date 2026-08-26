@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
-import { LucideSearchX } from '@lucide/angular';
+import { LucideCirclePause, LucideSearchX, LucideTriangleAlert } from '@lucide/angular';
 import { MovieRelease } from '../../media-detail-release-picker.service';
 import { IndexerRosterEntry } from '../../release-search-stream.service';
 import { ReleasesTableComponent } from '../releases-table/releases-table.component';
@@ -32,7 +32,7 @@ type IndexerSearchStateOrAll = IndexerRosterEntry['state'] | 'all';
 
 @Component({
   selector: 'app-releases-modal',
-  imports: [FormsModule, TranslateModule, ReleasesTableComponent, LucideSearchX],
+  imports: [FormsModule, TranslateModule, ReleasesTableComponent, LucideSearchX, LucideTriangleAlert, LucideCirclePause],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './releases-modal.component.html',
 })
@@ -94,15 +94,29 @@ export class ReleasesModalComponent {
     return tab === null ? all : all.filter((r) => r.sourceId === tab);
   });
 
-  /** Rows and progress coexist: the full-panel spinner is only for a search with nothing
-   *  back yet. */
-  readonly showSpinnerPanel = computed(() => this.loading() && this.releases().length === 0);
+  /** The open tab has nothing to show *yet*, which is not the same as nothing to show: either
+   *  the whole search has not answered, or the single indexer this tab follows is still
+   *  running. Rows win as soon as there are any, so progress never hides results — and once the
+   *  search has answered nothing spins, so a roster left with a stale `pending` entry cannot
+   *  strand a tab on a spinner that never resolves. */
+  readonly showSpinnerPanel = computed(() => {
+    if (this.visibleReleases().length || !this.loading()) return false;
+    const tab = this.activeTab();
+    if (tab === null) return true;
+    return this.indexers().some((ix) => ix.id === tab && ix.state === 'pending');
+  });
 
-  /** An open indexer tab explains itself; otherwise the whole search speaks, which the caller
-   *  narrows (no quality profile, for instance). */
-  readonly emptyKey = computed(() =>
-    this.activeTab() !== null ? 'media_detail.releases_empty_indexer' : this.emptyMessage(),
-  );
+  /** Why the open tab has nothing. "Found nothing" and "never answered" look identical in an
+   *  empty list but call for different fixes, so the panel names which one it is; the whole
+   *  search falls back to the caller's message (no quality profile, for instance). */
+  readonly emptyPanel = computed<{ icon: 'none' | 'failed' | 'skipped'; key: string }>(() => {
+    const tab = this.activeTab();
+    if (tab === null) return { icon: 'none', key: this.emptyMessage() };
+    const state = this.indexers().find((ix) => ix.id === tab)?.state;
+    if (state === 'failed') return { icon: 'failed', key: 'media_detail.indexer_failed' };
+    if (state === 'skipped') return { icon: 'skipped', key: 'media_detail.indexer_cooldown' };
+    return { icon: 'none', key: 'media_detail.releases_empty_indexer' };
+  });
 
   showModal() {
     this.activeTab.set(null);
