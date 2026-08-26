@@ -26,21 +26,20 @@
               <p class="font-medium truncate">{{ row.plugin.name }}</p>
               <p class="text-xs text-base-content/50 truncate">{{ 'settings.plugins.catalogue.by' | translate: { author: row.plugin.author } }}</p>
             </div>
-            @if (isInstalled(row.plugin.id)) {
+            @if (updateTarget(row)) {
+              <span class="badge badge-info badge-sm shrink-0">{{ 'settings.plugins.catalogue.update_available' | translate }}</span>
+            } @else if (isInstalled(row.plugin.id)) {
               <span class="badge badge-success badge-sm shrink-0">{{ 'settings.plugins.catalogue.installed' | translate }}</span>
             }
           </div>
 
           <p class="text-sm text-base-content/70 line-clamp-2">{{ row.plugin.description }}</p>
 
-          <div class="flex flex-wrap items-center gap-1 text-xs text-base-content/50">
-            @for (version of row.plugin.installable; track version.version) {
-              <span class="badge badge-ghost badge-xs">v{{ version.version }}</span>
-            }
-            @if (row.plugin.hidden) {
-              <span>{{ hiddenLabel(row) }}</span>
-            }
-          </div>
+          @if (installedVersion(row); as version) {
+            <p class="text-xs text-base-content/50">
+              {{ 'settings.plugins.catalogue.installed_version' | translate: { version: version } }}
+            </p>
+          }
 
           <div class="mt-auto pt-2 flex items-center justify-between">
             <span class="text-xs text-base-content/40 truncate">{{ row.sourceUrl }}</span>

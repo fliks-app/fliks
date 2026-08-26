@@ -78,6 +78,12 @@ export class PluginCatalogueComponent implements OnInit {
     return installed === row.latestVersion ? null : row.latestVersion;
   }
 
+  /** The version actually running, which is the only one a card has to state. What else the
+   *  catalogue offers is the update button's business, not a list to read. */
+  installedVersion(row: CatalogueRow): string | null {
+    return this.installedVersions().get(row.plugin.id) ?? null;
+  }
+
   isInstalled(pluginId: string): boolean {
     return this.installedIds().has(pluginId);
   }
@@ -91,14 +97,6 @@ export class PluginCatalogueComponent implements OnInit {
 
   hideBrokenLogo(event: Event): void {
     (event.target as HTMLImageElement).style.display = 'none';
-  }
-
-  hiddenLabel(row: CatalogueRow): string {
-    const hidden = row.plugin.hidden;
-    if (!hidden) return '';
-    return hidden.minFliksVersion
-      ? this.translate.instant('settings.plugins.catalogue.hidden_versions', { count: hidden.count, version: hidden.minFliksVersion })
-      : this.translate.instant('settings.plugins.catalogue.hidden_versions_no_upgrade', { count: hidden.count });
   }
 
   async installLatest(row: CatalogueRow): Promise<void> {

@@ -2228,10 +2228,10 @@
         "empty_no_catalog": "Noch kein zwischengespeicherter Katalog — aktualisieren Sie oben eine Quelle.",
         "by": "Von {{author}}",
         "installed": "Installiert",
+        "installed_version": "Installierte Version: {{version}}",
+        "update_available": "Update verfügbar",
         "install": "Installieren",
         "no_installable": "Keine installierbare Version",
-        "hidden_versions": "{{count}} Version(en) ausgeblendet — erfordert Fliks {{version}}+",
-        "hidden_versions_no_upgrade": "{{count}} Version(en) ausgeblendet",
         "inspect_error": "Dieses Plugin konnte nicht abgerufen werden.",
         "switch_to": "Auf {{version}} aktualisieren",
         "update_keeps_data": "Deine Einstellungen bleiben erhalten."
