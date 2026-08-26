@@ -11,7 +11,7 @@ const TRANSLATIONS = {
   media_detail: {
     releases_tab_all: 'All',
     releases_empty: 'No releases found.',
-    releases_empty_indexer: 'This indexer returned nothing.',
+    releases_empty_indexer: 'No results for this indexer.',
     indexer_failed: 'No answer in time',
     indexer_cooldown: 'Cooling down',
   },
@@ -182,6 +182,16 @@ describe('ReleasesModalComponent — per-indexer tabs', () => {
     fixture.componentInstance.activeTab.set(2);
     fixture.detectChanges();
     await fixture.whenStable();
-    expect(fixture.nativeElement.textContent).toContain('This indexer returned nothing.');
+    expect(fixture.nativeElement.textContent).toContain('No results for this indexer.');
+    // Both empty states share one centred block, icon included — an indexer tab that fell back
+    // to a bare paragraph would read as a different screen.
+    expect(fixture.nativeElement.querySelector('svg[lucideSearchX]')).not.toBeNull();
+  });
+
+  it('the whole-search empty message uses the same centred block', async () => {
+    const fixture = await createFixture({ releases: [], indexers: ROSTER, searched: true });
+    expect(fixture.componentInstance.emptyKey()).toBe('media_detail.releases_empty');
+    expect(fixture.nativeElement.textContent).toContain('No releases found.');
+    expect(fixture.nativeElement.querySelector('svg[lucideSearchX]')).not.toBeNull();
   });
 });

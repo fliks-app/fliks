@@ -905,7 +905,7 @@
     "blocklisted": "Blocked",
     "releases_empty": "No releases found. Check your configured sources.",
     "releases_tab_all": "All",
-    "releases_empty_indexer": "This indexer returned nothing for this search.",
+    "releases_empty_indexer": "No results for this indexer.",
     "indexer_failed": "This indexer did not answer in time",
     "indexer_cooldown": "Skipped — this indexer is cooling down after an error",
     "releases_error": "Unable to load releases.",

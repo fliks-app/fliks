@@ -56,10 +56,11 @@
           [grabPrefix]="grabPrefix()"
           (grab)="grab.emit($event)"
         />
-      } @else if (activeTab() !== null) {
-        <p class="text-sm text-base-content/60 py-4">{{ 'media_detail.releases_empty_indexer' | translate }}</p>
-      } @else if (searched() || !loading()) {
-        <p class="text-sm text-base-content/60 py-4">{{ emptyMessage() | translate }}</p>
+      } @else if (activeTab() !== null || searched() || !loading()) {
+        <div class="flex min-h-48 flex-col items-center justify-center gap-3 py-8 text-center">
+          <svg lucideSearchX class="h-10 w-10 text-base-content/25"></svg>
+          <p class="max-w-sm text-sm text-base-content/60">{{ emptyKey() | translate }}</p>
+        </div>
       }
     </div>
 
