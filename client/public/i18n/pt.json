@@ -1446,7 +1446,6 @@
       "libraries": "Bibliotecas",
       "users": "Utilizadores",
       "roles": "Funções",
-      "delay_profiles": "Perfis de atraso",
       "auto_approval": "Aprovação auto",
       "server": "Servidor",
       "subtitle_providers": "Fornecedores de legendas",
@@ -1926,22 +1925,6 @@
       "default_libraries": "Bibliotecas atribuídas por predefinição",
       "default_libraries_hint": "Os novos utilizadores criados com esta função herdarão o acesso a estas bibliotecas.",
       "confirm_delete": "Eliminar a função «{{name}}»?"
-    },
-    "delay_profiles": {
-      "title": "Perfis de atraso",
-      "subtitle": "Atraso antes da transferência automática de uma release (como no Radarr).",
-      "new": "Novo perfil",
-      "load_error": "Não foi possível carregar os perfis de atraso.",
-      "empty": "Nenhum perfil de atraso. As releases serão transferidas imediatamente.",
-      "col_delay": "Atraso",
-      "col_order": "Prioridade",
-      "all_media": "Todos os medias",
-      "editor_create": "Novo perfil de atraso",
-      "editor_edit": "Editar o perfil de atraso",
-      "field_delay": "Atraso (horas)",
-      "field_order": "Prioridade (mais baixo = primeiro)",
-      "save_error": "Não foi possível guardar.",
-      "confirm_delete": "Eliminar este perfil de atraso?"
     },
     "auto_approval": {
       "title": "Regras de aprovação automática",

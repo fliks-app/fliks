@@ -1446,7 +1446,6 @@
       "libraries": "Bibliotecas",
       "users": "Usuarios",
       "roles": "Roles",
-      "delay_profiles": "Perfiles de retardo",
       "auto_approval": "Aprobación auto",
       "server": "Servidor",
       "subtitle_providers": "Proveedores de subtítulos",
@@ -1926,22 +1925,6 @@
       "default_libraries": "Bibliotecas asignadas por defecto",
       "default_libraries_hint": "Los nuevos usuarios creados con este rol heredarán el acceso a estas bibliotecas.",
       "confirm_delete": "¿Eliminar el rol «{{name}}»?"
-    },
-    "delay_profiles": {
-      "title": "Perfiles de retardo",
-      "subtitle": "Retardo antes de la descarga automática de una release (como en Radarr).",
-      "new": "Nuevo perfil",
-      "load_error": "No se pueden cargar los perfiles de retardo.",
-      "empty": "No hay perfiles de retardo. Las releases se descargarán inmediatamente.",
-      "col_delay": "Retardo",
-      "col_order": "Prioridad",
-      "all_media": "Todos los medios",
-      "editor_create": "Nuevo perfil de retardo",
-      "editor_edit": "Modificar el perfil de retardo",
-      "field_delay": "Retardo (horas)",
-      "field_order": "Prioridad (más bajo = antes)",
-      "save_error": "No se puede guardar.",
-      "confirm_delete": "¿Eliminar este perfil de retardo?"
     },
     "auto_approval": {
       "title": "Reglas de aprobación automática",

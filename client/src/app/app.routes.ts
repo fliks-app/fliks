@@ -426,7 +426,6 @@ export const routes: Routes = [
               { path: 'stats', loadComponent: () => import('./features/settings/subtitles/subtitles-stats').then((m) => m.SubtitlesStatsComponent) },
             ],
           },
-          { path: 'delay-profiles', loadComponent: () => import('./features/settings/delay-profiles/delay-profiles').then((m) => m.DelayProfilesComponent) },
           { path: 'schedulers', loadComponent: () => import('./features/settings/schedulers/schedulers').then((m) => m.SchedulersComponent) },
           { path: 'auto-approval', loadComponent: () => import('./features/settings/auto-approval/auto-approval').then((m) => m.AutoApprovalSettingsComponent) },
           { path: 'streaming', loadComponent: () => import('./features/settings/streaming/streaming').then((m) => m.StreamingSettingsComponent) },

@@ -10,8 +10,6 @@ import { QualityDefinitionsService } from './quality-definitions.service';
 import { QualityDefinitionsController } from './quality-definitions.controller';
 import { CustomFormatsService } from './custom-formats.service';
 import { CustomFormatsController } from './custom-formats.controller';
-import { DelayProfile } from './entities/delay-profile.entity';
-import { DelayProfilesController } from './delay-profiles.controller';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
@@ -21,14 +19,12 @@ import { AuthModule } from '../auth/auth.module';
       QualityDefinition,
       LanguageProfile,
       CustomFormat,
-      DelayProfile,
     ]),
     AuthModule,
   ],
   controllers: [
     ProfilesController,
     CustomFormatsController,
-    DelayProfilesController,
     QualityDefinitionsController,
   ],
   providers: [ProfilesService, QualityDefinitionsService, CustomFormatsService],
