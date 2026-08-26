@@ -2124,7 +2124,6 @@
       "confirm_uninstall": "„{{name}}“ deinstallieren? Alle zu diesem Plugin gehörenden Daten gehen verloren.",
       "uninstalled": "Plugin uninstalled.",
       "uninstall_error": "Unable to uninstall the plugin.",
-      "inspect_error": "Unable to read this archive.",
       "installed": "Plugin installed.",
       "install_failed_but_kept": "\"{{id}}\" was installed but could not start: {{reason}}",
       "enabled_toast": "Plugin enabled.",
@@ -2232,7 +2231,6 @@
         "update_available": "Update verfügbar",
         "install": "Installieren",
         "no_installable": "Keine installierbare Version",
-        "inspect_error": "Dieses Plugin konnte nicht abgerufen werden.",
         "switch_to": "Auf {{version}} aktualisieren",
         "update_keeps_data": "Deine Einstellungen bleiben erhalten."
       },

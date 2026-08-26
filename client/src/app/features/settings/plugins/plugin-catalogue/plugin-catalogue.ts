@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, input, output, signal } from '@angular/core';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { ToastService } from '../../../../core/services/toast.service';
 import { CatalogPluginEntry, PluginInspectReport, PluginsApiService } from '../../../../core/services/api/plugins-api.service';
 
 interface CatalogueRow {
@@ -22,7 +21,6 @@ interface CatalogueRow {
 export class PluginCatalogueComponent implements OnInit {
   private readonly api = inject(PluginsApiService);
   private readonly translate = inject(TranslateService);
-  private readonly toast = inject(ToastService);
 
   readonly installedIds = input<ReadonlySet<string>>(new Set());
   /** Installed version per plugin id — what makes "already installed" and "out of date"
@@ -106,9 +104,9 @@ export class PluginCatalogueComponent implements OnInit {
     try {
       const report = await this.api.inspectFromCatalog(row.sourceId, row.plugin.id, row.latestVersion);
       this.install.emit(report);
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      this.toast.error(httpErr.error?.message ?? this.translate.instant('settings.plugins.catalogue.inspect_error'));
+    } catch {
+      // The global error interceptor already toasts the server's message; a second one here
+      // showed the same text twice.
     } finally {
       this.inspectingKey.set(null);
     }
