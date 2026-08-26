@@ -72,12 +72,13 @@ export class ReleasesModalComponent {
     if (!roster.length) return [];
     const counts = new Map<number, number>();
     for (const r of this.releases()) counts.set(r.sourceId, (counts.get(r.sourceId) ?? 0) + 1);
+    // `count: null` is the spinner slot — a tab still working. Tous spins for as long as any
+    // indexer does, so the whole strip follows one rule instead of the header carrying its own.
     return [
-      { id: null, label: '', count: this.releases().length, state: 'all' as const },
+      { id: null, label: '', count: this.loading() ? null : this.releases().length, state: 'all' as const },
       ...roster.map((ix) => ({
         id: ix.id,
         label: ix.name,
-        // A pending indexer has no count to show yet; a finished one shows 0 honestly.
         count: ix.state === 'pending' ? null : (counts.get(ix.id) ?? 0),
         state: ix.state,
       })),
