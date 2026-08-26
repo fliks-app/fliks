@@ -1065,7 +1065,9 @@
       "SIZE_NOT_PREFERRED": "Size far from recommended\n({{actual}} MB ≠ {{preferred}} MB)",
       "MIN_SEEDERS": "Insufficient seeders\n({{actual}} < {{min}})",
       "TITLE_MISMATCH": "Title does not match the media",
-      "EPISODE_MISMATCH": "Release does not match {{expected}} (found {{actual}})"
+      "EPISODE_MISMATCH": "Release does not match {{expected}} (found {{actual}})",
+      "FULL_SEASON_FOR_EPISODE": "Full season, but only {{expected}} is wanted",
+      "RESOLUTION_NOT_UPGRADED": "Not a resolution upgrade ({{actual}}p, needs above {{min}}p)"
     }
   },
   "requests": {
@@ -1454,7 +1456,6 @@
       "libraries": "Libraries",
       "users": "Users",
       "roles": "Roles",
-      "delay_profiles": "Delay profiles",
       "auto_approval": "Auto-approval",
       "server": "Server",
       "subtitle_providers": "Subtitle providers",
@@ -1941,22 +1942,6 @@
       "default_libraries": "Libraries assigned by default",
       "default_libraries_hint": "New users created with this role will inherit access to these libraries.",
       "confirm_delete": "Delete the role \"{{name}}\"?"
-    },
-    "delay_profiles": {
-      "title": "Delay profiles",
-      "subtitle": "Delay before automatically downloading a release (like in Radarr).",
-      "new": "New profile",
-      "load_error": "Unable to load the delay profiles.",
-      "empty": "No delay profile. Releases will be downloaded immediately.",
-      "col_delay": "Delay",
-      "col_order": "Priority",
-      "all_media": "All media",
-      "editor_create": "New delay profile",
-      "editor_edit": "Edit delay profile",
-      "field_delay": "Delay (hours)",
-      "field_order": "Priority (lower = first)",
-      "save_error": "Unable to save.",
-      "confirm_delete": "Delete this delay profile?"
     },
     "auto_approval": {
       "title": "Auto-approval rules",

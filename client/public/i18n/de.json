@@ -1057,7 +1057,9 @@
       "SIZE_NOT_PREFERRED": "Größe weicht vom empfohlenen Wert ab\n({{actual}} MB ≠ {{preferred}} MB)",
       "MIN_SEEDERS": "Zu wenige Seeder\n({{actual}} < {{min}})",
       "TITLE_MISMATCH": "Titel passt nicht zum Medium",
-      "EPISODE_MISMATCH": "Release passt nicht zu {{expected}} (gefunden: {{actual}})"
+      "EPISODE_MISMATCH": "Release passt nicht zu {{expected}} (gefunden: {{actual}})",
+      "FULL_SEASON_FOR_EPISODE": "Komplette Staffel, aber nur {{expected}} wird benötigt",
+      "RESOLUTION_NOT_UPGRADED": "Keine Auflösungsverbesserung ({{actual}}p, mehr als {{min}}p nötig)"
     }
   },
   "requests": {
@@ -1444,7 +1446,6 @@
       "libraries": "Bibliotheken",
       "users": "Benutzer",
       "roles": "Rollen",
-      "delay_profiles": "Verzögerungsprofile",
       "auto_approval": "Auto-Genehmigung",
       "server": "Server",
       "subtitle_providers": "Untertitel-Anbieter",
@@ -1924,22 +1925,6 @@
       "default_libraries": "Standardmäßig zugewiesene Bibliotheken",
       "default_libraries_hint": "Neue Benutzer, die mit dieser Rolle erstellt werden, erben den Zugriff auf diese Bibliotheken.",
       "confirm_delete": "Rolle „{{name}}“ löschen?"
-    },
-    "delay_profiles": {
-      "title": "Verzögerungsprofile",
-      "subtitle": "Verzögerung vor dem automatischen Download einer Release (wie in Radarr).",
-      "new": "Neues Profil",
-      "load_error": "Die Verzögerungsprofile konnten nicht geladen werden.",
-      "empty": "Kein Verzögerungsprofil. Releases werden sofort heruntergeladen.",
-      "col_delay": "Verzögerung",
-      "col_order": "Priorität",
-      "all_media": "Alle Medien",
-      "editor_create": "Neues Verzögerungsprofil",
-      "editor_edit": "Verzögerungsprofil bearbeiten",
-      "field_delay": "Verzögerung (Stunden)",
-      "field_order": "Priorität (niedriger = zuerst)",
-      "save_error": "Speichern nicht möglich.",
-      "confirm_delete": "Dieses Verzögerungsprofil löschen?"
     },
     "auto_approval": {
       "title": "Automatische Genehmigungsregeln",

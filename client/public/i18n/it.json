@@ -1057,7 +1057,9 @@
       "SIZE_NOT_PREFERRED": "Dimensione lontana da quella consigliata\n({{actual}} MB ≠ {{preferred}} MB)",
       "MIN_SEEDERS": "Seeder insufficienti\n({{actual}} < {{min}})",
       "TITLE_MISMATCH": "Il titolo non corrisponde al file multimediale",
-      "EPISODE_MISMATCH": "La release non corrisponde a {{expected}} (trovato {{actual}})"
+      "EPISODE_MISMATCH": "La release non corrisponde a {{expected}} (trovato {{actual}})",
+      "FULL_SEASON_FOR_EPISODE": "Stagione completa, ma serve solo {{expected}}",
+      "RESOLUTION_NOT_UPGRADED": "Non migliora la risoluzione ({{actual}}p, serve più di {{min}}p)"
     }
   },
   "requests": {
@@ -1444,7 +1446,6 @@
       "libraries": "Librerie",
       "users": "Utenti",
       "roles": "Ruoli",
-      "delay_profiles": "Profili di ritardo",
       "auto_approval": "Approvazione auto",
       "server": "Server",
       "subtitle_providers": "Fornitori di sottotitoli",
@@ -1924,22 +1925,6 @@
       "default_libraries": "Librerie assegnate per impostazione predefinita",
       "default_libraries_hint": "I nuovi utenti creati con questo ruolo erediteranno l'accesso a queste librerie.",
       "confirm_delete": "Eliminare il ruolo « {{name}} »?"
-    },
-    "delay_profiles": {
-      "title": "Profili di ritardo",
-      "subtitle": "Ritardo prima del download automatico di una release (come in Radarr).",
-      "new": "Nuovo profilo",
-      "load_error": "Impossibile caricare i profili di ritardo.",
-      "empty": "Nessun profilo di ritardo. Le release verranno scaricate immediatamente.",
-      "col_delay": "Ritardo",
-      "col_order": "Priorità",
-      "all_media": "Tutti i file multimediali",
-      "editor_create": "Nuovo profilo di ritardo",
-      "editor_edit": "Modifica il profilo di ritardo",
-      "field_delay": "Ritardo (ore)",
-      "field_order": "Priorità (più basso = prima)",
-      "save_error": "Salvataggio non riuscito.",
-      "confirm_delete": "Eliminare questo profilo di ritardo?"
     },
     "auto_approval": {
       "title": "Regole di approvazione automatica",

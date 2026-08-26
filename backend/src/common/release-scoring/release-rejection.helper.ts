@@ -432,9 +432,12 @@ export function computeRejections(opts: {
   /** Season the request targets. A release naming a different season is
    *  rejected; a title with no readable season number is left alone. */
   expectedSeason?: number;
-  /** Episode the request targets. A release naming a different episode is
-   *  rejected; a full-season pack still satisfies it. */
+  /** Episode the request targets. A release naming a different episode is rejected, and so is a
+   *  full-season pack — fetching a whole season to fill one episode. */
   expectedEpisode?: number;
+  /** From `want.minResolution`: the resolution already on disk when the profile allows only a
+   *  resolution upgrade. 0 or absent means the rule does not apply. */
+  minResolution?: number;
 }): ReleaseRejection[] {
   const out: ReleaseRejection[] = [];
 
@@ -468,10 +471,35 @@ export function computeRejections(opts: {
         },
       });
     }
+    // A pack answers a request for one episode by fetching the whole season. Stated as its own
+    // rule rather than left to the size limits: those need a runtime, and a series whose provider
+    // gives none has no size ceiling at all — which is how a 19 GB season pack was taken to fill
+    // a single missing episode.
+    if (opts.expectedEpisode != null && se.isFullSeason) {
+      out.push({
+        code: 'FULL_SEASON_FOR_EPISODE',
+        params: {
+          expected: formatSeasonEpisode(opts.expectedSeason, opts.expectedEpisode),
+        },
+      });
+    }
   }
 
   if (!opts.allowed.has(opts.qualityId)) {
     out.push({ code: 'QUALITY_NOT_ALLOWED' });
+  }
+
+  // "Upgrade resolution only": the profile refuses a same-resolution tier hop, so a 1080p Bluray
+  // must not replace a 1080p WEB-DL. Nothing enforced this after the acquisition split — the
+  // plugin's own note assumed core folded it into the rejections, and core never did.
+  if (opts.minResolution != null && opts.minResolution > 0) {
+    const releaseResolution = parseReleaseQuality(opts.releaseTitle ?? '').quality.resolution;
+    if (releaseResolution <= opts.minResolution) {
+      out.push({
+        code: 'RESOLUTION_NOT_UPGRADED',
+        params: { actual: releaseResolution, min: opts.minResolution },
+      });
+    }
   }
 
   if (opts.allowedLangs.size > 0 && !opts.allowedLangs.has(opts.languageId)) {
@@ -691,6 +719,9 @@ export async function scoreAndSortReleases(
      *  releases naming another one are flagged EPISODE_MISMATCH. */
     expectedSeason?: number;
     expectedEpisode?: number;
+    /** From `want.minResolution`: the resolution already on disk when the profile only allows a
+     *  resolution upgrade. 0 or absent means the rule does not apply. */
+    minResolution?: number;
   },
   deps: ReleaseScorerDeps,
 ): Promise<ScoredRelease[]> {
@@ -724,6 +755,7 @@ export async function scoreAndSortReleases(
         expectedTitle: opts.expectedTitle,
         expectedSeason: opts.expectedSeason,
         expectedEpisode: opts.expectedEpisode,
+        minResolution: opts.minResolution,
       });
       return {
         ...r,

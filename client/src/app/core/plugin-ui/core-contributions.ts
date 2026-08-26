@@ -67,7 +67,6 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
       { id: 'core.language_profiles', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.language_profiles', action: { kind: 'route', path: '/admin/settings/language-profiles' } },
       { id: 'core.quality_definitions', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.quality_definitions', action: { kind: 'route', path: '/admin/settings/quality-definitions' } },
       { id: 'core.custom_formats', slot: 'settings.page', weight: 400, labelKey: 'settings.nav.custom_formats', action: { kind: 'route', path: '/admin/settings/custom-formats' } },
-      { id: 'core.delay_profiles', slot: 'settings.page', weight: 500, labelKey: 'settings.nav.delay_profiles', action: { kind: 'route', path: '/admin/settings/delay-profiles' } },
     ],
   },
   {

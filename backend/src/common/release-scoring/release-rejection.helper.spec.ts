@@ -264,13 +264,23 @@ describe('computeRejections — episode targeting', () => {
     expect(reject('Some.Show.S04E03.1080p.WEB-DL.x264', 4, 3)).toEqual([]);
   });
 
-  it('accepts a full-season pack covering the requested episode', () => {
-    expect(reject('Some.Show.S04.COMPLETE.1080p.WEB-DL', 4, 3)).toEqual([]);
+  // A pack has no episode number, so the season/episode comparison alone never objected to one
+  // — and the size limits, the only other thing that would have, need a runtime the provider
+  // often does not give for a series. Hence a rule of its own.
+  it('VERDICT: rejects a full-season pack when one episode was asked for', () => {
+    expect(reject('Some.Show.S04.COMPLETE.1080p.WEB-DL', 4, 3)).toEqual([
+      'FULL_SEASON_FOR_EPISODE',
+    ]);
   });
 
-  it('rejects a pack from another season', () => {
+  it('leaves a pack alone when the request is the season itself', () => {
+    expect(reject('Some.Show.S04.COMPLETE.1080p.WEB-DL', 4, undefined)).toEqual([]);
+  });
+
+  it('rejects a pack from another season on both counts', () => {
     expect(reject('Some.Show.S03.COMPLETE.1080p.WEB-DL', 4, 3)).toEqual([
       'EPISODE_MISMATCH',
+      'FULL_SEASON_FOR_EPISODE',
     ]);
   });
 
@@ -331,5 +341,46 @@ describe('sortReleasesByRelevance — season-scoped pack preference', () => {
     const single = row({ id: 'single', seeders: 5000 });
     const seasonPack = pack({ id: 'pack', seeders: 20 });
     expect(order([single, seasonPack])).toEqual(['single', 'pack']);
+  });
+});
+
+/**
+ * `resolutionUpgradeOnly` survived the acquisition split as data and nothing else: core shipped
+ * `want.minResolution` over the seam, the plugin's own note assumed core folded it into the
+ * rejections, and core never did. The toggle was inert for every profile.
+ */
+describe('computeRejections — resolution upgrade only', () => {
+  const base = {
+    qualityId: 9,
+    allowed: new Set([9]),
+    languageId: 1,
+    allowedLangs: new Set<number>(),
+    isBlocklisted: false,
+    sizeBytes: 0,
+    runtimeMinutes: 0,
+    sizeByQuality: new Map(),
+    seeders: 10,
+    sourceId: 0,
+    sourceMinSeeders: new Map<number, number>(),
+  };
+
+  const codes = (releaseTitle: string, minResolution?: number) =>
+    computeRejections({ ...base, releaseTitle, minResolution }).map((r) => r.code);
+
+  it('VERDICT: refuses a same-resolution release when only a resolution upgrade is allowed', () => {
+    expect(codes('Show.S01E01.1080p.BluRay.x264', 1080)).toEqual(['RESOLUTION_NOT_UPGRADED']);
+  });
+
+  it('accepts a higher resolution', () => {
+    expect(codes('Show.S01E01.2160p.WEB-DL.x265', 1080)).toEqual([]);
+  });
+
+  it('refuses a lower resolution too, not just an equal one', () => {
+    expect(codes('Show.S01E01.720p.WEB-DL.x264', 1080)).toEqual(['RESOLUTION_NOT_UPGRADED']);
+  });
+
+  it('does not apply when the profile asks nothing — a missing grab must stay open', () => {
+    expect(codes('Show.S01E01.1080p.BluRay.x264', 0)).toEqual([]);
+    expect(codes('Show.S01E01.1080p.BluRay.x264', undefined)).toEqual([]);
   });
 });

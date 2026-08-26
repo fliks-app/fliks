@@ -18,6 +18,7 @@ import { Media } from '../../media/entities/media.entity';
 import { Season } from '../../media/entities/season.entity';
 import { Episode } from '../../media/entities/episode.entity';
 import { MediaFile } from '../../media/entities/media-file.entity';
+import { onDiskEpisodeNumbers } from '../../media/episode-coverage.util';
 import {
   AutoGrabPipelineService,
   type SearchDecision,
@@ -456,7 +457,7 @@ export class FliksHostImpl implements PluginHostApi {
         const episodes = await this.episodesOfSeason(season.id);
         if (!episodes.length)
           return skip('not-available', media.id, { seasonNumber });
-        files = await this.filesForSeasonPack(episodes);
+        files = await this.filesForSeasonPack(episodes, onDiskEpisodeNumbers(episodes));
       } else if (se.episode != null) {
         const episode = await this.episodeRepo.findOne({
           where: { season: { id: season.id }, episodeNumber: se.episode },
@@ -469,7 +470,10 @@ export class FliksHostImpl implements PluginHostApi {
           });
         }
         episodeNumber = episode.episodeNumber;
-        files = await this.filesForEpisode(episode);
+        files = await this.filesForEpisode(
+          episode,
+          onDiskEpisodeNumbers(await this.episodesOfSeason(season.id)),
+        );
       } else {
         return skip('not-available', media.id, { seasonNumber });
       }
@@ -574,10 +578,14 @@ export class FliksHostImpl implements PluginHostApi {
         sizeByQuality,
         sourceMinSeeders,
         sourceUnknownLang,
-        runtimeMinutes: media.runtime ?? 0,
+        runtimeMinutes: await this.scoringRuntimeMinutes(media, p.seasonNumber, p.episodeNumber),
         expectedTitle: expectedTitles,
         expectedSeason: p.seasonNumber,
         expectedEpisode: p.episodeNumber,
+        // Recomputed here rather than sent by the caller: only core can map a quality to a
+        // resolution, and the profile's "upgrade resolution only" toggle had no enforcement
+        // anywhere after the acquisition split.
+        minResolution: await this.minResolutionFor(media, p.seasonNumber, p.episodeNumber),
       },
       {
         scoreCustomFormats: (title, meta) =>
@@ -600,10 +608,80 @@ export class FliksHostImpl implements PluginHostApi {
       languageName: row.languageName,
       languageAllowed: row.languageAllowed,
       isFullSeason: row.isFullSeason,
-      sizeDeviation: row.sizeDeviation ?? 0,
+      // Kept null rather than flattened to 0: without a runtime the deviation is unknown, and 0
+      // reads as a perfect size match — which promoted an unmeasurable release at the last tiebreak.
+      sizeDeviation: row.sizeDeviation ?? null,
       videoCodec: row.videoCodec,
       rejections: row.rejections.map((r) => ({ code: r.code, params: r.params })),
     }));
+  }
+
+  /**
+   * The on-disk resolution a release must beat, or 0 when the profile does not ask for it. Mirrors
+   * `buildWant`: the rule applies to an upgrade, never to something genuinely missing.
+   */
+  private async minResolutionFor(
+    media: Media,
+    seasonNumber?: number,
+    episodeNumber?: number,
+  ): Promise<number> {
+    if (!media.qualityProfile?.resolutionUpgradeOnly) return 0;
+
+    let season: Season | null = null;
+    let episode: Episode | null = null;
+    if (media.type === MediaType.SERIES && seasonNumber != null) {
+      season = await this.seasonRepo.findOne({
+        where: { media: { id: media.id }, seasonNumber },
+      });
+      if (season && episodeNumber != null) {
+        episode = await this.episodeRepo.findOne({
+          where: { season: { id: season.id }, episodeNumber },
+        });
+      }
+    }
+    const files = await this.filesForClassification(media, season, episode);
+    // Nothing on disk is a `missing` grab, which the toggle deliberately does not gate.
+    if (!files.length) return 0;
+    return maxResolutionFromQualityStrings(files);
+  }
+
+  /**
+   * The runtime the size limits are judged against. `media.runtime` comes from TMDB's
+   * `episode_run_time`, which is empty for a great many series — and a runtime of zero disables
+   * the size rule entirely, in both directions. Episodes carry their own, so an episode-scoped
+   * request uses that one and a season-scoped request sums the season's.
+   */
+  private async scoringRuntimeMinutes(
+    media: Media,
+    seasonNumber?: number,
+    episodeNumber?: number,
+  ): Promise<number> {
+    if (media.type !== MediaType.SERIES || seasonNumber == null) return media.runtime ?? 0;
+
+    const qb = this.episodeRepo
+      .createQueryBuilder('ep')
+      .innerJoin('ep.season', 'season')
+      .select('COALESCE(SUM(ep.runtime), 0)', 'total')
+      .where('season.mediaId = :mediaId', { mediaId: media.id })
+      .andWhere('season.seasonNumber = :seasonNumber', { seasonNumber });
+    if (episodeNumber != null) {
+      qb.andWhere('ep.episodeNumber = :episodeNumber', { episodeNumber });
+    }
+    const row = await qb.getRawOne<{ total: string }>();
+    const total = Number(row?.total ?? 0);
+    if (total > 0) return total;
+
+    // No per-episode runtime either: fall back to the series figure, scaled for a pack so a
+    // whole season is not judged against one episode's ceiling.
+    const perEpisode = media.runtime ?? 0;
+    if (perEpisode <= 0 || episodeNumber != null) return perEpisode;
+    const count = await this.episodeRepo
+      .createQueryBuilder('ep')
+      .innerJoin('ep.season', 'season')
+      .where('season.mediaId = :mediaId', { mediaId: media.id })
+      .andWhere('season.seasonNumber = :seasonNumber', { seasonNumber })
+      .getCount();
+    return perEpisode * Math.max(count, 1);
   }
 
   // ===========================================================================
@@ -1191,16 +1269,25 @@ export class FliksHostImpl implements PluginHostApi {
       });
       return files.map((f) => ({ quality: f.quality }));
     }
-    if (episode) return this.filesForEpisode(episode);
-    if (season)
-      return this.filesForSeasonPack(await this.episodesOfSeason(season.id));
+    // Coverage, not raw `hasFile` — `episode-coverage.util.ts` states the rule this used to break:
+    // a shadowed episode of a multi-episode file has no file of its own, and reading the flag made
+    // its season classify as entirely missing, with an open rank window that would take any pack.
+    if (episode) {
+      const siblings = await this.episodesOfSeason(episode.seasonId);
+      return this.filesForEpisode(episode, onDiskEpisodeNumbers(siblings));
+    }
+    if (season) {
+      const episodes = await this.episodesOfSeason(season.id);
+      return this.filesForSeasonPack(episodes, onDiskEpisodeNumbers(episodes));
+    }
     return [];
   }
 
   private async filesForEpisode(
     episode: Episode,
+    onDisk: ReadonlySet<number>,
   ): Promise<{ quality?: string | null }[]> {
-    if (!episode.hasFile) return [];
+    if (!onDisk.has(episode.episodeNumber)) return [];
     const files = await this.mediaFileRepo.find({
       where: { episode: { id: episode.id } },
     });
@@ -1221,10 +1308,11 @@ export class FliksHostImpl implements PluginHostApi {
    *  everything), else the weakest on-disk quality (cutoff-gates the pack). */
   private async filesForSeasonPack(
     episodes: Episode[],
+    onDisk: ReadonlySet<number>,
   ): Promise<{ quality?: string | null }[]> {
     if (!episodes.length) return [];
     const perEpisode = await Promise.all(
-      episodes.map((e) => this.filesForEpisode(e)),
+      episodes.map((e) => this.filesForEpisode(e, onDisk)),
     );
     if (perEpisode.some((f) => f.length === 0)) return [];
     let weakest: string | null = null;

@@ -32,7 +32,6 @@ const BASELINE_SIDEBAR = [
     { label: 'settings.nav.language_profiles', href: '/admin/settings/language-profiles' },
     { label: 'settings.nav.quality_definitions', href: '/admin/settings/quality-definitions' },
     { label: 'settings.nav.custom_formats', href: '/admin/settings/custom-formats' },
-    { label: 'settings.nav.delay_profiles', href: '/admin/settings/delay-profiles' },
   ] },
   { label: 'admin.section_subtitles', links: [
     { label: 'settings.nav.subtitles', href: '/admin/settings/subtitles' },

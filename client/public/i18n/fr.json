@@ -1065,7 +1065,9 @@
       "SIZE_NOT_PREFERRED": "Taille éloignée du recommandé\n({{actual}} MB ≠ {{preferred}} MB)",
       "MIN_SEEDERS": "Seeders insuffisants\n({{actual}} < {{min}})",
       "TITLE_MISMATCH": "Titre ne correspond pas au média",
-      "EPISODE_MISMATCH": "La release ne correspond pas à {{expected}} (trouvé {{actual}})"
+      "EPISODE_MISMATCH": "La release ne correspond pas à {{expected}} (trouvé {{actual}})",
+      "FULL_SEASON_FOR_EPISODE": "Saison complète alors que seul {{expected}} est voulu",
+      "RESOLUTION_NOT_UPGRADED": "Pas une montée de résolution ({{actual}}p, il faut plus de {{min}}p)"
     }
   },
   "requests": {
@@ -1454,7 +1456,6 @@
       "libraries": "Bibliothèques",
       "users": "Utilisateurs",
       "roles": "Rôles",
-      "delay_profiles": "Profils de délai",
       "auto_approval": "Approbation auto",
       "server": "Serveur",
       "subtitle_providers": "Fournisseurs de sous-titres",
@@ -1941,22 +1942,6 @@
       "default_libraries": "Bibliothèques attribuées par défaut",
       "default_libraries_hint": "Les nouveaux utilisateurs créés avec ce rôle hériteront de l'accès à ces bibliothèques.",
       "confirm_delete": "Supprimer le rôle « {{name}} » ?"
-    },
-    "delay_profiles": {
-      "title": "Profils de délai",
-      "subtitle": "Délai avant le téléchargement automatique d'une release (comme dans Radarr).",
-      "new": "Nouveau profil",
-      "load_error": "Impossible de charger les profils de délai.",
-      "empty": "Aucun profil de délai. Les releases seront téléchargées immédiatement.",
-      "col_delay": "Délai",
-      "col_order": "Priorité",
-      "all_media": "Tous les médias",
-      "editor_create": "Nouveau profil de délai",
-      "editor_edit": "Modifier le profil de délai",
-      "field_delay": "Délai (heures)",
-      "field_order": "Priorité (plus bas = avant)",
-      "save_error": "Enregistrement impossible.",
-      "confirm_delete": "Supprimer ce profil de délai ?"
     },
     "auto_approval": {
       "title": "Règles d'approbation automatique",
