@@ -69,6 +69,9 @@ export class AcquisitionCandidatesService {
   ) {}
 
   async listMovieTargets(mediaIds?: number[], quiet = false): Promise<MovieTarget[]> {
+    // Scoped to one media, this is a lookup answering a single grab, not the library-wide sweep
+    // the summary describes — the fallback and the RSS id lookup each make one per media.
+    quiet = quiet || Boolean(mediaIds?.length);
     const qb = this.mediaRepo
       .createQueryBuilder('m')
       .leftJoinAndSelect('m.qualityProfile', 'qp')
@@ -98,6 +101,7 @@ export class AcquisitionCandidatesService {
   }
 
   async listEpisodeTargets(mediaIds?: number[], quiet = false): Promise<EpisodeTarget[]> {
+    quiet = quiet || Boolean(mediaIds?.length);
     const today = new Date().toISOString().slice(0, 10);
 
     const qb = this.episodeRepo
@@ -130,6 +134,10 @@ export class AcquisitionCandidatesService {
         'ep.hasFile',
       ])
       .addSelect(['season.id', 'season.seasonNumber', 'season.mediaId'])
+      // `media.library` is joined for its id alone: `Media.libraryId` is a `@RelationId` over
+      // this relation, so an explicit column list that skips it leaves the id undefined — and a
+      // target with no library id is dropped, which is how every series candidate disappeared.
+      .leftJoin('media.library', 'medialibrary')
       .addSelect([
         'media.id',
         'media.title',
@@ -140,6 +148,7 @@ export class AcquisitionCandidatesService {
         'media.imdbId',
         'media.alternativeTitles',
       ])
+      .addSelect('medialibrary.id')
       // Profile rows are joined for the upgrade-cutoff WHERE clause AND
       // hydrated on the media entity so AutoGrabPipeline.classifyForSearch
       // doesn't read them as undefined and skip with "no profile".

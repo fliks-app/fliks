@@ -23,4 +23,11 @@ describe('published plugin deadlines', () => {
   it('carry the one host method allowed longer than the common ceiling', () => {
     expect(HOST_CALL_DEADLINE_OVERRIDES_MS['library.ingest']).toBeGreaterThan(PLUGIN_DEADLINES_MS.hostCall);
   });
+
+  // A sweep over a few hundred candidates at seconds of indexer search each passes three minutes
+  // long before it finishes, so a job bounded by the interactive route's ceiling is reported as
+  // failed on every real library — and its overlap guard released while it is still running.
+  it('VERDICT: a job is allowed far longer than a request someone is waiting on', () => {
+    expect(PLUGIN_DEADLINES_MS.job).toBeGreaterThan(PLUGIN_DEADLINES_MS.pluginCall * 10);
+  });
 });

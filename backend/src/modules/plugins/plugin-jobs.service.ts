@@ -5,8 +5,8 @@ import { randomUUID } from 'crypto';
 import { PluginProcessService } from './plugin-process.service';
 import { PLUGIN_DEADLINES_MS, type PluginJob } from '../../common/plugin-contract';
 
-/** A scheduled search fans out to the same slow upstreams as its interactive counterpart. */
-const JOB_CALL_DEADLINE_MS = PLUGIN_DEADLINES_MS.pluginCall;
+/** A sweep's duration scales with library size, not with a request someone is waiting on. */
+const JOB_CALL_DEADLINE_MS = PLUGIN_DEADLINES_MS.job;
 
 function cronKey(pluginId: string, name: string): string {
   return `plugin:${pluginId}:${name}`;

@@ -488,6 +488,62 @@ describe('FliksHostImpl', () => {
       expect(h.acquisitionCandidates.listMovieTargets).toHaveBeenLastCalledWith([7], true);
     });
 
+    // `Media.libraryId` is a `@RelationId`, so a query selecting an explicit column list leaves
+    // it undefined — and the builder drops a target with no library id. That is how every series
+    // candidate disappeared while movies, loaded with `leftJoinAndSelect`, came through.
+    it('VERDICT: takes the library id from the joined relation when the RelationId is absent', async () => {
+      const h = makeHarness();
+      const series = makeMedia({ id: 2, type: MediaType.SERIES });
+      const season = makeSeason({ id: 20, mediaId: 2 });
+      const ep1 = makeEpisode({ id: 201, season, episodeNumber: 1 });
+      // Exactly what the episode query hydrates: the relation, not the RelationId.
+      const withRelationOnly = { ...series, libraryId: undefined, library: { id: 9 } };
+
+      h.acquisitionCandidates.listMovieTargets.mockResolvedValue([]);
+      h.acquisitionCandidates.listEpisodeTargets.mockResolvedValue([
+        { media: withRelationOnly, season, episode: ep1, files: [] },
+      ]);
+      h.acquisitionCandidates.groupIntoSeasonPacks.mockResolvedValue([]);
+      h.autoGrab.classifyForSearch.mockReturnValue({
+        mode: 'missing',
+        minRankExclusive: 0,
+        maxRankInclusive: 10,
+      });
+
+      const { items } = await h.host['acquisition.candidates']({
+        availableOn: '2099-01-01',
+        limit: 10,
+      });
+
+      expect(items).toHaveLength(1);
+      expect(items[0].libraryId).toBe(9);
+    });
+
+    it('still drops a target with no library id either way, rather than emitting a null one', async () => {
+      const h = makeHarness();
+      const series = makeMedia({ id: 2, type: MediaType.SERIES });
+      const season = makeSeason({ id: 20, mediaId: 2 });
+      const ep1 = makeEpisode({ id: 201, season, episodeNumber: 1 });
+
+      h.acquisitionCandidates.listMovieTargets.mockResolvedValue([]);
+      h.acquisitionCandidates.listEpisodeTargets.mockResolvedValue([
+        { media: { ...series, libraryId: undefined, library: null }, season, episode: ep1, files: [] },
+      ]);
+      h.acquisitionCandidates.groupIntoSeasonPacks.mockResolvedValue([]);
+      h.autoGrab.classifyForSearch.mockReturnValue({
+        mode: 'missing',
+        minRankExclusive: 0,
+        maxRankInclusive: 10,
+      });
+
+      const { items } = await h.host['acquisition.candidates']({
+        availableOn: '2099-01-01',
+        limit: 10,
+      });
+
+      expect(items).toEqual([]);
+    });
+
     it('clamps the limit to the contract bound', async () => {
       const h = makeHarness();
       h.acquisitionCandidates.listMovieTargets.mockResolvedValue([]);

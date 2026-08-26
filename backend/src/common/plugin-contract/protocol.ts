@@ -90,10 +90,18 @@ export const PLUGIN_DEADLINES_MS = {
   healthReply: 3_000,
   /** Ceiling on one host call, unless the method appears in {@link HOST_CALL_DEADLINE_OVERRIDES_MS}. */
   hostCall: 8_000,
-  /** Ceiling on one call core makes into the plugin — a proxied `http` route or a `job`.
-   *  A route fanning out to third-party upstreams is allowed to be slow, so the plugin's
-   *  own per-upstream timeouts have to fit under this. */
+  /** Ceiling on one proxied `http` route into the plugin. A route fanning out to third-party
+   *  upstreams is allowed to be slow, so the plugin's own per-upstream timeouts have to fit
+   *  under this — and a browser behind a reverse proxy gets a 504 long before this anyway. */
   pluginCall: 180_000,
+  /**
+   * Ceiling on one `job` call. Not `pluginCall`: that value is sized for a request a browser is
+   * waiting on, and a cron sweep has neither a browser nor a proxy in front of it. Its duration
+   * scales with library size — a few hundred candidates at seconds of indexer search each passes
+   * three minutes long before it is finished — so inheriting an interactive route's ceiling made
+   * core report every real sweep as failed, and release its overlap guard while it still ran.
+   */
+  job: 60 * 60_000,
   /** After `shutdown` is answered (or not), before SIGTERM, then before SIGKILL. */
   shutdownRpc: 3_000,
   sigtermGrace: 2_000,
