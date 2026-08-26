@@ -373,22 +373,119 @@ describe('FliksHostImpl', () => {
         maxRankInclusive: 10,
       });
 
-      const page1 = await h.host['acquisition.candidates']({
-        availableOn: '2099-01-01',
-        limit: 1,
-      });
-      expect(page1.items).toHaveLength(1);
-      expect(page1.cursor).toBe('1');
-      expectJsonSafe(page1);
+      // One movie, one pack, and the pack's two episodes: four targets over four pages.
+      const seen: Awaited<ReturnType<(typeof h.host)['acquisition.candidates']>>['items'] = [];
+      let cursor: string | null | undefined;
+      do {
+        const page = await h.host['acquisition.candidates']({
+          availableOn: '2099-01-01',
+          limit: 1,
+          cursor: cursor ?? undefined,
+        });
+        expect(page.items).toHaveLength(1);
+        expectJsonSafe(page);
+        seen.push(...page.items);
+        cursor = page.cursor;
+      } while (cursor);
 
-      const page2 = await h.host['acquisition.candidates']({
+      expect(seen).toHaveLength(4);
+      expect(seen[0].season).toBeUndefined();
+    });
+
+    // The pack used to be the only candidate for its season, so nothing was left to fall back
+    // to when no pack release won — and an RSS match on a loose episode could not recover its
+    // episode id either. Both readers need the episodes listed alongside the pack.
+    it('VERDICT: offers a packed season BOTH its pack and its episodes, pack first', async () => {
+      const h = makeHarness();
+      const series = makeMedia({ id: 2, type: MediaType.SERIES });
+      const season = makeSeason({ id: 20, mediaId: 2 });
+      const ep1 = makeEpisode({ id: 201, season, episodeNumber: 1 });
+      const ep2 = makeEpisode({ id: 202, season, episodeNumber: 2 });
+
+      h.acquisitionCandidates.listMovieTargets.mockResolvedValue([]);
+      h.acquisitionCandidates.listEpisodeTargets.mockResolvedValue([
+        { media: series, season, episode: ep1, files: [] },
+        { media: series, season, episode: ep2, files: [] },
+      ]);
+      h.acquisitionCandidates.groupIntoSeasonPacks.mockResolvedValue([
+        { media: series, season, episodes: [ep1, ep2], files: [], totalEpisodeCount: 2 },
+      ]);
+      h.autoGrab.classifyForSearch.mockReturnValue({
+        mode: 'missing',
+        minRankExclusive: 0,
+        maxRankInclusive: 10,
+      });
+
+      const { items } = await h.host['acquisition.candidates']({
+        availableOn: '2099-01-01',
+        limit: 10,
+      });
+
+      expect(items.map((t) => t.episode?.number ?? 'pack')).toEqual(['pack', 1, 2]);
+      // The sort has to keep the pack ahead of its own episodes, or a caller walking the list
+      // would commit to loose episodes before it had seen the pack.
+      expect(items.every((t) => t.season?.id === 20)).toBe(true);
+    });
+
+    // Every page used to re-run the whole enumeration, which is where the duplicated log lines
+    // came from — and an offset cursor over a set re-derived each time could skip or repeat rows.
+    it('VERDICT: a paginated walk enumerates once, not once per page', async () => {
+      const h = makeHarness();
+      const movie = makeMedia({ id: 1, type: MediaType.MOVIE, status: 'Released' });
+      h.acquisitionCandidates.listMovieTargets.mockResolvedValue([
+        { media: movie, files: [] },
+        { media: makeMedia({ id: 2, type: MediaType.MOVIE, status: 'Released' }), files: [] },
+        { media: makeMedia({ id: 3, type: MediaType.MOVIE, status: 'Released' }), files: [] },
+      ]);
+      h.acquisitionCandidates.listEpisodeTargets.mockResolvedValue([]);
+      h.acquisitionCandidates.groupIntoSeasonPacks.mockResolvedValue([]);
+      h.autoGrab.classifyForSearch.mockReturnValue({
+        mode: 'missing',
+        minRankExclusive: 0,
+        maxRankInclusive: 10,
+      });
+
+      let cursor: string | null | undefined;
+      let pages = 0;
+      do {
+        const page = await h.host['acquisition.candidates']({
+          availableOn: '2099-01-01',
+          limit: 1,
+          cursor: cursor ?? undefined,
+        });
+        pages++;
+        cursor = page.cursor;
+      } while (cursor);
+
+      expect(pages).toBe(3);
+      expect(h.acquisitionCandidates.listMovieTargets).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-enumerates rather than serving another walk’s page when the scope differs', async () => {
+      const h = makeHarness();
+      h.acquisitionCandidates.listMovieTargets.mockResolvedValue([
+        { media: makeMedia({ id: 1, type: MediaType.MOVIE, status: 'Released' }), files: [] },
+        { media: makeMedia({ id: 2, type: MediaType.MOVIE, status: 'Released' }), files: [] },
+      ]);
+      h.acquisitionCandidates.listEpisodeTargets.mockResolvedValue([]);
+      h.acquisitionCandidates.groupIntoSeasonPacks.mockResolvedValue([]);
+      h.autoGrab.classifyForSearch.mockReturnValue({
+        mode: 'missing',
+        minRankExclusive: 0,
+        maxRankInclusive: 10,
+      });
+
+      const first = await h.host['acquisition.candidates']({ availableOn: '2099-01-01', limit: 1 });
+      // Same cursor, different mediaIds: reusing the cached list would answer the wrong scope.
+      await h.host['acquisition.candidates']({
         availableOn: '2099-01-01',
         limit: 1,
-        cursor: page1.cursor!,
+        cursor: first.cursor!,
+        mediaIds: [7],
       });
-      expect(page2.items).toHaveLength(1);
-      expect(page2.cursor).toBeNull();
-      expectJsonSafe(page2);
+
+      expect(h.acquisitionCandidates.listMovieTargets).toHaveBeenCalledTimes(2);
+      expect(h.acquisitionCandidates.listMovieTargets).toHaveBeenLastCalledWith([7], true);
     });
 
     it('clamps the limit to the contract bound', async () => {
@@ -422,7 +519,7 @@ describe('FliksHostImpl', () => {
       const ep1 = makeEpisode({ id: 201, season, episodeNumber: 1 });
       const ep2 = makeEpisode({ id: 202, season, episodeNumber: 2 });
       // On a season the pack list does not cover, so it survives as a single and
-      // reaches `buildFromEpisodeTarget` — the packed season's episodes never do.
+      // reaches `buildFromEpisodeTarget`, including a packed season's own episodes.
       const loneSeason = makeSeason({ id: 21, mediaId: 2 });
       const ep3 = makeEpisode({ id: 203, season: loneSeason, episodeNumber: 1 });
 
@@ -444,10 +541,12 @@ describe('FliksHostImpl', () => {
       ]);
       // Every branch (movie, single episode, season pack) resolves to a
       // decision the candidates path must drop before it reaches a plugin.
-      h.autoGrab.classifyForSearch
-        .mockReturnValueOnce({ mode: 'skip', minRankExclusive: 40, maxRankInclusive: 62 })
-        .mockReturnValueOnce({ mode: 'unprofiled' })
-        .mockReturnValueOnce({ mode: 'skip', minRankExclusive: 40, maxRankInclusive: 62 });
+      h.autoGrab.classifyForSearch.mockReturnValue({
+        mode: 'skip',
+        minRankExclusive: 40,
+        maxRankInclusive: 62,
+        skipReason: 'at-cutoff',
+      });
 
       const result = await h.host['acquisition.candidates']({
         availableOn: '2099-01-01',
