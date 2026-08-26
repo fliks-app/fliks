@@ -2412,6 +2412,11 @@
     "status_unset": "Non ancora impostato"
   },
   "provider_list": {
+    "col_cooldown": "Cooldown",
+    "cooldown_minutes": "{{minutes}} min rimasti",
+    "cooldown_hours": "{{hours}} h rimaste",
+    "cooldown_rate_limit": "limite raggiunto",
+    "cooldown_failures": "dopo errori",
     "new": "Nuovo",
     "col_name": "Nome",
     "col_implementation": "Tipo",

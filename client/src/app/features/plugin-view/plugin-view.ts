@@ -288,14 +288,25 @@ export class PluginViewComponent {
    *  since only it holds the row. */
   providerRowActions(view: ProvidersView): ProviderRowAction[] {
     return (view.actions ?? [])
-      .filter((a) => a.scope === 'row')
-      .map((a) => ({
-        labelKey: a.labelKey,
-        method: a.method,
-        route: this.resourceUrl(a.route),
-        confirmKey: a.confirmKey,
-        result: a.result,
-      }));
+      .filter((a) => a.scope === 'row' && a.slot !== 'cooldown-reset')
+      .map((a) => this.toProviderRowAction(a));
+  }
+
+  /** The cooldown reset renders beside the cooldown instead of as another button, so it is
+   *  pulled out of `providerRowActions` rather than rendered twice. */
+  providerCooldownAction(view: ProvidersView): ProviderRowAction | null {
+    const action = (view.actions ?? []).find((a) => a.scope === 'row' && a.slot === 'cooldown-reset');
+    return action ? this.toProviderRowAction(action) : null;
+  }
+
+  private toProviderRowAction(a: NonNullable<ProvidersView['actions']>[number]): ProviderRowAction {
+    return {
+      labelKey: a.labelKey,
+      method: a.method,
+      route: this.resourceUrl(a.route),
+      confirmKey: a.confirmKey,
+      result: a.result,
+    };
   }
 
   /** `actions[].scope: 'list'` — rendered once above the rows, run with no draft. */

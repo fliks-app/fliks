@@ -149,6 +149,14 @@ export type FormActionId = (typeof FORM_ACTION_IDS)[number];
 export const TABLE_ROW_ACTION_IDS = ['table.open-media'] as const;
 export type TableRowActionId = (typeof TABLE_ROW_ACTION_IDS)[number];
 
+/**
+ * Where a `providers` row action renders instead of as its own labelled button. `cooldown-reset`
+ * puts it beside the cooldown a row reports, so clearing one sits next to the thing it clears.
+ * Closed vocabulary: an unknown value falls back to a plain button rather than disappearing.
+ */
+export const PROVIDER_ROW_ACTION_SLOTS = ['cooldown-reset'] as const;
+export type ProviderRowActionSlot = (typeof PROVIDER_ROW_ACTION_SLOTS)[number];
+
 export interface FormConfigPage extends ConfigPageBase {
   kind?: 'form';
   fields: FormItem[];
@@ -247,6 +255,8 @@ export interface ProvidersConfigPage extends ConfigPageBase {
     route: string;
     scope: 'row' | 'list';
     confirmKey?: string;
+    /** Renders this action in a known place rather than as its own button. `scope: 'row'` only. */
+    slot?: ProviderRowActionSlot;
     /** How core renders what a `GET` answers — an array of rows, in declared columns.
      *  A `GET` without it renders no button: core has no domain view to fall back on. */
     result?: { kind: 'table'; columns: TableColumn[]; emptyKey: string };

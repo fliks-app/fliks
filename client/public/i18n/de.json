@@ -2412,6 +2412,11 @@
     "status_unset": "Noch nicht festgelegt"
   },
   "provider_list": {
+    "col_cooldown": "Cooldown",
+    "cooldown_minutes": "{{minutes}} Min. übrig",
+    "cooldown_hours": "{{hours}} Std. übrig",
+    "cooldown_rate_limit": "Ratenlimit",
+    "cooldown_failures": "nach Fehlern",
     "new": "Neu",
     "col_name": "Name",
     "col_implementation": "Typ",

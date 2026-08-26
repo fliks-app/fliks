@@ -37,30 +37,67 @@
         <thead>
           <tr>
             <th>{{ labels().colNameKey | translate }}</th>
-            <th>{{ labels().colImplementationKey | translate }}</th>
+            @if (showImplementation()) { <th>{{ labels().colImplementationKey | translate }}</th> }
             @if (showPriority()) { <th class="text-end">{{ labels().colPriorityKey | translate }}</th> }
             <th class="text-center">{{ labels().colEnabledKey | translate }}</th>
+            @if (showCooldown()) { <th>{{ 'provider_list.col_cooldown' | translate }}</th> }
             @if (rowExtraStatus()) { <th></th> }
-            <th class="text-end w-40">{{ labels().actionsKey | translate }}</th>
+            <th class="text-end">{{ labels().actionsKey | translate }}</th>
           </tr>
         </thead>
         <tbody>
           @for (row of orderedRows(); track row.id; let i = $index) {
             <tr>
-              <td class="font-medium">{{ row.name }}</td>
-              <td class="text-sm">{{ implementationLabel(row[implementationKey()] + '') }}</td>
+              <td>
+                <button type="button" class="link link-hover font-medium" (click)="openEdit(row)">{{ row.name }}</button>
+              </td>
+              @if (showImplementation()) {
+                <td class="text-sm">{{ implementationLabel(row[implementationKey()] + '') }}</td>
+              }
               @if (showPriority()) { <td class="text-end tabular-nums">{{ row.priority }}</td> }
               <td class="text-center">
-                @if (row.enabled) {
-                  <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
-                } @else {
-                  <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
-                }
+                <input
+                  type="checkbox"
+                  class="toggle toggle-sm toggle-success"
+                  [checked]="row.enabled"
+                  [disabled]="togglingId() === row.id"
+                  [attr.aria-label]="labels().colEnabledKey | translate"
+                  (change)="toggleEnabled(row)"
+                />
               </td>
+              @if (showCooldown()) {
+                <td class="text-sm">
+                  @if (cooldownOf(row); as cd) {
+                    <span class="inline-flex flex-nowrap items-center gap-1.5">
+                      <span class="badge badge-sm badge-warning whitespace-nowrap">{{ cooldownRemaining(cd) }}</span>
+                      <span class="text-xs text-base-content/60">{{ cooldownReasonKey(cd) | translate }}</span>
+                      @if (cooldownAction(); as action) {
+                        <button
+                          type="button"
+                          class="btn btn-ghost btn-xs btn-square"
+                          [disabled]="rowActionBusy() === rowActionKey(row, action)"
+                          [attr.aria-label]="action.labelKey | translate"
+                          [attr.title]="action.labelKey | translate"
+                          (click)="runRowAction(row, action)"
+                        >
+                          @if (rowActionBusy() === rowActionKey(row, action)) {
+                            <span class="loading loading-spinner loading-xs"></span>
+                          } @else {
+                            <svg lucideRotateCcw class="h-4 w-4"></svg>
+                          }
+                        </button>
+                      }
+                    </span>
+                  } @else {
+                    <span class="text-base-content/30">—</span>
+                  }
+                </td>
+              }
               @if (rowExtraStatus(); as tpl) {
                 <td><ng-container *ngTemplateOutlet="tpl; context: { $implicit: row }" /></td>
               }
               <td class="text-end">
+                <span class="inline-flex flex-nowrap items-center justify-end gap-1">
                 @if (reorderable()) {
                   <button type="button" class="btn btn-ghost btn-xs btn-square" [disabled]="i === 0"
                           (click)="moveRow(row, -1)" [attr.aria-label]="'provider_list.move_up' | translate">
@@ -87,12 +124,10 @@
                     {{ action.labelKey | translate }}
                   </button>
                 }
-                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(row)">
-                  {{ labels().editKey | translate }}
-                </button>
                 <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(row)">
                   {{ labels().deleteKey | translate }}
                 </button>
+                </span>
               </td>
             </tr>
           }

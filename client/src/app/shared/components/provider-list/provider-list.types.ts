@@ -11,6 +11,8 @@ export interface ProviderInstance {
   enabled: boolean;
   priority: number;
   settings?: Record<string, unknown>;
+  /** Present only on resources that track backoff; `null` while the row is healthy. */
+  cooldown?: ProviderCooldown | null;
   [extra: string]: unknown;
 }
 
@@ -52,6 +54,16 @@ export interface ProviderRowAction {
   confirmKey?: string;
   /** How a `GET`'s answer renders (`ProvidersConfigPage.actions[].result`). */
   result?: { kind: 'table'; columns: TableColumn[]; emptyKey: string };
+}
+
+/** What a row reports about its own backoff, when the resource tracks one. Rendered as its own
+ *  column: a page offering "clear the cooldown" while never showing one is the shape this fills. */
+export interface ProviderCooldown {
+  reason: 'rate-limit' | 'failures';
+  remainingMs: number;
+  until: string;
+  failureCount?: number;
+  detail?: string;
 }
 
 export interface ProviderListLabels {

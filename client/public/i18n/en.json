@@ -2440,6 +2440,11 @@
     "status_unset": "Not set yet"
   },
   "provider_list": {
+    "col_cooldown": "Cooldown",
+    "cooldown_minutes": "{{minutes}} min left",
+    "cooldown_hours": "{{hours}} h left",
+    "cooldown_rate_limit": "rate limited",
+    "cooldown_failures": "after failures",
     "new": "New",
     "col_name": "Name",
     "col_implementation": "Type",
