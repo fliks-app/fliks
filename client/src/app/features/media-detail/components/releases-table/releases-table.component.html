@@ -1,4 +1,4 @@
-<div class="overflow-x-auto">
+<div class="overflow-x-auto overflow-y-hidden">
   <!-- `table-fixed` ignores a cell's min-width, so the title column's floor lives here. -->
   <table class="table table-fixed w-full sm:min-w-[64rem]">
     <thead>
@@ -19,7 +19,7 @@
         <tr [class.opacity-50]="r.blocklisted || !r.languageAllowed || r.rejections.length > 0">
           <td class="text-sm min-w-0">
             <!-- Title scrolls horizontally on its own -->
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto overflow-y-hidden">
               <p class="whitespace-nowrap inline-flex items-center gap-1.5">
                 @if (r.isFullSeason) {
                   <svg lucidePackage class="h-4 w-4 shrink-0 text-info" [attr.title]="'media_detail.season_pack' | translate"></svg>
