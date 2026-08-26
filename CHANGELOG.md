@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.2.1](https://github.com/fliks-app/fliks/compare/v3.2.0...v3.2.1) (2026-08-26)
+
+
+### Bug Fixes
+
+* **acquisition:** offer a packed season its episodes, and say why a row was skipped ([#1053](https://github.com/fliks-app/fliks/issues/1053)) ([cfe1c8c](https://github.com/fliks-app/fliks/commit/cfe1c8cb573cb9576aa5d78fc41c4eaed1dd88ed))
+* **acquisition:** stop dropping every series candidate, and unbound the sweep's deadline ([#1055](https://github.com/fliks-app/fliks/issues/1055)) ([b6fe715](https://github.com/fliks-app/fliks/commit/b6fe71572debf0c6578465a789107527b0dc75ec))
+* **release-scoring:** season packs, resolution upgrades, coverage, and remove delay profiles ([#1056](https://github.com/fliks-app/fliks/issues/1056)) ([1a3a5a2](https://github.com/fliks-app/fliks/commit/1a3a5a236105f6e6d9e760248f2a74ff0af78f93))
+
 ## [3.2.0](https://github.com/fliks-app/fliks/compare/v3.1.0...v3.2.0) (2026-08-26)
 
 
