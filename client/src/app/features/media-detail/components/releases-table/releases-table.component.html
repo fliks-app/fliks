@@ -1,5 +1,6 @@
-<div>
-  <table class="table table-fixed w-full">
+<div class="overflow-x-auto">
+  <!-- `table-fixed` ignores a cell's min-width, so the title column's floor lives here. -->
+  <table class="table table-fixed w-full sm:min-w-[64rem]">
     <thead>
       <tr>
         <th>{{ 'media_detail.col_release' | translate }}</th>
