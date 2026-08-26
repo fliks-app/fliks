@@ -2151,7 +2151,6 @@
       "confirm_uninstall": "Uninstall “{{name}}”? Any data associated with this plugin will be lost.",
       "uninstalled": "Plugin uninstalled.",
       "uninstall_error": "Unable to uninstall the plugin.",
-      "inspect_error": "Unable to read this archive.",
       "installed": "Plugin installed.",
       "install_failed_but_kept": "\"{{id}}\" was installed but could not start: {{reason}}",
       "enabled_toast": "Plugin enabled.",
@@ -2259,7 +2258,6 @@
         "update_available": "Update available",
         "install": "Install",
         "no_installable": "No installable version",
-        "inspect_error": "Unable to fetch this plugin.",
         "switch_to": "Update to {{version}}",
         "update_keeps_data": "Your settings are kept."
       },

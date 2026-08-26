@@ -116,9 +116,9 @@ export class PluginsSettingsComponent implements OnInit {
     try {
       const report: PluginInspectReport = await this.api.inspect(file);
       this.consentSheet()?.open(report);
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      this.toast.error(httpErr.error?.message ?? this.translate.instant('settings.plugins.inspect_error'));
+    } catch {
+      // Same as the catalogue path: the global error interceptor already toasts the server's
+      // message, so a second one here just repeats it.
     } finally {
       this.uploading.set(false);
     }
