@@ -1,5 +1,31 @@
 # Changelog
 
+## [3.2.0](https://github.com/fliks-app/fliks/compare/v3.1.0...v3.2.0) (2026-08-26)
+
+
+### Features
+
+* **media-detail:** show the file import date in the file info panel ([#1039](https://github.com/fliks-app/fliks/issues/1039)) ([d111ab8](https://github.com/fliks-app/fliks/commit/d111ab8b5489039a18d92066fd7a1fa97f92c533))
+* **plugin-catalogue:** state the version running instead of listing every version offered ([#1048](https://github.com/fliks-app/fliks/issues/1048)) ([fca84a7](https://github.com/fliks-app/fliks/commit/fca84a7ac624fea2ceae5da229a787739f4fb747))
+* **provider-list:** show the cooldown a row is in, and thin the actions cell ([#1047](https://github.com/fliks-app/fliks/issues/1047)) ([c830dc6](https://github.com/fliks-app/fliks/commit/c830dc6e4dc64752d163591166106dcbe88d2843))
+* **release-picker:** fill the modal as indexers answer, with a tab per indexer ([#1040](https://github.com/fliks-app/fliks/issues/1040)) ([c4b3fe8](https://github.com/fliks-app/fliks/commit/c4b3fe80026fedd8e86e2ebd4248f88e85f8c405))
+* **secrets:** let a client erase a stored credential with an explicit null ([#1032](https://github.com/fliks-app/fliks/issues/1032)) ([e523ed0](https://github.com/fliks-app/fliks/commit/e523ed0105b742fd57d64ebd99b8e25e96ed3931))
+
+
+### Bug Fixes
+
+* **media-detail:** track grab-best per target so several can run at once ([#1036](https://github.com/fliks-app/fliks/issues/1036)) ([dc4902e](https://github.com/fliks-app/fliks/commit/dc4902ee68f6fcc7f9851f996108e7cdae588606))
+* **notifications:** derive one event vocabulary instead of three that disagree ([#1034](https://github.com/fliks-app/fliks/issues/1034)) ([610365c](https://github.com/fliks-app/fliks/commit/610365c96dfb1636c6c885ee99301e773f8e7982))
+* **plugin-ui:** re-merge plugin translations whenever the registry reloads ([#1037](https://github.com/fliks-app/fliks/issues/1037)) ([1b956c3](https://github.com/fliks-app/fliks/commit/1b956c33ec205cab9fbd024a266db5ec050eb389))
+* **plugins:** only offer a catalog version core could verify ([#1050](https://github.com/fliks-app/fliks/issues/1050)) ([f23283b](https://github.com/fliks-app/fliks/commit/f23283b8a1a694262ac340354f945a8ae1887514))
+* **plugins:** refresh stale catalog sources at boot, not only at 3am ([#1038](https://github.com/fliks-app/fliks/issues/1038)) ([7aa2dee](https://github.com/fliks-app/fliks/commit/7aa2dee2cb93f0a9008cf39e6a8ac13f56af49f3))
+* **plugins:** stop showing an install error twice ([#1049](https://github.com/fliks-app/fliks/issues/1049)) ([f2d40af](https://github.com/fliks-app/fliks/commit/f2d40af4139d04bf9d2dbc1023a53aad04de9fef))
+* **release-picker:** give an empty search its own centred state ([#1042](https://github.com/fliks-app/fliks/issues/1042)) ([46b1fad](https://github.com/fliks-app/fliks/commit/46b1fad175b95b742178620ffdc2810e719f5fbb))
+* **release-picker:** keep each indexer tab on one line, and move progress into the strip ([#1041](https://github.com/fliks-app/fliks/issues/1041)) ([0a16b35](https://github.com/fliks-app/fliks/commit/0a16b3507642b5d2ae341b9b1d0a46890983db50))
+* **release-picker:** stop the release table nesting a second vertical scrollbar ([#1046](https://github.com/fliks-app/fliks/issues/1046)) ([e3dc21b](https://github.com/fliks-app/fliks/commit/e3dc21be9bb938a090924a66129d3a11faf0e97f))
+* **release-picker:** tell apart a tab still searching, one that failed, and one with no hits ([#1043](https://github.com/fliks-app/fliks/issues/1043)) ([1bb2f59](https://github.com/fliks-app/fliks/commit/1bb2f59ca21cecd33bb845dd493aebc4d26b327a))
+* **release-scoring:** honour the requested episode and season scope ([#1035](https://github.com/fliks-app/fliks/issues/1035)) ([0909c07](https://github.com/fliks-app/fliks/commit/0909c07db353e6a6c1d9f95414767ee7aaebee47))
+
 ## [3.1.0](https://github.com/fliks-app/fliks/compare/v3.0.0...v3.1.0) (2026-08-21)
 
 
