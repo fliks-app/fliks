@@ -59,38 +59,43 @@ export class MediaDetailReleasePickerService {
   private readonly http = inject(HttpClient);
   private readonly registry = inject(PluginUiRegistryService);
 
-  getMovieReleases(id: number, q?: string): Promise<MovieRelease[]> {
-    return this.search((r) => r.movie, { id }, q);
+  getMovieReleases(id: number, q?: string, searchId?: string): Promise<MovieRelease[]> {
+    return this.search((r) => r.movie, { id }, q, searchId);
   }
 
   grabMovie(id: number, body: GrabBody = {}): Promise<void> {
     return this.grab((r) => r.movie, { id }, body);
   }
 
-  getSeasonReleases(mediaId: number, seasonId: number, q?: string): Promise<MovieRelease[]> {
-    return this.search((r) => r.season, { id: mediaId, seasonId }, q);
+  getSeasonReleases(mediaId: number, seasonId: number, q?: string, searchId?: string): Promise<MovieRelease[]> {
+    return this.search((r) => r.season, { id: mediaId, seasonId }, q, searchId);
   }
 
   grabSeason(mediaId: number, seasonId: number, body: GrabBody = {}): Promise<void> {
     return this.grab((r) => r.season, { id: mediaId, seasonId }, body);
   }
 
-  getEpisodeReleases(mediaId: number, episodeId: number, q?: string): Promise<MovieRelease[]> {
-    return this.search((r) => r.episode, { id: mediaId, episodeId }, q);
+  getEpisodeReleases(mediaId: number, episodeId: number, q?: string, searchId?: string): Promise<MovieRelease[]> {
+    return this.search((r) => r.episode, { id: mediaId, episodeId }, q, searchId);
   }
 
   grabEpisode(mediaId: number, episodeId: number, body: GrabBody = {}): Promise<void> {
     return this.grab((r) => r.episode, { id: mediaId, episodeId }, body);
   }
 
+  /** `sid` names the modal waiting on this search: the plugin echoes it on every partial
+   *  result it pushes, so a modal ignores a search other than its own. Omitted means the
+   *  caller wants the answer only, with nothing streamed. */
   private async search(
     pick: (r: ReleasePickerRoutes) => ReleasePickerPair,
     params: RouteParams,
     q?: string,
+    searchId?: string,
   ): Promise<MovieRelease[]> {
     const url = this.resolve(pick, 'search', params);
     const httpParams: Record<string, string> = {};
     if (q?.trim()) httpParams['q'] = q.trim();
+    if (searchId) httpParams['sid'] = searchId;
     return firstValueFrom(this.http.get<MovieRelease[]>(url, { params: httpParams }));
   }
 

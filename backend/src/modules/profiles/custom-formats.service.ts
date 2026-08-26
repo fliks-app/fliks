@@ -73,7 +73,16 @@ export class CustomFormatsService {
     releaseTitle: string,
     meta?: { freeleech?: boolean; downloadVolumeFactor?: number },
   ): Promise<number> {
-    const formats = await this.findAll();
+    return this.scoreReleaseWith(await this.findAll(), releaseTitle, meta);
+  }
+
+  /** Same scoring against a format list the caller already read. The release scorer
+   *  runs this once per candidate, so re-reading the table per release is an N+1. */
+  scoreReleaseWith(
+    formats: CustomFormat[],
+    releaseTitle: string,
+    meta?: { freeleech?: boolean; downloadVolumeFactor?: number },
+  ): number {
     let total = 0;
     for (const fmt of formats) {
       if (this.matchesFormat(releaseTitle, fmt, meta)) {

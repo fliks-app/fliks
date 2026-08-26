@@ -35,15 +35,18 @@ export class ReleasesTableComponent {
   readonly grabPrefix = input('r');
   readonly showCfScore = input(true);
 
-  readonly grab = output<{ release: MovieRelease; index: number }>();
+  readonly grab = output<{ release: MovieRelease; key: string }>();
 
-  grabKey(i: number): string {
-    return `${this.grabPrefix()}-${i}`;
+  /** Keyed by `downloadUrl`, never by row position: the list re-ranks while a streamed
+   *  search fills in, and a tab shows a subset — a positional key would move an in-flight
+   *  grab's spinner, and its result, onto an unrelated release. */
+  grabKey(r: MovieRelease): string {
+    return `${this.grabPrefix()}-${r.downloadUrl}`;
   }
 
   /** An allowed release grabs straight away; a rejected one confirms first,
    *  naming the reason, since it bypasses the profile guard by hand. */
-  async onGrabClick(r: MovieRelease, i: number): Promise<void> {
+  async onGrabClick(r: MovieRelease): Promise<void> {
     if (!r.allowed) {
       const ok = await this.confirmation.confirm({
         title: this.translate.instant('media_detail.grab_rejected_confirm_title'),
@@ -52,7 +55,7 @@ export class ReleasesTableComponent {
       });
       if (!ok) return;
     }
-    this.grab.emit({ release: r, index: i });
+    this.grab.emit({ release: r, key: this.grabKey(r) });
   }
 
   rejectionText(rejections: { code: string; params?: Record<string, number | string> }[]): string {

@@ -337,6 +337,7 @@
       <app-releases-modal #movieReleasesModal
         [title]="'media_detail.releases_title' | translate"
         [releases]="releases()"
+        [indexers]="releasesIndexers()"
         [loading]="releasesLoading()"
         [searched]="releasesSearched()"
         [error]="releasesError()"
@@ -345,12 +346,13 @@
         [grabState]="grabState()"
         [canGrab]="canGrab()"
         grabPrefix="r"
-        (grab)="grabRelease($event.release, $event.index)"
+        (grab)="grabRelease($event.release, $event.key)"
       />
 
       <app-releases-modal #episodeReleasesModal
         [title]="'media_detail.ep_releases_title' | translate"
         [releases]="epReleases()"
+        [indexers]="epReleasesIndexers()"
         [loading]="epReleasesLoading()"
         [searched]="epReleasesSearched()"
         [error]="epReleasesError()"
@@ -359,12 +361,13 @@
         [grabState]="epGrabState()"
         [canGrab]="canGrab()"
         grabPrefix="ep"
-        (grab)="grabEpisodeRelease(m.id, selectedEpisodeId()!, $event.release, $event.index)"
+        (grab)="grabEpisodeRelease(m.id, selectedEpisodeId()!, $event.release, $event.key)"
       />
 
       <app-releases-modal #seasonReleasesModal
         [title]="'media_detail.season_packs_title' | translate"
         [releases]="seasonReleases()"
+        [indexers]="seasonReleasesIndexers()"
         [loading]="seasonReleasesLoading()"
         [searched]="true"
         [error]="seasonReleasesError()"
@@ -373,7 +376,7 @@
         [grabState]="seasonReleaseGrabState()"
         [showCfScore]="false"
         grabPrefix="s"
-        (grab)="onGrabSeasonReleaseFromModal(m.id, $event.release, $event.index)"
+        (grab)="onGrabSeasonReleaseFromModal(m.id, $event.release, $event.key)"
       />
 
       <app-media-detail-profiles-modal

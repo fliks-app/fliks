@@ -72,7 +72,7 @@ describe('ReleasesTableComponent — grab control gating', () => {
 
   it('an allowed release grabs immediately, without confirming', async () => {
     const { fixture, confirm } = await createFixture([makeRelease({ allowed: true })]);
-    let emitted: { release: MovieRelease; index: number } | undefined;
+    let emitted: { release: MovieRelease; key: string } | undefined;
     fixture.componentInstance.grab.subscribe((e) => (emitted = e));
 
     const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
@@ -81,13 +81,14 @@ describe('ReleasesTableComponent — grab control gating', () => {
     await fixture.whenStable();
 
     expect(confirm).not.toHaveBeenCalled();
-    expect(emitted?.index).toBe(0);
+    // Keyed by the release, not its row: the list re-ranks while a search streams in.
+    expect(emitted?.key).toBe('r-magnet:placeholder');
   });
 
   it('a rejected (non-blocklisted) release confirms first, naming the reason, then grabs', async () => {
     const release = makeRelease({ allowed: false, rejections: [{ code: 'QUALITY_NOT_ALLOWED' }] });
     const { fixture, confirm } = await createFixture([release]);
-    let emitted: { release: MovieRelease; index: number } | undefined;
+    let emitted: { release: MovieRelease; key: string } | undefined;
     fixture.componentInstance.grab.subscribe((e) => (emitted = e));
 
     const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;

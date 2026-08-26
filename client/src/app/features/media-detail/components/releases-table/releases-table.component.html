@@ -14,7 +14,7 @@
       </tr>
     </thead>
     <tbody>
-      @for (r of releases(); track r.downloadUrl; let i = $index) {
+      @for (r of releases(); track r.downloadUrl) {
         <tr [class.opacity-50]="r.blocklisted || !r.languageAllowed || r.rejections.length > 0">
           <td class="text-sm min-w-0">
             <!-- Title scrolls horizontally on its own -->
@@ -65,16 +65,16 @@
                 </div>
               </div>
               @if (canGrab() && !r.blocklisted) {
-                @if (grabState().get(grabKey(i)) === 'ok') {
+                @if (grabState().get(grabKey(r)) === 'ok') {
                   <svg lucideCheck class="h-5 w-5 text-success shrink-0"></svg>
                 } @else {
                   <button type="button" class="btn btn-xs btn-square shrink-0"
                     [class.btn-ghost]="r.allowed" [class.btn-warning]="!r.allowed"
-                    (click)="onGrabClick(r, i)"
+                    (click)="onGrabClick(r)"
                     [disabled]="grabBusy() !== null">
-                    @if (grabBusy() === grabKey(i)) {
+                    @if (grabBusy() === grabKey(r)) {
                       <span class="loading loading-spinner loading-xs"></span>
-                    } @else if (grabState().get(grabKey(i)) === 'error') {
+                    } @else if (grabState().get(grabKey(r)) === 'error') {
                       <svg lucideCircleAlert class="h-5 w-5 text-error"></svg>
                     } @else {
                       <svg lucideDownload class="h-5 w-5"></svg>
@@ -126,16 +126,16 @@
           <td class="hidden sm:table-cell text-sm">{{ r.sourceName }}</td>
           <td class="hidden sm:table-cell w-10">
             @if (canGrab() && !r.blocklisted) {
-              @if (grabState().get(grabKey(i)) === 'ok') {
+              @if (grabState().get(grabKey(r)) === 'ok') {
                 <svg lucideCheck class="h-5 w-5 text-success"></svg>
               } @else {
                 <button type="button" class="btn btn-xs btn-square"
                   [class.btn-ghost]="r.allowed" [class.btn-warning]="!r.allowed"
-                  (click)="onGrabClick(r, i)"
+                  (click)="onGrabClick(r)"
                   [disabled]="grabBusy() !== null">
-                  @if (grabBusy() === grabKey(i)) {
+                  @if (grabBusy() === grabKey(r)) {
                     <span class="loading loading-spinner loading-xs"></span>
-                  } @else if (grabState().get(grabKey(i)) === 'error') {
+                  } @else if (grabState().get(grabKey(r)) === 'error') {
                     <svg lucideCircleAlert class="h-5 w-5 text-error"></svg>
                   } @else {
                     <svg lucideDownload class="h-5 w-5"></svg>
