@@ -82,6 +82,7 @@ async function createComponent(
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     confirmation: { confirm: (...a: any[]) => Promise<boolean>; alert: (...a: any[]) => Promise<void> };
     labels: ProviderListLabels;
+    cooldownAction: ProviderRowAction | null;
   }> = {},
 ) {
   TestBed.configureTestingModule({
@@ -106,6 +107,7 @@ async function createComponent(
   if (opts.reorderable) fixture.componentRef.setInput('reorderable', opts.reorderable);
   if (opts.listActions) fixture.componentRef.setInput('listActions', opts.listActions);
   if (opts.rowActions) fixture.componentRef.setInput('rowActions', opts.rowActions);
+  if (opts.cooldownAction !== undefined) fixture.componentRef.setInput('cooldownAction', opts.cooldownAction);
   fixture.detectChanges();
   await fixture.whenStable();
   await new Promise((r) => setTimeout(r, 0));
@@ -382,5 +384,87 @@ describe('ProviderListComponent — editor dialog chrome', () => {
 
     expect(post).not.toHaveBeenCalled();
     expect(fixture.componentInstance.editingId()).toBeNull();
+  });
+});
+
+const RESET: ProviderRowAction = {
+  labelKey: 'x.clear_cooldown',
+  method: 'DELETE',
+  route: '/api/x/:id/cooldown',
+  confirmKey: 'x.confirm_clear',
+};
+
+function row(over: Record<string, unknown> = {}) {
+  return { id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {}, ...over };
+}
+
+describe('ProviderListComponent — cooldown column', () => {
+  it('VERDICT: a cooling row reports it, instead of only offering to clear something invisible', async () => {
+    const cooling = row({ cooldown: { reason: 'failures', remainingMs: 90_000, until: 'x', failureCount: 2 } });
+    const fixture = await createComponent({ get: () => of([cooling]) }, { cooldownAction: RESET });
+
+    expect(fixture.componentInstance.showCooldown()).toBe(true);
+    expect(fixture.componentInstance.cooldownOf(fixture.componentInstance.rows()[0])).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('svg[lucideRotateCcw]')).not.toBeNull();
+  });
+
+  it('a healthy row keeps the column but offers nothing to reset', async () => {
+    const fixture = await createComponent({ get: () => of([row({ cooldown: null })]) }, { cooldownAction: RESET });
+    expect(fixture.componentInstance.showCooldown()).toBe(true);
+    expect(fixture.componentInstance.cooldownOf(fixture.componentInstance.rows()[0])).toBeNull();
+    expect(fixture.nativeElement.querySelector('svg[lucideRotateCcw]')).toBeNull();
+  });
+
+  it('a resource that tracks no backoff shows no column at all', async () => {
+    const fixture = await createComponent({ get: () => of([row()]) }, { cooldownAction: null });
+    expect(fixture.componentInstance.showCooldown()).toBe(false);
+  });
+
+  // The test loader resolves no strings, so these assert on the key chosen — which is the
+  // decision under test: a six-hour backoff read as "360 min" would be unreadable.
+  it('reads a long backoff in hours rather than as hundreds of minutes', async () => {
+    const fixture = await createComponent({ get: () => of([row()]) });
+    const c = fixture.componentInstance;
+    expect(c.cooldownRemaining({ reason: 'failures', remainingMs: 90_000, until: 'x' })).toContain('minutes');
+    expect(c.cooldownRemaining({ reason: 'failures', remainingMs: 6 * 3_600_000, until: 'x' })).toContain('hours');
+  });
+
+  it('names the reason, so a rate limit is not read as a broken indexer', async () => {
+    const fixture = await createComponent({ get: () => of([row()]) });
+    const c = fixture.componentInstance;
+    expect(c.cooldownReasonKey({ reason: 'rate-limit', remainingMs: 1, until: 'x' })).toContain('rate_limit');
+    expect(c.cooldownReasonKey({ reason: 'failures', remainingMs: 1, until: 'x' })).toContain('failures');
+  });
+});
+
+describe('ProviderListComponent — row controls', () => {
+  it('VERDICT: the name opens the editor, so the row carries no separate edit button', async () => {
+    const fixture = await createComponent({ get: () => of([row()]) });
+    const nameButton = fixture.nativeElement.querySelector('td button') as HTMLButtonElement;
+    nameButton.click();
+    await fixture.whenStable();
+    expect(fixture.componentInstance.editingId()).toBe(1);
+  });
+
+  it('the enabled toggle persists the whole row, so a redacted secret is never written as a value', async () => {
+    const put = vi.fn(() => of({}));
+    const stored = row({ enabled: true, settings: { apiKey: '***' } });
+    const fixture = await createComponent({ get: () => of([stored]), put });
+    await fixture.componentInstance.toggleEnabled(fixture.componentInstance.rows()[0]);
+
+    expect(put).toHaveBeenCalledWith('/api/x/1', expect.objectContaining({ enabled: false, settings: { apiKey: '***' } }));
+  });
+
+  it('hides the implementation column when there is only one to tell apart', async () => {
+    const fixture = await createComponent({ get: () => of([row()]) }, { implementations: IMPLS });
+    expect(fixture.componentInstance.showImplementation()).toBe(false);
+  });
+
+  it('keeps the implementation column as soon as rows can differ', async () => {
+    const fixture = await createComponent(
+      { get: () => of([row()]) },
+      { implementations: [...IMPLS, { implementation: 'other', labelKey: 'x.impl_other', fields: [] }] },
+    );
+    expect(fixture.componentInstance.showImplementation()).toBe(true);
   });
 });

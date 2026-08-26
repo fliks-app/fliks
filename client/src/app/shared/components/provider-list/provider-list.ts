@@ -15,7 +15,7 @@ import { HttpClient } from '@angular/common/http';
 import { NgTemplateOutlet } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { LucideArrowUp, LucideArrowDown } from '@lucide/angular';
+import { LucideArrowUp, LucideArrowDown, LucideRotateCcw } from '@lucide/angular';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { InputFieldComponent } from '../forms/input-field/input-field';
 import { ToggleFieldComponent } from '../forms/toggle-field/toggle-field';
@@ -26,6 +26,7 @@ import {
   ProviderDraft,
   ProviderImplementation,
   ProviderInstance,
+  ProviderCooldown,
   ProviderListAction,
   ProviderListLabels,
   ProviderRowAction,
@@ -67,6 +68,7 @@ export function resolveRowActionRoute(route: string, id: number | string): strin
     DataTableComponent,
     LucideArrowUp,
     LucideArrowDown,
+    LucideRotateCcw,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './provider-list.html',
@@ -75,6 +77,7 @@ export class ProviderListComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  readonly togglingId = signal<number | null>(null);
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
   private readonly resultDialog = viewChild<ElementRef<HTMLDialogElement>>('resultDialog');
 
@@ -95,6 +98,10 @@ export class ProviderListComponent implements OnInit {
   readonly listActions = input<readonly ProviderListAction[]>([]);
   /** Rendered per row (`ProvidersConfigPage.actions[].scope: 'row'`) — every entry gets its own button. */
   readonly rowActions = input<readonly ProviderRowAction[]>([]);
+  /** The action that clears a row's cooldown, rendered beside the cooldown itself rather than
+   *  as another button in the actions cell. Routed through `runRowAction`, so it keeps that
+   *  path's confirmation, busy state and reload. */
+  readonly cooldownAction = input<ProviderRowAction | null>(null);
   /** Matches subtitle-providers' current UX: renaming the draft to the driver's label while creating. */
   readonly autoFillNameFromImplementation = input(false);
   /** Runs against the unsaved draft (before create/update), catching a bad connection before it's saved. */
@@ -347,6 +354,46 @@ export class ProviderListComponent implements OnInit {
       await this.reload();
     } finally {
       this.listActionBusy.set(null);
+    }
+  }
+
+  /** The implementation column earns its place only when there is something to tell apart —
+   *  the editor already hides its selector on a single implementation for the same reason. */
+  readonly showImplementation = computed(() => this.implementations().length > 1);
+
+  /** The column appears for resources that track backoff at all, so a healthy list still shows
+   *  the column its rows can report into rather than the table reshaping on the first failure. */
+  readonly showCooldown = computed(
+    () => this.cooldownAction() !== null || this.rows().some((r) => r.cooldown !== undefined),
+  );
+
+  cooldownOf(row: ProviderInstance): ProviderCooldown | null {
+    return row.cooldown ?? null;
+  }
+
+  /** Coarse on purpose: a backoff of hours read to the second would be noise, and the value is
+   *  a snapshot the list does not tick. */
+  cooldownRemaining(cd: ProviderCooldown): string {
+    const minutes = Math.ceil(cd.remainingMs / 60_000);
+    if (minutes < 60) return this.translate.instant('provider_list.cooldown_minutes', { minutes });
+    return this.translate.instant('provider_list.cooldown_hours', { hours: Math.ceil(minutes / 60) });
+  }
+
+  cooldownReasonKey(cd: ProviderCooldown): string {
+    return cd.reason === 'rate-limit' ? 'provider_list.cooldown_rate_limit' : 'provider_list.cooldown_failures';
+  }
+
+  /** Persists the whole row, as `moveRow` does: the resource merges secrets on update, so
+   *  echoing a redacted settings bag back never overwrites the stored one. */
+  async toggleEnabled(row: ProviderInstance): Promise<void> {
+    this.togglingId.set(row.id);
+    try {
+      await firstValueFrom(this.http.put(`${this.listUrl()}/${row.id}`, { ...row, enabled: !row.enabled }));
+      await this.reload();
+    } catch {
+      // handled by the global error interceptor
+    } finally {
+      this.togglingId.set(null);
     }
   }
 

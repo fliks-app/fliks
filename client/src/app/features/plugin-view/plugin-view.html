@@ -37,6 +37,7 @@
           [reorderable]="view.reorderable ?? false"
           [listActions]="providerListActions(view)"
           [rowActions]="providerRowActions(view)"
+          [cooldownAction]="providerCooldownAction(view)"
           [testConnection]="providerTestConnection(view)"
         />
       } @else {
