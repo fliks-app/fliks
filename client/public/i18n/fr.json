@@ -2255,10 +2255,10 @@
         "empty_no_catalog": "Aucun catalogue en cache pour le moment — actualisez une source ci-dessus.",
         "by": "Par {{author}}",
         "installed": "Installé",
+        "installed_version": "Version installée : {{version}}",
+        "update_available": "Mise à jour disponible",
         "install": "Installer",
         "no_installable": "Aucune version installable",
-        "hidden_versions": "{{count}} version(s) masquée(s) — nécessite Fliks {{version}}+",
-        "hidden_versions_no_upgrade": "{{count}} version(s) masquée(s)",
         "inspect_error": "Impossible de récupérer ce plugin.",
         "switch_to": "Mettre à jour en {{version}}",
         "update_keeps_data": "Vos réglages sont conservés."

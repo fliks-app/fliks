@@ -83,3 +83,41 @@ describe('PluginCatalogueComponent — updating an installed plugin', () => {
     expect(buttonLabels(fixture).join(' ')).not.toContain('settings.plugins.catalogue.switch_to');
   });
 });
+
+describe('PluginCatalogueComponent — what a card states', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  function text(fixture: ComponentFixture<unknown>): string {
+    return (fixture.nativeElement as HTMLElement).textContent ?? '';
+  }
+
+  it('VERDICT: states the version running, not every version the catalogue carries', async () => {
+    const { fixture } = await createComponent([['fliks.acme', '1.0.0']]);
+
+    expect(fixture.componentInstance.installedVersion(fixture.componentInstance.rows()[0])).toBe('1.0.0');
+    expect(text(fixture)).toContain('settings.plugins.catalogue.installed_version');
+    // The old card listed one badge per installable version, which said nothing about this install.
+    expect(fixture.nativeElement.querySelectorAll('.badge-ghost').length).toBe(0);
+  });
+
+  it('an outdated install reads as an update, not as merely installed', async () => {
+    const { fixture } = await createComponent([['fliks.acme', '1.0.0']]);
+    expect(text(fixture)).toContain('settings.plugins.catalogue.update_available');
+    expect(text(fixture)).not.toContain('settings.plugins.catalogue.installed"');
+    expect(fixture.nativeElement.querySelector('.badge-info')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.badge-success')).toBeNull();
+  });
+
+  it('an up-to-date install keeps the plain installed badge', async () => {
+    const { fixture } = await createComponent([['fliks.acme', '1.1.0']]);
+    expect(fixture.nativeElement.querySelector('.badge-success')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.badge-info')).toBeNull();
+  });
+
+  it('a plugin that is not installed states no version at all', async () => {
+    const { fixture } = await createComponent([]);
+    expect(fixture.componentInstance.installedVersion(fixture.componentInstance.rows()[0])).toBeNull();
+    expect(text(fixture)).not.toContain('settings.plugins.catalogue.installed_version');
+    expect(fixture.nativeElement.querySelector('.badge-info')).toBeNull();
+  });
+});
