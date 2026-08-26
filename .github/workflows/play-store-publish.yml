@@ -172,7 +172,9 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
           packageName: media.fliks.app
           releaseFiles: client/android/app/build/outputs/bundle/release/app-release.aab
-          track: ${{ github.event.inputs.track || 'internal' }}
+          # `tracks`, not `track`: the singular is deprecated and the action already converts
+          # it internally. A single value is accepted, so the dispatch input stays a choice.
+          tracks: ${{ github.event.inputs.track || 'internal' }}
           # `draft` is required while the app itself is in draft status
           # in Play Console (no production release ever submitted).
           # Once the app is approved + published live, this can flip to
