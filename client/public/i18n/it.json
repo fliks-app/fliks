@@ -9,6 +9,7 @@
     "path": "File",
     "quality": "Qualità",
     "size": "Dimensione",
+    "added_at": "Aggiunto il",
     "original_file_bitrate": "Bitrate",
     "codec": "Codec",
     "profile": "Profilo",

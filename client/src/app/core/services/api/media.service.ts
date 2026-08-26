@@ -84,7 +84,7 @@ export interface Media {
   digitalRelease?: string | null;
   physicalRelease?: string | null;
   seasons?: Season[];
-  files?: { id: number; quality: string; relativePath: string; size: number; episodeId?: number | null; streamInfo?: MediaFileInfo | null }[];
+  files?: { id: number; quality: string; relativePath: string; size: number; createdAt?: string; episodeId?: number | null; streamInfo?: MediaFileInfo | null }[];
   qualityProfile?: QualityProfileBrief | null;
   languageProfile?: { id: number; name: string } | null;
   minimumAvailability?: 'announced' | 'inCinemas' | 'released';

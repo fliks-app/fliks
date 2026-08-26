@@ -20,6 +20,7 @@ type FileInput = {
   relativePath: string;
   size: number;
   quality: string;
+  createdAt?: string;
   streamInfo?: MediaFileInfo | null;
 };
 
@@ -95,6 +96,19 @@ export class MediaFileInfoComponent {
     if (n >= 1_073_741_824) return (n / 1_073_741_824).toFixed(2) + ' GB';
     if (n >= 1_048_576) return (n / 1_048_576).toFixed(1) + ' MB';
     return (n / 1024).toFixed(0) + ' KB';
+  }
+
+  formatAddedAt(iso?: string): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString(this.translate.currentLang || undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 
   formatBitrate(bps?: number): string {
