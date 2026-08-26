@@ -27,6 +27,7 @@ import {
   MediaCollection,
 } from '../../core/services/api/media.service';
 import { MediaDetailReleasePickerService, MovieRelease } from './media-detail-release-picker.service';
+import { ReleaseSearchStreamService, type IndexerRosterEntry } from './release-search-stream.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
 import {
@@ -130,6 +131,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly mediaService = inject(MediaService);
   private readonly releasePickerApi = inject(MediaDetailReleasePickerService);
+  private readonly releaseStream = inject(ReleaseSearchStreamService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly auth = inject(AuthService);
   private readonly translate = inject(TranslateService);
@@ -626,6 +628,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly expectedKind = signal<MediaType>('movie');
 
   readonly releases = signal<MovieRelease[]>([]);
+  /** Indexers this search queries and where each one is, pushed while it runs. */
+  readonly releasesIndexers = signal<IndexerRosterEntry[]>([]);
   readonly releasesLoading = signal(false);
   readonly releasesSearched = signal(false);
   readonly releasesError = signal('');
@@ -723,6 +727,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly selectedEpisodeId = signal<number | null>(null);
   readonly selectedEpisodeSeasonId = signal<number | null>(null);
   readonly epReleases = signal<MovieRelease[]>([]);
+  readonly epReleasesIndexers = signal<IndexerRosterEntry[]>([]);
   readonly epReleasesLoading = signal(false);
   readonly epReleasesSearched = signal(false);
   readonly epReleasesError = signal('');
@@ -745,6 +750,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly seasonReleasesOpen = signal<number | null>(null);
   readonly seasonForReleases = signal<Season | null>(null);
   readonly seasonReleases = signal<MovieRelease[]>([]);
+  readonly seasonReleasesIndexers = signal<IndexerRosterEntry[]>([]);
   readonly seasonReleasesLoading = signal(false);
   readonly seasonReleasesError = signal('');
   readonly seasonReleasesEmptyMessage = signal('media_detail.releases_empty');
@@ -1107,10 +1113,14 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.releasesEmptyMessage.set('media_detail.releases_empty');
     this.grabToast.set('');
     this.releases.set([]);
+    this.releasesIndexers.set([]);
     this.releasesSearched.set(false);
     this.movieReleasesModal()?.showModal();
     try {
-      const rows = await this.releasePickerApi.getMovieReleases(m.id);
+      const rows = await this.releaseStream.run(
+        (searchId) => this.releasePickerApi.getMovieReleases(m.id, undefined, searchId),
+        { releases: this.releases, indexers: this.releasesIndexers },
+      );
       this.releases.set(rows);
       this.releasesSearched.set(true);
     } catch (err: unknown) {
@@ -1553,6 +1563,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.selectedEpisodeId.set(episodeId);
     this.selectedEpisodeSeasonId.set(seasonId);
     this.epReleases.set([]);
+    this.epReleasesIndexers.set([]);
     this.epReleasesSearched.set(false);
     this.epReleasesError.set('');
     this.epReleasesEmptyMessage.set('media_detail.releases_empty');
@@ -1560,7 +1571,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.epReleasesLoading.set(true);
     this.episodeReleasesModal()?.showModal();
     try {
-      const rows = await this.releasePickerApi.getEpisodeReleases(mediaId, episodeId);
+      const rows = await this.releaseStream.run(
+        (searchId) => this.releasePickerApi.getEpisodeReleases(mediaId, episodeId, undefined, searchId),
+        { releases: this.epReleases, indexers: this.epReleasesIndexers },
+      );
       this.epReleases.set(rows);
       this.epReleasesSearched.set(true);
     } catch (err: unknown) {
@@ -1581,8 +1595,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     );
   }
 
-  async grabEpisodeRelease(mediaId: number, episodeId: number, r: MovieRelease, index: number) {
-    const key = `ep-${index}`;
+  async grabEpisodeRelease(mediaId: number, episodeId: number, r: MovieRelease, key: string) {
     this.epGrabBusy.set(key);
     try {
       await this.releasePickerApi.grabEpisode(mediaId, episodeId, releaseGrabBody(r));
@@ -1599,12 +1612,16 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.seasonReleasesOpen.set(season.id);
     this.seasonForReleases.set(season);
     this.seasonReleases.set([]);
+    this.seasonReleasesIndexers.set([]);
     this.seasonReleasesError.set('');
     this.seasonReleasesEmptyMessage.set('media_detail.releases_empty');
     this.seasonReleasesLoading.set(true);
     this.seasonReleasesModal()?.showModal();
     try {
-      const rows = await this.releasePickerApi.getSeasonReleases(mediaId, season.id);
+      const rows = await this.releaseStream.run(
+        (searchId) => this.releasePickerApi.getSeasonReleases(mediaId, season.id, undefined, searchId),
+        { releases: this.seasonReleases, indexers: this.seasonReleasesIndexers },
+      );
       this.seasonReleases.set(rows);
     } catch (err: unknown) {
       if (isUnprofiledReleaseError(err)) {
@@ -1623,14 +1640,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     );
   }
 
-  onGrabSeasonReleaseFromModal(mediaId: number, r: MovieRelease, index: number) {
+  onGrabSeasonReleaseFromModal(mediaId: number, r: MovieRelease, key: string) {
     const season = this.seasonForReleases();
     if (!season) return;
-    void this.grabSeasonRelease(mediaId, season, r, index);
+    void this.grabSeasonRelease(mediaId, season, r, key);
   }
 
-  async grabSeasonRelease(mediaId: number, season: Season, r: MovieRelease, index: number) {
-    const key = `s-${index}`;
+  async grabSeasonRelease(mediaId: number, season: Season, r: MovieRelease, key: string) {
     this.seasonGrabBusy.set(key);
     try {
       await this.releasePickerApi.grabSeason(mediaId, season.id, releaseGrabBody(r));
@@ -1748,10 +1764,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.watchedEpisodeIds.set(ids);
   }
 
-  async grabRelease(r: MovieRelease, index: number) {
+  async grabRelease(r: MovieRelease, key: string) {
     const m = this.media();
     if (!m || m.type !== 'movie') return;
-    const key = `r-${index}`;
     this.grabBusy.set(key);
     try {
       await this.releasePickerApi.grabMovie(m.id, releaseGrabBody(r));

@@ -2,25 +2,54 @@
   <div class="modal-box w-[95%] max-w-7xl my-8 max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden p-0">
     <div class="px-4 pt-4 sm:px-6 sm:pt-6 shrink-0">
       <div class="flex items-center justify-between mb-3">
-        <h3 class="text-lg font-bold">{{ title() }}</h3>
+        <h3 class="text-lg font-bold flex items-center gap-2">
+          {{ title() }}
+          @if (loading() && releases().length) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+        </h3>
         <form method="dialog">
           <button class="btn btn-sm btn-circle btn-ghost">✕</button>
         </form>
       </div>
+
+      @if (tabs().length) {
+        <div role="tablist" class="tabs tabs-bordered overflow-x-auto flex-nowrap">
+          @for (t of tabs(); track t.id) {
+            <button
+              type="button"
+              role="tab"
+              class="tab gap-1.5 whitespace-nowrap"
+              [class.tab-active]="activeTab() === t.id"
+              [attr.aria-selected]="activeTab() === t.id"
+              (click)="activeTab.set(t.id)">
+              @if (t.state === 'pending') {
+                <span class="loading loading-spinner loading-xs text-warning"></span>
+              } @else if (t.state === 'failed') {
+                <span class="h-2 w-2 rounded-full bg-error shrink-0" [attr.title]="'media_detail.indexer_failed' | translate"></span>
+              } @else if (t.state === 'skipped') {
+                <span class="h-2 w-2 rounded-full bg-base-content/30 shrink-0" [attr.title]="'media_detail.indexer_cooldown' | translate"></span>
+              }
+              <span class="tab-label">{{ t.id === null ? ('media_detail.releases_tab_all' | translate) : t.label }}</span>
+              @if (t.count !== null) {
+                <span class="badge badge-xs badge-ghost tabular-nums">{{ t.count }}</span>
+              }
+            </button>
+          }
+        </div>
+      }
     </div>
 
     <div class="flex-1 overflow-y-auto px-4 sm:px-6">
-      @if (loading()) {
+      @if (error()) {
+        <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
+      } @else if (showSpinnerPanel()) {
         <div class="flex justify-center py-8">
           <span class="loading loading-spinner loading-lg"></span>
         </div>
-      } @else if (error()) {
-        <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
-      } @else if (searched() && releases().length === 0) {
-        <p class="text-sm text-base-content/60 py-4">{{ emptyMessage() | translate }}</p>
-      } @else if (releases().length) {
+      } @else if (visibleReleases().length) {
         <app-releases-table
-          [releases]="releases()"
+          [releases]="visibleReleases()"
           [grabBusy]="grabBusy()"
           [grabState]="grabState()"
           [canGrab]="canGrab()"
@@ -28,6 +57,10 @@
           [grabPrefix]="grabPrefix()"
           (grab)="grab.emit($event)"
         />
+      } @else if (activeTab() !== null) {
+        <p class="text-sm text-base-content/60 py-4">{{ 'media_detail.releases_empty_indexer' | translate }}</p>
+      } @else if (searched() || !loading()) {
+        <p class="text-sm text-base-content/60 py-4">{{ emptyMessage() | translate }}</p>
       }
     </div>
 

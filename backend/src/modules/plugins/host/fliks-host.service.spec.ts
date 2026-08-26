@@ -136,7 +136,7 @@ interface Harness {
   };
   profiles: { resolveAllowedForMedia: jest.Mock };
   qualityDefs: { getSizeLimitsMap: jest.Mock };
-  customFormats: { scoreRelease: jest.Mock };
+  customFormats: { findAll: jest.Mock; scoreReleaseWith: jest.Mock };
   requestLifecycle: { markInProgress: jest.Mock };
   libraryIngestService: { ingest: jest.Mock };
   notifications: { dispatch: jest.Mock };
@@ -172,7 +172,7 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
   const qualityDefs = {
     getSizeLimitsMap: jest.fn().mockResolvedValue(new Map()),
   };
-  const customFormats = { scoreRelease: jest.fn().mockResolvedValue(0) };
+  const customFormats = { findAll: jest.fn().mockResolvedValue([]), scoreReleaseWith: jest.fn().mockReturnValue(0) };
   const requestLifecycle = {
     markInProgress: jest.fn().mockResolvedValue(undefined),
   };
@@ -813,6 +813,39 @@ describe('FliksHostImpl', () => {
       expectJsonSafe(result);
     });
 
+    // Custom-format scoring used to read its whole table once per candidate. A streamed
+    // search re-scores the accumulated set per indexer, which turned that N+1 into an
+    // N*K one: 300 releases across 6 indexers meant ~1050 round trips for one search.
+    it('VERDICT: reads the format and size tables once per call, not once per release', async () => {
+      const h = makeHarness();
+      h.mediaRepo.findOne.mockResolvedValue(makeMedia({ runtime: 120 }));
+      h.profiles.resolveAllowedForMedia.mockReturnValue({
+        allowed: new Set([9]),
+        allowedLangs: new Set(),
+      });
+      h.qualityDefs.getSizeLimitsMap.mockResolvedValue(new Map());
+
+      const releases = Array.from({ length: 50 }, (_, i) => ({
+        id: `r${i}`,
+        title: `A Movie 2020 1080p WEB-DL group${i}`,
+        size: 4_000_000_000,
+        seeders: 10,
+        leechers: 2,
+        publishDate: new Date(0).toISOString(),
+        sourceRef: `source-${i}`,
+        blocked: false,
+      }));
+
+      const result = await h.host['releases.score']({ mediaId: 1, releases });
+
+      expect(result).toHaveLength(50);
+      expect(h.customFormats.findAll).toHaveBeenCalledTimes(1);
+      expect(h.qualityDefs.getSizeLimitsMap).toHaveBeenCalledTimes(1);
+      expect(h.mediaRepo.findOne).toHaveBeenCalledTimes(1);
+      // Every release is still scored — the reads were hoisted, not skipped.
+      expect(h.customFormats.scoreReleaseWith).toHaveBeenCalledTimes(50);
+    });
+
     it("returns [] for an unknown media id, and carries a rejection's params across the boundary", async () => {
       const h = makeHarness();
       h.mediaRepo.findOne.mockResolvedValueOnce(null);
@@ -1278,6 +1311,33 @@ describe('FliksHostImpl', () => {
         null,
         [9],
       );
+    });
+
+    it('delivers a user-scoped audience to that account alone', async () => {
+      const h = makeHarness('acme.tool');
+      await h.host['events.emitOwn']({
+        type: 'search.partial',
+        payload: { n: 1 },
+        audience: { userId: 42 },
+      });
+      expect(h.events.emitRaw).toHaveBeenCalledWith(
+        'plugin.acme.tool.search.partial',
+        { n: 1 },
+        [42],
+      );
+    });
+
+    // A user-scoped emit that fell through to recipientsForMedia would answer the
+    // media's requesters instead of the account that asked — the exact leak this
+    // audience exists to avoid.
+    it('never resolves a media audience for a user-scoped emit', async () => {
+      const h = makeHarness('acme.tool');
+      await h.host['events.emitOwn']({
+        type: 'x',
+        payload: null,
+        audience: { userId: 7 },
+      });
+      expect(h.sseAudience.recipientsForMedia).not.toHaveBeenCalled();
     });
   });
 

@@ -244,11 +244,16 @@ export interface PluginHostApi {
    *  rather than overwrite, and a stopped plugin stops counting. Core serves `queueActive`. */
   'counts.set': (p: { key: string; value: number }) => Promise<void>;
 
-  /** Plugin-namespaced SSE. Core force-prefixes the type to `plugin.<id>.<type>`. */
+  /**
+   * Plugin-namespaced SSE. Core force-prefixes the type to `plugin.<id>.<type>`.
+   * `{ userId }` addresses one account — the `delegated` principal of the request being
+   * served, when the answer belongs to whoever asked rather than to a media's audience.
+   * Narrower than `'all'`, which any plugin holding this scope can already use.
+   */
   'events.emitOwn': (p: {
     type: string;
     payload: unknown;
-    audience: 'all' | { mediaId: number };
+    audience: 'all' | { mediaId: number } | { userId: number };
   }) => Promise<void>;
 
   /**

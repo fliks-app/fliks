@@ -498,7 +498,12 @@ export class FliksHostImpl implements PluginHostApi {
     const { allowed, allowedLangs } =
       this.profiles.resolveAllowedForMedia(media);
     const { expectedTitles } = resolveSearchTitles(media);
-    const sizeByQuality = await this.qualityDefs.getSizeLimitsMap();
+    // Both read once per call: the scorer runs its callback per candidate, and this
+    // route is called once per indexer while a streamed search fills in.
+    const [sizeByQuality, customFormats] = await Promise.all([
+      this.qualityDefs.getSizeLimitsMap(),
+      this.customFormats.findAll(),
+    ]);
 
     type CandidateWithId = ReleaseCandidate & { id: string };
     const candidates: CandidateWithId[] = p.releases.map((r, i) => ({
@@ -541,7 +546,7 @@ export class FliksHostImpl implements PluginHostApi {
       },
       {
         scoreCustomFormats: (title, meta) =>
-          this.customFormats.scoreRelease(title, meta),
+          Promise.resolve(this.customFormats.scoreReleaseWith(customFormats, title, meta)),
         isBlocked: (_title, i) =>
           Promise.resolve(sourceBlocked.get(i) ?? false),
       },
@@ -875,11 +880,15 @@ export class FliksHostImpl implements PluginHostApi {
   private async eventsEmitOwn(p: {
     type: string;
     payload: unknown;
-    audience: 'all' | { mediaId: number };
+    audience: 'all' | { mediaId: number } | { userId: number };
   }): Promise<void> {
     const type = `plugin.${this.currentPluginId()}.${p.type}`;
     if (p.audience === 'all') {
       this.events.emitRaw(type, p.payload, null);
+      return;
+    }
+    if ('userId' in p.audience) {
+      this.events.emitRaw(type, p.payload, [p.audience.userId]);
       return;
     }
     const recipients = await this.sseAudience.recipientsForMedia(
