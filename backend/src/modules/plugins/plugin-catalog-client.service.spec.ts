@@ -33,7 +33,18 @@ function catalogWith(versionOverrides: Record<string, unknown> = {}): CatalogDoc
         description: 'A fixture.',
         author: 'Fliks',
         kind: 'data',
-        versions: [{ version: '1.0.0', pluginApi: PLUGIN_API_VERSION, fliks: COMPATIBLE_RANGE, ...versionOverrides }],
+        versions: [
+          {
+            version: '1.0.0',
+            pluginApi: PLUGIN_API_VERSION,
+            fliks: COMPATIBLE_RANGE,
+            // A version with no verifiable archive is not installable, so a fixture without one
+            // describes a row the filter would never offer.
+            zipUrl: 'https://example.com/p-1.0.0.fkplugin',
+            sha256: 'a'.repeat(64),
+            ...versionOverrides,
+          },
+        ],
       },
     ],
   } as CatalogDocument;
@@ -95,7 +106,9 @@ describe('PluginCatalogClientService', () => {
       plugins: [
         expect.objectContaining({
           id: 'fliks.test-plugin',
-          installable: [{ version: '1.0.0', pluginApi: PLUGIN_API_VERSION, fliks: COMPATIBLE_RANGE }],
+          installable: [
+            expect.objectContaining({ version: '1.0.0', pluginApi: PLUGIN_API_VERSION, fliks: COMPATIBLE_RANGE }),
+          ],
           hidden: null,
         }),
       ],

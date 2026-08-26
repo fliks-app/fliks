@@ -14,8 +14,12 @@ import { PLUGIN_API_VERSION, SUPPORTED_PLUGIN_API_VERSIONS } from '../../../comm
  *  convention as `plugin-registry.service.spec.ts`'s `COMPATIBLE_RANGE`). */
 const COMPATIBLE_RANGE = '>=1.0.0';
 
+/** A real archive by default: an entry without one is not installable, so a fixture omitting it
+ *  described a row that could never have been offered. */
+const ARCHIVE = { zipUrl: 'https://example.com/p-1.0.0.fkplugin', sha256: 'a'.repeat(64) };
+
 function version(overrides: Partial<CatalogVersionEntry> = {}): CatalogVersionEntry {
-  return { version: '1.0.0', pluginApi: PLUGIN_API_VERSION, fliks: COMPATIBLE_RANGE, ...overrides };
+  return { version: '1.0.0', pluginApi: PLUGIN_API_VERSION, fliks: COMPATIBLE_RANGE, ...ARCHIVE, ...overrides };
 }
 
 function document(overrides: Partial<CatalogDocument['plugins'][number]> = {}): CatalogDocument {
@@ -142,6 +146,39 @@ describe('filterCatalog()', () => {
     const result = filterCatalog(doc, SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1');
     expect(result.plugins[0].installable).toEqual([version()]);
     expect(result.plugins[0].hidden).toBeNull();
+  });
+
+  // A catalog commits a version's descriptor before its archive is built and signed, carrying an
+  // all-zero sha256 until then. Offering it made every install attempt fail its checksum check —
+  // and an admin whose cache held that entry could not act on the error at all.
+  it('VERDICT: never offers a version whose checksum is the unsigned placeholder', () => {
+    const unsigned = version({ sha256: '0'.repeat(64) });
+    const result = filterCatalog(document({ versions: [unsigned] }), SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1');
+    expect(result.plugins[0].installable).toEqual([]);
+  });
+
+  it('never offers a version whose checksum is malformed rather than merely absent', () => {
+    for (const sha256 of ['deadbeef', 'A'.repeat(64), 'z'.repeat(64), '']) {
+      const result = filterCatalog(document({ versions: [version({ sha256 })] }), SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1');
+      expect(result.plugins[0].installable).toEqual([]);
+    }
+  });
+
+  it('never offers a version with no archive to download', () => {
+    const noUrl = { version: '1.0.0', pluginApi: PLUGIN_API_VERSION, fliks: COMPATIBLE_RANGE, sha256: 'a'.repeat(64) };
+    const result = filterCatalog(
+      document({ versions: [noUrl as CatalogVersionEntry] }),
+      SUPPORTED_PLUGIN_API_VERSIONS,
+      '2.0.1',
+    );
+    expect(result.plugins[0].installable).toEqual([]);
+  });
+
+  it('an unsigned version does not tell the admin a core upgrade would reveal it', () => {
+    const unsigned = version({ sha256: '0'.repeat(64) });
+    const result = filterCatalog(document({ versions: [unsigned] }), SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1');
+    // Its `fliks` range is satisfied, so no version number fixes it — only the publisher does.
+    expect(result.plugins[0].hidden).toEqual({ count: 1, minFliksVersion: null });
   });
 
   it('hides a version whose pluginApi does not match exactly, and counts it', () => {
