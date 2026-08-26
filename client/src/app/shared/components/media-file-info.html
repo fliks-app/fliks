@@ -7,6 +7,9 @@
       @if (fullPath()) {
         <div class="col-span-full"><span class="text-base-content/50">{{ 'file_info.path' | translate }} :&nbsp;</span><span class="font-medium break-all">{{ fullPath() }}</span></div>
       }
+      @if (formatAddedAt(f.createdAt); as added) {
+        <div class="col-span-full"><span class="text-base-content/50">{{ 'file_info.added_at' | translate }} :&nbsp;</span><span class="font-medium">{{ added }}</span></div>
+      }
       @if (f.quality) {
         <div><span class="text-base-content/50">{{ 'file_info.quality' | translate }} :&nbsp;</span><span class="font-medium">{{ f.quality }}</span></div>
       }
