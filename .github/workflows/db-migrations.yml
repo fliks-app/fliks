@@ -11,10 +11,13 @@ on:
     branches: [main]
     paths:
       - 'backend/**'
+      # A change to the check itself has to run the check.
+      - '.github/workflows/db-migrations.yml'
   push:
     branches: [main]
     paths:
       - 'backend/**'
+      - '.github/workflows/db-migrations.yml'
 
 jobs:
   apply-migrations:
