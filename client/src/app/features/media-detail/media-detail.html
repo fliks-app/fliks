@@ -68,6 +68,7 @@
           (toggleMonitored)="toggleMonitored()"
           (loadReleases)="loadEpisodeReleases(m.id, s.id, ep.id)"
           (grabBest)="grabEpisodeBest(m.id, ep.id)"
+          (identify)="openIdentifyModal()"
           (openAnalyze)="openAnalyzeModal()"
           (editSubtitles)="openSubtitles()"
           (episodeWatchedToggled)="onEpisodeWatchedToggledFromHeader($event)"
@@ -194,6 +195,7 @@
           (deleteMedia)="deleteMedia()"
           (loadReleases)="loadReleases()"
           (grabBest)="grabBest()"
+          (identify)="openIdentifyModal()"
           (openAnalyze)="openAnalyzeModal()"
           (seriesWatchedToggled)="onSeriesWatchedToggled($event)"
           (editSubtitles)="openSubtitles()"
@@ -392,6 +394,8 @@
         (draftLanguageProfileIdChange)="draftLanguageProfileId.set($event)"
         (save)="saveProfiles()"
       />
+
+      <app-media-detail-identify-modal (identified)="onIdentified()" />
 
       <app-media-detail-library-modal
         [libraries]="libraries()"

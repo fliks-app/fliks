@@ -269,6 +269,7 @@ export class MediaInfoHeaderComponent {
   readonly deleteMedia = output<void>();
   readonly loadReleases = output<void>();
   readonly grabBest = output<void>();
+  readonly identify = output<void>();
   readonly openAnalyze = output<void>();
   readonly editSubtitles = output<void>();
   /** Open the tracking-status modal scoped to this header's context
@@ -640,6 +641,7 @@ export class MediaInfoHeaderComponent {
     'media.edit-library': () => this.openLibrary.emit(),
     'media.edit-subtitles': () => this.editSubtitles.emit(),
     'media.refresh-metadata': () => this.refreshMetadata.emit(),
+    'media.identify': () => this.identify.emit(),
     'media.analyze': () => this.openAnalyze.emit(),
     'media.toggle-monitored': () => this.toggleMonitored.emit(),
     'media.delete': () => this.deleteMedia.emit(),

@@ -17,6 +17,7 @@ export type CoreMediaActionId =
   | 'media.analyze'
   | 'media.toggle-monitored'
   | 'media.delete'
+  | 'media.identify'
   | 'media.request-deletion';
 
 const CORE_MEDIA_ACTION_IDS: ReadonlySet<string> = new Set<CoreMediaActionId>([
@@ -30,6 +31,7 @@ const CORE_MEDIA_ACTION_IDS: ReadonlySet<string> = new Set<CoreMediaActionId>([
   'media.edit-library',
   'media.edit-subtitles',
   'media.refresh-metadata',
+  'media.identify',
   'media.analyze',
   'media.toggle-monitored',
   'media.delete',

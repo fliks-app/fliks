@@ -90,6 +90,16 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     action: { kind: 'action', actionId: 'media.refresh-metadata' },
   },
   {
+    // `!isEpisode`: identity is title-level, like the profile/library entries.
+    id: 'core.identify',
+    slot: 'media.actions',
+    weight: 1050,
+    labelKey: 'media_detail.identify',
+    icon: 'search',
+    when: ['isAdmin', '!isEpisode'],
+    action: { kind: 'action', actionId: 'media.identify' },
+  },
+  {
     id: 'core.analyze',
     slot: 'media.actions',
     weight: 1100,

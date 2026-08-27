@@ -96,6 +96,7 @@ export interface Media {
   progressPercent?: number;
   preferredProvider?: 'tmdb' | 'tvdb' | null;
   imdbId?: string | null;
+  tvdbId?: number | null;
   metadata?: MediaMetadataBrief | null;
 }
 
@@ -476,6 +477,16 @@ export class MediaService {
 
   refreshMetadata(id: number) {
     return firstValueFrom(this.http.post<Media>(`/api/media/${id}/refresh`, {}));
+  }
+
+  /** Re-point a media at another work. Synchronous, unlike the refresh above:
+   *  the response is the re-identified media, and an id already held by another
+   *  title comes back as a 409. */
+  identify(
+    id: number,
+    target: { tmdbId?: number; tvdbId?: number; imdbId?: string; preferredProvider?: string },
+  ) {
+    return firstValueFrom(this.http.post<Media>(`/api/media/${id}/identify`, target));
   }
 
   refreshEpisodeMetadata(mediaId: number, episodeId: number) {
