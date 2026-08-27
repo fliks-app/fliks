@@ -43,7 +43,11 @@ describe('RequestsService delete requests', () => {
     findByTmdbId: jest.Mock;
     remove: jest.Mock;
     deleteMediaFolder: jest.Mock;
+    assertImportTarget: jest.Mock;
+    importFromTmdb: jest.Mock;
+    applyMonitoredForRequestScope: jest.Mock;
   };
+  let events: { emitDomain: jest.Mock };
   let casl: { createForUser: jest.Mock };
   let libraries: { getAccessibleLibraryIds: jest.Mock };
   let service: RequestsService;
@@ -54,16 +58,36 @@ describe('RequestsService delete requests', () => {
       findOne: jest.fn(),
       create: jest.fn((p: unknown) => p),
       save: jest.fn(async (r: any) => ({ id: r.id ?? 42, ...r })),
-      createQueryBuilder: jest.fn(),
+      // `approve` reads the row back through a builder before returning it.
+      createQueryBuilder: jest.fn(() => {
+        const qb: Record<string, unknown> = {};
+        for (const m of [
+          'leftJoin',
+          'addSelect',
+          'leftJoinAndMapOne',
+          'where',
+          'andWhere',
+          'orderBy',
+        ]) {
+          qb[m] = () => qb;
+        }
+        qb.getOne = () => Promise.resolve({ id: 7, user: null, approvedBy: null });
+        return qb;
+      }),
     };
     notifications = { dispatch: jest.fn().mockResolvedValue(undefined) };
     mediaService = {
       findByTmdbId: jest.fn(),
       remove: jest.fn(),
       deleteMediaFolder: jest.fn().mockResolvedValue(undefined),
+      assertImportTarget: jest.fn().mockResolvedValue(undefined),
+      importFromTmdb: jest.fn(),
+      applyMonitoredForRequestScope: jest.fn().mockResolvedValue(undefined),
     };
     casl = { createForUser: jest.fn(() => ({ can: () => true })) };
     libraries = { getAccessibleLibraryIds: jest.fn().mockResolvedValue([]) };
+
+    events = { emitDomain: jest.fn() };
 
     service = new RequestsService(
       requestRepo as never,
@@ -72,12 +96,11 @@ describe('RequestsService delete requests', () => {
       notifications as never,
       mediaService as never,
       {} as never,
-      {} as never,
       casl as never,
       {} as never,
       {} as never,
       libraries as never,
-      { emitDomain: jest.fn() } as never,
+      events as never,
     );
   });
 
@@ -290,6 +313,53 @@ describe('RequestsService delete requests', () => {
         'request.delete.declined',
         expect.objectContaining({ title: 'A Placeholder Title' }),
       );
+    });
+  });
+
+  // #886 gated the announcement behind `requests_auto_grab_on_approval` and #1015 removed both
+  // the key and the gate: core states the fact and the acquisition owner decides. Untested either
+  // way until now, and the failure is silent — an approval that announces nothing downloads
+  // nothing, with a green check to say it worked.
+  describe('approve (add) — acquisition announcement', () => {
+    const addRow = {
+      id: 7,
+      kind: RequestKind.ADD,
+      status: RequestStatus.PENDING,
+      mediaType: MediaType.MOVIE,
+      tmdbId: 555,
+      userId: 3,
+      libraryId: null,
+      qualityProfileId: null,
+      languageProfileId: null,
+      seasons: null,
+    };
+
+    const announcements = () =>
+      events.emitDomain.mock.calls
+        .map(([e]) => e as { type: string; mediaIds?: number[]; reason?: string })
+        .filter((e) => e.type === 'media.acquisition.requested');
+
+    it('VERDICT: announces the acquisition once the media is linked', async () => {
+      requestRepo.findOne.mockResolvedValue({ ...addRow });
+      mediaService.findByTmdbId.mockResolvedValue(null);
+      mediaService.importFromTmdb.mockResolvedValue({ id: 91 });
+
+      await service.approve(7, makeUser());
+
+      expect(announcements()).toEqual([
+        { type: 'media.acquisition.requested', mediaIds: [91], reason: 'request-approved' },
+      ]);
+    });
+
+    it('says nothing when the approval produced no media', async () => {
+      requestRepo.findOne.mockResolvedValue({ ...addRow });
+      mediaService.findByTmdbId.mockResolvedValue(null);
+      // The 409 branch: the title exists elsewhere, and no row comes back for it.
+      mediaService.importFromTmdb.mockRejectedValue({ status: 409 });
+
+      await service.approve(7, makeUser());
+
+      expect(announcements()).toEqual([]);
     });
   });
 });

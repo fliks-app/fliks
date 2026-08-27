@@ -17,7 +17,6 @@ describe('RequestLifecycleService onMediaRemoved (kind-aware)', () => {
       {} as never,
       { subscribe: jest.fn() } as never,
       {} as never,
-      {} as never,
     );
   });
 
@@ -70,5 +69,63 @@ describe('RequestLifecycleService onMediaRemoved (kind-aware)', () => {
     expect(first.status).toBe(RequestStatus.APPROVED);
     expect(duplicate.status).toBe(RequestStatus.APPROVED);
     expect(duplicate.media).toBeNull();
+  });
+});
+
+// The announcement is what makes an import satisfy a request: whoever owns acquisition acts on it
+// instead of waiting for its own tick. Nothing asserted it, and a lost announcement is silent —
+// the request flips to APPROVED and then sits there.
+describe('RequestLifecycleService onMediaImported — acquisition announcement', () => {
+  const media = { id: 91, tmdbId: 555, type: 'movie', qualityProfile: null, languageProfile: null };
+
+  function makeService(opts: { covers: boolean; open: unknown[] }) {
+    const requestRepo = {
+      find: jest.fn(async () => opts.open),
+      save: jest.fn(async (rows: unknown) => rows),
+    };
+    const events = { emitDomain: jest.fn(), subscribe: jest.fn() };
+    const service = new RequestLifecycleService(
+      requestRepo as never,
+      { applyMonitoredForRequestScope: jest.fn() } as never,
+      { envelopeCovers: jest.fn(async () => opts.covers) } as never,
+      events as never,
+      {} as never,
+    );
+    return { service, events, requestRepo };
+  }
+
+  const pending = () => ({
+    id: 1,
+    kind: RequestKind.ADD,
+    status: RequestStatus.PENDING,
+    seasons: null,
+  });
+
+  it('VERDICT: announces once the import adopted a request', async () => {
+    const { service, events } = makeService({ covers: true, open: [pending()] });
+
+    await service.onMediaImported(media as never, 3);
+
+    expect(events.emitDomain).toHaveBeenCalledWith({
+      type: 'media.acquisition.requested',
+      mediaIds: [91],
+      reason: 'media-imported',
+    });
+  });
+
+  it('says nothing when the imported profiles cover no open request', async () => {
+    const { service, events } = makeService({ covers: false, open: [pending()] });
+
+    await service.onMediaImported(media as never, 3);
+
+    expect(events.emitDomain).not.toHaveBeenCalled();
+  });
+
+  it('says nothing when there was no open request at all', async () => {
+    const { service, events } = makeService({ covers: true, open: [] });
+
+    await service.onMediaImported(media as never, 3);
+
+    expect(events.emitDomain).not.toHaveBeenCalled();
   });
 });
