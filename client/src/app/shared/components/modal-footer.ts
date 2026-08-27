@@ -16,9 +16,7 @@ import {
   template: '<ng-content />',
   host: {
     class: 'modal-action border-t border-base-200 bg-base-100',
-    '[class]': `flush()
-      ? 'shrink-0 mt-0 px-5 sm:px-6 pt-3 pb-4'
-      : '-mx-6 -mb-6 mt-6 px-6 py-4'`,
+    '[class]': `flush() ? 'shrink-0 mt-0 px-5 sm:px-6 pt-3 pb-4' : 'modal-footer-bar'`,
   },
 })
 export class ModalFooterComponent {
