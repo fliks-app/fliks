@@ -807,19 +807,8 @@ export class FliksHostImpl implements PluginHostApi {
       quality: x.file.quality,
     }));
 
-    let seasonNumber: number | undefined;
-    let episodeNumber: number | undefined;
-    if (result.imported.length === 1 && result.imported[0].episodeId != null) {
-      const episode = await this.episodeRepo.findOne({
-        where: { id: result.imported[0].episodeId },
-        relations: ['season'],
-      });
-      if (episode) {
-        episodeNumber = episode.episodeNumber;
-        seasonNumber = episode.season?.seasonNumber;
-      }
-    }
-
+    // Dispatched before the episode lookup below: neither payload carries the
+    // season or episode number, so resolving them first only delays the alert.
     if (imported.length) {
       const media = await this.mediaRepo.findOne({ where: { id: p.mediaId } });
       if (media) {
@@ -832,6 +821,19 @@ export class FliksHostImpl implements PluginHostApi {
           title: media.title,
           path: media.path,
         });
+      }
+    }
+
+    let seasonNumber: number | undefined;
+    let episodeNumber: number | undefined;
+    if (result.imported.length === 1 && result.imported[0].episodeId != null) {
+      const episode = await this.episodeRepo.findOne({
+        where: { id: result.imported[0].episodeId },
+        relations: ['season'],
+      });
+      if (episode) {
+        episodeNumber = episode.episodeNumber;
+        seasonNumber = episode.season?.seasonNumber;
       }
     }
 
