@@ -12,6 +12,9 @@ export interface ResolvedMenuRow {
   actionId?: string;
   route?: string;
   run: (() => void) | null;
+  /** Present on a submenu row. A submenu whose children all dropped is dropped
+   *  too — an empty group is worse than no group. */
+  children?: ResolvedMenuRow[];
 }
 
 /**
@@ -41,12 +44,19 @@ export function resolveMenuContributions(opts: {
     (a, b) => a.weight - b.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   );
 
+  /** Every contribution at any depth. A core row moved into a submenu must still
+   *  be found by the alias check below, or a plugin could widen it by aliasing
+   *  an actionId whose gate the search no longer reaches. */
+  const flatten = (list: readonly UiContribution[]): UiContribution[] =>
+    list.flatMap((c) => [c, ...flatten(c.children ?? [])]);
+  const everything = flatten(contributions);
+
   /** A contribution aliasing a core actionId inherits that core row's gate: a
    *  plugin may narrow one of core's actions, never widen it. */
   const coreFor = (c: UiContribution) => {
     if (c.action.kind !== 'action') return undefined;
     const wanted = c.action.actionId;
-    return ordered.find(
+    return everything.find(
       (a) => a.id.startsWith('core.') && a.action.kind === 'action' && a.action.actionId === wanted,
     );
   };
@@ -74,7 +84,11 @@ export function resolveMenuContributions(opts: {
       confirmKey: c.confirmKey,
     };
 
-    if (c.action.kind === 'route') {
+    if (c.action.kind === 'submenu') {
+      const children = resolveMenuContributions({ ...opts, contributions: c.children ?? [] });
+      if (!children.length) continue;
+      rows.push({ ...base, run: null, children });
+    } else if (c.action.kind === 'route') {
       const path = c.action.path;
       rows.push({ ...base, route: path, run: () => navigate(path) });
     } else if (c.action.kind === 'action') {

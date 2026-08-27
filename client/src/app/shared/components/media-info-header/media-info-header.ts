@@ -50,29 +50,27 @@ import { ClampToggleDirective } from '../../directives/clamp-toggle.directive';
 import { TvRowDirective } from '../../directives/tv-row.directive';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { NgTemplateOutlet } from '@angular/common';
-import { CardActionsService } from '../../../core/services/card-actions.service';
+import {
+  CardActionsService,
+  type CardAction,
+} from '../../../core/services/card-actions.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-evaluator';
 import type { MediaType } from '../../../core/enums/media-type.enum';
 import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { CORE_MEDIA_ACTIONS, sectionOf } from './core-media-actions';
-import { resolveMenuContributions } from '../../../core/plugin-ui/resolve-menu-contributions';
+import {
+  resolveMenuContributions,
+  type ResolvedMenuRow,
+} from '../../../core/plugin-ui/resolve-menu-contributions';
 import type { UiContribution } from '@fliks/plugin-contract/ui';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 
 /** One `media.actions` contribution resolved to something the template can
  *  render directly — visibility, handler and icon fallback already decided. */
-export interface ResolvedMediaAction {
-  id: string;
-  /** Kept from the contribution: the section boundaries are weight bands, so
-   *  a plugin lands in whichever group its own weight puts it. */
-  weight: number;
-  labelKey: string;
-  icon: string;
-  tone: 'default' | 'danger';
-  confirmKey?: string;
-  actionId?: string;
-  route?: string;
+/** A resolved menu row plus the handler the header binds to it. Extends the
+ *  shared row rather than restating its fields. */
+export interface ResolvedMediaAction extends ResolvedMenuRow {
   handler: (() => void) | null;
 }
 
@@ -623,6 +621,8 @@ export class MediaInfoHeaderComponent {
 
   private readonly actionHandlers: MediaActionHandlers = {
     'media.recommend': () => this.recommend.emit(),
+    'media.toggle-like': () => this.likeToggled.emit(),
+    'media.download': () => this.openDownload.emit(),
     'media.toggle-series-watched': () => this.onToggleWatched(),
     'media.open-tracking': () => this.openTracking.emit(),
     'media.request': () => this.requestMedia.emit(),
@@ -688,17 +688,7 @@ export class MediaInfoHeaderComponent {
     const items = this.menuItems();
     if (!items.length) return;
     this.cardActions.register({
-      actions: items.map((item) => ({
-        // The two toggles carry a label and an icon that follow live state, so
-        // they go through the same resolvers the rendered rows used to.
-        labelKey: this.displayLabelKey(item),
-        icon: this.displayIcon(item),
-        tone: item.tone,
-        section: sectionOf(item.weight),
-        disabled: this.isItemDisabled(item),
-        ...(item.route ? { route: item.route } : {}),
-        run: () => item.handler?.(),
-      })),
+      actions: items.map((item) => this.toCardAction(item)),
       anchor,
       title: this.title(),
       subtitle: this.dateLabel() ?? '',
@@ -707,6 +697,23 @@ export class MediaInfoHeaderComponent {
       placement: 'button',
     });
     this.cardActions.show();
+  }
+
+  /** One resolved row as a panel row. Recursive: a submenu's children go through
+   *  the same label/icon resolution as any other row. */
+  private toCardAction(item: ResolvedMediaAction): CardAction {
+    return {
+      labelKey: this.displayLabelKey(item),
+      icon: this.displayIcon(item),
+      tone: item.tone,
+      section: sectionOf(item.weight),
+      disabled: this.isItemDisabled(item),
+      ...(item.route ? { route: item.route } : {}),
+      ...(item.children?.length
+        ? { children: item.children.map((c) => this.toCardAction({ ...c, handler: c.run })) }
+        : {}),
+      run: () => item.handler?.(),
+    };
   }
 
   /** Mid-request spinner, per actionId — the ids not listed never show one. */

@@ -25,7 +25,43 @@
     @if (i > 0 && a.section !== actions()[i - 1].section) {
       <div class="h-px bg-base-content/10 my-1" role="separator"></div>
     }
-    @if (a.route) {
+    @if (a.children?.length) {
+      <button
+        #subTrigger
+        type="button"
+        class="dropdown-item"
+        [attr.aria-expanded]="isOpen(a)"
+        (click)="openSub(a, subTrigger)"
+      >
+        <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
+        <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
+        <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60"></svg>
+      </button>
+      <!-- Anchored beside its parent row, same mechanism the subtitle actions
+           menu uses. On touch/TV `app-popover-menu` falls back to its sheet, so
+           the group stays reachable where there is no room for a side panel. -->
+      <app-popover-menu
+        [open]="isOpen(a)"
+        [anchor]="subAnchor()"
+        placement="right-start"
+        [submenu]="true"
+        [width]="width()"
+        (closed)="closeSub()"
+      >
+        @for (child of a.children!; track $index) {
+          <button
+            type="button"
+            class="dropdown-item"
+            [class.text-error]="child.tone === 'danger'"
+            [disabled]="child.disabled"
+            (click)="trigger(child)"
+          >
+            <ng-container *ngTemplateOutlet="icon; context: { $implicit: child }" />
+            <span class="flex-1 truncate text-left">{{ child.labelKey ? (child.labelKey | translate) : child.label }}</span>
+          </button>
+        }
+      </app-popover-menu>
+    } @else if (a.route) {
       <a
         [routerLink]="a.route"
         class="dropdown-item"
@@ -70,6 +106,10 @@
     @case ('rotate-ccw') { <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg> }
     @case ('scan-line') { <svg lucideScanLine class="h-4 w-4 shrink-0 opacity-70"></svg> }
     @case ('search') { <svg lucideSearch class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('chevron-right') { <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('database') { <svg lucideDatabase class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('sliders-horizontal') { <svg lucideSlidersHorizontal class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('heart') { <svg lucideHeart class="h-4 w-4 shrink-0 opacity-70"></svg> }
     @case ('download') { <svg lucideDownload class="h-4 w-4 shrink-0 opacity-70"></svg> }
     @default { <svg lucideCircle class="h-4 w-4 shrink-0 opacity-70"></svg> }
   }

@@ -20,13 +20,37 @@ import type { UiContribution } from '@fliks/plugin-contract/ui';
  */
 export function sectionOf(weight: number): string {
   if (weight < 500) return 'personal';
-  if (weight < 700) return 'acquire';
   if (weight < 1000) return 'edit';
-  if (weight < 1300) return 'maintain';
-  return 'danger';
+  return 'advanced';
 }
 
 export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
+  {
+    id: 'core.like',
+    slot: 'media.actions',
+    weight: 120,
+    labelKey: 'media_detail.like',
+    icon: 'heart',
+    action: { kind: 'action', actionId: 'media.toggle-like' },
+  },
+  {
+    id: 'core.download',
+    slot: 'media.actions',
+    weight: 140,
+    labelKey: 'downloads.download',
+    icon: 'download',
+    when: ['!isTv', 'mediaType:movie'],
+    action: { kind: 'action', actionId: 'media.download' },
+  },
+  {
+    id: 'core.download_episode',
+    slot: 'media.actions',
+    weight: 140,
+    labelKey: 'downloads.download',
+    icon: 'download',
+    when: ['!isTv', 'isEpisode'],
+    action: { kind: 'action', actionId: 'media.download' },
+  },
   // ── Rows a card owns ────────────────────────────────────────────────────
   // Play and Open act on a card's target; on a detail page you are already
   // there, so they say `surface:card` rather than the lists diverging again.
@@ -66,6 +90,98 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     icon: 'eye',
     when: ['!mediaType:series'],
     action: { kind: 'action', actionId: 'media.toggle-watched' },
+  },
+  {
+    // Groups the two rows that re-read a title from its provider.
+    id: 'core.metadata_group',
+    slot: 'media.actions',
+    weight: 750,
+    labelKey: 'media_detail.metadata_group',
+    icon: 'database',
+    action: { kind: 'submenu' },
+    children: [
+    {
+      // `!isEpisode`: identity is title-level, like the profile/library entries.
+      id: 'core.identify',
+      slot: 'media.actions',
+      weight: 10,
+      labelKey: 'media_detail.identify',
+      icon: 'search',
+      when: ['isAdmin', '!isEpisode'],
+      action: { kind: 'action', actionId: 'media.identify' },
+    },
+    {
+      id: 'core.refresh_metadata',
+      slot: 'media.actions',
+      weight: 20,
+      labelKey: 'media_detail.refresh_metadata',
+      icon: 'rotate-ccw',
+      when: ['isAdmin'],
+      action: { kind: 'action', actionId: 'media.refresh-metadata' },
+    },
+    ],
+  },
+  {
+    // Everything that reconfigures or removes the title, one fold away from a
+    // menu that is mostly used for the rows above it.
+    id: 'core.advanced_group',
+    slot: 'media.actions',
+    weight: 1100,
+    labelKey: 'media_detail.advanced_group',
+    icon: 'sliders-horizontal',
+    action: { kind: 'submenu' },
+    children: [
+    {
+      id: 'core.analyze',
+      slot: 'media.actions',
+      weight: 10,
+      labelKey: 'media_detail.analyze',
+      icon: 'scan-line',
+      when: ['isAdmin'],
+      action: { kind: 'action', actionId: 'media.analyze' },
+    },
+    {
+      // `!isEpisode`: profile/library assignment is title-level, not
+      // per-episode — the pre-refactor episode header never bound
+      // `canEditProfiles` at all (always false), for the same reason.
+      id: 'core.edit_profiles',
+      slot: 'media.actions',
+      weight: 20,
+      labelKey: 'media_detail.edit_profiles',
+      icon: 'settings',
+      when: ['hasPermission:media.edit', '!isEpisode'],
+      action: { kind: 'action', actionId: 'media.edit-profiles' },
+    },
+    {
+      id: 'core.edit_library',
+      slot: 'media.actions',
+      weight: 30,
+      labelKey: 'media_detail.edit_library',
+      icon: 'folder',
+      when: ['hasPermission:media.edit', '!isEpisode'],
+      action: { kind: 'action', actionId: 'media.edit-library' },
+    },
+    {
+      id: 'core.toggle_monitored',
+      slot: 'media.actions',
+      weight: 40,
+      labelKey: 'media_detail.monitor',
+      icon: 'eye',
+      when: ['isAdmin'],
+      action: { kind: 'action', actionId: 'media.toggle-monitored' },
+    },
+    {
+      id: 'core.delete',
+      slot: 'media.actions',
+      weight: 50,
+      labelKey: 'media_detail.delete_from_library',
+      icon: 'trash-2',
+      tone: 'danger',
+      confirmKey: 'media_detail.confirm_delete',
+      when: ['hasPermission:media.delete'],
+      action: { kind: 'action', actionId: 'media.delete' },
+    },
+    ],
   },
   {
     // Drops the media from the list being browsed, not from the library.
@@ -114,27 +230,6 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     when: ['hasPermission:requests.create', '!hasPermission:media.create'],
     action: { kind: 'action', actionId: 'media.request' },
   },
-  {
-    // `!isEpisode`: profile/library assignment is title-level, not
-    // per-episode — the pre-refactor episode header never bound
-    // `canEditProfiles` at all (always false), for the same reason.
-    id: 'core.edit_profiles',
-    slot: 'media.actions',
-    weight: 700,
-    labelKey: 'media_detail.edit_profiles',
-    icon: 'settings',
-    when: ['hasPermission:media.edit', '!isEpisode'],
-    action: { kind: 'action', actionId: 'media.edit-profiles' },
-  },
-  {
-    id: 'core.edit_library',
-    slot: 'media.actions',
-    weight: 800,
-    labelKey: 'media_detail.edit_library',
-    icon: 'folder',
-    when: ['hasPermission:media.edit', '!isEpisode'],
-    action: { kind: 'action', actionId: 'media.edit-library' },
-  },
   // Subtitles are per-file, so the row belongs to a movie or to an episode and
   // to nothing else. That is an OR, which a flat AND-list can't say — but two
   // contributions on one actionId can, and they stay declarative, so any surface
@@ -142,7 +237,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
   {
     id: 'core.edit_subtitles',
     slot: 'media.actions',
-    weight: 900,
+    weight: 700,
     labelKey: 'media_detail.edit_subtitles',
     icon: 'captions',
     when: ['mediaType:movie'],
@@ -151,59 +246,11 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
   {
     id: 'core.edit_subtitles_episode',
     slot: 'media.actions',
-    weight: 900,
+    weight: 700,
     labelKey: 'media_detail.edit_subtitles',
     icon: 'captions',
     when: ['isEpisode'],
     action: { kind: 'action', actionId: 'media.edit-subtitles' },
-  },
-  {
-    id: 'core.refresh_metadata',
-    slot: 'media.actions',
-    weight: 1000,
-    labelKey: 'media_detail.refresh_metadata',
-    icon: 'rotate-ccw',
-    when: ['isAdmin'],
-    action: { kind: 'action', actionId: 'media.refresh-metadata' },
-  },
-  {
-    // `!isEpisode`: identity is title-level, like the profile/library entries.
-    id: 'core.identify',
-    slot: 'media.actions',
-    weight: 1050,
-    labelKey: 'media_detail.identify',
-    icon: 'search',
-    when: ['isAdmin', '!isEpisode'],
-    action: { kind: 'action', actionId: 'media.identify' },
-  },
-  {
-    id: 'core.analyze',
-    slot: 'media.actions',
-    weight: 1100,
-    labelKey: 'media_detail.analyze',
-    icon: 'scan-line',
-    when: ['isAdmin'],
-    action: { kind: 'action', actionId: 'media.analyze' },
-  },
-  {
-    id: 'core.toggle_monitored',
-    slot: 'media.actions',
-    weight: 1200,
-    labelKey: 'media_detail.monitor',
-    icon: 'eye',
-    when: ['isAdmin'],
-    action: { kind: 'action', actionId: 'media.toggle-monitored' },
-  },
-  {
-    id: 'core.delete',
-    slot: 'media.actions',
-    weight: 1300,
-    labelKey: 'media_detail.delete_from_library',
-    icon: 'trash-2',
-    tone: 'danger',
-    confirmKey: 'media_detail.confirm_delete',
-    when: ['hasPermission:media.delete'],
-    action: { kind: 'action', actionId: 'media.delete' },
   },
   {
     id: 'core.request_deletion',

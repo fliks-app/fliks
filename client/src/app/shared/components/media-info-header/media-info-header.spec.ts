@@ -223,8 +223,15 @@ function menuActions(fixture: ComponentFixture<MediaInfoHeaderComponent>): CardA
   return TestBed.inject(CardActionsService).actions() ?? [];
 }
 
+/** Submenu rows flattened away: these assertions are about which actions a role
+ *  can reach and under what gate, not about how they are grouped. The grouping
+ *  has its own test. */
+function flatActions(fixture: ComponentFixture<MediaInfoHeaderComponent>): CardAction[] {
+  return menuActions(fixture).flatMap((a) => a.children ?? [a]);
+}
+
 function menuItems(fixture: ComponentFixture<MediaInfoHeaderComponent>): CapturedItem[] {
-  return menuActions(fixture).map((a) => ({
+  return flatActions(fixture).map((a) => ({
     label: a.labelKey ?? a.label ?? '',
     icon: a.icon ?? null,
     danger: a.tone === 'danger',
@@ -260,13 +267,15 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'media_detail.like',
+      'downloads.download',
       'tracking.menu_item',
+      'media_detail.edit_subtitles',
+      'media_detail.identify',
+      'media_detail.refresh_metadata',
+      'media_detail.analyze',
       'media_detail.edit_profiles',
       'media_detail.edit_library',
-      'media_detail.edit_subtitles',
-      'media_detail.refresh_metadata',
-      'media_detail.identify',
-      'media_detail.analyze',
       'media_detail.unmonitor',
       'media_detail.delete_from_library',
     ]);
@@ -276,13 +285,14 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(OWNER, { mediaType: 'series', ...SERIES });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'media_detail.like',
       'media_detail.mark_series_watched',
       'tracking.menu_item',
+      'media_detail.identify',
+      'media_detail.refresh_metadata',
+      'media_detail.analyze',
       'media_detail.edit_profiles',
       'media_detail.edit_library',
-      'media_detail.refresh_metadata',
-      'media_detail.identify',
-      'media_detail.analyze',
       'media_detail.unmonitor',
       'media_detail.delete_from_library',
     ]);
@@ -292,6 +302,8 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(READER, { mediaType: 'movie', ...MOVIE });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'media_detail.like',
+      'downloads.download',
       'tracking.menu_item',
       'media_detail.edit_subtitles',
     ]);
@@ -301,6 +313,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(READER, { mediaType: 'series', ...SERIES });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'media_detail.like',
       'media_detail.mark_series_watched',
       'tracking.menu_item',
     ]);
@@ -310,6 +323,8 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(REQUESTER, { mediaType: 'movie', ...MOVIE });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'media_detail.like',
+      'downloads.download',
       'tracking.menu_item',
       'media_detail.request_media',
       'media_detail.edit_subtitles',
@@ -321,6 +336,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(REQUESTER, { mediaType: 'series', ...SERIES });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'media_detail.like',
       'media_detail.mark_series_watched',
       'tracking.menu_item',
       'media_detail.request_media',
@@ -332,6 +348,8 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(DELETER, { mediaType: 'movie', ...MOVIE });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'media_detail.like',
+      'downloads.download',
       'tracking.menu_item',
       'media_detail.edit_subtitles',
       'media_detail.delete_from_library',
@@ -342,6 +360,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(DELETER, { mediaType: 'series', ...SERIES });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'media_detail.like',
       'media_detail.mark_series_watched',
       'tracking.menu_item',
       'media_detail.delete_from_library',
@@ -449,7 +468,9 @@ describe('MediaInfoHeaderComponent — media.actions merges with plugin contribu
     });
     const shown = labels(fixture);
     expect(shown.indexOf('recommend.menu_item')).toBe(0);
-    expect(shown.indexOf('x.between')).toBe(1);
+    // Relative: an index breaks whenever a row joins the list.
+    expect(shown.indexOf('x.between')).toBeGreaterThan(shown.indexOf('recommend.menu_item'));
+    expect(shown.indexOf('x.between')).toBeLessThan(shown.indexOf('tracking.menu_item'));
     expect(shown.indexOf('tracking.menu_item')).toBeGreaterThan(1);
   });
 
@@ -594,7 +615,7 @@ describe('MediaInfoHeaderComponent — release-picker actions are plugin-contrib
     fixture.componentInstance.grabBest.subscribe(() => (grabbed = true));
     fixture.componentInstance.loadReleases.subscribe(() => (searched = true));
 
-    const rows = menuActions(fixture);
+    const rows = flatActions(fixture);
     rows[grabIdx].run();
     rows[searchIdx].run();
 
@@ -608,7 +629,7 @@ describe('MediaInfoHeaderComponent — release-picker actions are plugin-contrib
     const idle = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, registry: releasePickerRegistry });
     const grabIdx = labels(idle).indexOf('x.grab_best');
     expect(grabIdx).toBeGreaterThanOrEqual(0);
-    expect(menuActions(idle)[grabIdx].disabled).toBe(false);
+    expect(flatActions(idle)[grabIdx].disabled).toBe(false);
 
     const busy = await createFixture(OWNER, {
       mediaType: 'movie',
@@ -617,7 +638,7 @@ describe('MediaInfoHeaderComponent — release-picker actions are plugin-contrib
       grabBusy: 'best',
       releasesLoading: true,
     });
-    expect(menuActions(busy)[grabIdx].disabled).toBe(true);
+    expect(flatActions(busy)[grabIdx].disabled).toBe(true);
   });
 });
 

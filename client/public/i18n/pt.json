@@ -1078,7 +1078,10 @@
       "EPISODE_MISMATCH": "A release não corresponde a {{expected}} (encontrado {{actual}})",
       "FULL_SEASON_FOR_EPISODE": "Temporada completa, mas só {{expected}} é necessário",
       "RESOLUTION_NOT_UPGRADED": "Não melhora a resolução ({{actual}}p, precisa de mais de {{min}}p)"
-    }
+    },
+    "like": "Gosto",
+    "metadata_group": "Metadados",
+    "advanced_group": "Avançado"
   },
   "requests": {
     "title": "Pedidos",
