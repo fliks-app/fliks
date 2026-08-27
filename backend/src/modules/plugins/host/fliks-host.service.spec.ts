@@ -1423,6 +1423,46 @@ describe('FliksHostImpl', () => {
         }),
       ).rejects.toThrow(/outside every configured ingest root/);
     });
+
+    it('dispatches download.complete before resolving the episode it does not carry', async () => {
+      const h = makeHarness();
+      h.pluginRegistrationRepo.findOne.mockResolvedValue({
+        ingestRoots: [tmpRoot],
+      });
+      h.mediaRepo.findOne.mockResolvedValue(makeMedia());
+      h.libraryIngestService.ingest.mockResolvedValue({
+        imported: [
+          {
+            file: { id: 55, relativePath: 'Show/S01E02.mkv', quality: '1080p' },
+            episodeId: 7,
+          },
+        ],
+        alreadyPresent: [],
+      });
+
+      const order: string[] = [];
+      h.notifications.dispatch.mockImplementation(() => {
+        order.push('dispatch');
+        return Promise.resolve();
+      });
+      h.episodeRepo.findOne.mockImplementation(() => {
+        order.push('episodeLookup');
+        return Promise.resolve({ episodeNumber: 2, season: { seasonNumber: 1 } });
+      });
+
+      const result = await h.host['library.ingest']({
+        idempotencyKey: 'k1',
+        mediaId: 1,
+        paths: [sourceFile],
+        transfer: 'copy',
+        sourceLabel: 'Release.Name',
+      });
+
+      expect(order).toEqual(['dispatch', 'episodeLookup']);
+      // The lookup still has to happen — the return value carries the numbers.
+      expect(result.seasonNumber).toBe(1);
+      expect(result.episodeNumber).toBe(2);
+    });
   });
 
   // ===========================================================================
