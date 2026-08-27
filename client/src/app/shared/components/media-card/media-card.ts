@@ -477,6 +477,11 @@ export class MediaCardComponent {
           tone: r.tone,
           section: sectionOf(r.weight),
           ...(r.route ? { route: r.route } : {}),
+          ...(r.children?.length
+            ? { children: r.children.map((c) => ({
+                labelKey: c.labelKey, icon: c.icon, tone: c.tone, run: c.run!,
+              })) }
+            : {}),
           run: r.run!,
         } as CardAction,
       };

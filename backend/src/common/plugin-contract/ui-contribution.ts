@@ -50,7 +50,16 @@ export interface UiContribution {
   badge?: string;
   confirmKey?: string;
   when?: WhenPredicate[];
-  action: { kind: 'route'; path: string } | { kind: 'action'; actionId: string };
+  action:
+    | { kind: 'route'; path: string }
+    | { kind: 'action'; actionId: string }
+    /** A row that only opens the `children` below it. Older clients don't know
+     *  this kind and drop the row, which hides the group rather than showing a
+     *  parent that does nothing. */
+    | { kind: 'submenu' };
+  /** Rows nested under this one. Only meaningful with `action.kind: 'submenu'`;
+   *  a plugin can hand over a whole group this way. */
+  children?: UiContribution[];
 }
 
 /**

@@ -2,7 +2,9 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
+  signal,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -25,6 +27,10 @@ import {
   LucideScanLine,
   LucideSearch,
   LucideDownload,
+  LucideChevronRight,
+  LucideDatabase,
+  LucideSlidersHorizontal,
+  LucideHeart,
   LucideCircle,
 } from '@lucide/angular';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
@@ -63,6 +69,10 @@ import { CachedSrcDirective } from '../../directives/cached-src.directive';
     LucideScanLine,
     LucideSearch,
     LucideDownload,
+  LucideChevronRight,
+  LucideDatabase,
+  LucideSlidersHorizontal,
+  LucideHeart,
     LucideCircle,
     NgTemplateOutlet,
     RouterLink,
@@ -87,12 +97,41 @@ export class CardActionsPanelComponent {
   /** Compact under the ⋯ button; about the card's width under a figure. */
   readonly width = computed(() => {
     const anchor = this.service.anchor();
-    if (this.service.placement() === 'button' || !anchor) return 220;
-    return Math.min(280, Math.max(220, anchor.getBoundingClientRect().width));
+    // Wider than a card menu used to need: the rows now include submenu parents
+    // and longer labels, and a wrapped row reads badly.
+    if (this.service.placement() === 'button' || !anchor) return 280;
+    return Math.min(340, Math.max(280, anchor.getBoundingClientRect().width));
   });
+
+  constructor() {
+    // Collapse on every open: a group left unfolded from last time would make
+    // the menu a different height than the one the user reached for.
+    effect(() => {
+      if (this.service.open()) this.closeSub();
+    });
+  }
 
   onClose() {
     this.service.close();
+  }
+
+  /** The one open submenu, with the row it hangs off. Only one at a time: a
+   *  second panel beside the first would overlap it. */
+  private readonly openSubmenu = signal<CardAction | null>(null);
+  protected readonly subAnchor = signal<HTMLElement | null>(null);
+
+  isOpen(a: CardAction): boolean {
+    return this.openSubmenu() === a;
+  }
+
+  openSub(a: CardAction, anchor: HTMLElement) {
+    if (this.isOpen(a)) return this.closeSub();
+    this.subAnchor.set(anchor);
+    this.openSubmenu.set(a);
+  }
+
+  closeSub() {
+    this.openSubmenu.set(null);
   }
 
   /** A link row navigates on its own; the panel just gets out of the way. */
@@ -102,6 +141,8 @@ export class CardActionsPanelComponent {
 
   trigger(action: CardAction) {
     if (action.disabled) return;
+    // The flyout is a second panel, so closing the main one does not take it.
+    this.closeSub();
     this.service.close();
     // Defer so the close transition lands before the action navigates/mutates.
     queueMicrotask(() => action.run());
