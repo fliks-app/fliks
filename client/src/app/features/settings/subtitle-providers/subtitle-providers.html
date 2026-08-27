@@ -61,7 +61,7 @@
               @for (row of translationRows(); track row.id) {
                 <tr>
                   <td class="font-medium">
-                    <div class="whitespace-nowrap">{{ row.name }}</div>
+                    <div class="whitespace-nowrap"><button type="button" class="link link-hover" (click)="openEditTranslation(row)">{{ row.name }}</button></div>
                     @if (row.isDefault) {
                       <span class="badge badge-primary badge-sm mt-1">{{ 'settings.subtitle_providers.translation_default' | translate }}</span>
                     }
@@ -76,9 +76,6 @@
                   </td>
                   <td class="text-end">
                     <div class="flex justify-end gap-1">
-                      <button type="button" class="btn btn-ghost btn-xs" (click)="openEditTranslation(row)">
-                        {{ 'common.edit' | translate }}
-                      </button>
                       <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteTranslationProvider(row)">
                         {{ 'common.delete' | translate }}
                       </button>

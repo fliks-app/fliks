@@ -32,7 +32,9 @@
         <tbody>
           @for (rule of rules(); track rule.id) {
             <tr [class.opacity-50]="!rule.enabled">
-              <td class="font-medium">{{ rule.name }}</td>
+              <td>
+                <button type="button" class="link link-hover font-medium" (click)="openEdit(rule)">{{ rule.name }}</button>
+              </td>
               <td>{{ rule.priority }}</td>
               <td class="text-sm text-base-content/70">{{ rule.conditions.length }}</td>
               <td>
@@ -42,9 +44,6 @@
               </td>
               <td class="text-end">
                 <div class="flex justify-end gap-1">
-                  <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(rule)">
-                    {{ 'settings.auto_approval.edit' | translate }}
-                  </button>
                   <button type="button" class="btn btn-ghost btn-xs text-error" (click)="remove(rule)">
                     {{ 'settings.auto_approval.delete' | translate }}
                   </button>

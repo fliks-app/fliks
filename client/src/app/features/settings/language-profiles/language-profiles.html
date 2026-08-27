@@ -31,13 +31,12 @@
         <tbody>
           @for (p of profiles(); track p.id) {
             <tr>
-              <td class="font-medium">{{ p.name }}</td>
+              <td>
+                <button type="button" class="link link-hover font-medium" (click)="openEdit(p)">{{ p.name }}</button>
+              </td>
               <td class="text-end">{{ audioCount(p) }}</td>
               <td class="text-end">{{ subtitleCount(p) }}</td>
               <td class="text-end">
-                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(p)">
-                  {{ 'settings.language_profiles.edit' | translate }}
-                </button>
                 <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteProfile(p)">
                   {{ 'settings.language_profiles.delete' | translate }}
                 </button>
