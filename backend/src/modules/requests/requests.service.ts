@@ -637,6 +637,12 @@ export class RequestsService {
     if (query.kind) {
       qb.andWhere('r.kind = :kind', { kind: query.kind });
     }
+    if (query.tmdbId) {
+      qb.andWhere('r."tmdbId" = :tmdbId', { tmdbId: query.tmdbId });
+    }
+    if (query.mediaType) {
+      qb.andWhere('r."mediaType" = :mediaType', { mediaType: query.mediaType });
+    }
 
     const [data, total] = await qb
       .skip((page - 1) * limit)

@@ -105,6 +105,10 @@ export interface ListRequestsParams {
   status?: FliksRequestStatus;
   kind?: RequestKind;
   userId?: number;
+  /** Narrow to one title. Pass `mediaType` alongside it — TMDB ids are only
+   *  unique within a namespace, so a movie and a series can share a number. */
+  tmdbId?: number;
+  mediaType?: MediaType;
   page?: number;
   limit?: number;
 }
