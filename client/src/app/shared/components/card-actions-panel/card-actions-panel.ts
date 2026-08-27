@@ -132,6 +132,9 @@ export class CardActionsPanelComponent {
 
   closeSub() {
     this.openSubmenu.set(null);
+    // Dropped too: this panel is a singleton, and an element from a page that
+    // has since been destroyed still positions the next flyout.
+    this.subAnchor.set(null);
   }
 
   /** A link row navigates on its own; the panel just gets out of the way. */

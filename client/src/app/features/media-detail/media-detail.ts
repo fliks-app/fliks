@@ -1332,6 +1332,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       library: () => this.openLibraryModal(),
       subtitles: () => this.openSubtitles(),
       analyze: () => this.openAnalyzeModal(),
+      refresh: () => void this.refreshMetadata(),
       tracking: () =>
         this.openTracking(m.type === 'movie' ? { kind: 'movie' } : { kind: 'series' }),
     };

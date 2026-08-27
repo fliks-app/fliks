@@ -1081,7 +1081,9 @@
     },
     "like": "Mi piace",
     "metadata_group": "Metadati",
-    "advanced_group": "Avanzate"
+    "advanced_group": "Avanzate",
+    "add_to_list": "Aggiungi a un elenco",
+    "unlike": "Non mi piace più"
   },
   "requests": {
     "title": "Richieste",

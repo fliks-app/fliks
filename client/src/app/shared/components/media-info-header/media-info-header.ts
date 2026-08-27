@@ -624,6 +624,8 @@ export class MediaInfoHeaderComponent {
     'media.toggle-like': () => this.likeToggled.emit(),
     'media.download': () => this.openDownload.emit(),
     'media.toggle-series-watched': () => this.onToggleWatched(),
+    'media.toggle-watched': () => this.onToggleWatched(),
+    'media.add-to-playlist': () => this.addToPlaylist.emit(),
     'media.open-tracking': () => this.openTracking.emit(),
     'media.request': () => this.requestMedia.emit(),
     'media.grab-best': () => this.grabBest.emit(),
@@ -666,6 +668,12 @@ export class MediaInfoHeaderComponent {
     if (item.actionId === 'media.toggle-monitored') {
       return this.monitored() ? 'media_detail.unmonitor' : 'media_detail.monitor';
     }
+    if (item.actionId === 'media.toggle-watched') {
+      return this.watched() ? 'media_card.mark_unwatched' : 'media_card.mark_watched';
+    }
+    if (item.actionId === 'media.toggle-like') {
+      return this.liked() ? 'media_detail.unlike' : 'media_detail.like';
+    }
     return item.labelKey;
   }
 
@@ -674,6 +682,9 @@ export class MediaInfoHeaderComponent {
   displayIcon(item: ResolvedMediaAction): string {
     if (item.actionId === 'media.toggle-monitored') {
       return this.monitored() ? 'eye-off' : 'eye';
+    }
+    if (item.actionId === 'media.toggle-watched') {
+      return this.watched() ? 'eye-off' : 'eye';
     }
     return item.icon;
   }
