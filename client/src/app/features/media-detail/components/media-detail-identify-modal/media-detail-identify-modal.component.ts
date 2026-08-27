@@ -57,6 +57,8 @@ export class MediaDetailIdentifyModalComponent {
   readonly searching = signal(false);
   readonly searched = signal(false);
   readonly results = signal<MetadataSearchResult[]>([]);
+  /** Index of the result being applied, or -1 for the typed-ids button. Not the
+   *  tmdbId: a TVDB result reports 0 and every card would answer to it. */
   readonly applyingId = signal<number | null>(null);
 
   open(config: IdentifyModalConfig) {
@@ -104,13 +106,15 @@ export class MediaDetailIdentifyModalComponent {
     return result.existingMediaId != null && result.existingMediaId !== cfg?.mediaId;
   }
 
-  async apply(result: MetadataSearchResult) {
+  async apply(result: MetadataSearchResult, index: number) {
     const cfg = this.config();
     if (!cfg || this.isTaken(result)) return;
-    this.applyingId.set(result.tmdbId);
+    this.applyingId.set(index);
     try {
+      // A TVDB work with no TheMovieDB cross-reference reports tmdbId 0, which
+      // the API rejects — send an id only when the provider really has one.
       await this.media.identify(cfg.mediaId, {
-        tmdbId: result.tmdbId,
+        ...(result.tmdbId > 0 ? { tmdbId: result.tmdbId } : {}),
         ...(result.tvdbId != null ? { tvdbId: result.tvdbId } : {}),
         ...(result.imdbId ? { imdbId: result.imdbId } : {}),
       });
@@ -129,7 +133,7 @@ export class MediaDetailIdentifyModalComponent {
     const cfg = this.config();
     if (!cfg) return;
     const target = {
-      ...(this.formTmdbId() != null ? { tmdbId: this.formTmdbId()! } : {}),
+      ...((this.formTmdbId() ?? 0) > 0 ? { tmdbId: this.formTmdbId()! } : {}),
       ...(this.formTvdbId() != null ? { tvdbId: this.formTvdbId()! } : {}),
       ...(this.formImdbId().trim() ? { imdbId: this.formImdbId().trim() } : {}),
     };

@@ -81,12 +81,24 @@ describe('MediaMetadataService.identify', () => {
     expect(updates).toEqual([]); // the ids were never written
   });
 
-  it('writes only the ids the caller supplied', async () => {
+  it('VERDICT: clears the ids the caller did not supply — they belong to the old work', async () => {
+    const { service, updates } = harness({
+      media: { ...movie, tvdbId: 4242, imdbId: 'tt-old' },
+    });
+
+    await service.identify(1, { tvdbId: 99 });
+
+    // Keeping tmdbId=10 would let `resolveProviderForMedia` fall back to the
+    // previous work the moment TVDB is unavailable.
+    expect(updates).toEqual([{ tmdbId: null, tvdbId: 99, imdbId: null }]);
+  });
+
+  it('writes the full identity when the caller supplies every id', async () => {
     const { service, updates } = harness({ media: movie });
 
-    await service.identify(1, { tmdbId: 77, imdbId: 'tt7' });
+    await service.identify(1, { tmdbId: 77, tvdbId: 88, imdbId: 'tt7' });
 
-    expect(updates).toEqual([{ tmdbId: 77, imdbId: 'tt7' }]);
+    expect(updates).toEqual([{ tmdbId: 77, tvdbId: 88, imdbId: 'tt7' }]);
   });
 
   it('leaves a movie alone past the refresh — no season work', async () => {

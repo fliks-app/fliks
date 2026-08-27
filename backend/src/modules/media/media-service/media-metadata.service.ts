@@ -28,6 +28,7 @@ import { ImageService } from '../../images/image.service';
 import { EventsService } from '../../scheduler/events.service';
 import { mapWithConcurrency } from '../../../common/utils/concurrency';
 import { buildMediaFieldsFromTmdb } from './tmdb-mapping.util';
+import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 
 @Injectable()
 export class MediaMetadataService {
@@ -83,7 +84,8 @@ export class MediaMetadataService {
    */
   async identify(
     id: number,
-    // Identification only ever sets ids; an omitted field is left untouched.
+    // The supplied ids ARE the new identity: what the caller omits is cleared,
+    // never carried over from the work this media used to point at.
     target: {
       tmdbId?: number;
       tvdbId?: number;
@@ -115,14 +117,20 @@ export class MediaMetadataService {
 
     const before = `"${media.title}" tmdb=${media.tmdbId ?? '-'} tvdb=${media.tvdbId ?? '-'}`;
 
+    // Keeping an id the caller did not supply would leave this media pointing at
+    // the previous work on that provider, and `resolveProviderForMedia` falls
+    // back to whichever id is set — the old identity would silently return.
+    // Cross-referencing during the refresh below repopulates the rest.
+    // The cast clears the three ids: the columns are nullable, the entity types
+    // them as non-null.
     await this.mediaRepo.update(id, {
-      ...(target.tmdbId !== undefined ? { tmdbId: target.tmdbId } : {}),
-      ...(target.tvdbId !== undefined ? { tvdbId: target.tvdbId } : {}),
-      ...(target.imdbId !== undefined ? { imdbId: target.imdbId } : {}),
+      tmdbId: target.tmdbId ?? null,
+      tvdbId: target.tvdbId ?? null,
+      imdbId: target.imdbId ?? null,
       ...(target.preferredProvider !== undefined
         ? { preferredProvider: target.preferredProvider }
         : {}),
-    });
+    } as QueryDeepPartialEntity<Media>);
 
     const refreshed = await this.refreshMetadata(id);
 
