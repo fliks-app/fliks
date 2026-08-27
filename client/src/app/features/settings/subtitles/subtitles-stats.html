@@ -62,7 +62,7 @@
               </tr>
             </thead>
             <tbody>
-              @for (row of pagedMissing(); track row.fileId + row.language) {
+              @for (row of missing(); track row.fileId + row.language) {
                 <tr>
                   <td>
                     @if (row.episodeId) {

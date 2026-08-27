@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 
@@ -206,8 +206,16 @@ export class SubtitlesApiService {
     return firstValueFrom(this.http.delete<{ deleted: number }>('/api/subtitles/blacklist'));
   }
 
-  getMissing() {
-    return firstValueFrom(this.http.get<MissingSubtitleEntry[]>('/api/subtitles/missing'));
+  /** Server-paged: the full list is one row per (file, profile language) and
+   *  runs to six figures on a large library. */
+  getMissing(page = 1, limit = 20) {
+    const params = new HttpParams().set('page', String(page)).set('limit', String(limit));
+    return firstValueFrom(
+      this.http.get<{ total: number; data: MissingSubtitleEntry[] }>(
+        '/api/subtitles/missing',
+        { params },
+      ),
+    );
   }
 }
 
