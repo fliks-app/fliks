@@ -1089,7 +1089,9 @@
     },
     "like": "J’aime",
     "metadata_group": "Métadonnées",
-    "advanced_group": "Avancé"
+    "advanced_group": "Avancé",
+    "add_to_list": "Ajouter à une liste",
+    "unlike": "Je n’aime plus"
   },
   "requests": {
     "title": "Demandes",

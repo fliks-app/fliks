@@ -154,7 +154,7 @@ describe('MediaCardComponent — card.actions characterisation', () => {
       { labelKey: 'media_card.action_play', icon: 'play', tone: 'default' },
       { labelKey: 'media_card.action_open', icon: 'external-link', tone: 'default' },
       { labelKey: 'recommend.menu_item', icon: 'user-plus', tone: 'default' },
-      { labelKey: 'playlists.add_to_playlist', icon: 'list-plus', tone: 'default' },
+      { labelKey: 'media_detail.add_to_list', icon: 'list-plus', tone: 'default' },
       { labelKey: 'media_card.mark_watched', icon: 'eye', tone: 'default' },
       { labelKey: 'media_card.remove_from_list', icon: 'trash-2', tone: 'danger' },
     ]);
@@ -173,7 +173,7 @@ describe('MediaCardComponent — card.actions characterisation', () => {
       'media_card.action_play',
       'media_card.action_open',
       'recommend.menu_item',
-      'playlists.add_to_playlist',
+      'media_detail.add_to_list',
       'media_card.mark_watched',
       'media_card.remove_from_list',
     ]);
@@ -191,7 +191,7 @@ describe('MediaCardComponent — card.actions characterisation', () => {
     expect(labels(h)).toEqual([
       'media_card.action_open',
       'recommend.menu_item',
-      'playlists.add_to_playlist',
+      'media_detail.add_to_list',
       'media_card.mark_watched',
       'media_card.remove_from_list',
     ]);
@@ -207,10 +207,10 @@ describe('MediaCardComponent — card.actions characterisation', () => {
       'media_card.action_play',
       'media_card.action_open',
       'recommend.menu_item',
-      'playlists.add_to_playlist',
+      'media_detail.add_to_list',
       'media_card.mark_watched',
-      'tracking.menu_item',
       'media_detail.edit_subtitles',
+      'media_detail.advanced_group',
     ]);
   });
 
@@ -226,9 +226,9 @@ describe('MediaCardComponent — card.actions characterisation', () => {
     expect(labels(h)).toEqual([
       'media_card.action_open',
       'recommend.menu_item',
-      'playlists.add_to_playlist',
-      'tracking.menu_item',
+      'media_detail.add_to_list',
       'media_detail.edit_subtitles',
+      'media_detail.advanced_group',
     ]);
   });
 
@@ -245,7 +245,7 @@ describe('MediaCardComponent — card.actions characterisation', () => {
       'media_card.action_play',
       'media_card.action_open',
       'recommend.menu_item',
-      'playlists.add_to_playlist',
+      'media_detail.add_to_list',
       'media_card.mark_watched',
     ]);
   });
@@ -259,7 +259,7 @@ describe('MediaCardComponent — card.actions characterisation', () => {
       interactiveWatched: false,
       clickIntent: 'open',
     });
-    expect(labels(h)).toEqual(['media_card.action_open', 'recommend.menu_item', 'playlists.add_to_playlist']);
+    expect(labels(h)).toEqual(['media_card.action_open', 'recommend.menu_item', 'media_detail.add_to_list']);
   });
 
   it('season card (media-detail): interactiveWatched only, no playlist target — Add/Recommend absent without an id', async () => {
@@ -339,7 +339,7 @@ describe('MediaCardComponent — card action handlers do what their row promises
 
   it('Add to playlist opens the modal with the resolved target', async () => {
     const h = await createFixture(FULL_MEMBER, { link: ['/movies', '7'], playlistMediaId: 7 });
-    findAction(h, 'playlists.add_to_playlist').run();
+    findAction(h, 'media_detail.add_to_list').run();
     expect(h.addToPlaylist.open).toHaveBeenCalledWith({ mediaId: 7 });
   });
 

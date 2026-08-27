@@ -269,10 +269,12 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
       'recommend.menu_item',
       'media_detail.like',
       'downloads.download',
-      'tracking.menu_item',
+      'media_detail.add_to_list',
+      'media_card.mark_watched',
       'media_detail.edit_subtitles',
       'media_detail.identify',
       'media_detail.refresh_metadata',
+      'tracking.menu_item',
       'media_detail.analyze',
       'media_detail.edit_profiles',
       'media_detail.edit_library',
@@ -286,10 +288,11 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'media_detail.like',
+      'media_detail.add_to_list',
       'media_detail.mark_series_watched',
-      'tracking.menu_item',
       'media_detail.identify',
       'media_detail.refresh_metadata',
+      'tracking.menu_item',
       'media_detail.analyze',
       'media_detail.edit_profiles',
       'media_detail.edit_library',
@@ -304,8 +307,10 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
       'recommend.menu_item',
       'media_detail.like',
       'downloads.download',
-      'tracking.menu_item',
+      'media_detail.add_to_list',
+      'media_card.mark_watched',
       'media_detail.edit_subtitles',
+      'tracking.menu_item',
     ]);
   });
 
@@ -314,6 +319,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'media_detail.like',
+      'media_detail.add_to_list',
       'media_detail.mark_series_watched',
       'tracking.menu_item',
     ]);
@@ -325,9 +331,11 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
       'recommend.menu_item',
       'media_detail.like',
       'downloads.download',
-      'tracking.menu_item',
+      'media_detail.add_to_list',
+      'media_card.mark_watched',
       'media_detail.request_media',
       'media_detail.edit_subtitles',
+      'tracking.menu_item',
       'media_detail.request_deletion',
     ]);
   });
@@ -337,9 +345,10 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'media_detail.like',
+      'media_detail.add_to_list',
       'media_detail.mark_series_watched',
-      'tracking.menu_item',
       'media_detail.request_media',
+      'tracking.menu_item',
       'media_detail.request_deletion',
     ]);
   });
@@ -350,8 +359,10 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
       'recommend.menu_item',
       'media_detail.like',
       'downloads.download',
-      'tracking.menu_item',
+      'media_detail.add_to_list',
+      'media_card.mark_watched',
       'media_detail.edit_subtitles',
+      'tracking.menu_item',
       'media_detail.delete_from_library',
     ]);
   });
@@ -361,6 +372,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'media_detail.like',
+      'media_detail.add_to_list',
       'media_detail.mark_series_watched',
       'tracking.menu_item',
       'media_detail.delete_from_library',

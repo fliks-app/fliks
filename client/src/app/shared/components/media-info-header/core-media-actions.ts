@@ -76,7 +76,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     id: 'core.add_to_playlist',
     slot: 'media.actions',
     weight: 150,
-    labelKey: 'playlists.add_to_playlist',
+    labelKey: 'media_detail.add_to_list',
     icon: 'list-plus',
     action: { kind: 'action', actionId: 'media.add-to-playlist' },
   },
@@ -131,6 +131,15 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     icon: 'sliders-horizontal',
     action: { kind: 'submenu' },
     children: [
+    {
+      id: 'core.tracking',
+      slot: 'media.actions',
+      weight: 5,
+      labelKey: 'tracking.menu_item',
+      icon: 'list-checks',
+      when: ['isMonitored'],
+      action: { kind: 'action', actionId: 'media.open-tracking' },
+    },
     {
       id: 'core.analyze',
       slot: 'media.actions',
@@ -211,15 +220,6 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     icon: 'check',
     when: ['mediaType:series', '!isEpisode'],
     action: { kind: 'action', actionId: 'media.toggle-series-watched' },
-  },
-  {
-    id: 'core.tracking',
-    slot: 'media.actions',
-    weight: 300,
-    labelKey: 'tracking.menu_item',
-    icon: 'list-checks',
-    when: ['isMonitored'],
-    action: { kind: 'action', actionId: 'media.open-tracking' },
   },
   {
     id: 'core.request_media',

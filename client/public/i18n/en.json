@@ -1089,7 +1089,9 @@
     },
     "like": "Like",
     "metadata_group": "Metadata",
-    "advanced_group": "Advanced"
+    "advanced_group": "Advanced",
+    "add_to_list": "Add to list",
+    "unlike": "Unlike"
   },
   "requests": {
     "title": "Requests",

@@ -425,6 +425,9 @@ export class MediaCardComponent {
     'media.edit-subtitles': () => this.goToDetail('subtitles'),
     'media.identify': () => this.goToDetail('identify'),
     'media.analyze': () => this.goToDetail('analyze'),
+    // Not a modal, but routed like one: the refresh reports through the detail
+    // page's toast and SSE, so running it from a card would be silent.
+    'media.refresh-metadata': () => this.goToDetail('refresh'),
     'media.add-to-playlist': () => {
       const episodeId = this.playlistEpisodeId();
       const mediaId = this.media()?.id ?? this.playlistMediaId();
@@ -438,10 +441,10 @@ export class MediaCardComponent {
 
   /** Opens one of the detail page's modals by deep link. */
   private goToDetail(action: string) {
-    const mediaId = this.media()?.id ?? this.playlistMediaId();
-    if (mediaId == null) return;
-    const type = this.media()?.type === 'series' ? 'tv' : 'movie';
-    void this.router.navigate(['/media', type, mediaId], { queryParams: { action } });
+    // The card already knows its own route; a hand-built path guesses wrong.
+    const link = this._link();
+    if (!link) return;
+    void this.router.navigate(link, { queryParams: { action } });
   }
 
   /**
