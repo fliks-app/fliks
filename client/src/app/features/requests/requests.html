@@ -185,7 +185,7 @@
               <div class="flex flex-col">
                 @if (row.mediaType === 'series' && row.seasons && row.seasons.length) {
                   <p class="text-sm text-base-content/70">
-                    <span class="text-base-content/50">{{ 'requests.seasons_label' | translate }} · </span>
+                    <span class="text-base-content/50">{{ (row.seasons!.length === 1 ? 'requests.seasons_label_one' : 'requests.seasons_label_other') | translate }}</span>
                     {{ row.seasons.join(', ') }}
                   </p>
                 }
@@ -214,11 +214,11 @@
                 </p>
                 @if (row.kind !== 'delete') {
                   <p>
-                    <span class="text-base-content/50">{{ 'discover.quality_profile' | translate }} · </span>
+                    <span class="text-base-content/50">{{ 'requests.quality_profile_label' | translate }}</span>
                     {{ qualityProfileDisplay(row.qualityProfileId) }}
                   </p>
                   <p>
-                    <span class="text-base-content/50">{{ 'discover.language_profile' | translate }} · </span>
+                    <span class="text-base-content/50">{{ 'requests.language_profile_label' | translate }}</span>
                     {{ languageProfileDisplay(row.languageProfileId) }}
                   </p>
                 }
