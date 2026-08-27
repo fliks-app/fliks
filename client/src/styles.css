@@ -411,6 +411,15 @@ body:not(.keyboard-modality):not(.tv) app-mosaic-card button:focus-visible .mosa
   position: absolute;
   z-index: 50;
 }
+/* A scroll container clips at its padding box, and as soon as one axis
+   scrolls CSS forces the other out of `visible` — so the ring above is cut
+   off the left and right edges of any full-width focusable inside one.
+   Reserve the ring's 4px and pull it straight back out of the layout, so the
+   content keeps its original alignment. Put it on the scrolling element. */
+.scroll-ring-safe {
+  @apply px-1 -mx-1;
+}
+
 /* Opt-out for focusables that paint their own focus affordance (e.g.
    round avatar with a ring-primary on the inner div). The default
    rectangle would draw a competing outer ring around the card. */

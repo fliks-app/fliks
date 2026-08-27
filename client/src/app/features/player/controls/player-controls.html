@@ -501,7 +501,7 @@
           <span class="font-medium">{{ 'player.queue' | translate }}</span>
         </button>
         <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
-        <div class="max-h-[38vh] overflow-y-auto">
+        <div class="max-h-[38vh] overflow-y-auto scroll-ring-safe">
           @for (q of queueItems(); track $index; let i = $index) {
             <button
               class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
