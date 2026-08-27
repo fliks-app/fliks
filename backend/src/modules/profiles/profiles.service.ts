@@ -9,8 +9,6 @@ import { QualityProfile } from './entities/quality-profile.entity';
 import { LanguageProfile } from './entities/language-profile.entity';
 import { CreateQualityProfileDto } from './dto/create-quality-profile.dto';
 import { CreateLanguageProfileDto } from './dto/create-language-profile.dto';
-import { buildDefaultMovieQualityProfileDto } from './default-movie-quality-profile';
-import { buildDefaultLanguageProfileDto } from './default-language-profile';
 import {
   buildAllowedQualityIds,
   allowedAudioLanguageIds,
@@ -25,20 +23,9 @@ export class ProfilesService {
     private readonly lpRepo: Repository<LanguageProfile>,
   ) {}
 
-  async ensureDefaultQualityProfiles(): Promise<void> {
-    if ((await this.qpRepo.count()) > 0) return;
-    await this.createQualityProfile(buildDefaultMovieQualityProfileDto());
-  }
-
-  async ensureDefaultLanguageProfiles(): Promise<void> {
-    if ((await this.lpRepo.count()) > 0) return;
-    await this.createLanguageProfile(buildDefaultLanguageProfileDto());
-  }
-
   async resolveQualityProfileIdForImport(
     requested?: number,
   ): Promise<number | null> {
-    await this.ensureDefaultQualityProfiles();
     if (requested != null) {
       const p = await this.qpRepo.findOne({ where: { id: requested } });
       if (!p) {
@@ -57,11 +44,9 @@ export class ProfilesService {
 
   /**
    * Effective allowed-quality + allowed-audio-language sets for a media.
-   * No runtime fallback to system-default profiles — defaults are seeded
-   * once (via `ensureDefault*Profiles`) and the import flow assigns them
-   * automatically. A media reaching this code without a profile yields an
-   * empty allowed set; the search/grab pipelines treat that as "skip /
-   * refuse to act". The same rule applies to both quality and language.
+   * Nothing is invented when a profile is absent: the allowed set comes back
+   * empty and the search/grab pipelines refuse to act on it, reporting
+   * `unprofiled` rather than guessing a policy the admin never set.
    */
   resolveAllowedForMedia(media: {
     qualityProfile?: QualityProfile | null;
@@ -77,12 +62,9 @@ export class ProfilesService {
 
   /**
    * Strict variant for the manual grab paths: throws `BadRequest` when the
-   * quality profile is missing or empty. Language profile is treated as
-   * optional — a null profile yields an empty `allowedLangs` set (permissive)
-   * so the manual "Search releases" button doesn't break on media
-   * imported before language profiles were always assigned. The auto
-   * SearchMissing pipeline uses the non-throwing variant and refuses to
-   * act on missing-profile rows via `classifyForSearch`.
+   * quality profile is missing or empty. The language profile is optional on
+   * both paths — a null one yields an empty `allowedLangs` set, which the
+   * scorer reads as "accept any language".
    */
   resolveAllowedForMediaOrThrow(
     media: {
@@ -108,7 +90,6 @@ export class ProfilesService {
   async resolveLanguageProfileIdForImport(
     requested?: number,
   ): Promise<number | null> {
-    await this.ensureDefaultLanguageProfiles();
     if (requested != null) {
       const p = await this.lpRepo.findOne({ where: { id: requested } });
       if (!p) {

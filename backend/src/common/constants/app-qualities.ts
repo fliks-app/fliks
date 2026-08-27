@@ -71,5 +71,3 @@ export function maxAllowedRank(allowed: Set<number>): number {
   }
   return max;
 }
-
-export const DEFAULT_MOVIE_QUALITY_PROFILE_NAME = 'HD-1080p (défaut)';

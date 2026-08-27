@@ -37,8 +37,6 @@ export class ProfilesModule implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    void this.profiles.ensureDefaultQualityProfiles();
-    void this.profiles.ensureDefaultLanguageProfiles();
     void this.qualityDefs.ensureDefaults();
   }
 }
