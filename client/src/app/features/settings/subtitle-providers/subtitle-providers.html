@@ -129,7 +129,9 @@
 
 <dialog #statsDialog class="modal">
   <div class="modal-box max-w-2xl">
-    <h2 class="text-lg font-bold">{{ statsProviderName() }} — {{ 'settings.subtitle_providers.stats_title' | translate }}</h2>
+    <app-modal-header>
+      <h3 class="text-lg font-bold">{{ statsProviderName() }} — {{ 'settings.subtitle_providers.stats_title' | translate }}</h3>
+    </app-modal-header>
     @if (statsLoading()) {
       <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
     } @else if (statsData().length === 0) {
@@ -171,13 +173,15 @@
 
 <dialog #translationEditorDialog class="modal">
   <div class="modal-box max-w-xl max-h-[90vh] flex flex-col">
-    <h2 class="text-lg font-bold shrink-0">
-      @if (trEditingId() === null) {
-        {{ 'settings.subtitle_providers.translation_editor_create' | translate }}
-      } @else {
-        {{ 'settings.subtitle_providers.translation_editor_edit' | translate }}
-      }
-    </h2>
+    <app-modal-header class="shrink-0">
+      <h3 class="text-lg font-bold">
+        @if (trEditingId() === null) {
+          {{ 'settings.subtitle_providers.translation_editor_create' | translate }}
+        } @else {
+          {{ 'settings.subtitle_providers.translation_editor_edit' | translate }}
+        }
+      </h3>
+    </app-modal-header>
 
     <div class="flex flex-col gap-3 p-2 -m-2 mt-1 overflow-y-auto">
       <label class="form-control w-full">

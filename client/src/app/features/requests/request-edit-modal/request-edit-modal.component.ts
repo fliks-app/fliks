@@ -3,10 +3,12 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { FliksRequestRow } from '../../../core/services/api/requests.service';
 import { LibrarySummary } from '../../../core/services/api/libraries-api.service';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 
 @Component({
   selector: 'app-request-edit-modal',
-  imports: [FormsModule, TranslateModule],
+  imports: [
+    ModalHeaderComponent,FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './request-edit-modal.component.html',
 })

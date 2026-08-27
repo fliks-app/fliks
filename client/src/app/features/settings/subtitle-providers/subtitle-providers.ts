@@ -27,6 +27,7 @@ import {
   ProviderListLabels,
   ProviderTestResult,
 } from '../../../shared/components/provider-list/provider-list.types';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 
 const DEFAULT_TRANSLATION_MODEL = 'gemini-2.0-flash';
 
@@ -91,7 +92,8 @@ const LABELS: ProviderListLabels = {
 
 @Component({
   selector: 'app-subtitle-providers-settings',
-  imports: [FormsModule, TranslateModule, ProviderListComponent],
+  imports: [
+    ModalHeaderComponent,FormsModule, TranslateModule, ProviderListComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitle-providers.html',
 })

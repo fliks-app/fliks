@@ -51,13 +51,15 @@
 
   <dialog #editorDialog class="modal">
     <div class="modal-box max-w-2xl max-h-[90vh] flex flex-col">
-      <h2 class="text-lg font-bold shrink-0">
-        @if (editingId() === null) {
-          {{ 'settings.language_profiles.editor_create_title' | translate }}
-        } @else {
-          {{ 'settings.language_profiles.editor_edit_title' | translate }}
-        }
-      </h2>
+      <app-modal-header class="shrink-0">
+        <h3 class="text-lg font-bold">
+          @if (editingId() === null) {
+            {{ 'settings.language_profiles.editor_create_title' | translate }}
+          } @else {
+            {{ 'settings.language_profiles.editor_edit_title' | translate }}
+          }
+        </h3>
+      </app-modal-header>
       <div class="py-4 flex flex-col gap-6 overflow-y-auto flex-1 min-h-0 scroll-ring-safe">
         <label class="form-control w-full">
           <span class="label-text">{{ 'settings.language_profiles.field_name' | translate }}</span>

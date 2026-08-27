@@ -33,6 +33,7 @@ import {
   ProviderTestResult,
 } from './provider-list.types';
 import { DataTableComponent } from '../data-table/data-table';
+import { ModalHeaderComponent } from '../modal-header';
 
 interface RowActionResultView {
   url: string;
@@ -59,6 +60,7 @@ export function resolveRowActionRoute(route: string, id: number | string): strin
 @Component({
   selector: 'app-provider-list',
   imports: [
+    ModalHeaderComponent,
     TranslateModule,
     NgTemplateOutlet,
     InputFieldComponent,

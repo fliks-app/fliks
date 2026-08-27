@@ -18,10 +18,12 @@ import { LibrariesApiService, Library } from '../../../../core/services/api/libr
 import { SettingsApiService } from '../../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
+import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 
 @Component({
   selector: 'app-import-modal',
-  imports: [FormsModule, TranslateModule],
+  imports: [
+    ModalHeaderComponent,FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './import-modal.component.html',
 })

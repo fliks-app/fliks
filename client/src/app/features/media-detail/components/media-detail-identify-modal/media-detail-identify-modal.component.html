@@ -103,8 +103,8 @@
       }
     </div>
 
-    <div class="modal-action mt-0 shrink-0 px-5 sm:px-6 py-3 border-t border-base-200 bg-base-100">
-      <button type="button" class="btn btn-sm" (click)="close()">{{ 'common.close' | translate }}</button>
+    <div class="modal-action modal-action-sticky">
+      <button type="button" class="btn" (click)="close()">{{ 'common.close' | translate }}</button>
     </div>
   </div>
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>

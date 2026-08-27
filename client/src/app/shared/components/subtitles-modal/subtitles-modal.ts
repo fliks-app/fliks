@@ -57,6 +57,7 @@ import { ToastService } from '../../../core/services/toast.service';
 import { PaginationComponent } from '../pagination/pagination';
 import { MediaDetailSubtitleSearchModalComponent } from '../../../features/media-detail/components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
 import type { MediaInfoHeaderSubtitle } from '../media-info-header/media-info-header';
+import { ModalHeaderComponent } from '../modal-header';
 
 interface SubtitleRow {
   sub?: SubtitleFileRow;
@@ -73,6 +74,7 @@ interface SubtitleRow {
 @Component({
   selector: 'app-subtitles-modal',
   imports: [
+    ModalHeaderComponent,
     FormsModule,
     TranslateModule,
     LocalizeLanguagePipe,

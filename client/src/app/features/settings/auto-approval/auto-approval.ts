@@ -15,6 +15,7 @@ import {
   AutoApprovalRule,
   RuleCondition,
 } from '../../../core/services/api/auto-approval-api.service';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 
 const EMPTY_CONDITION = (): RuleCondition => ({
   field: 'role',
@@ -24,7 +25,8 @@ const EMPTY_CONDITION = (): RuleCondition => ({
 
 @Component({
   selector: 'app-auto-approval',
-  imports: [FormsModule, TranslateModule],
+  imports: [
+    ModalHeaderComponent,FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './auto-approval.html',
 })

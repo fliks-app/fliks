@@ -510,13 +510,13 @@
         }
 
         <div class="modal-action">
-          <button type="button" class="btn btn-ghost btn-sm" (click)="cancelWizard('radarr')">
+          <button type="button" class="btn btn-ghost" (click)="cancelWizard('radarr')">
             {{ 'import.path_wizard.cancel' | translate }}
           </button>
           @if (eligibleLocalLibraries('radarr').length > 0) {
             <button
               type="button"
-              class="btn btn-primary btn-sm"
+              class="btn btn-primary"
               [disabled]="!radarrCanConfirm() || radarrLoading()"
               (click)="confirmRadarrImport()"
             >
@@ -571,13 +571,13 @@
         }
 
         <div class="modal-action">
-          <button type="button" class="btn btn-ghost btn-sm" (click)="cancelWizard('sonarr')">
+          <button type="button" class="btn btn-ghost" (click)="cancelWizard('sonarr')">
             {{ 'import.path_wizard.cancel' | translate }}
           </button>
           @if (eligibleLocalLibraries('sonarr').length > 0) {
             <button
               type="button"
-              class="btn btn-primary btn-sm"
+              class="btn btn-primary"
               [disabled]="!sonarrCanConfirm() || sonarrLoading()"
               (click)="confirmSonarrImport()"
             >

@@ -2,14 +2,18 @@
   <div class="modal-box max-w-lg">
     @if (report(); as r) {
       @if (!r.installable) {
-        <h3 class="text-lg font-bold mb-2">{{ 'settings.plugins.consent.refused_title' | translate }}</h3>
+        <app-modal-header [title]="'settings.plugins.consent.refused_title' | translate" />
         <p class="text-sm text-base-content/70">{{ refusalMessage() }}</p>
         <div class="modal-action">
           <button type="button" class="btn" (click)="close()">{{ 'common.close' | translate }}</button>
         </div>
       } @else {
-        <h3 class="text-lg font-bold">{{ 'settings.plugins.consent.title' | translate: { name: r.name } }}</h3>
-        <p class="text-xs text-base-content/50 mb-3">{{ 'settings.plugins.consent.identity' | translate: { id: r.id, version: r.version } }}</p>
+        <app-modal-header>
+          <div>
+            <h3 class="text-lg font-bold">{{ 'settings.plugins.consent.title' | translate: { name: r.name } }}</h3>
+            <p class="text-xs text-base-content/50 mt-1">{{ 'settings.plugins.consent.identity' | translate: { id: r.id, version: r.version } }}</p>
+          </div>
+        </app-modal-header>
 
         <span class="badge badge-sm mb-3" [class]="trust().cssClass">
           {{ trust().labelKey | translate: trust().params }}

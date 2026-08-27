@@ -9,6 +9,7 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { SseService } from '../../../core/services/sse.service';
 import { PaginationComponent } from '../pagination/pagination';
 import { BadgeTone, CellValue, ListAction, PagedResult, RowAction, TableColumn, TableFilter, TableRow, TableSubValue } from './data-table.types';
+import { ModalHeaderComponent } from '../modal-header';
 
 /** Keystroke-to-request debounce for a `search` filter — see `onSearchInput`. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -38,7 +39,8 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
  */
 @Component({
   selector: 'app-data-table',
-  imports: [TranslateModule, LocaleDatePipe, PaginationComponent],
+  imports: [
+    ModalHeaderComponent,TranslateModule, LocaleDatePipe, PaginationComponent],
   providers: [LocaleDatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './data-table.html',

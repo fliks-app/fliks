@@ -87,6 +87,7 @@ import { TvSectionDirective } from '../../shared/directives/tv-section.directive
 import { ImgFadeInDirective } from '../../shared/directives/img-fade-in.directive';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
+import { ModalHeaderComponent } from '../../shared/components/modal-header';
 
 const LS_EPISODES_HAS_FILE_ONLY = 'fliks.mediaDetail.episodesHasFileOnly';
 
@@ -102,6 +103,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
 @Component({
   selector: 'app-media-detail',
   imports: [
+    ModalHeaderComponent,
     CachedSrcDirective,
     TranslateModule,
     DefaultFocusDirective,

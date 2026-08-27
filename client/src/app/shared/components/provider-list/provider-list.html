@@ -207,7 +207,7 @@
       </div>
       <app-toggle-field [label]="labels().fieldEnabledKey | translate" [value]="draftEnabled()" (valueChange)="draftEnabled.set($event)" />
     </div>
-    <div class="modal-action shrink-0 px-5 sm:px-6 pb-4 pt-2 border-t border-base-200 bg-base-100">
+    <div class="modal-action modal-action-sticky">
       <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
         {{ labels().cancelKey | translate }}
       </button>
@@ -227,7 +227,7 @@
 <dialog #resultDialog class="modal">
   <div class="modal-box max-w-2xl">
     @if (resultView(); as view) {
-      <h3 class="font-bold text-lg mb-4">{{ view.title }}</h3>
+      <app-modal-header [title]="view.title" />
       <app-data-table
         [listUrl]="view.url"
         [columns]="view.result.columns"

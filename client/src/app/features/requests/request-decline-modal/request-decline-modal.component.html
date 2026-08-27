@@ -1,8 +1,10 @@
 <dialog #dialog class="modal" aria-labelledby="request-decline-title">
   <div class="modal-box max-w-md">
-    <h2 id="request-decline-title" class="text-lg font-semibold">
-      {{ 'requests.decline_title' | translate }}
-    </h2>
+    <app-modal-header>
+      <h3 id="request-decline-title" class="text-lg font-bold">
+        {{ 'requests.decline_title' | translate }}
+      </h3>
+    </app-modal-header>
     <textarea
       class="textarea textarea-bordered w-full mt-3"
       rows="3"
@@ -11,12 +13,12 @@
       (ngModelChange)="reasonTextChange.emit($event)"
     ></textarea>
     <div class="modal-action mt-2">
-      <button type="button" class="btn btn-ghost btn-sm" (click)="close(); dismissed.emit()">
+      <button type="button" class="btn btn-ghost" (click)="close(); dismissed.emit()">
         {{ 'common.cancel' | translate }}
       </button>
       <button
         type="button"
-        class="btn btn-warning btn-sm"
+        class="btn btn-warning"
         [disabled]="submitBusy()"
         (click)="submitted.emit()"
       >

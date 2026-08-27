@@ -37,4 +37,8 @@ export class MediaDetailLibraryModalComponent {
   showModal() {
     this.dialogEl()?.nativeElement.showModal();
   }
+
+  close() {
+    this.dialogEl()?.nativeElement.close();
+  }
 }

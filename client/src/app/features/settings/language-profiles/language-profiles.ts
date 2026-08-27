@@ -18,6 +18,7 @@ import {
   SubtitleLanguageItem,
   HearingImpairedMode,
 } from '../../../core/services/api/profiles.service';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 
 interface LangDef {
   id: number;
@@ -35,7 +36,8 @@ const HI_MODES: HearingImpairedMode[] = ['prefer', 'avoid', 'require', 'forbid']
 
 @Component({
   selector: 'app-language-profiles',
-  imports: [FormsModule, TranslateModule],
+  imports: [
+    ModalHeaderComponent,FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './language-profiles.html',
 })

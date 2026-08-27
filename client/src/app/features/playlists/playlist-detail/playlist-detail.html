@@ -331,12 +331,12 @@
         autofocus
       />
       <div class="modal-action mt-0">
-        <button type="button" class="btn btn-sm" (click)="closeRename()">
+        <button type="button" class="btn" (click)="closeRename()">
           {{ 'common.cancel' | translate }}
         </button>
         <button
           type="submit"
-          class="btn btn-primary btn-sm"
+          class="btn btn-primary"
           [disabled]="renaming() || !renameValue().trim()"
         >
           @if (renaming()) {
@@ -390,12 +390,12 @@
       }
     </div>
     <div class="modal-action">
-      <button type="button" class="btn btn-sm" (click)="closeSettings()">
+      <button type="button" class="btn" (click)="closeSettings()">
         {{ 'common.cancel' | translate }}
       </button>
       <button
         type="button"
-        class="btn btn-primary btn-sm"
+        class="btn btn-primary"
         [disabled]="savingSettings()"
         (click)="saveSettings()"
       >

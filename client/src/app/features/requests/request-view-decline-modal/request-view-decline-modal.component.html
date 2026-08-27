@@ -1,15 +1,19 @@
 <dialog #dialog class="modal" aria-labelledby="request-view-decline-title">
   @if (payload(); as declineView) {
     <div class="modal-box max-w-md">
-      <h2 id="request-view-decline-title" class="text-lg font-semibold">
-        {{ 'requests.view_decline_title' | translate }}
-      </h2>
-      <p class="text-sm text-base-content/60 mt-1 line-clamp-2">{{ declineView.mediaTitle }}</p>
+      <app-modal-header>
+        <div class="min-w-0">
+          <h3 id="request-view-decline-title" class="text-lg font-bold">
+            {{ 'requests.view_decline_title' | translate }}
+          </h3>
+          <p class="text-sm text-base-content/60 mt-1 line-clamp-2">{{ declineView.mediaTitle }}</p>
+        </div>
+      </app-modal-header>
       <p class="mt-4 text-sm text-base-content whitespace-pre-wrap wrap-break-word">
         {{ declineView.reason }}
       </p>
       <div class="modal-action mt-2">
-        <button type="button" class="btn btn-primary btn-sm" (click)="close(); dismissed.emit()">
+        <button type="button" class="btn btn-primary" (click)="close(); dismissed.emit()">
           {{ 'common.close' | translate }}
         </button>
       </div>

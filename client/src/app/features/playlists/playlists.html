@@ -47,12 +47,12 @@
         autofocus
       />
       <div class="modal-action mt-0">
-        <button type="button" class="btn btn-sm" (click)="closeCreate()">
+        <button type="button" class="btn" (click)="closeCreate()">
           {{ 'common.cancel' | translate }}
         </button>
         <button
           type="submit"
-          class="btn btn-primary btn-sm"
+          class="btn btn-primary"
           [disabled]="creating() || !newName().trim()"
         >
           @if (creating()) {

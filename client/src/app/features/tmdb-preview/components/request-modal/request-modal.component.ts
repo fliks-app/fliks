@@ -16,10 +16,12 @@ import { RequestsService } from '../../../../core/services/api/requests.service'
 import { LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
+import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 
 @Component({
   selector: 'app-request-modal',
-  imports: [FormsModule, TranslateModule],
+  imports: [
+    ModalHeaderComponent,FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './request-modal.component.html',
 })

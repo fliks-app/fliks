@@ -88,8 +88,12 @@
 
 <dialog #libraryDialog class="modal">
   <div class="modal-box max-w-md">
-    <h2 class="text-lg font-bold">{{ 'home_settings.libraries_modal_title' | translate }}</h2>
-    <p class="text-sm text-base-content/60 mt-1">{{ 'home_settings.libraries_modal_hint' | translate }}</p>
+    <app-modal-header>
+      <div>
+        <h3 class="text-lg font-bold">{{ 'home_settings.libraries_modal_title' | translate }}</h3>
+        <p class="text-sm text-base-content/60 mt-1">{{ 'home_settings.libraries_modal_hint' | translate }}</p>
+      </div>
+    </app-modal-header>
 
     @if (libraryRows().length) {
       <div cdkDropList (cdkDropListDropped)="dropLibrary($event)" class="flex flex-col gap-2 mt-4">

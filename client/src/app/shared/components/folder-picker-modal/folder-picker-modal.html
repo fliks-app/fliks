@@ -1,6 +1,6 @@
 <dialog #dialog class="modal" role="dialog" aria-modal="true" (close)="cancel()">
   <div class="modal-box max-w-2xl">
-    <h3 class="text-lg font-bold">{{ 'folder_picker.title' | translate }}</h3>
+    <app-modal-header [title]="'folder_picker.title' | translate" />
 
     <div class="mt-2 flex items-center gap-2">
       <button

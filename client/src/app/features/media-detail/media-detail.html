@@ -465,8 +465,12 @@
      superset) and disables the granular options when ticked. -->
 <dialog #analyzeDialog class="modal" role="dialog" aria-modal="true" aria-labelledby="analyze-title">
   <div class="modal-box">
-    <h3 id="analyze-title" class="text-lg font-bold mb-2">{{ 'media_detail.analyze_title' | translate }}</h3>
-    <p class="text-sm text-base-content/70 mb-4">{{ 'media_detail.analyze_hint' | translate }}</p>
+    <app-modal-header>
+      <div>
+        <h3 id="analyze-title" class="text-lg font-bold">{{ 'media_detail.analyze_title' | translate }}</h3>
+        <p class="text-sm text-base-content/70 mt-1">{{ 'media_detail.analyze_hint' | translate }}</p>
+      </div>
+    </app-modal-header>
     <div class="space-y-2">
       <label class="flex items-start gap-3 cursor-pointer">
         <input

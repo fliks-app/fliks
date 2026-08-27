@@ -44,14 +44,14 @@
           <div role="alert" class="alert alert-error text-sm py-2">{{ profilesErr() }}</div>
         }
         <div class="modal-action">
-          <button type="submit" class="btn btn-primary btn-sm" [disabled]="profilesSaveLoading()">
+          <button type="button" class="btn btn-ghost" (click)="close()">
+            {{ 'common.close' | translate }}
+          </button>
+          <button type="submit" class="btn btn-primary" [disabled]="profilesSaveLoading()">
             @if (profilesSaveLoading()) {
               <span class="loading loading-spinner loading-xs"></span>
             }
             {{ 'media_detail.save_profiles' | translate }}
-          </button>
-          <button type="button" class="btn btn-sm" onclick="this.closest('dialog').close()">
-            {{ 'common.close' | translate }}
           </button>
         </div>
       </form>

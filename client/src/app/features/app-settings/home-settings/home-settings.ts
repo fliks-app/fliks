@@ -37,10 +37,12 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { DisplaySettingsService } from '../../../core/services/display-settings.service';
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 
 @Component({
   selector: 'app-home-settings',
   imports: [
+    ModalHeaderComponent,
     TranslateModule,
     FormsModule,
     CdkDropList,

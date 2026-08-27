@@ -59,9 +59,9 @@
 
 <dialog #editorDialog class="modal">
   <div class="modal-box max-w-lg">
-      <h3 class="text-lg font-semibold mb-4">
-        {{ (editingId() != null ? 'settings.auto_approval.editor_edit' : 'settings.auto_approval.editor_create') | translate }}
-      </h3>
+      <app-modal-header
+        [title]="(editingId() != null ? 'settings.auto_approval.editor_edit' : 'settings.auto_approval.editor_create') | translate"
+      />
       <div class="flex flex-col gap-4">
         <label class="form-control w-full">
           <span class="label-text">{{ 'settings.auto_approval.field_name' | translate }}</span>
@@ -137,10 +137,10 @@
 
 
         <div class="modal-action">
-          <button type="button" class="btn btn-ghost btn-sm" (click)="closeEditor()">
+          <button type="button" class="btn btn-ghost" (click)="closeEditor()">
             {{ 'common.cancel' | translate }}
           </button>
-          <button type="button" class="btn btn-primary btn-sm" [disabled]="saving()" (click)="save()">
+          <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">
             @if (saving()) {
               <span class="loading loading-spinner loading-xs"></span>
             }

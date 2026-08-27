@@ -169,12 +169,12 @@
         (ngModelChange)="messageText.set($event)"
       ></textarea>
       <div class="modal-action mt-2">
-        <button type="button" class="btn btn-ghost btn-sm" (click)="closeMessage()">
+        <button type="button" class="btn btn-ghost" (click)="closeMessage()">
           {{ 'common.cancel' | translate }}
         </button>
         <button
           type="button"
-          class="btn btn-primary btn-sm"
+          class="btn btn-primary"
           [disabled]="messageBusy() || !messageText().trim()"
           (click)="sendMessage()"
         >

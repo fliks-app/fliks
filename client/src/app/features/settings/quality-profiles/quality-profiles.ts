@@ -20,10 +20,12 @@ import {
   MediaService,
   AppQualityDef,
 } from '../../../core/services/api/media.service';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 
 @Component({
   selector: 'app-quality-profiles',
-  imports: [FormsModule, LucideChevronLeft, RouterLink, TranslateModule],
+  imports: [
+    ModalHeaderComponent,FormsModule, LucideChevronLeft, RouterLink, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quality-profiles.html',
 })

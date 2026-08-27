@@ -9,10 +9,12 @@ import {
 } from '@angular/core';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../core/services/confirmation.service';
+import { ModalHeaderComponent } from './modal-header';
 
 @Component({
   selector: 'app-confirmation-modal',
-  imports: [TranslateModule],
+  imports: [
+    ModalHeaderComponent,TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './confirmation-modal.html',
 })

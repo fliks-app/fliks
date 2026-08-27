@@ -38,18 +38,18 @@
         <div role="alert" class="alert alert-success text-sm py-2">{{ 'media_detail.library_saved' | translate }}</div>
       }
       <div class="modal-action">
+        <button type="button" class="btn btn-ghost" (click)="close()">
+          {{ 'common.close' | translate }}
+        </button>
         <button
           type="submit"
-          class="btn btn-primary btn-sm"
+          class="btn btn-primary"
           [disabled]="saving() || selectedLibraryId() === null"
         >
           @if (saving()) {
             <span class="loading loading-spinner loading-xs"></span>
           }
           {{ 'common.save' | translate }}
-        </button>
-        <button type="button" class="btn btn-sm" onclick="this.closest('dialog').close()">
-          {{ 'common.close' | translate }}
         </button>
       </div>
     </form>

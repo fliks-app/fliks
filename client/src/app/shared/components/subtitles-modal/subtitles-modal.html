@@ -1,11 +1,6 @@
 <dialog #modal class="modal">
   <div class="modal-box w-11/12 max-w-5xl">
-    <div class="flex items-start justify-between gap-4 mb-4">
-      <h3 class="text-lg font-bold">{{ 'media_detail.edit_subtitles' | translate }}</h3>
-      <form method="dialog">
-        <button class="btn btn-sm btn-circle btn-ghost" [attr.aria-label]="'common.close' | translate">✕</button>
-      </form>
-    </div>
+    <app-modal-header [title]="'media_detail.edit_subtitles' | translate" />
 
     <section class="space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
@@ -187,8 +182,12 @@
 <!-- Sync options modal -->
 <dialog #syncDialog class="modal">
   <div class="modal-box max-w-2xl w-11/12">
-    <h3 class="text-lg font-bold">{{ 'media_detail.sync_modal_title' | translate }}</h3>
-    <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.sync_modal_subtitle' | translate }}</p>
+    <app-modal-header>
+      <div>
+        <h3 class="text-lg font-bold">{{ 'media_detail.sync_modal_title' | translate }}</h3>
+        <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.sync_modal_subtitle' | translate }}</p>
+      </div>
+    </app-modal-header>
 
     <div class="flex flex-col gap-4 mt-4">
       <label class="form-control w-full">
@@ -276,8 +275,12 @@
 <!-- Adjust Times modal -->
 <dialog #adjustDialog class="modal">
   <div class="modal-box max-w-md">
-    <h3 class="text-lg font-bold">{{ 'media_detail.adjust_times_title' | translate }}</h3>
-    <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.adjust_times_subtitle' | translate }}</p>
+    <app-modal-header>
+      <div>
+        <h3 class="text-lg font-bold">{{ 'media_detail.adjust_times_title' | translate }}</h3>
+        <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.adjust_times_subtitle' | translate }}</p>
+      </div>
+    </app-modal-header>
 
     <div class="flex gap-3 mt-4">
       <label class="form-control flex-1">
@@ -329,8 +332,12 @@
 <!-- Change Frame Rate modal -->
 <dialog #fpsDialog class="modal">
   <div class="modal-box max-w-md">
-    <h3 class="text-lg font-bold">{{ 'media_detail.change_fps_title' | translate }}</h3>
-    <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.change_fps_subtitle' | translate }}</p>
+    <app-modal-header>
+      <div>
+        <h3 class="text-lg font-bold">{{ 'media_detail.change_fps_title' | translate }}</h3>
+        <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.change_fps_subtitle' | translate }}</p>
+      </div>
+    </app-modal-header>
 
     <div class="flex gap-4 mt-4">
       <label class="form-control flex-1">
@@ -379,20 +386,24 @@
 
 <dialog #ocrLangDialog class="modal">
   <div class="modal-box max-w-sm">
-    @if (langDialogMode() === 'relabel') {
-      <h3 class="text-lg font-bold">{{ 'media_detail.change_language_title' | translate }}</h3>
-      <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.change_language_hint' | translate }}</p>
-    } @else if (langDialogMode() === 'translate') {
-      <h3 class="text-lg font-bold">{{ 'media_detail.translate_target_language' | translate }}</h3>
-      <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.translate_hint' | translate }}</p>
-    } @else if (langDialogMode() === 'upload') {
-      <h3 class="text-lg font-bold">{{ 'media_detail.upload_subtitle' | translate }}</h3>
-      <p class="py-2 text-sm text-base-content/70 break-all">{{ pendingUploadName() }}</p>
-      <p class="text-sm text-base-content/70">{{ 'media_detail.upload_subtitle_hint' | translate }}</p>
-    } @else {
-      <h3 class="text-lg font-bold">{{ 'media_detail.ocr_language_title' | translate }}</h3>
-      <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.ocr_language_hint' | translate }}</p>
-    }
+    <app-modal-header>
+      <div class="min-w-0">
+        @if (langDialogMode() === 'relabel') {
+          <h3 class="text-lg font-bold">{{ 'media_detail.change_language_title' | translate }}</h3>
+          <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.change_language_hint' | translate }}</p>
+        } @else if (langDialogMode() === 'translate') {
+          <h3 class="text-lg font-bold">{{ 'media_detail.translate_target_language' | translate }}</h3>
+          <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.translate_hint' | translate }}</p>
+        } @else if (langDialogMode() === 'upload') {
+          <h3 class="text-lg font-bold">{{ 'media_detail.upload_subtitle' | translate }}</h3>
+          <p class="py-2 text-sm text-base-content/70 break-all">{{ pendingUploadName() }}</p>
+          <p class="text-sm text-base-content/70">{{ 'media_detail.upload_subtitle_hint' | translate }}</p>
+        } @else {
+          <h3 class="text-lg font-bold">{{ 'media_detail.ocr_language_title' | translate }}</h3>
+          <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.ocr_language_hint' | translate }}</p>
+        }
+      </div>
+    </app-modal-header>
     <div class="mt-2 space-y-4">
       <select class="select select-bordered w-full" [ngModel]="ocrLang()" (ngModelChange)="ocrLang.set($event)">
         @for (code of langDialogCodes(); track code) {

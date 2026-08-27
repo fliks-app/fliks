@@ -11,10 +11,12 @@ import { TranslateModule } from '@ngx-translate/core';
 import { LocalizeLanguagePipe } from '../../../../core/pipes/localize-language.pipe';
 import { SubtitleSearchResult } from '../../../../core/services/api/subtitles-api.service';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
+import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 
 @Component({
   selector: 'app-media-detail-subtitle-search-modal',
-  imports: [TranslateModule, FormsModule, LocalizeLanguagePipe, TvSelectDirective],
+  imports: [
+    ModalHeaderComponent,TranslateModule, FormsModule, LocalizeLanguagePipe, TvSelectDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-subtitle-search-modal.component.html',
 })

@@ -1,10 +1,14 @@
 <dialog #dialog class="modal" aria-labelledby="request-edit-title">
   @if (row(); as editRow) {
     <div class="modal-box max-w-md">
-      <h2 id="request-edit-title" class="text-lg font-semibold">
-        {{ 'requests.edit_title' | translate }}
-      </h2>
-      <p class="text-sm text-base-content/60 mt-1">{{ editRow.title }}</p>
+      <app-modal-header>
+        <div>
+          <h3 id="request-edit-title" class="text-lg font-bold">
+            {{ 'requests.edit_title' | translate }}
+          </h3>
+          <p class="text-sm text-base-content/60 mt-1">{{ editRow.title }}</p>
+        </div>
+      </app-modal-header>
 
       <div class="flex flex-col gap-4 mt-4">
         @if (libraries().length > 1) {
@@ -55,12 +59,12 @@
       </div>
 
       <div class="modal-action mt-2">
-        <button type="button" class="btn btn-ghost btn-sm" (click)="close(); dismissed.emit()">
+        <button type="button" class="btn btn-ghost" (click)="close(); dismissed.emit()">
           {{ 'common.cancel' | translate }}
         </button>
         <button
           type="button"
-          class="btn btn-primary btn-sm"
+          class="btn btn-primary"
           [disabled]="saving()"
           (click)="save.emit()"
         >

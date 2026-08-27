@@ -11,6 +11,7 @@ import { HttpClient } from '@angular/common/http';
 import { TranslateModule } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { FolderPickerService } from '../../../core/services/folder-picker.service';
+import { ModalHeaderComponent } from '../modal-header';
 
 interface FsEntry {
   name: string;
@@ -25,7 +26,8 @@ interface FsListing {
 
 @Component({
   selector: 'app-folder-picker-modal',
-  imports: [TranslateModule],
+  imports: [
+    ModalHeaderComponent,TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './folder-picker-modal.html',
 })
