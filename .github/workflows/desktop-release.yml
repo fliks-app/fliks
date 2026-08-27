@@ -15,8 +15,9 @@
 #      desktop/web so electron-builder ships it at resources/web.
 #   + a vendored self-contained libmpv into desktop/native/vendor per OS.
 #
-# Release checklist: the Windows mpv pin (MPV_WINBUILD_TAG below) needs a
-# periodic bump — it does not move on its own, unlike the old newest-asset scrape.
+# Release checklist: bump the Windows mpv pin (MPV_WINBUILD_TAG below) when
+# convenient — upstream deletes releases after about a month, and past that the
+# build falls back to the newest one and warns instead of failing.
 #
 # The native compositor addon (SDL2 + GLES/EGL) is LINUX-ONLY by design — it is
 # the OSR self-compositor needed under Mutter/X11. macOS and Windows embed mpv
@@ -172,25 +173,29 @@ jobs:
       # Windows embeds mpv via --wid by spawning a vendored mpv.exe, downloaded
       # from a pinned zhongfly/mpv-winbuild release (MPV_WINBUILD_TAG below) so
       # the Windows media/TLS stack only changes when that pin is bumped, not on
-      # every build. Bumping is a one-line edit; confirm the target release has
-      # an x86_64 asset first — some are aarch64-only.
+      # every build. Upstream prunes old releases, so a stale pin falls back to
+      # the newest x86_64 build rather than failing the release.
       - name: Vendor mpv (Windows)
         if: runner.os == 'Windows'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MPV_WINBUILD_TAG: "2026-07-27-48e6c35c0e"
+          MPV_WINBUILD_TAG: "2026-08-27-182fa6ca49"
         run: |
           set -euo pipefail
           dest=desktop/native/vendor
           mkdir -p "$dest"
           # The `|| true` keeps `set -e` from firing on a grep-no-match / head
-          # SIGPIPE; the explicit guard below reports the failure clearly. The
+          # SIGPIPE; the explicit guards below report the failure clearly. The
           # API call is authenticated to avoid the unauthenticated shared-runner-IP rate limit.
-          url=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/zhongfly/mpv-winbuild/releases/tags/$MPV_WINBUILD_TAG" \
-            | grep -oE 'https://[^"]+mpv-x86_64-[0-9][^"]*\.7z' | head -1) || true
-          test -n "$url" || { echo "::error::no mpv-x86_64 .7z asset on release $MPV_WINBUILD_TAG"; exit 1; }
+          api() { curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/zhongfly/mpv-winbuild/$1"; }
+          pick() { grep -oE 'https://[^"]+mpv-x86_64-[0-9][^"]*\.7z' | head -1; }
+          url=$(api "releases/tags/$MPV_WINBUILD_TAG" | pick) || true
+          if [ -z "$url" ]; then
+            echo "::warning::pinned mpv release $MPV_WINBUILD_TAG is gone upstream — using the newest build instead, bump MPV_WINBUILD_TAG"
+            url=$(api "releases?per_page=10" | pick) || true
+          fi
+          test -n "$url" || { echo "::error::no mpv-x86_64 .7z asset on $MPV_WINBUILD_TAG nor the 10 newest releases"; exit 1; }
           echo "Downloading mpv: $url"
           curl -fsSL -o "$RUNNER_TEMP/mpv.7z" "$url"
           7z x -y -o"$dest" "$RUNNER_TEMP/mpv.7z" >/dev/null
