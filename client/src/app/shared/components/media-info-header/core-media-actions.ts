@@ -43,12 +43,14 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     action: { kind: 'action', actionId: 'media.download' },
   },
   {
+    // A card reports an episode as `series` + `isEpisode`; the detail header
+    // reports it as `movie`, so this twin covers the card surface only.
     id: 'core.download_episode',
     slot: 'media.actions',
     weight: 140,
     labelKey: 'downloads.download',
     icon: 'download',
-    when: ['!isTv', 'isEpisode'],
+    when: ['!isTv', 'isEpisode', 'surface:card'],
     action: { kind: 'action', actionId: 'media.download' },
   },
   // ── Rows a card owns ────────────────────────────────────────────────────
@@ -241,15 +243,6 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     labelKey: 'media_detail.edit_subtitles',
     icon: 'captions',
     when: ['mediaType:movie', 'surface:detail'],
-    action: { kind: 'action', actionId: 'media.edit-subtitles' },
-  },
-  {
-    id: 'core.edit_subtitles_episode',
-    slot: 'media.actions',
-    weight: 700,
-    labelKey: 'media_detail.edit_subtitles',
-    icon: 'captions',
-    when: ['isEpisode', 'surface:detail'],
     action: { kind: 'action', actionId: 'media.edit-subtitles' },
   },
   {

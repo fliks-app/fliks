@@ -449,6 +449,18 @@ describe('MediaInfoHeaderComponent — destructive-item styling and ephemeral gu
     expect(shown).toContain('media_detail.delete_from_library');
   });
 
+  it('an episode-level header lists Download and Edit subtitles once, not twice', async () => {
+    const fixture = await createFixture(OWNER, {
+      mediaType: 'movie',
+      ...MOVIE,
+      episodeId: 999,
+      episodeInstance: true,
+    });
+    const shown = labels(fixture);
+    expect(shown.filter((l) => l === 'downloads.download').length).toBe(1);
+    expect(shown.filter((l) => l === 'media_detail.edit_subtitles').length).toBe(1);
+  });
+
   it('the series-watched toggle swaps its label with the live watched state', async () => {
     const unwatched = await createFixture(OWNER, { mediaType: 'series', ...SERIES, watched: false });
     expect(labels(unwatched)).toContain('media_detail.mark_series_watched');
