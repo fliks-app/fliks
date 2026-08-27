@@ -31,6 +31,8 @@ import java.io.File;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Singleton utilities for ExoPlayer offline downloads.
@@ -84,6 +86,25 @@ public class FlixDownloadUtil {
 
     /** The persistent download table. Readable straight away, unlike the
      *  DownloadManager, which loads it asynchronously after construction. */
+    /**
+     * Worker pool for the DownloadManager.
+     *
+     * A plain fixed pool never reclaims its core threads, so one burst at the
+     * highest cap leaves that many parked for the life of the process. Letting
+     * them time out keeps the ceiling — an unbounded cached pool would trade a
+     * known cost for an open-ended one — while giving the threads back once the
+     * downloads are done.
+     */
+    private static ThreadPoolExecutor buildDownloadExecutor() {
+        ThreadPoolExecutor executor =
+            (ThreadPoolExecutor) Executors.newFixedThreadPool(MAX_SUPPORTED_PARALLEL);
+        // Must precede allowCoreThreadTimeOut: newFixedThreadPool leaves the
+        // keep-alive at zero, and enabling the timeout on zero throws.
+        executor.setKeepAliveTime(60, TimeUnit.SECONDS);
+        executor.allowCoreThreadTimeOut(true);
+        return executor;
+    }
+
     public static synchronized DefaultDownloadIndex getDownloadIndex(Context ctx) {
         if (downloadIndex == null) {
             downloadIndex = new DefaultDownloadIndex(getDatabaseProvider(ctx));
@@ -111,7 +132,7 @@ public class FlixDownloadUtil {
                 getDatabaseProvider(ctx),
                 getCache(ctx),
                 buildHttpDataSourceFactory(),
-                Executors.newFixedThreadPool(MAX_SUPPORTED_PARALLEL)
+                buildDownloadExecutor()
             );
             downloadManager.setMaxParallelDownloads(maxParallelDownloads);
             // Emit progress/completion events to WebView — registered once on

@@ -1,0 +1,108 @@
+# Compiles the Android and iOS shells on pull requests.
+#
+# The release workflows (`play-store-publish.yml`, `appstore-publish.yml`) only
+# run on a `v*` tag, so until this existed nothing built the native code before
+# it shipped: a Java or Swift compile error sailed through review and surfaced
+# at release time, on the tag, with no obvious owner.
+#
+# Neither job signs anything — signing needs secrets a fork's PR can't reach,
+# and a compile error is what we're after here, not a distributable artefact.
+# Path filters keep the macOS runner (billed at 10x) off pull requests that
+# don't touch the client.
+
+name: Native build
+
+on:
+  pull_request:
+    paths:
+      - 'client/**'
+      - '.github/workflows/native-build.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'client/**'
+      - '.github/workflows/native-build.yml'
+
+concurrency:
+  group: native-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - uses: android-actions/setup-android@v4
+
+      - name: Install client dependencies
+        run: npm ci
+
+      - name: Build Angular client
+        run: npm run build
+
+      - name: Capacitor sync to Android shell
+        run: npx cap sync android
+
+      - name: Compile Android shell
+        run: ./gradlew --no-daemon assembleDebug
+        working-directory: client/android
+
+  ios:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install client dependencies
+        run: npm ci
+
+      - name: Build Angular client
+        run: npx ng build --configuration=production
+
+      - name: Capacitor sync to iOS shell
+        run: npx cap sync ios
+
+      # Simulator destination + signing off: a device build would need a
+      # provisioning profile, and the app plus its Live Activity widget compile
+      # the same either way.
+      - name: Compile iOS shell
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+        working-directory: client/ios/App
