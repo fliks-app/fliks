@@ -16,16 +16,15 @@ import { firstValueFrom } from 'rxjs';
 import { ImportDiskComponent } from '../../import-disk/import-disk';
 import { SeerrApiService } from '../../../core/services/api/seerr-api.service';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
-import {
-  LibrariesApiService,
-  Library,
-} from '../../../core/services/api/libraries-api.service';
+import { LibrariesApiService, Library } from '../../../core/services/api/libraries-api.service';
 import {
   MediaServersApiService,
   MediaServerRow,
 } from '../../../core/services/api/media-servers-api.service';
 import { SseService } from '../../../core/services/sse.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 
 const SETTING_SEERR_URL = 'seerr_url';
 const SETTING_SEERR_API_KEY = 'seerr_api_key';
@@ -77,7 +76,14 @@ type LibrarySelection = number | null;
 
 @Component({
   selector: 'app-data-imports-settings',
-  imports: [FormsModule, TranslateModule, LucideDownload, ImportDiskComponent],
+  imports: [
+    ModalHeaderComponent,
+    ModalFooterComponent,
+    FormsModule,
+    TranslateModule,
+    LucideDownload,
+    ImportDiskComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './data-imports.html',
 })
@@ -156,9 +162,7 @@ export class DataImportsSettingsComponent implements OnInit {
   readonly radarrPreviewing = signal(false);
   readonly radarrShowWizard = signal(false);
   readonly radarrCanConfirm = computed(() =>
-    this.radarrMappings().every(
-      (m) => m.ignore || m.localLibraryId != null,
-    ),
+    this.radarrMappings().every((m) => m.ignore || m.localLibraryId != null),
   );
 
   readonly sonarrPreview = signal<PreviewImportResult | null>(null);
@@ -166,9 +170,7 @@ export class DataImportsSettingsComponent implements OnInit {
   readonly sonarrPreviewing = signal(false);
   readonly sonarrShowWizard = signal(false);
   readonly sonarrCanConfirm = computed(() =>
-    this.sonarrMappings().every(
-      (m) => m.ignore || m.localLibraryId != null,
-    ),
+    this.sonarrMappings().every((m) => m.ignore || m.localLibraryId != null),
   );
 
   readonly IGNORE_VALUE = IGNORE_VALUE;
@@ -184,28 +186,20 @@ export class DataImportsSettingsComponent implements OnInit {
     if (event.type === 'watch-history.import.completed') {
       this.setEmbyImporting(Number(event['serverId']), false);
       this.toast.success(
-        this.translate.instant(
-          'settings.data_imports.emby.import_completed',
-          {
-            users: Number(event['users'] ?? 0),
-            usersCreated: Number(event['usersCreated'] ?? 0),
-            imported: Number(event['imported'] ?? 0),
-            skipped: Number(event['skipped'] ?? 0),
-          },
-        ),
+        this.translate.instant('settings.data_imports.emby.import_completed', {
+          users: Number(event['users'] ?? 0),
+          usersCreated: Number(event['usersCreated'] ?? 0),
+          imported: Number(event['imported'] ?? 0),
+          skipped: Number(event['skipped'] ?? 0),
+        }),
       );
       return;
     }
     if (event.type === 'watch-history.import.failed') {
       this.setEmbyImporting(Number(event['serverId']), false);
-      const err =
-        (event['error'] as string | undefined) ??
-        this.translate.instant('common.error');
+      const err = (event['error'] as string | undefined) ?? this.translate.instant('common.error');
       this.toast.error(
-        this.translate.instant(
-          'settings.data_imports.emby.import_failed',
-          { error: err },
-        ),
+        this.translate.instant('settings.data_imports.emby.import_failed', { error: err }),
       );
       return;
     }
@@ -220,21 +214,13 @@ export class DataImportsSettingsComponent implements OnInit {
       };
       this.seerrLastSummary.set(summary);
       this.toast.success(
-        this.translate.instant(
-          'settings.data_imports.seerr.import_completed',
-          summary,
-        ),
+        this.translate.instant('settings.data_imports.seerr.import_completed', summary),
       );
     } else if (event.type === 'seerr.import.failed') {
       this.seerrImporting.set(false);
-      const err =
-        (event['error'] as string | undefined) ??
-        this.translate.instant('common.error');
+      const err = (event['error'] as string | undefined) ?? this.translate.instant('common.error');
       this.toast.error(
-        this.translate.instant(
-          'settings.data_imports.seerr.import_failed',
-          { error: err },
-        ),
+        this.translate.instant('settings.data_imports.seerr.import_failed', { error: err }),
       );
     }
   });
@@ -279,20 +265,14 @@ export class DataImportsSettingsComponent implements OnInit {
     try {
       await this.mediaServersApi.importWatchHistory(server.id);
       this.toast.success(
-        this.translate.instant(
-          'settings.data_imports.emby.import_started',
-          { name: server.name },
-        ),
+        this.translate.instant('settings.data_imports.emby.import_started', { name: server.name }),
       );
     } catch (err: unknown) {
       this.setEmbyImporting(server.id, false);
       const httpErr = err as { error?: { message?: string } };
       this.toast.error(
         httpErr.error?.message ??
-          this.translate.instant(
-            'settings.data_imports.emby.import_failed',
-            { error: '' },
-          ),
+          this.translate.instant('settings.data_imports.emby.import_failed', { error: '' }),
       );
     }
   }
@@ -302,10 +282,7 @@ export class DataImportsSettingsComponent implements OnInit {
   // ---------------------------------------------------------------------------
 
   get canSubmitSeerr(): boolean {
-    return (
-      this.seerrUrl().trim().length > 0 &&
-      this.seerrApiKey().trim().length > 0
-    );
+    return this.seerrUrl().trim().length > 0 && this.seerrApiKey().trim().length > 0;
   }
 
   async saveSeerrCredentials() {
@@ -313,9 +290,7 @@ export class DataImportsSettingsComponent implements OnInit {
     this.seerrSaving.set(true);
     try {
       await this.settingsApi.setBulk({
-        [SETTING_SEERR_URL]: this.seerrUrl()
-          .trim()
-          .replace(/\/$/, ''),
+        [SETTING_SEERR_URL]: this.seerrUrl().trim().replace(/\/$/, ''),
         [SETTING_SEERR_API_KEY]: this.seerrApiKey().trim(),
       });
       this.toast.success(this.translate.instant('common.saved'));
@@ -338,8 +313,7 @@ export class DataImportsSettingsComponent implements OnInit {
       const httpErr = err as { error?: { message?: string } };
       this.seerrTestResult.set({
         ok: false,
-        message:
-          httpErr.error?.message ?? this.translate.instant('common.error'),
+        message: httpErr.error?.message ?? this.translate.instant('common.error'),
       });
     } finally {
       this.seerrTesting.set(false);
@@ -354,20 +328,13 @@ export class DataImportsSettingsComponent implements OnInit {
     this.seerrLastSummary.set(null);
     try {
       await this.seerrApi.importRequests();
-      this.toast.success(
-        this.translate.instant(
-          'settings.data_imports.seerr.import_started',
-        ),
-      );
+      this.toast.success(this.translate.instant('settings.data_imports.seerr.import_started'));
     } catch (err: unknown) {
       this.seerrImporting.set(false);
       const httpErr = err as { error?: { message?: string } };
       this.toast.error(
         httpErr.error?.message ??
-          this.translate.instant(
-            'settings.data_imports.seerr.import_failed',
-            { error: '' },
-          ),
+          this.translate.instant('settings.data_imports.seerr.import_failed', { error: '' }),
       );
     }
   }
@@ -377,10 +344,7 @@ export class DataImportsSettingsComponent implements OnInit {
   // ---------------------------------------------------------------------------
 
   get canSubmitRadarr(): boolean {
-    return (
-      this.radarrUrl().trim().length > 0 &&
-      this.radarrApiKey().trim().length > 0
-    );
+    return this.radarrUrl().trim().length > 0 && this.radarrApiKey().trim().length > 0;
   }
 
   /** Import-specific gate: credentials AND a picked target library. */
@@ -389,10 +353,7 @@ export class DataImportsSettingsComponent implements OnInit {
   }
 
   get canSubmitSonarr(): boolean {
-    return (
-      this.sonarrUrl().trim().length > 0 &&
-      this.sonarrApiKey().trim().length > 0
-    );
+    return this.sonarrUrl().trim().length > 0 && this.sonarrApiKey().trim().length > 0;
   }
 
   get canImportSonarr(): boolean {
@@ -419,21 +380,17 @@ export class DataImportsSettingsComponent implements OnInit {
     this.radarrTestResult.set(null);
     try {
       const r = await firstValueFrom(
-        this.http.post<{ ok: boolean; message: string }>(
-          '/api/imports/radarr/test',
-          {
-            url: this.radarrUrl().trim().replace(/\/$/, ''),
-            apiKey: this.radarrApiKey().trim(),
-          },
-        ),
+        this.http.post<{ ok: boolean; message: string }>('/api/imports/radarr/test', {
+          url: this.radarrUrl().trim().replace(/\/$/, ''),
+          apiKey: this.radarrApiKey().trim(),
+        }),
       );
       this.radarrTestResult.set(r);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
       this.radarrTestResult.set({
         ok: false,
-        message:
-          httpErr.error?.message ?? this.translate.instant('common.error'),
+        message: httpErr.error?.message ?? this.translate.instant('common.error'),
       });
     } finally {
       this.radarrTesting.set(false);
@@ -460,21 +417,17 @@ export class DataImportsSettingsComponent implements OnInit {
     this.sonarrTestResult.set(null);
     try {
       const r = await firstValueFrom(
-        this.http.post<{ ok: boolean; message: string }>(
-          '/api/imports/sonarr/test',
-          {
-            url: this.sonarrUrl().trim().replace(/\/$/, ''),
-            apiKey: this.sonarrApiKey().trim(),
-          },
-        ),
+        this.http.post<{ ok: boolean; message: string }>('/api/imports/sonarr/test', {
+          url: this.sonarrUrl().trim().replace(/\/$/, ''),
+          apiKey: this.sonarrApiKey().trim(),
+        }),
       );
       this.sonarrTestResult.set(r);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
       this.sonarrTestResult.set({
         ok: false,
-        message:
-          httpErr.error?.message ?? this.translate.instant('common.error'),
+        message: httpErr.error?.message ?? this.translate.instant('common.error'),
       });
     } finally {
       this.sonarrTesting.set(false);
@@ -513,10 +466,7 @@ export class DataImportsSettingsComponent implements OnInit {
     this.resultSig(provider).set(null);
     try {
       const preview = await firstValueFrom(
-        this.http.post<PreviewImportResult>(
-          `/api/imports/${provider}/preview`,
-          { url, apiKey },
-        ),
+        this.http.post<PreviewImportResult>(`/api/imports/${provider}/preview`, { url, apiKey }),
       );
       this.previewSig(provider).set(preview);
       if (preview.remoteRootFolders.length === 0) {
@@ -533,8 +483,7 @@ export class DataImportsSettingsComponent implements OnInit {
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
       this.errorSig(provider).set(
-        httpErr.error?.message ??
-          this.translate.instant('import.path_wizard.preview_error'),
+        httpErr.error?.message ?? this.translate.instant('import.path_wizard.preview_error'),
       );
     } finally {
       this.previewingSig(provider).set(false);
@@ -577,8 +526,7 @@ export class DataImportsSettingsComponent implements OnInit {
   eligibleLocalLibraries(provider: Provider) {
     const preview = this.previewSig(provider)();
     if (!preview) return [];
-    const target =
-      provider === 'radarr' ? this.radarrLibrary() : this.sonarrLibrary();
+    const target = provider === 'radarr' ? this.radarrLibrary() : this.sonarrLibrary();
     if (typeof target !== 'number') return [];
     return preview.localLibraries.filter((lib) => lib.id === target);
   }
@@ -601,13 +549,9 @@ export class DataImportsSettingsComponent implements OnInit {
     this.resultSig(provider).set(null);
     this.errorSig(provider).set('');
 
-    const lib =
-      provider === 'radarr' ? this.radarrLibrary() : this.sonarrLibrary();
+    const lib = provider === 'radarr' ? this.radarrLibrary() : this.sonarrLibrary();
     const mode = provider === 'radarr' ? this.radarrMode() : this.sonarrMode();
-    const importSubs =
-      provider === 'radarr'
-        ? this.radarrImportSubs()
-        : this.sonarrImportSubs();
+    const importSubs = provider === 'radarr' ? this.radarrImportSubs() : this.sonarrImportSubs();
 
     try {
       const result = await firstValueFrom(
@@ -623,9 +567,7 @@ export class DataImportsSettingsComponent implements OnInit {
       this.resultSig(provider).set(result);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      this.errorSig(provider).set(
-        httpErr.error?.message ?? this.translate.instant('import.error'),
-      );
+      this.errorSig(provider).set(httpErr.error?.message ?? this.translate.instant('import.error'));
     } finally {
       this.loadingSig(provider).set(false);
     }

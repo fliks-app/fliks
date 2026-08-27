@@ -12,7 +12,12 @@
           <option [value]="code">{{ code | localizeLanguage }}</option>
         }
       </select>
-      <button type="button" class="btn btn-primary btn-sm" (click)="search.emit()" [disabled]="subSearchLoading()">
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        (click)="search.emit()"
+        [disabled]="subSearchLoading()"
+      >
         @if (subSearchLoading()) {
           <span class="loading loading-spinner loading-xs"></span>
         }
@@ -25,8 +30,12 @@
           <thead>
             <tr>
               <th>{{ 'media_detail.col_sub_title' | translate }}</th>
-              <th class="text-center hidden sm:table-cell">{{ 'media_detail.col_sub_score' | translate }}</th>
-              <th class="text-center hidden sm:table-cell">{{ 'media_detail.col_sub_flags' | translate }}</th>
+              <th class="text-center hidden sm:table-cell">
+                {{ 'media_detail.col_sub_score' | translate }}
+              </th>
+              <th class="text-center hidden sm:table-cell">
+                {{ 'media_detail.col_sub_flags' | translate }}
+              </th>
               <th>{{ 'media_detail.col_sub_provider' | translate }}</th>
               <th class="w-32"></th>
             </tr>
@@ -35,7 +44,9 @@
             @for (r of subSearchResults(); track r.providerFileId) {
               <tr>
                 <td class="text-sm">
-                  <div class="max-w-[13rem] sm:max-w-[20rem] truncate" [title]="r.title">{{ r.title }}</div>
+                  <div class="max-w-[13rem] sm:max-w-[20rem] truncate" [title]="r.title">
+                    {{ r.title }}
+                  </div>
                   <div class="sm:hidden mt-1 flex items-center gap-2 text-sm">
                     <progress
                       class="progress w-14 h-1.5"
@@ -78,7 +89,9 @@
                 <td class="text-sm">
                   {{ r.providerName }}
                   @if (r.downloadCount) {
-                    <span class="block text-sm text-base-content/50 whitespace-nowrap">{{ 'media_detail.subtitle_downloads' | translate: { count: r.downloadCount } }}</span>
+                    <span class="block text-sm text-base-content/50 whitespace-nowrap">{{
+                      'media_detail.subtitle_downloads' | translate: { count: r.downloadCount }
+                    }}</span>
                   }
                 </td>
                 <td>
@@ -97,11 +110,15 @@
         </table>
       </div>
     } @else if (subSearchSearched() && !subSearchLoading()) {
-      <p class="text-sm text-base-content/50 py-4 text-center">{{ 'media_detail.no_subtitle_results' | translate }}</p>
+      <p class="text-sm text-base-content/50 py-4 text-center">
+        {{ 'media_detail.no_subtitle_results' | translate }}
+      </p>
     }
-    <div class="modal-action">
-      <form method="dialog"><button class="btn btn-ghost">{{ 'common.close' | translate }}</button></form>
-    </div>
+    <app-modal-footer>
+      <form method="dialog">
+        <button class="btn btn-ghost">{{ 'common.close' | translate }}</button>
+      </form>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>

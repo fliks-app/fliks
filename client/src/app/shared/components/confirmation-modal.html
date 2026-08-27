@@ -2,7 +2,7 @@
   <div class="modal-box">
     <app-modal-header [title]="title()" />
     <p class="py-4 whitespace-pre-line">{{ message() }}</p>
-    <div class="modal-action">
+    <app-modal-footer>
       @if (dismissLabel(); as dl) {
         <button class="btn btn-ghost" (click)="confirmService.dismiss()">{{ dl }}</button>
       }
@@ -14,10 +14,14 @@
       <button class="btn" [class]="confirmBtnClass()" (click)="confirmService.accept()">
         {{ alertOnly() ? ('common.ok' | translate) : confirmLabel() }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="dismissLabel() ? confirmService.dismiss() : confirmService.cancel()" [attr.aria-label]="'common.close' | translate">
+    <button
+      type="button"
+      (click)="dismissLabel() ? confirmService.dismiss() : confirmService.cancel()"
+      [attr.aria-label]="'common.close' | translate"
+    >
       {{ 'common.close' | translate }}
     </button>
   </form>

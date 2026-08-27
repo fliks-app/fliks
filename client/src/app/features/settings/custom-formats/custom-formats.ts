@@ -16,10 +16,12 @@ import {
   CustomFormatSpec,
 } from '../../../core/services/api/custom-formats-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-custom-formats-settings',
-  imports: [FormsModule, LucideX, TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './custom-formats.html',
 })
@@ -41,7 +43,9 @@ export class CustomFormatsSettingsComponent implements OnInit {
   readonly formSpecs = signal<CustomFormatSpec[]>([]);
 
   readonly testTitle = signal('');
-  readonly testResults = signal<{ formatId: number; formatName: string; matched: boolean; score: number }[]>([]);
+  readonly testResults = signal<
+    { formatId: number; formatName: string; matched: boolean; score: number }[]
+  >([]);
   readonly testLoading = signal(false);
 
   readonly specTypes = ['title_regex', 'source', 'resolution', 'language', 'release_flag'] as const;
@@ -95,9 +99,7 @@ export class CustomFormatsSettingsComponent implements OnInit {
   }
 
   updateSpec(index: number, patch: Partial<CustomFormatSpec>) {
-    this.formSpecs.update((specs) =>
-      specs.map((s, i) => (i === index ? { ...s, ...patch } : s)),
-    );
+    this.formSpecs.update((specs) => specs.map((s, i) => (i === index ? { ...s, ...patch } : s)));
   }
 
   async save() {
@@ -134,13 +136,26 @@ export class CustomFormatsSettingsComponent implements OnInit {
   }
 
   async deleteRow(cf: CustomFormat) {
-    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('settings.custom_formats.confirm_delete', { name: cf.name }), variant: 'danger' })) return;
+    if (
+      !(await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: this.translate.instant('settings.custom_formats.confirm_delete', {
+          name: cf.name,
+        }),
+        variant: 'danger',
+      }))
+    )
+      return;
     try {
       await this.api.remove(cf.id);
       await this.reloadAll();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Error', variant: 'danger' });
+      void this.confirmation.alert({
+        title: this.translate.instant('common.error'),
+        message: httpErr.error?.message ?? 'Error',
+        variant: 'danger',
+      });
     }
   }
 }

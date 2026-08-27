@@ -12,20 +12,21 @@ import { RouterLink } from '@angular/router';
 import { LucideChevronLeft } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
-import {
-  ProfilesService,
-  QualityProfile,
-} from '../../../core/services/api/profiles.service';
-import {
-  MediaService,
-  AppQualityDef,
-} from '../../../core/services/api/media.service';
+import { ProfilesService, QualityProfile } from '../../../core/services/api/profiles.service';
+import { MediaService, AppQualityDef } from '../../../core/services/api/media.service';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-quality-profiles',
   imports: [
-    ModalHeaderComponent,FormsModule, LucideChevronLeft, RouterLink, TranslateModule],
+    ModalFooterComponent,
+    ModalHeaderComponent,
+    FormsModule,
+    LucideChevronLeft,
+    RouterLink,
+    TranslateModule,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quality-profiles.html',
 })
@@ -65,9 +66,7 @@ export class QualityProfilesComponent implements OnInit {
       this.profiles.set(profiles);
       this.definitions.set(defs);
     } catch {
-      this.listError.set(
-        this.translate.instant('settings.quality_profiles.load_error'),
-      );
+      this.listError.set(this.translate.instant('settings.quality_profiles.load_error'));
     } finally {
       this.loading.set(false);
     }
@@ -98,9 +97,7 @@ export class QualityProfilesComponent implements OnInit {
     this.formCutoff.set(p.cutoff);
     this.formUpgrade.set(p.upgradeAllowed);
     this.formResolutionUpgradeOnly.set(p.resolutionUpgradeOnly ?? false);
-    const allowed = new Set(
-      p.items.filter((i) => i.allowed).map((i) => i.quality.id),
-    );
+    const allowed = new Set(p.items.filter((i) => i.allowed).map((i) => i.quality.id));
     this.allowedIds.set(allowed);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -159,11 +156,17 @@ export class QualityProfilesComponent implements OnInit {
   }
 
   async deleteProfile(p: QualityProfile) {
-    const msg = this.translate.instant(
-      'settings.quality_profiles.confirm_delete',
-      { name: p.name },
-    );
-    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: msg, variant: 'danger' })) return;
+    const msg = this.translate.instant('settings.quality_profiles.confirm_delete', {
+      name: p.name,
+    });
+    if (
+      !(await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: msg,
+        variant: 'danger',
+      }))
+    )
+      return;
     try {
       await this.profilesApi.deleteQualityProfile(p.id);
       await this.reloadAll();
@@ -171,7 +174,8 @@ export class QualityProfilesComponent implements OnInit {
       const httpErr = err as { error?: { message?: string } };
       void this.confirmation.alert({
         title: this.translate.instant('common.error'),
-        message: httpErr.error?.message ??
+        message:
+          httpErr.error?.message ??
           this.translate.instant('settings.quality_profiles.delete_error'),
         variant: 'danger',
       });

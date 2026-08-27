@@ -982,6 +982,8 @@
     "subtitles_section": "Legendas",
     "search_subtitles": "Procurar legendas",
     "upload_subtitle": "Carregar uma legenda",
+    "subtitles_import": "Importar",
+    "subtitles_search": "Pesquisar",
     "upload_subtitle_hint": "Escolha o idioma do ficheiro a carregar.",
     "upload_subtitle_success": "Legenda carregada",
     "auto_subtitle": "Auto",

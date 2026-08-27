@@ -1,15 +1,13 @@
 <dialog #dialog class="modal">
   <div class="modal-box max-w-xl">
-    <div class="flex justify-between items-start gap-4">
+    <app-modal-header>
       <div>
-        <h2 class="text-lg font-bold">{{ 'settings.plugins.settings.title' | translate }}</h2>
-        <p class="text-sm text-base-content/60 mt-1">{{ 'settings.plugins.settings.subtitle' | translate }}</p>
+        <h3 class="text-lg font-bold">{{ 'settings.plugins.settings.title' | translate }}</h3>
+        <p class="text-sm text-base-content/60 mt-1">
+          {{ 'settings.plugins.settings.subtitle' | translate }}
+        </p>
       </div>
-      <button type="button" class="btn btn-sm btn-ghost btn-circle" (click)="close()"
-        [attr.aria-label]="'common.close' | translate">
-        <svg lucideX class="h-4 w-4"></svg>
-      </button>
-    </div>
+    </app-modal-header>
 
     @if (loading()) {
       <div class="flex justify-center py-10">
@@ -27,11 +25,15 @@
       </div>
     }
 
-    <div class="modal-action">
-      <button type="button" class="btn btn-ghost" (click)="close()">{{ 'common.close' | translate }}</button>
-    </div>
+    <app-modal-footer>
+      <button type="button" class="btn btn-ghost" (click)="close()">
+        {{ 'common.close' | translate }}
+      </button>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="close()" [attr.aria-label]="'common.close' | translate">close</button>
+    <button type="button" (click)="close()" [attr.aria-label]="'common.close' | translate">
+      close
+    </button>
   </form>
 </dialog>

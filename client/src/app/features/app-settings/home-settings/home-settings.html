@@ -14,48 +14,71 @@
 
     <div cdkDropList (cdkDropListDropped)="drop($event)" class="flex flex-col gap-2">
       @for (section of rows(); track section.key; let i = $index) {
-        <div cdkDrag [cdkDragDisabled]="tv.isTv()" class="flex items-center gap-2 rounded-lg border border-base-200 bg-base-200/40 px-3 py-2">
+        <div
+          cdkDrag
+          [cdkDragDisabled]="tv.isTv()"
+          class="flex items-center gap-2 rounded-lg border border-base-200 bg-base-200/40 px-3 py-2"
+        >
           @if (!tv.isTv()) {
-            <button type="button" cdkDragHandle
-                    class="cursor-grab text-base-content/40 hover:text-base-content/70"
-                    [attr.aria-label]="'home_settings.drag' | translate">
+            <button
+              type="button"
+              cdkDragHandle
+              class="cursor-grab text-base-content/40 hover:text-base-content/70"
+              [attr.aria-label]="'home_settings.drag' | translate"
+            >
               <svg lucideGripVertical class="h-4 w-4"></svg>
             </button>
           }
 
           <span class="flex-1 font-medium">
             @if (section.type === 'library-recent') {
-              {{ 'home_settings.section_library_recent' | translate: { library: section.libraryName } }}
+              {{
+                'home_settings.section_library_recent' | translate: { library: section.libraryName }
+              }}
             } @else {
               {{ builtinLabel(section) | translate }}
             }
           </span>
 
           @if (section.type === 'libraries') {
-            <button type="button" class="btn btn-ghost btn-xs btn-square"
-                    (click)="openLibraryReorder()"
-                    [attr.aria-label]="'home_settings.libraries_settings' | translate">
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-square"
+              (click)="openLibraryReorder()"
+              [attr.aria-label]="'home_settings.libraries_settings' | translate"
+            >
               <svg lucideSettings class="h-4 w-4"></svg>
             </button>
           }
 
           @if (tv.isTv()) {
-            <button type="button" class="btn btn-ghost btn-xs btn-square"
-                    [disabled]="i === 0" (click)="move(i, -1)"
-                    [attr.aria-label]="'home_settings.move_up' | translate">
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-square"
+              [disabled]="i === 0"
+              (click)="move(i, -1)"
+              [attr.aria-label]="'home_settings.move_up' | translate"
+            >
               <svg lucideArrowUp class="h-4 w-4"></svg>
             </button>
-            <button type="button" class="btn btn-ghost btn-xs btn-square"
-                    [disabled]="i === rows().length - 1" (click)="move(i, 1)"
-                    [attr.aria-label]="'home_settings.move_down' | translate">
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-square"
+              [disabled]="i === rows().length - 1"
+              (click)="move(i, 1)"
+              [attr.aria-label]="'home_settings.move_down' | translate"
+            >
               <svg lucideArrowDown class="h-4 w-4"></svg>
             </button>
           }
 
-          <input type="checkbox" class="toggle toggle-primary toggle-sm ml-1"
-                 [checked]="section.visible"
-                 (change)="setVisible(i, $any($event.target).checked)"
-                 [attr.aria-label]="'home_settings.toggle_visible' | translate" />
+          <input
+            type="checkbox"
+            class="toggle toggle-primary toggle-sm ml-1"
+            [checked]="section.visible"
+            (change)="setVisible(i, $any($event.target).checked)"
+            [attr.aria-label]="'home_settings.toggle_visible' | translate"
+          />
         </div>
       }
     </div>
@@ -91,20 +114,28 @@
     <app-modal-header>
       <div>
         <h3 class="text-lg font-bold">{{ 'home_settings.libraries_modal_title' | translate }}</h3>
-        <p class="text-sm text-base-content/60 mt-1">{{ 'home_settings.libraries_modal_hint' | translate }}</p>
+        <p class="text-sm text-base-content/60 mt-1">
+          {{ 'home_settings.libraries_modal_hint' | translate }}
+        </p>
       </div>
     </app-modal-header>
 
     @if (libraryRows().length) {
       <div cdkDropList (cdkDropListDropped)="dropLibrary($event)" class="flex flex-col gap-2 mt-4">
         @for (lib of libraryRows(); track lib.id; let i = $index) {
-          <div cdkDrag [cdkDragDisabled]="tv.isTv()"
-               class="flex items-center gap-2 rounded-lg border border-base-200 bg-base-200/40 px-3 py-2"
-               [class.opacity-50]="lib.hidden">
+          <div
+            cdkDrag
+            [cdkDragDisabled]="tv.isTv()"
+            class="flex items-center gap-2 rounded-lg border border-base-200 bg-base-200/40 px-3 py-2"
+            [class.opacity-50]="lib.hidden"
+          >
             @if (!tv.isTv()) {
-              <button type="button" cdkDragHandle
-                      class="cursor-grab text-base-content/40 hover:text-base-content/70"
-                      [attr.aria-label]="'home_settings.drag' | translate">
+              <button
+                type="button"
+                cdkDragHandle
+                class="cursor-grab text-base-content/40 hover:text-base-content/70"
+                [attr.aria-label]="'home_settings.drag' | translate"
+              >
                 <svg lucideGripVertical class="h-4 w-4"></svg>
               </button>
             }
@@ -112,21 +143,32 @@
             <span class="flex-1 font-medium truncate">{{ lib.name }}</span>
 
             @if (tv.isTv()) {
-              <button type="button" class="btn btn-ghost btn-xs btn-square"
-                      [disabled]="i === 0" (click)="moveLibrary(i, -1)"
-                      [attr.aria-label]="'home_settings.move_up' | translate">
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs btn-square"
+                [disabled]="i === 0"
+                (click)="moveLibrary(i, -1)"
+                [attr.aria-label]="'home_settings.move_up' | translate"
+              >
                 <svg lucideArrowUp class="h-4 w-4"></svg>
               </button>
-              <button type="button" class="btn btn-ghost btn-xs btn-square"
-                      [disabled]="i === libraryRows().length - 1" (click)="moveLibrary(i, 1)"
-                      [attr.aria-label]="'home_settings.move_down' | translate">
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs btn-square"
+                [disabled]="i === libraryRows().length - 1"
+                (click)="moveLibrary(i, 1)"
+                [attr.aria-label]="'home_settings.move_down' | translate"
+              >
                 <svg lucideArrowDown class="h-4 w-4"></svg>
               </button>
             }
 
-            <button type="button" class="btn btn-ghost btn-xs btn-square"
-                    (click)="toggleLibraryHidden(i)"
-                    [attr.aria-label]="'home_settings.toggle_library_visible' | translate">
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-square"
+              (click)="toggleLibraryHidden(i)"
+              [attr.aria-label]="'home_settings.toggle_library_visible' | translate"
+            >
               @if (lib.hidden) {
                 <svg lucideEyeOff class="h-4 w-4 text-base-content/40"></svg>
               } @else {
@@ -137,20 +179,40 @@
         }
       </div>
     } @else {
-      <p class="text-center py-8 text-base-content/50">{{ 'settings.libraries.empty' | translate }}</p>
+      <p class="text-center py-8 text-base-content/50">
+        {{ 'settings.libraries.empty' | translate }}
+      </p>
     }
 
-    <div class="modal-action mt-6">
-      <button type="button" class="btn btn-ghost" (click)="closeLibraryReorder()" [disabled]="librarySaving()">
+    <app-modal-footer>
+      <button
+        type="button"
+        class="btn btn-ghost"
+        (click)="closeLibraryReorder()"
+        [disabled]="librarySaving()"
+      >
         {{ 'common.cancel' | translate }}
       </button>
-      <button type="button" class="btn btn-primary" (click)="saveLibraryOrder()" [disabled]="librarySaving()">
-        @if (librarySaving()) { <span class="loading loading-spinner loading-sm"></span> }
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="saveLibraryOrder()"
+        [disabled]="librarySaving()"
+      >
+        @if (librarySaving()) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
         {{ 'common.save' | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeLibraryReorder()" [attr.aria-label]="'common.close' | translate">close</button>
+    <button
+      type="button"
+      (click)="closeLibraryReorder()"
+      [attr.aria-label]="'common.close' | translate"
+    >
+      close
+    </button>
   </form>
 </dialog>

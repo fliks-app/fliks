@@ -9,18 +9,14 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { TranslateModule } from '@ngx-translate/core';
-import {
-  LucideArrowRight,
-  LucideCheck,
-  LucideCircleAlert,
-  LucideEyeOff,
-} from '@lucide/angular';
+import { LucideArrowRight, LucideCheck, LucideCircleAlert, LucideEyeOff } from '@lucide/angular';
 import {
   MediaService,
   TrackingEpisode,
   TrackingStatus,
 } from '../../../core/services/api/media.service';
 import { ModalHeaderComponent } from '../modal-header';
+import { ModalFooterComponent } from '../modal-footer';
 
 export type TrackingScope =
   | { kind: 'movie' }
@@ -32,6 +28,7 @@ export type TrackingScope =
   selector: 'app-tracking-status-modal',
   standalone: true,
   imports: [
+    ModalFooterComponent,
     NgTemplateOutlet,
     TranslateModule,
     ModalHeaderComponent,
@@ -45,8 +42,7 @@ export type TrackingScope =
 })
 export class TrackingStatusModalComponent {
   private readonly media = inject(MediaService);
-  private readonly dialog =
-    viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
   readonly loading = signal(false);
   readonly data = signal<TrackingStatus | null>(null);

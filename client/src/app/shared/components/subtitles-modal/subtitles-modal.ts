@@ -17,10 +17,7 @@ import {
 } from '@lucide/angular';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
 import { formatSubtitleLabel, formatSubtitleParts } from '../../../core/utils/player.utils';
-import {
-  guessLanguageFromFilename,
-  localizeLanguage,
-} from '../../../core/utils/language.utils';
+import { guessLanguageFromFilename, localizeLanguage } from '../../../core/utils/language.utils';
 import {
   isImageBasedSubtitleCodec,
   isOcrSupportedSubtitleCodec,
@@ -48,16 +45,14 @@ import {
   AvailableTranslationProvider,
 } from '../../../core/services/api/translation-providers-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
-import {
-  LanguageProfile,
-  ProfilesService,
-} from '../../../core/services/api/profiles.service';
+import { LanguageProfile, ProfilesService } from '../../../core/services/api/profiles.service';
 import { SseService } from '../../../core/services/sse.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { PaginationComponent } from '../pagination/pagination';
 import { MediaDetailSubtitleSearchModalComponent } from '../../../features/media-detail/components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
 import type { MediaInfoHeaderSubtitle } from '../media-info-header/media-info-header';
 import { ModalHeaderComponent } from '../modal-header';
+import { ModalFooterComponent } from '../modal-footer';
 
 interface SubtitleRow {
   sub?: SubtitleFileRow;
@@ -74,6 +69,7 @@ interface SubtitleRow {
 @Component({
   selector: 'app-subtitles-modal',
   imports: [
+    ModalFooterComponent,
     ModalHeaderComponent,
     FormsModule,
     TranslateModule,
@@ -120,8 +116,7 @@ export class SubtitlesModalComponent {
 
   private readonly cardActions = inject(CardActionsService);
 
-  private readonly viewer =
-    viewChild<SubtitleViewerModalComponent>('subtitleViewer');
+  private readonly viewer = viewChild<SubtitleViewerModalComponent>('subtitleViewer');
 
   protected readonly canDownload = this.device.canSaveFiles;
 
@@ -140,20 +135,14 @@ export class SubtitlesModalComponent {
     if (!sub) return '';
     return sub.relativePath
       ? this.streamingApi.getSubtitleDownloadUrl(sub.mediaFileId, sub.id)
-      : this.streamingApi.getEmbeddedSubtitleDownloadUrl(
-          sub.mediaFileId,
-          sub.streamIndex!,
-        );
+      : this.streamingApi.getEmbeddedSubtitleDownloadUrl(sub.mediaFileId, sub.streamIndex!);
   }
 
   /** Reads the playback WebVTT, so an embedded track is extracted on demand. */
   protected viewSubtitle(sub: SubtitleFileRow): void {
     const url = sub.relativePath
       ? this.streamingApi.getSubtitleUrl(sub.mediaFileId, sub.id)
-      : this.streamingApi.getEmbeddedSubtitleUrl(
-          sub.mediaFileId,
-          sub.streamIndex!,
-        );
+      : this.streamingApi.getEmbeddedSubtitleUrl(sub.mediaFileId, sub.streamIndex!);
     void this.viewer()?.open(formatSubtitleLabel(sub, this.translate), url);
   }
 
@@ -324,9 +313,39 @@ export class SubtitlesModalComponent {
 
   // OCR language picker (used when an image track is untagged — 'und').
   readonly ocrLangCodes: readonly string[] = [
-    'en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'sv', 'da', 'no', 'fi',
-    'pl', 'cs', 'sk', 'hu', 'ro', 'el', 'ru', 'uk', 'bg', 'sr', 'hr',
-    'tr', 'ar', 'he', 'fa', 'hi', 'th', 'vi', 'id', 'ja', 'ko', 'zh',
+    'en',
+    'fr',
+    'de',
+    'es',
+    'it',
+    'pt',
+    'nl',
+    'sv',
+    'da',
+    'no',
+    'fi',
+    'pl',
+    'cs',
+    'sk',
+    'hu',
+    'ro',
+    'el',
+    'ru',
+    'uk',
+    'bg',
+    'sr',
+    'hr',
+    'tr',
+    'ar',
+    'he',
+    'fa',
+    'hi',
+    'th',
+    'vi',
+    'id',
+    'ja',
+    'ko',
+    'zh',
   ];
   private readonly ocrTargetId = signal<number | null>(null);
   readonly ocrLang = signal('en');
@@ -355,8 +374,7 @@ export class SubtitlesModalComponent {
   readonly uploadAccept = computed(() =>
     this.device.isAndroidNative() ? '*/*' : '.srt,.ass,.ssa,.vtt,.sub,text/plain',
   );
-  private readonly uploadInput =
-    viewChild<ElementRef<HTMLInputElement>>('uploadInput');
+  private readonly uploadInput = viewChild<ElementRef<HTMLInputElement>>('uploadInput');
   /** File chosen in the picker, held until the language dialog is confirmed. */
   private readonly pendingUpload = signal<File | null>(null);
   readonly pendingUploadName = computed(() => this.pendingUpload()?.name ?? '');
@@ -595,7 +613,10 @@ export class SubtitlesModalComponent {
   private readonly loadProfilesEffect = effect(() => {
     const lpId = this.languageProfileId();
     if (lpId && !this.languageProfiles().length) {
-      this.profilesApi.getLanguageProfiles().then((lp) => this.languageProfiles.set(lp)).catch(() => {});
+      this.profilesApi
+        .getLanguageProfiles()
+        .then((lp) => this.languageProfiles.set(lp))
+        .catch(() => {});
     }
   });
 
@@ -734,12 +755,7 @@ export class SubtitlesModalComponent {
       }))
     )
       return;
-    await this.subActions.validate(
-      this.mediaId(),
-      sub.id,
-      this.subtitles,
-      this.subtitleActionBusy,
-    );
+    await this.subActions.validate(this.mediaId(), sub.id, this.subtitles, this.subtitleActionBusy);
     this.toast.success(this.translate.instant('media_detail.validate_success'));
   }
 
@@ -783,15 +799,11 @@ export class SubtitlesModalComponent {
       return; // global interceptor surfaced the error
     }
     if (providers.length === 0) {
-      this.toast.error(
-        this.translate.instant('media_detail.translate_no_providers'),
-      );
+      this.toast.error(this.translate.instant('media_detail.translate_no_providers'));
       return;
     }
     this.translationProviders.set(providers);
-    this.selectedTranslationProviderId.set(
-      (providers.find((p) => p.isDefault) ?? providers[0]).id,
-    );
+    this.selectedTranslationProviderId.set((providers.find((p) => p.isDefault) ?? providers[0]).id);
     const src = (sub.language ?? '').toLowerCase();
     this.langDialogMode.set('translate');
     this.ocrTargetId.set(sub.id);
@@ -823,9 +835,7 @@ export class SubtitlesModalComponent {
     if (!file) return;
     this.pendingUpload.set(file);
     this.langDialogMode.set('upload');
-    this.ocrLang.set(
-      guessLanguageFromFilename(file.name, SUBTITLE_LANGUAGE_CODES) ?? 'en',
-    );
+    this.ocrLang.set(guessLanguageFromFilename(file.name, SUBTITLE_LANGUAGE_CODES) ?? 'en');
     this.ocrLangDialog()?.nativeElement.showModal();
   }
 
@@ -864,8 +874,13 @@ export class SubtitlesModalComponent {
         this.selectedTranslationProviderId() ?? undefined,
       );
     } else {
-      void this.subActions
-        .setLanguage(this.mediaId(), id, this.subtitles, this.subtitleActionBusy, this.ocrLang());
+      void this.subActions.setLanguage(
+        this.mediaId(),
+        id,
+        this.subtitles,
+        this.subtitleActionBusy,
+        this.ocrLang(),
+      );
     }
   }
 
@@ -885,11 +900,7 @@ export class SubtitlesModalComponent {
     this.toast.info(this.translate.instant('media_detail.ocr_started'));
   }
 
-  private async triggerTranslate(
-    subtitleId: number,
-    targetLanguage: string,
-    providerId?: number,
-  ) {
+  private async triggerTranslate(subtitleId: number, targetLanguage: string, providerId?: number) {
     await this.subActions.translateSubtitle(
       this.mediaId(),
       subtitleId,
@@ -910,6 +921,11 @@ export class SubtitlesModalComponent {
       }))
     )
       return;
-    await this.subActions.remove(this.mediaId(), subtitleId, this.subtitles, this.subtitleActionBusy);
+    await this.subActions.remove(
+      this.mediaId(),
+      subtitleId,
+      this.subtitles,
+      this.subtitleActionBusy,
+    );
   }
 }

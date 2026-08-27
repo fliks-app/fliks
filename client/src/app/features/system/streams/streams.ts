@@ -16,10 +16,24 @@ import { ToastService } from '../../../core/services/toast.service';
 import { LucideMessageSquare, LucidePause, LucidePlay, LucideSquare } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { parseDeviceLabel } from '../../../core/utils/format-device-label';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 
 @Component({
   selector: 'app-system-streams',
-  imports: [UpperCasePipe, RouterLink, TranslateModule, FormsModule, ResolveUrlPipe, LucideMessageSquare, LucidePause, LucidePlay, LucideSquare],
+  imports: [
+    ModalHeaderComponent,
+    ModalFooterComponent,
+    UpperCasePipe,
+    RouterLink,
+    TranslateModule,
+    FormsModule,
+    ResolveUrlPipe,
+    LucideMessageSquare,
+    LucidePause,
+    LucidePlay,
+    LucideSquare,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './streams.html',
 })
@@ -63,9 +77,12 @@ export class SystemStreamsComponent implements OnInit, OnDestroy {
     try {
       await this.streamsApi.sendCommand(stream.sessionId, isPaused ? 'play' : 'pause');
       const next = new Set(paused);
-      if (isPaused) next.delete(stream.sessionId); else next.add(stream.sessionId);
+      if (isPaused) next.delete(stream.sessionId);
+      else next.add(stream.sessionId);
       this.pausedSessions.set(next);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   isPaused(sessionId: string): boolean {
@@ -103,9 +120,7 @@ export class SystemStreamsComponent implements OnInit, OnDestroy {
     const confirmed = await this.confirmation.confirm({
       title: this.translate.instant('system.stream_stop'),
       message: this.translate.instant(
-        stream.username
-          ? 'system.stream_stop_confirm_user'
-          : 'system.stream_stop_confirm',
+        stream.username ? 'system.stream_stop_confirm_user' : 'system.stream_stop_confirm',
         { title: stream.mediaTitle, user: stream.username },
       ),
       confirmLabel: this.translate.instant('system.stream_stop_action'),
@@ -115,7 +130,9 @@ export class SystemStreamsComponent implements OnInit, OnDestroy {
     try {
       await this.streamsApi.sendCommand(stream.sessionId, 'stop');
       this.streams.update((s) => s.filter((x) => x.sessionId !== stream.sessionId));
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   formatTime(seconds: number): string {

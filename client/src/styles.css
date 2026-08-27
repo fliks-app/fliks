@@ -682,12 +682,6 @@ body.tv .to-base-100\/50 {
   }
 }
 
-/* Footer of a scrollable modal: pinned under the scroll area and ruled off
-   from it, so the actions stay reachable while the body scrolls. */
-.modal-action-sticky {
-  @apply shrink-0 px-5 sm:px-6 pb-4 pt-2 border-t border-base-200 bg-base-100;
-}
-
 /* Shared item style for app-dropdown-menu (desktop dropdown + mobile/TV
    bottom sheet). Caller adds a colour utility (`text-white`, `text-error`,
    …) and an icon — everything else (padding, hover, focus, layout) lives

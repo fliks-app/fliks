@@ -987,6 +987,8 @@
     "subtitles_section": "Sous-titres",
     "search_subtitles": "Chercher des sous-titres",
     "upload_subtitle": "Importer un sous-titre",
+    "subtitles_import": "Importer",
+    "subtitles_search": "Rechercher",
     "upload_subtitle_hint": "Choisissez la langue du fichier à importer.",
     "upload_subtitle_success": "Sous-titre importé",
     "auto_subtitle": "Auto",

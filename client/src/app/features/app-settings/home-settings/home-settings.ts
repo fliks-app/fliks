@@ -38,10 +38,12 @@ import { DisplaySettingsService } from '../../../core/services/display-settings.
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-home-settings',
   imports: [
+    ModalFooterComponent,
     ModalHeaderComponent,
     TranslateModule,
     FormsModule,
@@ -79,13 +81,10 @@ export class HomeSettingsPageComponent implements OnInit {
   private libs: { id: number; name: string }[] = [];
 
   // --- Library order + visibility modal ---
-  private readonly libraryDialog =
-    viewChild<ElementRef<HTMLDialogElement>>('libraryDialog');
+  private readonly libraryDialog = viewChild<ElementRef<HTMLDialogElement>>('libraryDialog');
   /** Working copy edited in the modal: every accessible library in the user's
    *  order, each flagged hidden. Persisted only on save. */
-  readonly libraryRows = signal<
-    { id: number; name: string; hidden: boolean }[]
-  >([]);
+  readonly libraryRows = signal<{ id: number; name: string; hidden: boolean }[]>([]);
   readonly librarySaving = signal(false);
 
   private readonly BUILTIN_LABELS: Record<string, string> = {
@@ -115,17 +114,12 @@ export class HomeSettingsPageComponent implements OnInit {
   }
 
   private get requestsAllowed(): boolean {
-    return (
-      this.auth.hasPermission('requests.create') ||
-      this.auth.hasPermission('requests.manage')
-    );
+    return this.auth.hasPermission('requests.create') || this.auth.hasPermission('requests.manage');
   }
 
   /** Re-derive the rendered rows from the persisted settings + current libs. */
   private rebuild() {
-    this.rows.set(
-      this.home.resolve(this.libs, { requests: this.requestsAllowed }),
-    );
+    this.rows.set(this.home.resolve(this.libs, { requests: this.requestsAllowed }));
   }
 
   /** Reset zone order + visibility to defaults, after confirmation. */
@@ -147,9 +141,7 @@ export class HomeSettingsPageComponent implements OnInit {
   }
 
   private persist() {
-    this.home.setOrder(
-      this.rows().map((r) => ({ key: r.key, visible: r.visible })),
-    );
+    this.home.setOrder(this.rows().map((r) => ({ key: r.key, visible: r.visible })));
   }
 
   drop(event: CdkDragDrop<ResolvedHomeSection[]>) {

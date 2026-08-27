@@ -56,15 +56,13 @@ import {
   PlaylistShareRole,
   PlaylistVisibility,
 } from '../../../core/services/api/playlists-api.service';
-import {
-  SocialApiService,
-  SocialUser,
-} from '../../../core/services/api/social-api.service';
+import { SocialApiService, SocialUser } from '../../../core/services/api/social-api.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { TvService } from '../../../core/services/tv.service';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 interface PlaylistSeriesGroup {
   seriesId: number;
@@ -80,6 +78,7 @@ type PlaylistGroupedEntry =
 @Component({
   selector: 'app-playlist-detail',
   imports: [
+    ModalFooterComponent,
     CachedSrcDirective,
     TranslateModule,
     FormsModule,
@@ -136,12 +135,9 @@ export class PlaylistDetailComponent {
   private readonly routeParams = toSignal(this.route.paramMap);
   readonly playlistId = computed(() => Number(this.routeParams()?.get('id')));
 
-  private readonly renameDialog =
-    viewChild<ElementRef<HTMLDialogElement>>('renameDialog');
-  private readonly settingsDialog =
-    viewChild<ElementRef<HTMLDialogElement>>('settingsDialog');
-  private readonly membersDialog =
-    viewChild<ElementRef<HTMLDialogElement>>('membersDialog');
+  private readonly renameDialog = viewChild<ElementRef<HTMLDialogElement>>('renameDialog');
+  private readonly settingsDialog = viewChild<ElementRef<HTMLDialogElement>>('settingsDialog');
+  private readonly membersDialog = viewChild<ElementRef<HTMLDialogElement>>('membersDialog');
 
   readonly loading = signal(true);
   readonly playlist = signal<Playlist | null>(null);
@@ -202,8 +198,7 @@ export class PlaylistDetailComponent {
     for (const g of groups.values()) {
       g.episodes.sort(
         (a, b) =>
-          (a.episode?.season?.seasonNumber ?? 0) -
-            (b.episode?.season?.seasonNumber ?? 0) ||
+          (a.episode?.season?.seasonNumber ?? 0) - (b.episode?.season?.seasonNumber ?? 0) ||
           (a.episode?.episodeNumber ?? 0) - (b.episode?.episodeNumber ?? 0),
       );
     }
@@ -236,10 +231,7 @@ export class PlaylistDetailComponent {
       ep.endEpisodeNumber && ep.endEpisodeNumber !== ep.episodeNumber
         ? `-${ep.endEpisodeNumber}`
         : '';
-    const code =
-      s != null
-        ? `S${s}E${ep.episodeNumber}${end}`
-        : `E${ep.episodeNumber}${end}`;
+    const code = s != null ? `S${s}E${ep.episodeNumber}${end}` : `E${ep.episodeNumber}${end}`;
     return ep.title ? `${code} · ${ep.title}` : code;
   }
 
@@ -258,9 +250,7 @@ export class PlaylistDetailComponent {
   itemThumb(it: PlaylistItem): string | null {
     // Prefer a landscape image (episode still, else the movie/series fanart),
     // like the history list; fall back to the poster.
-    return (
-      it.episode?.stillUrl ?? it.media.fanartUrl ?? it.media.posterUrl ?? null
-    );
+    return it.episode?.stillUrl ?? it.media.fanartUrl ?? it.media.posterUrl ?? null;
   }
 
   // ── Playback ──
@@ -309,21 +299,14 @@ export class PlaylistDetailComponent {
     const p = this.playlist();
     if (!p) return;
     const queue = this.orderedItems().map((i) => this.toQueueItem(i));
-    const launched = await this.playable.playFromPlaylist(
-      p.id,
-      queue,
-      startIndex,
-      p.autoPlay,
-    );
+    const launched = await this.playable.playFromPlaylist(p.id, queue, startIndex, p.autoPlay);
     if (!launched) {
       this.toast.error(this.translate.instant('playlists.item_unavailable'));
     }
   }
 
   private patchItem(itemId: number, patch: Partial<PlaylistItem>): void {
-    this.items.update((list) =>
-      list.map((i) => (i.itemId === itemId ? { ...i, ...patch } : i)),
-    );
+    this.items.update((list) => list.map((i) => (i.itemId === itemId ? { ...i, ...patch } : i)));
   }
 
   /** Toggle the viewer's watched state for a movie or episode item. */
@@ -343,9 +326,7 @@ export class PlaylistDetailComponent {
       // (owner-scoped), so mirror that by removing it from the list instead of
       // just flagging it.
       if (state.completed && this.playlist()?.autoRemoveWatched && this.isOwner()) {
-        this.items.update((list) =>
-          list.filter((i) => i.itemId !== item.itemId),
-        );
+        this.items.update((list) => list.filter((i) => i.itemId !== item.itemId));
       } else {
         this.patchItem(item.itemId, {
           watched: state.completed,
@@ -392,10 +373,7 @@ export class PlaylistDetailComponent {
   private async load(id: number): Promise<void> {
     this.loading.set(true);
     try {
-      const [playlist, items] = await Promise.all([
-        this.api.get(id),
-        this.api.items(id),
-      ]);
+      const [playlist, items] = await Promise.all([this.api.get(id), this.api.items(id)]);
       this.playlist.set(playlist);
       this.items.set(items);
     } catch {
@@ -610,9 +588,7 @@ export class PlaylistDetailComponent {
       else for (const ep of e.group.episodes) ids.push(ep.itemId);
     }
     const byId = new Map(this.items().map((i) => [i.itemId, i]));
-    this.items.set(
-      ids.map((id) => byId.get(id)).filter((x): x is PlaylistItem => !!x),
-    );
+    this.items.set(ids.map((id) => byId.get(id)).filter((x): x is PlaylistItem => !!x));
     this.persistOrder();
   }
 
@@ -634,9 +610,7 @@ export class PlaylistDetailComponent {
   async removeItem(item: PlaylistItem): Promise<void> {
     const id = this.playlist()?.id;
     if (id == null) return;
-    const title = item.episode
-      ? this.episodeLabel(item.episode)
-      : item.media.title;
+    const title = item.episode ? this.episodeLabel(item.episode) : item.media.title;
     const confirmed = await this.confirmation.confirm({
       title: this.translate.instant('playlists.remove_item_title'),
       message: this.translate.instant('playlists.remove_item_confirm', {

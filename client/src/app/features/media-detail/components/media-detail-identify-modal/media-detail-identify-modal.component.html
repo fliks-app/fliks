@@ -1,23 +1,15 @@
 <dialog #dialog class="modal">
   <div class="modal-box max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
-    <div class="px-5 sm:px-6 pt-4 pb-3 border-b border-base-200 flex justify-between items-center gap-3 shrink-0 bg-base-100">
-      <h2 class="text-lg font-bold leading-tight">{{ 'media_detail.identify_title' | translate }}</h2>
-      <button
-        type="button"
-        class="btn btn-sm btn-circle btn-ghost shrink-0"
-        (click)="close()"
-        [attr.aria-label]="'common.close' | translate"
-      >
-        ✕
-      </button>
-    </div>
+    <app-modal-header flush [title]="'media_detail.identify_title' | translate" />
 
     <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
       <p class="text-sm text-base-content/60">{{ 'media_detail.identify_hint' | translate }}</p>
 
       @if (config()?.path) {
         <div>
-          <span class="text-sm text-base-content/50">{{ 'media_detail.identify_path' | translate }}</span>
+          <span class="text-sm text-base-content/50">{{
+            'media_detail.identify_path' | translate
+          }}</span>
           <p class="text-sm font-mono break-all m-0">{{ config()!.path }}</p>
         </div>
       }
@@ -25,67 +17,113 @@
       <div class="grid gap-4 sm:grid-cols-2">
         <label class="form-control w-full">
           <span class="label-text">{{ 'media_detail.identify_field_title' | translate }}</span>
-          <input type="text" class="input input-bordered input-sm w-full"
-            [ngModel]="formTitle()" (ngModelChange)="formTitle.set($event)"
-            (keydown.enter)="search()" />
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formTitle()"
+            (ngModelChange)="formTitle.set($event)"
+            (keydown.enter)="search()"
+          />
         </label>
         <label class="form-control w-full">
           <span class="label-text">{{ 'media_detail.identify_field_year' | translate }}</span>
-          <input type="number" class="input input-bordered input-sm w-full"
-            [ngModel]="formYear()" (ngModelChange)="formYear.set($event === null ? null : +$event)"
-            (keydown.enter)="search()" />
+          <input
+            type="number"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formYear()"
+            (ngModelChange)="formYear.set($event === null ? null : +$event)"
+            (keydown.enter)="search()"
+          />
         </label>
         <label class="form-control w-full">
           <span class="label-text">{{ 'media_detail.identify_field_imdb' | translate }}</span>
-          <input type="text" class="input input-bordered input-sm w-full font-mono"
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
             placeholder="tt1234567"
-            [ngModel]="formImdbId()" (ngModelChange)="formImdbId.set($event)" />
+            [ngModel]="formImdbId()"
+            (ngModelChange)="formImdbId.set($event)"
+          />
         </label>
         <label class="form-control w-full">
           <span class="label-text">{{ 'media_detail.identify_field_tmdb' | translate }}</span>
-          <input type="number" class="input input-bordered input-sm w-full font-mono"
-            [ngModel]="formTmdbId()" (ngModelChange)="formTmdbId.set($event === null ? null : +$event)" />
+          <input
+            type="number"
+            class="input input-bordered input-sm w-full font-mono"
+            [ngModel]="formTmdbId()"
+            (ngModelChange)="formTmdbId.set($event === null ? null : +$event)"
+          />
         </label>
         <label class="form-control w-full">
           <span class="label-text">{{ 'media_detail.identify_field_tvdb' | translate }}</span>
-          <input type="number" class="input input-bordered input-sm w-full font-mono"
-            [ngModel]="formTvdbId()" (ngModelChange)="formTvdbId.set($event === null ? null : +$event)" />
+          <input
+            type="number"
+            class="input input-bordered input-sm w-full font-mono"
+            [ngModel]="formTvdbId()"
+            (ngModelChange)="formTvdbId.set($event === null ? null : +$event)"
+          />
         </label>
       </div>
 
       <div class="flex flex-wrap gap-2">
-        <button type="button" class="btn btn-primary btn-sm"
-          [disabled]="searching() || !formTitle().trim()" (click)="search()">
-          @if (searching()) { <span class="loading loading-spinner loading-xs"></span> }
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          [disabled]="searching() || !formTitle().trim()"
+          (click)="search()"
+        >
+          @if (searching()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
           {{ 'media_detail.identify_search' | translate }}
         </button>
-        <button type="button" class="btn btn-outline btn-sm"
-          [disabled]="applyingKey() !== null" (click)="applyIds()">
-          @if (applyingKey() === 'ids') { <span class="loading loading-spinner loading-xs"></span> }
+        <button
+          type="button"
+          class="btn btn-outline btn-sm"
+          [disabled]="applyingKey() !== null"
+          (click)="applyIds()"
+        >
+          @if (applyingKey() === 'ids') {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
           {{ 'media_detail.identify_apply_ids' | translate }}
         </button>
       </div>
 
       @if (searched()) {
         <div class="border-t border-base-200 pt-4">
-          <h3 class="text-base font-semibold m-0 mb-3">{{ 'media_detail.identify_results' | translate }}</h3>
+          <h3 class="text-base font-semibold m-0 mb-3">
+            {{ 'media_detail.identify_results' | translate }}
+          </h3>
           @if (!results().length) {
-            <p class="text-sm text-base-content/50 py-4">{{ 'media_detail.identify_no_results' | translate }}</p>
+            <p class="text-sm text-base-content/50 py-4">
+              {{ 'media_detail.identify_no_results' | translate }}
+            </p>
           } @else {
             <div class="grid gap-3 grid-cols-2 sm:grid-cols-4 lg:grid-cols-5">
               @for (r of results(); track key(r)) {
-                <button type="button"
+                <button
+                  type="button"
                   class="flex flex-col gap-1 text-left rounded-lg p-1 hover:bg-base-200 disabled:opacity-40"
                   [disabled]="applyingKey() !== null || isTaken(r)"
-                  [attr.title]="isTaken(r) ? ('media_detail.identify_already_in_library' | translate) : r.title"
-                  (click)="apply(r)">
+                  [attr.title]="
+                    isTaken(r) ? ('media_detail.identify_already_in_library' | translate) : r.title
+                  "
+                  (click)="apply(r)"
+                >
                   <div class="relative aspect-[2/3] w-full rounded bg-base-300 overflow-hidden">
                     @if (r.posterUrl) {
-                      <img [src]="r.posterUrl | resolveUrl" [alt]="r.title"
-                        class="h-full w-full object-cover" loading="lazy" />
+                      <img
+                        [src]="r.posterUrl | resolveUrl"
+                        [alt]="r.title"
+                        class="h-full w-full object-cover"
+                        loading="lazy"
+                      />
                     }
                     @if (applyingKey() === key(r)) {
-                      <span class="absolute inset-0 flex items-center justify-center bg-base-100/70">
+                      <span
+                        class="absolute inset-0 flex items-center justify-center bg-base-100/70"
+                      >
                         <span class="loading loading-spinner loading-sm"></span>
                       </span>
                     }
@@ -93,7 +131,9 @@
                   <span class="text-sm leading-tight line-clamp-2">{{ r.title }}</span>
                   <span class="text-xs text-base-content/50">
                     {{ r.year ?? '—' }}
-                    @if (isTaken(r)) { · {{ 'media_detail.identify_already_in_library' | translate }} }
+                    @if (isTaken(r)) {
+                      · {{ 'media_detail.identify_already_in_library' | translate }}
+                    }
                   </span>
                 </button>
               }
@@ -103,9 +143,9 @@
       }
     </div>
 
-    <div class="modal-action modal-action-sticky">
+    <app-modal-footer flush>
       <button type="button" class="btn" (click)="close()">{{ 'common.close' | translate }}</button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>

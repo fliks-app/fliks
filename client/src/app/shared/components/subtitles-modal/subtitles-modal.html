@@ -11,7 +11,9 @@
                 type="button"
                 class="btn btn-ghost btn-sm shrink-0"
                 [disabled]="searchDisabled() || subtitleActionBusy()"
-                [attr.title]="searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null"
+                [attr.title]="
+                  searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null
+                "
                 (click)="searchMissing()"
               >
                 @if (subtitleActionBusy()) {
@@ -32,21 +34,25 @@
                 type="button"
                 class="btn btn-ghost btn-sm shrink-0"
                 [disabled]="searchDisabled() || subtitleActionBusy()"
-                [attr.title]="searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null"
+                [attr.title]="
+                  searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null
+                "
                 (click)="pickSubtitleFile()"
               >
                 <svg lucideUpload class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
-                {{ 'media_detail.upload_subtitle' | translate }}
+                {{ 'media_detail.subtitles_import' | translate }}
               </button>
             }
             <button
               type="button"
               class="btn btn-primary btn-sm shrink-0"
               [disabled]="searchDisabled() || subtitleActionBusy()"
-              [attr.title]="searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null"
+              [attr.title]="
+                searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null
+              "
               (click)="openSubtitleSearch()"
             >
-              {{ 'media_detail.search_subtitles' | translate }}
+              {{ 'media_detail.subtitles_search' | translate }}
             </button>
           </div>
         }
@@ -86,11 +92,16 @@
                   @let sub = row.sub!;
                   <tr>
                     <td class="font-medium">{{ sub.language | localizeLanguage }}</td>
-                    <td class="text-sm text-base-content/60 truncate max-w-48" [title]="sub.relativePath ?? ''">
+                    <td
+                      class="text-sm text-base-content/60 truncate max-w-48"
+                      [title]="sub.relativePath ?? ''"
+                    >
                       @if (sub.relativePath) {
                         {{ sub.relativePath | subtitleFilename }}
                       } @else if (sub.providerType === 'embedded') {
-                        <span class="text-base-content/30">{{ 'media_detail.embedded' | translate }}</span>
+                        <span class="text-base-content/30">{{
+                          'media_detail.embedded' | translate
+                        }}</span>
                       } @else {
                         —
                       }
@@ -99,7 +110,9 @@
                       @if (sub.providerType === 'embedded') {
                         <span class="badge badge-sm badge-neutral">embedded</span>
                       } @else if (sub.providerType === 'translated') {
-                        <span [title]="sub.translationModel ?? ''">{{ translationServiceLabel(sub) }}</span>
+                        <span [title]="sub.translationModel ?? ''">{{
+                          translationServiceLabel(sub)
+                        }}</span>
                       } @else {
                         {{ sub.providerType }}
                       }
@@ -113,22 +126,43 @@
                     </td>
                     <td class="text-center text-sm">
                       @if (sub.status === 'processing') {
-                        @if (sub.providerType === 'translated' && translationPercent(sub.id) !== null) {
+                        @if (
+                          sub.providerType === 'translated' && translationPercent(sub.id) !== null
+                        ) {
                           <span class="inline-flex items-center gap-1 align-middle">
-                            <progress class="progress progress-warning w-16 h-1.5 align-middle" [value]="translationPercent(sub.id)" max="100"></progress>
-                            <span class="tabular-nums text-[10px]">{{ translationPercent(sub.id) }}%</span>
+                            <progress
+                              class="progress progress-warning w-16 h-1.5 align-middle"
+                              [value]="translationPercent(sub.id)"
+                              max="100"
+                            ></progress>
+                            <span class="tabular-nums text-[10px]"
+                              >{{ translationPercent(sub.id) }}%</span
+                            >
                           </span>
                         } @else {
                           <span class="badge badge-sm badge-warning gap-1">
                             <span class="loading loading-spinner loading-xs"></span>
-                            {{ (sub.providerType === 'translated' ? 'media_detail.translate_processing' : 'media_detail.ocr_processing') | translate }}
+                            {{
+                              (sub.providerType === 'translated'
+                                ? 'media_detail.translate_processing'
+                                : 'media_detail.ocr_processing'
+                              ) | translate
+                            }}
                           </span>
                         }
                       }
-                      @if (sub.forced) { <span class="badge badge-sm badge-outline mr-1">F</span> }
-                      @if (sub.hearingImpaired) { <span class="badge badge-sm badge-outline">HI</span> }
-                      @if (sub.synced) { <span class="badge badge-sm badge-info ml-1">Synced</span> }
-                      @if (sub.codec) { <span class="badge badge-sm badge-ghost ml-1">{{ sub.codec }}</span> }
+                      @if (sub.forced) {
+                        <span class="badge badge-sm badge-outline mr-1">F</span>
+                      }
+                      @if (sub.hearingImpaired) {
+                        <span class="badge badge-sm badge-outline">HI</span>
+                      }
+                      @if (sub.synced) {
+                        <span class="badge badge-sm badge-info ml-1">Synced</span>
+                      }
+                      @if (sub.codec) {
+                        <span class="badge badge-sm badge-ghost ml-1">{{ sub.codec }}</span>
+                      }
                     </td>
                     <td class="text-end">
                       @if (canManage() && rowHasActions(sub) && sub.status !== 'processing') {
@@ -185,7 +219,9 @@
     <app-modal-header>
       <div>
         <h3 class="text-lg font-bold">{{ 'media_detail.sync_modal_title' | translate }}</h3>
-        <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.sync_modal_subtitle' | translate }}</p>
+        <p class="text-sm text-base-content/60 mt-1">
+          {{ 'media_detail.sync_modal_subtitle' | translate }}
+        </p>
       </div>
     </app-modal-header>
 
@@ -201,21 +237,33 @@
           @if (audioStreams().length) {
             <optgroup [label]="'media_detail.sync_audio_tracks' | translate">
               @for (s of audioStreams(); track s.streamIndex) {
-                <option [value]="'audio:' + s.streamIndex">{{ s.language | localizeLanguage }} — {{ s.codec }}@if (s.title) { ({{ s.title }}) }</option>
+                <option [value]="'audio:' + s.streamIndex">
+                  {{ s.language | localizeLanguage }} — {{ s.codec }}
+                  @if (s.title) {
+                    ({{ s.title }})
+                  }
+                </option>
               }
             </optgroup>
           }
           @if (subtitleStreams().length) {
             <optgroup [label]="'media_detail.sync_subtitle_tracks' | translate">
               @for (s of subtitleStreams(); track s.streamIndex) {
-                <option [value]="'subtitle:' + s.streamIndex">{{ s.language | localizeLanguage }} — {{ s.codec }}@if (s.title) { ({{ s.title }}) }</option>
+                <option [value]="'subtitle:' + s.streamIndex">
+                  {{ s.language | localizeLanguage }} — {{ s.codec }}
+                  @if (s.title) {
+                    ({{ s.title }})
+                  }
+                </option>
               }
             </optgroup>
           }
           @if (externalSubtitleRefs().length) {
             <optgroup [label]="'media_detail.sync_external_subtitles' | translate">
               @for (s of externalSubtitleRefs(); track s.id) {
-                <option [value]="'file:' + s.relativePath">{{ s.language | localizeLanguage }} — {{ s.providerType }} ({{ s.status }})</option>
+                <option [value]="'file:' + s.relativePath">
+                  {{ s.language | localizeLanguage }} — {{ s.providerType }} ({{ s.status }})
+                </option>
               }
             </optgroup>
           }
@@ -233,7 +281,9 @@
           (ngModelChange)="syncMaxOffset.set($event)"
         />
         <div class="label">
-          <span class="label-text-alt text-base-content/50">{{ 'media_detail.sync_max_offset_hint' | translate }}</span>
+          <span class="label-text-alt text-base-content/50">{{
+            'media_detail.sync_max_offset_hint' | translate
+          }}</span>
         </div>
       </label>
 
@@ -258,14 +308,14 @@
       </label>
     </div>
 
-    <div class="modal-action">
+    <app-modal-footer>
       <button type="button" class="btn btn-ghost" (click)="closeSyncModal()">
         {{ 'common.cancel' | translate }}
       </button>
       <button type="button" class="btn btn-primary" (click)="confirmSync()">
         {{ 'media_detail.action_sync' | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
     <button type="button" tabindex="-1" (click)="closeSyncModal()">close</button>
@@ -278,7 +328,9 @@
     <app-modal-header>
       <div>
         <h3 class="text-lg font-bold">{{ 'media_detail.adjust_times_title' | translate }}</h3>
-        <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.adjust_times_subtitle' | translate }}</p>
+        <p class="text-sm text-base-content/60 mt-1">
+          {{ 'media_detail.adjust_times_subtitle' | translate }}
+        </p>
       </div>
     </app-modal-header>
 
@@ -312,17 +364,19 @@
       </label>
     </div>
     <div class="label">
-      <span class="label-text-alt text-base-content/50">{{ 'media_detail.adjust_offset_hint' | translate }}</span>
+      <span class="label-text-alt text-base-content/50">{{
+        'media_detail.adjust_offset_hint' | translate
+      }}</span>
     </div>
 
-    <div class="modal-action">
+    <app-modal-footer>
       <button type="button" class="btn btn-ghost" (click)="closeAdjustModal()">
         {{ 'common.cancel' | translate }}
       </button>
       <button type="button" class="btn btn-primary" (click)="confirmAdjust()">
         {{ 'media_detail.action_adjust_times' | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
     <button type="button" tabindex="-1" (click)="closeAdjustModal()">close</button>
@@ -335,7 +389,9 @@
     <app-modal-header>
       <div>
         <h3 class="text-lg font-bold">{{ 'media_detail.change_fps_title' | translate }}</h3>
-        <p class="text-sm text-base-content/60 mt-1">{{ 'media_detail.change_fps_subtitle' | translate }}</p>
+        <p class="text-sm text-base-content/60 mt-1">
+          {{ 'media_detail.change_fps_subtitle' | translate }}
+        </p>
       </div>
     </app-modal-header>
 
@@ -370,14 +426,19 @@
       </label>
     </div>
 
-    <div class="modal-action">
+    <app-modal-footer>
       <button type="button" class="btn btn-ghost" (click)="closeFpsModal()">
         {{ 'common.cancel' | translate }}
       </button>
-      <button type="button" class="btn btn-primary" [disabled]="fpsFrom() === fpsTo()" (click)="confirmFps()">
+      <button
+        type="button"
+        class="btn btn-primary"
+        [disabled]="fpsFrom() === fpsTo()"
+        (click)="confirmFps()"
+      >
         {{ 'media_detail.action_change_fps' | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
     <button type="button" tabindex="-1" (click)="closeFpsModal()">close</button>
@@ -390,22 +451,36 @@
       <div class="min-w-0">
         @if (langDialogMode() === 'relabel') {
           <h3 class="text-lg font-bold">{{ 'media_detail.change_language_title' | translate }}</h3>
-          <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.change_language_hint' | translate }}</p>
+          <p class="py-2 text-sm text-base-content/70">
+            {{ 'media_detail.change_language_hint' | translate }}
+          </p>
         } @else if (langDialogMode() === 'translate') {
-          <h3 class="text-lg font-bold">{{ 'media_detail.translate_target_language' | translate }}</h3>
-          <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.translate_hint' | translate }}</p>
+          <h3 class="text-lg font-bold">
+            {{ 'media_detail.translate_target_language' | translate }}
+          </h3>
+          <p class="py-2 text-sm text-base-content/70">
+            {{ 'media_detail.translate_hint' | translate }}
+          </p>
         } @else if (langDialogMode() === 'upload') {
           <h3 class="text-lg font-bold">{{ 'media_detail.upload_subtitle' | translate }}</h3>
           <p class="py-2 text-sm text-base-content/70 break-all">{{ pendingUploadName() }}</p>
-          <p class="text-sm text-base-content/70">{{ 'media_detail.upload_subtitle_hint' | translate }}</p>
+          <p class="text-sm text-base-content/70">
+            {{ 'media_detail.upload_subtitle_hint' | translate }}
+          </p>
         } @else {
           <h3 class="text-lg font-bold">{{ 'media_detail.ocr_language_title' | translate }}</h3>
-          <p class="py-2 text-sm text-base-content/70">{{ 'media_detail.ocr_language_hint' | translate }}</p>
+          <p class="py-2 text-sm text-base-content/70">
+            {{ 'media_detail.ocr_language_hint' | translate }}
+          </p>
         }
       </div>
     </app-modal-header>
     <div class="mt-2 space-y-4">
-      <select class="select select-bordered w-full" [ngModel]="ocrLang()" (ngModelChange)="ocrLang.set($event)">
+      <select
+        class="select select-bordered w-full"
+        [ngModel]="ocrLang()"
+        (ngModelChange)="ocrLang.set($event)"
+      >
         @for (code of langDialogCodes(); track code) {
           <option [value]="code">{{ code | localizeLanguage }}</option>
         }
@@ -425,12 +500,23 @@
         </label>
       }
     </div>
-    <div class="modal-action">
-      <button type="button" class="btn" (click)="closeOcrLangModal()">{{ 'common.cancel' | translate }}</button>
-      <button type="button" class="btn btn-primary" (click)="confirmLanguage()">
-        {{ (langDialogMode() === 'relabel' ? 'common.save' : langDialogMode() === 'translate' ? 'media_detail.translate' : langDialogMode() === 'upload' ? 'media_detail.upload_subtitle' : 'media_detail.action_ocr_extract') | translate }}
+    <app-modal-footer>
+      <button type="button" class="btn" (click)="closeOcrLangModal()">
+        {{ 'common.cancel' | translate }}
       </button>
-    </div>
+      <button type="button" class="btn btn-primary" (click)="confirmLanguage()">
+        {{
+          (langDialogMode() === 'relabel'
+            ? 'common.save'
+            : langDialogMode() === 'translate'
+              ? 'media_detail.translate'
+              : langDialogMode() === 'upload'
+                ? 'media_detail.upload_subtitle'
+                : 'media_detail.action_ocr_extract'
+          ) | translate
+        }}
+      </button>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
     <button type="button" tabindex="-1" (click)="closeOcrLangModal()">close</button>

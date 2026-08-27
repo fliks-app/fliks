@@ -987,6 +987,8 @@
     "subtitles_section": "Subtitles",
     "search_subtitles": "Search subtitles",
     "upload_subtitle": "Upload a subtitle",
+    "subtitles_import": "Import",
+    "subtitles_search": "Search",
     "upload_subtitle_hint": "Pick the language of the file to upload.",
     "upload_subtitle_success": "Subtitle uploaded",
     "auto_subtitle": "Auto",

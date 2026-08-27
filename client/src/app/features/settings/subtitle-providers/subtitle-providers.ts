@@ -13,7 +13,10 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
-import { SubtitleProvidersApiService, ProviderRateLimit } from '../../../core/services/api/subtitle-providers-api.service';
+import {
+  SubtitleProvidersApiService,
+  ProviderRateLimit,
+} from '../../../core/services/api/subtitle-providers-api.service';
 import {
   TranslationProvidersApiService,
   TranslationProviderRow,
@@ -28,6 +31,7 @@ import {
   ProviderTestResult,
 } from '../../../shared/components/provider-list/provider-list.types';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 const DEFAULT_TRANSLATION_MODEL = 'gemini-2.0-flash';
 
@@ -58,10 +62,20 @@ const IMPLEMENTATIONS: ProviderImplementation[] = [
   {
     implementation: 'subdl',
     labelKey: 'settings.subtitle_providers.type_subdl',
-    fields: [{ key: 'apiKey', type: 'text', labelKey: 'settings.subtitle_providers.field_api_key' }],
+    fields: [
+      { key: 'apiKey', type: 'text', labelKey: 'settings.subtitle_providers.field_api_key' },
+    ],
   },
-  { implementation: 'subsynchro', labelKey: 'settings.subtitle_providers.type_subsynchro', fields: [] },
-  { implementation: 'supersubtitles', labelKey: 'settings.subtitle_providers.type_supersubtitles', fields: [] },
+  {
+    implementation: 'subsynchro',
+    labelKey: 'settings.subtitle_providers.type_subsynchro',
+    fields: [],
+  },
+  {
+    implementation: 'supersubtitles',
+    labelKey: 'settings.subtitle_providers.type_supersubtitles',
+    fields: [],
+  },
   { implementation: 'yify', labelKey: 'settings.subtitle_providers.type_yify', fields: [] },
   { implementation: 'gestdown', labelKey: 'settings.subtitle_providers.type_gestdown', fields: [] },
 ];
@@ -93,7 +107,12 @@ const LABELS: ProviderListLabels = {
 @Component({
   selector: 'app-subtitle-providers-settings',
   imports: [
-    ModalHeaderComponent,FormsModule, TranslateModule, ProviderListComponent],
+    ModalFooterComponent,
+    ModalHeaderComponent,
+    FormsModule,
+    TranslateModule,
+    ProviderListComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitle-providers.html',
 })
@@ -105,7 +124,8 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
 
-  private readonly translationEditorDialog = viewChild<ElementRef<HTMLDialogElement>>('translationEditorDialog');
+  private readonly translationEditorDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('translationEditorDialog');
   private readonly statsDialog = viewChild<ElementRef<HTMLDialogElement>>('statsDialog');
 
   readonly listUrl = '/api/subtitles/providers';
@@ -115,7 +135,9 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly rateLimits = signal<Map<string, ProviderRateLimit>>(new Map());
 
   readonly statsLoading = signal(false);
-  readonly statsData = signal<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>([]);
+  readonly statsData = signal<
+    { date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]
+  >([]);
   readonly statsProviderName = signal('');
 
   // Machine-translation — a list of admin-configured providers plus the global
@@ -280,8 +302,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
         ok: res.ok,
         message: res.ok
           ? this.translate.instant('settings.subtitle_providers.test_success')
-          : res.error ||
-            this.translate.instant('settings.subtitle_providers.test_failed'),
+          : res.error || this.translate.instant('settings.subtitle_providers.test_failed'),
       });
     } catch {
       this.trTestResult.set({
@@ -306,9 +327,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.trSaving.set(true);
     const id = this.trEditingId();
     try {
-      await (id == null
-        ? this.translationApi.create(body)
-        : this.translationApi.update(id, body));
+      await (id == null ? this.translationApi.create(body) : this.translationApi.update(id, body));
       this.closeTranslationEditor();
       await this.reloadTranslationProviders();
     } catch {
@@ -319,10 +338,9 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   }
 
   async deleteTranslationProvider(row: TranslationProviderRow) {
-    const msg = this.translate.instant(
-      'settings.subtitle_providers.confirm_delete',
-      { name: row.name },
-    );
+    const msg = this.translate.instant('settings.subtitle_providers.confirm_delete', {
+      name: row.name,
+    });
     if (
       !(await this.confirmation.confirm({
         title: this.translate.instant('common.confirm'),
@@ -350,9 +368,15 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     try {
       this.statsData.set(
         await firstValueFrom(
-          this.http.get<{ date: string; queries: number; avgResponseMs: number; totalResults: number; errors: number }[]>(
-            `/api/subtitles/providers/${row.id}/stats`,
-          ),
+          this.http.get<
+            {
+              date: string;
+              queries: number;
+              avgResponseMs: number;
+              totalResults: number;
+              errors: number;
+            }[]
+          >(`/api/subtitles/providers/${row.id}/stats`),
         ),
       );
     } finally {
@@ -392,10 +416,13 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly testConnection = async (draft: ProviderDraft): Promise<ProviderTestResult> => {
     try {
       const { ok, detail } = await firstValueFrom(
-        this.http.post<{ ok: boolean; detail?: string }>('/api/subtitles/providers/test-connection', {
-          type: draft.implementation,
-          settings: this.trimSettings(draft.settings),
-        }),
+        this.http.post<{ ok: boolean; detail?: string }>(
+          '/api/subtitles/providers/test-connection',
+          {
+            type: draft.implementation,
+            settings: this.trimSettings(draft.settings),
+          },
+        ),
       );
       const verdict = this.translate.instant(
         ok ? 'settings.subtitle_providers.test_success' : 'settings.subtitle_providers.test_failed',
@@ -403,7 +430,10 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
       // `detail` is the provider's own reason (HTTP status, missing credential) — kept verbatim.
       return { ok, message: detail ? `${verdict} — ${detail}` : verdict };
     } catch {
-      return { ok: false, message: this.translate.instant('settings.subtitle_providers.test_network_error') };
+      return {
+        ok: false,
+        message: this.translate.instant('settings.subtitle_providers.test_network_error'),
+      };
     }
   };
 

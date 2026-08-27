@@ -11,13 +11,15 @@ import { LucideX } from '@lucide/angular';
 import { ToggleFieldComponent } from '../../../../shared/components/forms/toggle-field/toggle-field';
 import { SettingsApiService } from '../../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
+import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 
 /** Mirrors the backend's `PLUGIN_AUTO_UPDATE_SETTING`. */
 const AUTO_UPDATE_KEY = 'plugins.auto_update';
 
 @Component({
   selector: 'app-plugin-settings',
-  imports: [TranslateModule, LucideX, ToggleFieldComponent],
+  imports: [ModalFooterComponent, ModalHeaderComponent, TranslateModule, ToggleFieldComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-settings.html',
 })

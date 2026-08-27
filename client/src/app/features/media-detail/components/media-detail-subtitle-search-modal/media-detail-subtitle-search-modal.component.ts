@@ -12,11 +12,18 @@ import { LocalizeLanguagePipe } from '../../../../core/pipes/localize-language.p
 import { SubtitleSearchResult } from '../../../../core/services/api/subtitles-api.service';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-media-detail-subtitle-search-modal',
   imports: [
-    ModalHeaderComponent,TranslateModule, FormsModule, LocalizeLanguagePipe, TvSelectDirective],
+    ModalFooterComponent,
+    ModalHeaderComponent,
+    TranslateModule,
+    FormsModule,
+    LocalizeLanguagePipe,
+    TvSelectDirective,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-subtitle-search-modal.component.html',
 })
@@ -35,8 +42,24 @@ export class MediaDetailSubtitleSearchModalComponent {
   // resolved via the localizeLanguage pipe so it matches what the player
   // shows on its audio/subtitle tracks.
   readonly languageCodes: readonly string[] = [
-    'en', 'fr', 'de', 'es', 'it', 'pt', 'ja', 'ko', 'zh', 'ru',
-    'ar', 'nl', 'pl', 'tr', 'sv', 'da', 'no', 'fi',
+    'en',
+    'fr',
+    'de',
+    'es',
+    'it',
+    'pt',
+    'ja',
+    'ko',
+    'zh',
+    'ru',
+    'ar',
+    'nl',
+    'pl',
+    'tr',
+    'sv',
+    'da',
+    'no',
+    'fi',
   ];
 
   private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');

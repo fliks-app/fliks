@@ -40,9 +40,11 @@
             <tbody>
               @for (s of seasons(); track s.seasonNumber) {
                 @let alreadyRequested = alreadyRequestedSeasons().has(s.seasonNumber);
-                <tr class="hover"
-                    [class.opacity-50]="!selectedSeasons().has(s.seasonNumber) && !alreadyRequested"
-                    [class.opacity-60]="alreadyRequested">
+                <tr
+                  class="hover"
+                  [class.opacity-50]="!selectedSeasons().has(s.seasonNumber) && !alreadyRequested"
+                  [class.opacity-60]="alreadyRequested"
+                >
                   <td>
                     <input
                       type="checkbox"
@@ -52,15 +54,23 @@
                       (change)="toggleSeason(s.seasonNumber)"
                     />
                   </td>
-                  <td class="font-medium">{{ 'discover.season_label' | translate }} {{ s.seasonNumber }}</td>
+                  <td class="font-medium">
+                    {{ 'discover.season_label' | translate }} {{ s.seasonNumber }}
+                  </td>
                   <td>{{ s.episodeCount }}</td>
                   <td>
                     @if (alreadyRequested) {
-                      <span class="badge badge-warning badge-sm">{{ 'discover.already_requested' | translate }}</span>
+                      <span class="badge badge-warning badge-sm">{{
+                        'discover.already_requested' | translate
+                      }}</span>
                     } @else if (selectedSeasons().has(s.seasonNumber)) {
-                      <span class="badge badge-primary badge-sm">{{ 'discover.status_selected' | translate }}</span>
+                      <span class="badge badge-primary badge-sm">{{
+                        'discover.status_selected' | translate
+                      }}</span>
                     } @else {
-                      <span class="badge badge-ghost badge-sm">{{ 'discover.status_not_requested' | translate }}</span>
+                      <span class="badge badge-ghost badge-sm">{{
+                        'discover.status_not_requested' | translate
+                      }}</span>
                     }
                   </td>
                 </tr>
@@ -71,13 +81,17 @@
       }
     }
 
-    @if (qualityProfiles().length || languageProfiles().length || compatibleLibraries().length > 1) {
+    @if (
+      qualityProfiles().length || languageProfiles().length || compatibleLibraries().length > 1
+    ) {
       <div class="mt-6">
         <h3 class="text-base font-semibold mb-3">{{ 'discover.advanced_options' | translate }}</h3>
         <div class="flex flex-col gap-3">
           @if (compatibleLibraries().length > 1) {
             <label class="form-control w-full">
-              <span class="label-text text-base-content/60">{{ 'settings.libraries.title' | translate }}</span>
+              <span class="label-text text-base-content/60">{{
+                'settings.libraries.title' | translate
+              }}</span>
               <select
                 class="select select-bordered select-sm w-full"
                 [ngModel]="libraryId()"
@@ -92,7 +106,9 @@
           }
           @if (qualityProfiles().length && !profilesLocked()) {
             <label class="form-control w-full">
-              <span class="label-text text-base-content/60">{{ 'discover.quality_profile' | translate }}</span>
+              <span class="label-text text-base-content/60">{{
+                'discover.quality_profile' | translate
+              }}</span>
               <select
                 class="select select-bordered select-sm w-full"
                 [ngModel]="qualityProfileId()"
@@ -106,7 +122,9 @@
           }
           @if (languageProfiles().length && !profilesLocked()) {
             <label class="form-control w-full">
-              <span class="label-text text-base-content/60">{{ 'discover.language_profile' | translate }}</span>
+              <span class="label-text text-base-content/60">{{
+                'discover.language_profile' | translate
+              }}</span>
               <select
                 class="select select-bordered select-sm w-full"
                 [ngModel]="languageProfileId()"
@@ -122,7 +140,7 @@
       </div>
     }
 
-    <div class="modal-action">
+    <app-modal-footer>
       <button type="button" class="btn btn-ghost" (click)="close()">
         {{ 'common.cancel' | translate }}
       </button>
@@ -141,7 +159,7 @@
           {{ 'discover.request' | translate }}
         }
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
     <button type="button" (click)="close()">close</button>

@@ -37,11 +37,19 @@
         <thead>
           <tr>
             <th>{{ labels().colNameKey | translate }}</th>
-            @if (showImplementation()) { <th>{{ labels().colImplementationKey | translate }}</th> }
-            @if (showPriority()) { <th class="text-end">{{ labels().colPriorityKey | translate }}</th> }
+            @if (showImplementation()) {
+              <th>{{ labels().colImplementationKey | translate }}</th>
+            }
+            @if (showPriority()) {
+              <th class="text-end">{{ labels().colPriorityKey | translate }}</th>
+            }
             <th class="text-center">{{ labels().colEnabledKey | translate }}</th>
-            @if (showCooldown()) { <th>{{ 'provider_list.col_cooldown' | translate }}</th> }
-            @if (rowExtraStatus()) { <th></th> }
+            @if (showCooldown()) {
+              <th>{{ 'provider_list.col_cooldown' | translate }}</th>
+            }
+            @if (rowExtraStatus()) {
+              <th></th>
+            }
             <th class="text-end">{{ labels().actionsKey | translate }}</th>
           </tr>
         </thead>
@@ -49,12 +57,16 @@
           @for (row of orderedRows(); track row.id; let i = $index) {
             <tr>
               <td>
-                <button type="button" class="link link-hover font-medium" (click)="openEdit(row)">{{ row.name }}</button>
+                <button type="button" class="link link-hover font-medium" (click)="openEdit(row)">
+                  {{ row.name }}
+                </button>
               </td>
               @if (showImplementation()) {
                 <td class="text-sm">{{ implementationLabel(row[implementationKey()] + '') }}</td>
               }
-              @if (showPriority()) { <td class="text-end tabular-nums">{{ row.priority }}</td> }
+              @if (showPriority()) {
+                <td class="text-end tabular-nums">{{ row.priority }}</td>
+              }
               <td class="text-center">
                 <input
                   type="checkbox"
@@ -69,8 +81,12 @@
                 <td class="text-sm">
                   @if (cooldownOf(row); as cd) {
                     <span class="inline-flex flex-nowrap items-center gap-1.5">
-                      <span class="badge badge-sm badge-warning whitespace-nowrap">{{ cooldownRemaining(cd) }}</span>
-                      <span class="text-xs text-base-content/60">{{ cooldownReasonKey(cd) | translate }}</span>
+                      <span class="badge badge-sm badge-warning whitespace-nowrap">{{
+                        cooldownRemaining(cd)
+                      }}</span>
+                      <span class="text-xs text-base-content/60">{{
+                        cooldownReasonKey(cd) | translate
+                      }}</span>
                       @if (cooldownAction(); as action) {
                         <button
                           type="button"
@@ -98,35 +114,49 @@
               }
               <td class="text-end">
                 <span class="inline-flex flex-nowrap items-center justify-end gap-1">
-                @if (reorderable()) {
-                  <button type="button" class="btn btn-ghost btn-xs btn-square" [disabled]="i === 0"
-                          (click)="moveRow(row, -1)" [attr.aria-label]="'provider_list.move_up' | translate">
-                    <svg lucideArrowUp class="h-4 w-4"></svg>
-                  </button>
-                  <button type="button" class="btn btn-ghost btn-xs btn-square" [disabled]="i === orderedRows().length - 1"
-                          (click)="moveRow(row, 1)" [attr.aria-label]="'provider_list.move_down' | translate">
-                    <svg lucideArrowDown class="h-4 w-4"></svg>
-                  </button>
-                }
-                @if (rowExtraActions(); as tpl) {
-                  <ng-container *ngTemplateOutlet="tpl; context: { $implicit: row }" />
-                }
-                @for (action of visibleRowActions(); track action.labelKey) {
+                  @if (reorderable()) {
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs btn-square"
+                      [disabled]="i === 0"
+                      (click)="moveRow(row, -1)"
+                      [attr.aria-label]="'provider_list.move_up' | translate"
+                    >
+                      <svg lucideArrowUp class="h-4 w-4"></svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs btn-square"
+                      [disabled]="i === orderedRows().length - 1"
+                      (click)="moveRow(row, 1)"
+                      [attr.aria-label]="'provider_list.move_down' | translate"
+                    >
+                      <svg lucideArrowDown class="h-4 w-4"></svg>
+                    </button>
+                  }
+                  @if (rowExtraActions(); as tpl) {
+                    <ng-container *ngTemplateOutlet="tpl; context: { $implicit: row }" />
+                  }
+                  @for (action of visibleRowActions(); track action.labelKey) {
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      (click)="runRowAction(row, action)"
+                      [disabled]="rowActionBusy() === rowActionKey(row, action)"
+                    >
+                      @if (rowActionBusy() === rowActionKey(row, action)) {
+                        <span class="loading loading-spinner loading-xs"></span>
+                      }
+                      {{ action.labelKey | translate }}
+                    </button>
+                  }
                   <button
                     type="button"
-                    class="btn btn-ghost btn-xs"
-                    (click)="runRowAction(row, action)"
-                    [disabled]="rowActionBusy() === rowActionKey(row, action)"
+                    class="btn btn-ghost btn-xs text-error"
+                    (click)="deleteRow(row)"
                   >
-                    @if (rowActionBusy() === rowActionKey(row, action)) {
-                      <span class="loading loading-spinner loading-xs"></span>
-                    }
-                    {{ action.labelKey | translate }}
+                    {{ labels().deleteKey | translate }}
                   </button>
-                }
-                <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(row)">
-                  {{ labels().deleteKey | translate }}
-                </button>
                 </span>
               </td>
             </tr>
@@ -139,20 +169,10 @@
 
 <dialog #editorDialog class="modal">
   <div class="modal-box max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
-    <div class="px-5 sm:px-6 pt-4 pb-3 border-b border-base-200 flex justify-between items-center gap-3 shrink-0 bg-base-100">
-      <h2 class="text-lg font-bold leading-tight">
-        {{ (editingId() === null ? labels().createTitleKey : labels().editTitleKey) | translate }}
-      </h2>
-      <button
-        type="button"
-        class="btn btn-sm btn-circle btn-ghost shrink-0"
-        (click)="closeEditor()"
-        [disabled]="saving()"
-        [attr.aria-label]="labels().cancelKey | translate"
-      >
-        ✕
-      </button>
-    </div>
+    <app-modal-header
+      flush
+      [title]="(editingId() === null ? labels().createTitleKey : labels().editTitleKey) | translate"
+    />
     <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
       <app-input-field
         [label]="labels().fieldNameKey | translate"
@@ -161,7 +181,11 @@
       />
 
       @if (implementations().length > 1) {
-        <app-select-field [label]="labels().fieldImplementationKey | translate" [value]="draftImplementation()" (valueChange)="onImplementationChange($event)">
+        <app-select-field
+          [label]="labels().fieldImplementationKey | translate"
+          [value]="draftImplementation()"
+          (valueChange)="onImplementationChange($event)"
+        >
           @for (impl of implementations(); track impl.implementation) {
             <option [value]="impl.implementation">{{ impl.labelKey | translate }}</option>
           }
@@ -169,7 +193,11 @@
       }
 
       @if (currentImplementation(); as impl) {
-        <app-schema-form [fields]="impl.fields" [(value)]="draftValue" [secretsSet]="secretsSet()" />
+        <app-schema-form
+          [fields]="impl.fields"
+          [(value)]="draftValue"
+          [secretsSet]="secretsSet()"
+        />
       } @else if (draftImplementation()) {
         <p class="text-sm text-warning">{{ 'provider_list.unknown_implementation' | translate }}</p>
       }
@@ -185,10 +213,15 @@
             @if (testLoading()) {
               <span class="loading loading-spinner loading-xs"></span>
             }
-            {{ (labels().testConnectionKey ?? 'provider_list.test_connection') | translate }}
+            {{ labels().testConnectionKey ?? 'provider_list.test_connection' | translate }}
           </button>
           @if (testResult(); as tr) {
-            <div role="alert" class="alert text-sm py-2" [class.alert-success]="tr.ok" [class.alert-error]="!tr.ok">
+            <div
+              role="alert"
+              class="alert text-sm py-2"
+              [class.alert-success]="tr.ok"
+              [class.alert-error]="!tr.ok"
+            >
               {{ tr.message }}
             </div>
           }
@@ -205,9 +238,13 @@
           />
         }
       </div>
-      <app-toggle-field [label]="labels().fieldEnabledKey | translate" [value]="draftEnabled()" (valueChange)="draftEnabled.set($event)" />
+      <app-toggle-field
+        [label]="labels().fieldEnabledKey | translate"
+        [value]="draftEnabled()"
+        (valueChange)="draftEnabled.set($event)"
+      />
     </div>
-    <div class="modal-action modal-action-sticky">
+    <app-modal-footer flush>
       <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
         {{ labels().cancelKey | translate }}
       </button>
@@ -217,10 +254,12 @@
         }
         {{ labels().saveKey | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">close</button>
+    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">
+      close
+    </button>
   </form>
 </dialog>
 
@@ -234,11 +273,15 @@
         [emptyKey]="view.result.emptyKey"
       />
     }
-    <div class="modal-action">
-      <button type="button" class="btn btn-ghost" (click)="closeResult()">{{ 'common.close' | translate }}</button>
-    </div>
+    <app-modal-footer>
+      <button type="button" class="btn btn-ghost" (click)="closeResult()">
+        {{ 'common.close' | translate }}
+      </button>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeResult()" [attr.aria-label]="'common.close' | translate">close</button>
+    <button type="button" (click)="closeResult()" [attr.aria-label]="'common.close' | translate">
+      close
+    </button>
   </form>
 </dialog>

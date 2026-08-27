@@ -8,11 +8,13 @@
 
     <app-orphan-scan-panel #panel />
 
-    <div class="modal-action mt-4 shrink-0">
+    <app-modal-footer>
       <button type="button" class="btn" (click)="close()">{{ 'common.close' | translate }}</button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="close()" [attr.aria-label]="'common.close' | translate">close</button>
+    <button type="button" (click)="close()" [attr.aria-label]="'common.close' | translate">
+      close
+    </button>
   </form>
 </dialog>

@@ -12,15 +12,19 @@
       <p class="mt-4 text-sm text-base-content whitespace-pre-wrap wrap-break-word">
         {{ declineView.reason }}
       </p>
-      <div class="modal-action mt-2">
+      <app-modal-footer>
         <button type="button" class="btn btn-primary" (click)="close(); dismissed.emit()">
           {{ 'common.close' | translate }}
         </button>
-      </div>
+      </app-modal-footer>
     </div>
   }
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="close(); dismissed.emit()" [attr.aria-label]="'common.close' | translate">
+    <button
+      type="button"
+      (click)="close(); dismissed.emit()"
+      [attr.aria-label]="'common.close' | translate"
+    >
       {{ 'common.close' | translate }}
     </button>
   </form>

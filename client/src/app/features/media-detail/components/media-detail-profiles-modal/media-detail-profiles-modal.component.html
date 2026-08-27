@@ -43,7 +43,7 @@
         @if (profilesErr()) {
           <div role="alert" class="alert alert-error text-sm py-2">{{ profilesErr() }}</div>
         }
-        <div class="modal-action">
+        <app-modal-footer>
           <button type="button" class="btn btn-ghost" (click)="close()">
             {{ 'common.close' | translate }}
           </button>
@@ -53,7 +53,7 @@
             }
             {{ 'media_detail.save_profiles' | translate }}
           </button>
-        </div>
+        </app-modal-footer>
       </form>
     }
   </div>

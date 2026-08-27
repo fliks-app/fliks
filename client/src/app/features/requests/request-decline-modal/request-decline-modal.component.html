@@ -12,7 +12,7 @@
       [ngModel]="reasonText()"
       (ngModelChange)="reasonTextChange.emit($event)"
     ></textarea>
-    <div class="modal-action mt-2">
+    <app-modal-footer>
       <button type="button" class="btn btn-ghost" (click)="close(); dismissed.emit()">
         {{ 'common.cancel' | translate }}
       </button>
@@ -24,10 +24,14 @@
       >
         {{ 'requests.decline_submit' | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="close(); dismissed.emit()" [attr.aria-label]="'common.close' | translate">
+    <button
+      type="button"
+      (click)="close(); dismissed.emit()"
+      [attr.aria-label]="'common.close' | translate"
+    >
       {{ 'common.close' | translate }}
     </button>
   </form>

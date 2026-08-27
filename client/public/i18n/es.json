@@ -982,6 +982,8 @@
     "subtitles_section": "Subtítulos",
     "search_subtitles": "Buscar subtítulos",
     "upload_subtitle": "Subir un subtítulo",
+    "subtitles_import": "Importar",
+    "subtitles_search": "Buscar",
     "upload_subtitle_hint": "Elige el idioma del archivo que vas a subir.",
     "upload_subtitle_success": "Subtítulo subido",
     "auto_subtitle": "Auto",

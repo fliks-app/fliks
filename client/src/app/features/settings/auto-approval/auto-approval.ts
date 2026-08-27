@@ -16,6 +16,7 @@ import {
   RuleCondition,
 } from '../../../core/services/api/auto-approval-api.service';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 const EMPTY_CONDITION = (): RuleCondition => ({
   field: 'role',
@@ -25,8 +26,7 @@ const EMPTY_CONDITION = (): RuleCondition => ({
 
 @Component({
   selector: 'app-auto-approval',
-  imports: [
-    ModalHeaderComponent,FormsModule, TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './auto-approval.html',
 })
@@ -129,12 +129,15 @@ export class AutoApprovalSettingsComponent implements OnInit {
 
   async remove(rule: AutoApprovalRule) {
     if (
-      !await this.confirmation.confirm({
+      !(await this.confirmation.confirm({
         title: this.translate.instant('common.confirm'),
-        message: this.translate.instant('settings.auto_approval.confirm_delete', { name: rule.name }),
+        message: this.translate.instant('settings.auto_approval.confirm_delete', {
+          name: rule.name,
+        }),
         variant: 'danger',
-      })
-    ) return;
+      }))
+    )
+      return;
     try {
       await this.api.remove(rule.id);
       this.rules.update((list) => list.filter((r) => r.id !== rule.id));

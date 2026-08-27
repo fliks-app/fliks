@@ -32,12 +32,16 @@
             </option>
           }
         </select>
-        <span class="label-text-alt opacity-60">{{ 'media_detail.provider_override_hint' | translate }}</span>
+        <span class="label-text-alt opacity-60">{{
+          'media_detail.provider_override_hint' | translate
+        }}</span>
       </label>
       @if (saved()) {
-        <div role="alert" class="alert alert-success text-sm py-2">{{ 'media_detail.library_saved' | translate }}</div>
+        <div role="alert" class="alert alert-success text-sm py-2">
+          {{ 'media_detail.library_saved' | translate }}
+        </div>
       }
-      <div class="modal-action">
+      <app-modal-footer>
         <button type="button" class="btn btn-ghost" (click)="close()">
           {{ 'common.close' | translate }}
         </button>
@@ -51,7 +55,7 @@
           }
           {{ 'common.save' | translate }}
         </button>
-      </div>
+      </app-modal-footer>
     </form>
   </div>
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>

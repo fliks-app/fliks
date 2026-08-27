@@ -14,7 +14,11 @@ import { LucideX } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import { ToastService } from '../../../../core/services/toast.service';
-import { PluginsApiService, PluginSourceRow } from '../../../../core/services/api/plugins-api.service';
+import {
+  PluginsApiService,
+  PluginSourceRow,
+} from '../../../../core/services/api/plugins-api.service';
+import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 
 /** One `code` per backend refusal (`plugin-sources.controller.ts`) — never the raw `detail`, which is not translated. */
 function createErrorKey(code: string | undefined): string {
@@ -33,7 +37,7 @@ function createErrorKey(code: string | undefined): string {
 /** Sources list + add form — any number of sources, the official catalog is just the seeded first row. */
 @Component({
   selector: 'app-plugin-sources',
-  imports: [FormsModule, DatePipe, LucideX, TranslateModule],
+  imports: [ModalHeaderComponent, FormsModule, DatePipe, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-sources.html',
 })
@@ -126,12 +130,18 @@ export class PluginSourcesComponent implements OnInit {
       if (result.ok) {
         this.toast.success(this.translate.instant('settings.plugins.sources.refresh_ok'));
       } else {
-        this.toast.error(this.translate.instant('settings.plugins.sources.refresh_error', { detail: result.detail }));
+        this.toast.error(
+          this.translate.instant('settings.plugins.sources.refresh_error', {
+            detail: result.detail,
+          }),
+        );
       }
       await this.reload();
       this.changed.emit();
     } catch {
-      this.toast.error(this.translate.instant('settings.plugins.sources.refresh_error', { detail: '' }));
+      this.toast.error(
+        this.translate.instant('settings.plugins.sources.refresh_error', { detail: '' }),
+      );
     } finally {
       this.refreshingId.set(null);
     }

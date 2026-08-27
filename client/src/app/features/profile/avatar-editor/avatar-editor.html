@@ -34,14 +34,14 @@
         [attr.aria-label]="'social.avatar_zoom' | translate"
       />
     </div>
-    <div class="modal-action">
+    <app-modal-footer>
       <button type="button" class="btn btn-ghost" (click)="close()">
         {{ 'common.cancel' | translate }}
       </button>
       <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="confirm()">
         {{ 'common.save' | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
     <button (click)="close()">{{ 'common.close' | translate }}</button>

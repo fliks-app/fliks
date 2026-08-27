@@ -40,7 +40,7 @@
       }
     </div>
 
-    <div class="modal-action">
+    <app-modal-footer>
       <button type="button" class="btn" (click)="cancel()">
         {{ 'common.cancel' | translate }}
       </button>
@@ -52,7 +52,7 @@
       >
         {{ 'folder_picker.select' | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
     <button type="button" (click)="cancel()" [attr.aria-label]="'common.close' | translate">
