@@ -206,11 +206,11 @@ export class OrphanScanPanelComponent {
     for (let i = 0; i < this.groups().length; i++) {
       if (this.groups()[i].done) continue;
       if (!this.groups()[i].searched) await this.search(i);
+      // The search selects the first result, so an empty pick is a deselection:
+      // the group is skipped rather than imported against a row nobody chose.
       const vm = this.groups()[i];
-      const pick = vm.pick ?? vm.results[0] ?? null;
-      if (pick) {
-        this.patch(i, { pick });
-        items.push(this.relinkBody(libraryId, vm.group, pick));
+      if (vm.pick) {
+        items.push(this.relinkBody(libraryId, vm.group, vm.pick));
       }
       this.imported.update((n) => n + 1);
     }
@@ -271,11 +271,13 @@ export class OrphanScanPanelComponent {
               (nfo.tvdbId != null && r.tvdbId === nfo.tvdbId),
           )
         : undefined;
+      // Import-all takes the first result when nothing is picked, so pick it
+      // here: the row the import will use is the row the user sees selected.
       this.patch(index, {
         results,
         searching: false,
         searched: true,
-        pick: auto ?? null,
+        pick: auto ?? results[0] ?? null,
         fromNfo: !!auto,
       });
     } catch {

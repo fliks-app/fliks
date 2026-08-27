@@ -104,6 +104,23 @@ describe('OrphanScanPanelComponent.importAll', () => {
     ]);
   });
 
+  it('skips a group whose default pick was deselected', async () => {
+    const { panel, relinked } = setup(['Alpha', 'Beta']);
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    panel.pick(0, panel.groups()[0].pick!); // clicking the selected row clears it
+
+    expect(await panel.importAll(7)).toBe(1);
+    expect(relinked.map((b) => b.folderName)).toEqual(['Beta']);
+  });
+
+  it('selects the first result as soon as a group is searched', async () => {
+    const { panel } = setup(['Alpha']);
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+
+    expect(panel.groups()[0].pick?.title).toBe('First');
+    expect(panel.groups()[0].fromNfo).toBe(false);
+  });
+
   it('keeps an explicit pick over the first result', async () => {
     const { panel, relinked } = setup(['Alpha']);
     await panel.scanPath('/medias', ['movie'], 'tmdb');
