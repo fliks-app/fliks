@@ -12,28 +12,8 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
-  LucideArrowRightLeft,
-  LucideBadgeCheck,
-  LucideBan,
   LucideChevronDown,
-  LucideChevronRight,
-  LucideClock,
-  LucideCode,
-  LucideDownload,
-  LucideEye,
-  LucideFileText,
-  LucideImage,
-  LucideLanguages,
-  LucideMaximize2,
-  LucideMoveHorizontal,
-  LucidePlay,
-  LucideSmile,
-  LucideThermometer,
-  LucideTrash2,
   LucideUpload,
-  LucideVolume2,
-  LucideWandSparkles,
-  LucideZap,
 } from '@lucide/angular';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
 import { formatSubtitleLabel, formatSubtitleParts } from '../../../core/utils/player.utils';
@@ -60,6 +40,10 @@ import {
 } from '../../../core/services/api/subtitles-api.service';
 import { SubtitleActionsService } from '../../../core/services/subtitle-actions.service';
 import {
+  CardAction,
+  CardActionsService,
+} from '../../../core/services/card-actions.service';
+import {
   TranslationProvidersApiService,
   AvailableTranslationProvider,
 } from '../../../core/services/api/translation-providers-api.service';
@@ -72,7 +56,6 @@ import { SseService } from '../../../core/services/sse.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { PaginationComponent } from '../pagination/pagination';
 import { MediaDetailSubtitleSearchModalComponent } from '../../../features/media-detail/components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
-import { PopoverMenuComponent } from '../popover-menu';
 import type { MediaInfoHeaderSubtitle } from '../media-info-header/media-info-header';
 
 interface SubtitleRow {
@@ -96,30 +79,9 @@ interface SubtitleRow {
     SubtitleFilenamePipe,
     PaginationComponent,
     MediaDetailSubtitleSearchModalComponent,
-    PopoverMenuComponent,
     SubtitleViewerModalComponent,
-    LucideArrowRightLeft,
-    LucideBadgeCheck,
-    LucideBan,
     LucideChevronDown,
-    LucideChevronRight,
-    LucideClock,
-    LucideCode,
-    LucideDownload,
-    LucideEye,
-    LucideFileText,
-    LucideImage,
-    LucideLanguages,
-    LucideMaximize2,
-    LucideMoveHorizontal,
-    LucidePlay,
-    LucideSmile,
-    LucideThermometer,
-    LucideTrash2,
     LucideUpload,
-    LucideVolume2,
-    LucideWandSparkles,
-    LucideZap,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitles-modal.html',
@@ -154,42 +116,7 @@ export class SubtitlesModalComponent {
   readonly subtitlesLoading = signal(false);
   readonly subtitleActionBusy = signal(false);
 
-  /** Row whose Actions popover is currently open. `null` when closed.
-   *  A single popover instance is reused for every row; `actionsSub()`
-   *  resolves the active row's data inside the popover template. */
-  readonly actionsOpenForId = signal<number | null>(null);
-  readonly actionsAnchor = signal<HTMLElement | null>(null);
-  /** Drives the actions popover's `[open]`. Kept separate from
-   *  `actionsOpenForId` so the content stays rendered through the slide-down
-   *  exit — the row id (content source) is cleared only once `(closed)` fires
-   *  after the animation, so the menu's buttons don't flip mid-slide. */
-  readonly actionsMenuOpen = signal(false);
-  readonly actionsSub = computed(() => {
-    const id = this.actionsOpenForId();
-    return id == null ? null : this.subtitles().find((s) => s.id === id) ?? null;
-  });
-  /** The open row is an image-based (burn-required) track — offer OCR instead
-   *  of the text-only post-processing actions. */
-  readonly actionsSubIsImage = computed(() =>
-    isImageBasedSubtitleCodec(this.actionsSub()?.codec),
-  );
-  /** The open image track has an OCR path (PGS/VobSub) — offer extraction.
-   *  Image codecs without one (DVB/XSUB) only get the burn-in note. */
-  readonly actionsSubIsOcrable = computed(() =>
-    isOcrSupportedSubtitleCodec(this.actionsSub()?.codec),
-  );
-  /** Embedded tracks have no sidecar file: blacklist/delete don't apply. */
-  readonly actionsSubIsEmbedded = computed(
-    () => this.actionsSub()?.providerType === 'embedded',
-  );
-  /** The open row resolves to text cues: a sidecar file or an embedded text
-   *  track (extracted on demand), never an image track. Gates every action that
-   *  needs the cues themselves — translate, view, download. */
-  readonly actionsSubHasTextCues = computed(() => {
-    const sub = this.actionsSub();
-    if (!sub || isImageBasedSubtitleCodec(sub.codec)) return false;
-    return !!sub.relativePath || sub.streamIndex != null;
-  });
+  private readonly cardActions = inject(CardActionsService);
 
   private readonly viewer =
     viewChild<SubtitleViewerModalComponent>('subtitleViewer');
@@ -235,78 +162,150 @@ export class SubtitlesModalComponent {
     return true;
   }
 
-  /** The "Corrections" flyout submenu (post-processing fixes) anchored to its
-   *  entry in the main actions menu. */
-  readonly correctionsMenuOpen = signal(false);
-  readonly correctionsAnchor = signal<HTMLElement | null>(null);
-  /** The "Décalage" flyout submenu (sync / adjust times / frame rate). */
-  readonly offsetMenuOpen = signal(false);
-  readonly offsetAnchor = signal<HTMLElement | null>(null);
+  /** Everything the row offers, as one declarative tree handed to the shared
+   *  actions panel: it renders the anchored dropdown on desktop and the sheet
+   *  (submenus swapping in place) on touch and TV. */
+  private buildSubActions(sub: SubtitleFileRow): CardAction[] {
+    const run = (fn: (s: SubtitleFileRow) => void) => () => fn(sub);
+    const embedded = sub.providerType === 'embedded';
+    const image = isImageBasedSubtitleCodec(sub.codec);
+    const hasTextCues =
+      !image && (!!sub.relativePath || sub.streamIndex != null);
+    const actions: CardAction[] = [];
+
+    if (image) {
+      actions.push(
+        isOcrSupportedSubtitleCodec(sub.codec)
+          ? {
+              labelKey: 'media_detail.action_ocr_extract',
+              icon: 'file-text',
+              run: run((s) => this.ocrSubtitle(s)),
+            }
+          : {
+              // Image codecs with no OCR path (DVB/XSUB) only get the note.
+              labelKey: 'media_detail.ocr_unavailable',
+              icon: 'file-text',
+              disabled: true,
+              run: () => {},
+            },
+      );
+    } else {
+      if (hasTextCues) {
+        actions.push({
+          labelKey: 'media_detail.action_view_subtitle',
+          icon: 'eye',
+          run: run((s) => this.viewSubtitle(s)),
+        });
+        if (this.canDownload()) {
+          actions.push({
+            labelKey: 'media_detail.action_download_subtitle',
+            icon: 'download',
+            href: this.subtitleDownloadUrl(sub),
+            download: this.subtitleDownloadName(sub),
+            run: () => {},
+          });
+        }
+        actions.push({
+          labelKey: 'media_detail.translate',
+          icon: 'languages',
+          run: run((s) => this.translateSubtitle(s)),
+        });
+      }
+      if (!embedded) {
+        actions.push(
+          {
+            labelKey: 'media_detail.change_language',
+            icon: 'arrow-right-left',
+            run: run((s) => this.changeLanguage(s)),
+          },
+          {
+            labelKey: 'media_detail.offset',
+            icon: 'move-horizontal',
+            run: () => {},
+            children: [
+              {
+                labelKey: 'media_detail.action_sync',
+                icon: 'play',
+                run: run((s) => this.openSyncModal(s.id)),
+              },
+              {
+                labelKey: 'media_detail.action_adjust_times',
+                icon: 'clock',
+                run: run((s) => this.openAdjustModal(s.id)),
+              },
+              {
+                labelKey: 'media_detail.action_change_fps',
+                icon: 'zap',
+                run: run((s) => this.openFpsModal(s.id)),
+              },
+            ],
+          },
+          {
+            labelKey: 'media_detail.corrections',
+            icon: 'wand-sparkles',
+            run: () => {},
+            children: (
+              [
+                ['media_detail.action_remove_hi', 'volume-2', 'removeHiTags'],
+                ['media_detail.action_remove_style', 'code', 'removeStyleTags'],
+                ['media_detail.action_remove_emoji', 'smile', 'removeEmoji'],
+                ['media_detail.action_ocr_fixes', 'image', 'ocrFixes'],
+                ['media_detail.action_common_fixes', 'thermometer', 'commonFixes'],
+                ['media_detail.action_fix_uppercase', 'maximize-2', 'fixUppercase'],
+                ['media_detail.action_reverse_rtl', 'arrow-right-left', 'reverseRtl'],
+                ['media_detail.action_convert_srt', 'file-text', 'convertToSrt'],
+              ] as const
+            ).map(([labelKey, icon, action]) => ({
+              labelKey,
+              icon,
+              run: run((s) =>
+                this.postProcessSubtitle({ subtitleId: s.id, action }),
+              ),
+            })),
+          },
+        );
+        if ((sub.score ?? 0) !== 100) {
+          actions.push({
+            labelKey: 'media_detail.action_validate',
+            icon: 'badge-check',
+            tone: 'success',
+            run: run((s) => this.validateSubtitle(s)),
+          });
+        }
+      }
+    }
+
+    if (!embedded) {
+      actions.push(
+        {
+          labelKey: 'media_detail.action_blacklist',
+          icon: 'ban',
+          tone: 'warning',
+          section: 'remove',
+          run: run((s) => this.blacklistSubtitle(s)),
+        },
+        {
+          labelKey: 'media_detail.action_delete',
+          icon: 'trash-2',
+          tone: 'danger',
+          section: 'remove',
+          run: run((s) => this.deleteSubtitle(s.id)),
+        },
+      );
+    }
+    return actions;
+  }
 
   protected openSubActions(sub: SubtitleFileRow, anchor: HTMLElement) {
-    this.actionsAnchor.set(anchor);
-    this.actionsOpenForId.set(sub.id);
-    this.actionsMenuOpen.set(true);
-  }
-  /** `(closed)` handler — fires after the slide-down completes, so the row's
-   *  data is safe to drop here. */
-  protected closeSubActions() {
-    this.actionsMenuOpen.set(false);
-    this.actionsOpenForId.set(null);
-    this.actionsAnchor.set(null);
-    this.correctionsMenuOpen.set(false);
-    this.correctionsAnchor.set(null);
-    this.offsetMenuOpen.set(false);
-    this.offsetAnchor.set(null);
-  }
-  protected runSubAction(action: (sub: SubtitleFileRow) => void): void {
-    const sub = this.actionsSub();
-    if (!sub) return;
-    // Start the close animation but keep the row's data until `(closed)` clears
-    // it, so the menu's buttons don't flip while the sheet slides out.
-    this.correctionsMenuOpen.set(false);
-    this.offsetMenuOpen.set(false);
-    this.actionsMenuOpen.set(false);
-    action(sub);
+    this.cardActions.register({
+      actions: this.buildSubActions(sub),
+      anchor,
+      title: formatSubtitleLabel(sub, this.translate),
+      placement: 'button',
+    });
+    this.cardActions.show();
   }
 
-  /** Open the Corrections flyout beside its entry (keeps the main menu open). */
-  protected openCorrections(anchor: HTMLElement) {
-    this.offsetMenuOpen.set(false);
-    this.correctionsAnchor.set(anchor);
-    this.correctionsMenuOpen.set(true);
-  }
-  protected closeCorrections() {
-    this.correctionsMenuOpen.set(false);
-    this.correctionsAnchor.set(null);
-  }
-  /** Run a correction, then close both the flyout and the main menu. */
-  protected runCorrection(action: (sub: SubtitleFileRow) => void): void {
-    const sub = this.actionsSub();
-    if (!sub) return;
-    this.correctionsMenuOpen.set(false);
-    this.actionsMenuOpen.set(false);
-    action(sub);
-  }
-
-  /** Open the Décalage flyout beside its entry (keeps the main menu open). */
-  protected openOffset(anchor: HTMLElement) {
-    this.correctionsMenuOpen.set(false);
-    this.offsetAnchor.set(anchor);
-    this.offsetMenuOpen.set(true);
-  }
-  protected closeOffset() {
-    this.offsetMenuOpen.set(false);
-    this.offsetAnchor.set(null);
-  }
-  /** Run a timing action, then close both the flyout and the main menu. */
-  protected runOffset(action: (sub: SubtitleFileRow) => void): void {
-    const sub = this.actionsSub();
-    if (!sub) return;
-    this.offsetMenuOpen.set(false);
-    this.actionsMenuOpen.set(false);
-    action(sub);
-  }
   readonly subSearchLang = signal('en');
   readonly subSearchResults = signal<SubtitleSearchResult[]>([]);
   readonly subSearchLoading = signal(false);
