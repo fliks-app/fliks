@@ -3,6 +3,8 @@ import {
   SubtitleProviderInterface,
   SubtitleSearchParams,
   SubtitleSearchResult,
+  SubtitleProviderTestResult,
+  testResultFromResponse,
 } from './subtitle-provider.interface';
 import {
   isRateLimited,
@@ -143,12 +145,15 @@ export class OpenSubtitlesProvider implements SubtitleProviderInterface {
     return Buffer.from(await fileRes.arrayBuffer());
   }
 
-  async testConnection(settings: Record<string, unknown>): Promise<boolean> {
+  async testConnection(
+    settings: Record<string, unknown>,
+  ): Promise<SubtitleProviderTestResult> {
     const apiKey = (settings.apiKey as string)?.trim() || this.apiKey;
     const username = (settings.username as string) || this.settings.username;
     const password = (settings.password as string) || this.settings.password;
 
-    if (!username || !password) return false;
+    if (!username || !password)
+      return { ok: false, detail: 'missing username or password' };
 
     const res = await fetch('https://api.opensubtitles.com/api/v1/login', {
       method: 'POST',
@@ -160,7 +165,7 @@ export class OpenSubtitlesProvider implements SubtitleProviderInterface {
       body: JSON.stringify({ username, password }),
     });
 
-    return res.ok;
+    return testResultFromResponse(res);
   }
 
   private async ensureToken(): Promise<void> {

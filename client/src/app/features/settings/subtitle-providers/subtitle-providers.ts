@@ -389,18 +389,17 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
 
   readonly testConnection = async (draft: ProviderDraft): Promise<ProviderTestResult> => {
     try {
-      const ok = await firstValueFrom(
-        this.http.post<boolean>('/api/subtitles/providers/test-connection', {
+      const { ok, detail } = await firstValueFrom(
+        this.http.post<{ ok: boolean; detail?: string }>('/api/subtitles/providers/test-connection', {
           type: draft.implementation,
           settings: this.trimSettings(draft.settings),
         }),
       );
-      return {
-        ok,
-        message: this.translate.instant(
-          ok ? 'settings.subtitle_providers.test_success' : 'settings.subtitle_providers.test_failed',
-        ),
-      };
+      const verdict = this.translate.instant(
+        ok ? 'settings.subtitle_providers.test_success' : 'settings.subtitle_providers.test_failed',
+      );
+      // `detail` is the provider's own reason (HTTP status, missing credential) — kept verbatim.
+      return { ok, message: detail ? `${verdict} — ${detail}` : verdict };
     } catch {
       return { ok: false, message: this.translate.instant('settings.subtitle_providers.test_network_error') };
     }

@@ -3,6 +3,8 @@ import {
   SubtitleProviderInterface,
   SubtitleSearchParams,
   SubtitleSearchResult,
+  SubtitleProviderTestResult,
+  testResultFromResponse,
 } from './subtitle-provider.interface';
 import { isRateLimited, rateLimitedFetch } from './rate-limiter';
 
@@ -125,11 +127,11 @@ export class GestdownProvider implements SubtitleProviderInterface {
     return Buffer.from(await res.arrayBuffer());
   }
 
-  async testConnection(): Promise<boolean> {
+  async testConnection(): Promise<SubtitleProviderTestResult> {
     const res = await fetch(`${BASE_URL}/shows/search/test`, {
       headers: { 'User-Agent': USER_AGENT },
     });
-    return res.ok;
+    return testResultFromResponse(res);
   }
 
   /**

@@ -17,7 +17,6 @@ import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleProviderType } from '../../common/enums/subtitle-provider-type.enum';
 import { hasServableTextSub } from '../../common/constants/subtitle-codecs';
 import { SubtitleProviderService } from './subtitle-provider.service';
-import { SubtitleProviderFactory } from './providers/subtitle-provider.factory';
 import { SubtitlesService } from './subtitles.service';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
@@ -50,7 +49,6 @@ export class SubtitleActivityController {
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly providerService: SubtitleProviderService,
-    private readonly factory: SubtitleProviderFactory,
     private readonly subtitlesService: SubtitlesService,
   ) {}
 
@@ -183,25 +181,17 @@ export class SubtitleActivityController {
     const results = [];
 
     for (const provider of providers) {
-      try {
-        const impl = this.factory.create(provider.type, provider.settings);
-        const ok = await impl.testConnection(provider.settings);
-        results.push({
-          id: provider.id,
-          name: provider.name,
-          type: provider.type,
-          ok,
-          error: null,
-        });
-      } catch (err) {
-        results.push({
-          id: provider.id,
-          name: provider.name,
-          type: provider.type,
-          ok: false,
-          error: String(err),
-        });
-      }
+      const { ok, detail } = await this.providerService.testConnection(
+        provider.type,
+        provider.settings,
+      );
+      results.push({
+        id: provider.id,
+        name: provider.name,
+        type: provider.type,
+        ok,
+        error: detail ?? null,
+      });
     }
 
     return results;

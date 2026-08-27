@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubtitleProvider } from './entities/subtitle-provider.entity';
 import { CreateSubtitleProviderDto } from './dto/create-subtitle-provider.dto';
 import { UpdateSubtitleProviderDto } from './dto/update-subtitle-provider.dto';
 import { SubtitleProviderFactory } from './providers/subtitle-provider.factory';
+import { SubtitleProviderTestResult } from './providers/subtitle-provider.interface';
 import { mergeSecretFields, redactSecretFields } from '../../common/utils/secret-fields.util';
 
 /** The credential keys the provider implementations read; `username` is an identifier, not a secret. */
@@ -20,6 +21,8 @@ export function redactProviderSecrets(provider: SubtitleProvider): SubtitleProvi
 
 @Injectable()
 export class SubtitleProviderService {
+  private readonly logger = new Logger(SubtitleProviderService.name);
+
   constructor(
     @InjectRepository(SubtitleProvider)
     private readonly repo: Repository<SubtitleProvider>,
@@ -77,17 +80,37 @@ export class SubtitleProviderService {
     await this.repo.remove(provider);
   }
 
-  async testProvider(id: number): Promise<boolean> {
+  async testProvider(id: number): Promise<SubtitleProviderTestResult> {
     const provider = await this.findOne(id);
-    const impl = this.factory.create(provider.type, provider.settings);
-    return impl.testConnection(provider.settings);
+    return this.testConnection(provider.type, provider.settings);
   }
 
+  // Every probe funnels through here: the implementations let their failures throw so the
+  // reason survives, and this is the one place that turns it into a verdict and a log line.
   async testConnection(
     type: import('../../common/enums').SubtitleProviderType,
     settings: Record<string, unknown>,
-  ): Promise<boolean> {
-    const impl = this.factory.create(type, settings);
-    return impl.testConnection(settings);
+  ): Promise<SubtitleProviderTestResult> {
+    try {
+      const result = await this.factory
+        .create(type, settings)
+        .testConnection(settings);
+      if (result.ok) {
+        this.logger.log(
+          `Connection test succeeded for subtitle provider "${type}"`,
+        );
+      } else {
+        this.logger.warn(
+          `Connection test failed for subtitle provider "${type}": ${result.detail ?? 'no detail'}`,
+        );
+      }
+      return result;
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `Connection test errored for subtitle provider "${type}": ${detail}`,
+      );
+      return { ok: false, detail };
+    }
   }
 }
