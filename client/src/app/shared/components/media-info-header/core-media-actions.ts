@@ -146,7 +146,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
       weight: 10,
       labelKey: 'media_detail.analyze',
       icon: 'scan-line',
-      when: ['isAdmin'],
+      when: ['isAdmin', 'surface:detail'],
       action: { kind: 'action', actionId: 'media.analyze' },
     },
     {
@@ -158,7 +158,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
       weight: 20,
       labelKey: 'media_detail.edit_profiles',
       icon: 'settings',
-      when: ['hasPermission:media.edit', '!isEpisode'],
+      when: ['hasPermission:media.edit', '!isEpisode', 'surface:detail'],
       action: { kind: 'action', actionId: 'media.edit-profiles' },
     },
     {
@@ -167,7 +167,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
       weight: 30,
       labelKey: 'media_detail.edit_library',
       icon: 'folder',
-      when: ['hasPermission:media.edit', '!isEpisode'],
+      when: ['hasPermission:media.edit', '!isEpisode', 'surface:detail'],
       action: { kind: 'action', actionId: 'media.edit-library' },
     },
     {
@@ -240,7 +240,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     weight: 700,
     labelKey: 'media_detail.edit_subtitles',
     icon: 'captions',
-    when: ['mediaType:movie'],
+    when: ['mediaType:movie', 'surface:detail'],
     action: { kind: 'action', actionId: 'media.edit-subtitles' },
   },
   {
@@ -249,7 +249,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     weight: 700,
     labelKey: 'media_detail.edit_subtitles',
     icon: 'captions',
-    when: ['isEpisode'],
+    when: ['isEpisode', 'surface:detail'],
     action: { kind: 'action', actionId: 'media.edit-subtitles' },
   },
   {

@@ -209,7 +209,6 @@ describe('MediaCardComponent — card.actions characterisation', () => {
       'recommend.menu_item',
       'media_detail.add_to_list',
       'media_card.mark_watched',
-      'media_detail.edit_subtitles',
       'media_detail.advanced_group',
     ]);
   });
@@ -227,7 +226,6 @@ describe('MediaCardComponent — card.actions characterisation', () => {
       'media_card.action_open',
       'recommend.menu_item',
       'media_detail.add_to_list',
-      'media_detail.edit_subtitles',
       'media_detail.advanced_group',
     ]);
   });
