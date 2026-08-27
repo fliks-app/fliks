@@ -19,6 +19,8 @@ import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.cache.CacheDataSource;
 import androidx.media3.datasource.cache.NoOpCacheEvictor;
 import androidx.media3.datasource.cache.SimpleCache;
+import androidx.media3.database.DatabaseProvider;
+import androidx.media3.exoplayer.offline.DefaultDownloadIndex;
 import androidx.media3.exoplayer.offline.Download;
 import androidx.media3.exoplayer.offline.DownloadManager;
 import androidx.media3.exoplayer.offline.DownloadNotificationHelper;
@@ -51,6 +53,8 @@ public class FlixDownloadUtil {
     private static int maxParallelDownloads = 3;
 
     private static SimpleCache cache;
+    private static DatabaseProvider databaseProvider;
+    private static DefaultDownloadIndex downloadIndex;
     private static DownloadManager downloadManager;
     private static DownloadNotificationHelper notificationHelper;
     private static String authToken;
@@ -68,13 +72,32 @@ public class FlixDownloadUtil {
         }
     }
 
+    /** One SQLite helper for the whole app. The cache, the manager and the
+     *  index all sit on the same database file; handing each its own helper is
+     *  how you end up with locking surprises. */
+    public static synchronized DatabaseProvider getDatabaseProvider(Context ctx) {
+        if (databaseProvider == null) {
+            databaseProvider = new StandaloneDatabaseProvider(ctx.getApplicationContext());
+        }
+        return databaseProvider;
+    }
+
+    /** The persistent download table. Readable straight away, unlike the
+     *  DownloadManager, which loads it asynchronously after construction. */
+    public static synchronized DefaultDownloadIndex getDownloadIndex(Context ctx) {
+        if (downloadIndex == null) {
+            downloadIndex = new DefaultDownloadIndex(getDatabaseProvider(ctx));
+        }
+        return downloadIndex;
+    }
+
     public static synchronized SimpleCache getCache(Context ctx) {
         if (cache == null) {
             File cacheDir = new File(ctx.getFilesDir(), "fliks-offline");
             cache = new SimpleCache(
                 cacheDir,
                 new NoOpCacheEvictor(),
-                new StandaloneDatabaseProvider(ctx)
+                getDatabaseProvider(ctx)
             );
         }
         return cache;
@@ -85,7 +108,7 @@ public class FlixDownloadUtil {
             ensureChannel(ctx);
             downloadManager = new DownloadManager(
                 ctx,
-                new StandaloneDatabaseProvider(ctx),
+                getDatabaseProvider(ctx),
                 getCache(ctx),
                 buildHttpDataSourceFactory(),
                 Executors.newFixedThreadPool(MAX_SUPPORTED_PARALLEL)

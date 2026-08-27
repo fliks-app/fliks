@@ -105,15 +105,17 @@ export class DownloadNotificationService {
   }
 
   /** Update the copy on the iOS Live Activity tracking the download queue.
-   *  No-op on Android, which builds its own foreground-service notification. */
+   *  Gated on the platform, not on the method existing: registerPlugin hands
+   *  back a proxy that fabricates a wrapper for any name, so an Android call
+   *  would cross the bridge only to be rejected as unimplemented. */
   setActivityCopy(copy: DownloadActivityCopy): void {
-    if (!DownloadNotification?.setActivityCopy) return;
+    if (!DownloadNotification || Capacitor.getPlatform() !== 'ios') return;
     DownloadNotification.setActivityCopy(copy).catch(() => {});
   }
 
   /** Cap how many transfers the native daemon runs at once. */
   setMaxConcurrentDownloads(max: number): void {
-    if (!DownloadNotification?.setMaxConcurrentDownloads) return;
+    if (!this.isNative || !DownloadNotification) return;
     DownloadNotification.setMaxConcurrentDownloads({ max }).catch(() => {});
   }
 

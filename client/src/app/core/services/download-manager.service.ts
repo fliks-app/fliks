@@ -144,7 +144,7 @@ export class DownloadManagerService {
    * is the only time the wording can change.
    */
   private syncActivityCopy() {
-    if (!this.isNative) return;
+    if (Capacitor.getPlatform() !== 'ios') return;
     const active = this.cache
       .load()
       .filter((t) => DownloadManagerService.ACTIVE_STATUSES.includes(t.status));
@@ -551,9 +551,12 @@ export class DownloadManagerService {
         void this.preDownloadSubtitles(task.id);
       } else {
         this.persistedProgress.set(task.id, native.progress);
+        // Anything the daemon is holding but not actively transferring reads
+        // as queued — ExoPlayer also parks downloads as `stopped` and
+        // `restarting`, and neither is progress the user should see counting.
         this.updateTaskStatus(
           task.id,
-          native.state === 'queued' ? 'queued' : 'downloading',
+          native.state === 'downloading' ? 'downloading' : 'queued',
           native.progress,
         );
       }
