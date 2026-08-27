@@ -11,7 +11,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { CurrencyPipe, DecimalPipe } from '@angular/common';
+import { CurrencyPipe, DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -23,9 +23,16 @@ import {
 } from '../../core/services/api/metadata.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
+import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
-import { RequestsService, TitleRequestState } from '../../core/services/api/requests.service';
+import {
+  RequestsService,
+  TitleRequestState,
+  FliksRequestRow,
+} from '../../core/services/api/requests.service';
+import { RequestDeclineModalComponent } from '../requests/request-decline-modal/request-decline-modal.component';
+import { RequestEditModalComponent } from '../requests/request-edit-modal/request-edit-modal.component';
 import { RequestModalComponent } from './components/request-modal/request-modal.component';
 import { ImportModalComponent } from './components/import-modal/import-modal.component';
 import { MediaType } from '../../core/enums/media-type.enum';
@@ -41,7 +48,7 @@ import { PreviewSeasonsComponent } from './components/preview-seasons/preview-se
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DecimalPipe, TranslateModule, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, ClampToggleDirective, CollapsibleSectionComponent, PreviewSeasonsComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
+  imports: [FormsModule, CurrencyPipe, DecimalPipe, NgTemplateOutlet, TranslateModule, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, ClampToggleDirective, CollapsibleSectionComponent, PreviewSeasonsComponent, RequestDeclineModalComponent, RequestEditModalComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tmdb-preview.html',
 })
@@ -52,6 +59,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   private readonly profilesApi = inject(ProfilesService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly requestsApi = inject(RequestsService);
+  private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   protected readonly navbar = inject(NavbarService);
   private readonly backgroundService = inject(BackgroundService);
@@ -115,8 +123,53 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     () => this.titleState()?.requestedSeasons ?? [],
   );
 
+  readonly canManageRequests = computed(() =>
+    this.auth.hasPermission('requests.manage'),
+  );
+
+  /** Pending requests on this title, for a manager. Importing while one is
+   *  open can leave it stranded: the lifecycle only adopts a request whose
+   *  profiles the imported envelope covers, so a narrower import leaves it
+   *  PENDING with the media already in the library. */
+  readonly pendingRequests = signal<FliksRequestRow[]>([]);
+
+  /** Whether a pending request makes a raw import the wrong move — the scope
+   *  rule `hasBlockingRequest` already applies to requesters: any pending
+   *  request for a movie, only a whole-series one for a series. */
+  readonly pendingBlocksImport = computed(() => {
+    const pending = this.pendingRequests();
+    if (!pending.length) return false;
+    return this.type() === 'series'
+      ? pending.some((r) => !r.seasons?.length)
+      : true;
+  });
+
+  /** The import button stands down while a pending request would be bypassed —
+   *  kept apart from `canImport`, which `canRequest` negates as a role test. */
+  readonly showImportButton = computed(
+    () => this.canImport() && !this.pendingBlocksImport(),
+  );
+
+  readonly declineForId = signal<number | null>(null);
+  readonly declineReasonText = signal('');
+  readonly actionBusyId = signal<number | null>(null);
+
+  readonly editingRequest = signal<FliksRequestRow | null>(null);
+  readonly editQualityProfileId = signal<number | null>(null);
+  readonly editLanguageProfileId = signal<number | null>(null);
+  readonly editLibraryId = signal<number | null>(null);
+  readonly editSaving = signal(false);
+
+  readonly compatibleLibraries = computed(() => {
+    const row = this.editingRequest();
+    if (!row) return [];
+    return this.libraries().filter((l) => l.mediaTypes.includes(row.mediaType));
+  });
+
   private readonly requestModal = viewChild(RequestModalComponent);
   private readonly importModal = viewChild(ImportModalComponent);
+  private readonly declineModal = viewChild(RequestDeclineModalComponent);
+  private readonly editModal = viewChild(RequestEditModalComponent);
   private readonly trailerDialog =
     viewChild<ElementRef<HTMLDialogElement>>('trailerDialog');
   private readonly sanitizer = inject(DomSanitizer);
@@ -205,9 +258,9 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     const provider = this.provider();
     const externalId = this.externalId();
 
-    // Only the request flow needs profiles+libraries pre-loaded on the page
-    // (the import modal loads its own data on open).
-    if (this.canRequest()) {
+    // Feeds the request form and the manager's edit modal; the import modal
+    // loads its own data on open.
+    if (this.canRequest() || this.canManageRequests()) {
       const [qp, lp, libs] = await Promise.all([
         this.profilesApi.getQualityProfiles(),
         this.profilesApi.getLanguageProfiles(),
@@ -226,6 +279,9 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
       // import never see the "déjà demandé" badge anyway.
       if (this.canRequest()) {
         await this.loadTitleState(details.tmdbId);
+      }
+      if (this.canManageRequests()) {
+        await this.loadPendingRequests(details.tmdbId);
       }
     } catch {
       this.error.set(this.translate.instant('discover.preview_error'));
@@ -261,6 +317,123 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
       provider: this.provider(),
       externalId: this.externalId(),
     });
+  }
+
+  /** Pending requests on this title, so a manager acts on the request instead
+   *  of importing past it. Bypasses the cache: an approve/decline here has to
+   *  be reflected on the next visit. */
+  private async loadPendingRequests(tmdbId: number) {
+    try {
+      const page = await this.requestsApi.list(
+        {
+          tmdbId,
+          mediaType: this.type() as MediaType,
+          status: 'pending',
+          kind: 'add',
+          limit: 50,
+        },
+        { force: true },
+      );
+      this.pendingRequests.set(page.data);
+    } catch {
+      /* a failed lookup must not block the page — the Add button stays */
+    }
+  }
+
+  private refreshPendingRequests() {
+    const m = this.media();
+    if (m) void this.loadPendingRequests(m.tmdbId);
+  }
+
+  async approveRequest(id: number) {
+    this.actionBusyId.set(id);
+    try {
+      await this.requestsApi.approve(id);
+      this.refreshPendingRequests();
+    } finally {
+      this.actionBusyId.set(null);
+    }
+  }
+
+  openDecline(id: number) {
+    this.declineForId.set(id);
+    this.declineReasonText.set('');
+    this.declineModal()?.showModal();
+  }
+
+  closeDecline() {
+    this.declineModal()?.close();
+    this.declineForId.set(null);
+  }
+
+  async submitDecline() {
+    const id = this.declineForId();
+    if (id == null) return;
+    this.actionBusyId.set(id);
+    try {
+      await this.requestsApi.decline(id, this.declineReasonText());
+      this.closeDecline();
+      this.refreshPendingRequests();
+    } finally {
+      this.actionBusyId.set(null);
+    }
+  }
+
+  openEdit(row: FliksRequestRow) {
+    this.editingRequest.set(row);
+    this.editQualityProfileId.set(row.qualityProfileId);
+    this.editLanguageProfileId.set(row.languageProfileId);
+    this.editLibraryId.set(row.libraryId);
+    this.editModal()?.showModal();
+  }
+
+  closeEdit() {
+    this.editModal()?.close();
+    this.editingRequest.set(null);
+  }
+
+  async saveEdit() {
+    const row = this.editingRequest();
+    if (!row) return;
+    this.editSaving.set(true);
+    try {
+      // Only send libraryId when it actually changed: re-sending an unchanged
+      // value would re-run the backend access check on a plain profile edit.
+      const libraryChanged = this.editLibraryId() !== row.libraryId;
+      await this.requestsApi.update(row.id, {
+        qualityProfileId: this.editQualityProfileId() ?? undefined,
+        languageProfileId: this.editLanguageProfileId() ?? undefined,
+        ...(libraryChanged ? { libraryId: this.editLibraryId() } : {}),
+      });
+      this.toast.success(this.translate.instant('requests.edit_success'));
+      this.closeEdit();
+      this.refreshPendingRequests();
+    } finally {
+      this.editSaving.set(false);
+    }
+  }
+
+  /** Season scope of a per-season request; empty for a whole-title one. */
+  seasonScope(row: FliksRequestRow): string {
+    return (row.seasons ?? []).join(', ');
+  }
+
+  /** Quality profile the requester picked. `#id` when the profile is gone —
+   *  losing the value entirely would hide what the request actually asks for. */
+  qualityProfileName(row: FliksRequestRow): string {
+    return this.profileName(this.qualityProfiles(), row.qualityProfileId);
+  }
+
+  languageProfileName(row: FliksRequestRow): string {
+    return this.profileName(this.languageProfiles(), row.languageProfileId);
+  }
+
+  private profileName(
+    profiles: { id: number; name: string }[],
+    id: number | null,
+  ): string {
+    if (id == null) return '';
+    return profiles.find((p) => p.id === id)?.name ?? `#${id}`;
   }
 
   openRequestModal() {

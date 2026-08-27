@@ -1,3 +1,48 @@
+<ng-template #pendingRequestsPanel>
+  @if (canManageRequests() && pendingRequests().length) {
+    <div class="mt-4 rounded-lg border border-warning/40 bg-warning/5 p-3 flex flex-col gap-3">
+      @for (r of pendingRequests(); track r.id) {
+        <div class="flex flex-col gap-1.5">
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span class="badge badge-warning badge-sm">{{ 'requests.status.pending' | translate }}</span>
+            <span class="text-sm">
+              <span class="text-base-content/50">{{ 'requests.requested_by' | translate }}</span>
+              <span class="font-medium">{{ r.user.username }}</span>
+            </span>
+            <span class="flex flex-wrap items-center gap-1 ms-auto">
+              <button type="button" class="btn btn-primary btn-sm"
+                      [disabled]="actionBusyId() === r.id" (click)="approveRequest(r.id)">
+                {{ 'requests.approve' | translate }}
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm"
+                      [disabled]="actionBusyId() === r.id" (click)="openEdit(r)">
+                {{ 'requests.edit' | translate }}
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm text-error"
+                      [disabled]="actionBusyId() === r.id" (click)="openDecline(r.id)">
+                {{ 'requests.decline' | translate }}
+              </button>
+            </span>
+          </div>
+          @if (seasonScope(r) || qualityProfileName(r) || languageProfileName(r)) {
+            <div class="flex flex-col gap-0.5 text-sm text-base-content/60">
+              @if (seasonScope(r)) {
+                <span>{{ 'requests.seasons_label' | translate }} {{ seasonScope(r) }}</span>
+              }
+              @if (qualityProfileName(r)) {
+                <span>{{ 'discover.quality_profile' | translate }}: {{ qualityProfileName(r) }}</span>
+              }
+              @if (languageProfileName(r)) {
+                <span>{{ 'discover.language_profile' | translate }}: {{ languageProfileName(r) }}</span>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</ng-template>
+
 @if (loading()) {
   <div class="flex justify-center py-16">
     <span class="loading loading-spinner loading-lg"></span>
@@ -44,7 +89,7 @@
 
       <!-- Action buttons -->
       <div class="flex flex-wrap items-center gap-3 mt-4">
-        @if (canImport()) {
+        @if (showImportButton()) {
           <button type="button" class="btn btn-primary flex-1 gap-2" (click)="openImportModal()">
             <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
           </button>
@@ -69,6 +114,7 @@
           {{ 'discover.seasons_already_requested' | translate:{ seasons: requestedSeasons().join(', ') } }}
         </p>
       }
+      <ng-container *ngTemplateOutlet="pendingRequestsPanel" />
 
       @if (m.overview) {
         <p [appClampToggle]="m.overview" #syn="clampToggle"
@@ -174,7 +220,7 @@
 
         <!-- Action buttons — order + sizing matching media-detail's row. -->
         <div class="flex flex-wrap items-center gap-2 mt-6">
-          @if (canImport()) {
+          @if (showImportButton()) {
             <button type="button" class="btn btn-primary gap-2" (click)="openImportModal()">
               <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
             </button>
@@ -199,6 +245,7 @@
             {{ 'discover.seasons_already_requested' | translate:{ seasons: requestedSeasons().join(', ') } }}
           </p>
         }
+        <ng-container *ngTemplateOutlet="pendingRequestsPanel" />
 
         @if (m.overview) {
           <p class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line">{{ m.overview }}</p>
@@ -349,3 +396,28 @@
 />
 
 <app-import-modal />
+<app-request-decline-modal
+  [requestId]="declineForId()"
+  [reasonText]="declineReasonText()"
+  [submitBusy]="actionBusyId() !== null"
+  (reasonTextChange)="declineReasonText.set($event)"
+  (dismissed)="closeDecline()"
+  (submitted)="submitDecline()"
+/>
+
+<app-request-edit-modal
+  [row]="editingRequest()"
+  [qualityProfiles]="qualityProfiles()"
+  [languageProfiles]="languageProfiles()"
+  [libraries]="compatibleLibraries()"
+  [qualityProfileId]="editQualityProfileId()"
+  [languageProfileId]="editLanguageProfileId()"
+  [libraryId]="editLibraryId()"
+  [saving]="editSaving()"
+  (qualityProfileIdChange)="editQualityProfileId.set($event)"
+  (languageProfileIdChange)="editLanguageProfileId.set($event)"
+  (libraryIdChange)="editLibraryId.set($event)"
+  (dismissed)="closeEdit()"
+  (save)="saveEdit()"
+/>
+
