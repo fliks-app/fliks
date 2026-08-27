@@ -32,8 +32,17 @@ jobs:
       - run: npm install --no-save @conventional-commits/parser@0.4.1
       - name: Check messages against release-please's parser
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.base_ref }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-        # On a push the range is the single new commit — which is the squash
-        # message, the one release-please will actually read.
-        run: node .github/scripts/check-commit-parse.mjs "${BASE:-$HEAD~1}..$HEAD"
+        # Judge a PR only on what it adds: the event's `base.sha` is frozen at
+        # PR creation, so on a long-lived branch it drags in everything already
+        # on main and re-reports history nobody can amend. On a push the range
+        # is the single new commit — the squash message release-please reads.
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            git fetch -q --depth=1000 origin "$BASE_REF"
+            range="origin/$BASE_REF..$HEAD"
+          else
+            range="$HEAD~1..$HEAD"
+          fi
+          node .github/scripts/check-commit-parse.mjs "$range"
