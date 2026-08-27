@@ -32,7 +32,9 @@
         <tbody>
           @for (nc of rows(); track nc.id) {
             <tr>
-              <td class="font-medium">{{ nc.name }}</td>
+              <td>
+                <button type="button" class="link link-hover font-medium" (click)="openEdit(nc)">{{ nc.name }}</button>
+              </td>
               <td><span class="badge badge-ghost badge-sm">{{ nc.type }}</span></td>
               <td class="text-sm text-base-content/60">{{ nc.events.length }} event(s)</td>
               <td>
@@ -43,9 +45,6 @@
                 }
               </td>
               <td class="text-end">
-                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(nc)">
-                  {{ 'settings.notifications.edit' | translate }}
-                </button>
                 <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(nc)">
                   {{ 'settings.notifications.delete' | translate }}
                 </button>

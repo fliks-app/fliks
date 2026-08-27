@@ -31,7 +31,9 @@
         <tbody>
           @for (cf of rows(); track cf.id) {
             <tr>
-              <td class="font-medium">{{ cf.name }}</td>
+              <td>
+                <button type="button" class="link link-hover font-medium" (click)="openEdit(cf)">{{ cf.name }}</button>
+              </td>
               <td>
                 <span
                   class="badge badge-sm"
@@ -44,9 +46,6 @@
               </td>
               <td class="text-sm text-base-content/60">{{ cf.specs.length }} spec(s)</td>
               <td class="text-end">
-                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(cf)">
-                  {{ 'settings.custom_formats.edit' | translate }}
-                </button>
                 <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(cf)">
                   {{ 'settings.custom_formats.delete' | translate }}
                 </button>

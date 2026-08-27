@@ -33,7 +33,9 @@
         <tbody>
           @for (row of rows(); track row.id) {
             <tr>
-              <td class="font-medium">{{ row.name }}</td>
+              <td>
+                <button type="button" class="link link-hover font-medium" (click)="openEdit(row)">{{ row.name }}</button>
+              </td>
               <td><span class="badge badge-ghost badge-sm">{{ typeLabel(row.type) }}</span></td>
               <td class="text-sm text-base-content/60 truncate max-w-[12rem]">{{ row.url }}</td>
               <td class="text-sm text-base-content/60">{{ row.events.length }} event(s)</td>
@@ -45,9 +47,6 @@
                 }
               </td>
               <td class="text-end">
-                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(row)">
-                  {{ 'settings.media_servers.edit' | translate }}
-                </button>
                 <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(row)">
                   {{ 'settings.media_servers.delete' | translate }}
                 </button>

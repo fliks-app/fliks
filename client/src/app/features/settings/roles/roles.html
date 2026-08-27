@@ -29,7 +29,9 @@
         <tbody>
           @for (role of rows(); track role.id) {
             <tr>
-              <td class="font-medium">{{ role.name }}</td>
+              <td>
+                <button type="button" class="link link-hover font-medium" (click)="openEdit(role)">{{ role.name }}</button>
+              </td>
               <td>
                 <div class="flex flex-wrap gap-1">
                   @for (perm of role.permissions; track perm) {
@@ -43,9 +45,6 @@
                 }
               </td>
               <td class="text-end">
-                <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(role)">
-                  {{ 'settings.users.edit' | translate }}
-                </button>
                 <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRole(role)">
                   {{ 'settings.users.delete' | translate }}
                 </button>
