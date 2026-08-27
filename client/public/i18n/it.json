@@ -1391,6 +1391,7 @@
     "offline": "Offline",
     "confirm_delete": "Eliminare questo download? Il file verrà eliminato da questo dispositivo.",
     "retry": "Riprova",
+    "notif_progress": "Download in corso",
     "notif_complete": "Download completato",
     "notif_failed": "Download fallito"
   },

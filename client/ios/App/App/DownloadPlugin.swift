@@ -1,3 +1,4 @@
+import ActivityKit
 import Capacitor
 import AVFoundation
 import UIKit
@@ -73,7 +74,20 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
     private var completedIds: Set<String> = []
     /// id → notification strings supplied by the WebView (already localized via
     /// ngx-translate so no user-facing text is hardcoded in native).
-    private var notifById: [String: (title: String, complete: String, failed: String)] = [:]
+    private var notifById: [String: NotifCopy] = [:]
+    /// id → the download's Live Activity, while one is running.
+    private var activities: [String: Activity<DownloadActivityAttributes>] = [:]
+    /// id → progress last pushed to the Live Activity. ActivityKit budgets
+    /// updates, and the delegate fires far more often than the bar can move
+    /// visibly, so pushes are coalesced into 1-point steps.
+    private var activityProgress: [String: Int] = [:]
+
+    struct NotifCopy {
+        let title: String
+        let progress: String
+        let complete: String
+        let failed: String
+    }
 
     override public func load() {
         // Restore the persisted id → relative-path map so completed downloads
@@ -147,7 +161,12 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         if let title = call.getString("notifTitle"),
            let complete = call.getString("notifComplete"),
            let failed = call.getString("notifFailed") {
-            notifById[id] = (title, complete, failed)
+            notifById[id] = NotifCopy(
+                title: title,
+                progress: call.getString("notifProgress") ?? complete,
+                complete: complete,
+                failed: failed
+            )
         }
 
         let asset = AVURLAsset(url: url, options: assetOptions.isEmpty ? nil : assetOptions)
@@ -199,6 +218,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
                     task.taskDescription = id
                     self.activeTasks[id] = task
                     self.progressById[id] = 0
+                    self.startActivity(id: id)
                     task.resume()
                 }
             }
@@ -237,6 +257,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         activeTasks.removeValue(forKey: id)
         progressById.removeValue(forKey: id)
         completedIds.remove(id)
+        cancelActivity(id: id)
         notifById.removeValue(forKey: id)
 
         // Delete the on-disk bundle (resolved from the stored relative path).
@@ -359,6 +380,8 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         let progress = expected > 0 ? Float(loadedDuration / expected) * 100 : 0
         progressById[id] = progress
 
+        updateActivity(id: id, progress: progress)
+
         notifyListeners("downloadProgress", data: [
             "id": id,
             "progress": Int(progress),
@@ -383,6 +406,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             persistAssetState()
             NSLog("[Download] task \(id) failed: [\(error.domain) \(error.code)] \(error.localizedDescription)")
             notifyListeners("downloadFailed", data: ["id": id, "progress": 0, "state": "failed"])
+            endActivity(id: id, success: false)
             postNotification(id: id, success: false)
         } else if error == nil {
             progressById[id] = 100
@@ -394,6 +418,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
                 "state": "completed",
                 "localUrl": resolvedAssetURL(id: id)?.absoluteString ?? "",
             ])
+            endActivity(id: id, success: true)
             postNotification(id: id, success: true)
         }
         // NSURLErrorCancelled == user-initiated removeDownload; stay silent.
@@ -406,6 +431,76 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             BackgroundDownloadCompletion.handler?()
             BackgroundDownloadCompletion.handler = nil
         }
+    }
+
+    // MARK: - Live Activity
+
+    /// Publish the download's Live Activity — a lock-screen card and, on the
+    /// models that have one, the Dynamic Island. Silently skipped when the user
+    /// has Live Activities turned off, which is the documented failure mode.
+    private func startActivity(id: String) {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled,
+              let copy = notifById[id],
+              activities[id] == nil else { return }
+        do {
+            activities[id] = try Activity.request(
+                attributes: DownloadActivityAttributes(title: copy.title),
+                content: .init(
+                    state: .init(progress: 0, status: copy.progress, finished: false),
+                    staleDate: nil
+                )
+            )
+            activityProgress[id] = 0
+        } catch {
+            NSLog("[Download] Live Activity refused for \(id): \(error.localizedDescription)")
+        }
+    }
+
+    private func updateActivity(id: String, progress: Float) {
+        guard let activity = activities[id], let copy = notifById[id] else { return }
+        let percent = Int(progress)
+        guard percent != activityProgress[id] else { return }
+        activityProgress[id] = percent
+        Task {
+            await activity.update(
+                .init(
+                    state: .init(
+                        progress: Double(progress) / 100,
+                        status: copy.progress,
+                        finished: false
+                    ),
+                    staleDate: nil
+                )
+            )
+        }
+    }
+
+    /// Show the outcome briefly, then let the system retire the card.
+    private func endActivity(id: String, success: Bool) {
+        guard let activity = activities.removeValue(forKey: id) else { return }
+        let copy = notifById[id]
+        activityProgress.removeValue(forKey: id)
+        Task {
+            await activity.end(
+                .init(
+                    state: .init(
+                        progress: success ? 1 : 0,
+                        status: success ? (copy?.complete ?? "") : (copy?.failed ?? ""),
+                        finished: true
+                    ),
+                    staleDate: nil
+                ),
+                dismissalPolicy: .after(.now + 5)
+            )
+        }
+    }
+
+    /// The user deleted the download — retire the card at once, with no outcome
+    /// to report.
+    private func cancelActivity(id: String) {
+        guard let activity = activities.removeValue(forKey: id) else { return }
+        activityProgress.removeValue(forKey: id)
+        Task { await activity.end(nil, dismissalPolicy: .immediate) }
     }
 
     // MARK: - Notifications

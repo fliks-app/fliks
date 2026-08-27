@@ -9,9 +9,11 @@ export interface NativeDownloadEvent {
   seq: number;
 }
 
-/** Pre-translated notification copy shown by the native download daemon (iOS). */
+/** Pre-translated notification copy shown by the native download daemon (iOS),
+ *  on the completion banner and on the download's Live Activity. */
 export interface DownloadNotifStrings {
   notifTitle: string;
+  notifProgress: string;
   notifComplete: string;
   notifFailed: string;
 }

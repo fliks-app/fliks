@@ -275,6 +275,7 @@ export class DownloadManagerService {
       const notifTitle = episode ? `${title} · ${episode}` : title;
       this.notif.startDownload(String(taskId), hlsUrl, token, {
         notifTitle,
+        notifProgress: this.translate.instant('downloads.notif_progress'),
         notifComplete: this.translate.instant('downloads.notif_complete'),
         notifFailed: this.translate.instant('downloads.notif_failed'),
       });
