@@ -600,6 +600,7 @@ export class MediaInfoHeaderComponent {
     isEpisode: !!this.episodeId(),
     isTv: this.tv.isTv(),
     isTouch: this.device.isTouch(),
+    surface: 'detail',
   }));
 
   /**

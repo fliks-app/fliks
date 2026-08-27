@@ -7,6 +7,8 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { Media } from '../../../core/services/api/media.service';
 import { Capacitor } from '@capacitor/core';
 import { computeMediaBarStatus, computeMediaBarPercent } from '../../utils/media-status.util';
+import { MediaService } from '../../../core/services/api/media.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { IdentifyModalService } from '../../../core/services/identify-modal.service';
 import { TrackingModalService } from '../../../core/services/tracking-modal.service';
 import { CardActionsDirective } from '../../directives/card-actions.directive';
@@ -54,6 +56,8 @@ export class MediaCardComponent {
   private readonly tv = inject(TvService);
   private readonly cardActionsService = inject(CardActionsService);
   private readonly addToPlaylist = inject(AddToPlaylistService);
+  private readonly mediaApi = inject(MediaService);
+  private readonly toast = inject(ToastService);
   private readonly identifyModal = inject(IdentifyModalService);
   private readonly trackingModal = inject(TrackingModalService);
   private readonly recommend = inject(RecommendService);
@@ -428,9 +432,6 @@ export class MediaCardComponent {
       if (mediaId == null) return;
       this.trackingModal.open(mediaId, this.media()?.type === 'series' ? { kind: 'series' } : { kind: 'movie' });
     },
-    'media.edit-profiles': () => this.goToDetail('profiles'),
-    'media.edit-library': () => this.goToDetail('library'),
-    'media.edit-subtitles': () => this.goToDetail('subtitles'),
     'media.identify': () => {
       const m = this.media();
       if (!m) return;
@@ -445,10 +446,14 @@ export class MediaCardComponent {
         imdbId: m.imdbId ?? null,
       });
     },
-    'media.analyze': () => this.goToDetail('analyze'),
-    // Not a modal, but routed like one: the refresh reports through the detail
-    // page's toast and SSE, so running it from a card would be silent.
-    'media.refresh-metadata': () => this.goToDetail('refresh'),
+    'media.refresh-metadata': () => {
+      const mediaId = this.media()?.id;
+      if (mediaId == null) return;
+      void this.mediaApi.refreshMetadata(mediaId).then(
+        () => this.toast.success(this.translate.instant('media_detail.refresh_launched')),
+        () => undefined, // the interceptor surfaces the failure
+      );
+    },
     'media.add-to-playlist': () => {
       const episodeId = this.playlistEpisodeId();
       const mediaId = this.media()?.id ?? this.playlistMediaId();
@@ -459,14 +464,6 @@ export class MediaCardComponent {
       this.recommend.open({ mediaId: mediaId!, episodeId: this.playlistEpisodeId() ?? undefined });
     },
   } satisfies MediaActionHandlers;
-
-  /** Opens one of the detail page's modals by deep link. */
-  private goToDetail(action: string) {
-    // The card already knows its own route; a hand-built path guesses wrong.
-    const link = this._link();
-    if (!link) return;
-    void this.router.navigate(link, { queryParams: { action } });
-  }
 
   /**
    * Actions exposed via the contextual panel (TV menu button / mobile long-press).
