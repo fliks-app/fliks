@@ -39,6 +39,10 @@ testem.log
 /typings
 __screenshots__/
 
+# Xcode build products — a derived-data path inside the repo is convenient for
+# simulator runs, but it is regenerated on every build.
+/ios/DerivedData*/
+
 # System files
 .DS_Store
 Thumbs.db
