@@ -17,7 +17,7 @@ export interface CardAction {
    */
   icon?: string;
   /** Optional tone applied to label + icon. */
-  tone?: 'default' | 'danger';
+  tone?: 'default' | 'danger' | 'warning' | 'success';
   /** Action invoked when the user activates this row. */
   run: () => void;
   /** Disabled rows render greyed out and can't be activated. */
@@ -27,6 +27,10 @@ export interface CardAction {
   section?: string;
   /** Renders the row as a link instead of a button. `run` is ignored. */
   route?: string;
+  /** Renders the row as a plain `<a href>` — for a file download, where the
+   *  anchor's `download` must survive a lost `Content-Disposition`. */
+  href?: string;
+  download?: string;
   /** Rows nested under this one; the row becomes a disclosure instead of an
    *  action. Never empty — the resolver drops a group that has nothing left. */
   children?: CardAction[];

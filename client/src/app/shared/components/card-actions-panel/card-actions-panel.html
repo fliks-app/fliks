@@ -7,97 +7,102 @@
 >
   @if (sheetSub(); as sub) {
     <div class="panel-slide-fwd">
-    <button type="button" class="dropdown-item mb-1" (click)="backToRoot()">
-      <svg lucideArrowLeft class="h-4 w-4 shrink-0 opacity-60"></svg>
-      <span class="flex-1 truncate text-left font-medium">{{ sub.labelKey ? (sub.labelKey | translate) : sub.label }}</span>
-    </button>
-    <div class="h-px bg-base-content/10 my-1" role="separator"></div>
-    <ng-container *ngTemplateOutlet="childRows; context: { $implicit: sub.children! }" />
+      <button type="button" class="dropdown-item mb-1" (click)="backToRoot()">
+        <svg lucideArrowLeft class="h-4 w-4 shrink-0 opacity-60"></svg>
+        <span class="flex-1 truncate text-left font-medium">{{ sub.labelKey ? (sub.labelKey | translate) : sub.label }}</span>
+      </button>
+      <div class="h-px bg-base-content/10 my-1" role="separator"></div>
+      <ng-container *ngTemplateOutlet="rows; context: { $implicit: sub.children! }" />
     </div>
   } @else {
     <div [class.panel-slide-back]="slide() === 'back'">
-    @if (title()) {
-      <div class="flex items-start gap-3 px-2 pb-3 mb-1 border-b border-base-content/10">
-        @if (imageUrl(); as img) {
-          <img [cachedSrc]="img | resolveUrl" alt="" loading="lazy"
-            class="shrink-0 rounded object-cover bg-base-300"
-            [style.width.px]="imageAspect() === 'landscape' ? 80 : 60"
-            [style.aspect-ratio]="imageAspect() === 'landscape' ? '16 / 9' : '2 / 3'" />
-        }
-        <div class="min-w-0">
-          <div class="text-sm font-semibold line-clamp-2">{{ title() }}</div>
-          @if (subtitle()) {
-            <div class="text-xs text-base-content/60 line-clamp-2">{{ subtitle() }}</div>
+      @if (title()) {
+        <div class="flex items-start gap-3 px-2 pb-3 mb-1 border-b border-base-content/10">
+          @if (imageUrl(); as img) {
+            <img [cachedSrc]="img | resolveUrl" alt="" loading="lazy"
+              class="shrink-0 rounded object-cover bg-base-300"
+              [style.width.px]="imageAspect() === 'landscape' ? 80 : 60"
+              [style.aspect-ratio]="imageAspect() === 'landscape' ? '16 / 9' : '2 / 3'" />
           }
+          <div class="min-w-0">
+            <div class="text-sm font-semibold line-clamp-2">{{ title() }}</div>
+            @if (subtitle()) {
+              <div class="text-xs text-base-content/60 line-clamp-2">{{ subtitle() }}</div>
+            }
+          </div>
         </div>
-      </div>
-    }
-    @for (a of actions(); track $index; let i = $index) {
-      @if (i > 0 && a.section !== actions()[i - 1].section) {
-        <div class="h-px bg-base-content/10 my-1" role="separator"></div>
       }
-      @if (a.children?.length) {
-        <button
-          #subTrigger
-          type="button"
-          class="dropdown-item"
-          [attr.aria-expanded]="isOpen(a)"
-          (click)="openSub(a, subTrigger)"
-        >
-          <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
-          <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
-          <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60"></svg>
-        </button>
-        <!-- Desktop only: in sheet mode the group takes over the panel above
-             instead, since a second sheet would stack on top of this one. -->
-        <app-popover-menu
-          [open]="isOpen(a)"
-          [anchor]="subAnchor()"
-          placement="right-start"
-          [submenu]="true"
-          [width]="width()"
-          (closed)="closeSub()"
-        >
-          <ng-container *ngTemplateOutlet="childRows; context: { $implicit: a.children! }" />
-        </app-popover-menu>
-      } @else if (a.route) {
-        <a
-          [routerLink]="a.route"
-          class="dropdown-item"
-          [class.text-error]="a.tone === 'danger'"
-          (click)="closeForRoute()"
-        >
-          <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
-          <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
-        </a>
-      } @else {
-        <button
-          type="button"
-          class="dropdown-item"
-          [class.text-error]="a.tone === 'danger'"
-          [disabled]="a.disabled"
-          (click)="trigger(a)"
-        >
-          <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
-          <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
-        </button>
+      @for (a of actions(); track $index; let i = $index) {
+        @if (i > 0 && a.section !== actions()[i - 1].section) {
+          <div class="h-px bg-base-content/10 my-1" role="separator"></div>
+        }
+        @if (a.children?.length) {
+          <button
+            #subTrigger
+            type="button"
+            class="dropdown-item"
+            [attr.aria-expanded]="isOpen(a)"
+            (click)="openSub(a, subTrigger)"
+          >
+            <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
+            <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
+            <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60"></svg>
+          </button>
+          <!-- Desktop only: in sheet mode the group takes over the panel above
+               instead, since a second sheet would stack on top of this one. -->
+          <app-popover-menu
+            [open]="isOpen(a)"
+            [anchor]="subAnchor()"
+            placement="right-start"
+            [submenu]="true"
+            [width]="width()"
+            (closed)="closeSub()"
+          >
+            <ng-container *ngTemplateOutlet="rows; context: { $implicit: a.children! }" />
+          </app-popover-menu>
+        } @else {
+          <ng-container *ngTemplateOutlet="row; context: { $implicit: a }" />
+        }
       }
-    }
     </div>
   }
 </app-popover-menu>
 
-<ng-template #childRows let-children>
-  @for (child of children; track $index) {
+<ng-template #rows let-list>
+  @for (a of list; track $index) {
+    <ng-container *ngTemplateOutlet="row; context: { $implicit: a }" />
+  }
+</ng-template>
+
+<!-- One leaf row, rendered as a download link, a router link or a button. -->
+<ng-template #row let-a>
+  @if (a.href) {
+    <a class="dropdown-item" [href]="a.href" [attr.download]="a.download" (click)="closeForRoute()">
+      <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
+      <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
+    </a>
+  } @else if (a.route) {
+    <a
+      [routerLink]="a.route"
+      class="dropdown-item"
+      [class.text-error]="a.tone === 'danger'"
+      (click)="closeForRoute()"
+    >
+      <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
+      <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
+    </a>
+  } @else {
     <button
       type="button"
       class="dropdown-item"
-      [class.text-error]="child.tone === 'danger'"
-      [disabled]="child.disabled"
-      (click)="trigger(child)"
+      [class.text-error]="a.tone === 'danger'"
+      [class.text-warning]="a.tone === 'warning'"
+      [class.text-success]="a.tone === 'success'"
+      [disabled]="a.disabled"
+      (click)="trigger(a)"
     >
-      <ng-container *ngTemplateOutlet="icon; context: { $implicit: child }" />
-      <span class="flex-1 truncate text-left">{{ child.labelKey ? (child.labelKey | translate) : child.label }}</span>
+      <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
+      <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
     </button>
   }
 </ng-template>
@@ -127,6 +132,21 @@
     @case ('sliders-horizontal') { <svg lucideSlidersHorizontal class="h-4 w-4 shrink-0 opacity-70"></svg> }
     @case ('heart') { <svg lucideHeart class="h-4 w-4 shrink-0 opacity-70"></svg> }
     @case ('download') { <svg lucideDownload class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('file-text') { <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('languages') { <svg lucideLanguages class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('arrow-right-left') { <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('move-horizontal') { <svg lucideMoveHorizontal class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('wand-sparkles') { <svg lucideWandSparkles class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('badge-check') { <svg lucideBadgeCheck class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('ban') { <svg lucideBan class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('volume-2') { <svg lucideVolume2 class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('code') { <svg lucideCode class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('smile') { <svg lucideSmile class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('image') { <svg lucideImage class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('thermometer') { <svg lucideThermometer class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('maximize-2') { <svg lucideMaximize2 class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('clock') { <svg lucideClock class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('zap') { <svg lucideZap class="h-4 w-4 shrink-0 opacity-70"></svg> }
     @default { <svg lucideCircle class="h-4 w-4 shrink-0 opacity-70"></svg> }
   }
 </ng-template>
