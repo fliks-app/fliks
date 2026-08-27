@@ -55,6 +55,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         CAPPluginMethod(name: "resumeDownloads", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setActivityCopy", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMaxConcurrentDownloads", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "dismissActivity", returnType: CAPPluginReturnPromise),
     ]
 
     /// Concurrent transfers. HLS aggregate downloads are segment-chatty, so a
@@ -473,6 +474,18 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         call.resolve()
     }
 
+    /// Retire the queue's Live Activity, whatever state this process thinks it
+    /// is in. The WebView calls it once nothing is downloading any more — after
+    /// a force-quit that is the only reliable moment, since no code runs at
+    /// termination and `Activity.activities` can still be empty when the plugin
+    /// loads.
+    @objc func dismissActivity(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            self?.retireAllActivities()
+        }
+        call.resolve()
+    }
+
     /// Copy for the queue's Live Activity. The WebView owns it: it holds the
     /// translations and knows whether to name a title or count the batch.
     @objc func setActivityCopy(_ call: CAPPluginCall) {
@@ -663,6 +676,21 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         }
     }
 
+    /// End every activity this app owns, adopted or not, and reset the batch.
+    /// Sweeping the system's list rather than just `activity` is what clears a
+    /// card left behind by a previous run that this process never adopted.
+    private func retireAllActivities() {
+        activity = nil
+        activityCopy = nil
+        activityPercent = -1
+        batchTotal = 0
+        batchDone = 0
+        batchFailed = 0
+        for orphan in Activity<DownloadActivityAttributes>.activities {
+            Task { await orphan.end(nil, dismissalPolicy: .immediate) }
+        }
+    }
+
     private func nextStaleDate() -> Date {
         Date().addingTimeInterval(Self.activityStaleAfter)
     }
@@ -729,14 +757,20 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
     /// Show the outcome briefly, then let the system retire the card. Nothing
     /// finished (the user cleared the queue) retires it at once instead.
     private func endActivity(outcome: BatchOutcome) {
-        guard let activity else { return }
+        let current = activity
         let copy = activityCopy
-        self.activity = nil
-        self.activityCopy = nil
+        activity = nil
+        activityCopy = nil
         activityPercent = -1
-        guard outcome != .abandoned, let copy else {
-            Task { await activity.end(nil, dismissalPolicy: .immediate) }
+        // No outcome worth showing, or nothing of ours to show it on — sweep
+        // instead of returning, or a card this process never adopted survives.
+        guard outcome != .abandoned, let current, let copy else {
+            retireAllActivities()
             return
+        }
+        // Anything else on screen predates this batch and has no outcome due.
+        for stray in Activity<DownloadActivityAttributes>.activities where stray.id != current.id {
+            Task { await stray.end(nil, dismissalPolicy: .immediate) }
         }
         let state = DownloadActivityAttributes.ContentState(
             progress: outcome == .complete ? 1 : overallProgress(),
@@ -747,7 +781,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             finished: true
         )
         Task {
-            await activity.end(
+            await current.end(
                 .init(state: state, staleDate: nil),
                 dismissalPolicy: .after(.now + 5)
             )

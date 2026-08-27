@@ -142,13 +142,21 @@ export class DownloadManagerService {
    * come from here: ngx-translate is the single source of copy and a widget
    * extension cannot reach it. Called whenever the batch changes shape, which
    * is the only time the wording can change.
+   *
+   * An empty queue retires the card. That is the one reliable moment to clear a
+   * card stranded by a force-quit: nothing runs at termination, and by the time
+   * recovery has settled, this is the only place that knows the queue the card
+   * describes no longer exists.
    */
   private syncActivityCopy() {
     if (Capacitor.getPlatform() !== 'ios') return;
     const active = this.cache
       .load()
       .filter((t) => DownloadManagerService.ACTIVE_STATUSES.includes(t.status));
-    if (!active.length) return;
+    if (!active.length) {
+      this.notif.dismissActivity();
+      return;
+    }
     const only = active[0];
     const title = only.media?.title ?? '';
     this.notif.setActivityCopy({
@@ -642,6 +650,10 @@ export class DownloadManagerService {
         }
       }
     }
+
+    // Recovery has just decided what is really still going; a card describing
+    // anything else — a queue a force-quit killed — goes now.
+    this.syncActivityCopy();
 
     this.recoveredAt.update((n) => n + 1);
   }

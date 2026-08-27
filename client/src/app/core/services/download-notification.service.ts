@@ -44,6 +44,7 @@ interface DownloadNotificationPlugin {
   resumeDownloads(): Promise<void>;
   setActivityCopy(opts: DownloadActivityCopy): Promise<void>;
   setMaxConcurrentDownloads(opts: { max: number }): Promise<void>;
+  dismissActivity(): Promise<void>;
   addListener(event: string, cb: (data: any) => void): Promise<any>;
 }
 
@@ -114,6 +115,12 @@ export class DownloadNotificationService {
   setActivityCopy(copy: DownloadActivityCopy): void {
     if (!DownloadNotification || Capacitor.getPlatform() !== 'ios') return;
     DownloadNotification.setActivityCopy(copy).catch(() => {});
+  }
+
+  /** Retire the iOS Live Activity for the download queue. */
+  dismissActivity(): void {
+    if (!DownloadNotification || Capacitor.getPlatform() !== 'ios') return;
+    DownloadNotification.dismissActivity().catch(() => {});
   }
 
   /** Cap how many transfers the native daemon runs at once. */
