@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.3.0](https://github.com/fliks-app/fliks/compare/v3.2.1...v3.3.0) (2026-08-27)
+
+
+### Bug Fixes
+
+* **release:** restore the iOS version markers and fail on unreadable commits ([#1061](https://github.com/fliks-app/fliks/issues/1061)) ([c8750b8](https://github.com/fliks-app/fliks/commit/c8750b830c878e3aab33511b00ae7d5bf05ad70c))
+* **streaming:** resume a slept client on the sid it already holds ([#1058](https://github.com/fliks-app/fliks/issues/1058)) ([fab97f5](https://github.com/fliks-app/fliks/commit/fab97f551f1585d1a348591db04ab995e5d252b1))
+
 ## [3.2.1](https://github.com/fliks-app/fliks/compare/v3.2.0...v3.2.1) (2026-08-26)
 
 
