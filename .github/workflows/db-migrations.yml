@@ -58,16 +58,11 @@ jobs:
       - run: npm ci
       - name: Run migrations on a fresh DB
         run: npm run db:migration:run
-      - name: Report entity metadata drift against the migrated schema
+      - name: Verify entity metadata matches the migrated schema
         # `migration:generate` against a DB holding the latest schema emits a
         # file only when the entities and the schema disagree. It exits
-        # non-zero in the no-diff case, so a plain exit code says nothing —
+        # non-zero in the no-diff case too, so a plain exit code says nothing —
         # the emitted file is the signal.
-        #
-        # Reported, not enforced: a known body of drift predates this check
-        # (constraint/index naming, plus 14 nullable-in-entity FK columns), so
-        # failing here would redden every PR for something it did not cause.
-        # See #1057 for the inventory and the options to clear it.
         run: |
           set -o pipefail
           shopt -s nullglob
@@ -81,12 +76,13 @@ jobs:
           # path passed above is never the path written.
           drift=(src/migrations/*__ci_drift_check.ts)
           if [ ${#drift[@]} -gt 0 ]; then
-            echo "::warning::Entity metadata differs from the migrated schema — see #1057."
-            echo "If this PR changed an entity, generate and commit the migration:"
+            echo "::error::Entity changes are not reflected in any committed migration."
+            echo "Generate and commit it:"
             echo "  npm run db:migration:generate -- src/migrations/<descriptive-name>"
             cat "${drift[@]}"
             # A leftover file is picked up as a real migration by the next run.
             rm -f "${drift[@]}"
+            exit 1
           elif [ "$emitted" = false ] &&
                ! grep -q "No changes in database schema were found" <<<"$out"; then
             echo "::error::migration:generate did not complete — this check verified nothing."
