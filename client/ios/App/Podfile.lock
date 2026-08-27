@@ -11,6 +11,8 @@ PODS:
     - IONFilesystemLib (~> 1.1.1)
   - CapacitorKeyboard (8.0.2):
     - Capacitor
+  - CapacitorNetwork (8.0.1):
+    - Capacitor
   - CapacitorPreferences (8.0.1):
     - Capacitor
   - CapacitorSplashScreen (8.0.1):
@@ -25,6 +27,7 @@ DEPENDENCIES:
   - "CapacitorDevice (from `../../node_modules/@capacitor/device`)"
   - "CapacitorFilesystem (from `../../node_modules/@capacitor/filesystem`)"
   - "CapacitorKeyboard (from `../../node_modules/@capacitor/keyboard`)"
+  - "CapacitorNetwork (from `../../node_modules/@capacitor/network`)"
   - "CapacitorPreferences (from `../../node_modules/@capacitor/preferences`)"
   - "CapacitorSplashScreen (from `../../node_modules/@capacitor/splash-screen`)"
   - google-cast-sdk (~> 4.8)
@@ -47,6 +50,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/filesystem"
   CapacitorKeyboard:
     :path: "../../node_modules/@capacitor/keyboard"
+  CapacitorNetwork:
+    :path: "../../node_modules/@capacitor/network"
   CapacitorPreferences:
     :path: "../../node_modules/@capacitor/preferences"
   CapacitorSplashScreen:
@@ -59,11 +64,12 @@ SPEC CHECKSUMS:
   CapacitorDevice: 14cba6f88d1c3074cbf825fea977c8c526453ff8
   CapacitorFilesystem: 2db285a1ac6e475cc27cae2e1bea999000f9e2be
   CapacitorKeyboard: 8aa4f4ae80b2c92f92c07bf0181c464c2e7f5ff0
+  CapacitorNetwork: 8812ce60d11fb63d8f2e4ba51a49b2e59892ebe2
   CapacitorPreferences: cca2021f386efb75947c850334447d9ff22b14f1
   CapacitorSplashScreen: 4b46c72298db552b3c57ce021ef028b6dc7f1fa7
   google-cast-sdk: 32f65af50d164e3c475e79ad123db3cc26fbcd37
   IONFilesystemLib: 21a63377696b2d8fab5632ecfb7d2ac67bddb68a
 
-PODFILE CHECKSUM: 4e6609da3d9b2361d7a453c7c3feae4f3770008e
+PODFILE CHECKSUM: 35b212988c939926f17192642f1eeb73d962a4aa
 
 COCOAPODS: 1.16.2

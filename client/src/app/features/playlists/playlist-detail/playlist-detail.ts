@@ -64,6 +64,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { TvService } from '../../../core/services/tv.service';
+import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
 
 interface PlaylistSeriesGroup {
   seriesId: number;
@@ -79,6 +80,7 @@ type PlaylistGroupedEntry =
 @Component({
   selector: 'app-playlist-detail',
   imports: [
+    CachedSrcDirective,
     TranslateModule,
     FormsModule,
     NgTemplateOutlet,

@@ -19,6 +19,8 @@ import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.cache.CacheDataSource;
 import androidx.media3.datasource.cache.NoOpCacheEvictor;
 import androidx.media3.datasource.cache.SimpleCache;
+import androidx.media3.database.DatabaseProvider;
+import androidx.media3.exoplayer.offline.DefaultDownloadIndex;
 import androidx.media3.exoplayer.offline.Download;
 import androidx.media3.exoplayer.offline.DownloadManager;
 import androidx.media3.exoplayer.offline.DownloadNotificationHelper;
@@ -29,6 +31,8 @@ import java.io.File;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Singleton utilities for ExoPlayer offline downloads.
@@ -41,7 +45,18 @@ public class FlixDownloadUtil {
     static final String DOWNLOAD_CHANNEL_ID = "fliks_downloads";
     static final int FOREGROUND_NOTIFICATION_ID = 888888;
 
+    /** Worker pool size. Sized to the largest cap the settings screen offers so
+     *  raising the cap isn't bottlenecked by a pool fixed at construction;
+     *  {@link DownloadManager#setMaxParallelDownloads} is what actually gates
+     *  concurrency, and it can be changed on a live manager. */
+    private static final int MAX_SUPPORTED_PARALLEL = 5;
+    /** Concurrent transfers, in force until the WebView pushes the user's
+     *  setting. Held statically so it survives the manager being built later. */
+    private static int maxParallelDownloads = 3;
+
     private static SimpleCache cache;
+    private static DatabaseProvider databaseProvider;
+    private static DefaultDownloadIndex downloadIndex;
     private static DownloadManager downloadManager;
     private static DownloadNotificationHelper notificationHelper;
     private static String authToken;
@@ -50,13 +65,60 @@ public class FlixDownloadUtil {
         authToken = token;
     }
 
+    /** Cap concurrent transfers. Applies to a manager that already exists, and
+     *  is remembered for one built later. */
+    public static synchronized void setMaxParallelDownloads(int value) {
+        maxParallelDownloads = Math.max(1, Math.min(MAX_SUPPORTED_PARALLEL, value));
+        if (downloadManager != null) {
+            downloadManager.setMaxParallelDownloads(maxParallelDownloads);
+        }
+    }
+
+    /** One SQLite helper for the whole app. The cache, the manager and the
+     *  index all sit on the same database file; handing each its own helper is
+     *  how you end up with locking surprises. */
+    public static synchronized DatabaseProvider getDatabaseProvider(Context ctx) {
+        if (databaseProvider == null) {
+            databaseProvider = new StandaloneDatabaseProvider(ctx.getApplicationContext());
+        }
+        return databaseProvider;
+    }
+
+    /** The persistent download table. Readable straight away, unlike the
+     *  DownloadManager, which loads it asynchronously after construction. */
+    /**
+     * Worker pool for the DownloadManager.
+     *
+     * A plain fixed pool never reclaims its core threads, so one burst at the
+     * highest cap leaves that many parked for the life of the process. Letting
+     * them time out keeps the ceiling — an unbounded cached pool would trade a
+     * known cost for an open-ended one — while giving the threads back once the
+     * downloads are done.
+     */
+    private static ThreadPoolExecutor buildDownloadExecutor() {
+        ThreadPoolExecutor executor =
+            (ThreadPoolExecutor) Executors.newFixedThreadPool(MAX_SUPPORTED_PARALLEL);
+        // Must precede allowCoreThreadTimeOut: newFixedThreadPool leaves the
+        // keep-alive at zero, and enabling the timeout on zero throws.
+        executor.setKeepAliveTime(60, TimeUnit.SECONDS);
+        executor.allowCoreThreadTimeOut(true);
+        return executor;
+    }
+
+    public static synchronized DefaultDownloadIndex getDownloadIndex(Context ctx) {
+        if (downloadIndex == null) {
+            downloadIndex = new DefaultDownloadIndex(getDatabaseProvider(ctx));
+        }
+        return downloadIndex;
+    }
+
     public static synchronized SimpleCache getCache(Context ctx) {
         if (cache == null) {
             File cacheDir = new File(ctx.getFilesDir(), "fliks-offline");
             cache = new SimpleCache(
                 cacheDir,
                 new NoOpCacheEvictor(),
-                new StandaloneDatabaseProvider(ctx)
+                getDatabaseProvider(ctx)
             );
         }
         return cache;
@@ -67,12 +129,12 @@ public class FlixDownloadUtil {
             ensureChannel(ctx);
             downloadManager = new DownloadManager(
                 ctx,
-                new StandaloneDatabaseProvider(ctx),
+                getDatabaseProvider(ctx),
                 getCache(ctx),
                 buildHttpDataSourceFactory(),
-                Executors.newFixedThreadPool(2)
+                buildDownloadExecutor()
             );
-            downloadManager.setMaxParallelDownloads(2);
+            downloadManager.setMaxParallelDownloads(maxParallelDownloads);
             // Emit progress/completion events to WebView — registered once on
             // the singleton so events flow regardless of service lifecycle.
             downloadManager.addListener(new DownloadManager.Listener() {

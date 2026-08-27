@@ -15,6 +15,27 @@
       </button>
     </div>
 
+    @if (showConcurrency) {
+      <div class="divider my-0"></div>
+
+      <!-- Concurrent downloads -->
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <p class="font-medium">{{ 'storage_settings.max_concurrent' | translate }}</p>
+          <p class="text-sm text-base-content/60">{{ 'storage_settings.max_concurrent_hint' | translate }}</p>
+        </div>
+        <select
+          class="select select-sm select-bordered w-20"
+          [ngModel]="maxConcurrent()"
+          (ngModelChange)="onMaxConcurrentChange($event)"
+        >
+          @for (choice of concurrencyChoices; track choice) {
+            <option [ngValue]="choice">{{ choice }}</option>
+          }
+        </select>
+      </div>
+    }
+
     <div class="divider my-0"></div>
 
     <!-- Delete all downloads -->

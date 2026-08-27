@@ -5,6 +5,7 @@ import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { MediaInfoHeaderComponent } from './media-info-header';
 import { AuthService } from '../../../core/services/auth.service';
+import { OfflinePlaybackSyncService } from '../../../core/services/offline-playback-sync.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { NavbarService } from '../../../core/services/navbar.service';
@@ -139,6 +140,7 @@ async function createFixture(
         provide: PlayerSettingsService,
         useValue: { resolveAudioStreamIndex: () => null, getRememberedSubtitleTrack: () => null },
       },
+      { provide: OfflinePlaybackSyncService, useValue: { queuedPositionFor: () => null } },
       { provide: TrackManagerService, useValue: { saveAudioSelection: () => {}, saveSubtitleSelection: () => {} } },
       { provide: PlayableMediaService, useValue: { loadWatchedState: () => Promise.resolve(watched) } },
       {

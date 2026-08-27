@@ -21,6 +21,7 @@ import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-eva
 import type { UiContribution } from '@fliks/plugin-contract/ui';
 import { resolveCardAction, type CardActionHandlers } from '../../../core/plugin-ui/card-action-registry';
 import { CORE_CARD_ACTIONS } from './core-card-actions';
+import { CachedSrcDirective } from '../../directives/cached-src.directive';
 
 export type MediaCardAspect = 'portrait' | 'landscape';
 
@@ -37,7 +38,8 @@ export type CardStatus = 'watched' | 'missing' | null;
 
 @Component({
   selector: 'app-media-card',
-  imports: [RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslateModule,
+  imports: [
+    CachedSrcDirective,RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslateModule,
     LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX,
     CardActionsDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,

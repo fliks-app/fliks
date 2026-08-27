@@ -31,12 +31,11 @@
   "dataGroups": [
     {
       "name": "media-images",
-      "urls": ["/images/posters/**", "/images/fanart/**", "/images/persons/**"],
+      "urls": ["/api/images/**"],
       "cacheConfig": {
-        "strategy": "freshness",
+        "strategy": "performance",
         "maxSize": 2000,
-        "maxAge": "30d",
-        "timeout": "3s"
+        "maxAge": "30d"
       }
     }
   ],

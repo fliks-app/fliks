@@ -26,6 +26,7 @@ import { TvRowDirective } from '../../directives/tv-row.directive';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { LikesApiService } from '../../../core/services/api/likes-api.service';
+import { CachedSrcDirective } from '../../directives/cached-src.directive';
 
 /**
  * Home widget listing content other members have recommended to the viewer,
@@ -37,6 +38,7 @@ import { LikesApiService } from '../../../core/services/api/likes-api.service';
 @Component({
   selector: 'app-received-recommendations-card',
   imports: [
+    CachedSrcDirective,
     RouterLink,
     TranslateModule,
     DropdownMenuComponent,

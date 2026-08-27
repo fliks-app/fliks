@@ -86,10 +86,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         handleEventsForBackgroundURLSession identifier: String,
         completionHandler: @escaping () -> Void
     ) {
-        if identifier == BackgroundDownloadCompletion.sessionIdentifier {
-            BackgroundDownloadCompletion.handler = completionHandler
-        } else {
+        guard identifier == BackgroundDownloadCompletion.sessionIdentifier else {
             completionHandler()
+            return
+        }
+        BackgroundDownloadCompletion.handler = completionHandler
+        // Only DownloadPlugin.load() recreates the session, and that waits on the
+        // Capacitor bridge coming up. If the bridge never gets there the handler
+        // stays unanswered and the OS throttles every later transfer, so answer
+        // it ourselves once the launch window has had its chance.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
+            BackgroundDownloadCompletion.handler?()
+            BackgroundDownloadCompletion.handler = nil
         }
     }
 

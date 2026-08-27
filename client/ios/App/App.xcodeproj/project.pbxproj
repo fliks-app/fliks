@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0182C69BFDA23ED357D87951 /* FliksDownloadWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4556EE894302C0882439DDE7 /* FliksDownloadWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
@@ -15,20 +16,51 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		A084ECDBA7D38E1E42DFC39D /* Pods_App.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */; };
+		A5BFFD74DD3ACBEA9EFFE03C /* DownloadLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1CFB5B9999E3F369F363538 /* DownloadLiveActivity.swift */; };
+		DDA1A6BB527B466CBB92C6F9 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6F95214B133B7B5140D7D297 /* Foundation.framework */; };
+		E767D512577E33EDD09F137D /* DownloadActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8546BB7ADC2E5B59E726E7ED /* DownloadActivityAttributes.swift */; };
 		F1000001AAAA000000000001 /* FlksViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000011 /* FlksViewController.swift */; };
 		F1000001AAAA000000000002 /* HdrPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000012 /* HdrPlugin.swift */; };
 		F1000001AAAA000000000003 /* NativePlayerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000013 /* NativePlayerPlugin.swift */; };
 		F1000001AAAA000000000004 /* ImmersivePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000014 /* ImmersivePlugin.swift */; };
-		F1000001AAAA00000000000A /* OrientationPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA00000000001A /* OrientationPlugin.swift */; };
 		F1000001AAAA000000000005 /* PipPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000015 /* PipPlugin.swift */; };
 		F1000001AAAA000000000006 /* CastPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000016 /* CastPlugin.swift */; };
 		F1000001AAAA000000000007 /* AudioCapabilitiesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */; };
 		F1000001AAAA000000000008 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000018 /* SubtitleOverlayView.swift */; };
 		F1000001AAAA000000000009 /* DownloadPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000019 /* DownloadPlugin.swift */; };
+		F1000001AAAA00000000000A /* OrientationPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA00000000001A /* OrientationPlugin.swift */; };
+		F954F4DC03C3615047B0AABF /* DownloadActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8546BB7ADC2E5B59E726E7ED /* DownloadActivityAttributes.swift */; };
+		F9D6B0DE0B5D3649DA0CC8B8 /* FliksDownloadWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2014FCBAA5253E0B35A8DFD6 /* FliksDownloadWidgetBundle.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		36CE9162945F5F8D50A45670 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = EC6D67A307A83F77678EB64F;
+			remoteInfo = FliksDownloadWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		1344D0D67CFB2551F1BDF9EB /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				0182C69BFDA23ED357D87951 /* FliksDownloadWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		2014FCBAA5253E0B35A8DFD6 /* FliksDownloadWidgetBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FliksDownloadWidgetBundle.swift; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
+		4556EE894302C0882439DDE7 /* FliksDownloadWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FliksDownloadWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -37,18 +69,22 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
+		6F95214B133B7B5140D7D297 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		8546BB7ADC2E5B59E726E7ED /* DownloadActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DownloadActivityAttributes.swift; sourceTree = "<group>"; };
+		A89664499363506F1B6D7298 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.release.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.release.xcconfig"; sourceTree = "<group>"; };
+		B1CFB5B9999E3F369F363538 /* DownloadLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DownloadLiveActivity.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000011 /* FlksViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlksViewController.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000012 /* HdrPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HdrPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000013 /* NativePlayerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePlayerPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000014 /* ImmersivePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImmersivePlugin.swift; sourceTree = "<group>"; };
-		F1000001AAAA00000000001A /* OrientationPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000015 /* PipPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000016 /* CastPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCapabilitiesPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000018 /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000019 /* DownloadPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadPlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA00000000001A /* OrientationPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationPlugin.swift; sourceTree = "<group>"; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -61,6 +97,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D8E61D15D46A9A3D9A53A1B8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DDA1A6BB527B466CBB92C6F9 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -68,6 +112,7 @@
 			isa = PBXGroup;
 			children = (
 				AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */,
+				AB139F28F6F886A78E1F8E61 /* iOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -79,6 +124,7 @@
 				504EC3051FED79650016851F /* Products */,
 				7F8756D8B27F46E3366F6CEA /* Pods */,
 				27E2DDA53C4D2A4D1A88CE4A /* Frameworks */,
+				960BEF959FF3D17AE53A833B /* FliksDownloadWidget */,
 			);
 			sourceTree = "<group>";
 		};
@@ -86,6 +132,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				4556EE894302C0882439DDE7 /* FliksDownloadWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -124,6 +171,26 @@
 			name = Pods;
 			sourceTree = "<group>";
 		};
+		960BEF959FF3D17AE53A833B /* FliksDownloadWidget */ = {
+			isa = PBXGroup;
+			children = (
+				8546BB7ADC2E5B59E726E7ED /* DownloadActivityAttributes.swift */,
+				B1CFB5B9999E3F369F363538 /* DownloadLiveActivity.swift */,
+				2014FCBAA5253E0B35A8DFD6 /* FliksDownloadWidgetBundle.swift */,
+				A89664499363506F1B6D7298 /* Info.plist */,
+			);
+			name = FliksDownloadWidget;
+			path = FliksDownloadWidget;
+			sourceTree = "<group>";
+		};
+		AB139F28F6F886A78E1F8E61 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				6F95214B133B7B5140D7D297 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -137,15 +204,34 @@
 				504EC3021FED79650016851F /* Resources */,
 				9592DBEFFC6D2A0C8D5DEB22 /* [CP] Embed Pods Frameworks */,
 				42FC8C93EB537F9F98FDACA1 /* [CP] Copy Pods Resources */,
+				1344D0D67CFB2551F1BDF9EB /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				15558A150BDC471DA8A0372D /* PBXTargetDependency */,
 			);
 			name = App;
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		EC6D67A307A83F77678EB64F /* FliksDownloadWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4207A1697F3C692DE296B5F4 /* Build configuration list for PBXNativeTarget "FliksDownloadWidget" */;
+			buildPhases = (
+				8D9A5CF9033DE9B622CC1A99 /* Sources */,
+				D8E61D15D46A9A3D9A53A1B8 /* Frameworks */,
+				5361D39D8601446131BA40CF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FliksDownloadWidget;
+			productName = FliksDownloadWidget;
+			productReference = 4556EE894302C0882439DDE7 /* FliksDownloadWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -177,6 +263,7 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				EC6D67A307A83F77678EB64F /* FliksDownloadWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -192,6 +279,13 @@
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5361D39D8601446131BA40CF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -264,10 +358,30 @@
 				F1000001AAAA000000000007 /* AudioCapabilitiesPlugin.swift in Sources */,
 				F1000001AAAA000000000008 /* SubtitleOverlayView.swift in Sources */,
 				F1000001AAAA000000000009 /* DownloadPlugin.swift in Sources */,
+				F954F4DC03C3615047B0AABF /* DownloadActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8D9A5CF9033DE9B622CC1A99 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E767D512577E33EDD09F137D /* DownloadActivityAttributes.swift in Sources */,
+				A5BFFD74DD3ACBEA9EFFE03C /* DownloadLiveActivity.swift in Sources */,
+				F9D6B0DE0B5D3649DA0CC8B8 /* FliksDownloadWidgetBundle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		15558A150BDC471DA8A0372D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = FliksDownloadWidget;
+			target = EC6D67A307A83F77678EB64F /* FliksDownloadWidget */;
+			targetProxy = 36CE9162945F5F8D50A45670 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
@@ -409,7 +523,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 3.2.1; /* x-release-please-version */
+				MARKETING_VERSION = 3.2.1;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = media.fliks.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -432,7 +546,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 3.2.1; /* x-release-please-version */
+				MARKETING_VERSION = 3.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = media.fliks.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
@@ -441,9 +555,61 @@
 			};
 			name = Release;
 		};
+		56210AB04D02B8209FC4D70B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 85ZC7Y8WQ2;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = FliksDownloadWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 3.2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = media.fliks.app.DownloadWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		94C142DA5BE1215EDD8EEF3C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 85ZC7Y8WQ2;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = FliksDownloadWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 3.2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = media.fliks.app.DownloadWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		4207A1697F3C692DE296B5F4 /* Build configuration list for PBXNativeTarget "FliksDownloadWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				94C142DA5BE1215EDD8EEF3C /* Release */,
+				56210AB04D02B8209FC4D70B /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		504EC2FF1FED79650016851F /* Build configuration list for PBXProject "App" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

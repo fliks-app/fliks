@@ -33,6 +33,7 @@ import {
   computeProfileHash,
   buildPlaybackProfileFromContext,
   resolveSourceVideoBitrateBps,
+  cappedRungVideoBitrateBps,
   parseBitrateToBps,
   type BurnInSubtitle,
 } from './transcoding';
@@ -575,29 +576,54 @@ export class StreamingController {
     const sourceWidth = video?.width ?? 1920;
     const sourceHeight = video?.height ?? 1080;
     const sourceBitrate = info?.formatBitRate ?? 0;
+    const duration = info?.durationSeconds ?? 0;
+
+    // Offline playback keeps every audio rendition, so the download carries
+    // one audio stream per source track, not one.
+    const audioStreams = info?.audio ?? [];
+    const audioTrackCount = Math.max(1, audioStreams.length);
+    const audioSumBps = audioStreams.reduce(
+      (sum, a) => sum + (a.bitRate ?? 0),
+      0,
+    );
+    const sourceVideoBitrateBps = resolveSourceVideoBitrateBps(
+      video?.bitRate,
+      info?.formatBitRate,
+      audioSumBps,
+    );
 
     const qualities: { key: string; label: string; estimatedSize: number }[] =
       [];
     for (const p of PROFILES) {
       if (!profileFitsSource(p, sourceWidth, sourceHeight)) continue;
-      const videoBps = parseBitrateToBps(p.videoBitrate);
-      const audioBps = parseBitrateToBps(p.audioBitrate);
-      const duration = info?.durationSeconds ?? 0;
-      const estimated =
+      // The rung nominal is a ceiling, not what the encoder is told to emit:
+      // a transcode is capped to the source bitrate, so quoting the nominal
+      // overstated every download off a source below its rung — which is most
+      // of them. This is the same function that produces the encoder's `-b:v`.
+      // Codec: the estimate has no device profile, so it assumes the output
+      // family matches the source, the common case and the lower bound (a
+      // less efficient target gets proportionally more bits).
+      const videoBps = cappedRungVideoBitrateBps(p, {
+        outputCodec: video?.codec,
+        sourceWidth,
+        sourceHeight,
+        sourceFrameRate: Number(video?.frameRate) || 0,
+        sourceVideoBitrateBps,
+        sourceVideoCodec: video?.codec,
+      });
+      const audioBps = parseBitrateToBps(p.audioBitrate) * audioTrackCount;
+      let estimated =
         duration > 0
           ? Math.floor(((videoBps + audioBps) * duration) / 8)
           : Math.floor(
               fileSize * (videoBps / Math.max(sourceBitrate, videoBps)),
             );
-      const sizeLabel =
-        estimated >= 1e9
-          ? `${(estimated / 1e9).toFixed(1)} GB`
-          : estimated >= 1e6
-            ? `${(estimated / 1e6).toFixed(0)} MB`
-            : `${(estimated / 1e3).toFixed(0)} KB`;
+      // A re-encode that came out larger than its source would be a bug, not a
+      // download to warn the user about.
+      if (fileSize > 0) estimated = Math.min(estimated, fileSize);
       qualities.push({
         key: p.name,
-        label: `${p.name} (~${sizeLabel})`,
+        label: p.name,
         estimatedSize: estimated,
       });
     }

@@ -47,6 +47,7 @@ import { BackgroundService } from '../../core/services/background.service';
 import { SearchStateService } from '../../core/services/search-state.service';
 import { NavContributionsService, DOCK_PINNED_IDS, MOBILE_HIDDEN_IDS, type ResolvedNavItem } from '../../core/plugin-ui/nav-contributions.service';
 import { NavIconComponent } from './nav-icon';
+import { CachedSrcDirective } from '../directives/cached-src.directive';
 import {
   LucideMenu,
   LucideChevronLeft,
@@ -64,6 +65,7 @@ const SIDEBAR_COUNTS_DEBOUNCE_MS = 400;
 @Component({
   selector: 'app-layout',
   imports: [
+    CachedSrcDirective,
     RouterOutlet, RouterLink, RouterLinkActive, TranslateModule,
     LucideMenu, LucideChevronLeft, LucideSearch, LucideCast, LucideEllipsisVertical, LucidePin, LucideRocket,
     CastOverlayComponent,

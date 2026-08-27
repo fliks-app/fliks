@@ -8,10 +8,12 @@ import {
   PersonProviderCredits,
 } from '../../core/services/api/persons-api.service';
 import { PersonDetailComponent } from './person-detail';
+import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 
 @Component({
   selector: 'app-person-filmography',
-  imports: [TranslateModule, SlicePipe, ResolveUrlPipe, LucideFilm],
+  imports: [
+    CachedSrcDirective,TranslateModule, SlicePipe, ResolveUrlPipe, LucideFilm],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './person-filmography.html',
 })

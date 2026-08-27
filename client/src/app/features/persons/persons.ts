@@ -19,12 +19,14 @@ import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideUsers } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 @Component({
   selector: 'app-persons',
-  imports: [FormsModule, TranslateModule, RouterLink, ResolveUrlPipe, LucideSearch, LucideUsers],
+  imports: [
+    CachedSrcDirective,FormsModule, TranslateModule, RouterLink, ResolveUrlPipe, LucideSearch, LucideUsers],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './persons.html',
 })

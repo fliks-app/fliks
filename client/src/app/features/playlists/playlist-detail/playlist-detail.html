@@ -9,11 +9,11 @@
         @if (pl.posters.length >= 4) {
           <div class="grid grid-cols-2 grid-rows-2 h-full w-full">
             @for (p of pl.posters.slice(0, 4); track p) {
-              <img [src]="p | resolveUrl: 'thumb'" alt="" class="h-full w-full object-cover" />
+              <img [cachedSrc]="p | resolveUrl: 'thumb'" alt="" class="h-full w-full object-cover" />
             }
           </div>
         } @else if (pl.posters.length > 0) {
-          <img [src]="pl.posters[0] | resolveUrl: 'thumb'" alt="" class="h-full w-full object-cover" />
+          <img [cachedSrc]="pl.posters[0] | resolveUrl: 'thumb'" alt="" class="h-full w-full object-cover" />
         } @else {
           <div class="flex h-full w-full items-center justify-center text-base-content/40">
             <svg lucideListVideo class="h-8 w-8" [strokeWidth]="1.5"></svg>
@@ -203,7 +203,7 @@
                     class="relative w-24 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300"
                   >
                     <img
-                      [src]="(entry.group.media.fanartUrl ?? entry.group.media.posterUrl) | resolveUrl: 'thumb'"
+                      [cachedSrc]="(entry.group.media.fanartUrl ?? entry.group.media.posterUrl) | resolveUrl: 'thumb'"
                       alt=""
                       class="h-full w-full object-cover"
                       loading="lazy"
@@ -263,7 +263,7 @@
     >
       @if (itemThumb(item); as thumb) {
         <img
-          [src]="thumb | resolveUrl: 'thumb'"
+          [cachedSrc]="thumb | resolveUrl: 'thumb'"
           alt=""
           class="h-full w-full object-cover"
           loading="lazy"

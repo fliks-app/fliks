@@ -12,6 +12,11 @@ import { BrowserDeviceProfileService } from './browser-device-profile.service';
 import { TranslateService } from '@ngx-translate/core';
 import { formatSubtitleLabel } from '../utils/player.utils';
 import { AppSettingsService } from './app-settings.service';
+import { DownloadSettingsService } from './download-settings.service';
+import { ImageCacheService } from './image-cache.service';
+import { ServerConfigService } from './server-config.service';
+import { NetworkService } from './network.service';
+import { imageUrlWithSize, type ImageSize } from '../pipes/resolve-url.pipe';
 import {
   desktopDownloaderOrNull,
   type DesktopDownloadStatus,
@@ -55,14 +60,19 @@ export class DownloadManagerService {
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
   private readonly translate = inject(TranslateService);
   private readonly appSettings = inject(AppSettingsService);
+  private readonly imageCache = inject(ImageCacheService);
+  /** Injected here so the native queue is capped from app start, before any
+   *  download can be requested. */
+  private readonly downloadSettings = inject(DownloadSettingsService);
+  private readonly serverConfig = inject(ServerConfigService);
+  private readonly network = inject(NetworkService);
 
   private readonly titles = new Map<number, { title: string; episode?: string }>();
   private eventSeq = 0;
   private nextLocalId = Date.now();
 
-  // Cap concurrent web downloads (each spins up a hidden player + Shaka store);
-  // native downloads are queued by the OS daemon and don't come through here.
-  private static readonly MAX_WEB_CONCURRENT = 2;
+  // Web downloads each spin up a hidden player + Shaka store, so they honour
+  // the same cap as the native queue; there the OS daemon enforces it instead.
   private webActive = 0;
   private readonly webQueue: Array<() => void> = [];
 
@@ -97,8 +107,70 @@ export class DownloadManagerService {
       this.updateTaskStatus(taskId, 'ready', 100);
       // Pre-download subtitles for offline playback (fire-and-forget)
       void this.preDownloadSubtitles(taskId);
+      void this.persistSize(taskId);
+    } else if (event.type === 'progress') {
+      this.persistProgress(taskId, event.progress, event.state);
     }
+    if (event.type !== 'progress') this.syncActivityCopy();
   });
+
+  /** In-flight statuses, in the order a task moves through them. */
+  private static readonly ACTIVE_STATUSES = ['transcoding', 'queued', 'downloading'];
+
+  /** Last percentage persisted per task, so the write below can be throttled. */
+  private readonly persistedProgress = new Map<number, number>();
+
+  /** Promote the persisted status out of `transcoding` once the OS daemon has
+   *  taken the task. {@link recover} keys off that distinction, so a task still
+   *  reading `transcoding` after a relaunch looks like one that never started
+   *  and gets cancelled. Progress is written in 5-point steps — the daemon emits
+   *  it far more often than localStorage should be rewritten — but a change of
+   *  state always lands, or a queued task would never show it left the queue. */
+  private persistProgress(taskId: number, progress: number, state?: string) {
+    const status = state === 'queued' ? 'queued' : 'downloading';
+    const last = this.persistedProgress.get(taskId);
+    const settled = this.cache.load().find((t) => t.id === taskId)?.status === status;
+    if (settled && last !== undefined && progress - last < 5) return;
+    this.persistedProgress.set(taskId, progress);
+    this.updateTaskStatus(taskId, status, progress);
+  }
+
+  /**
+   * Refresh the copy on the iOS Live Activity covering the download queue.
+   *
+   * The native side aggregates the numbers off its own task list — it is the
+   * only thing that knows what is really transferring — but the wording has to
+   * come from here: ngx-translate is the single source of copy and a widget
+   * extension cannot reach it. Called whenever the batch changes shape, which
+   * is the only time the wording can change.
+   *
+   * An empty queue retires the card. That is the one reliable moment to clear a
+   * card stranded by a force-quit: nothing runs at termination, and by the time
+   * recovery has settled, this is the only place that knows the queue the card
+   * describes no longer exists.
+   */
+  private syncActivityCopy() {
+    if (Capacitor.getPlatform() !== 'ios') return;
+    const active = this.cache
+      .load()
+      .filter((t) => DownloadManagerService.ACTIVE_STATUSES.includes(t.status));
+    if (!active.length) {
+      this.notif.dismissActivity();
+      return;
+    }
+    const only = active[0];
+    const title = only.media?.title ?? '';
+    this.notif.setActivityCopy({
+      headline:
+        active.length === 1
+          ? (only.episodeLabel ? `${title} · ${only.episodeLabel}` : title)
+          : this.translate.instant('downloads.notif_active_count', { count: active.length }),
+      detail: this.translate.instant('downloads.notif_progress'),
+      stale: this.translate.instant('downloads.notif_stale'),
+      complete: this.translate.instant('downloads.notif_complete'),
+      failed: this.translate.instant('downloads.notif_failed'),
+    });
+  }
 
   /** Session epoch already recovered, or -1. The task list is scoped to the
    *  (server, user) pair that owns it, so each session recovers once. */
@@ -112,10 +184,13 @@ export class DownloadManagerService {
     }
   });
 
+  /** Reconcile again on reconnect. Rides the reachability signal rather than
+   *  the DOM `online` event, which WKWebView never fires. */
+  private readonly reconnectEffect = effect(() => {
+    if (this.network.isOnline() && this.recoveredEpoch >= 0) void this.recover();
+  });
+
   constructor() {
-    window.addEventListener('online', () => {
-      if (this.recoveredEpoch >= 0) void this.recover();
-    });
     this.downloader?.onStatus((s) => this.onDesktopStatus(s));
   }
 
@@ -135,6 +210,7 @@ export class DownloadManagerService {
       this.updateTaskStatus(task.id, 'ready', 100);
       this.emitEvent('complete', task.id, 100);
       void this.preDownloadSubtitles(task.id);
+      void this.persistSize(task.id);
     } else {
       this.updateTaskStatus(task.id, 'failed', 0);
       this.emitEvent('failed', task.id, 0);
@@ -248,14 +324,41 @@ export class DownloadManagerService {
       const notifTitle = episode ? `${title} · ${episode}` : title;
       this.notif.startDownload(String(taskId), hlsUrl, token, {
         notifTitle,
+        notifProgress: this.translate.instant('downloads.notif_progress'),
+        notifStale: this.translate.instant('downloads.notif_stale'),
         notifComplete: this.translate.instant('downloads.notif_complete'),
         notifFailed: this.translate.instant('downloads.notif_failed'),
       });
+      this.syncActivityCopy();
     } else {
       this.enqueueWeb(task, hlsUrl);
     }
 
     return task;
+  }
+
+  /**
+   * Run a failed download again from the metadata of the one that failed.
+   *
+   * The dead task is dropped first: its id is baked into the native daemon's
+   * bookkeeping and into any partial bundle on disk, so reusing it would have
+   * the retry inherit the corpse of the previous attempt.
+   */
+  async retryDownload(task: DownloadTask): Promise<DownloadTask> {
+    await this.deleteDownload(task);
+    return this.createDownload(
+      task.mediaFileId,
+      task.quality,
+      task.media?.title ?? '',
+      task.episodeLabel,
+      {
+        mediaId: task.mediaId,
+        posterUrl: task.media?.posterUrl ?? null,
+        type: task.media?.type,
+        episodeId: task.episodeId,
+        auto: task.auto,
+      },
+    );
   }
 
   async deleteDownload(task: DownloadTask) {
@@ -296,7 +399,7 @@ export class DownloadManagerService {
         this.webQueue.shift()?.();
       }
     };
-    if (this.webActive < DownloadManagerService.MAX_WEB_CONCURRENT) {
+    if (this.webActive < this.downloadSettings.maxConcurrent()) {
       void run();
     } else {
       this.webQueue.push(() => void run());
@@ -336,6 +439,7 @@ export class DownloadManagerService {
         this.updateTaskStatus(downloadId, 'ready', 100);
         this.emitEvent('complete', downloadId, 100);
         void this.preDownloadSubtitles(downloadId);
+        void this.persistSize(downloadId);
       } else {
         throw new Error('Shaka offline store returned null');
       }
@@ -385,14 +489,18 @@ export class DownloadManagerService {
       }
       // Fetch audio stream info for offline audio track picker
       let audioStreams: { language?: string; title?: string; codec?: string; channels?: number }[] | undefined;
+      let fanartUrl: string | null = null;
       try {
         const media = await this.mediaService.getOne(task.mediaId);
+        fanartUrl = media.fanartUrl ?? null;
         const file = media.files?.find((f: any) => f.id === task.mediaFileId);
         const si = (file as any)?.streamInfo;
         if (si?.audio?.length > 1) {
           audioStreams = si.audio;
         }
       } catch { /* non-critical */ }
+
+      this.prefetchArtwork(task.media?.posterUrl, fanartUrl);
 
       // Persist subtitle + audio metadata on the task
       const tasks = this.cache.load();
@@ -402,6 +510,33 @@ export class DownloadManagerService {
     } catch (e) {
       console.warn('[DL] Failed to pre-download subtitles:', e);
     }
+  }
+
+  /** Pin the title's artwork on disk alongside the media. The downloads page
+   *  and the detail header still render it offline, where the remote URL is
+   *  dead and the WebView cache is not something we control. */
+  private prefetchArtwork(posterUrl?: string | null, fanartUrl?: string | null) {
+    const wanted: [string | null | undefined, ImageSize][] = [
+      [posterUrl, 'thumb'],
+      [posterUrl, 'medium'],
+      [fanartUrl, 'medium'],
+    ];
+    for (const [url, size] of wanted) {
+      if (!url) continue;
+      void this.imageCache.prefetch(this.serverConfig.resolveUrl(imageUrlWithSize(url, size)));
+    }
+  }
+
+  /** Measure what the finished download occupies and keep it on the task, so
+   *  the list can show it without a per-row trip to the platform. */
+  private async persistSize(taskId: number) {
+    const task = this.cache.load().find((t) => t.id === taskId);
+    if (!task) return;
+    const bytes = await this.storage.sizeBytes(`download-${task.mediaFileId}`);
+    if (!bytes) return;
+    this.cache.save(
+      this.cache.load().map((t) => (t.id === taskId ? { ...t, sizeBytes: bytes } : t)),
+    );
   }
 
   private persistTask(task: DownloadTask) {
@@ -421,12 +556,54 @@ export class DownloadManagerService {
   }
 
   /**
+   * Re-sync one in-flight task with the native download daemon. Returns true
+   * when the daemon still owns it — live or finished — and the caller must
+   * leave it alone.
+   *
+   * `getDownloads` only reports transfers the daemon still holds (ExoPlayer
+   * drops an item the moment it completes), so a download that finished while
+   * the app was dead needs the `isDownloaded` probe, which reads the persistent
+   * index on both platforms.
+   */
+  private async reconcileNative(
+    task: DownloadTask,
+    nativeById: Map<string, { id: string; progress: number; state: string }>,
+  ): Promise<boolean> {
+    const native = nativeById.get(String(task.id));
+    if (native && native.state !== 'failed' && native.state !== 'removing') {
+      if (native.state === 'completed') {
+        this.updateTaskStatus(task.id, 'ready', 100);
+        void this.preDownloadSubtitles(task.id);
+      } else {
+        this.persistedProgress.set(task.id, native.progress);
+        // Anything the daemon is holding but not actively transferring reads
+        // as queued — ExoPlayer also parks downloads as `stopped` and
+        // `restarting`, and neither is progress the user should see counting.
+        this.updateTaskStatus(
+          task.id,
+          native.state === 'downloading' ? 'downloading' : 'queued',
+          native.progress,
+        );
+      }
+      return true;
+    }
+    if (await this.notif.isDownloaded(String(task.id))) {
+      this.updateTaskStatus(task.id, 'ready', 100);
+      void this.preDownloadSubtitles(task.id);
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Recover download state from localStorage cache.
    * Re-populates the titles map for UI display.
    *
-   * `onStartup` = the app just (re)launched, so every in-flight task is a
-   * leftover from before and its session is dead; on a mere reconnect,
-   * in-flight downloads may still be live, so only the untracked ones are failed.
+   * `onStartup` = the app just (re)launched. That only condemns an in-flight
+   * task on web and desktop, where the transfer lived in the JS context that
+   * went away. On native the OS daemon owns it and outlives the process — iOS
+   * even relaunches us in the background to deliver its session events — so
+   * those are reconciled against the daemon instead.
    */
   private async recover(onStartup = false) {
     const tasks = this.cache.load();
@@ -470,26 +647,34 @@ export class DownloadManagerService {
       } else if (t.status === 'failed') {
         // Remove stale failed tasks
         this.cache.remove(t.id);
-      } else if (t.status === 'transcoding') {
-        // In-flight when the app last stopped and stuck at 0% (web Shaka store
-        // died with the JS context; a redeploy left the native download with a
-        // dead session).
-        if (onStartup) {
-          // Cancel the dead native download so it can't keep retrying and race
-          // the fresh one. Auto items are dropped and re-fetched by the
-          // reconciler (one clean download); manual ones are flagged failed so
-          // they don't silently vanish.
-          if (t.auto) {
-            await this.deleteDownload(t);
-          } else {
-            if (this.isNative) await this.notif.removeDownload(String(t.id));
-            this.updateTaskStatus(t.id, 'failed', 0);
-          }
-        } else if (!this.isNative || !nativeById.has(String(t.id))) {
+      } else if (DownloadManagerService.ACTIVE_STATUSES.includes(t.status)) {
+        // In-flight when the app last stopped. Ask the native daemon before
+        // condemning anything — on web the Shaka store did die with the JS
+        // context, but a native transfer very likely didn't.
+        if (this.isNative && (await this.reconcileNative(t, nativeById))) continue;
+
+        // Cancel the dead download so it can't keep retrying and race the fresh
+        // one. Auto items are dropped and re-fetched by the reconciler (one
+        // clean download); manual ones are flagged failed so they don't
+        // silently vanish.
+        if (onStartup && t.auto) {
+          await this.deleteDownload(t);
+        } else {
+          if (this.isNative) await this.notif.removeDownload(String(t.id));
           this.updateTaskStatus(t.id, 'failed', 0);
         }
       }
     }
+
+    // Downloads that finished before sizes were recorded, and any the
+    // reconciliation above just promoted to ready.
+    for (const t of this.cache.load()) {
+      if (t.status === 'ready' && t.sizeBytes == null) void this.persistSize(t.id);
+    }
+
+    // Recovery has just decided what is really still going; a card describing
+    // anything else — a queue a force-quit killed — goes now.
+    this.syncActivityCopy();
 
     this.recoveredAt.update((n) => n + 1);
   }

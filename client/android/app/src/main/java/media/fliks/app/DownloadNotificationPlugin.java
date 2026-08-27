@@ -7,10 +7,12 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
 import androidx.media3.common.util.UnstableApi;
-import androidx.media3.database.StandaloneDatabaseProvider;
-import androidx.media3.exoplayer.offline.DefaultDownloadIndex;
 import androidx.media3.exoplayer.offline.Download;
+import androidx.media3.exoplayer.offline.DownloadCursor;
 import androidx.media3.exoplayer.offline.DownloadManager;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -84,13 +86,42 @@ public class DownloadNotificationPlugin extends Plugin {
         }, 3000);
     }
 
-    /** Get all downloads with their current state + progress. */
+    /** Cap concurrent transfers, from the device setting. */
+    @PluginMethod()
+    public void setMaxConcurrentDownloads(PluginCall call) {
+        FlixDownloadUtil.setMaxParallelDownloads(call.getInt("max", 3));
+        call.resolve();
+    }
+
+    /**
+     * Every download the daemon knows about, in flight or finished.
+     *
+     * Built from the persistent index rather than {@code getCurrentDownloads()}:
+     * the DownloadManager loads that table asynchronously after construction, so
+     * a call landing before it finishes — which is exactly what happens on app
+     * start, when the WebView reconciles — sees an empty list and reports live
+     * transfers as gone. Live objects are layered on top for fresher progress.
+     */
     @PluginMethod()
     public void getDownloads(PluginCall call) {
         try {
+            Map<String, Download> byId = new LinkedHashMap<>();
+            try (DownloadCursor cursor =
+                     FlixDownloadUtil.getDownloadIndex(getContext()).getDownloads()) {
+                while (cursor.moveToNext()) {
+                    Download dl = cursor.getDownload();
+                    byId.put(dl.request.id, dl);
+                }
+            }
             DownloadManager dm = FlixDownloadUtil.getDownloadManager(getContext());
+            if (dm.isInitialized()) {
+                for (Download dl : dm.getCurrentDownloads()) {
+                    byId.put(dl.request.id, dl);
+                }
+            }
+
             JSArray arr = new JSArray();
-            for (Download dl : dm.getCurrentDownloads()) {
+            for (Download dl : byId.values()) {
                 JSObject obj = new JSObject();
                 obj.put("id", dl.request.id);
                 obj.put("progress", Math.round(dl.getPercentDownloaded()));
@@ -114,11 +145,9 @@ public class DownloadNotificationPlugin extends Plugin {
     public void isDownloaded(PluginCall call) {
         try {
             String id = call.getString("id", "");
-            // Query DownloadIndex directly — synchronous DB read, works even
-            // before DownloadManager finishes async initialization.
-            DefaultDownloadIndex index = new DefaultDownloadIndex(
-                new StandaloneDatabaseProvider(getContext()));
-            Download dl = index.getDownload(id);
+            // The index, not the manager: a synchronous DB read that works even
+            // before the DownloadManager finishes loading.
+            Download dl = FlixDownloadUtil.getDownloadIndex(getContext()).getDownload(id);
             boolean found = dl != null && dl.state == Download.STATE_COMPLETED;
             JSObject result = new JSObject();
             result.put("downloaded", found);
@@ -128,6 +157,20 @@ public class DownloadNotificationPlugin extends Plugin {
             result.put("downloaded", false);
             call.resolve(result);
         }
+    }
+
+    /** Bytes the download occupies in the cache. Zero when it isn't there. */
+    @PluginMethod()
+    public void getDownloadSize(PluginCall call) {
+        JSObject result = new JSObject();
+        try {
+            String id = call.getString("id", "");
+            Download dl = FlixDownloadUtil.getDownloadIndex(getContext()).getDownload(id);
+            result.put("bytes", dl == null ? 0 : dl.getBytesDownloaded());
+        } catch (Exception e) {
+            result.put("bytes", 0);
+        }
+        call.resolve(result);
     }
 
     private static String stateToString(int state) {

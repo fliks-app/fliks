@@ -17,6 +17,7 @@ import {
 import { AuthService } from '../../../core/services/auth.service';
 import { desktopDownloaderOrNull } from '../../../core/plugins/desktop-downloader.bridge';
 import { LucideDownload, LucideX } from '@lucide/angular';
+import { formatBytes } from '../../utils/download-format';
 
 @Component({
   selector: 'app-download-quality-modal',
@@ -48,7 +49,9 @@ import { LucideDownload, LucideX } from '@lucide/angular';
                   <svg lucideDownload class="h-4 w-4"></svg>
                   {{ q.key === 'original' ? ('downloads.original' | translate) : q.key }}
                 </span>
-                <span class="text-xs opacity-60">{{ q.label.split('(')[1]?.replace(')', '') || '' }}</span>
+                @if (q.estimatedSize) {
+                  <span class="text-xs opacity-60">~{{ formatBytes(q.estimatedSize) }}</span>
+                }
               </button>
             }
           </div>
@@ -83,6 +86,8 @@ import { LucideDownload, LucideX } from '@lucide/angular';
 export class DownloadQualityModalComponent {
   private readonly streamingApi = inject(StreamingApiService);
   private readonly auth = inject(AuthService);
+
+  protected readonly formatBytes = formatBytes;
 
   /** Original-file download is a browser save-to-disk — hidden on native,
    *  which uses the ExoPlayer/AVAsset offline pipeline instead. */

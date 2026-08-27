@@ -34,6 +34,7 @@ import { TranslateModule } from '@ngx-translate/core';
 import { formatTime, SpriteMetadata } from '../../../core/utils/player.utils';
 import { SeekbarComponent } from '../../../shared/components/seekbar/seekbar';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
+import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
 import {
   LucideCaptions,
   LucideCheck,
@@ -85,6 +86,7 @@ interface AppearanceRow {
 @Component({
   selector: 'app-player-controls',
   imports: [
+    CachedSrcDirective,
     TranslateModule,
     LucideCaptions,
     LucideCheck,

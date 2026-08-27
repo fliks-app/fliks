@@ -15,10 +15,12 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { LucideChevronLeft } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ClampToggleDirective } from '../../shared/directives/clamp-toggle.directive';
+import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 
 @Component({
   selector: 'app-person-detail',
-  imports: [TranslateModule, RouterLink, RouterLinkActive, RouterOutlet, ResolveUrlPipe, ClampToggleDirective, LucideChevronLeft],
+  imports: [
+    CachedSrcDirective,TranslateModule, RouterLink, RouterLinkActive, RouterOutlet, ResolveUrlPipe, ClampToggleDirective, LucideChevronLeft],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './person-detail.html',
 })

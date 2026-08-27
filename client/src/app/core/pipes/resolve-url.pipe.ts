@@ -3,6 +3,14 @@ import { ServerConfigService } from '../services/server-config.service';
 
 export type ImageSize = 'thumb' | 'medium' | 'full';
 
+/** Append the pre-generated variant to a local image URL. Remote URLs (TMDB
+ *  direct, manual override) are left untouched — see {@link ResolveUrlPipe}. */
+export function imageUrlWithSize(url: string, size: ImageSize): string {
+  if (!url.startsWith('/api/images/')) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}size=${size}`;
+}
+
 /**
  * Resolves a relative URL against the configured server base. When given a
  * second argument matching one of our local image sizes (thumb / medium /
@@ -18,11 +26,7 @@ export class ResolveUrlPipe implements PipeTransform {
 
   transform(url: string | null | undefined, size?: ImageSize): string | null {
     if (!url) return null;
-    let resolved = url;
-    if (size && url.startsWith('/api/images/')) {
-      const sep = url.includes('?') ? '&' : '?';
-      resolved = `${url}${sep}size=${size}`;
-    }
+    const resolved = size ? imageUrlWithSize(url, size) : url;
     return this.config.resolveUrl(resolved);
   }
 }

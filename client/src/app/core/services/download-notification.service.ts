@@ -9,11 +9,26 @@ export interface NativeDownloadEvent {
   seq: number;
 }
 
-/** Pre-translated notification copy shown by the native download daemon (iOS). */
+/** Pre-translated notification copy shown by the native download daemon (iOS),
+ *  on the completion banner and on the download's Live Activity. */
 export interface DownloadNotifStrings {
   notifTitle: string;
+  notifProgress: string;
+  notifStale: string;
   notifComplete: string;
   notifFailed: string;
+}
+
+/** Pre-translated copy for the iOS Live Activity covering the download queue.
+ *  The native side owns the numbers; only the wording comes from here. */
+export interface DownloadActivityCopy {
+  /** Media title for a lone download, a count for a batch. */
+  headline: string;
+  detail: string;
+  /** Replaces `detail` once the system flags the content as out of date. */
+  stale: string;
+  complete: string;
+  failed: string;
 }
 
 interface DownloadNotificationPlugin {
@@ -27,6 +42,10 @@ interface DownloadNotificationPlugin {
   getOfflineUrl(opts: { id: string }): Promise<{ url: string | null }>;
   pauseDownloads(): Promise<void>;
   resumeDownloads(): Promise<void>;
+  setActivityCopy(opts: DownloadActivityCopy): Promise<void>;
+  setMaxConcurrentDownloads(opts: { max: number }): Promise<void>;
+  dismissActivity(): Promise<void>;
+  getDownloadSize(opts: { id: string }): Promise<{ bytes: number }>;
   addListener(event: string, cb: (data: any) => void): Promise<any>;
 }
 
@@ -90,6 +109,27 @@ export class DownloadNotificationService {
     }
   }
 
+  /** Update the copy on the iOS Live Activity tracking the download queue.
+   *  Gated on the platform, not on the method existing: registerPlugin hands
+   *  back a proxy that fabricates a wrapper for any name, so an Android call
+   *  would cross the bridge only to be rejected as unimplemented. */
+  setActivityCopy(copy: DownloadActivityCopy): void {
+    if (!DownloadNotification || Capacitor.getPlatform() !== 'ios') return;
+    DownloadNotification.setActivityCopy(copy).catch(() => {});
+  }
+
+  /** Retire the iOS Live Activity for the download queue. */
+  dismissActivity(): void {
+    if (!DownloadNotification || Capacitor.getPlatform() !== 'ios') return;
+    DownloadNotification.dismissActivity().catch(() => {});
+  }
+
+  /** Cap how many transfers the native daemon runs at once. */
+  setMaxConcurrentDownloads(max: number): void {
+    if (!this.isNative || !DownloadNotification) return;
+    DownloadNotification.setMaxConcurrentDownloads({ max }).catch(() => {});
+  }
+
   /** Remove a download (cancel + delete cached data). */
   async removeDownload(id: string): Promise<void> {
     if (!this.isNative || !DownloadNotification) return;
@@ -104,6 +144,16 @@ export class DownloadNotificationService {
       return JSON.parse(result.downloads);
     } catch {
       return [];
+    }
+  }
+
+  /** Bytes a completed download occupies on device, or 0 when it isn't there. */
+  async getDownloadSize(id: string): Promise<number> {
+    if (!this.isNative || !DownloadNotification) return 0;
+    try {
+      return (await DownloadNotification.getDownloadSize({ id })).bytes ?? 0;
+    } catch {
+      return 0;
     }
   }
 

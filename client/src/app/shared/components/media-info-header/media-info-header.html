@@ -201,7 +201,7 @@
       @if (posterUrl()) {
         <img
           appImgFadeIn
-          [src]="posterUrl()! | resolveUrl:'medium'" [alt]="title()"
+          [cachedSrc]="posterUrl()! | resolveUrl:'medium'" [alt]="title()"
           loading="eager" fetchpriority="high" decoding="async"
           class="w-full rounded-xl object-cover bg-base-300"
           [class.aspect-2/3]="posterMode() === 'poster'"

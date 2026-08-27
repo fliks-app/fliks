@@ -20,6 +20,7 @@ import { DismissableStackService } from './core/services/dismissable-stack.servi
 import { NavbarService } from './core/services/navbar.service';
 import { PwaAutoUpdateService } from './core/services/pwa-auto-update.service';
 import { AppResumeService } from './core/services/app-resume.service';
+import { OfflinePlaybackSyncService } from './core/services/offline-playback-sync.service';
 
 @Component({
   selector: 'app-root',
@@ -45,6 +46,9 @@ export class App implements OnInit, OnDestroy {
   private readonly navbar = inject(NavbarService);
   private readonly pwaAutoUpdate = inject(PwaAutoUpdateService);
   private readonly appResume = inject(AppResumeService);
+  /** Injected so the offline playback queue is flushed on start, not only when
+   *  some page happens to instantiate the service. */
+  private readonly offlineSync = inject(OfflinePlaybackSyncService);
   private backButtonListener?: { remove: () => Promise<void> };
   private resumeListener?: { remove: () => Promise<void> };
   private pauseListener?: { remove: () => Promise<void> };
