@@ -14,6 +14,10 @@ export interface WhenContext {
   isEpisode?: boolean;
   isTv: boolean;
   isTouch: boolean;
+  /** Which menu is being built. Both surfaces read the same contribution
+   *  lists, so an item only declares this when it genuinely belongs to one:
+   *  Play and Open mean nothing on a detail page you are already on. */
+  surface?: 'card' | 'detail';
 }
 
 /** `null` marks a predicate this client doesn't know — the fail-closed signal. */
@@ -30,6 +34,8 @@ function evaluateKnown(predicate: string, ctx: WhenContext): boolean | null {
   if (predicate === 'isEpisode') return ctx.isEpisode ?? false;
   if (predicate === 'isTv') return ctx.isTv;
   if (predicate === 'isTouch') return ctx.isTouch;
+  if (predicate === 'surface:card') return ctx.surface === 'card';
+  if (predicate === 'surface:detail') return ctx.surface === 'detail';
   return null;
 }
 
