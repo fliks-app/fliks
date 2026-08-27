@@ -51,6 +51,22 @@ describe('evaluateWhen', () => {
     expect(evaluateWhen(['isTouch'], ctx({ isTouch: true }))).toBe(true);
   });
 
+  // Both menus read the same contribution lists, so an item that belongs to
+  // only one says so. An omitted surface matches neither, which keeps a
+  // surface-scoped item out of any caller that hasn't declared where it is.
+  it('VERDICT: surface:card and surface:detail select one menu each', () => {
+    expect(evaluateWhen(['surface:card'], ctx({ surface: 'card' }))).toBe(true);
+    expect(evaluateWhen(['surface:card'], ctx({ surface: 'detail' }))).toBe(false);
+    expect(evaluateWhen(['surface:detail'], ctx({ surface: 'detail' }))).toBe(true);
+    expect(evaluateWhen(['surface:detail'], ctx({ surface: 'card' }))).toBe(false);
+    expect(evaluateWhen(['surface:card'], ctx())).toBe(false);
+  });
+
+  it('leaves an item with no surface predicate visible on both', () => {
+    expect(evaluateWhen(['isAdmin'], ctx({ isAdmin: true, surface: 'card' }))).toBe(true);
+    expect(evaluateWhen(['isAdmin'], ctx({ isAdmin: true, surface: 'detail' }))).toBe(true);
+  });
+
   // The whole safety property: a manifest naming a predicate this client
   // doesn't know must hide the item, never show it — in either polarity.
   it('VERDICT: an unknown predicate is always false', () => {
