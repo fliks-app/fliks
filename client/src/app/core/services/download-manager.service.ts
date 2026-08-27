@@ -12,6 +12,7 @@ import { BrowserDeviceProfileService } from './browser-device-profile.service';
 import { TranslateService } from '@ngx-translate/core';
 import { formatSubtitleLabel } from '../utils/player.utils';
 import { AppSettingsService } from './app-settings.service';
+import { DownloadSettingsService } from './download-settings.service';
 import { ImageCacheService } from './image-cache.service';
 import { ServerConfigService } from './server-config.service';
 import { NetworkService } from './network.service';
@@ -60,6 +61,9 @@ export class DownloadManagerService {
   private readonly translate = inject(TranslateService);
   private readonly appSettings = inject(AppSettingsService);
   private readonly imageCache = inject(ImageCacheService);
+  /** Injected here so the native queue is capped from app start, before any
+   *  download can be requested. */
+  private readonly downloadSettings = inject(DownloadSettingsService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly network = inject(NetworkService);
 
@@ -67,9 +71,8 @@ export class DownloadManagerService {
   private eventSeq = 0;
   private nextLocalId = Date.now();
 
-  // Cap concurrent web downloads (each spins up a hidden player + Shaka store);
-  // native downloads are queued by the OS daemon and don't come through here.
-  private static readonly MAX_WEB_CONCURRENT = 2;
+  // Web downloads each spin up a hidden player + Shaka store, so they honour
+  // the same cap as the native queue; there the OS daemon enforces it instead.
   private webActive = 0;
   private readonly webQueue: Array<() => void> = [];
 
@@ -360,7 +363,7 @@ export class DownloadManagerService {
         this.webQueue.shift()?.();
       }
     };
-    if (this.webActive < DownloadManagerService.MAX_WEB_CONCURRENT) {
+    if (this.webActive < this.downloadSettings.maxConcurrent()) {
       void run();
     } else {
       this.webQueue.push(() => void run());

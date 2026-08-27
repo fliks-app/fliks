@@ -41,6 +41,15 @@ public class FlixDownloadUtil {
     static final String DOWNLOAD_CHANNEL_ID = "fliks_downloads";
     static final int FOREGROUND_NOTIFICATION_ID = 888888;
 
+    /** Worker pool size. Sized to the largest cap the settings screen offers so
+     *  raising the cap isn't bottlenecked by a pool fixed at construction;
+     *  {@link DownloadManager#setMaxParallelDownloads} is what actually gates
+     *  concurrency, and it can be changed on a live manager. */
+    private static final int MAX_SUPPORTED_PARALLEL = 5;
+    /** Concurrent transfers, in force until the WebView pushes the user's
+     *  setting. Held statically so it survives the manager being built later. */
+    private static int maxParallelDownloads = 3;
+
     private static SimpleCache cache;
     private static DownloadManager downloadManager;
     private static DownloadNotificationHelper notificationHelper;
@@ -48,6 +57,15 @@ public class FlixDownloadUtil {
 
     public static synchronized void setAuthToken(String token) {
         authToken = token;
+    }
+
+    /** Cap concurrent transfers. Applies to a manager that already exists, and
+     *  is remembered for one built later. */
+    public static synchronized void setMaxParallelDownloads(int value) {
+        maxParallelDownloads = Math.max(1, Math.min(MAX_SUPPORTED_PARALLEL, value));
+        if (downloadManager != null) {
+            downloadManager.setMaxParallelDownloads(maxParallelDownloads);
+        }
     }
 
     public static synchronized SimpleCache getCache(Context ctx) {
@@ -70,9 +88,9 @@ public class FlixDownloadUtil {
                 new StandaloneDatabaseProvider(ctx),
                 getCache(ctx),
                 buildHttpDataSourceFactory(),
-                Executors.newFixedThreadPool(2)
+                Executors.newFixedThreadPool(MAX_SUPPORTED_PARALLEL)
             );
-            downloadManager.setMaxParallelDownloads(2);
+            downloadManager.setMaxParallelDownloads(maxParallelDownloads);
             // Emit progress/completion events to WebView — registered once on
             // the singleton so events flow regardless of service lifecycle.
             downloadManager.addListener(new DownloadManager.Listener() {

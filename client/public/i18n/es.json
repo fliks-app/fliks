@@ -205,6 +205,8 @@
     "clear_cache_hint": "Elimina los datos almacenados en caché (listas, metadatos). Las páginas se recargarán desde el servidor.",
     "clear": "Vaciar",
     "cache_cleared": "Caché vaciada",
+    "max_concurrent": "Descargas simultáneas",
+    "max_concurrent_hint": "Cuántas descargas avanzan a la vez. El resto espera su turno.",
     "delete_downloads": "Eliminar todas las descargas",
     "delete_downloads_hint": "Elimina todos los medios descargados para la reproducción sin conexión en este dispositivo.",
     "delete_downloads_confirm": "¿Eliminar todas las descargas? Esta acción es irreversible.",

@@ -54,11 +54,14 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         CAPPluginMethod(name: "pauseDownloads", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "resumeDownloads", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setActivityCopy", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setMaxConcurrentDownloads", returnType: CAPPluginReturnPromise),
     ]
 
     /// Concurrent transfers. HLS aggregate downloads are segment-chatty, so a
-    /// wide queue slows every item down instead of finishing any of them.
-    private static let maxConcurrentDownloads = 3
+    /// wide queue slows every item down instead of finishing any of them. The
+    /// WebView pushes the user's setting over `setMaxConcurrentDownloads`; this
+    /// is only the value in force until it does.
+    private var maxConcurrentDownloads = 3
 
     /// UserDefaults key under which the id → relative-path map is persisted.
     private static let assetsDefaultsKey = "fliks_offline_assets"
@@ -218,7 +221,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             self.startActivityIfNeeded()
             // Surface the state immediately so the UI leaves "transcoding" —
             // queued when it has to wait its turn, downloading when it doesn't.
-            let willStart = self.inFlightCount < Self.maxConcurrentDownloads && !self.paused
+            let willStart = self.inFlightCount < self.maxConcurrentDownloads && !self.paused
             self.notifyListeners("downloadProgress", data: [
                 "id": id,
                 "progress": 0,
@@ -236,7 +239,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
     /// Start as many queued downloads as the concurrency cap allows.
     private func pumpQueue() {
         guard !paused else { return }
-        while inFlightCount < Self.maxConcurrentDownloads, !pending.isEmpty {
+        while inFlightCount < maxConcurrentDownloads, !pending.isEmpty {
             beginDownload(pending.removeFirst())
         }
     }
@@ -444,6 +447,19 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         paused = false
         for task in activeTasks.values { task.resume() }
         pumpQueue()
+        call.resolve()
+    }
+
+    /// Cap concurrent transfers. Raising it starts queued downloads at once;
+    /// lowering it lets the extra ones finish rather than cancelling work
+    /// already paid for, and the queue narrows as they drain.
+    @objc func setMaxConcurrentDownloads(_ call: CAPPluginCall) {
+        let requested = call.getInt("max") ?? maxConcurrentDownloads
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.maxConcurrentDownloads = max(1, min(5, requested))
+            self.pumpQueue()
+        }
         call.resolve()
     }
 

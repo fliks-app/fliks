@@ -210,6 +210,8 @@
     "clear_cache_hint": "Supprime les données mises en cache (listes, métadonnées). Les pages se rechargeront depuis le serveur.",
     "clear": "Vider",
     "cache_cleared": "Cache vidé",
+    "max_concurrent": "Téléchargements simultanés",
+    "max_concurrent_hint": "Nombre de téléchargements qui progressent en même temps. Les autres attendent leur tour.",
     "delete_downloads": "Supprimer tous les téléchargements",
     "delete_downloads_hint": "Supprime tous les médias téléchargés pour la lecture hors-ligne sur cet appareil.",
     "delete_downloads_confirm": "Supprimer tous les téléchargements ? Cette action est irréversible.",

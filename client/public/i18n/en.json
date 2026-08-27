@@ -210,6 +210,8 @@
     "clear_cache_hint": "Deletes cached data (lists, metadata). Pages will reload from the server.",
     "clear": "Clear",
     "cache_cleared": "Cache cleared",
+    "max_concurrent": "Simultaneous downloads",
+    "max_concurrent_hint": "How many downloads progress at once. The rest wait their turn.",
     "delete_downloads": "Delete all downloads",
     "delete_downloads_hint": "Deletes all media downloaded for offline playback on this device.",
     "delete_downloads_confirm": "Delete all downloads? This action is irreversible.",

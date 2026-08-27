@@ -205,6 +205,8 @@
     "clear_cache_hint": "Löscht die zwischengespeicherten Daten (Listen, Metadaten). Die Seiten werden neu vom Server geladen.",
     "clear": "Leeren",
     "cache_cleared": "Cache geleert",
+    "max_concurrent": "Gleichzeitige Downloads",
+    "max_concurrent_hint": "Wie viele Downloads gleichzeitig laufen. Die übrigen warten.",
     "delete_downloads": "Alle Downloads löschen",
     "delete_downloads_hint": "Löscht alle für die Offline-Wiedergabe heruntergeladenen Medien auf diesem Gerät.",
     "delete_downloads_confirm": "Alle Downloads löschen? Diese Aktion ist unwiderruflich.",

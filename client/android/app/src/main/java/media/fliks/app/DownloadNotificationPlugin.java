@@ -86,6 +86,12 @@ public class DownloadNotificationPlugin extends Plugin {
 
     /** Get all downloads with their current state + progress. */
     @PluginMethod()
+    public void setMaxConcurrentDownloads(PluginCall call) {
+        FlixDownloadUtil.setMaxParallelDownloads(call.getInt("max", 3));
+        call.resolve();
+    }
+
+    @PluginMethod()
     public void getDownloads(PluginCall call) {
         try {
             DownloadManager dm = FlixDownloadUtil.getDownloadManager(getContext());
