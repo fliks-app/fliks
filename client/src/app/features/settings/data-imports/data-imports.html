@@ -1,7 +1,9 @@
 <div class="flex flex-col gap-6">
   <div>
     <h1 class="text-2xl font-bold">{{ 'settings.data_imports.title' | translate }}</h1>
-    <p class="text-sm text-base-content/60 mt-1">{{ 'settings.data_imports.subtitle' | translate }}</p>
+    <p class="text-sm text-base-content/60 mt-1">
+      {{ 'settings.data_imports.subtitle' | translate }}
+    </p>
   </div>
 
   @if (loading()) {
@@ -25,7 +27,9 @@
       <div class="card-body gap-4">
         <div>
           <h2 class="card-title text-lg">{{ 'settings.data_imports.emby.section' | translate }}</h2>
-          <p class="text-sm text-base-content/60 mt-1">{{ 'settings.data_imports.emby.description' | translate }}</p>
+          <p class="text-sm text-base-content/60 mt-1">
+            {{ 'settings.data_imports.emby.description' | translate }}
+          </p>
         </div>
 
         @if (embyServers().length === 0) {
@@ -39,7 +43,9 @@
                 <tr>
                   <th>{{ 'settings.media_servers.col_name' | translate }}</th>
                   <th>{{ 'settings.media_servers.col_url' | translate }}</th>
-                  <th class="text-center">{{ 'settings.media_servers.col_enabled' | translate }}</th>
+                  <th class="text-center">
+                    {{ 'settings.media_servers.col_enabled' | translate }}
+                  </th>
                   <th class="text-end w-48"></th>
                 </tr>
               </thead>
@@ -47,12 +53,18 @@
                 @for (server of embyServers(); track server.id) {
                   <tr>
                     <td class="font-medium">{{ server.name }}</td>
-                    <td class="text-sm text-base-content/60 truncate max-w-[16rem]">{{ server.url }}</td>
+                    <td class="text-sm text-base-content/60 truncate max-w-[16rem]">
+                      {{ server.url }}
+                    </td>
                     <td class="text-center">
                       @if (server.enabled) {
-                        <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
+                        <span class="badge badge-success badge-sm">{{
+                          'common.yes' | translate
+                        }}</span>
                       } @else {
-                        <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
+                        <span class="badge badge-ghost badge-sm">{{
+                          'common.no' | translate
+                        }}</span>
                       }
                     </td>
                     <td class="text-end">
@@ -83,8 +95,12 @@
     <section class="card bg-base-200/60 border border-base-200">
       <div class="card-body gap-4">
         <div>
-          <h2 class="card-title text-lg">{{ 'settings.data_imports.seerr.section' | translate }}</h2>
-          <p class="text-sm text-base-content/60 mt-1">{{ 'settings.data_imports.seerr.description' | translate }}</p>
+          <h2 class="card-title text-lg">
+            {{ 'settings.data_imports.seerr.section' | translate }}
+          </h2>
+          <p class="text-sm text-base-content/60 mt-1">
+            {{ 'settings.data_imports.seerr.description' | translate }}
+          </p>
         </div>
 
         <label class="form-control w-full max-w-xl">
@@ -228,7 +244,9 @@
               (ngModelChange)="radarrLibrary.set($event)"
               required
             >
-              <option [ngValue]="null" disabled>{{ 'settings.libraries.import_target_placeholder' | translate }}</option>
+              <option [ngValue]="null" disabled>
+                {{ 'settings.libraries.import_target_placeholder' | translate }}
+              </option>
               @for (l of movieLibraries(); track l.id) {
                 <option [ngValue]="l.id">{{ l.name }}</option>
               }
@@ -300,16 +318,31 @@
               <div>
                 <p>{{ 'import.result_imported' | translate: { count: r.imported } }}</p>
                 @if (r.subtitlesImported) {
-                  <p class="mt-1">{{ 'import.result_subtitles' | translate: { count: r.subtitlesImported } }}</p>
+                  <p class="mt-1">
+                    {{ 'import.result_subtitles' | translate: { count: r.subtitlesImported } }}
+                  </p>
                 }
                 @if (r.qualityProfilesCreated.length) {
-                  <p class="mt-1">{{ 'import.quality_profiles_created' | translate: { count: r.qualityProfilesCreated.length } }}: {{ r.qualityProfilesCreated.join(', ') }}</p>
+                  <p class="mt-1">
+                    {{
+                      'import.quality_profiles_created'
+                        | translate: { count: r.qualityProfilesCreated.length }
+                    }}: {{ r.qualityProfilesCreated.join(', ') }}
+                  </p>
                 }
                 @if (r.rootFoldersCreated.length) {
-                  <p class="mt-1">{{ 'import.root_folders_created' | translate: { count: r.rootFoldersCreated.length } }}: {{ r.rootFoldersCreated.join(', ') }}</p>
+                  <p class="mt-1">
+                    {{
+                      'import.root_folders_created'
+                        | translate: { count: r.rootFoldersCreated.length }
+                    }}: {{ r.rootFoldersCreated.join(', ') }}
+                  </p>
                 }
                 @if (r.errors.length) {
-                  <p class="mt-1">{{ r.errors.length }} {{ 'import.result_errors' | translate }}: {{ r.errors.slice(0, 5).join(', ') }}</p>
+                  <p class="mt-1">
+                    {{ r.errors.length }} {{ 'import.result_errors' | translate }}:
+                    {{ r.errors.slice(0, 5).join(', ') }}
+                  </p>
                 }
               </div>
             </div>
@@ -377,7 +410,9 @@
               (ngModelChange)="sonarrLibrary.set($event)"
               required
             >
-              <option [ngValue]="null" disabled>{{ 'settings.libraries.import_target_placeholder' | translate }}</option>
+              <option [ngValue]="null" disabled>
+                {{ 'settings.libraries.import_target_placeholder' | translate }}
+              </option>
               @for (l of seriesLibraries(); track l.id) {
                 <option [ngValue]="l.id">{{ l.name }}</option>
               }
@@ -449,16 +484,31 @@
               <div>
                 <p>{{ 'import.result_imported' | translate: { count: r.imported } }}</p>
                 @if (r.subtitlesImported) {
-                  <p class="mt-1">{{ 'import.result_subtitles' | translate: { count: r.subtitlesImported } }}</p>
+                  <p class="mt-1">
+                    {{ 'import.result_subtitles' | translate: { count: r.subtitlesImported } }}
+                  </p>
                 }
                 @if (r.qualityProfilesCreated.length) {
-                  <p class="mt-1">{{ 'import.quality_profiles_created' | translate: { count: r.qualityProfilesCreated.length } }}: {{ r.qualityProfilesCreated.join(', ') }}</p>
+                  <p class="mt-1">
+                    {{
+                      'import.quality_profiles_created'
+                        | translate: { count: r.qualityProfilesCreated.length }
+                    }}: {{ r.qualityProfilesCreated.join(', ') }}
+                  </p>
                 }
                 @if (r.rootFoldersCreated.length) {
-                  <p class="mt-1">{{ 'import.root_folders_created' | translate: { count: r.rootFoldersCreated.length } }}: {{ r.rootFoldersCreated.join(', ') }}</p>
+                  <p class="mt-1">
+                    {{
+                      'import.root_folders_created'
+                        | translate: { count: r.rootFoldersCreated.length }
+                    }}: {{ r.rootFoldersCreated.join(', ') }}
+                  </p>
                 }
                 @if (r.errors.length) {
-                  <p class="mt-1">{{ r.errors.length }} {{ 'import.result_errors' | translate }}: {{ r.errors.slice(0, 5).join(', ') }}</p>
+                  <p class="mt-1">
+                    {{ r.errors.length }} {{ 'import.result_errors' | translate }}:
+                    {{ r.errors.slice(0, 5).join(', ') }}
+                  </p>
                 }
               </div>
             </div>
@@ -473,15 +523,25 @@
   @if (radarrShowWizard()) {
     <div class="modal modal-open">
       <div class="modal-box max-w-2xl">
-        <h3 class="font-bold text-lg">{{ 'import.path_wizard.title' | translate }}</h3>
-        <p class="text-sm text-base-content/60 mt-1">{{ 'import.path_wizard.description' | translate }}</p>
+        <app-modal-header (closed)="cancelWizard('radarr')">
+          <div>
+            <h3 class="text-lg font-bold">{{ 'import.path_wizard.title' | translate }}</h3>
+            <p class="text-sm text-base-content/60 mt-1">
+              {{ 'import.path_wizard.description' | translate }}
+            </p>
+          </div>
+        </app-modal-header>
 
         @if (radarrPreview(); as preview) {
           @if (eligibleLocalLibraries('radarr').length === 0) {
             <div role="alert" class="alert alert-warning mt-4 text-sm">
               <div>
                 <p>{{ 'import.path_wizard.no_root_folders' | translate }}</p>
-                <button type="button" class="btn btn-sm btn-primary mt-3" (click)="goToLibraries('radarr')">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-primary mt-3"
+                  (click)="goToLibraries('radarr')"
+                >
                   {{ 'import.path_wizard.go_to_root_folders' | translate }}
                 </button>
               </div>
@@ -490,7 +550,9 @@
             <div class="flex flex-col gap-3 mt-4">
               @for (m of radarrMappings(); track m.remotePath) {
                 <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <code class="text-sm bg-base-300 px-2 py-1 rounded sm:flex-1 truncate">{{ m.remotePath }}</code>
+                  <code class="text-sm bg-base-300 px-2 py-1 rounded sm:flex-1 truncate">{{
+                    m.remotePath
+                  }}</code>
                   <span class="text-base-content/40 hidden sm:inline">→</span>
                   <select
                     class="select select-bordered select-sm sm:flex-1"
@@ -501,7 +563,9 @@
                     @for (lib of eligibleLocalLibraries('radarr'); track lib.id) {
                       <option [ngValue]="lib.id">{{ lib.name }} ({{ lib.path }})</option>
                     }
-                    <option [ngValue]="IGNORE_VALUE">{{ 'import.path_wizard.option_ignore' | translate }}</option>
+                    <option [ngValue]="IGNORE_VALUE">
+                      {{ 'import.path_wizard.option_ignore' | translate }}
+                    </option>
                   </select>
                 </div>
               }
@@ -509,14 +573,14 @@
           }
         }
 
-        <div class="modal-action">
-          <button type="button" class="btn btn-ghost btn-sm" (click)="cancelWizard('radarr')">
+        <app-modal-footer>
+          <button type="button" class="btn btn-ghost" (click)="cancelWizard('radarr')">
             {{ 'import.path_wizard.cancel' | translate }}
           </button>
           @if (eligibleLocalLibraries('radarr').length > 0) {
             <button
               type="button"
-              class="btn btn-primary btn-sm"
+              class="btn btn-primary"
               [disabled]="!radarrCanConfirm() || radarrLoading()"
               (click)="confirmRadarrImport()"
             >
@@ -526,7 +590,7 @@
               {{ 'import.path_wizard.confirm' | translate }}
             </button>
           }
-        </div>
+        </app-modal-footer>
       </div>
     </div>
   }
@@ -534,15 +598,25 @@
   @if (sonarrShowWizard()) {
     <div class="modal modal-open">
       <div class="modal-box max-w-2xl">
-        <h3 class="font-bold text-lg">{{ 'import.path_wizard.title' | translate }}</h3>
-        <p class="text-sm text-base-content/60 mt-1">{{ 'import.path_wizard.description' | translate }}</p>
+        <app-modal-header (closed)="cancelWizard('sonarr')">
+          <div>
+            <h3 class="text-lg font-bold">{{ 'import.path_wizard.title' | translate }}</h3>
+            <p class="text-sm text-base-content/60 mt-1">
+              {{ 'import.path_wizard.description' | translate }}
+            </p>
+          </div>
+        </app-modal-header>
 
         @if (sonarrPreview(); as preview) {
           @if (eligibleLocalLibraries('sonarr').length === 0) {
             <div role="alert" class="alert alert-warning mt-4 text-sm">
               <div>
                 <p>{{ 'import.path_wizard.no_root_folders' | translate }}</p>
-                <button type="button" class="btn btn-sm btn-primary mt-3" (click)="goToLibraries('sonarr')">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-primary mt-3"
+                  (click)="goToLibraries('sonarr')"
+                >
                   {{ 'import.path_wizard.go_to_root_folders' | translate }}
                 </button>
               </div>
@@ -551,7 +625,9 @@
             <div class="flex flex-col gap-3 mt-4">
               @for (m of sonarrMappings(); track m.remotePath) {
                 <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <code class="text-sm bg-base-300 px-2 py-1 rounded sm:flex-1 truncate">{{ m.remotePath }}</code>
+                  <code class="text-sm bg-base-300 px-2 py-1 rounded sm:flex-1 truncate">{{
+                    m.remotePath
+                  }}</code>
                   <span class="text-base-content/40 hidden sm:inline">→</span>
                   <select
                     class="select select-bordered select-sm sm:flex-1"
@@ -562,7 +638,9 @@
                     @for (lib of eligibleLocalLibraries('sonarr'); track lib.id) {
                       <option [ngValue]="lib.id">{{ lib.name }} ({{ lib.path }})</option>
                     }
-                    <option [ngValue]="IGNORE_VALUE">{{ 'import.path_wizard.option_ignore' | translate }}</option>
+                    <option [ngValue]="IGNORE_VALUE">
+                      {{ 'import.path_wizard.option_ignore' | translate }}
+                    </option>
                   </select>
                 </div>
               }
@@ -570,14 +648,14 @@
           }
         }
 
-        <div class="modal-action">
-          <button type="button" class="btn btn-ghost btn-sm" (click)="cancelWizard('sonarr')">
+        <app-modal-footer>
+          <button type="button" class="btn btn-ghost" (click)="cancelWizard('sonarr')">
             {{ 'import.path_wizard.cancel' | translate }}
           </button>
           @if (eligibleLocalLibraries('sonarr').length > 0) {
             <button
               type="button"
-              class="btn btn-primary btn-sm"
+              class="btn btn-primary"
               [disabled]="!sonarrCanConfirm() || sonarrLoading()"
               (click)="confirmSonarrImport()"
             >
@@ -587,7 +665,7 @@
               {{ 'import.path_wizard.confirm' | translate }}
             </button>
           }
-        </div>
+        </app-modal-footer>
       </div>
     </div>
   }

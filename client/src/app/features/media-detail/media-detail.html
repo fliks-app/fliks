@@ -1,5 +1,4 @@
 <div appTvSection appDefaultFocus="[autofocus]" class="flex flex-col gap-4">
-
   @if (loading()) {
     <!-- Skeleton: same vertical rhythm as the loaded layout so the page
          doesn't reflow when data arrives. -->
@@ -31,7 +30,6 @@
       <p class="text-lg">{{ 'media_detail.not_found' | translate }}</p>
     </div>
   } @else if (media(); as m) {
-
     <!-- ===== EPISODE MODE ===== -->
     @if (episodeMode() && focusedEpisode(); as ep) {
       @let s = focusedSeason()!;
@@ -89,7 +87,7 @@
             [watchedEpisodeIds]="watchedEpisodeIds()"
             [episodeProgress]="episodeProgress()"
             [hideControls]="true"
-            [sectionTitle]="'media_detail.more_from_season' | translate:{ season: s.seasonNumber }"
+            [sectionTitle]="'media_detail.more_from_season' | translate: { season: s.seasonNumber }"
             (toggleEpisodeWatched)="onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
           />
         }
@@ -97,25 +95,25 @@
         @if (otherSeasons().length) {
           <div class="divider my-6"></div>
           <app-collapsible-section
-            [heading]="'media_detail.other_seasons_of' | translate:{ title: m.title }"
+            [heading]="'media_detail.other_seasons_of' | translate: { title: m.title }"
             persistKey="otherSeasons"
           >
-          <app-horizontal-scroller>
-            @for (other of otherSeasons(); track other.id) {
-              <app-media-card
-                class="shrink-0 w-28 sm:w-32 lg:w-40"
-                [aspect]="'portrait'"
-                [imageUrl]="other.posterUrl ?? m.posterUrl"
-                [title]="('media_detail.season' | translate) + ' ' + other.seasonNumber"
-                [subtitle]="other.episodes.length + ' ' + ('media_detail.episodes' | translate)"
-                [link]="seasonLink(m, other)"
-                [replaceUrl]="true"
-                [interactiveWatched]="true"
-                [status]="seasonFullyWatched(other) ? 'watched' : null"
-                (watchedToggled)="onToggleSeasonWatched(m.id, other, $event)"
-              />
-            }
-          </app-horizontal-scroller>
+            <app-horizontal-scroller>
+              @for (other of otherSeasons(); track other.id) {
+                <app-media-card
+                  class="shrink-0 w-28 sm:w-32 lg:w-40"
+                  [aspect]="'portrait'"
+                  [imageUrl]="other.posterUrl ?? m.posterUrl"
+                  [title]="('media_detail.season' | translate) + ' ' + other.seasonNumber"
+                  [subtitle]="other.episodes.length + ' ' + ('media_detail.episodes' | translate)"
+                  [link]="seasonLink(m, other)"
+                  [replaceUrl]="true"
+                  [interactiveWatched]="true"
+                  [status]="seasonFullyWatched(other) ? 'watched' : null"
+                  (watchedToggled)="onToggleSeasonWatched(m.id, other, $event)"
+                />
+              }
+            </app-horizontal-scroller>
           </app-collapsible-section>
         }
 
@@ -146,7 +144,7 @@
         }
       </div>
 
-    <!-- ===== NORMAL MODE (movie / series) ===== -->
+      <!-- ===== NORMAL MODE (movie / series) ===== -->
     } @else {
       <div class="flex flex-col">
         <app-media-info-header
@@ -217,7 +215,7 @@
         @if (m.type === 'movie' && collection(); as coll) {
           <div class="divider my-6"></div>
           <app-collapsible-section
-            [heading]="'media_detail.part_of' | translate:{ name: coll.name }"
+            [heading]="'media_detail.part_of' | translate: { name: coll.name }"
             persistKey="collection"
           >
             @if (coll.items.length > 1) {
@@ -230,7 +228,7 @@
                 @if (only.posterUrl) {
                   <img
                     appImgFadeIn
-                    [cachedSrc]="only.posterUrl | resolveUrl:'thumb'"
+                    [cachedSrc]="only.posterUrl | resolveUrl: 'thumb'"
                     [alt]="only.title"
                     class="w-16 rounded-md shrink-0"
                     loading="lazy"
@@ -243,7 +241,9 @@
                     <p class="text-sm text-base-content/60">{{ only.year }}</p>
                   }
                   @if (!only.hasFile) {
-                    <span class="badge badge-sm badge-warning mt-1">{{ 'media_card.missing_files' | translate }}</span>
+                    <span class="badge badge-sm badge-warning mt-1">{{
+                      'media_card.missing_files' | translate
+                    }}</span>
                   }
                 </div>
               </a>
@@ -328,14 +328,13 @@
           <div class="divider my-6"></div>
           <ng-container *ngTemplateOutlet="castCrewBlock" />
         }
-
-
       </div>
     }
 
     <!-- Modals (shared between modes) -->
     <div>
-      <app-releases-modal #movieReleasesModal
+      <app-releases-modal
+        #movieReleasesModal
         [title]="'media_detail.releases_title' | translate"
         [releases]="releases()"
         [indexers]="releasesIndexers()"
@@ -350,7 +349,8 @@
         (grab)="grabRelease($event.release, $event.key)"
       />
 
-      <app-releases-modal #episodeReleasesModal
+      <app-releases-modal
+        #episodeReleasesModal
         [title]="'media_detail.ep_releases_title' | translate"
         [releases]="epReleases()"
         [indexers]="epReleasesIndexers()"
@@ -365,7 +365,8 @@
         (grab)="grabEpisodeRelease(m.id, selectedEpisodeId()!, $event.release, $event.key)"
       />
 
-      <app-releases-modal #seasonReleasesModal
+      <app-releases-modal
+        #seasonReleasesModal
         [title]="'media_detail.season_packs_title' | translate"
         [releases]="seasonReleases()"
         [indexers]="seasonReleasesIndexers()"
@@ -407,7 +408,6 @@
       <app-download-quality-modal #downloadModal (download)="onDownload($event)" />
       <app-download-detail-modal #downloadDetailModal [progress]="activeDownload()" />
     </div>
-
   }
 </div>
 
@@ -419,7 +419,7 @@
         [aspect]="'portrait'"
         [imageUrl]="item.posterUrl"
         [title]="item.title"
-        [subtitle]="item.year ? ('' + item.year) : ''"
+        [subtitle]="item.year ? '' + item.year : ''"
         [rating]="item.rating ?? 0"
         [status]="item.hasFile ? null : 'missing'"
         [link]="['/movies', '' + item.id]"
@@ -431,29 +431,49 @@
 <ng-template #castCrewBlock>
   @if (cast().length) {
     <div class="cv-auto py-5 -my-5 px-4 -mx-4" style="contain-intrinsic-size: auto 12rem">
-    <app-collapsible-section [heading]="'media_detail.cast' | translate" persistKey="cast">
-    <app-horizontal-scroller>
-      @for (c of cast(); track c.id) {
-        <a [routerLink]="['/persons', c.person.id]" data-no-focus-ring class="shrink-0 w-20 sm:w-24 flex flex-col items-center gap-1.5 group">
-          <div class="avatar">
-            <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary group-focus:ring-primary group-focus-visible:ring-primary group-focus:ring-4 group-focus-visible:ring-4 group-focus:ring-offset-2 group-focus-visible:ring-offset-2 group-focus:ring-offset-base-100 group-focus-visible:ring-offset-base-100 transition-colors">
-              @if (c.person.avatarUrl) {
-                <img appImgFadeIn [cachedSrc]="c.person.avatarUrl | resolveUrl:'thumb'" [alt]="c.person.name" loading="lazy" decoding="async" fetchpriority="low" />
-              } @else {
-                <div class="bg-base-300 flex items-center justify-center w-full h-full text-lg font-bold text-base-content/30">
-                  {{ c.person.name.charAt(0) }}
+      <app-collapsible-section [heading]="'media_detail.cast' | translate" persistKey="cast">
+        <app-horizontal-scroller>
+          @for (c of cast(); track c.id) {
+            <a
+              [routerLink]="['/persons', c.person.id]"
+              data-no-focus-ring
+              class="shrink-0 w-20 sm:w-24 flex flex-col items-center gap-1.5 group"
+            >
+              <div class="avatar">
+                <div
+                  class="w-16 h-16 sm:w-20 sm:h-20 rounded-full ring ring-base-200 group-hover:ring-primary group-focus:ring-primary group-focus-visible:ring-primary group-focus:ring-4 group-focus-visible:ring-4 group-focus:ring-offset-2 group-focus-visible:ring-offset-2 group-focus:ring-offset-base-100 group-focus-visible:ring-offset-base-100 transition-colors"
+                >
+                  @if (c.person.avatarUrl) {
+                    <img
+                      appImgFadeIn
+                      [cachedSrc]="c.person.avatarUrl | resolveUrl: 'thumb'"
+                      [alt]="c.person.name"
+                      loading="lazy"
+                      decoding="async"
+                      fetchpriority="low"
+                    />
+                  } @else {
+                    <div
+                      class="bg-base-300 flex items-center justify-center w-full h-full text-lg font-bold text-base-content/30"
+                    >
+                      {{ c.person.name.charAt(0) }}
+                    </div>
+                  }
                 </div>
+              </div>
+              <span class="text-xs text-center font-medium line-clamp-1 w-full">{{
+                c.person.name
+              }}</span>
+              @if (c.character) {
+                <span
+                  class="text-[10px] text-base-content/50 text-center line-clamp-1 w-full -mt-1"
+                  >{{ c.character }}</span
+                >
               }
-            </div>
-          </div>
-          <span class="text-xs text-center font-medium line-clamp-1 w-full">{{ c.person.name }}</span>
-          @if (c.character) {
-            <span class="text-[10px] text-base-content/50 text-center line-clamp-1 w-full -mt-1">{{ c.character }}</span>
+            </a>
           }
-        </a>
-      }
-    </app-horizontal-scroller>
-    </app-collapsible-section>
+        </app-horizontal-scroller>
+      </app-collapsible-section>
     </div>
   }
 </ng-template>
@@ -463,83 +483,133 @@
      Escape-to-close for free; the <form method="dialog"> backdrop
      dismisses on outside click. Rescan stays on /rescan (full-disk
      superset) and disables the granular options when ticked. -->
-<dialog #analyzeDialog class="modal" role="dialog" aria-modal="true" aria-labelledby="analyze-title">
+<dialog
+  #analyzeDialog
+  class="modal"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="analyze-title"
+>
   <div class="modal-box">
-    <h3 id="analyze-title" class="text-lg font-bold mb-2">{{ 'media_detail.analyze_title' | translate }}</h3>
-    <p class="text-sm text-base-content/70 mb-4">{{ 'media_detail.analyze_hint' | translate }}</p>
+    <app-modal-header>
+      <div>
+        <h3 id="analyze-title" class="text-lg font-bold">
+          {{ 'media_detail.analyze_title' | translate }}
+        </h3>
+        <p class="text-sm text-base-content/70 mt-1">
+          {{ 'media_detail.analyze_hint' | translate }}
+        </p>
+      </div>
+    </app-modal-header>
     <div class="space-y-2">
       <label class="flex items-start gap-3 cursor-pointer">
         <input
           #firstAnalyzeOption
-          type="checkbox" class="checkbox checkbox-primary mt-0.5"
+          type="checkbox"
+          class="checkbox checkbox-primary mt-0.5"
           [checked]="analyzeOpts().rescan"
           (change)="setAnalyzeOpt('rescan', $any($event.target).checked)"
         />
         <span>
           <span class="font-medium block">{{ 'media_detail.analyze_rescan' | translate }}</span>
-          <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_rescan_hint' | translate }}</span>
+          <span class="text-xs text-base-content/60">{{
+            'media_detail.analyze_rescan_hint' | translate
+          }}</span>
         </span>
       </label>
-      <label class="flex items-start gap-3 cursor-pointer" [class.opacity-50]="analyzeOpts().rescan">
+      <label
+        class="flex items-start gap-3 cursor-pointer"
+        [class.opacity-50]="analyzeOpts().rescan"
+      >
         <input
-          type="checkbox" class="checkbox checkbox-primary mt-0.5"
-          [checked]="analyzeOpts().sprites" [disabled]="analyzeOpts().rescan"
+          type="checkbox"
+          class="checkbox checkbox-primary mt-0.5"
+          [checked]="analyzeOpts().sprites"
+          [disabled]="analyzeOpts().rescan"
           (change)="setAnalyzeOpt('sprites', $any($event.target).checked)"
         />
         <span>
           <span class="font-medium block">{{ 'media_detail.analyze_sprites' | translate }}</span>
-          <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_sprites_hint' | translate }}</span>
+          <span class="text-xs text-base-content/60">{{
+            'media_detail.analyze_sprites_hint' | translate
+          }}</span>
         </span>
       </label>
-      <label class="flex items-start gap-3 cursor-pointer" [class.opacity-50]="analyzeOpts().rescan">
+      <label
+        class="flex items-start gap-3 cursor-pointer"
+        [class.opacity-50]="analyzeOpts().rescan"
+      >
         <input
-          type="checkbox" class="checkbox checkbox-primary mt-0.5"
-          [checked]="analyzeOpts().crop" [disabled]="analyzeOpts().rescan"
+          type="checkbox"
+          class="checkbox checkbox-primary mt-0.5"
+          [checked]="analyzeOpts().crop"
+          [disabled]="analyzeOpts().rescan"
           (change)="setAnalyzeOpt('crop', $any($event.target).checked)"
         />
         <span>
           <span class="font-medium block">{{ 'media_detail.analyze_crop' | translate }}</span>
-          <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_crop_hint' | translate }}</span>
+          <span class="text-xs text-base-content/60">{{
+            'media_detail.analyze_crop_hint' | translate
+          }}</span>
         </span>
       </label>
-      <label class="flex items-start gap-3 cursor-pointer" [class.opacity-50]="analyzeOpts().rescan">
+      <label
+        class="flex items-start gap-3 cursor-pointer"
+        [class.opacity-50]="analyzeOpts().rescan"
+      >
         <input
-          type="checkbox" class="checkbox checkbox-primary mt-0.5"
-          [checked]="analyzeOpts().subtitleCache" [disabled]="analyzeOpts().rescan"
+          type="checkbox"
+          class="checkbox checkbox-primary mt-0.5"
+          [checked]="analyzeOpts().subtitleCache"
+          [disabled]="analyzeOpts().rescan"
           (change)="setAnalyzeOpt('subtitleCache', $any($event.target).checked)"
         />
         <span>
-          <span class="font-medium block">{{ 'media_detail.analyze_subtitle_cache' | translate }}</span>
-          <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_subtitle_cache_hint' | translate }}</span>
+          <span class="font-medium block">{{
+            'media_detail.analyze_subtitle_cache' | translate
+          }}</span>
+          <span class="text-xs text-base-content/60">{{
+            'media_detail.analyze_subtitle_cache_hint' | translate
+          }}</span>
         </span>
       </label>
       @if (analyzeShowMarkers()) {
-        <label class="flex items-start gap-3 cursor-pointer" [class.opacity-50]="analyzeOpts().rescan">
+        <label
+          class="flex items-start gap-3 cursor-pointer"
+          [class.opacity-50]="analyzeOpts().rescan"
+        >
           <input
-            type="checkbox" class="checkbox checkbox-primary mt-0.5"
-            [checked]="analyzeOpts().markers" [disabled]="analyzeOpts().rescan"
+            type="checkbox"
+            class="checkbox checkbox-primary mt-0.5"
+            [checked]="analyzeOpts().markers"
+            [disabled]="analyzeOpts().rescan"
             (change)="setAnalyzeOpt('markers', $any($event.target).checked)"
           />
           <span>
             <span class="font-medium block">{{ 'media_detail.analyze_markers' | translate }}</span>
-            <span class="text-xs text-base-content/60">{{ 'media_detail.analyze_markers_hint' | translate }}</span>
+            <span class="text-xs text-base-content/60">{{
+              'media_detail.analyze_markers_hint' | translate
+            }}</span>
           </span>
         </label>
       }
     </div>
-    <div class="modal-action">
+    <app-modal-footer>
       <button type="button" class="btn btn-ghost" (click)="closeAnalyzeModal()">
         {{ 'common.cancel' | translate }}
       </button>
       <button
-        type="button" class="btn btn-primary"
+        type="button"
+        class="btn btn-primary"
         [disabled]="analyzeRunning() || !analyzeHasSelection()"
         (click)="runAnalyze()"
       >
-        @if (analyzeRunning()) { <span class="loading loading-spinner loading-sm"></span> }
+        @if (analyzeRunning()) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
         {{ 'media_detail.analyze_apply' | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <!-- Backdrop close: clicking outside submits the dialog-method form,
        which the browser handles natively. The button is removed from the

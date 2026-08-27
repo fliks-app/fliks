@@ -33,7 +33,9 @@
             <th>{{ 'settings.quality_profiles.col_name' | translate }}</th>
             <th>{{ 'settings.quality_profiles.col_cutoff' | translate }}</th>
             <th>{{ 'settings.quality_profiles.col_upgrade' | translate }}</th>
-            <th class="text-end">{{ 'settings.quality_profiles.col_allowed_count' | translate }}</th>
+            <th class="text-end">
+              {{ 'settings.quality_profiles.col_allowed_count' | translate }}
+            </th>
             <th class="text-end w-40">{{ 'settings.quality_profiles.actions' | translate }}</th>
           </tr>
         </thead>
@@ -41,7 +43,9 @@
           @for (p of profiles(); track p.id) {
             <tr>
               <td>
-                <button type="button" class="link link-hover font-medium" (click)="openEdit(p)">{{ p.name }}</button>
+                <button type="button" class="link link-hover font-medium" (click)="openEdit(p)">
+                  {{ p.name }}
+                </button>
               </td>
               <td class="text-sm">{{ cutoffLabel(p.cutoff) }}</td>
               <td>
@@ -53,7 +57,11 @@
               </td>
               <td class="text-end">{{ allowedCount(p) }}</td>
               <td class="text-end">
-                <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteProfile(p)">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs text-error"
+                  (click)="deleteProfile(p)"
+                >
                   {{ 'settings.quality_profiles.delete' | translate }}
                 </button>
               </td>
@@ -65,91 +73,102 @@
   }
 </div>
 
-  <dialog #editorDialog class="modal">
-    <div class="modal-box max-w-2xl max-h-[90vh] flex flex-col">
-      <h2 class="text-lg font-bold shrink-0">
+<dialog #editorDialog class="modal">
+  <div class="modal-box max-w-2xl max-h-[90vh] flex flex-col">
+    <app-modal-header class="shrink-0">
+      <h3 class="text-lg font-bold">
         @if (editingId() === null) {
           {{ 'settings.quality_profiles.editor_create_title' | translate }}
         } @else {
           {{ 'settings.quality_profiles.editor_edit_title' | translate }}
         }
-      </h2>
-      <div class="py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 scroll-ring-safe">
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.quality_profiles.field_name' | translate }}</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="formName()"
-            (ngModelChange)="formName.set($event)"
-          />
-        </label>
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.quality_profiles.field_cutoff' | translate }}</span>
-          <select
-            class="select select-bordered select-sm w-full"
-            [ngModel]="formCutoff()"
-            (ngModelChange)="formCutoff.set(+$event)"
-          >
-            @for (q of definitions(); track q.id) {
-              <option [ngValue]="q.id">{{ q.name }} ({{ q.resolution }}p · {{ q.source }})</option>
-            }
-          </select>
-        </label>
+      </h3>
+    </app-modal-header>
+    <div class="py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 scroll-ring-safe">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.quality_profiles.field_name' | translate }}</span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="formName()"
+          (ngModelChange)="formName.set($event)"
+        />
+      </label>
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.quality_profiles.field_cutoff' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          [ngModel]="formCutoff()"
+          (ngModelChange)="formCutoff.set(+$event)"
+        >
+          @for (q of definitions(); track q.id) {
+            <option [ngValue]="q.id">{{ q.name }} ({{ q.resolution }}p · {{ q.source }})</option>
+          }
+        </select>
+      </label>
+      <label class="label cursor-pointer justify-start items-center gap-3">
+        <input
+          type="checkbox"
+          class="toggle toggle-sm toggle-primary"
+          [ngModel]="formUpgrade()"
+          (ngModelChange)="formUpgrade.set($event)"
+        />
+        <span class="label-text">{{ 'settings.quality_profiles.field_upgrade' | translate }}</span>
+      </label>
+      @if (formUpgrade()) {
         <label class="label cursor-pointer justify-start items-center gap-3">
           <input
             type="checkbox"
             class="toggle toggle-sm toggle-primary"
-            [ngModel]="formUpgrade()"
-            (ngModelChange)="formUpgrade.set($event)"
+            [ngModel]="formResolutionUpgradeOnly()"
+            (ngModelChange)="formResolutionUpgradeOnly.set($event)"
           />
-          <span class="label-text">{{ 'settings.quality_profiles.field_upgrade' | translate }}</span>
+          <span class="label-text">{{
+            'settings.quality_profiles.field_resolution_upgrade_only' | translate
+          }}</span>
         </label>
-        @if (formUpgrade()) {
-          <label class="label cursor-pointer justify-start items-center gap-3">
-            <input
-              type="checkbox"
-              class="toggle toggle-sm toggle-primary"
-              [ngModel]="formResolutionUpgradeOnly()"
-              (ngModelChange)="formResolutionUpgradeOnly.set($event)"
-            />
-            <span class="label-text">{{ 'settings.quality_profiles.field_resolution_upgrade_only' | translate }}</span>
-          </label>
-        }
-        <div>
-          <p class="text-sm font-medium mb-2">{{ 'settings.quality_profiles.qualities_group' | translate }}</p>
-          <div class="rounded-lg border border-base-200 divide-y divide-base-200 max-h-[28rem] overflow-y-auto">
-            @for (q of definitions(); track q.id) {
-              <div class="px-3 py-2 hover:bg-base-200/50">
-                <div class="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    class="checkbox checkbox-sm"
-                    [checked]="isAllowed(q.id)"
-                    (change)="toggleQuality(q.id, $event)"
-                  />
-                  <span class="text-sm flex-1">{{ q.name }}</span>
-                  <span class="text-sm text-base-content/50 tabular-nums">{{ q.resolution }}p · {{ q.source }}</span>
-                </div>
+      }
+      <div>
+        <p class="text-sm font-medium mb-2">
+          {{ 'settings.quality_profiles.qualities_group' | translate }}
+        </p>
+        <div
+          class="rounded-lg border border-base-200 divide-y divide-base-200 max-h-[28rem] overflow-y-auto"
+        >
+          @for (q of definitions(); track q.id) {
+            <div class="px-3 py-2 hover:bg-base-200/50">
+              <div class="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-sm"
+                  [checked]="isAllowed(q.id)"
+                  (change)="toggleQuality(q.id, $event)"
+                />
+                <span class="text-sm flex-1">{{ q.name }}</span>
+                <span class="text-sm text-base-content/50 tabular-nums"
+                  >{{ q.resolution }}p · {{ q.source }}</span
+                >
               </div>
-            }
-          </div>
-        </div>
-
-      </div>
-      <div class="modal-action shrink-0">
-        <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
-          {{ 'settings.quality_profiles.cancel' | translate }}
-        </button>
-        <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
-          @if (saving()) {
-            <span class="loading loading-spinner loading-sm"></span>
+            </div>
           }
-          {{ 'settings.quality_profiles.save' | translate }}
-        </button>
+        </div>
       </div>
     </div>
-    <form method="dialog" class="modal-backdrop">
-      <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">close</button>
-    </form>
-  </dialog>
+    <app-modal-footer>
+      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+        {{ 'settings.quality_profiles.cancel' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+        @if (saving()) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
+        {{ 'settings.quality_profiles.save' | translate }}
+      </button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">
+      close
+    </button>
+  </form>
+</dialog>

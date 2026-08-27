@@ -23,15 +23,21 @@
           @for (s of seasons(); track s.seasonNumber) {
             <div>
               @if (scope().kind === 'series') {
-                <div class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-1">
-                  {{ 'tracking.season' | translate:{ number: s.seasonNumber } }}
+                <div
+                  class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-1"
+                >
+                  {{ 'tracking.season' | translate: { number: s.seasonNumber } }}
                 </div>
               }
               <div class="flex flex-col">
                 @for (ep of s.episodes; track ep.episodeId) {
-                  <div class="flex items-center justify-between gap-3 py-1.5 border-b border-base-200 last:border-0">
+                  <div
+                    class="flex items-center justify-between gap-3 py-1.5 border-b border-base-200 last:border-0"
+                  >
                     <span class="text-sm truncate">{{ episodeLabel(ep) }}</span>
-                    <ng-container *ngTemplateOutlet="line; context: { $implicit: ep }"></ng-container>
+                    <ng-container
+                      *ngTemplateOutlet="line; context: { $implicit: ep }"
+                    ></ng-container>
                   </div>
                 }
               </div>
@@ -49,11 +55,11 @@
       </p>
     }
 
-    <div class="modal-action">
-      <button type="button" class="btn btn-sm" (click)="close()">
+    <app-modal-footer>
+      <button type="button" class="btn" (click)="close()">
         {{ 'common.close' | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>

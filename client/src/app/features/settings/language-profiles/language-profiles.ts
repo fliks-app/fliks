@@ -18,6 +18,8 @@ import {
   SubtitleLanguageItem,
   HearingImpairedMode,
 } from '../../../core/services/api/profiles.service';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 interface LangDef {
   id: number;
@@ -35,7 +37,7 @@ const HI_MODES: HearingImpairedMode[] = ['prefer', 'avoid', 'require', 'forbid']
 
 @Component({
   selector: 'app-language-profiles',
-  imports: [FormsModule, TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './language-profiles.html',
 })
@@ -220,14 +222,29 @@ export class LanguageProfilesComponent implements OnInit {
   }
 
   async deleteProfile(p: LanguageProfile) {
-    const msg = this.translate.instant('settings.language_profiles.confirm_delete', { name: p.name });
-    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: msg, variant: 'danger' })) return;
+    const msg = this.translate.instant('settings.language_profiles.confirm_delete', {
+      name: p.name,
+    });
+    if (
+      !(await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: msg,
+        variant: 'danger',
+      }))
+    )
+      return;
     try {
       await this.api.deleteLanguageProfile(p.id);
       await this.reloadAll();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? this.translate.instant('settings.language_profiles.delete_error'), variant: 'danger' });
+      void this.confirmation.alert({
+        title: this.translate.instant('common.error'),
+        message:
+          httpErr.error?.message ??
+          this.translate.instant('settings.language_profiles.delete_error'),
+        variant: 'danger',
+      });
     }
   }
 }

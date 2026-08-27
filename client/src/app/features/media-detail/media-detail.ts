@@ -28,17 +28,23 @@ import {
   RelatedMedia,
   MediaCollection,
 } from '../../core/services/api/media.service';
-import { MediaDetailReleasePickerService, MovieRelease } from './media-detail-release-picker.service';
-import { ReleaseSearchStreamService, type IndexerRosterEntry } from './release-search-stream.service';
+import {
+  MediaDetailReleasePickerService,
+  MovieRelease,
+} from './media-detail-release-picker.service';
+import {
+  ReleaseSearchStreamService,
+  type IndexerRosterEntry,
+} from './release-search-stream.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
-import {
-  LibrariesApiService,
-  LibrarySummary,
-} from '../../core/services/api/libraries-api.service';
+import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
-import { StreamingApiService, MediaResumeInfo } from '../../core/services/api/streaming-api.service';
+import {
+  StreamingApiService,
+  MediaResumeInfo,
+} from '../../core/services/api/streaming-api.service';
 import { MarkersApiService } from '../../core/services/api/markers-api.service';
 import { RequestsService, TitleRequestState } from '../../core/services/api/requests.service';
 import {
@@ -51,9 +57,7 @@ import { MediaFileInfoComponent } from '../../shared/components/media-file-info'
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { MediaDetailSeasonsComponent } from './components/media-detail-seasons/media-detail-seasons.component';
 import { ReleasesModalComponent } from './components/releases-modal/releases-modal.component';
-import {
-  TrackingScope,
-} from '../../shared/components/tracking-status-modal/tracking-status-modal';
+import { TrackingScope } from '../../shared/components/tracking-status-modal/tracking-status-modal';
 import { MediaDetailProfilesModalComponent } from './components/media-detail-profiles-modal/media-detail-profiles-modal.component';
 import { MediaDetailLibraryModalComponent } from './components/media-detail-library-modal/media-detail-library-modal.component';
 import { RequestModalComponent } from '../tmdb-preview/components/request-modal/request-modal.component';
@@ -87,6 +91,8 @@ import { TvSectionDirective } from '../../shared/directives/tv-section.directive
 import { ImgFadeInDirective } from '../../shared/directives/img-fade-in.directive';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
+import { ModalHeaderComponent } from '../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../shared/components/modal-footer';
 
 const LS_EPISODES_HAS_FILE_ONLY = 'fliks.mediaDetail.episodesHasFileOnly';
 
@@ -102,6 +108,8 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
 @Component({
   selector: 'app-media-detail',
   imports: [
+    ModalFooterComponent,
+    ModalHeaderComponent,
     CachedSrcDirective,
     TranslateModule,
     DefaultFocusDirective,
@@ -245,9 +253,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.backgroundService.clear();
       return;
     }
-    const pool = [m.fanartUrl, ...(m.additionalFanartUrls ?? [])].filter(
-      (u): u is string => !!u,
-    );
+    const pool = [m.fanartUrl, ...(m.additionalFanartUrls ?? [])].filter((u): u is string => !!u);
     if (pool.length === 0) {
       this.backgroundService.clear();
       return;
@@ -267,13 +273,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       void this.reloadAfterRescan(m.id);
     } else if (event.type === 'metadata.refreshed') {
       void this.reloadAfterRescan(m.id);
-      this.toast.success(
-        this.translate.instant('media_detail.refresh_ok'),
-      );
+      this.toast.success(this.translate.instant('media_detail.refresh_ok'));
     } else if (event.type === 'metadata.failed') {
       this.toast.error(
-        (event as { error?: string }).error ??
-          this.translate.instant('media_detail.refresh_error'),
+        (event as { error?: string }).error ?? this.translate.instant('media_detail.refresh_error'),
       );
     }
   });
@@ -333,7 +336,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   });
 
-
   // ── Episode full-page mode (when navigating to series/:id/episode/:episodeId) ──
   readonly episodeMode = signal(false);
   readonly focusedEpisode = signal<Episode | null>(null);
@@ -361,7 +363,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   readonly episodeActiveFile = computed(() => {
     const id = this.episodeActiveFileId();
-    return this.episodeFiles().find(f => f.id === id) ?? null;
+    return this.episodeFiles().find((f) => f.id === id) ?? null;
   });
 
   readonly episodeLabel = computed(() => {
@@ -380,7 +382,12 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly episodeDateLabel = computed(() => {
     const ep = this.focusedEpisode();
     if (!ep?.airDate) return null;
-    return new Date(ep.airDate).toLocaleDateString(this.translate.currentLang || undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    return new Date(ep.airDate).toLocaleDateString(this.translate.currentLang || undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
   });
 
   /**
@@ -473,7 +480,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return total > 0;
   }
 
-
   /**
    * When the focused episode changes on the episode detail page, bring the
    * "Plus de saison X" scroller to the episode AFTER the active one — the
@@ -486,11 +492,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly scrollToFocusedEpisodeEffect = effect(() => {
     const active = this.focusedEpisode();
     const eps = this.currentSeasonEpisodes();
-    if (
-      !active ||
-      !this.episodeMode() ||
-      this.moreFromSeasonEpisodes().length === 0
-    ) {
+    if (!active || !this.episodeMode() || this.moreFromSeasonEpisodes().length === 0) {
       return;
     }
     const idx = eps.findIndex((e) => e.id === active.id);
@@ -509,8 +511,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const elRect = el.getBoundingClientRect();
     const scrollerRect = scroller.getBoundingClientRect();
     const target =
-      scroller.scrollLeft + (elRect.left - scrollerRect.left)
-      - scroller.clientWidth / 2 + el.offsetWidth / 2;
+      scroller.scrollLeft +
+      (elRect.left - scrollerRect.left) -
+      scroller.clientWidth / 2 +
+      el.offsetWidth / 2;
     scroller.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
   }
 
@@ -567,9 +571,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       for (const s of seasons) {
         const ep = s.episodes?.find((e) => e.id === info.episodeId);
         if (ep) {
-          const file = info.mediaFileId
-            ? { id: info.mediaFileId }
-            : resolveFile(ep.id);
+          const file = info.mediaFileId ? { id: info.mediaFileId } : resolveFile(ep.id);
           if (file) return { episode: ep, season: s, file };
         }
       }
@@ -613,18 +615,14 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return `S${sn}:E${en} - ${ctx.episode.title ?? ''}`;
   });
 
-  readonly nextPlayEpisodeId = computed(
-    () => this.nextPlayEpisode()?.episode.id,
-  );
-  readonly nextPlayMediaFileId = computed(
-    () => this.nextPlayEpisode()?.file.id,
-  );
+  readonly nextPlayEpisodeId = computed(() => this.nextPlayEpisode()?.episode.id);
+  readonly nextPlayMediaFileId = computed(() => this.nextPlayEpisode()?.file.id);
 
   /** Directors for shared header */
   readonly directors = computed(() =>
     this.crew()
-      .filter(c => c.job?.toLowerCase() === 'director')
-      .map(c => c.person.name),
+      .filter((c) => c.job?.toLowerCase() === 'director')
+      .map((c) => c.person.name),
   );
 
   readonly loading = signal(true);
@@ -674,17 +672,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   /** Regular requester (no `media.create` permission). The Demander
    *  actions are only surfaced for them — admins use Grab/Search. */
   readonly canRequest = computed(
-    () =>
-      !this.auth.hasPermission('media.create') &&
-      this.auth.hasPermission('requests.create'),
+    () => !this.auth.hasPermission('media.create') && this.auth.hasPermission('requests.create'),
   );
 
   /** Requester (no `media.delete`) can ask an admin to delete this library
    *  title. Admins with `media.delete` delete directly and never see it. */
   readonly canRequestDeletion = computed(
-    () =>
-      this.auth.hasPermission('requests.create') &&
-      !this.auth.hasPermission('media.delete'),
+    () => this.auth.hasPermission('requests.create') && !this.auth.hasPermission('media.delete'),
   );
 
   /** A deletion request on this title is already pending (submitted by the
@@ -706,15 +700,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
    *  user) — a movie request (no seasons concept) or a whole-series request
    *  covering everything. Blocks the Demander entry in the header for the
    *  corresponding case. */
-  readonly hasBlockingRequest = computed(
-    () => this.titleState()?.requested ?? false,
-  );
+  readonly hasBlockingRequest = computed(() => this.titleState()?.requested ?? false);
 
   /** Season numbers already covered by an active per-season request (any
    *  user). Gates the season-level Demander entry and pre-fed to the modal. */
-  readonly requestedSeasons = computed<number[]>(
-    () => this.titleState()?.requestedSeasons ?? [],
-  );
+  readonly requestedSeasons = computed<number[]>(() => this.titleState()?.requestedSeasons ?? []);
   readonly deleteLoading = signal(false);
   readonly monitoredLoading = signal(false);
   /** Active season tab (series) — first season selected after load */
@@ -806,10 +796,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     // Admins edit profiles inline; regular requesters need the same
     // options surfaced to fill the request modal. Either permission
     // is enough to justify the round-trip.
-    if (
-      !this.auth.hasPermission('media.edit') &&
-      !this.auth.hasPermission('requests.create')
-    ) return;
+    if (!this.auth.hasPermission('media.edit') && !this.auth.hasPermission('requests.create'))
+      return;
     this.profilesOptionsLoading.set(true);
     try {
       const [q, l, libs] = await Promise.all([
@@ -834,8 +822,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     // anywhere else — a home card, a similar-movies card that swaps the page
     // under itself — starts at the top, whether or not it was read before.
     const nav =
-      this.router.getCurrentNavigation() ??
-      untracked(this.router.lastSuccessfulNavigation);
+      this.router.getCurrentNavigation() ?? untracked(this.router.lastSuccessfulNavigation);
     const wentBack = nav?.trigger === 'popstate';
     this.scrollMemory.activate(this.scrollKey());
     if (!Number.isFinite(id) || id < 1) {
@@ -873,11 +860,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     try {
       const m = await this.mediaService.getOne(id);
       if (m.type !== kind) {
-        void this.router.navigate([
-          '/',
-          m.type === 'movie' ? 'movies' : 'series',
-          m.id,
-        ]);
+        void this.router.navigate(['/', m.type === 'movie' ? 'movies' : 'series', m.id]);
         return;
       }
       this.media.set(m);
@@ -900,7 +883,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
           .then((fresh) => {
             if (fresh.type === kind) this.media.set(fresh);
           })
-          .catch(() => { /* network failure — cached body keeps showing */ });
+          .catch(() => {
+            /* network failure — cached body keeps showing */
+          });
       });
 
       // Episode focus (series/:id/episode/:episodeId) is applied reactively
@@ -908,11 +893,23 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // call is needed here.
 
       // Load cast/crew async — doesn't block page render
-      this.mediaService.getCast(m.id).then((c) => this.cast.set(c)).catch(() => {});
-      this.mediaService.getCrew(m.id).then((c) => this.crew.set(c)).catch(() => {});
+      this.mediaService
+        .getCast(m.id)
+        .then((c) => this.cast.set(c))
+        .catch(() => {});
+      this.mediaService
+        .getCrew(m.id)
+        .then((c) => this.crew.set(c))
+        .catch(() => {});
       if (m.type === 'movie') {
-        this.mediaService.getSimilar(m.id).then((s) => this.similar.set(s)).catch(() => {});
-        this.mediaService.getCollection(m.id).then((c) => this.collection.set(c)).catch(() => {});
+        this.mediaService
+          .getSimilar(m.id)
+          .then((s) => this.similar.set(s))
+          .catch(() => {});
+        this.mediaService
+          .getCollection(m.id)
+          .then((c) => this.collection.set(c))
+          .catch(() => {});
       }
       // Active requests (only for users who would ever see the Demander
       // button — admins skip the round-trip).
@@ -931,9 +928,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
             ? this.streamingApi.getWatchedEpisodeIds(m.id).catch(() => [] as number[])
             : Promise.resolve([] as number[]),
           m.type === 'series'
-            ? this.streamingApi
-                .getEpisodeProgress(m.id)
-                .catch(() => ({}) as Record<number, number>)
+            ? this.streamingApi.getEpisodeProgress(m.id).catch(() => ({}) as Record<number, number>)
             : Promise.resolve({} as Record<number, number>),
         ]);
         this.resumeInfo.set(resumeInfo);
@@ -959,17 +954,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
           let targetSeasonId: number | null = null;
           if (resumeInfo?.episodeId) {
             targetSeasonId =
-              m.seasons.find((s) =>
-                s.episodes?.some((e) => e.id === resumeInfo.episodeId),
-              )?.id ?? null;
+              m.seasons.find((s) => s.episodes?.some((e) => e.id === resumeInfo.episodeId))?.id ??
+              null;
           }
           if (targetSeasonId == null) {
             targetSeasonId =
-              m.seasons.find((s) =>
-                s.episodes?.some(
-                  (e) => e.hasFile && !watchedSet.has(e.id),
-                ),
-              )?.id ?? null;
+              m.seasons.find((s) => s.episodes?.some((e) => e.hasFile && !watchedSet.has(e.id)))
+                ?.id ?? null;
           }
           if (targetSeasonId != null) {
             this.activeSeasonId.set(targetSeasonId);
@@ -984,7 +975,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
           const seasonId = this.activeSeasonId();
           const activeSeason = m.seasons.find((s) => s.id === seasonId);
           if (activeSeason?.episodes?.length) {
-            const firstUnwatched = activeSeason.episodes.find((e) => e.hasFile && !watchedSet.has(e.id));
+            const firstUnwatched = activeSeason.episodes.find(
+              (e) => e.hasFile && !watchedSet.has(e.id),
+            );
             if (firstUnwatched) {
               requestAnimationFrame(() => {
                 const el = document.getElementById(`episode-${firstUnwatched.id}`);
@@ -993,7 +986,12 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
                 if (scroller && scroller.scrollWidth > scroller.clientWidth) {
                   const elRect = el.getBoundingClientRect();
                   const scrollerRect = scroller.getBoundingClientRect();
-                  const offset = elRect.left - scrollerRect.left + scroller.scrollLeft - scroller.clientWidth / 2 + el.offsetWidth / 2;
+                  const offset =
+                    elRect.left -
+                    scrollerRect.left +
+                    scroller.scrollLeft -
+                    scroller.clientWidth / 2 +
+                    el.offsetWidth / 2;
                   scroller.scrollTo({ left: offset, behavior: 'smooth' });
                 }
               });
@@ -1068,10 +1066,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.libraryPatchSaving.set(true);
     this.libraryPatchSaved.set(false);
     try {
-      let updated =
-        libId !== m.libraryId
-          ? await this.mediaService.patchLibrary(m.id, libId)
-          : m;
+      let updated = libId !== m.libraryId ? await this.mediaService.patchLibrary(m.id, libId) : m;
       if (providerChanged) {
         updated = await this.mediaService.update(m.id, {
           preferredProvider: provider,
@@ -1208,7 +1203,14 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   async deleteMedia() {
     const m = this.media();
     if (!m) return;
-    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('media_detail.confirm_delete', { title: m.title }), variant: 'danger' })) return;
+    if (
+      !(await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: this.translate.instant('media_detail.confirm_delete', { title: m.title }),
+        variant: 'danger',
+      }))
+    )
+      return;
     this.deleteLoading.set(true);
     try {
       await this.mediaService.delete(m.id);
@@ -1236,9 +1238,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       } else {
         await this.mediaService.refreshMetadata(m.id);
       }
-      this.toast.success(
-        this.translate.instant('media_detail.refresh_launched'),
-      );
+      this.toast.success(this.translate.instant('media_detail.refresh_launched'));
     } catch (err: unknown) {
       this.toast.error(serverMessage(err, this.translate, 'media_detail.refresh_error'));
     }
@@ -1269,7 +1269,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         if (ep.title) episode += ` ${ep.title}`;
       }
       await this.downloadManager.createDownload(ev.mediaFileId, ev.quality, title, episode, {
-        mediaId: m?.id, posterUrl: m?.posterUrl, type: m?.type, episodeId: ep?.id,
+        mediaId: m?.id,
+        posterUrl: m?.posterUrl,
+        type: m?.type,
+        episodeId: ep?.id,
       });
       this.toast.success(this.translate.instant('downloads.started'));
     } catch {
@@ -1299,15 +1302,12 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   /** Intro/outro detection is episode-based, so the analyze option only
    *  applies to series. */
-  readonly analyzeShowMarkers = computed(
-    () => this.media()?.type === 'series',
-  );
+  readonly analyzeShowMarkers = computed(() => this.media()?.type === 'series');
 
   /** Refs to the native <dialog>. `showModal()` gives us focus trapping,
    *  Tab cycling and Escape-to-close for free — no manual keydown
    *  handling required. */
-  private readonly analyzeDialog =
-    viewChild<ElementRef<HTMLDialogElement>>('analyzeDialog');
+  private readonly analyzeDialog = viewChild<ElementRef<HTMLDialogElement>>('analyzeDialog');
   private readonly firstAnalyzeOption =
     viewChild<ElementRef<HTMLInputElement>>('firstAnalyzeOption');
 
@@ -1400,10 +1400,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.analyzeDialog()?.nativeElement.close();
   }
 
-  setAnalyzeOpt(
-    key: 'rescan' | 'sprites' | 'crop' | 'subtitleCache' | 'markers',
-    value: boolean,
-  ) {
+  setAnalyzeOpt(key: 'rescan' | 'sprites' | 'crop' | 'subtitleCache' | 'markers', value: boolean) {
     this.analyzeOpts.update((o) => ({ ...o, [key]: value }));
   }
 
@@ -1431,14 +1428,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
           await this.markersApi.detectSeries(m.id);
         }
       }
-      this.toast.success(
-        this.translate.instant('media_detail.analyze_launched'),
-      );
+      this.toast.success(this.translate.instant('media_detail.analyze_launched'));
       this.closeAnalyzeModal();
     } catch {
-      this.toast.error(
-        this.translate.instant('media_detail.analyze_launch_error'),
-      );
+      this.toast.error(this.translate.instant('media_detail.analyze_launch_error'));
     } finally {
       this.analyzeRunning.set(false);
     }
@@ -1453,11 +1446,17 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       const ep = this.focusedEpisode();
       if (ep) {
         for (const s of updated.seasons ?? []) {
-          const fresh = s.episodes?.find(e => e.id === ep.id);
-          if (fresh) { this.focusedSeason.set(s); this.focusedEpisode.set(fresh); break; }
+          const fresh = s.episodes?.find((e) => e.id === ep.id);
+          if (fresh) {
+            this.focusedSeason.set(s);
+            this.focusedEpisode.set(fresh);
+            break;
+          }
         }
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   selectSeason(seasonId: number) {
@@ -1474,7 +1473,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       } else {
         sessionStorage.removeItem(`fliks.season.${m.id}`);
       }
-    } catch { /* private mode */ }
+    } catch {
+      /* private mode */
+    }
   }
 
   private restoreActiveSeason(): number | null {
@@ -1483,7 +1484,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     try {
       const v = sessionStorage.getItem(`fliks.season.${m.id}`);
       return v ? Number(v) : null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
 
   setEpisodesHasFileOnly(value: boolean) {
@@ -1605,7 +1608,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!this.isAdmin()) return;
     this.episodeBusy.set(episode.id);
     try {
-      const updated = await this.mediaService.updateEpisodeMonitored(episode.id, !episode.monitored);
+      const updated = await this.mediaService.updateEpisodeMonitored(
+        episode.id,
+        !episode.monitored,
+      );
       const m = this.media();
       if (!m?.seasons) return;
       const nextSeasons = m.seasons.map((s) =>
@@ -1644,7 +1650,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.episodeReleasesModal()?.showModal();
     try {
       const rows = await this.releaseStream.run(
-        (searchId) => this.releasePickerApi.getEpisodeReleases(mediaId, episodeId, undefined, searchId),
+        (searchId) =>
+          this.releasePickerApi.getEpisodeReleases(mediaId, episodeId, undefined, searchId),
         { releases: this.epReleases, indexers: this.epReleasesIndexers },
       );
       this.epReleases.set(rows);
@@ -1691,7 +1698,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.seasonReleasesModal()?.showModal();
     try {
       const rows = await this.releaseStream.run(
-        (searchId) => this.releasePickerApi.getSeasonReleases(mediaId, season.id, undefined, searchId),
+        (searchId) =>
+          this.releasePickerApi.getSeasonReleases(mediaId, season.id, undefined, searchId),
         { releases: this.seasonReleases, indexers: this.seasonReleasesIndexers },
       );
       this.seasonReleases.set(rows);
@@ -1699,7 +1707,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       if (isUnprofiledReleaseError(err)) {
         this.seasonReleasesEmptyMessage.set('media_detail.no_quality_profile');
       } else {
-        this.seasonReleasesError.set(serverMessage(err, this.translate, 'media_detail.releases_error'));
+        this.seasonReleasesError.set(
+          serverMessage(err, this.translate, 'media_detail.releases_error'),
+        );
       }
     } finally {
       this.seasonReleasesLoading.set(false);
@@ -1744,7 +1754,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // ignore
     }
   }
-
 
   /**
    * Handler for the series root watched toggle. The header has already
@@ -1969,9 +1978,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
    *  profile lock flip without a manual reload. */
   private async loadTitleState(tmdbId: number, mediaType: MediaType) {
     try {
-      this.titleState.set(
-        await this.requestsApi.getTitleState(tmdbId, mediaType),
-      );
+      this.titleState.set(await this.requestsApi.getTitleState(tmdbId, mediaType));
     } catch {
       /* swallowed; global interceptor surfaces it */
     }
@@ -2014,9 +2021,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         title: m.title,
       });
       this.deleteRequestPending.set(true);
-      this.toast.success(
-        this.translate.instant('media_detail.request_deletion_success'),
-      );
+      this.toast.success(this.translate.instant('media_detail.request_deletion_success'));
     } catch {
       /* error toast surfaced by the global interceptor */
     }

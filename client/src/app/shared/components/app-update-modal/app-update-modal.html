@@ -15,13 +15,16 @@
           {{ 'update.version_available' | translate: { version: info.version } }}
         }
         @if (info.releaseDate) {
-          · {{ info.releaseDate | localeDate:{ dateStyle: 'medium' } }}
+          · {{ info.releaseDate | localeDate: { dateStyle: 'medium' } }}
         }
       </p>
 
       <div class="rounded-box bg-base-200 p-3 max-h-72 overflow-y-auto mb-4">
         @if (info.releaseNotes) {
-          <div class="changelog-md text-sm break-words" [innerHTML]="info.releaseNotes | markdown"></div>
+          <div
+            class="changelog-md text-sm break-words"
+            [innerHTML]="info.releaseNotes | markdown"
+          ></div>
         } @else {
           <p class="text-sm opacity-60">{{ 'update.no_notes' | translate }}</p>
         }
@@ -29,7 +32,11 @@
 
       @if (downloading()) {
         <div class="mb-4">
-          <progress class="progress progress-primary w-full" [value]="update.progress()" max="100"></progress>
+          <progress
+            class="progress progress-primary w-full"
+            [value]="update.progress()"
+            max="100"
+          ></progress>
           <p class="text-xs opacity-70 mt-1 text-center">
             {{ 'update.downloading' | translate: { percent: update.progress() } }}
           </p>
@@ -38,7 +45,7 @@
         <p class="text-sm text-error mb-3">{{ 'update.error' | translate }}: {{ err }}</p>
       }
 
-      <div class="modal-action">
+      <app-modal-footer>
         <form method="dialog">
           <button class="btn btn-ghost">{{ 'common.close' | translate }}</button>
         </form>
@@ -59,7 +66,7 @@
             {{ 'update.open_release' | translate }}
           </button>
         }
-      </div>
+      </app-modal-footer>
     }
   </div>
   <form method="dialog" class="modal-backdrop">

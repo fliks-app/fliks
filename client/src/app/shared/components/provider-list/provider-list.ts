@@ -33,6 +33,8 @@ import {
   ProviderTestResult,
 } from './provider-list.types';
 import { DataTableComponent } from '../data-table/data-table';
+import { ModalHeaderComponent } from '../modal-header';
+import { ModalFooterComponent } from '../modal-footer';
 
 interface RowActionResultView {
   url: string;
@@ -59,6 +61,8 @@ export function resolveRowActionRoute(route: string, id: number | string): strin
 @Component({
   selector: 'app-provider-list',
   imports: [
+    ModalFooterComponent,
+    ModalHeaderComponent,
     TranslateModule,
     NgTemplateOutlet,
     InputFieldComponent,
@@ -105,9 +109,13 @@ export class ProviderListComponent implements OnInit {
   /** Matches subtitle-providers' current UX: renaming the draft to the driver's label while creating. */
   readonly autoFillNameFromImplementation = input(false);
   /** Runs against the unsaved draft (before create/update), catching a bad connection before it's saved. */
-  readonly testConnection = input<((draft: ProviderDraft) => Promise<ProviderTestResult>) | null>(null);
+  readonly testConnection = input<((draft: ProviderDraft) => Promise<ProviderTestResult>) | null>(
+    null,
+  );
   /** Last chance to normalise the save body (e.g. trim a URL) without resurrecting a dropped secret. */
-  readonly beforeSave = input<((body: Record<string, unknown>) => Record<string, unknown>) | null>(null);
+  readonly beforeSave = input<((body: Record<string, unknown>) => Record<string, unknown>) | null>(
+    null,
+  );
   /** Extra per-row column/actions the generic shape can't express (e.g. subtitle providers' rate-limit badge). */
   readonly rowExtraStatus = input<TemplateRef<{ $implicit: ProviderInstance }> | null>(null);
   readonly rowExtraActions = input<TemplateRef<{ $implicit: ProviderInstance }> | null>(null);
@@ -140,7 +148,9 @@ export class ProviderListComponent implements OnInit {
 
   /** A `GET` with no declared `result` has nothing to show, so it gets no button — the same
    *  fail-closed rule the `table` kind applies to an unknown `actionId`. */
-  readonly visibleRowActions = computed(() => this.rowActions().filter((a) => a.method !== 'GET' || !!a.result));
+  readonly visibleRowActions = computed(() =>
+    this.rowActions().filter((a) => a.method !== 'GET' || !!a.result),
+  );
 
   /** Display order: priority ascending when `reorderable`, otherwise the server's own order. */
   readonly orderedRows = computed(() =>
@@ -148,7 +158,8 @@ export class ProviderListComponent implements OnInit {
   );
 
   readonly currentImplementation = computed(
-    () => this.implementations().find((i) => i.implementation === this.draftImplementation()) ?? null,
+    () =>
+      this.implementations().find((i) => i.implementation === this.draftImplementation()) ?? null,
   );
 
   readonly requiredFieldMissing = computed(() => {
@@ -177,7 +188,9 @@ export class ProviderListComponent implements OnInit {
 
   implementationLabel(value: string): string {
     const impl = this.implementations().find((i) => i.implementation === value);
-    return impl ? this.translate.instant(impl.labelKey) : this.translate.instant('provider_list.unknown_implementation');
+    return impl
+      ? this.translate.instant(impl.labelKey)
+      : this.translate.instant('provider_list.unknown_implementation');
   }
 
   private seedValue(row: ProviderInstance | null, impl: ProviderImplementation): SchemaFormValue {
@@ -198,7 +211,9 @@ export class ProviderListComponent implements OnInit {
     this.editingId.set(null);
     const impl = this.implementations()[0] ?? null;
     this.draftImplementation.set(impl?.implementation ?? '');
-    this.draftName.set(impl && this.autoFillNameFromImplementation() ? this.translate.instant(impl.labelKey) : '');
+    this.draftName.set(
+      impl && this.autoFillNameFromImplementation() ? this.translate.instant(impl.labelKey) : '',
+    );
     this.draftPriority.set(this.defaultPriority());
     this.draftEnabled.set(this.defaultEnabled());
     this.draftValue.set(impl ? this.seedValue(null, impl) : {});
@@ -277,7 +292,10 @@ export class ProviderListComponent implements OnInit {
         }),
       );
     } catch {
-      this.testResult.set({ ok: false, message: this.translate.instant('provider_list.test_network_error') });
+      this.testResult.set({
+        ok: false,
+        message: this.translate.instant('provider_list.test_network_error'),
+      });
     } finally {
       this.testLoading.set(false);
     }
@@ -316,7 +334,13 @@ export class ProviderListComponent implements OnInit {
   async deleteRow(row: ProviderInstance): Promise<void> {
     const l = this.labels();
     const msg = this.translate.instant(l.confirmDeleteKey, { name: row.name });
-    if (!(await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: msg, variant: 'danger' })))
+    if (
+      !(await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: msg,
+        variant: 'danger',
+      }))
+    )
       return;
     try {
       await firstValueFrom(this.http.delete(`${this.listUrl()}/${row.id}`));
@@ -339,8 +363,12 @@ export class ProviderListComponent implements OnInit {
     if (idx < 0 || swapIdx < 0 || swapIdx >= ordered.length) return;
     const other = ordered[swapIdx];
     try {
-      await firstValueFrom(this.http.put(`${this.listUrl()}/${row.id}`, { ...row, priority: other.priority }));
-      await firstValueFrom(this.http.put(`${this.listUrl()}/${other.id}`, { ...other, priority: row.priority }));
+      await firstValueFrom(
+        this.http.put(`${this.listUrl()}/${row.id}`, { ...row, priority: other.priority }),
+      );
+      await firstValueFrom(
+        this.http.put(`${this.listUrl()}/${other.id}`, { ...other, priority: row.priority }),
+      );
       await this.reload();
     } catch {
       // handled by the global error interceptor
@@ -376,11 +404,15 @@ export class ProviderListComponent implements OnInit {
   cooldownRemaining(cd: ProviderCooldown): string {
     const minutes = Math.ceil(cd.remainingMs / 60_000);
     if (minutes < 60) return this.translate.instant('provider_list.cooldown_minutes', { minutes });
-    return this.translate.instant('provider_list.cooldown_hours', { hours: Math.ceil(minutes / 60) });
+    return this.translate.instant('provider_list.cooldown_hours', {
+      hours: Math.ceil(minutes / 60),
+    });
   }
 
   cooldownReasonKey(cd: ProviderCooldown): string {
-    return cd.reason === 'rate-limit' ? 'provider_list.cooldown_rate_limit' : 'provider_list.cooldown_failures';
+    return cd.reason === 'rate-limit'
+      ? 'provider_list.cooldown_rate_limit'
+      : 'provider_list.cooldown_failures';
   }
 
   /** Persists the whole row, as `moveRow` does: the resource merges secrets on update, so
@@ -388,7 +420,9 @@ export class ProviderListComponent implements OnInit {
   async toggleEnabled(row: ProviderInstance): Promise<void> {
     this.togglingId.set(row.id);
     try {
-      await firstValueFrom(this.http.put(`${this.listUrl()}/${row.id}`, { ...row, enabled: !row.enabled }));
+      await firstValueFrom(
+        this.http.put(`${this.listUrl()}/${row.id}`, { ...row, enabled: !row.enabled }),
+      );
       await this.reload();
     } catch {
       // handled by the global error interceptor
@@ -416,7 +450,11 @@ export class ProviderListComponent implements OnInit {
     }
     if (action.method === 'GET') {
       if (!action.result) return;
-      this.resultView.set({ url, title: `${row.name} — ${this.translate.instant(action.labelKey)}`, result: action.result });
+      this.resultView.set({
+        url,
+        title: `${row.name} — ${this.translate.instant(action.labelKey)}`,
+        result: action.result,
+      });
       this.resultDialog()?.nativeElement.showModal();
       return;
     }

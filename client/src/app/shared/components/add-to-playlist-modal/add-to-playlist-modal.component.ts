@@ -18,6 +18,7 @@ import {
 import { ToastService } from '../../../core/services/toast.service';
 import { AutoDownloadService } from '../../../core/services/auto-download.service';
 import { ModalHeaderComponent } from '../modal-header';
+import { ModalFooterComponent } from '../modal-footer';
 
 /**
  * Small dialog to add a media to an existing playlist or create a new one on
@@ -28,6 +29,7 @@ import { ModalHeaderComponent } from '../modal-header';
 @Component({
   selector: 'app-add-to-playlist-modal',
   imports: [
+    ModalFooterComponent,
     FormsModule,
     TranslateModule,
     LucideListPlus,
@@ -43,8 +45,7 @@ export class AddToPlaylistModalComponent {
   private readonly translate = inject(TranslateService);
   private readonly autoDownload = inject(AutoDownloadService);
 
-  private readonly dialogEl =
-    viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
   readonly added = output<void>();
 
@@ -104,9 +105,7 @@ export class AddToPlaylistModalComponent {
     try {
       const created = await this.api.create({ name });
       await this.api.addItem(created.id, target);
-      this.toast.success(
-        this.translate.instant('playlists.created_and_added_toast'),
-      );
+      this.toast.success(this.translate.instant('playlists.created_and_added_toast'));
       this.added.emit();
       this.close();
     } catch {

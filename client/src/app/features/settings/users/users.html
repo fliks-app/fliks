@@ -30,9 +30,13 @@
           @for (user of rows(); track user.id) {
             <tr>
               <td class="font-medium">
-                <a [routerLink]="['/admin/users', user.id]" class="link link-hover">{{ user.username }}</a>
+                <a [routerLink]="['/admin/users', user.id]" class="link link-hover">{{
+                  user.username
+                }}</a>
                 @if (auth.user()?.id === user.id) {
-                  <span class="badge badge-primary badge-sm ml-2">{{ 'settings.users.you' | translate }}</span>
+                  <span class="badge badge-primary badge-sm ml-2">{{
+                    'settings.users.you' | translate
+                  }}</span>
                 }
               </td>
               <td>
@@ -40,9 +44,13 @@
               </td>
               <td>
                 @if (user.enabled) {
-                  <span class="badge badge-success badge-sm">{{ 'common.active' | translate }}</span>
+                  <span class="badge badge-success badge-sm">{{
+                    'common.active' | translate
+                  }}</span>
                 } @else {
-                  <span class="badge badge-ghost badge-sm">{{ 'common.disabled' | translate }}</span>
+                  <span class="badge badge-ghost badge-sm">{{
+                    'common.disabled' | translate
+                  }}</span>
                 }
               </td>
               <td class="text-base-content/70 text-sm">
@@ -61,113 +69,104 @@
 </div>
 
 <dialog #editorDialog class="modal">
-    <div class="modal-box max-w-md max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
-      <div class="px-5 sm:px-6 pt-4 pb-3 border-b border-base-200 flex justify-between items-center shrink-0 bg-base-100">
-        <h2 class="text-lg font-bold">{{ 'settings.users.editor_create' | translate }}</h2>
-        <button
-          type="button"
-          class="btn btn-sm btn-ghost btn-circle"
-          (click)="closeEditor()"
-          [attr.aria-label]="'common.close' | translate"
+  <div class="modal-box max-w-md max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+    <app-modal-header flush [title]="'settings.users.editor_create' | translate" />
+
+    <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.users.field_username' | translate }}</span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="formUsername()"
+          (ngModelChange)="formUsername.set($event)"
+        />
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.users.field_email' | translate }}</span>
+        <input
+          type="email"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="formEmail()"
+          (ngModelChange)="formEmail.set($event)"
+          placeholder="email@example.com"
+        />
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.users.field_password' | translate }}</span>
+        <input
+          type="password"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="formPassword()"
+          (ngModelChange)="formPassword.set($event)"
+          placeholder="••••••••"
+        />
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.users.field_role' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          [ngModel]="formRoleId()"
+          (ngModelChange)="formRoleId.set($event)"
         >
-          <svg lucideX class="h-5 w-5"></svg>
-        </button>
-      </div>
+          @for (role of roles(); track role.id) {
+            <option [ngValue]="role.id">{{ role.name }}</option>
+          }
+        </select>
+      </label>
 
-      <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.users.field_username' | translate }}</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="formUsername()"
-            (ngModelChange)="formUsername.set($event)"
-          />
-        </label>
+      <label class="label cursor-pointer justify-start gap-3">
+        <input
+          type="checkbox"
+          class="toggle toggle-sm"
+          [ngModel]="formEnabled()"
+          (ngModelChange)="formEnabled.set($event)"
+        />
+        <span class="label-text">{{ 'settings.users.field_enabled' | translate }}</span>
+      </label>
 
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.users.field_email' | translate }}</span>
-          <input
-            type="email"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="formEmail()"
-            (ngModelChange)="formEmail.set($event)"
-            placeholder="email@example.com"
-          />
-        </label>
-
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.users.field_password' | translate }}</span>
-          <input
-            type="password"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="formPassword()"
-            (ngModelChange)="formPassword.set($event)"
-            placeholder="••••••••"
-          />
-        </label>
-
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.users.field_role' | translate }}</span>
-          <select
-            class="select select-bordered select-sm w-full"
-            [ngModel]="formRoleId()"
-            (ngModelChange)="formRoleId.set($event)"
-          >
-            @for (role of roles(); track role.id) {
-              <option [ngValue]="role.id">{{ role.name }}</option>
+      <div>
+        <p class="label-text mb-2">{{ 'settings.users.field_libraries' | translate }}</p>
+        @if (libraries().length === 0) {
+          <p class="text-xs text-base-content/50">
+            {{ 'settings.users.no_libraries' | translate }}
+          </p>
+        } @else {
+          <div class="flex flex-col gap-1">
+            @for (lib of libraries(); track lib.id) {
+              <label class="label cursor-pointer justify-start gap-2 py-1">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-xs"
+                  [ngModel]="formLibraryIds().has(lib.id)"
+                  (ngModelChange)="toggleLibrary(lib.id)"
+                />
+                <span class="label-text text-sm">{{ lib.name }}</span>
+              </label>
             }
-          </select>
-        </label>
-
-        <label class="label cursor-pointer justify-start gap-3">
-          <input
-            type="checkbox"
-            class="toggle toggle-sm"
-            [ngModel]="formEnabled()"
-            (ngModelChange)="formEnabled.set($event)"
-          />
-          <span class="label-text">{{ 'settings.users.field_enabled' | translate }}</span>
-        </label>
-
-        <div>
-          <p class="label-text mb-2">{{ 'settings.users.field_libraries' | translate }}</p>
-          @if (libraries().length === 0) {
-            <p class="text-xs text-base-content/50">{{ 'settings.users.no_libraries' | translate }}</p>
-          } @else {
-            <div class="flex flex-col gap-1">
-              @for (lib of libraries(); track lib.id) {
-                <label class="label cursor-pointer justify-start gap-2 py-1">
-                  <input
-                    type="checkbox"
-                    class="checkbox checkbox-xs"
-                    [ngModel]="formLibraryIds().has(lib.id)"
-                    (ngModelChange)="toggleLibrary(lib.id)"
-                  />
-                  <span class="label-text text-sm">{{ lib.name }}</span>
-                </label>
-              }
-            </div>
-          }
-        </div>
-
-      </div>
-
-      <div class="modal-action shrink-0 px-5 sm:px-6 pb-4 pt-2 border-t border-base-200 bg-base-100">
-        <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
-          {{ 'settings.users.cancel' | translate }}
-        </button>
-        <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
-          @if (saving()) {
-            <span class="loading loading-spinner loading-sm"></span>
-          }
-          {{ 'settings.users.save' | translate }}
-        </button>
+          </div>
+        }
       </div>
     </div>
-    <form method="dialog" class="modal-backdrop">
-      <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">
-        {{ 'common.close' | translate }}
+
+    <app-modal-footer flush>
+      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+        {{ 'settings.users.cancel' | translate }}
       </button>
-    </form>
-  </dialog>
+      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+        @if (saving()) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
+        {{ 'settings.users.save' | translate }}
+      </button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">
+      {{ 'common.close' | translate }}
+    </button>
+  </form>
+</dialog>

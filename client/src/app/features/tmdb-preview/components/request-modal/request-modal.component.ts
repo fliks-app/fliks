@@ -16,10 +16,12 @@ import { RequestsService } from '../../../../core/services/api/requests.service'
 import { LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
+import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-request-modal',
-  imports: [FormsModule, TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './request-modal.component.html',
 })
@@ -80,14 +82,10 @@ export class RequestModalComponent {
     const locked = !!params.profilesLocked;
     this.profilesLocked.set(locked);
     this.qualityProfileId.set(
-      locked
-        ? (params.lockedQualityProfileId ?? null)
-        : (this.qualityProfiles()[0]?.id ?? null),
+      locked ? (params.lockedQualityProfileId ?? null) : (this.qualityProfiles()[0]?.id ?? null),
     );
     this.languageProfileId.set(
-      locked
-        ? (params.lockedLanguageProfileId ?? null)
-        : (this.languageProfiles()[0]?.id ?? null),
+      locked ? (params.lockedLanguageProfileId ?? null) : (this.languageProfiles()[0]?.id ?? null),
     );
     const compatible = this.libraries().filter((l) => l.mediaTypes.includes(params.mediaType));
     const defaultLib =
@@ -103,25 +101,27 @@ export class RequestModalComponent {
     if (params.mediaType === 'series') {
       this.seasonsLoading.set(true);
       const preselected = new Set(params.preselectedSeasons ?? []);
-      this.metadata.getTvSeasons(params.tmdbId).then((s) => {
-        this.seasons.set(s);
-        // Default empty unless the caller passed `preselectedSeasons`
-        // (e.g. the season-level Demander entry pre-fills the season
-        // it was clicked on). Already-requested rows are filtered out
-        // — they're disabled and can't be re-picked anyway.
-        const taken = this.alreadyRequestedSeasons();
-        this.selectedSeasons.set(
-          new Set(
-            s
-              .map((x) => x.seasonNumber)
-              .filter((n) => preselected.has(n) && !taken.has(n)),
-          ),
-        );
-      }).catch(() => {
-        this.seasons.set([]);
-      }).finally(() => {
-        this.seasonsLoading.set(false);
-      });
+      this.metadata
+        .getTvSeasons(params.tmdbId)
+        .then((s) => {
+          this.seasons.set(s);
+          // Default empty unless the caller passed `preselectedSeasons`
+          // (e.g. the season-level Demander entry pre-fills the season
+          // it was clicked on). Already-requested rows are filtered out
+          // — they're disabled and can't be re-picked anyway.
+          const taken = this.alreadyRequestedSeasons();
+          this.selectedSeasons.set(
+            new Set(
+              s.map((x) => x.seasonNumber).filter((n) => preselected.has(n) && !taken.has(n)),
+            ),
+          );
+        })
+        .catch(() => {
+          this.seasons.set([]);
+        })
+        .finally(() => {
+          this.seasonsLoading.set(false);
+        });
     }
   }
 

@@ -14,7 +14,7 @@
       </p>
     } @else {
       <p class="text-xs text-base-content/50 mb-2">
-        {{ 'media_detail.subtitle_view_count' | translate:{ count: cues().length } }}
+        {{ 'media_detail.subtitle_view_count' | translate: { count: cues().length } }}
       </p>
       <div class="max-h-[60vh] overflow-y-auto flex flex-col gap-2 pr-1">
         @for (cue of cues(); track $index) {
@@ -28,11 +28,11 @@
       </div>
     }
 
-    <div class="modal-action">
-      <button type="button" class="btn btn-sm" (click)="close()">
+    <app-modal-footer>
+      <button type="button" class="btn" (click)="close()">
         {{ 'common.close' | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>

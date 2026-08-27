@@ -17,6 +17,8 @@ import { MovieRelease } from '../../media-detail-release-picker.service';
 import { IndexerRosterEntry } from '../../release-search-stream.service';
 import { ReleasesTableComponent } from '../releases-table/releases-table.component';
 import { DismissableStackService } from '../../../../core/services/dismissable-stack.service';
+import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 
 /** `null` is the "Tous" tab; anything else is one indexer id. */
 export type ReleaseTab = number | null;
@@ -32,7 +34,16 @@ type IndexerSearchStateOrAll = IndexerRosterEntry['state'] | 'all';
 
 @Component({
   selector: 'app-releases-modal',
-  imports: [FormsModule, TranslateModule, ReleasesTableComponent, LucideSearchX, LucideTriangleAlert, LucideCirclePause],
+  imports: [
+    ModalFooterComponent,
+    ModalHeaderComponent,
+    FormsModule,
+    TranslateModule,
+    ReleasesTableComponent,
+    LucideSearchX,
+    LucideTriangleAlert,
+    LucideCirclePause,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './releases-modal.component.html',
 })
@@ -76,7 +87,12 @@ export class ReleasesModalComponent {
     // `count: null` is the spinner slot — a tab still working. Tous spins for as long as any
     // indexer does, so the whole strip follows one rule instead of the header carrying its own.
     return [
-      { id: null, label: '', count: this.loading() ? null : this.releases().length, state: 'all' as const },
+      {
+        id: null,
+        label: '',
+        count: this.loading() ? null : this.releases().length,
+        state: 'all' as const,
+      },
       ...roster.map((ix) => ({
         id: ix.id,
         label: ix.name,
@@ -124,6 +140,8 @@ export class ReleasesModalComponent {
     if (!el || el.open) return;
     el.showModal();
     this.dismissStack.push(this.closeCallback);
-    el.addEventListener('close', () => this.dismissStack.remove(this.closeCallback), { once: true });
+    el.addEventListener('close', () => this.dismissStack.remove(this.closeCallback), {
+      once: true,
+    });
   }
 }

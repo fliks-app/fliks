@@ -982,6 +982,8 @@
     "subtitles_section": "Untertitel",
     "search_subtitles": "Untertitel suchen",
     "upload_subtitle": "Untertitel hochladen",
+    "subtitles_import": "Importieren",
+    "subtitles_search": "Suchen",
     "upload_subtitle_hint": "Wählen Sie die Sprache der hochzuladenden Datei.",
     "upload_subtitle_success": "Untertitel hochgeladen",
     "auto_subtitle": "Auto",

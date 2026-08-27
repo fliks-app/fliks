@@ -18,10 +18,12 @@ import { LibrariesApiService, Library } from '../../../../core/services/api/libr
 import { SettingsApiService } from '../../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
+import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-import-modal',
-  imports: [FormsModule, TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './import-modal.component.html',
 })
@@ -58,7 +60,13 @@ export class ImportModalComponent {
     this.libraries().filter((l) => l.mediaTypes.includes(this.mediaType())),
   );
 
-  async open(params: { title: string; mediaType: MediaType; tmdbId: number; provider?: string; externalId?: string }) {
+  async open(params: {
+    title: string;
+    mediaType: MediaType;
+    tmdbId: number;
+    provider?: string;
+    externalId?: string;
+  }) {
     this.title.set(params.title);
     this.mediaType.set(params.mediaType);
     this.tmdbId.set(params.tmdbId);
@@ -121,7 +129,9 @@ export class ImportModalComponent {
     } catch (err: unknown) {
       const httpErr = err as { status?: number; error?: { message?: string } };
       if (httpErr?.status === 400) {
-        this.error.set(httpErr.error?.message ?? this.translate.instant('discover.tmdb_not_configured'));
+        this.error.set(
+          httpErr.error?.message ?? this.translate.instant('discover.tmdb_not_configured'),
+        );
       } else if (httpErr?.status === 403) {
         this.error.set(this.translate.instant('discover.forbidden'));
       } else {

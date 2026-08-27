@@ -9,10 +9,12 @@ import {
 } from '@angular/core';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../core/services/confirmation.service';
+import { ModalHeaderComponent } from './modal-header';
+import { ModalFooterComponent } from './modal-footer';
 
 @Component({
   selector: 'app-confirmation-modal',
-  imports: [TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './confirmation-modal.html',
 })
@@ -20,25 +22,18 @@ export class ConfirmationModalComponent {
   readonly confirmService = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
 
-  private readonly dialog =
-    viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
   readonly isOpen = computed(() => !!this.confirmService.state());
   readonly title = computed(() => this.confirmService.state()?.title ?? '');
   readonly message = computed(() => this.confirmService.state()?.message ?? '');
   readonly confirmLabel = computed(
-    () =>
-      this.confirmService.state()?.confirmLabel ??
-      this.translate.instant('common.confirm'),
+    () => this.confirmService.state()?.confirmLabel ?? this.translate.instant('common.confirm'),
   );
   readonly cancelLabel = computed(
-    () =>
-      this.confirmService.state()?.cancelLabel ??
-      this.translate.instant('common.cancel'),
+    () => this.confirmService.state()?.cancelLabel ?? this.translate.instant('common.cancel'),
   );
-  readonly variant = computed(
-    () => this.confirmService.state()?.variant ?? 'default',
-  );
+  readonly variant = computed(() => this.confirmService.state()?.variant ?? 'default');
 
   readonly alertOnly = computed(() => this.confirmService.state()?.alertOnly ?? false);
   readonly dismissLabel = computed(() => this.confirmService.state()?.dismissLabel ?? null);

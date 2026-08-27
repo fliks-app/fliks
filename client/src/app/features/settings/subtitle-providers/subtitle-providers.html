@@ -1,7 +1,9 @@
 <div class="flex flex-col gap-6">
   <div>
     <h1 class="text-2xl font-bold">{{ 'settings.subtitle_providers.title' | translate }}</h1>
-    <p class="text-sm text-base-content/60 mt-1">{{ 'settings.subtitle_providers.subtitle' | translate }}</p>
+    <p class="text-sm text-base-content/60 mt-1">
+      {{ 'settings.subtitle_providers.subtitle' | translate }}
+    </p>
   </div>
 
   <!-- AI subtitle translation -->
@@ -9,10 +11,18 @@
     <div class="card-body gap-4">
       <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h2 class="card-title text-lg">{{ 'settings.subtitle_providers.translation_title' | translate }}</h2>
-          <p class="text-sm text-base-content/60">{{ 'settings.subtitle_providers.translation_hint' | translate }}</p>
+          <h2 class="card-title text-lg">
+            {{ 'settings.subtitle_providers.translation_title' | translate }}
+          </h2>
+          <p class="text-sm text-base-content/60">
+            {{ 'settings.subtitle_providers.translation_hint' | translate }}
+          </p>
         </div>
-        <button type="button" class="btn btn-primary btn-sm shrink-0 self-start" (click)="openCreateTranslation()">
+        <button
+          type="button"
+          class="btn btn-primary btn-sm shrink-0 self-start"
+          (click)="openCreateTranslation()"
+        >
           {{ 'settings.subtitle_providers.translation_new' | translate }}
         </button>
       </div>
@@ -26,11 +36,15 @@
             [ngModel]="translationEnabled()"
             (ngModelChange)="saveTranslationEnabled($event)"
           />
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_enabled' | translate }}</span>
+          <span class="label-text">{{
+            'settings.subtitle_providers.translation_enabled' | translate
+          }}</span>
         </label>
 
         <label class="form-control w-32">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_concurrency' | translate }}</span>
+          <span class="label-text">{{
+            'settings.subtitle_providers.translation_concurrency' | translate
+          }}</span>
           <input
             type="number"
             min="1"
@@ -45,7 +59,9 @@
       @if (translationLoading()) {
         <div class="flex justify-center py-6"><span class="loading loading-spinner"></span></div>
       } @else if (translationRows().length === 0) {
-        <p class="text-sm text-base-content/50 py-4">{{ 'settings.subtitle_providers.translation_empty' | translate }}</p>
+        <p class="text-sm text-base-content/50 py-4">
+          {{ 'settings.subtitle_providers.translation_empty' | translate }}
+        </p>
       } @else {
         <div class="overflow-x-auto rounded-lg border border-base-200">
           <table class="table">
@@ -53,17 +69,31 @@
               <tr>
                 <th>{{ 'settings.subtitle_providers.col_name' | translate }}</th>
                 <th>{{ 'settings.subtitle_providers.translation_col_engine' | translate }}</th>
-                <th class="text-center">{{ 'settings.subtitle_providers.col_status' | translate }}</th>
-                <th class="text-end w-32">{{ 'settings.subtitle_providers.actions' | translate }}</th>
+                <th class="text-center">
+                  {{ 'settings.subtitle_providers.col_status' | translate }}
+                </th>
+                <th class="text-end w-32">
+                  {{ 'settings.subtitle_providers.actions' | translate }}
+                </th>
               </tr>
             </thead>
             <tbody>
               @for (row of translationRows(); track row.id) {
                 <tr>
                   <td class="font-medium">
-                    <div class="whitespace-nowrap"><button type="button" class="link link-hover" (click)="openEditTranslation(row)">{{ row.name }}</button></div>
+                    <div class="whitespace-nowrap">
+                      <button
+                        type="button"
+                        class="link link-hover"
+                        (click)="openEditTranslation(row)"
+                      >
+                        {{ row.name }}
+                      </button>
+                    </div>
                     @if (row.isDefault) {
-                      <span class="badge badge-primary badge-sm mt-1">{{ 'settings.subtitle_providers.translation_default' | translate }}</span>
+                      <span class="badge badge-primary badge-sm mt-1">{{
+                        'settings.subtitle_providers.translation_default' | translate
+                      }}</span>
                     }
                   </td>
                   <td class="text-sm">{{ translationEngineLabel(row.engine) }}</td>
@@ -76,7 +106,11 @@
                   </td>
                   <td class="text-end">
                     <div class="flex justify-end gap-1">
-                      <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteTranslationProvider(row)">
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs text-error"
+                        (click)="deleteTranslationProvider(row)"
+                      >
                         {{ 'common.delete' | translate }}
                       </button>
                     </div>
@@ -93,7 +127,9 @@
   <!-- Download providers -->
   <div class="card bg-base-100 border border-base-200">
     <div class="card-body gap-4">
-      <p class="text-sm text-base-content/60">{{ 'settings.subtitle_providers.download_hint' | translate }}</p>
+      <p class="text-sm text-base-content/60">
+        {{ 'settings.subtitle_providers.download_hint' | translate }}
+      </p>
 
       <app-provider-list
         titleKey="settings.subtitle_providers.download_title"
@@ -112,8 +148,12 @@
 
       <ng-template #rateLimitStatusTpl let-row>
         @if (row.enabled && getRateLimit(implementationOf(row)); as rl) {
-          <span class="badge badge-warning badge-sm gap-1" [title]="'settings.subtitle_providers.rate_limited_hint' | translate">
-            {{ 'settings.subtitle_providers.rate_limited' | translate }} — {{ formatDelay(rl.delaySec) }}
+          <span
+            class="badge badge-warning badge-sm gap-1"
+            [title]="'settings.subtitle_providers.rate_limited_hint' | translate"
+          >
+            {{ 'settings.subtitle_providers.rate_limited' | translate }} —
+            {{ formatDelay(rl.delaySec) }}
           </span>
         }
       </ng-template>
@@ -129,21 +169,37 @@
 
 <dialog #statsDialog class="modal">
   <div class="modal-box max-w-2xl">
-    <h2 class="text-lg font-bold">{{ statsProviderName() }} — {{ 'settings.subtitle_providers.stats_title' | translate }}</h2>
+    <app-modal-header>
+      <h3 class="text-lg font-bold">
+        {{ statsProviderName() }} — {{ 'settings.subtitle_providers.stats_title' | translate }}
+      </h3>
+    </app-modal-header>
     @if (statsLoading()) {
-      <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+      <div class="flex justify-center py-8">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
     } @else if (statsData().length === 0) {
-      <p class="text-center py-8 text-base-content/50">{{ 'settings.subtitle_providers.stats_empty' | translate }}</p>
+      <p class="text-center py-8 text-base-content/50">
+        {{ 'settings.subtitle_providers.stats_empty' | translate }}
+      </p>
     } @else {
       <div class="overflow-x-auto mt-4 rounded-lg border border-base-200">
         <table class="table">
           <thead>
             <tr>
               <th>{{ 'settings.subtitle_providers.stats_date' | translate }}</th>
-              <th class="text-right">{{ 'settings.subtitle_providers.stats_queries' | translate }}</th>
-              <th class="text-right">{{ 'settings.subtitle_providers.stats_avg_time' | translate }}</th>
-              <th class="text-right">{{ 'settings.subtitle_providers.stats_results' | translate }}</th>
-              <th class="text-right">{{ 'settings.subtitle_providers.stats_errors' | translate }}</th>
+              <th class="text-right">
+                {{ 'settings.subtitle_providers.stats_queries' | translate }}
+              </th>
+              <th class="text-right">
+                {{ 'settings.subtitle_providers.stats_avg_time' | translate }}
+              </th>
+              <th class="text-right">
+                {{ 'settings.subtitle_providers.stats_results' | translate }}
+              </th>
+              <th class="text-right">
+                {{ 'settings.subtitle_providers.stats_errors' | translate }}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -153,16 +209,20 @@
                 <td class="text-right tabular-nums">{{ row.queries }}</td>
                 <td class="text-right tabular-nums">{{ row.avgResponseMs }}ms</td>
                 <td class="text-right tabular-nums">{{ row.totalResults }}</td>
-                <td class="text-right tabular-nums" [class.text-error]="row.errors > 0">{{ row.errors }}</td>
+                <td class="text-right tabular-nums" [class.text-error]="row.errors > 0">
+                  {{ row.errors }}
+                </td>
               </tr>
             }
           </tbody>
         </table>
       </div>
     }
-    <div class="modal-action">
-      <button type="button" class="btn btn-ghost" (click)="closeStats()">{{ 'common.close' | translate }}</button>
-    </div>
+    <app-modal-footer>
+      <button type="button" class="btn btn-ghost" (click)="closeStats()">
+        {{ 'common.close' | translate }}
+      </button>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
     <button type="button" (click)="closeStats()">close</button>
@@ -171,25 +231,36 @@
 
 <dialog #translationEditorDialog class="modal">
   <div class="modal-box max-w-xl max-h-[90vh] flex flex-col">
-    <h2 class="text-lg font-bold shrink-0">
-      @if (trEditingId() === null) {
-        {{ 'settings.subtitle_providers.translation_editor_create' | translate }}
-      } @else {
-        {{ 'settings.subtitle_providers.translation_editor_edit' | translate }}
-      }
-    </h2>
+    <app-modal-header class="shrink-0">
+      <h3 class="text-lg font-bold">
+        @if (trEditingId() === null) {
+          {{ 'settings.subtitle_providers.translation_editor_create' | translate }}
+        } @else {
+          {{ 'settings.subtitle_providers.translation_editor_edit' | translate }}
+        }
+      </h3>
+    </app-modal-header>
 
     <div class="flex flex-col gap-3 p-2 -m-2 mt-1 overflow-y-auto">
       <label class="form-control w-full">
         <span class="label-text">{{ 'settings.subtitle_providers.col_name' | translate }}</span>
-        <input type="text" class="input input-bordered input-sm w-full"
-          [ngModel]="trFormName()" (ngModelChange)="trFormName.set($event)" />
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="trFormName()"
+          (ngModelChange)="trFormName.set($event)"
+        />
       </label>
 
       <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.subtitle_providers.translation_engine' | translate }}</span>
-        <select class="select select-bordered select-sm w-full"
-          [ngModel]="trFormEngine()" (ngModelChange)="onTranslationEngineChange($event)">
+        <span class="label-text">{{
+          'settings.subtitle_providers.translation_engine' | translate
+        }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          [ngModel]="trFormEngine()"
+          (ngModelChange)="onTranslationEngineChange($event)"
+        >
           @for (e of translationEngines; track e.value) {
             <option [value]="e.value">{{ e.label }}</option>
           }
@@ -198,14 +269,25 @@
 
       @if (trFormEngine() === 'gemini') {
         <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_api_key' | translate }}</span>
-          <input type="text" class="input input-bordered input-sm w-full font-mono"
-            [ngModel]="trFormApiKey()" (ngModelChange)="trFormApiKey.set($event)" />
+          <span class="label-text">{{
+            'settings.subtitle_providers.translation_api_key' | translate
+          }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
+            [ngModel]="trFormApiKey()"
+            (ngModelChange)="trFormApiKey.set($event)"
+          />
         </label>
         <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_model' | translate }}</span>
-          <select class="select select-bordered select-sm w-full font-mono"
-            [ngModel]="trFormModel()" (ngModelChange)="trFormModel.set($event)">
+          <span class="label-text">{{
+            'settings.subtitle_providers.translation_model' | translate
+          }}</span>
+          <select
+            class="select select-bordered select-sm w-full font-mono"
+            [ngModel]="trFormModel()"
+            (ngModelChange)="trFormModel.set($event)"
+          >
             @if (!geminiModels.includes(trFormModel())) {
               <option [value]="trFormModel()">{{ trFormModel() }}</option>
             }
@@ -216,74 +298,145 @@
         </label>
       } @else if (trFormEngine() === 'openai') {
         <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_openai_base_url' | translate }}</span>
-          <input type="text" class="input input-bordered input-sm w-full font-mono"
+          <span class="label-text">{{
+            'settings.subtitle_providers.translation_openai_base_url' | translate
+          }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
             placeholder="https://api.groq.com/openai/v1"
-            [ngModel]="trFormBaseUrl()" (ngModelChange)="trFormBaseUrl.set($event)" />
-          <span class="text-xs text-base-content/50 mt-1">{{ 'settings.subtitle_providers.translation_openai_base_url_hint' | translate }}</span>
+            [ngModel]="trFormBaseUrl()"
+            (ngModelChange)="trFormBaseUrl.set($event)"
+          />
+          <span class="text-xs text-base-content/50 mt-1">{{
+            'settings.subtitle_providers.translation_openai_base_url_hint' | translate
+          }}</span>
         </label>
         <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_api_key_optional' | translate }}</span>
-          <input type="text" class="input input-bordered input-sm w-full font-mono"
-            [ngModel]="trFormApiKey()" (ngModelChange)="trFormApiKey.set($event)" />
+          <span class="label-text">{{
+            'settings.subtitle_providers.translation_api_key_optional' | translate
+          }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
+            [ngModel]="trFormApiKey()"
+            (ngModelChange)="trFormApiKey.set($event)"
+          />
         </label>
         <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_openai_model' | translate }}</span>
-          <input type="text" class="input input-bordered input-sm w-full font-mono"
+          <span class="label-text">{{
+            'settings.subtitle_providers.translation_openai_model' | translate
+          }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
             placeholder="llama-3.3-70b-versatile"
-            [ngModel]="trFormModel()" (ngModelChange)="trFormModel.set($event)" />
+            [ngModel]="trFormModel()"
+            (ngModelChange)="trFormModel.set($event)"
+          />
         </label>
       } @else {
         <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_libretranslate_url' | translate }}</span>
-          <input type="text" class="input input-bordered input-sm w-full font-mono"
+          <span class="label-text">{{
+            'settings.subtitle_providers.translation_libretranslate_url' | translate
+          }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
             placeholder="http://libretranslate:5000"
-            [ngModel]="trFormUrl()" (ngModelChange)="trFormUrl.set($event)" />
-          <span class="text-xs text-base-content/50 mt-1">{{ 'settings.subtitle_providers.translation_libretranslate_url_hint' | translate }}</span>
+            [ngModel]="trFormUrl()"
+            (ngModelChange)="trFormUrl.set($event)"
+          />
+          <span class="text-xs text-base-content/50 mt-1">{{
+            'settings.subtitle_providers.translation_libretranslate_url_hint' | translate
+          }}</span>
         </label>
         <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_api_key_optional' | translate }}</span>
-          <input type="text" class="input input-bordered input-sm w-full font-mono"
-            [ngModel]="trFormApiKey()" (ngModelChange)="trFormApiKey.set($event)" />
+          <span class="label-text">{{
+            'settings.subtitle_providers.translation_api_key_optional' | translate
+          }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
+            [ngModel]="trFormApiKey()"
+            (ngModelChange)="trFormApiKey.set($event)"
+          />
         </label>
       }
 
       <div class="flex gap-6">
         <label class="flex items-center gap-2">
-          <input type="checkbox" class="checkbox checkbox-sm"
-            [ngModel]="trFormEnabled()" (ngModelChange)="trFormEnabled.set($event)" />
-          <span class="label-text">{{ 'settings.subtitle_providers.field_enabled' | translate }}</span>
+          <input
+            type="checkbox"
+            class="checkbox checkbox-sm"
+            [ngModel]="trFormEnabled()"
+            (ngModelChange)="trFormEnabled.set($event)"
+          />
+          <span class="label-text">{{
+            'settings.subtitle_providers.field_enabled' | translate
+          }}</span>
         </label>
         <label class="flex items-center gap-2">
-          <input type="checkbox" class="checkbox checkbox-sm"
-            [ngModel]="trFormDefault()" (ngModelChange)="trFormDefault.set($event)" />
-          <span class="label-text">{{ 'settings.subtitle_providers.translation_set_default' | translate }}</span>
+          <input
+            type="checkbox"
+            class="checkbox checkbox-sm"
+            [ngModel]="trFormDefault()"
+            (ngModelChange)="trFormDefault.set($event)"
+          />
+          <span class="label-text">{{
+            'settings.subtitle_providers.translation_set_default' | translate
+          }}</span>
         </label>
       </div>
 
       <div class="flex items-center gap-2">
-        <button type="button" class="btn btn-outline btn-sm" (click)="testTranslation()" [disabled]="trTestLoading()">
-          @if (trTestLoading()) { <span class="loading loading-spinner loading-xs"></span> }
+        <button
+          type="button"
+          class="btn btn-outline btn-sm"
+          (click)="testTranslation()"
+          [disabled]="trTestLoading()"
+        >
+          @if (trTestLoading()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
           {{ 'settings.subtitle_providers.test' | translate }}
         </button>
         @if (trTestResult(); as r) {
-          <span class="text-sm" [class.text-success]="r.ok" [class.text-error]="!r.ok">{{ r.message }}</span>
+          <span class="text-sm" [class.text-success]="r.ok" [class.text-error]="!r.ok">{{
+            r.message
+          }}</span>
         }
       </div>
     </div>
 
-    <div class="modal-action shrink-0">
-      <button type="button" class="btn btn-ghost" (click)="closeTranslationEditor()" [disabled]="trSaving()">
+    <app-modal-footer>
+      <button
+        type="button"
+        class="btn btn-ghost"
+        (click)="closeTranslationEditor()"
+        [disabled]="trSaving()"
+      >
         {{ 'settings.subtitle_providers.cancel' | translate }}
       </button>
-      <button type="button" class="btn btn-primary" (click)="saveTranslationProvider()" [disabled]="trSaving()">
-        @if (trSaving()) { <span class="loading loading-spinner loading-sm"></span> }
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="saveTranslationProvider()"
+        [disabled]="trSaving()"
+      >
+        @if (trSaving()) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
         {{ 'settings.subtitle_providers.save' | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeTranslationEditor()" [attr.aria-label]="'common.close' | translate">
+    <button
+      type="button"
+      (click)="closeTranslationEditor()"
+      [attr.aria-label]="'common.close' | translate"
+    >
       {{ 'common.close' | translate }}
     </button>
   </form>

@@ -21,10 +21,12 @@ import { LibrariesApiService, Library } from '../../../core/services/api/librari
 import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { formatRelativeTime } from '../../../core/utils/relative-time';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-users-settings',
-  imports: [FormsModule, LucideX, RouterLink, TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, RouterLink, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './users.html',
 })
@@ -127,5 +129,4 @@ export class UsersSettingsComponent implements OnInit {
       this.saving.set(false);
     }
   }
-
 }

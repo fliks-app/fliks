@@ -9,9 +9,15 @@
         }
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-base-content/70">
           <span class="font-medium">{{ overallStateLabelKey() | translate }}</span>
-          @if (p.percent !== null) { <span class="tabular-nums">{{ p.percent }}%</span> }
-          @if (speedLabel(); as sp) { <span>↓ {{ sp }}</span> }
-          @if (etaLabel(); as e) { <span>{{ 'activity.eta' | translate }} {{ e }}</span> }
+          @if (p.percent !== null) {
+            <span class="tabular-nums">{{ p.percent }}%</span>
+          }
+          @if (speedLabel(); as sp) {
+            <span>↓ {{ sp }}</span>
+          }
+          @if (etaLabel(); as e) {
+            <span>{{ 'activity.eta' | translate }} {{ e }}</span>
+          }
         </div>
       </div>
 
@@ -21,9 +27,14 @@
           @for (s of seasonRows(); track s.seasonNumber) {
             <div class="flex flex-col gap-1">
               <div class="flex items-center justify-between gap-3">
-                <span class="text-sm font-medium">{{ 'tracking.season' | translate:{ number: s.seasonNumber } }}</span>
+                <span class="text-sm font-medium">{{
+                  'tracking.season' | translate: { number: s.seasonNumber }
+                }}</span>
                 <span class="text-sm text-base-content/60">
-                  {{ s.stateLabelKey | translate }}@if (s.percent !== null) { · {{ s.percent }}%}
+                  {{ s.stateLabelKey | translate }}
+                  @if (s.percent !== null) {
+                    · {{ s.percent }}%
+                  }
                 </span>
               </div>
               @if (s.percent !== null) {
@@ -32,8 +43,10 @@
               @if (s.leaves.length) {
                 <div class="flex flex-col gap-1 pl-3 mt-1">
                   @for (l of s.leaves; track l.key) {
-                    <div class="flex items-center justify-between gap-3 text-xs text-base-content/60">
-                      <span>{{ l.labelKey | translate:{ number: l.labelNumber } }}</span>
+                    <div
+                      class="flex items-center justify-between gap-3 text-xs text-base-content/60"
+                    >
+                      <span>{{ l.labelKey | translate: { number: l.labelNumber } }}</span>
                       <span>{{ l.stateLabelKey | translate }} · {{ l.percent }}%</span>
                     </div>
                   }
@@ -49,11 +62,11 @@
       </p>
     }
 
-    <div class="modal-action">
-      <button type="button" class="btn btn-sm" (click)="close()">
+    <app-modal-footer>
+      <button type="button" class="btn" (click)="close()">
         {{ 'common.close' | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>

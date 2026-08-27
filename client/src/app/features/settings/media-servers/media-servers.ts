@@ -17,10 +17,12 @@ import {
   MediaServerRow,
   MediaServerTypeInfo,
 } from '../../../core/services/api/media-servers-api.service';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-media-servers-settings',
-  imports: [FormsModule, LucideX, TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-servers.html',
 })
@@ -130,7 +132,10 @@ export class MediaServersSettingsComponent implements OnInit {
       const r = await this.api.testConnection(id);
       this.testResult.set(r);
     } catch {
-      this.testResult.set({ ok: false, message: this.translate.instant('settings.media_servers.test_error') });
+      this.testResult.set({
+        ok: false,
+        message: this.translate.instant('settings.media_servers.test_error'),
+      });
     } finally {
       this.testLoading.set(false);
     }
@@ -165,11 +170,16 @@ export class MediaServersSettingsComponent implements OnInit {
   }
 
   async deleteRow(row: MediaServerRow) {
-    if (!await this.confirmation.confirm({
-      title: this.translate.instant('common.confirm'),
-      message: this.translate.instant('settings.media_servers.confirm_delete', { name: row.name }),
-      variant: 'danger',
-    })) return;
+    if (
+      !(await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: this.translate.instant('settings.media_servers.confirm_delete', {
+          name: row.name,
+        }),
+        variant: 'danger',
+      }))
+    )
+      return;
     try {
       await this.api.remove(row.id);
       await this.reloadAll();

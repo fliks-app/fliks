@@ -4,104 +4,128 @@
   </div>
 } @else if (playlist(); as pl) {
   <div class="flex items-start gap-4 mb-6">
-      <!-- Playlist icon: the auto cover mosaic (2×2 / single / fallback). -->
-      <div class="w-16 h-16 sm:w-20 sm:h-20 shrink-0 overflow-hidden rounded-lg bg-base-300">
-        @if (pl.posters.length >= 4) {
-          <div class="grid grid-cols-2 grid-rows-2 h-full w-full">
-            @for (p of pl.posters.slice(0, 4); track p) {
-              <img [cachedSrc]="p | resolveUrl: 'thumb'" alt="" class="h-full w-full object-cover" />
-            }
-          </div>
-        } @else if (pl.posters.length > 0) {
-          <img [cachedSrc]="pl.posters[0] | resolveUrl: 'thumb'" alt="" class="h-full w-full object-cover" />
-        } @else {
-          <div class="flex h-full w-full items-center justify-center text-base-content/40">
-            <svg lucideListVideo class="h-8 w-8" [strokeWidth]="1.5"></svg>
-          </div>
+    <!-- Playlist icon: the auto cover mosaic (2×2 / single / fallback). -->
+    <div class="w-16 h-16 sm:w-20 sm:h-20 shrink-0 overflow-hidden rounded-lg bg-base-300">
+      @if (pl.posters.length >= 4) {
+        <div class="grid grid-cols-2 grid-rows-2 h-full w-full">
+          @for (p of pl.posters.slice(0, 4); track p) {
+            <img [cachedSrc]="p | resolveUrl: 'thumb'" alt="" class="h-full w-full object-cover" />
+          }
+        </div>
+      } @else if (pl.posters.length > 0) {
+        <img
+          [cachedSrc]="pl.posters[0] | resolveUrl: 'thumb'"
+          alt=""
+          class="h-full w-full object-cover"
+        />
+      } @else {
+        <div class="flex h-full w-full items-center justify-center text-base-content/40">
+          <svg lucideListVideo class="h-8 w-8" [strokeWidth]="1.5"></svg>
+        </div>
+      }
+    </div>
+
+    <div class="min-w-0 flex-1">
+      <h1 class="text-2xl font-bold truncate">{{ pl.name }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">
+        {{
+          (items().length <= 1 ? 'common.item_count_one' : 'common.item_count_other')
+            | translate: { count: items().length }
+        }}
+      </p>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+      @if (items().length) {
+        <button type="button" class="btn btn-primary btn-sm gap-2" (click)="playAll()">
+          <svg lucidePlay class="h-4 w-4"></svg>
+          {{ 'player.play' | translate }}
+        </button>
+      }
+      @if (!isOwner() && !sharingDisabled()) {
+        <button
+          type="button"
+          class="btn btn-sm gap-2"
+          [class.btn-ghost]="!pl.saved"
+          [class.btn-outline]="pl.saved"
+          [disabled]="savingBookmark()"
+          (click)="toggleSave()"
+        >
+          @if (pl.saved) {
+            <svg lucideBookmarkCheck class="h-4 w-4"></svg>
+            {{ 'playlists.saved_label' | translate }}
+          } @else {
+            <svg lucideBookmark class="h-4 w-4"></svg>
+            {{ 'playlists.save' | translate }}
+          }
+        </button>
+      }
+      <!-- md+ : inline buttons -->
+      <div class="hidden md:flex items-center gap-2">
+        @if (canManage()) {
+          @if (!sharingDisabled()) {
+            <button type="button" class="btn btn-ghost btn-sm gap-2" (click)="openMembers()">
+              <svg lucideUsers class="h-4 w-4"></svg>
+              {{ 'playlists.members' | translate }}
+            </button>
+          }
+          <button type="button" class="btn btn-ghost btn-sm gap-2" (click)="openSettings()">
+            <svg lucideSettings class="h-4 w-4"></svg>
+            {{ 'playlists.settings' | translate }}
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm gap-2" (click)="openRename()">
+            <svg lucidePencil class="h-4 w-4"></svg>
+            {{ 'playlists.rename' | translate }}
+          </button>
+        }
+        @if (isOwner()) {
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm text-error gap-2"
+            (click)="deletePlaylist()"
+          >
+            <svg lucideTrash2 class="h-4 w-4"></svg>
+            {{ 'common.delete' | translate }}
+          </button>
         }
       </div>
 
-      <div class="min-w-0 flex-1">
-        <h1 class="text-2xl font-bold truncate">{{ pl.name }}</h1>
-        <p class="text-sm text-base-content/60 mt-1">
-          {{ (items().length <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate: { count: items().length } }}
-        </p>
-      </div>
-      <div class="flex items-center gap-2 shrink-0">
-        @if (items().length) {
-          <button type="button" class="btn btn-primary btn-sm gap-2" (click)="playAll()">
-            <svg lucidePlay class="h-4 w-4"></svg>
-            {{ 'player.play' | translate }}
-          </button>
-        }
-        @if (!isOwner() && !sharingDisabled()) {
-          <button type="button" class="btn btn-sm gap-2" [class.btn-ghost]="!pl.saved" [class.btn-outline]="pl.saved" [disabled]="savingBookmark()" (click)="toggleSave()">
-            @if (pl.saved) {
-              <svg lucideBookmarkCheck class="h-4 w-4"></svg>
-              {{ 'playlists.saved_label' | translate }}
-            } @else {
-              <svg lucideBookmark class="h-4 w-4"></svg>
-              {{ 'playlists.save' | translate }}
-            }
-          </button>
-        }
-        <!-- md+ : inline buttons -->
-        <div class="hidden md:flex items-center gap-2">
+      <!-- small screens : dropdown (desktop) / bottom sheet (native) -->
+      @if (canManage() || isOwner()) {
+        <app-dropdown-menu placement="bottom-end" class="md:hidden">
+          <div
+            trigger
+            tabindex="0"
+            role="button"
+            class="btn btn-ghost btn-sm btn-circle"
+            [attr.aria-label]="'common.more' | translate"
+          >
+            <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+          </div>
           @if (canManage()) {
             @if (!sharingDisabled()) {
-              <button type="button" class="btn btn-ghost btn-sm gap-2" (click)="openMembers()">
+              <button type="button" class="dropdown-item text-white" (click)="openMembers()">
                 <svg lucideUsers class="h-4 w-4"></svg>
                 {{ 'playlists.members' | translate }}
               </button>
             }
-            <button type="button" class="btn btn-ghost btn-sm gap-2" (click)="openSettings()">
+            <button type="button" class="dropdown-item text-white" (click)="openSettings()">
               <svg lucideSettings class="h-4 w-4"></svg>
               {{ 'playlists.settings' | translate }}
             </button>
-            <button type="button" class="btn btn-ghost btn-sm gap-2" (click)="openRename()">
+            <button type="button" class="dropdown-item text-white" (click)="openRename()">
               <svg lucidePencil class="h-4 w-4"></svg>
               {{ 'playlists.rename' | translate }}
             </button>
           }
           @if (isOwner()) {
-            <button type="button" class="btn btn-ghost btn-sm text-error gap-2" (click)="deletePlaylist()">
+            <button type="button" class="dropdown-item text-error" (click)="deletePlaylist()">
               <svg lucideTrash2 class="h-4 w-4"></svg>
               {{ 'common.delete' | translate }}
             </button>
           }
-        </div>
-
-        <!-- small screens : dropdown (desktop) / bottom sheet (native) -->
-        @if (canManage() || isOwner()) {
-          <app-dropdown-menu placement="bottom-end" class="md:hidden">
-            <div trigger tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.more' | translate">
-              <svg lucideEllipsisVertical class="h-5 w-5"></svg>
-            </div>
-            @if (canManage()) {
-              @if (!sharingDisabled()) {
-                <button type="button" class="dropdown-item text-white" (click)="openMembers()">
-                  <svg lucideUsers class="h-4 w-4"></svg>
-                  {{ 'playlists.members' | translate }}
-                </button>
-              }
-              <button type="button" class="dropdown-item text-white" (click)="openSettings()">
-                <svg lucideSettings class="h-4 w-4"></svg>
-                {{ 'playlists.settings' | translate }}
-              </button>
-              <button type="button" class="dropdown-item text-white" (click)="openRename()">
-                <svg lucidePencil class="h-4 w-4"></svg>
-                {{ 'playlists.rename' | translate }}
-              </button>
-            }
-            @if (isOwner()) {
-              <button type="button" class="dropdown-item text-error" (click)="deletePlaylist()">
-                <svg lucideTrash2 class="h-4 w-4"></svg>
-                {{ 'common.delete' | translate }}
-              </button>
-            }
-          </app-dropdown-menu>
-        }
-      </div>
+        </app-dropdown-menu>
+      }
+    </div>
   </div>
 
   @if (!items().length) {
@@ -110,20 +134,68 @@
     </div>
   } @else {
     <div cdkDropList (cdkDropListDropped)="dropGroup($event)" class="flex flex-col gap-1">
-        @for (
-          entry of groupedEntries();
-          track entry.kind === 'movie' ? 'm' + entry.item.itemId : 's' + entry.group.seriesId;
-          let i = $index
-        ) {
-          <div cdkDrag [cdkDragDisabled]="!canEditItems() || tv.isTv()">
-            @if (entry.kind === 'movie') {
-              <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
+      @for (
+        entry of groupedEntries();
+        track entry.kind === 'movie' ? 'm' + entry.item.itemId : 's' + entry.group.seriesId;
+        let i = $index
+      ) {
+        <div cdkDrag [cdkDragDisabled]="!canEditItems() || tv.isTv()">
+          @if (entry.kind === 'movie') {
+            <div class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200">
+              @if (canEditItems()) {
+                @if (!tv.isTv()) {
+                  <button
+                    type="button"
+                    cdkDragHandle
+                    class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0"
+                    [attr.aria-label]="'playlists.drag' | translate"
+                  >
+                    <svg lucideGripVertical class="h-4 w-4"></svg>
+                  </button>
+                } @else {
+                  <div class="flex flex-col shrink-0">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs btn-square"
+                      [disabled]="i === 0"
+                      (click)="moveGroup(i, -1)"
+                      [attr.aria-label]="'playlists.move_up' | translate"
+                    >
+                      <svg lucideArrowUp class="h-4 w-4"></svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs btn-square"
+                      [disabled]="i === groupedEntries().length - 1"
+                      (click)="moveGroup(i, 1)"
+                      [attr.aria-label]="'playlists.move_down' | translate"
+                    >
+                      <svg lucideArrowDown class="h-4 w-4"></svg>
+                    </button>
+                  </div>
+                }
+              }
+              <ng-container
+                [ngTemplateOutlet]="itemRow"
+                [ngTemplateOutletContext]="{ $implicit: entry.item }"
+              ></ng-container>
+            </div>
+          } @else {
+            <div
+              class="collapse collapse-arrow rounded-lg"
+              [class.collapse-open]="expandedSeries().has(entry.group.seriesId)"
+            >
+              <div
+                class="collapse-title flex items-center gap-2 min-h-0 p-1.5 pr-10 cursor-pointer hover:bg-base-200"
+                (click)="toggleSeries(entry.group.seriesId)"
+              >
                 @if (canEditItems()) {
                   @if (!tv.isTv()) {
                     <button
                       type="button"
                       cdkDragHandle
                       class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0"
+                      (click)="$event.stopPropagation()"
                       [attr.aria-label]="'playlists.drag' | translate"
                     >
                       <svg lucideGripVertical class="h-4 w-4"></svg>
@@ -134,7 +206,7 @@
                         type="button"
                         class="btn btn-ghost btn-xs btn-square"
                         [disabled]="i === 0"
-                        (click)="moveGroup(i, -1)"
+                        (click)="$event.stopPropagation(); moveGroup(i, -1)"
                         [attr.aria-label]="'playlists.move_up' | translate"
                       >
                         <svg lucideArrowUp class="h-4 w-4"></svg>
@@ -143,7 +215,7 @@
                         type="button"
                         class="btn btn-ghost btn-xs btn-square"
                         [disabled]="i === groupedEntries().length - 1"
-                        (click)="moveGroup(i, 1)"
+                        (click)="$event.stopPropagation(); moveGroup(i, 1)"
                         [attr.aria-label]="'playlists.move_down' | translate"
                       >
                         <svg lucideArrowDown class="h-4 w-4"></svg>
@@ -151,102 +223,59 @@
                     </div>
                   }
                 }
-                <ng-container
-                  [ngTemplateOutlet]="itemRow"
-                  [ngTemplateOutletContext]="{ $implicit: entry.item }"
-                ></ng-container>
-              </div>
-            } @else {
-              <div
-                class="collapse collapse-arrow rounded-lg"
-                [class.collapse-open]="expandedSeries().has(entry.group.seriesId)"
-              >
                 <div
-                  class="collapse-title flex items-center gap-2 min-h-0 p-1.5 pr-10 cursor-pointer hover:bg-base-200"
-                  (click)="toggleSeries(entry.group.seriesId)"
+                  class="relative w-24 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300"
                 >
-                  @if (canEditItems()) {
-                    @if (!tv.isTv()) {
-                      <button
-                        type="button"
-                        cdkDragHandle
-                        class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0"
-                        (click)="$event.stopPropagation()"
-                        [attr.aria-label]="'playlists.drag' | translate"
-                      >
-                        <svg lucideGripVertical class="h-4 w-4"></svg>
-                      </button>
-                    } @else {
-                      <div class="flex flex-col shrink-0">
-                        <button
-                          type="button"
-                          class="btn btn-ghost btn-xs btn-square"
-                          [disabled]="i === 0"
-                          (click)="$event.stopPropagation(); moveGroup(i, -1)"
-                          [attr.aria-label]="'playlists.move_up' | translate"
-                        >
-                          <svg lucideArrowUp class="h-4 w-4"></svg>
-                        </button>
-                        <button
-                          type="button"
-                          class="btn btn-ghost btn-xs btn-square"
-                          [disabled]="i === groupedEntries().length - 1"
-                          (click)="$event.stopPropagation(); moveGroup(i, 1)"
-                          [attr.aria-label]="'playlists.move_down' | translate"
-                        >
-                          <svg lucideArrowDown class="h-4 w-4"></svg>
-                        </button>
-                      </div>
-                    }
-                  }
-                  <div
-                    class="relative w-24 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300"
-                  >
-                    <img
-                      [cachedSrc]="(entry.group.media.fanartUrl ?? entry.group.media.posterUrl) | resolveUrl: 'thumb'"
-                      alt=""
-                      class="h-full w-full object-cover"
-                      loading="lazy"
-                    />
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <p class="font-medium line-clamp-2">{{ entry.group.media.title }}</p>
-                    <p class="text-sm text-base-content/60">
-                      {{ 'playlists.episodes_count' | translate: { count: entry.group.episodes.length } }}
-                    </p>
-                  </div>
-                  @if (canEditItems()) {
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-sm btn-square text-error shrink-0"
-                      (click)="$event.stopPropagation(); removeSeries(entry.group)"
-                      [attr.aria-label]="'playlists.remove_series_title' | translate"
-                    >
-                      <svg lucideTrash2 class="h-4 w-4"></svg>
-                    </button>
-                  }
+                  <img
+                    [cachedSrc]="
+                      entry.group.media.fanartUrl ?? entry.group.media.posterUrl
+                        | resolveUrl: 'thumb'
+                    "
+                    alt=""
+                    class="h-full w-full object-cover"
+                    loading="lazy"
+                  />
                 </div>
-                <div class="collapse-content !px-0 !pb-0">
-                  <div class="flex flex-col gap-1 mt-1">
-                    @for (item of entry.group.episodes; track item.itemId) {
-                      <div
-                        class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200"
-                        [class.pl-4]="!canEditItems()"
-                        [class.sm:pl-10]="!canEditItems()"
-                      >
-                        <ng-container
-                          [ngTemplateOutlet]="itemRow"
-                          [ngTemplateOutletContext]="{ $implicit: item }"
-                        ></ng-container>
-                      </div>
-                    }
-                  </div>
+                <div class="min-w-0 flex-1">
+                  <p class="font-medium line-clamp-2">{{ entry.group.media.title }}</p>
+                  <p class="text-sm text-base-content/60">
+                    {{
+                      'playlists.episodes_count' | translate: { count: entry.group.episodes.length }
+                    }}
+                  </p>
+                </div>
+                @if (canEditItems()) {
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm btn-square text-error shrink-0"
+                    (click)="$event.stopPropagation(); removeSeries(entry.group)"
+                    [attr.aria-label]="'playlists.remove_series_title' | translate"
+                  >
+                    <svg lucideTrash2 class="h-4 w-4"></svg>
+                  </button>
+                }
+              </div>
+              <div class="collapse-content !px-0 !pb-0">
+                <div class="flex flex-col gap-1 mt-1">
+                  @for (item of entry.group.episodes; track item.itemId) {
+                    <div
+                      class="flex items-center gap-2 rounded-lg p-1.5 hover:bg-base-200"
+                      [class.pl-4]="!canEditItems()"
+                      [class.sm:pl-10]="!canEditItems()"
+                    >
+                      <ng-container
+                        [ngTemplateOutlet]="itemRow"
+                        [ngTemplateOutletContext]="{ $implicit: item }"
+                      ></ng-container>
+                    </div>
+                  }
                 </div>
               </div>
-            }
-          </div>
-        }
-      </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
   }
 }
 
@@ -258,9 +287,7 @@
     (click)="playFrom(item)"
     class="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
   >
-    <div
-      class="relative w-24 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300"
-    >
+    <div class="relative w-24 sm:w-44 aspect-video shrink-0 overflow-hidden rounded bg-base-300">
       @if (itemThumb(item); as thumb) {
         <img
           [cachedSrc]="thumb | resolveUrl: 'thumb'"
@@ -284,12 +311,16 @@
       @if (item.episode; as ep) {
         <p class="font-medium line-clamp-2">{{ episodeLabel(ep) }}</p>
         @if (ep.runtime) {
-          <p class="text-sm text-base-content/60 truncate">{{ ep.runtime }} {{ 'common.min' | translate }}</p>
+          <p class="text-sm text-base-content/60 truncate">
+            {{ ep.runtime }} {{ 'common.min' | translate }}
+          </p>
         }
       } @else {
         <p class="font-medium line-clamp-2">{{ item.media.title }}</p>
         @if (item.media.runtime) {
-          <p class="text-sm text-base-content/60 truncate">{{ item.media.runtime }} {{ 'common.min' | translate }}</p>
+          <p class="text-sm text-base-content/60 truncate">
+            {{ item.media.runtime }} {{ 'common.min' | translate }}
+          </p>
         }
       }
     </div>
@@ -297,7 +328,13 @@
   <!-- Secondary actions: view details + watched + remove, in one dropdown. -->
   <div class="shrink-0 self-center">
     <app-dropdown-menu placement="bottom-end">
-      <div trigger tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.more' | translate">
+      <div
+        trigger
+        tabindex="0"
+        role="button"
+        class="btn btn-ghost btn-sm btn-circle"
+        [attr.aria-label]="'common.more' | translate"
+      >
         <svg lucideEllipsisVertical class="h-5 w-5"></svg>
       </div>
       <a class="dropdown-item text-white" [routerLink]="itemLink(item)">
@@ -330,13 +367,13 @@
         (ngModelChange)="renameValue.set($event)"
         autofocus
       />
-      <div class="modal-action mt-0">
-        <button type="button" class="btn btn-sm" (click)="closeRename()">
+      <app-modal-footer>
+        <button type="button" class="btn" (click)="closeRename()">
           {{ 'common.cancel' | translate }}
         </button>
         <button
           type="submit"
-          class="btn btn-primary btn-sm"
+          class="btn btn-primary"
           [disabled]="renaming() || !renameValue().trim()"
         >
           @if (renaming()) {
@@ -344,7 +381,7 @@
           }
           {{ 'common.save' | translate }}
         </button>
-      </div>
+      </app-modal-footer>
     </form>
   </div>
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
@@ -389,13 +426,13 @@
         />
       }
     </div>
-    <div class="modal-action">
-      <button type="button" class="btn btn-sm" (click)="closeSettings()">
+    <app-modal-footer>
+      <button type="button" class="btn" (click)="closeSettings()">
         {{ 'common.cancel' | translate }}
       </button>
       <button
         type="button"
-        class="btn btn-primary btn-sm"
+        class="btn btn-primary"
         [disabled]="savingSettings()"
         (click)="saveSettings()"
       >
@@ -404,7 +441,7 @@
         }
         {{ 'common.save' | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>
@@ -424,7 +461,9 @@
         <li class="flex items-center gap-3 p-1.5 rounded-lg">
           <span class="flex-1 min-w-0 truncate font-medium">{{ m.username }}</span>
           @if (m.role === 'owner' || m.userId === myUserId()) {
-            <span class="badge badge-sm badge-ghost">{{ ('playlists.role_' + m.role) | translate }}</span>
+            <span class="badge badge-sm badge-ghost">{{
+              'playlists.role_' + m.role | translate
+            }}</span>
           } @else {
             <select
               class="select select-bordered select-xs w-36 shrink-0"
@@ -434,9 +473,17 @@
             >
               <option value="viewer">{{ 'playlists.role_viewer' | translate }}</option>
               <option value="editor">{{ 'playlists.role_editor' | translate }}</option>
-              <option value="administrator">{{ 'playlists.role_administrator' | translate }}</option>
+              <option value="administrator">
+                {{ 'playlists.role_administrator' | translate }}
+              </option>
             </select>
-            <button type="button" class="btn btn-ghost btn-xs btn-square text-error" [disabled]="memberBusy()" (click)="removeMember(m.userId)" [attr.aria-label]="'playlists.remove_item_action' | translate">
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-square text-error"
+              [disabled]="memberBusy()"
+              (click)="removeMember(m.userId)"
+              [attr.aria-label]="'playlists.remove_item_action' | translate"
+            >
               <svg lucideTrash2 class="h-4 w-4"></svg>
             </button>
           }
@@ -459,7 +506,12 @@
       <ul class="flex flex-col gap-1 mt-2 max-h-52 overflow-y-auto scroll-ring-safe">
         @for (u of memberResults(); track u.id) {
           <li>
-            <button type="button" class="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left" [disabled]="memberBusy()" (click)="addMember(u)">
+            <button
+              type="button"
+              class="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left"
+              [disabled]="memberBusy()"
+              (click)="addMember(u)"
+            >
               <span class="flex-1 min-w-0 truncate">{{ u.username }}</span>
               <svg lucideUserPlus class="h-4 w-4 text-base-content/60"></svg>
             </button>

@@ -1,4 +1,15 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -8,7 +19,19 @@ import { formatBytes, formatSpeed } from '../../utils/download-format';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SseService } from '../../../core/services/sse.service';
 import { PaginationComponent } from '../pagination/pagination';
-import { BadgeTone, CellValue, ListAction, PagedResult, RowAction, TableColumn, TableFilter, TableRow, TableSubValue } from './data-table.types';
+import {
+  BadgeTone,
+  CellValue,
+  ListAction,
+  PagedResult,
+  RowAction,
+  TableColumn,
+  TableFilter,
+  TableRow,
+  TableSubValue,
+} from './data-table.types';
+import { ModalHeaderComponent } from '../modal-header';
+import { ModalFooterComponent } from '../modal-footer';
 
 /** Keystroke-to-request debounce for a `search` filter — see `onSearchInput`. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -38,7 +61,13 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
  */
 @Component({
   selector: 'app-data-table',
-  imports: [TranslateModule, LocaleDatePipe, PaginationComponent],
+  imports: [
+    ModalFooterComponent,
+    ModalHeaderComponent,
+    TranslateModule,
+    LocaleDatePipe,
+    PaginationComponent,
+  ],
   providers: [LocaleDatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './data-table.html',
@@ -62,7 +91,9 @@ export class DataTableComponent implements OnInit {
   readonly loadErrorKey = input('data_table.load_error');
   readonly emptyKey = input('data_table.empty');
   /** Resolves a core `actionId`; undefined = unknown = the button must not render (fail closed). */
-  readonly resolveAction = input<(actionId: string, row: TableRow) => (() => void) | undefined>(() => undefined);
+  readonly resolveAction = input<(actionId: string, row: TableRow) => (() => void) | undefined>(
+    () => undefined,
+  );
   /** `list` answers `{data,total,page,pageSize}` rather than a bare array. */
   readonly paged = input(false);
   readonly pageSize = input(20);
@@ -112,7 +143,10 @@ export class DataTableComponent implements OnInit {
     void this.loadRows();
     const declared = this.refreshMs();
     if (declared > 0) {
-      this.refreshTimer = setInterval(() => this.requestRefresh(), Math.max(declared, REFRESH_MIN_MS));
+      this.refreshTimer = setInterval(
+        () => this.requestRefresh(),
+        Math.max(declared, REFRESH_MIN_MS),
+      );
     }
   }
 
@@ -158,7 +192,9 @@ export class DataTableComponent implements OnInit {
       }
       if (this.paged()) {
         params = params.set('page', this.page()).set('pageSize', this.pageSize());
-        const res = await firstValueFrom(this.http.get<PagedResult<TableRow>>(this.listUrl(), { params }));
+        const res = await firstValueFrom(
+          this.http.get<PagedResult<TableRow>>(this.listUrl(), { params }),
+        );
         if (seq !== this.loadSeq) return;
         this.rows.set(this.applyDefaultSort(Array.isArray(res?.data) ? res.data : []));
         this.total.set(res?.total ?? 0);
@@ -209,7 +245,7 @@ export class DataTableComponent implements OnInit {
 
   /** `LocaleDatePipe` doesn't accept a boolean — no declared column is ever meant to be one. */
   cellDate(value: CellValue): string | number | null {
-    return typeof value === 'boolean' ? null : value ?? null;
+    return typeof value === 'boolean' ? null : (value ?? null);
   }
 
   cellBytes(value: CellValue): string {
@@ -304,7 +340,12 @@ export class DataTableComponent implements OnInit {
         const handler = this.resolveAction()(action.actionId, row);
         if (handler) result.push({ action, run: handler });
       } else if (action.kind === 'route') {
-        result.push({ action, run: () => { void this.router.navigateByUrl(action.path); } });
+        result.push({
+          action,
+          run: () => {
+            void this.router.navigateByUrl(action.path);
+          },
+        });
       } else {
         result.push({ action, run: () => this.runProxy(row, action) });
       }
@@ -318,7 +359,8 @@ export class DataTableComponent implements OnInit {
   ): Promise<void> {
     this.busy.set(`${row.id}:${action.path}`);
     try {
-      if (await this.runHttpAction(action.method, action.path, action.confirmKey)) await this.loadRows();
+      if (await this.runHttpAction(action.method, action.path, action.confirmKey))
+        await this.loadRows();
     } catch {
       // handled by the global error interceptor
     } finally {
@@ -330,7 +372,8 @@ export class DataTableComponent implements OnInit {
   async runListAction(action: ListAction): Promise<void> {
     this.listActionBusy.set(action.path);
     try {
-      if (await this.runHttpAction(action.method, action.path, action.confirmKey)) await this.loadRows();
+      if (await this.runHttpAction(action.method, action.path, action.confirmKey))
+        await this.loadRows();
     } catch {
       // handled by the global error interceptor
     } finally {
@@ -339,7 +382,11 @@ export class DataTableComponent implements OnInit {
   }
 
   /** Returns false without calling anything when the user declines the confirm — not an error. */
-  private async runHttpAction(method: 'POST' | 'DELETE', path: string, confirmKey?: string): Promise<boolean> {
+  private async runHttpAction(
+    method: 'POST' | 'DELETE',
+    path: string,
+    confirmKey?: string,
+  ): Promise<boolean> {
     if (confirmKey) {
       const ok = await this.confirmation.confirm({
         title: this.translate.instant('common.confirm'),

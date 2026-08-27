@@ -7,10 +7,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
-import {
-  LeafKey,
-  MediaDownloadProgress,
-} from '../../../core/services/download-progress.service';
+import { LeafKey, MediaDownloadProgress } from '../../../core/services/download-progress.service';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { ModalHeaderComponent } from '../modal-header';
 import {
@@ -21,6 +18,7 @@ import {
   formatEta,
   ProgressVariant,
 } from '../../utils/download-format';
+import { ModalFooterComponent } from '../modal-footer';
 
 interface LeafRow {
   key: string;
@@ -52,19 +50,16 @@ interface SeasonRow {
 @Component({
   selector: 'app-download-detail-modal',
   standalone: true,
-  imports: [TranslateModule, ProgressBarComponent, ModalHeaderComponent],
+  imports: [ModalFooterComponent, TranslateModule, ProgressBarComponent, ModalHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './download-detail-modal.html',
 })
 export class DownloadDetailModalComponent {
   readonly progress = input<MediaDownloadProgress | null>(null);
 
-  private readonly dialog =
-    viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
-  readonly overallStateLabelKey = computed(() =>
-    qbStateLabelKey(this.progress()?.state ?? ''),
-  );
+  readonly overallStateLabelKey = computed(() => qbStateLabelKey(this.progress()?.state ?? ''));
   readonly overallVariant = computed<ProgressVariant>(() =>
     qbStateVariant(this.progress()?.state ?? ''),
   );

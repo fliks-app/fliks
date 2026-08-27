@@ -19,6 +19,8 @@ import {
 import { MediaService } from '../../../../core/services/api/media.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import type { MediaType } from '../../../../core/enums/media-type.enum';
+import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 
 /** What the caller knows about the media, used to prefill the criteria. */
 export interface IdentifyModalConfig {
@@ -34,7 +36,13 @@ export interface IdentifyModalConfig {
 
 @Component({
   selector: 'app-media-detail-identify-modal',
-  imports: [TranslateModule, FormsModule, ResolveUrlPipe],
+  imports: [
+    ModalFooterComponent,
+    ModalHeaderComponent,
+    TranslateModule,
+    FormsModule,
+    ResolveUrlPipe,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-identify-modal.component.html',
 })

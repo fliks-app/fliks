@@ -11,6 +11,8 @@ import { HttpClient } from '@angular/common/http';
 import { TranslateModule } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { FolderPickerService } from '../../../core/services/folder-picker.service';
+import { ModalHeaderComponent } from '../modal-header';
+import { ModalFooterComponent } from '../modal-footer';
 
 interface FsEntry {
   name: string;
@@ -25,7 +27,7 @@ interface FsListing {
 
 @Component({
   selector: 'app-folder-picker-modal',
-  imports: [TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './folder-picker-modal.html',
 })
@@ -33,8 +35,7 @@ export class FolderPickerModalComponent {
   private readonly picker = inject(FolderPickerService);
   private readonly http = inject(HttpClient);
 
-  private readonly dialog =
-    viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
   readonly listing = signal<FsListing | null>(null);
   readonly loading = signal(false);
@@ -59,9 +60,7 @@ export class FolderPickerModalComponent {
     this.error.set('');
     try {
       const params: Record<string, string> = path ? { path } : {};
-      const listing = await firstValueFrom(
-        this.http.get<FsListing>('/api/fs/browse', { params }),
-      );
+      const listing = await firstValueFrom(this.http.get<FsListing>('/api/fs/browse', { params }));
       this.listing.set(listing);
     } catch {
       // Directory unreadable — stay where we are, surface a message.

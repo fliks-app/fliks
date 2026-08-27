@@ -15,16 +15,15 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucidePlus } from '@lucide/angular';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
-import {
-  Playlist,
-  PlaylistsApiService,
-} from '../../core/services/api/playlists-api.service';
+import { Playlist, PlaylistsApiService } from '../../core/services/api/playlists-api.service';
 import { ToastService } from '../../core/services/toast.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
+import { ModalFooterComponent } from '../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-playlists',
   imports: [
+    ModalFooterComponent,
     MosaicCardComponent,
     TranslateModule,
     FormsModule,
@@ -43,8 +42,7 @@ export class PlaylistsComponent implements OnInit {
   private readonly reuseStrategy = inject(CachingReuseStrategy);
   private readonly destroyRef = inject(DestroyRef);
 
-  private readonly createDialog =
-    viewChild<ElementRef<HTMLDialogElement>>('createDialog');
+  private readonly createDialog = viewChild<ElementRef<HTMLDialogElement>>('createDialog');
 
   readonly playlists = signal<Playlist[]>([]);
   readonly loading = signal(false);
@@ -57,11 +55,9 @@ export class PlaylistsComponent implements OnInit {
     // navigates back to a cached instance — refresh on reattach so a playlist
     // created/deleted elsewhere shows up (mirrors home/search/history).
     const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
-    this.reuseStrategy.attached$
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((key) => {
-        if (key === ownKey) void this.load(true);
-      });
+    this.reuseStrategy.attached$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((key) => {
+      if (key === ownKey) void this.load(true);
+    });
   }
 
   private async load(force = false): Promise<void> {

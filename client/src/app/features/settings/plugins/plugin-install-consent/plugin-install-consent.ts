@@ -17,6 +17,8 @@ import {
 } from '../../../../core/services/api/plugins-api.service';
 import { trustBadgeFor, requiresAcknowledgement } from '../plugin-trust';
 import { refusalMessageKey } from '../plugin-refusal';
+import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 
 /**
  * The install consent sheet. Owns the confirm call itself — the caller only
@@ -24,7 +26,7 @@ import { refusalMessageKey } from '../plugin-refusal';
  */
 @Component({
   selector: 'app-plugin-install-consent',
-  imports: [FormsModule, TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-install-consent.html',
 })

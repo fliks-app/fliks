@@ -1,7 +1,11 @@
 <dialog #dialog class="modal">
   <div class="modal-box max-w-lg">
-    <h2 class="text-lg font-bold text-primary">{{ 'discover.add_to_library' | translate }}</h2>
-    <p class="text-base-content/80">{{ title() }}</p>
+    <app-modal-header>
+      <div>
+        <h3 class="text-lg font-bold text-primary">{{ 'discover.add_to_library' | translate }}</h3>
+        <p class="text-base-content/80">{{ title() }}</p>
+      </div>
+    </app-modal-header>
 
     @if (error()) {
       <div role="alert" class="alert alert-error text-sm mt-4 py-2">{{ error() }}</div>
@@ -15,7 +19,9 @@
       <div class="mt-6 flex flex-col gap-3">
         @if (qualityProfiles().length) {
           <label class="form-control w-full">
-            <span class="label-text text-base-content/60">{{ 'discover.quality_profile' | translate }}</span>
+            <span class="label-text text-base-content/60">{{
+              'discover.quality_profile' | translate
+            }}</span>
             <select
               class="select select-bordered select-sm w-full"
               [ngModel]="selectedQualityProfileId()"
@@ -29,7 +35,9 @@
         }
         @if (languageProfiles().length) {
           <label class="form-control w-full">
-            <span class="label-text text-base-content/60">{{ 'discover.language_profile' | translate }}</span>
+            <span class="label-text text-base-content/60">{{
+              'discover.language_profile' | translate
+            }}</span>
             <select
               class="select select-bordered select-sm w-full"
               [ngModel]="selectedLanguageProfileId()"
@@ -43,7 +51,9 @@
         }
         @if (compatibleLibraries().length > 1) {
           <label class="form-control w-full">
-            <span class="label-text text-base-content/60">{{ 'settings.libraries.title' | translate }}</span>
+            <span class="label-text text-base-content/60">{{
+              'settings.libraries.title' | translate
+            }}</span>
             <select
               class="select select-bordered select-sm w-full"
               [ngModel]="selectedLibraryId()"
@@ -58,7 +68,7 @@
       </div>
     }
 
-    <div class="modal-action">
+    <app-modal-footer>
       <button type="button" class="btn btn-ghost" (click)="close()">
         {{ 'common.cancel' | translate }}
       </button>
@@ -73,7 +83,7 @@
         }
         {{ 'discover.add_to_library' | translate }}
       </button>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop">
     <button type="button" (click)="close()">close</button>

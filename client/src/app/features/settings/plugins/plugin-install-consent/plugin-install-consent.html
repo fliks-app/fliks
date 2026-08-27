@@ -2,14 +2,26 @@
   <div class="modal-box max-w-lg">
     @if (report(); as r) {
       @if (!r.installable) {
-        <h3 class="text-lg font-bold mb-2">{{ 'settings.plugins.consent.refused_title' | translate }}</h3>
+        <app-modal-header [title]="'settings.plugins.consent.refused_title' | translate" />
         <p class="text-sm text-base-content/70">{{ refusalMessage() }}</p>
-        <div class="modal-action">
-          <button type="button" class="btn" (click)="close()">{{ 'common.close' | translate }}</button>
-        </div>
+        <app-modal-footer>
+          <button type="button" class="btn" (click)="close()">
+            {{ 'common.close' | translate }}
+          </button>
+        </app-modal-footer>
       } @else {
-        <h3 class="text-lg font-bold">{{ 'settings.plugins.consent.title' | translate: { name: r.name } }}</h3>
-        <p class="text-xs text-base-content/50 mb-3">{{ 'settings.plugins.consent.identity' | translate: { id: r.id, version: r.version } }}</p>
+        <app-modal-header>
+          <div>
+            <h3 class="text-lg font-bold">
+              {{ 'settings.plugins.consent.title' | translate: { name: r.name } }}
+            </h3>
+            <p class="text-xs text-base-content/50 mt-1">
+              {{
+                'settings.plugins.consent.identity' | translate: { id: r.id, version: r.version }
+              }}
+            </p>
+          </div>
+        </app-modal-header>
 
         <span class="badge badge-sm mb-3" [class]="trust().cssClass">
           {{ trust().labelKey | translate: trust().params }}
@@ -18,8 +30,12 @@
         @if (r.kind === 'data') {
           <p class="text-sm mb-4">{{ 'settings.plugins.consent.data_tier' | translate }}</p>
         } @else {
-          <p class="text-sm font-semibold mb-1">{{ 'settings.plugins.consent.process_tier_title' | translate: { name: r.name } }}</p>
-          <p class="text-sm text-base-content/70 mb-4">{{ 'settings.plugins.consent.process_tier_body' | translate }}</p>
+          <p class="text-sm font-semibold mb-1">
+            {{ 'settings.plugins.consent.process_tier_title' | translate: { name: r.name } }}
+          </p>
+          <p class="text-sm text-base-content/70 mb-4">
+            {{ 'settings.plugins.consent.process_tier_body' | translate }}
+          </p>
         }
 
         @if (r.capabilities?.length) {
@@ -41,7 +57,9 @@
               [ngModel]="acknowledged()"
               (ngModelChange)="acknowledged.set($event)"
             />
-            <span class="label-text text-sm">{{ 'settings.plugins.consent.unverified_ack' | translate }}</span>
+            <span class="label-text text-sm">{{
+              'settings.plugins.consent.unverified_ack' | translate
+            }}</span>
           </label>
         }
 
@@ -49,17 +67,22 @@
           <div role="alert" class="alert alert-error text-sm py-2 mb-2">{{ error() }}</div>
         }
 
-        <div class="modal-action">
+        <app-modal-footer>
           <button type="button" class="btn btn-ghost" (click)="close()" [disabled]="confirming()">
             {{ 'common.cancel' | translate }}
           </button>
-          <button type="button" class="btn btn-primary" (click)="confirm()" [disabled]="!canConfirm()">
+          <button
+            type="button"
+            class="btn btn-primary"
+            (click)="confirm()"
+            [disabled]="!canConfirm()"
+          >
             @if (confirming()) {
               <span class="loading loading-spinner loading-sm"></span>
             }
             {{ 'settings.plugins.consent.confirm' | translate }}
           </button>
-        </div>
+        </app-modal-footer>
       }
     }
   </div>

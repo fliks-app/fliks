@@ -56,7 +56,10 @@
               (change)="onSelectChange(filter.key, $event)"
             >
               @for (option of filter.options; track option.value) {
-                <option [value]="option.value" [selected]="filterValue(filter.key) === option.value">
+                <option
+                  [value]="option.value"
+                  [selected]="filterValue(filter.key) === option.value"
+                >
                   {{ option.labelKey | translate }}
                 </option>
               }
@@ -94,10 +97,18 @@
               @for (col of columns(); track col.key) {
                 <td [class.whitespace-nowrap]="cellNowrap(col)">
                   @switch (col.format) {
-                    @case ('date') { {{ cellDate(row[col.key]) | localeDate }} }
-                    @case ('bytes') { {{ cellBytes(row[col.key]) }} }
-                    @case ('percent') { {{ cellPercent(row[col.key]) }} }
-                    @case ('speed') { {{ cellSpeed(row[col.key]) }} }
+                    @case ('date') {
+                      {{ cellDate(row[col.key]) | localeDate }}
+                    }
+                    @case ('bytes') {
+                      {{ cellBytes(row[col.key]) }}
+                    }
+                    @case ('percent') {
+                      {{ cellPercent(row[col.key]) }}
+                    }
+                    @case ('speed') {
+                      {{ cellSpeed(row[col.key]) }}
+                    }
                     @default {
                       @if (col.truncate) {
                         <!-- The width cap is what makes the ellipsis appear: a table cell sizes
@@ -105,18 +116,27 @@
                         <span
                           class="block truncate max-w-[12rem] sm:max-w-xs lg:max-w-md"
                           [title]="cellLabel(col, row[col.key])"
-                        >{{ cellLabel(col, row[col.key]) }}</span>
+                          >{{ cellLabel(col, row[col.key]) }}</span
+                        >
                       } @else if (detailText(col, row); as detail) {
-                        <button type="button" class="link link-hover" (click)="openDetail(col, row)"
-                          [attr.aria-label]="(col.detailTitleKey ?? col.labelKey) | translate">
+                        <button
+                          type="button"
+                          class="link link-hover"
+                          (click)="openDetail(col, row)"
+                          [attr.aria-label]="col.detailTitleKey ?? col.labelKey | translate"
+                        >
                           @if (badgeClass(col, row[col.key]); as badge) {
-                            <span class="badge badge-sm" [class]="badge">{{ cellLabel(col, row[col.key]) }}</span>
+                            <span class="badge badge-sm" [class]="badge">{{
+                              cellLabel(col, row[col.key])
+                            }}</span>
                           } @else {
                             {{ cellLabel(col, row[col.key]) }}
                           }
                         </button>
                       } @else if (badgeClass(col, row[col.key]); as badge) {
-                        <span class="badge badge-sm" [class]="badge">{{ cellLabel(col, row[col.key]) }}</span>
+                        <span class="badge badge-sm" [class]="badge">{{
+                          cellLabel(col, row[col.key])
+                        }}</span>
                       } @else {
                         {{ cellLabel(col, row[col.key]) }}
                       }
@@ -125,11 +145,17 @@
                   @if (col.subValues?.length) {
                     <div class="flex flex-wrap items-center gap-1 mt-1 whitespace-nowrap">
                       @for (sub of col.subValues; track sub.key) {
-                        @if (row[sub.key] !== null && row[sub.key] !== undefined && row[sub.key] !== '') {
+                        @if (
+                          row[sub.key] !== null && row[sub.key] !== undefined && row[sub.key] !== ''
+                        ) {
                           @if (badgeClass(sub, row[sub.key]); as badge) {
-                            <span class="badge badge-sm" [class]="badge">{{ subValueText(sub, row[sub.key]) }}</span>
+                            <span class="badge badge-sm" [class]="badge">{{
+                              subValueText(sub, row[sub.key])
+                            }}</span>
                           } @else {
-                            <span class="text-sm text-base-content/60">{{ subValueText(sub, row[sub.key]) }}</span>
+                            <span class="text-sm text-base-content/60">{{
+                              subValueText(sub, row[sub.key])
+                            }}</span>
                           }
                         }
                       }
@@ -140,7 +166,15 @@
               @if (rowActions().length) {
                 <td class="text-end">
                   @for (item of visibleActions(row); track item.action.labelKey) {
-                    <button type="button" class="btn btn-ghost btn-xs" (click)="item.run()" [disabled]="busy() === (row.id + ':' + (item.action.kind === 'proxy' ? item.action.path : ''))">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      (click)="item.run()"
+                      [disabled]="
+                        busy() ===
+                        row.id + ':' + (item.action.kind === 'proxy' ? item.action.path : '')
+                      "
+                    >
                       {{ item.action.labelKey | translate }}
                     </button>
                   }
@@ -152,7 +186,12 @@
       </table>
     </div>
     @if (paged() && totalPages() > 1) {
-      <app-pagination class="pt-2" [current]="page()" [total]="totalPages()" (pageChange)="goToPage($event)" />
+      <app-pagination
+        class="pt-2"
+        [current]="page()"
+        [total]="totalPages()"
+        (pageChange)="goToPage($event)"
+      />
     }
   }
 </div>
@@ -160,14 +199,21 @@
 @if (detail(); as open) {
   <dialog class="modal modal-open">
     <div class="modal-box max-w-2xl">
-      <h3 class="font-bold text-lg mb-4">{{ open.titleKey | translate }}</h3>
-      <pre class="text-sm whitespace-pre-wrap break-words bg-base-200 rounded p-3 max-h-[60vh] overflow-auto">{{ open.text }}</pre>
-      <div class="modal-action">
-        <button type="button" class="btn btn-ghost" (click)="closeDetail()">{{ 'common.close' | translate }}</button>
-      </div>
+      <app-modal-header [title]="open.titleKey | translate" (closed)="closeDetail()" />
+      <pre
+        class="text-sm whitespace-pre-wrap break-words bg-base-200 rounded p-3 max-h-[60vh] overflow-auto"
+        >{{ open.text }}</pre
+      >
+      <app-modal-footer>
+        <button type="button" class="btn btn-ghost" (click)="closeDetail()">
+          {{ 'common.close' | translate }}
+        </button>
+      </app-modal-footer>
     </div>
     <form method="dialog" class="modal-backdrop">
-      <button type="button" (click)="closeDetail()" [attr.aria-label]="'common.close' | translate">close</button>
+      <button type="button" (click)="closeDetail()" [attr.aria-label]="'common.close' | translate">
+        close
+      </button>
     </form>
   </dialog>
 }

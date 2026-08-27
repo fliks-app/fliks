@@ -1,5 +1,14 @@
-import { ChangeDetectionStrategy, Component, ElementRef, input, output, viewChild } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  input,
+  output,
+  viewChild,
+} from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 export interface RequestViewDeclinePayload {
   mediaTitle: string;
@@ -8,7 +17,7 @@ export interface RequestViewDeclinePayload {
 
 @Component({
   selector: 'app-request-view-decline-modal',
-  imports: [TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './request-view-decline-modal.component.html',
 })

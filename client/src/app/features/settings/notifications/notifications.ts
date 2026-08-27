@@ -16,6 +16,8 @@ import { firstValueFrom } from 'rxjs';
 import { SECRETS_SET_KEY } from '@fliks/plugin-contract/ui';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SECRET_MASK } from '../../../shared/components/schema-form/schema-form';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 /** The types this editor knows how to render fields for — adding one server-side is not enough,
  *  each needs its own field set below. */
@@ -42,7 +44,7 @@ interface CreateNotificationBody {
 
 @Component({
   selector: 'app-notifications-settings',
-  imports: [FormsModule, LucideX, TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './notifications.html',
 })
@@ -93,7 +95,9 @@ export class NotificationsSettingsComponent implements OnInit {
 
   private async loadEvents() {
     try {
-      this.allEvents.set(await firstValueFrom(this.http.get<string[]>('/api/notifications/events')));
+      this.allEvents.set(
+        await firstValueFrom(this.http.get<string[]>('/api/notifications/events')),
+      );
     } catch {
       this.listError.set(this.translate.instant('settings.notifications.load_error'));
     }
@@ -192,10 +196,7 @@ export class NotificationsSettingsComponent implements OnInit {
     this.testResult.set(null);
     try {
       const r = await firstValueFrom(
-        this.http.post<{ ok: boolean; message: string }>(
-          `/api/notifications/${id}/test`,
-          {},
-        ),
+        this.http.post<{ ok: boolean; message: string }>(`/api/notifications/${id}/test`, {}),
       );
       this.testResult.set(r);
     } catch {
@@ -231,13 +232,24 @@ export class NotificationsSettingsComponent implements OnInit {
   }
 
   async deleteRow(nc: NotificationConnection) {
-    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('settings.notifications.confirm_delete', { name: nc.name }), variant: 'danger' })) return;
+    if (
+      !(await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: this.translate.instant('settings.notifications.confirm_delete', { name: nc.name }),
+        variant: 'danger',
+      }))
+    )
+      return;
     try {
       await firstValueFrom(this.http.delete(`/api/notifications/${nc.id}`));
       await this.reloadAll();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Error', variant: 'danger' });
+      void this.confirmation.alert({
+        title: this.translate.instant('common.error'),
+        message: httpErr.error?.message ?? 'Error',
+        variant: 'danger',
+      });
     }
   }
 }

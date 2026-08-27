@@ -1,15 +1,15 @@
 <dialog #dialog class="modal">
-  <div class="modal-box w-[95%] max-w-7xl my-8 max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden p-0">
-    <div class="px-4 pt-4 sm:px-6 sm:pt-6 shrink-0">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-lg font-bold">{{ title() }}</h3>
-        <form method="dialog">
-          <button class="btn btn-sm btn-circle btn-ghost">✕</button>
-        </form>
-      </div>
+  <div
+    class="modal-box w-[95%] max-w-7xl my-8 max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden p-0"
+  >
+    <app-modal-header flush [title]="title()" />
 
+    <div class="px-4 pt-4 sm:px-6 shrink-0">
       @if (tabs().length) {
-        <div role="tablist" class="tabs tabs-bordered flex-nowrap overflow-x-auto overflow-y-hidden">
+        <div
+          role="tablist"
+          class="tabs tabs-bordered flex-nowrap overflow-x-auto overflow-y-hidden"
+        >
           @for (t of tabs(); track t.id) {
             <button
               type="button"
@@ -17,19 +17,33 @@
               class="tab shrink-0 whitespace-nowrap"
               [class.tab-active]="activeTab() === t.id"
               [attr.aria-selected]="activeTab() === t.id"
-              (click)="activeTab.set(t.id)">
+              (click)="activeTab.set(t.id)"
+            >
               <span class="inline-flex flex-nowrap items-center gap-1.5">
                 @if (t.state === 'failed') {
-                  <span class="h-2 w-2 rounded-full bg-error shrink-0" [attr.title]="'media_detail.indexer_failed' | translate"></span>
+                  <span
+                    class="h-2 w-2 rounded-full bg-error shrink-0"
+                    [attr.title]="'media_detail.indexer_failed' | translate"
+                  ></span>
                 } @else if (t.state === 'skipped') {
-                  <span class="h-2 w-2 rounded-full bg-base-content/30 shrink-0" [attr.title]="'media_detail.indexer_cooldown' | translate"></span>
+                  <span
+                    class="h-2 w-2 rounded-full bg-base-content/30 shrink-0"
+                    [attr.title]="'media_detail.indexer_cooldown' | translate"
+                  ></span>
                 }
-                <span class="tab-label">{{ t.id === null ? ('media_detail.releases_tab_all' | translate) : t.label }}</span>
-                <span class="tab-count inline-flex h-5 min-w-5 shrink-0 items-center justify-center">
+                <span class="tab-label">{{
+                  t.id === null ? ('media_detail.releases_tab_all' | translate) : t.label
+                }}</span>
+                <span
+                  class="tab-count inline-flex h-5 min-w-5 shrink-0 items-center justify-center"
+                >
                   @if (t.count === null) {
                     <span class="loading loading-spinner loading-xs text-warning"></span>
                   } @else {
-                    <span class="badge badge-sm badge-ghost h-5 min-w-5 rounded-full px-1 tabular-nums">{{ t.count }}</span>
+                    <span
+                      class="badge badge-sm badge-ghost h-5 min-w-5 rounded-full px-1 tabular-nums"
+                      >{{ t.count }}</span
+                    >
                   }
                 </span>
               </span>
@@ -43,9 +57,13 @@
       @if (error()) {
         <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
       } @else if (showSpinnerPanel()) {
-        <div class="flex min-h-64 flex-col items-center justify-center gap-3 pt-16 pb-10 text-center">
+        <div
+          class="flex min-h-64 flex-col items-center justify-center gap-3 pt-16 pb-10 text-center"
+        >
           <span class="loading loading-spinner loading-lg text-base-content/40"></span>
-          <p class="max-w-sm text-sm text-base-content/60">{{ 'media_detail.releases_searching' | translate }}</p>
+          <p class="max-w-sm text-sm text-base-content/60">
+            {{ 'media_detail.releases_searching' | translate }}
+          </p>
         </div>
       } @else if (visibleReleases().length) {
         <app-releases-table
@@ -58,7 +76,9 @@
           (grab)="grab.emit($event)"
         />
       } @else if (activeTab() !== null || searched() || !loading()) {
-        <div class="flex min-h-64 flex-col items-center justify-center gap-3 pt-16 pb-10 text-center">
+        <div
+          class="flex min-h-64 flex-col items-center justify-center gap-3 pt-16 pb-10 text-center"
+        >
           @switch (emptyPanel().icon) {
             @case ('failed') {
               <svg lucideTriangleAlert class="h-10 w-10 text-warning/60"></svg>
@@ -75,11 +95,11 @@
       }
     </div>
 
-    <div class="modal-action px-4 pb-4 sm:px-6 shrink-0">
+    <app-modal-footer flush>
       <form method="dialog">
-        <button class="btn btn-sm">{{ 'common.close' | translate }}</button>
+        <button class="btn">{{ 'common.close' | translate }}</button>
       </form>
-    </div>
+    </app-modal-footer>
   </div>
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>

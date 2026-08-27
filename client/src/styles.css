@@ -682,6 +682,19 @@ body.tv .to-base-100\/50 {
   }
 }
 
+/* Modal chrome in a padded `.modal-box`: the header and footer bleed out of its
+   1.5rem padding so their rule reaches both edges, the way a `p-0` box's flex
+   column does it. Real CSS, not utilities — the negative margins live in a host
+   binding, which Tailwind's scanner does not pick up. */
+.modal-header-bar {
+  margin: -1.5rem -1.5rem 1rem;
+  padding: 1.25rem 1.5rem 0.75rem;
+}
+.modal-footer-bar {
+  margin: 1.5rem -1.5rem -1.5rem;
+  padding: 1rem 1.5rem;
+}
+
 /* Shared item style for app-dropdown-menu (desktop dropdown + mobile/TV
    bottom sheet). Caller adds a colour utility (`text-white`, `text-error`,
    …) and an icon — everything else (padding, hover, focus, layout) lives

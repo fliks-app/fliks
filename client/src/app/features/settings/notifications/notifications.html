@@ -2,7 +2,9 @@
   <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
     <div>
       <h1 class="text-2xl font-bold">{{ 'settings.notifications.title' | translate }}</h1>
-      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.notifications.subtitle' | translate }}</p>
+      <p class="text-sm text-base-content/60 mt-1">
+        {{ 'settings.notifications.subtitle' | translate }}
+      </p>
     </div>
     <button type="button" class="btn btn-primary self-start sm:self-auto" (click)="openCreate()">
       {{ 'settings.notifications.new' | translate }}
@@ -16,7 +18,9 @@
   } @else if (listError()) {
     <div role="alert" class="alert alert-error">{{ listError() }}</div>
   } @else if (rows().length === 0) {
-    <p class="text-center py-12 text-base-content/50">{{ 'settings.notifications.empty' | translate }}</p>
+    <p class="text-center py-12 text-base-content/50">
+      {{ 'settings.notifications.empty' | translate }}
+    </p>
   } @else {
     <div class="overflow-x-auto rounded-lg border border-base-200">
       <table class="table table-zebra">
@@ -33,9 +37,13 @@
           @for (nc of rows(); track nc.id) {
             <tr>
               <td>
-                <button type="button" class="link link-hover font-medium" (click)="openEdit(nc)">{{ nc.name }}</button>
+                <button type="button" class="link link-hover font-medium" (click)="openEdit(nc)">
+                  {{ nc.name }}
+                </button>
               </td>
-              <td><span class="badge badge-ghost badge-sm">{{ nc.type }}</span></td>
+              <td>
+                <span class="badge badge-ghost badge-sm">{{ nc.type }}</span>
+              </td>
               <td class="text-sm text-base-content/60">{{ nc.events.length }} event(s)</td>
               <td>
                 @if (nc.enabled) {
@@ -45,7 +53,11 @@
                 }
               </td>
               <td class="text-end">
-                <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(nc)">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs text-error"
+                  (click)="deleteRow(nc)"
+                >
                   {{ 'settings.notifications.delete' | translate }}
                 </button>
               </td>
@@ -57,195 +69,187 @@
   }
 </div>
 
-  <dialog #editorDialog class="modal">
-    <div class="modal-box max-w-lg max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
-      <div class="px-5 sm:px-6 pt-4 pb-3 border-b border-base-200 flex justify-between items-center shrink-0 bg-base-100">
-        <h2 class="text-lg font-bold">
-          @if (editingId() === null) {
-            {{ 'settings.notifications.editor_create' | translate }}
-          } @else {
-            {{ 'settings.notifications.editor_edit' | translate }}
-          }
-        </h2>
-        <button
-          type="button"
-          class="btn btn-sm btn-ghost btn-circle"
-          (click)="closeEditor()"
-          [attr.aria-label]="'common.close' | translate"
+<dialog #editorDialog class="modal">
+  <div class="modal-box max-w-lg max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+    <app-modal-header
+      flush
+      [title]="
+        (editingId() === null
+          ? 'settings.notifications.editor_create'
+          : 'settings.notifications.editor_edit'
+        ) | translate
+      "
+    />
+
+    <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.notifications.field_name' | translate }}</span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="formName()"
+          (ngModelChange)="formName.set($event)"
+        />
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.notifications.field_type' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          [ngModel]="formType()"
+          (ngModelChange)="formType.set($event)"
         >
-          <svg lucideX class="h-5 w-5"></svg>
-        </button>
-      </div>
+          @for (t of connectionTypes; track t) {
+            <option [value]="t">{{ t }}</option>
+          }
+        </select>
+      </label>
 
-      <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.notifications.field_name' | translate }}</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="formName()"
-            (ngModelChange)="formName.set($event)"
-          />
-        </label>
+      <label class="form-control w-full">
+        <span class="label-text">
+          @if (formType() === 'ntfy') {
+            {{ 'settings.notifications.field_server_url' | translate }}
+          } @else {
+            {{ 'settings.notifications.field_webhook_url' | translate }}
+          }
+        </span>
+        <input
+          type="url"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="formWebhookUrl()"
+          (ngModelChange)="formWebhookUrl.set($event)"
+          placeholder="https://..."
+        />
+      </label>
 
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.notifications.field_type' | translate }}</span>
-          <select
-            class="select select-bordered select-sm w-full"
-            [ngModel]="formType()"
-            (ngModelChange)="formType.set($event)"
-          >
-            @for (t of connectionTypes; track t) {
-              <option [value]="t">{{ t }}</option>
-            }
-          </select>
-        </label>
-
+      @if (supportsToken()) {
         <label class="form-control w-full">
           <span class="label-text">
-            @if (formType() === 'ntfy') {
-              {{ 'settings.notifications.field_server_url' | translate }}
-            } @else {
-              {{ 'settings.notifications.field_webhook_url' | translate }}
+            {{ 'settings.notifications.field_token' | translate }}
+            @if (formType() !== 'gotify') {
+              <span class="opacity-60">
+                {{ 'settings.notifications.field_token_optional' | translate }}
+              </span>
             }
           </span>
           <input
-            type="url"
+            type="password"
             class="input input-bordered input-sm w-full"
-            [ngModel]="formWebhookUrl()"
-            (ngModelChange)="formWebhookUrl.set($event)"
-            placeholder="https://..."
+            [placeholder]="tokenStored() && !formTokenCleared() ? secretMask : ''"
+            [ngModel]="formToken()"
+            (ngModelChange)="onTokenInput($event)"
           />
-        </label>
-
-        @if (supportsToken()) {
-          <label class="form-control w-full">
-            <span class="label-text">
-              {{ 'settings.notifications.field_token' | translate }}
-              @if (formType() !== 'gotify') {
-                <span class="opacity-60">
-                  {{ 'settings.notifications.field_token_optional' | translate }}
-                </span>
-              }
-            </span>
-            <input
-              type="password"
-              class="input input-bordered input-sm w-full"
-              [placeholder]="tokenStored() && !formTokenCleared() ? secretMask : ''"
-              [ngModel]="formToken()"
-              (ngModelChange)="onTokenInput($event)"
-            />
-            @if (canClearToken()) {
-              @if (formTokenCleared()) {
-                <span class="label-text-alt text-warning">
-                  {{ 'common.secret_will_clear' | translate }}
-                  <button
-                    type="button"
-                    class="link link-hover font-medium"
-                    (click)="formTokenCleared.set(false)"
-                  >
-                    {{ 'common.secret_keep' | translate }}
-                  </button>
-                </span>
-              } @else {
+          @if (canClearToken()) {
+            @if (formTokenCleared()) {
+              <span class="label-text-alt text-warning">
+                {{ 'common.secret_will_clear' | translate }}
                 <button
                   type="button"
-                  class="link link-hover label-text-alt self-start text-base-content/60"
-                  (click)="formTokenCleared.set(true)"
+                  class="link link-hover font-medium"
+                  (click)="formTokenCleared.set(false)"
                 >
-                  {{ 'common.secret_clear' | translate }}
+                  {{ 'common.secret_keep' | translate }}
                 </button>
-              }
-            } @else if (editingId() !== null) {
-              <span class="label-text-alt text-base-content/50">
-                {{ 'settings.notifications.token_hint' | translate }}
               </span>
-            }
-          </label>
-        }
-
-        @if (formType() === 'ntfy') {
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'settings.notifications.field_topic' | translate }}</span>
-            <input
-              type="text"
-              class="input input-bordered input-sm w-full"
-              [ngModel]="formTopic()"
-              (ngModelChange)="formTopic.set($event)"
-              placeholder="fliks"
-            />
-          </label>
-        }
-
-        <div>
-          <p class="label-text mb-2">{{ 'settings.notifications.field_events' | translate }}</p>
-          <div class="flex flex-wrap gap-2">
-            @for (event of allEvents(); track event) {
-              <label class="label cursor-pointer gap-2 justify-start">
-                <input
-                  type="checkbox"
-                  class="checkbox checkbox-xs"
-                  [ngModel]="formEvents().includes(event)"
-                  (ngModelChange)="toggleEvent(event)"
-                />
-                <span class="label-text text-sm font-mono">{{ event }}</span>
-              </label>
-            }
-          </div>
-        </div>
-
-        <label class="label cursor-pointer justify-start gap-3">
-          <input
-            type="checkbox"
-            class="toggle toggle-sm"
-            [ngModel]="formEnabled()"
-            (ngModelChange)="formEnabled.set($event)"
-          />
-          <span class="label-text">{{ 'settings.notifications.field_enabled' | translate }}</span>
-        </label>
-
-        @if (editingId() !== null) {
-          <div class="flex flex-col gap-2 pt-2 border-t border-base-200">
-            <button
-              type="button"
-              class="btn btn-outline btn-sm w-fit"
-              (click)="testConnection()"
-              [disabled]="testLoading()"
-            >
-              @if (testLoading()) {
-                <span class="loading loading-spinner loading-xs"></span>
-              }
-              {{ 'settings.notifications.test_connection' | translate }}
-            </button>
-            @if (testResult(); as tr) {
-              <div
-                role="alert"
-                class="alert text-sm py-2"
-                [class.alert-success]="tr.ok"
-                [class.alert-error]="!tr.ok"
+            } @else {
+              <button
+                type="button"
+                class="link link-hover label-text-alt self-start text-base-content/60"
+                (click)="formTokenCleared.set(true)"
               >
-                {{ tr.message }}
-              </div>
+                {{ 'common.secret_clear' | translate }}
+              </button>
             }
-          </div>
-        }
-
-
-      </div>
-
-      <div class="modal-action shrink-0 px-5 sm:px-6 pb-4 pt-2 border-t border-base-200 bg-base-100">
-        <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
-          {{ 'settings.notifications.cancel' | translate }}
-        </button>
-        <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
-          @if (saving()) {
-            <span class="loading loading-spinner loading-sm"></span>
+          } @else if (editingId() !== null) {
+            <span class="label-text-alt text-base-content/50">
+              {{ 'settings.notifications.token_hint' | translate }}
+            </span>
           }
-          {{ 'settings.notifications.save' | translate }}
-        </button>
+        </label>
+      }
+
+      @if (formType() === 'ntfy') {
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'settings.notifications.field_topic' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formTopic()"
+            (ngModelChange)="formTopic.set($event)"
+            placeholder="fliks"
+          />
+        </label>
+      }
+
+      <div>
+        <p class="label-text mb-2">{{ 'settings.notifications.field_events' | translate }}</p>
+        <div class="flex flex-wrap gap-2">
+          @for (event of allEvents(); track event) {
+            <label class="label cursor-pointer gap-2 justify-start">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-xs"
+                [ngModel]="formEvents().includes(event)"
+                (ngModelChange)="toggleEvent(event)"
+              />
+              <span class="label-text text-sm font-mono">{{ event }}</span>
+            </label>
+          }
+        </div>
       </div>
+
+      <label class="label cursor-pointer justify-start gap-3">
+        <input
+          type="checkbox"
+          class="toggle toggle-sm"
+          [ngModel]="formEnabled()"
+          (ngModelChange)="formEnabled.set($event)"
+        />
+        <span class="label-text">{{ 'settings.notifications.field_enabled' | translate }}</span>
+      </label>
+
+      @if (editingId() !== null) {
+        <div class="flex flex-col gap-2 pt-2 border-t border-base-200">
+          <button
+            type="button"
+            class="btn btn-outline btn-sm w-fit"
+            (click)="testConnection()"
+            [disabled]="testLoading()"
+          >
+            @if (testLoading()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'settings.notifications.test_connection' | translate }}
+          </button>
+          @if (testResult(); as tr) {
+            <div
+              role="alert"
+              class="alert text-sm py-2"
+              [class.alert-success]="tr.ok"
+              [class.alert-error]="!tr.ok"
+            >
+              {{ tr.message }}
+            </div>
+          }
+        </div>
+      }
     </div>
-    <form method="dialog" class="modal-backdrop">
-      <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">close</button>
-    </form>
-  </dialog>
+
+    <app-modal-footer flush>
+      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+        {{ 'settings.notifications.cancel' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+        @if (saving()) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
+        {{ 'settings.notifications.save' | translate }}
+      </button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">
+      close
+    </button>
+  </form>
+</dialog>
