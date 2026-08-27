@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
@@ -149,7 +150,10 @@ export class ImageService {
       }),
     );
 
-    return this.getApiPath(type, id, variant);
+    // The path is stable across re-downloads, so a client that cached the old
+    // bytes for `max-age` would keep showing them after a re-identification.
+    // Stamping the content makes the URL move exactly when the image does.
+    return `${this.getApiPath(type, id, variant)}?v=${createHash('sha1').update(buffer).digest('hex').slice(0, 8)}`;
   }
 
   /**

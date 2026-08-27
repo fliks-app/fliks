@@ -117,6 +117,13 @@ export class MediaMetadataService {
 
     const before = `"${media.title}" tmdb=${media.tmdbId ?? '-'} tvdb=${media.tvdbId ?? '-'}`;
 
+    // The refresh below re-reads the whole work — every season, episode and
+    // image — so without this line a long identify looks like nothing happened.
+    this.log.log(
+      `identify: media#${id} ${before} -> tmdb=${target.tmdbId ?? '-'} ` +
+        `tvdb=${target.tvdbId ?? '-'} imdb=${target.imdbId ?? '-'}, refreshing`,
+    );
+
     // Keeping an id the caller did not supply would leave this media pointing at
     // the previous work on that provider, and `resolveProviderForMedia` falls
     // back to whichever id is set — the old identity would silently return.
@@ -139,7 +146,8 @@ export class MediaMetadataService {
     }
 
     this.log.log(
-      `identify: ${before} -> "${refreshed.title}" tmdb=${refreshed.tmdbId ?? '-'} tvdb=${refreshed.tvdbId ?? '-'}`,
+      `identify: media#${id} done — "${refreshed.title}" tmdb=${refreshed.tmdbId ?? '-'} ` +
+        `tvdb=${refreshed.tvdbId ?? '-'} imdb=${refreshed.imdbId ?? '-'}`,
     );
     return (await this.mediaRepo.findOne({ where: { id } })) ?? refreshed;
   }
