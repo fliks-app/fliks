@@ -17,3 +17,23 @@ jobs:
         with:
           fetch-depth: 0
       - uses: wagoid/commitlint-github-action@v6
+
+  # commitlint's parser is lenient about the body; release-please's is not, and
+  # it drops what it can't parse without failing. Same parser, run loudly.
+  release-parser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm install --no-save @conventional-commits/parser@0.4.1
+      - name: Check messages against release-please's parser
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        # On a push the range is the single new commit — which is the squash
+        # message, the one release-please will actually read.
+        run: node .github/scripts/check-commit-parse.mjs "${BASE:-$HEAD~1}..$HEAD"
