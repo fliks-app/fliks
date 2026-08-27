@@ -4,6 +4,8 @@ import {
   computed,
   inject,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import {
   LucidePlay,
@@ -13,6 +15,16 @@ import {
   LucideTrash2,
   LucideListPlus,
   LucideUserPlus,
+  LucideCheck,
+  LucideListChecks,
+  LucideClipboardList,
+  LucideSettings,
+  LucideFolder,
+  LucideCaptions,
+  LucideRotateCcw,
+  LucideScanLine,
+  LucideSearch,
+  LucideDownload,
   LucideCircle,
 } from '@lucide/angular';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
@@ -41,7 +53,19 @@ import { CachedSrcDirective } from '../../directives/cached-src.directive';
     LucideTrash2,
     LucideListPlus,
     LucideUserPlus,
+    LucideCheck,
+    LucideListChecks,
+    LucideClipboardList,
+    LucideSettings,
+    LucideFolder,
+    LucideCaptions,
+    LucideRotateCcw,
+    LucideScanLine,
+    LucideSearch,
+    LucideDownload,
     LucideCircle,
+    NgTemplateOutlet,
+    RouterLink,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './card-actions-panel.html',
@@ -68,6 +92,11 @@ export class CardActionsPanelComponent {
   });
 
   onClose() {
+    this.service.close();
+  }
+
+  /** A link row navigates on its own; the panel just gets out of the way. */
+  closeForRoute() {
     this.service.close();
   }
 

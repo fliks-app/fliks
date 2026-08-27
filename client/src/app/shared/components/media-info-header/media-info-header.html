@@ -147,13 +147,10 @@
         <svg lucideListPlus class="h-5 w-5"></svg>
         {{ 'playlists.add_to_playlist' | translate }}
       </button>
-      <app-dropdown-menu placement="bottom-end">
-        <button trigger type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer">
-          <svg lucideEllipsisVertical class="h-5 w-5"></svg>
-          {{ 'common.more' | translate }}
-        </button>
-        <ng-container *ngTemplateOutlet="moreMenuItems"></ng-container>
-      </app-dropdown-menu>
+      <button #moreMobile type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer" (click)="openActionsMenu(moreMobile)">
+        <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+        {{ 'common.more' | translate }}
+      </button>
     </div>
 
     <!-- Series episode progress -->
@@ -329,12 +326,10 @@
         <button type="button" class="btn btn-ghost btn btn-circle" [attr.aria-label]="'playlists.add_to_playlist' | translate" (click)="addToPlaylist.emit()">
           <svg lucideListPlus class="h-4 w-4"></svg>
         </button>
-        <app-dropdown-menu placement="bottom-end">
-          <button trigger type="button" class="btn btn-ghost btn btn-circle">
-            <svg lucideEllipsisVertical class="h-5 w-5"></svg>
-          </button>
-          <ng-container *ngTemplateOutlet="moreMenuItems"></ng-container>
-        </app-dropdown-menu>
+        <button #moreDesktop type="button" class="btn btn-ghost btn btn-circle"
+          [attr.aria-label]="'common.more' | translate" (click)="openActionsMenu(moreDesktop)">
+          <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+        </button>
       </div>
 
       <!-- Progress bar -->
@@ -497,62 +492,5 @@
         </div>
       }
     </div>
-  }
-</ng-template>
-
-<!-- Items projected into both mobile + desktop dropdown-menus. Rendered from
-     the `media.actions` contribution registry: core's own list merged with
-     any plugin contributions, sorted by weight then id, `when`-filtered. -->
-<ng-template #moreMenuItems>
-  @for (item of menuItems(); track item.id) {
-    @if (item.route) {
-      <a
-        [routerLink]="item.route"
-        class="dropdown-item"
-        [class.text-error]="item.tone === 'danger'"
-        [class.text-white]="item.tone !== 'danger'"
-      >
-        <ng-container *ngTemplateOutlet="menuItemIcon; context: { item }"></ng-container>
-        <span class="flex-1">{{ displayLabelKey(item) | translate }}</span>
-      </a>
-    } @else {
-      <button
-        type="button"
-        [disabled]="isItemDisabled(item)"
-        class="dropdown-item"
-        [class.text-error]="item.tone === 'danger'"
-        [class.text-white]="item.tone !== 'danger'"
-        (click)="item.handler!()"
-      >
-        @if (isItemBusy(item)) {
-          <span class="loading loading-spinner loading-sm"></span>
-        } @else {
-          <ng-container *ngTemplateOutlet="menuItemIcon; context: { item }"></ng-container>
-        }
-        <span class="flex-1">{{ displayLabelKey(item) | translate }}</span>
-      </button>
-    }
-  }
-</ng-template>
-
-<!-- Icon by name, with a danger-tone accent kept as-is from the pre-refactor
-     markup. Unrecognised name → generic glyph, never blank. -->
-<ng-template #menuItemIcon let-item="item">
-  @switch (displayIcon(item)) {
-    @case ('user-plus') { <svg lucideUserPlus class="h-5 w-5 shrink-0 opacity-80"></svg> }
-    @case ('check') { <svg lucideCheck class="h-5 w-5 shrink-0 opacity-80" [class.text-success]="item.actionId === 'media.toggle-series-watched' && watched()"></svg> }
-    @case ('list-checks') { <svg lucideListChecks class="h-5 w-5 shrink-0 opacity-80"></svg> }
-    @case ('clipboard-list') { <svg lucideClipboardList class="h-5 w-5 shrink-0 opacity-80"></svg> }
-    @case ('download') { <svg lucideDownload class="h-5 w-5 shrink-0 opacity-80"></svg> }
-    @case ('search') { <svg lucideSearch class="h-5 w-5 shrink-0 opacity-80"></svg> }
-    @case ('settings') { <svg lucideSettings class="h-5 w-5 shrink-0 opacity-80"></svg> }
-    @case ('folder') { <svg lucideFolder class="h-5 w-5 shrink-0 opacity-80"></svg> }
-    @case ('captions') { <svg lucideCaptions class="h-5 w-5 shrink-0 opacity-80"></svg> }
-    @case ('rotate-ccw') { <svg lucideRotateCcw class="h-5 w-5 shrink-0 opacity-80"></svg> }
-    @case ('scan-line') { <svg lucideScanLine class="h-5 w-5 shrink-0 opacity-80"></svg> }
-    @case ('eye') { <svg lucideEye class="h-5 w-5 shrink-0 opacity-80"></svg> }
-    @case ('eye-off') { <svg lucideEyeOff class="h-5 w-5 shrink-0 opacity-80"></svg> }
-    @case ('trash-2') { <svg lucideTrash2 class="h-5 w-5 shrink-0"></svg> }
-    @default { <svg lucideCircle class="h-5 w-5 shrink-0 opacity-80"></svg> }
   }
 </ng-template>
