@@ -79,7 +79,10 @@ export class AutoGrabPipelineService {
     media: Media,
     files: { quality?: string | null }[],
   ): SearchDecision {
-    if (!media.qualityProfile || !media.languageProfile) {
+    // Only the quality profile is required. A media with no language profile
+    // imposes no language requirement, which the scorer already reads as
+    // "accept any" — the same rule the manual grab paths apply.
+    if (!media.qualityProfile) {
       return { mode: 'unprofiled' };
     }
     if (!files.length) {
