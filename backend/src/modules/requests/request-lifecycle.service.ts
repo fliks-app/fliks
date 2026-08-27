@@ -17,7 +17,6 @@ import { onDiskEpisodeNumbers } from '../media/episode-coverage.util';
 import { ProfilesService } from '../profiles/profiles.service';
 import { EventsService } from '../scheduler/events.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { SettingsService } from '../settings/settings.service';
 import { User } from '../users/entities/user.entity';
 import {
   IN_FLIGHT_REQUEST_STATUSES,
@@ -65,18 +64,8 @@ export class RequestLifecycleService
     private readonly profiles: ProfilesService,
     private readonly events: EventsService,
     private readonly notifications: NotificationsService,
-    private readonly settings: SettingsService,
   ) {}
 
-  /**
-   * Whether an import driven by a request approval should kick off a
-   * targeted search immediately, or wait for the next scheduled
-   * SearchMissing tick. Default is "yes" — users expect the download
-   * to start right after the green check.
-   *
-   * Admin-toggleable from the General settings page; defaults to `true`
-   * (an unset key reads as enabled) to preserve behaviour on existing installs.
-   */
   onModuleInit(): void {
     // Files landing on disk is the canonical "request might be
     // available now" trigger. Subscribing here keeps the recompute

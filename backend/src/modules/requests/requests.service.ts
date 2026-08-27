@@ -28,7 +28,6 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { MediaService } from '../media/media.service';
 import { Media } from '../media/entities/media.entity';
 import { ProfilesService } from '../profiles/profiles.service';
-import { SettingsService } from '../settings/settings.service';
 import { EventsService } from '../scheduler/events.service';
 import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
 import { Action } from '../auth/casl/actions.enum';
@@ -64,7 +63,6 @@ export class RequestsService {
     private readonly notifications: NotificationsService,
     private readonly mediaService: MediaService,
     private readonly profilesService: ProfilesService,
-    private readonly settings: SettingsService,
     private readonly caslAbilityFactory: CaslAbilityFactory,
     private readonly imageService: ImageService,
     private readonly tmdb: TmdbProvider,
