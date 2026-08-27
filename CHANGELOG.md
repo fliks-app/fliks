@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.4.1](https://github.com/fliks-app/fliks/compare/v3.4.0...v3.4.1) (2026-08-27)
+
+
+### Bug Fixes
+
+* **card-actions:** swap submenus in place on the sheet instead of stacking ([#1086](https://github.com/fliks-app/fliks/issues/1086)) ([370cad8](https://github.com/fliks-app/fliks/commit/370cad84afbe5076172eafc7283c721f99b8b6f0))
+* **ci:** fall back to the newest mpv winbuild when the pin is gone ([#1080](https://github.com/fliks-app/fliks/issues/1080)) ([770b9bc](https://github.com/fliks-app/fliks/commit/770b9bc706754d11ee3c2eef31f69cb5568646ff))
+* **identify:** finish the job — relink the files, refresh off the request, bust the image cache ([#1085](https://github.com/fliks-app/fliks/issues/1085)) ([83e81f0](https://github.com/fliks-app/fliks/commit/83e81f050ea2644f284abab8febe0a7d14b28228))
+* **identify:** make re-identification work on a TVDB library ([#1083](https://github.com/fliks-app/fliks/issues/1083)) ([50d7546](https://github.com/fliks-app/fliks/commit/50d7546e6924039cda62109490eb646b462e9714))
+* **media-menu:** stop doubling Download and Edit subtitles on an episode ([#1082](https://github.com/fliks-app/fliks/issues/1082)) ([01ca716](https://github.com/fliks-app/fliks/commit/01ca716172641280cdff1568a8b4ac15b7fd460d))
+* **releases:** let the table reach the modal edges on a narrow screen ([#1091](https://github.com/fliks-app/fliks/issues/1091)) ([258e5f0](https://github.com/fliks-app/fliks/commit/258e5f0db9ca55923564f0701895443dea28c4ba))
+* **releases:** stop the mobile row overflowing sideways ([#1089](https://github.com/fliks-app/fliks/issues/1089)) ([60541d6](https://github.com/fliks-app/fliks/commit/60541d63fcc5d17069f2917ea0cdeec4faf42305))
+
 ## [3.4.0](https://github.com/fliks-app/fliks/compare/v3.3.0...v3.4.0) (2026-08-27)
 
 

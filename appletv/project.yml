@@ -8,7 +8,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "3.4.0" # x-release-please-version
+    MARKETING_VERSION: "3.4.1" # x-release-please-version
     # CI overrides this with the repo's commit count: Apple rejects a build
     # number it has already seen for the app.
     CURRENT_PROJECT_VERSION: "1"
