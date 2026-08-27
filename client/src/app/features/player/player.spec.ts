@@ -125,7 +125,10 @@ function createHarness(opts: {
   const stopSessions = vi.fn(async () => ({}));
   const updatePlaybackState = vi.fn(async () => ({}));
   const getStreamUrl = vi.fn((id: number, sid?: string) => `stream://${id}?sid=${sid}`);
-  const getHlsUrl = vi.fn((id: number) => `hls://${id}`);
+  const getHlsUrl = vi.fn(
+    (id: number, quality?: string, startAt?: number, sid?: string) =>
+      `hls://${id}?q=${quality}&startAt=${startAt}&sid=${sid}`,
+  );
 
   const streamingApi = {
     getPlaybackInfo,
@@ -404,4 +407,114 @@ describe('PlayerComponent pre-roll', () => {
     expect(h.navigated).toBe(true);
   });
 
+});
+
+describe('PlayerComponent wake / resume', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.unstubAllGlobals();
+  });
+
+  /** A clock gap the 1s tick can't explain = the process was frozen. */
+  function sleep(component: any, ms: number) {
+    component.lastTickAt = Date.now() - ms;
+  }
+
+  it('a clock gap warms the existing session instead of reloading the engine', async () => {
+    const h = createHarness();
+    const fetchMock = vi.fn(async (_url: string) => ({}) as any);
+    vi.stubGlobal('fetch', fetchMock);
+    h.state.playbackMode.set('transcode');
+    h.engine.currentTime = 640;
+
+    sleep(h.component, 10 * 60 * 1000);
+    h.component.tickClockWatch();
+    await flush();
+
+    // Prewarm rides the live sid at the playhead: this is what revives the
+    // backend session and respawns ffmpeg while the user is still paused.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const url = fetchMock.mock.calls[0]![0];
+    expect(url).toContain(`sid=sid-${MAIN_FILE_ID}`);
+    expect(url).toContain('startAt=640');
+    // And a beat goes out now rather than up to 10s later.
+    expect(h.streamingApi.updatePlaybackState).toHaveBeenCalled();
+    // The whole point: no fresh sid, no engine.load(), so no black frame.
+    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
+    expect(h.engine.loadCalls.length).toBe(0);
+  });
+
+  it('the frozen interval does not read as a stalled playhead', async () => {
+    const h = createHarness();
+    vi.stubGlobal('fetch', vi.fn(async () => ({}) as any));
+    h.state.loading.set(false);
+    h.state.paused.set(false);
+    h.component.lastProgressPos = 640;
+    h.component.lastProgressAt = Date.now() - 60_000;
+    h.engine.currentTime = 640;
+    h.engine.duration = 3600;
+
+    sleep(h.component, 60_000);
+    h.component.tickClockWatch();
+    h.component.checkStall();
+    await flush();
+
+    // A stall recovery here would re-mint the sid and reload the engine.
+    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
+    expect(h.engine.loadCalls.length).toBe(0);
+  });
+
+  it('direct play has no encoder to warm', async () => {
+    const h = createHarness();
+    const fetchMock = vi.fn(async () => ({}) as any);
+    vi.stubGlobal('fetch', fetchMock);
+    h.state.playbackMode.set('direct');
+
+    sleep(h.component, 60_000);
+    h.component.tickClockWatch();
+    await flush();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(h.streamingApi.updatePlaybackState).toHaveBeenCalled();
+  });
+
+  it('a heartbeat lost to the network is retried, not swallowed', async () => {
+    const h = createHarness();
+    vi.stubGlobal('fetch', vi.fn(async () => ({}) as any));
+    h.streamingApi.updatePlaybackState.mockRejectedValueOnce(
+      new Error('offline'),
+    );
+
+    await h.component.savePosition();
+    expect(h.component.resumeDue).toBe(true);
+
+    // Next tick, still online: the resume path runs again on its own.
+    h.component.lastTickAt = Date.now();
+    h.component.lastResumeAt = 0;
+    h.component.lastSaveAt = 0;
+    h.component.tickClockWatch();
+    await flush();
+    expect(h.component.resumeDue).toBe(false);
+    expect(h.streamingApi.updatePlaybackState).toHaveBeenCalledTimes(2);
+  });
+
+  it('a long buffer explains itself, a short one stays mute', async () => {
+    const h = createHarness();
+    h.state.loading.set(false);
+    h.state.buffering.set(true);
+
+    h.component.lastTickAt = Date.now();
+    h.component.tickClockWatch();
+    expect(h.component.preparing()).toBe(false);
+
+    h.component.stalledSince = Date.now() - 6_000;
+    h.component.lastTickAt = Date.now();
+    h.component.tickClockWatch();
+    expect(h.component.preparing()).toBe(true);
+
+    h.state.buffering.set(false);
+    h.component.lastTickAt = Date.now();
+    h.component.tickClockWatch();
+    expect(h.component.preparing()).toBe(false);
+  });
 });

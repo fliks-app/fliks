@@ -119,7 +119,8 @@
       "SubtitleBurnIn": "Legendas incrustadas",
       "AudioCodecNotSupported": "Codec de áudio não suportado",
       "AudioChannelsNotSupported": "Demasiados canais de áudio"
-    }
+    },
+    "preparing": "A preparar a transmissão…"
   },
   "sse": {
     "subtitle_synced": "Legenda sincronizada com sucesso.",

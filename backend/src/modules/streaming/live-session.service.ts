@@ -196,6 +196,13 @@ export type LiveSessionPatch = Partial<
  * to absorb transient network hiccups without dragging the ffmpeg
  * keep-alive window).
  *
+ * A GC'd entry isn't forgotten: it is kept as a tombstone for
+ * `STREAM_SESSION_REVIVE_TTL_MS` (15 min default, measured from its last
+ * beat), and any request presenting that sid again revives it. The stream
+ * URL therefore stays replayable across a laptop sleep or a network drop —
+ * the client resumes on its existing sid instead of re-minting one and
+ * reloading the engine (which tears the picture down to black).
+ *
  * Drives the admin "now watching" dashboard and the ffmpeg job grace
  * window — `listForJob` reports whether a given encoder still has any
  * live consumer.
@@ -204,6 +211,11 @@ export type LiveSessionPatch = Partial<
 export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(LiveSessionRegistry.name);
   private readonly sessions = new Map<string, LiveSession>();
+  /** GC'd sessions still inside the revive window, keyed by sid. Consulted
+   *  only by {@link resolve} — they are invisible to the dashboard, the
+   *  per-user cap and the ffmpeg keep-alive, so a tombstone never holds an
+   *  encoder alive. */
+  private readonly tombstones = new Map<string, LiveSession>();
   private gcTimer: ReturnType<typeof setInterval> | null = null;
 
   private readonly ttlMs = StreamLifetime.liveSessionTtlMs();
@@ -213,6 +225,10 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
    *  them warm; this only bounds how long a paused or finished download holds
    *  its session before GC reclaims it. */
   private readonly pinnedTtlMs = 60 * 60 * 1000;
+  private readonly reviveTtlMs = StreamLifetime.sessionReviveTtlMs();
+  /** Hard ceiling on tombstones so a client looping playback-info can't grow
+   *  the map without bound; the oldest are dropped first. */
+  private static readonly MAX_TOMBSTONES = 500;
 
   onModuleInit(): void {
     this.gcTimer = setInterval(() => this.runGc(), this.gcIntervalMs);
@@ -221,6 +237,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
   onModuleDestroy(): void {
     if (this.gcTimer) clearInterval(this.gcTimer);
     this.sessions.clear();
+    this.tombstones.clear();
   }
 
   /**
@@ -338,7 +355,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       sseConnectionId?: string | null;
     },
   ): LiveSession | null {
-    const session = this.sessions.get(sessionId);
+    const session = this.resolve(sessionId);
     if (!session) return null;
     session.lastBeat = Date.now();
     if (payload.position !== undefined) session.position = payload.position;
@@ -366,7 +383,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
    * beat, gets GC'd mid-playback and 410s on its next segment.
    */
   touch(sessionId: string): boolean {
-    const session = this.sessions.get(sessionId);
+    const session = this.resolve(sessionId);
     if (!session) return false;
     session.lastBeat = Date.now();
     return true;
@@ -378,20 +395,46 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
    * fall through to defaults).
    */
   update(sessionId: string, patch: LiveSessionPatch): LiveSession | null {
-    const session = this.sessions.get(sessionId);
+    const session = this.resolve(sessionId);
     if (!session) return null;
     Object.assign(session, patch);
     return session;
   }
 
-  /** Drop a session explicitly. Returns whether the id was known. */
+  /** Drop a session explicitly — an intentional stop is not revivable, so the
+   *  tombstone goes too. Returns whether the id was known. */
   stop(sessionId: string): boolean {
+    this.tombstones.delete(sessionId);
     return this.sessions.delete(sessionId);
   }
 
-  /** Lookup by id without mutating lastBeat. */
+  /** Lookup by id without mutating lastBeat. Revives a tombstoned sid. */
   get(sessionId: string): LiveSession | null {
-    return this.sessions.get(sessionId) ?? null;
+    return this.resolve(sessionId);
+  }
+
+  /**
+   * Resolve a sid the caller presented: a live session, else a tombstone
+   * inside the revive window — which is moved back into the live map. Anyone
+   * still holding the sid (a heartbeat, a segment fetch) is proof the viewer
+   * is back, and reviving keeps their stream URL valid: no 410, no fresh sid,
+   * no engine reload. The encoder is gone by then; the next segment request
+   * respawns it at the requested segment through the usual slow path.
+   */
+  private resolve(sessionId: string): LiveSession | null {
+    const live = this.sessions.get(sessionId);
+    if (live) return live;
+    const buried = this.tombstones.get(sessionId);
+    if (!buried) return null;
+    this.tombstones.delete(sessionId);
+    if (buried.lastBeat < Date.now() - this.reviveTtlMs) return null;
+    this.sessions.set(sessionId, buried);
+    this.log.log(
+      `revived session ${sessionId} after ${Math.round(
+        (Date.now() - buried.lastBeat) / 1000,
+      )}s idle (file ${buried.mediaFileId}, user ${buried.userId})`,
+    );
+    return buried;
   }
 
   /**
@@ -450,11 +493,23 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       if (session.lastBeat < now - ttl) expired.push(id);
     }
     for (const id of expired) {
+      const session = this.sessions.get(id)!;
       this.sessions.delete(id);
+      // Insertion order is beat order, which is what the size trim below
+      // walks — oldest first.
+      this.tombstones.set(id, session);
+    }
+    for (const [id, session] of this.tombstones) {
+      if (session.lastBeat < now - this.reviveTtlMs) this.tombstones.delete(id);
+    }
+    for (const id of this.tombstones.keys()) {
+      if (this.tombstones.size <= LiveSessionRegistry.MAX_TOMBSTONES) break;
+      this.tombstones.delete(id);
     }
     if (expired.length) {
       this.log.log(
-        `gc: dropped ${expired.length} session(s) past ${Math.round(this.ttlMs / 1000)}s ttl`,
+        `gc: dropped ${expired.length} session(s) past ${Math.round(this.ttlMs / 1000)}s ttl` +
+          `, revivable for ${Math.round(this.reviveTtlMs / 60000)}min`,
       );
     }
   }

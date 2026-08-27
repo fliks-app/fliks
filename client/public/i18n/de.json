@@ -119,7 +119,8 @@
       "SubtitleBurnIn": "Eingebrannte Untertitel",
       "AudioCodecNotSupported": "Audio-Codec nicht unterstützt",
       "AudioChannelsNotSupported": "Zu viele Audiokanäle"
-    }
+    },
+    "preparing": "Stream wird vorbereitet…"
   },
   "sse": {
     "subtitle_synced": "Untertitel erfolgreich synchronisiert.",

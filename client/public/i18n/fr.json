@@ -124,7 +124,8 @@
       "SubtitleBurnIn": "Sous-titres incrustés",
       "AudioCodecNotSupported": "Codec audio non supporté",
       "AudioChannelsNotSupported": "Trop de canaux audio"
-    }
+    },
+    "preparing": "Préparation du flux…"
   },
   "sse": {
     "subtitle_synced": "Sous-titre synchronisé avec succès.",
