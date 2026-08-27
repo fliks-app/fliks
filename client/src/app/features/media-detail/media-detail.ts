@@ -53,6 +53,9 @@ import {
   TrackingStatusModalComponent,
   TrackingScope,
 } from '../../shared/components/tracking-status-modal/tracking-status-modal';
+import {
+  MediaDetailIdentifyModalComponent,
+} from './components/media-detail-identify-modal/media-detail-identify-modal.component';
 import { MediaDetailProfilesModalComponent } from './components/media-detail-profiles-modal/media-detail-profiles-modal.component';
 import { MediaDetailLibraryModalComponent } from './components/media-detail-library-modal/media-detail-library-modal.component';
 import { RequestModalComponent } from '../tmdb-preview/components/request-modal/request-modal.component';
@@ -111,6 +114,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     MediaDetailSeasonsComponent,
     ReleasesModalComponent,
     TrackingStatusModalComponent,
+    MediaDetailIdentifyModalComponent,
     MediaDetailProfilesModalComponent,
     MediaDetailLibraryModalComponent,
     RequestModalComponent,
@@ -1304,10 +1308,33 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   /** Refs to the native <dialog>. `showModal()` gives us focus trapping,
    *  Tab cycling and Escape-to-close for free — no manual keydown
    *  handling required. */
+  private readonly identifyModal = viewChild(MediaDetailIdentifyModalComponent);
   private readonly analyzeDialog =
     viewChild<ElementRef<HTMLDialogElement>>('analyzeDialog');
   private readonly firstAnalyzeOption =
     viewChild<ElementRef<HTMLInputElement>>('firstAnalyzeOption');
+
+  openIdentifyModal() {
+    const m = this.media();
+    if (!m) return;
+    this.identifyModal()?.open({
+      mediaId: m.id,
+      mediaType: m.type,
+      title: m.title,
+      year: m.year ?? null,
+      path: m.path ?? null,
+      tmdbId: m.tmdbId ?? null,
+      tvdbId: m.tvdbId ?? null,
+      imdbId: m.imdbId ?? null,
+    });
+  }
+
+  /** The title, art and whole episode tree change, so the page reloads rather
+   *  than patching the row — same path the rescan takes. */
+  onIdentified() {
+    const m = this.media();
+    if (m) void this.reloadAfterRescan(m.id);
+  }
 
   openAnalyzeModal() {
     this.analyzeOpts.set({

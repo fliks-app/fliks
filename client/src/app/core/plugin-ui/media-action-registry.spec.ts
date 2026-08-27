@@ -11,6 +11,7 @@ const ALL_IDS: CoreMediaActionId[] = [
   'media.edit-library',
   'media.edit-subtitles',
   'media.refresh-metadata',
+  'media.identify',
   'media.analyze',
   'media.toggle-monitored',
   'media.delete',
