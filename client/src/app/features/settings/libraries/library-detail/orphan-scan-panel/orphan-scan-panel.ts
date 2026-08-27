@@ -9,7 +9,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { UpperCasePipe } from '@angular/common';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { LucideChevronsDownUp, LucideChevronsUpDown } from '@lucide/angular';
+import { LucideCheck, LucideChevronsDownUp, LucideChevronsUpDown } from '@lucide/angular';
 import { MediaType } from '../../../../../core/enums/media-type.enum';
 import { PaginationComponent } from '../../../../../shared/components/pagination/pagination';
 import { ResolveUrlPipe } from '../../../../../core/pipes/resolve-url.pipe';
@@ -50,6 +50,7 @@ interface GroupVM {
     UpperCasePipe,
     TranslateModule,
     ResolveUrlPipe,
+    LucideCheck,
     LucideChevronsDownUp,
     LucideChevronsUpDown,
     PaginationComponent,
