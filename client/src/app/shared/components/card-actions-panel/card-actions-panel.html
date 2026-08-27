@@ -21,25 +21,56 @@
       </div>
     </div>
   }
-  @for (a of actions(); track a) {
-    <button
-      type="button"
-      class="dropdown-item"
-      [class.text-error]="a.tone === 'danger'"
-      [disabled]="a.disabled"
-      (click)="trigger(a)"
-    >
-      @switch (a.icon) {
-        @case ('play') { <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70"></svg> }
-        @case ('external-link') { <svg lucideExternalLink class="h-4 w-4 shrink-0 opacity-70"></svg> }
-        @case ('eye') { <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg> }
-        @case ('eye-off') { <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg> }
-        @case ('trash-2') { <svg lucideTrash2 class="h-4 w-4 shrink-0 opacity-70"></svg> }
-        @case ('list-plus') { <svg lucideListPlus class="h-4 w-4 shrink-0 opacity-70"></svg> }
-        @case ('user-plus') { <svg lucideUserPlus class="h-4 w-4 shrink-0 opacity-70"></svg> }
-        @default { <svg lucideCircle class="h-4 w-4 shrink-0 opacity-70"></svg> }
-      }
-      <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
-    </button>
+  @for (a of actions(); track $index; let i = $index) {
+    @if (i > 0 && a.section !== actions()[i - 1].section) {
+      <div class="h-px bg-base-content/10 my-1" role="separator"></div>
+    }
+    @if (a.route) {
+      <a
+        [routerLink]="a.route"
+        class="dropdown-item"
+        [class.text-error]="a.tone === 'danger'"
+        (click)="closeForRoute()"
+      >
+        <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
+        <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
+      </a>
+    } @else {
+      <button
+        type="button"
+        class="dropdown-item"
+        [class.text-error]="a.tone === 'danger'"
+        [disabled]="a.disabled"
+        (click)="trigger(a)"
+      >
+        <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
+        <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
+      </button>
+    }
   }
 </app-popover-menu>
+
+<!-- Curated whitelist: a `card.actions` contribution may name any icon, and an
+     unrecognised one must fall back to a glyph rather than render blank. -->
+<ng-template #icon let-a>
+  @switch (a.icon) {
+    @case ('play') { <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('external-link') { <svg lucideExternalLink class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('eye') { <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('eye-off') { <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('trash-2') { <svg lucideTrash2 class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('list-plus') { <svg lucideListPlus class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('user-plus') { <svg lucideUserPlus class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('check') { <svg lucideCheck class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('list-checks') { <svg lucideListChecks class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('clipboard-list') { <svg lucideClipboardList class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('settings') { <svg lucideSettings class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('folder') { <svg lucideFolder class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('captions') { <svg lucideCaptions class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('rotate-ccw') { <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('scan-line') { <svg lucideScanLine class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('search') { <svg lucideSearch class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('download') { <svg lucideDownload class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @default { <svg lucideCircle class="h-4 w-4 shrink-0 opacity-70"></svg> }
+  }
+</ng-template>

@@ -13,26 +13,14 @@ import { Router, RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import {
-  LucideCaptions,
   LucideCheck,
-  LucideCircle,
-  LucideClipboardList,
   LucideDownload,
   LucideEllipsisVertical,
-  LucideEye,
-  LucideEyeOff,
   LucideFilm,
-  LucideFolder,
   LucideHeart,
-  LucideListChecks,
   LucideListPlus,
   LucidePlay,
   LucideRotateCcw,
-  LucideScanLine,
-  LucideSearch,
-  LucideSettings,
-  LucideTrash2,
-  LucideUserPlus,
 } from '@lucide/angular';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
 import {
@@ -62,6 +50,7 @@ import { ClampToggleDirective } from '../../directives/clamp-toggle.directive';
 import { TvRowDirective } from '../../directives/tv-row.directive';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { NgTemplateOutlet } from '@angular/common';
+import { CardActionsService } from '../../../core/services/card-actions.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-evaluator';
 import type { MediaType } from '../../../core/enums/media-type.enum';
@@ -72,8 +61,25 @@ import { CachedSrcDirective } from '../../directives/cached-src.directive';
 
 /** One `media.actions` contribution resolved to something the template can
  *  render directly — visibility, handler and icon fallback already decided. */
+/**
+ * Section boundaries, as weight bands over the media actions registry:
+ * personal actions, acquisition, editing, maintenance, then destructive.
+ * Bands rather than an explicit field so a plugin contribution groups itself by
+ * the weight it already declares, with no addition to the contract.
+ */
+function sectionOf(weight: number): string {
+  if (weight < 500) return 'personal';
+  if (weight < 700) return 'acquire';
+  if (weight < 1000) return 'edit';
+  if (weight < 1300) return 'maintain';
+  return 'danger';
+}
+
 export interface ResolvedMediaAction {
   id: string;
+  /** Kept from the contribution: the section boundaries are weight bands, so
+   *  a plugin lands in whichever group its own weight puts it. */
+  weight: number;
   labelKey: string;
   icon: string;
   tone: 'default' | 'danger';
@@ -135,10 +141,8 @@ interface AudioTrack {
     TvSelectDirective,
     NgTemplateOutlet,
     DecimalPipe, FormsModule, RouterLink, TranslateModule,
-    LucideCaptions, LucideCheck, LucideCircle, LucideClipboardList, LucideDownload,
-    LucideEllipsisVertical, LucideEye, LucideEyeOff,
-    LucideFilm, LucideFolder, LucideHeart, LucideListChecks, LucideListPlus, LucidePlay, LucideRotateCcw, LucideScanLine,
-    LucideSearch, LucideSettings, LucideTrash2, LucideUserPlus,
+    LucideCheck, LucideDownload, LucideEllipsisVertical,
+    LucideFilm, LucideHeart, LucideListPlus, LucidePlay, LucideRotateCcw,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-info-header.html',
@@ -156,6 +160,7 @@ export class MediaInfoHeaderComponent {
   private readonly streamingApi = inject(StreamingApiService);
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
   private readonly pluginUi = inject(PluginUiRegistryService);
+  private readonly cardActions = inject(CardActionsService);
 
   // ── Inputs: content ──
   readonly title = input.required<string>();
@@ -665,6 +670,7 @@ export class MediaInfoHeaderComponent {
       if (!(this.extraGuards[c.id]?.() ?? true)) continue;
       const base = {
         id: c.id,
+        weight: c.weight,
         labelKey: c.labelKey,
         icon: c.icon ?? 'circle',
         tone: c.tone ?? ('default' as const),
@@ -710,6 +716,37 @@ export class MediaInfoHeaderComponent {
       return this.monitored() ? 'eye-off' : 'eye';
     }
     return item.icon;
+  }
+
+  /**
+   * Hands the resolved rows to the shared card actions panel, anchored to the
+   * ⋯ button that was clicked. The panel owns the chrome on every form factor —
+   * anchored dropdown on desktop, bottom sheet on touch and TV — so this header
+   * no longer carries a menu of its own.
+   */
+  openActionsMenu(anchor: HTMLElement) {
+    const items = this.menuItems();
+    if (!items.length) return;
+    this.cardActions.register({
+      actions: items.map((item) => ({
+        // The two toggles carry a label and an icon that follow live state, so
+        // they go through the same resolvers the rendered rows used to.
+        labelKey: this.displayLabelKey(item),
+        icon: this.displayIcon(item),
+        tone: item.tone,
+        section: sectionOf(item.weight),
+        disabled: this.isItemDisabled(item),
+        ...(item.route ? { route: item.route } : {}),
+        run: () => item.handler?.(),
+      })),
+      anchor,
+      title: this.title(),
+      subtitle: this.dateLabel() ?? '',
+      imageUrl: this.posterUrl(),
+      imageAspect: this.episodeId() ? 'landscape' : 'portrait',
+      placement: 'button',
+    });
+    this.cardActions.show();
   }
 
   /** Mid-request spinner, per actionId — the ids not listed never show one. */

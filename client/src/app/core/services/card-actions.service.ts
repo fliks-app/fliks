@@ -22,6 +22,11 @@ export interface CardAction {
   run: () => void;
   /** Disabled rows render greyed out and can't be activated. */
   disabled?: boolean;
+  /** Rows are grouped in declaration order and a rule is drawn wherever this
+   *  changes. Any name works: it labels nothing, it only marks the boundary. */
+  section?: string;
+  /** Renders the row as a link instead of a button. `run` is ignored. */
+  route?: string;
 }
 
 /**
