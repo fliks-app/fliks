@@ -5,6 +5,7 @@ import {
   JoinColumn,
   RelationId,
   Unique,
+  Index,
 } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Playlist } from './playlist.entity';
@@ -17,16 +18,18 @@ import { PlaylistShareRole } from '../../../common/enums';
  * "owner can never be removed" rule structural.
  */
 @Entity('playlist_shares')
-@Unique(['playlist', 'user'])
+@Unique('UQ_playlist_shares_playlist_user', ['playlist', 'user'])
+@Index('IDX_playlist_shares_playlistId', ['playlist'])
+@Index('IDX_playlist_shares_userId', ['user'])
 export class PlaylistShare extends BaseEntity {
-  @ManyToOne(() => Playlist, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Playlist, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'playlistId' })
   playlist: Playlist;
 
   @RelationId((s: PlaylistShare) => s.playlist)
   playlistId: number;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;
 

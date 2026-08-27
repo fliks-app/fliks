@@ -18,18 +18,18 @@ import { FollowStatus } from '../../../common/enums';
  * {@link PlaylistShare} join-entity shape.
  */
 @Entity('user_follows')
-@Unique(['follower', 'following'])
-@Index(['follower'])
-@Index(['following'])
+@Unique('UQ_user_follows_pair', ['follower', 'following'])
+@Index('IDX_user_follows_follower', ['follower'])
+@Index('IDX_user_follows_following', ['following'])
 export class UserFollow extends BaseEntity {
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'followerId' })
   follower: User;
 
   @RelationId((f: UserFollow) => f.follower)
   followerId: number;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'followingId' })
   following: User;
 

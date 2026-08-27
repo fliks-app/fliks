@@ -25,14 +25,19 @@ import { User } from '../../users/entities/user.entity';
 // `synchronize` matches prod — a plain @Unique can't express the NULL split.
 @Index('UQ_playlist_items_movie', ['playlist', 'media'], {
   unique: true,
-  where: '"episodeId" IS NULL',
+  where: '("episodeId" IS NULL)',
 })
 @Index('UQ_playlist_items_episode', ['playlist', 'episode'], {
   unique: true,
-  where: '"episodeId" IS NOT NULL',
+  where: '("episodeId" IS NOT NULL)',
 })
+@Index('IDX_playlist_items_playlist_position', ['playlist', 'position'])
+@Index('IDX_playlist_items_mediaId', ['media'])
+@Index('IDX_playlist_items_episodeId', ['episode'])
+@Index('IDX_playlist_items_addedById', ['addedBy'])
 export class PlaylistItem extends BaseEntity {
   @ManyToOne(() => Playlist, (playlist) => playlist.items, {
+    nullable: false,
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'playlistId' })
@@ -42,7 +47,7 @@ export class PlaylistItem extends BaseEntity {
   playlistId: number;
 
   /** The movie, or the parent series when this item is an episode. */
-  @ManyToOne(() => Media, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Media, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'mediaId' })
   media: Media;
 
