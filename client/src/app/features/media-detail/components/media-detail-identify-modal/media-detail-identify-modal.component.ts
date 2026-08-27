@@ -89,8 +89,8 @@ export class MediaDetailIdentifyModalComponent {
       const year = this.formYear();
       const found = title
         ? isSeries
-          ? await this.metadata.searchTv(title, year ?? undefined)
-          : await this.metadata.searchMovie(title, year ?? undefined)
+          ? await this.metadata.searchTv(title, year ?? undefined, undefined, cfg.mediaId)
+          : await this.metadata.searchMovie(title, year ?? undefined, undefined, cfg.mediaId)
         : [];
       this.results.set(found);
       this.searched.set(true);

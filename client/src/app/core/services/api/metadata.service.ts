@@ -109,10 +109,13 @@ export interface DiscoverFilters {
 export class MetadataService {
   private readonly http = inject(HttpClient);
 
-  searchMovie(q: string, year?: number, provider?: string) {
+  /** `mediaId` lets the server search the provider that media is refreshed
+   *  from; an explicit `provider` still wins. */
+  searchMovie(q: string, year?: number, provider?: string, mediaId?: number) {
     let params = new HttpParams().set('q', q);
     if (year != null) params = params.set('year', String(year));
     if (provider) params = params.set('provider', provider);
+    if (mediaId != null) params = params.set('mediaId', String(mediaId));
     return firstValueFrom(
       this.http.get<MetadataSearchResult[]>('/api/metadata/search/movie', {
         params,
@@ -120,10 +123,13 @@ export class MetadataService {
     );
   }
 
-  searchTv(q: string, year?: number, provider?: string) {
+  /** `mediaId` lets the server search the provider that media is refreshed
+   *  from; an explicit `provider` still wins. */
+  searchTv(q: string, year?: number, provider?: string, mediaId?: number) {
     let params = new HttpParams().set('q', q);
     if (year != null) params = params.set('year', String(year));
     if (provider) params = params.set('provider', provider);
+    if (mediaId != null) params = params.set('mediaId', String(mediaId));
     return firstValueFrom(
       this.http.get<MetadataSearchResult[]>('/api/metadata/search/tv', {
         params,

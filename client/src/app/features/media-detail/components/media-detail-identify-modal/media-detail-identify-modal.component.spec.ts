@@ -33,12 +33,13 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
 
   function setup() {
     const identify = vi.fn(() => Promise.resolve({} as never));
+    const searchTv = vi.fn(() => Promise.resolve([]));
     TestBed.configureTestingModule({
       imports: [MediaDetailIdentifyModalComponent],
       providers: [
         provideZonelessChangeDetection(),
         provideTranslateService(),
-        { provide: MetadataService, useValue: { searchTv: vi.fn(), searchMovie: vi.fn() } },
+        { provide: MetadataService, useValue: { searchTv, searchMovie: vi.fn() } },
         { provide: MediaService, useValue: { identify } },
         { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
       ],
@@ -55,7 +56,7 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
       tvdbId: null,
       imdbId: null,
     });
-    return { cmp, identify };
+    return { cmp, identify, searchTv };
   }
 
   it('VERDICT: sends no tmdbId when the provider has none, so the API accepts it', async () => {
@@ -72,6 +73,15 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
     await cmp.apply({ ...tvdbOnly, tmdbId: 77 }, 0);
 
     expect(identify).toHaveBeenCalledWith(795, { tmdbId: 77, tvdbId: 4242, imdbId: 'tt0499308' });
+  });
+
+  it('searches with the media id so the server picks its library provider', async () => {
+    const { cmp, searchTv } = setup();
+    cmp.formTitle.set('A Series');
+
+    await cmp.search();
+
+    expect(searchTv).toHaveBeenCalledWith('A Series', undefined, undefined, 795);
   });
 
   it('keys the in-flight spinner by row, not by the shared 0 id', async () => {
