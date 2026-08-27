@@ -1,5 +1,53 @@
 # Changelog
 
+## [3.4.0](https://github.com/fliks-app/fliks/compare/v3.3.0...v3.4.0) (2026-08-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* **plugin-ui:** one list, one dispatcher, one resolver for media menus
+* **profiles:** a fresh install starts with no quality profile, so auto-grab reports unprofiled until an admin creates one. Existing rows are left untouched - no migration deletes them.
+
+### Features
+
+* **media-detail:** identify a media from its actions menu ([dd35ae6](https://github.com/fliks-app/fliks/commit/dd35ae6ee9d7dab2e9467e6bf4188319f7208011))
+* **media-menu:** group the actions into submenus, with Like and Download ([ad05331](https://github.com/fliks-app/fliks/commit/ad05331d8f979241c33707042639b600290a3811))
+* **media-menu:** open the tracking and identify dialogs in place ([216d756](https://github.com/fliks-app/fliks/commit/216d756bc1fd409da15e392f2418537e081c1317))
+* **media:** re-point a media at another work ([c9bf9d6](https://github.com/fliks-app/fliks/commit/c9bf9d654e436c757f3c276e96a3554449131fa8))
+* **plugin-ui:** add a surface predicate to when ([ae60f51](https://github.com/fliks-app/fliks/commit/ae60f510eef3d2ab72cfc5192eb61418adc4b75c))
+* **profiles:** stop seeding a default quality and language profile ([3115375](https://github.com/fliks-app/fliks/commit/31153759b3fded3d09f9563b06f80145e21ca9f2))
+* **requests:** act on a pending request from the title preview ([8c9dc82](https://github.com/fliks-app/fliks/commit/8c9dc825066d4f7c1dacdd2524ab67cda15bf887))
+* **subtitles:** report why a provider connection test failed ([5995e7e](https://github.com/fliks-app/fliks/commit/5995e7ec2e252eb2b2e8b343815b73cbfb91d9c7))
+
+
+### Bug Fixes
+
+* **auto-grab:** accept any language when no language profile is set ([f0ee821](https://github.com/fliks-app/fliks/commit/f0ee82169bc4a38c933212ec90822e3b75c6aae5))
+* **db:** clear the entity drift and enforce the CI check ([#1070](https://github.com/fliks-app/fliks/issues/1070)) ([f034abe](https://github.com/fliks-app/fliks/commit/f034abe10aa70507204987ae32d4c9c5c191c2d2)), closes [#1057](https://github.com/fliks-app/fliks/issues/1057)
+* **focus-ring:** keep the ring visible in three more scrollers ([41486f0](https://github.com/fliks-app/fliks/commit/41486f0b71164825c82a42810645baddd30f6081))
+* **focus-ring:** keep the ring visible inside scroll containers ([bdd00a9](https://github.com/fliks-app/fliks/commit/bdd00a934df7a1868d347645bc0b072ef38643c0))
+* **media-menu:** keep the page-owned dialogs off a card, refresh in place ([704edef](https://github.com/fliks-app/fliks/commit/704edef38dceffd302dd8bd5af2aeffadbd92be0))
+* **media-menu:** side flyout, card routing and the two live toggles ([3eb4229](https://github.com/fliks-app/fliks/commit/3eb4229a5416c60e59f891003093a8f87fbbb298))
+* **provider-list:** center the editor modal header ([ac6419c](https://github.com/fliks-app/fliks/commit/ac6419c9fe16f1ecf6b5417e552ee9e3c0d4e47d))
+* **requests:** hide the import button while a request is pending, and unify the labels ([1ca873e](https://github.com/fliks-app/fliks/commit/1ca873e5cb18d2ff3ac0e97da8190994f50eb3c5))
+* **scheduler:** walk the subtitle passes in batches instead of all at once ([236c84d](https://github.com/fliks-app/fliks/commit/236c84d83c39fc54ba0da690afd5682f59b9f9e2))
+* **subtitles:** stop the missing-subtitles list from hanging the server ([f3c75f5](https://github.com/fliks-app/fliks/commit/f3c75f56ccc75ed563a25597922c759c247a7f50))
+
+
+### Performance Improvements
+
+* **notifications:** dispatch download.complete before the episode lookup ([#1071](https://github.com/fliks-app/fliks/issues/1071)) ([dffdc64](https://github.com/fliks-app/fliks/commit/dffdc6454d7ece740d2f7809977f32f3f7184cf5)), closes [#893](https://github.com/fliks-app/fliks/issues/893)
+
+
+### Miscellaneous Chores
+
+* cut the next release as 3.4.0 ([#1076](https://github.com/fliks-app/fliks/issues/1076)) ([a28928b](https://github.com/fliks-app/fliks/commit/a28928b73d191b231542f4916a2074c660fc6b3f))
+
+
+### Code Refactoring
+
+* **plugin-ui:** one list, one dispatcher, one resolver for media menus ([c0ea0e2](https://github.com/fliks-app/fliks/commit/c0ea0e229025b4627f57e424b373143d64cbaa7f))
+
 ## [3.3.0](https://github.com/fliks-app/fliks/compare/v3.2.1...v3.3.0) (2026-08-27)
 
 
