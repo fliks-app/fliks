@@ -13,6 +13,8 @@ import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
 import {
   MetadataService,
   MetadataSearchResult,
+  searchResultIds,
+  searchResultKey,
 } from '../../../../core/services/api/metadata.service';
 import { MediaService } from '../../../../core/services/api/media.service';
 import { ToastService } from '../../../../core/services/toast.service';
@@ -57,7 +59,10 @@ export class MediaDetailIdentifyModalComponent {
   readonly searching = signal(false);
   readonly searched = signal(false);
   readonly results = signal<MetadataSearchResult[]>([]);
-  readonly applyingId = signal<number | null>(null);
+  /** Key of the result being applied, or 'ids' for the typed-ids button. */
+  readonly applyingKey = signal<string | null>(null);
+
+  readonly key = searchResultKey;
 
   open(config: IdentifyModalConfig) {
     this.config.set(config);
@@ -87,8 +92,8 @@ export class MediaDetailIdentifyModalComponent {
       const year = this.formYear();
       const found = title
         ? isSeries
-          ? await this.metadata.searchTv(title, year ?? undefined)
-          : await this.metadata.searchMovie(title, year ?? undefined)
+          ? await this.metadata.searchTv(title, year ?? undefined, undefined, cfg.mediaId)
+          : await this.metadata.searchMovie(title, year ?? undefined, undefined, cfg.mediaId)
         : [];
       this.results.set(found);
       this.searched.set(true);
@@ -107,20 +112,16 @@ export class MediaDetailIdentifyModalComponent {
   async apply(result: MetadataSearchResult) {
     const cfg = this.config();
     if (!cfg || this.isTaken(result)) return;
-    this.applyingId.set(result.tmdbId);
+    this.applyingKey.set(searchResultKey(result));
     try {
-      await this.media.identify(cfg.mediaId, {
-        tmdbId: result.tmdbId,
-        ...(result.tvdbId != null ? { tvdbId: result.tvdbId } : {}),
-        ...(result.imdbId ? { imdbId: result.imdbId } : {}),
-      });
+      await this.media.identify(cfg.mediaId, searchResultIds(result));
       this.toast.success(this.translate.instant('media_detail.identify_success'));
       this.close();
       this.identified.emit();
     } catch {
       // the global interceptor surfaces the 409 / provider error
     } finally {
-      this.applyingId.set(null);
+      this.applyingKey.set(null);
     }
   }
 
@@ -129,12 +130,12 @@ export class MediaDetailIdentifyModalComponent {
     const cfg = this.config();
     if (!cfg) return;
     const target = {
-      ...(this.formTmdbId() != null ? { tmdbId: this.formTmdbId()! } : {}),
+      ...((this.formTmdbId() ?? 0) > 0 ? { tmdbId: this.formTmdbId()! } : {}),
       ...(this.formTvdbId() != null ? { tvdbId: this.formTvdbId()! } : {}),
       ...(this.formImdbId().trim() ? { imdbId: this.formImdbId().trim() } : {}),
     };
     if (!Object.keys(target).length) return;
-    this.applyingId.set(-1);
+    this.applyingKey.set('ids');
     try {
       await this.media.identify(cfg.mediaId, target);
       this.toast.success(this.translate.instant('media_detail.identify_success'));
@@ -143,7 +144,7 @@ export class MediaDetailIdentifyModalComponent {
     } catch {
       // handled by the global interceptor
     } finally {
-      this.applyingId.set(null);
+      this.applyingKey.set(null);
     }
   }
 }

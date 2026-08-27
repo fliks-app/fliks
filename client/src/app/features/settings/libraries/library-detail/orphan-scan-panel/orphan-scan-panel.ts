@@ -9,7 +9,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { UpperCasePipe } from '@angular/common';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { LucideChevronsDownUp, LucideChevronsUpDown } from '@lucide/angular';
+import { LucideCheck, LucideChevronsDownUp, LucideChevronsUpDown } from '@lucide/angular';
 import { MediaType } from '../../../../../core/enums/media-type.enum';
 import { PaginationComponent } from '../../../../../shared/components/pagination/pagination';
 import { ResolveUrlPipe } from '../../../../../core/pipes/resolve-url.pipe';
@@ -17,6 +17,7 @@ import { ToastService } from '../../../../../core/services/toast.service';
 import {
   MetadataService,
   MetadataSearchResult,
+  searchResultKey,
 } from '../../../../../core/services/api/metadata.service';
 import {
   ImportsApiService,
@@ -49,6 +50,7 @@ interface GroupVM {
     UpperCasePipe,
     TranslateModule,
     ResolveUrlPipe,
+    LucideCheck,
     LucideChevronsDownUp,
     LucideChevronsUpDown,
     PaginationComponent,
@@ -205,11 +207,11 @@ export class OrphanScanPanelComponent {
     for (let i = 0; i < this.groups().length; i++) {
       if (this.groups()[i].done) continue;
       if (!this.groups()[i].searched) await this.search(i);
+      // The search selects the first result, so an empty pick is a deselection:
+      // the group is skipped rather than imported against a row nobody chose.
       const vm = this.groups()[i];
-      const pick = vm.pick ?? vm.results[0] ?? null;
-      if (pick) {
-        this.patch(i, { pick });
-        items.push(this.relinkBody(libraryId, vm.group, pick));
+      if (vm.pick) {
+        items.push(this.relinkBody(libraryId, vm.group, vm.pick));
       }
       this.imported.update((n) => n + 1);
     }
@@ -270,11 +272,13 @@ export class OrphanScanPanelComponent {
               (nfo.tvdbId != null && r.tvdbId === nfo.tvdbId),
           )
         : undefined;
+      // Import-all takes the first result when nothing is picked, so pick it
+      // here: the row the import will use is the row the user sees selected.
       this.patch(index, {
         results,
         searching: false,
         searched: true,
-        pick: auto ?? null,
+        pick: auto ?? results[0] ?? null,
         fromNfo: !!auto,
       });
     } catch {
@@ -286,9 +290,15 @@ export class OrphanScanPanelComponent {
     }
   }
 
+  readonly key = searchResultKey;
+
+  isPicked(pick: MetadataSearchResult | null, result: MetadataSearchResult): boolean {
+    return !!pick && searchResultKey(pick) === searchResultKey(result);
+  }
+
   pick(index: number, result: MetadataSearchResult) {
-    const current = this.groups()[index]?.pick;
-    const same = current?.provider === result.provider && current?.tmdbId === result.tmdbId;
+    const current = this.groups()[index]?.pick ?? null;
+    const same = this.isPicked(current, result);
     this.patch(index, { pick: same ? null : result, fromNfo: false });
   }
 

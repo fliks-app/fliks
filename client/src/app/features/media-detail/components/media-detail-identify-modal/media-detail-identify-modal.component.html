@@ -60,8 +60,8 @@
           {{ 'media_detail.identify_search' | translate }}
         </button>
         <button type="button" class="btn btn-outline btn-sm"
-          [disabled]="applyingId() !== null" (click)="applyIds()">
-          @if (applyingId() === -1) { <span class="loading loading-spinner loading-xs"></span> }
+          [disabled]="applyingKey() !== null" (click)="applyIds()">
+          @if (applyingKey() === 'ids') { <span class="loading loading-spinner loading-xs"></span> }
           {{ 'media_detail.identify_apply_ids' | translate }}
         </button>
       </div>
@@ -73,10 +73,10 @@
             <p class="text-sm text-base-content/50 py-4">{{ 'media_detail.identify_no_results' | translate }}</p>
           } @else {
             <div class="grid gap-3 grid-cols-2 sm:grid-cols-4 lg:grid-cols-5">
-              @for (r of results(); track r.tmdbId) {
+              @for (r of results(); track key(r)) {
                 <button type="button"
                   class="flex flex-col gap-1 text-left rounded-lg p-1 hover:bg-base-200 disabled:opacity-40"
-                  [disabled]="applyingId() !== null || isTaken(r)"
+                  [disabled]="applyingKey() !== null || isTaken(r)"
                   [attr.title]="isTaken(r) ? ('media_detail.identify_already_in_library' | translate) : r.title"
                   (click)="apply(r)">
                   <div class="relative aspect-[2/3] w-full rounded bg-base-300 overflow-hidden">
@@ -84,7 +84,7 @@
                       <img [src]="r.posterUrl | resolveUrl" [alt]="r.title"
                         class="h-full w-full object-cover" loading="lazy" />
                     }
-                    @if (applyingId() === r.tmdbId) {
+                    @if (applyingKey() === key(r)) {
                       <span class="absolute inset-0 flex items-center justify-center bg-base-100/70">
                         <span class="loading loading-spinner loading-sm"></span>
                       </span>

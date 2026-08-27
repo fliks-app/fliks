@@ -22,6 +22,27 @@ export interface MetadataSearchResult {
   existingMediaType: MediaType | null;
 }
 
+/**
+ * A result's identity for the UI: TVDB reports `tmdbId: 0` for a work
+ * TheMovieDB does not know, so every one of its rows would share that key.
+ */
+export function searchResultKey(r: MetadataSearchResult): string {
+  return `${r.provider}:${r.tmdbId || 0}:${r.tvdbId || 0}`;
+}
+
+/** The ids worth sending to the API — the 0 above is not an id. */
+export function searchResultIds(r: MetadataSearchResult): {
+  tmdbId?: number;
+  tvdbId?: number;
+  imdbId?: string;
+} {
+  return {
+    ...(r.tmdbId > 0 ? { tmdbId: r.tmdbId } : {}),
+    ...(r.tvdbId ? { tvdbId: r.tvdbId } : {}),
+    ...(r.imdbId ? { imdbId: r.imdbId } : {}),
+  };
+}
+
 /** A cast/crew credit from the provider. */
 export interface MetadataCredit {
   externalId: number;
@@ -109,10 +130,13 @@ export interface DiscoverFilters {
 export class MetadataService {
   private readonly http = inject(HttpClient);
 
-  searchMovie(q: string, year?: number, provider?: string) {
+  /** `mediaId` lets the server search the provider that media is refreshed
+   *  from; an explicit `provider` still wins. */
+  searchMovie(q: string, year?: number, provider?: string, mediaId?: number) {
     let params = new HttpParams().set('q', q);
     if (year != null) params = params.set('year', String(year));
     if (provider) params = params.set('provider', provider);
+    if (mediaId != null) params = params.set('mediaId', String(mediaId));
     return firstValueFrom(
       this.http.get<MetadataSearchResult[]>('/api/metadata/search/movie', {
         params,
@@ -120,10 +144,13 @@ export class MetadataService {
     );
   }
 
-  searchTv(q: string, year?: number, provider?: string) {
+  /** `mediaId` lets the server search the provider that media is refreshed
+   *  from; an explicit `provider` still wins. */
+  searchTv(q: string, year?: number, provider?: string, mediaId?: number) {
     let params = new HttpParams().set('q', q);
     if (year != null) params = params.set('year', String(year));
     if (provider) params = params.set('provider', provider);
+    if (mediaId != null) params = params.set('mediaId', String(mediaId));
     return firstValueFrom(
       this.http.get<MetadataSearchResult[]>('/api/metadata/search/tv', {
         params,

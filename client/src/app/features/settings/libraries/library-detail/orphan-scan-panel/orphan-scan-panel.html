@@ -45,7 +45,7 @@
         @for (item of pagedGroups(); track item.vm.group.groupKey) {
         @let vm = item.vm;
         @let i = item.i;
-          <div class="collapse collapse-arrow bg-base-200/40 border border-base-200"
+          <div class="collapse collapse-arrow bg-base-200 border border-base-300"
             [class.collapse-open]="!vm.collapsed" [class.collapse-close]="vm.collapsed">
             <div class="collapse-title cursor-pointer flex items-center justify-between gap-2 flex-wrap pr-12"
               (click)="toggleCollapse(i)">
@@ -99,11 +99,18 @@
                   }
 
                   <div class="flex flex-col gap-1 max-h-60 overflow-auto">
-                    @for (r of vm.results; track r.tmdbId) {
+                    @for (r of vm.results; track key(r)) {
                       <button type="button"
-                        class="flex items-center gap-3 p-2 rounded text-left hover:bg-base-300/50"
-                        [class.bg-base-300]="vm.pick?.tmdbId === r.tmdbId"
+                        class="relative flex items-center gap-3 p-2 rounded-lg text-left border-2 hover:bg-base-300/50"
+                        [class.bg-base-300]="isPicked(vm.pick, r)"
+                        [class.border-primary]="isPicked(vm.pick, r)"
+                        [class.border-transparent]="!isPicked(vm.pick, r)"
                         (click)="pick(i, r)">
+                        @if (isPicked(vm.pick, r)) {
+                          <span class="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-content">
+                            <svg lucideCheck class="h-3 w-3"></svg>
+                          </span>
+                        }
                         @if (r.posterUrl) {
                           <img [src]="r.posterUrl | resolveUrl: 'thumb'" alt="" loading="lazy"
                             class="h-14 w-auto rounded shrink-0" />
@@ -113,7 +120,7 @@
                         <div class="min-w-0">
                           <div class="flex items-center gap-2">
                             <span class="font-medium truncate">{{ r.title }}</span>
-                            @if (vm.fromNfo && vm.pick?.tmdbId === r.tmdbId) {
+                            @if (vm.fromNfo && isPicked(vm.pick, r)) {
                               <span class="badge badge-ghost badge-xs">{{ 'settings.libraries.scan_from_nfo' | translate }}</span>
                             }
                           </div>

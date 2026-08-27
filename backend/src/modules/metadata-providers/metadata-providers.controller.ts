@@ -31,11 +31,13 @@ export class MetadataProvidersController {
     @Query('q') q: string,
     @Query('year') year?: string,
     @Query('provider') providerName?: string,
+    @Query('mediaId') mediaId?: string,
   ) {
     const query = q?.trim();
     if (!query) return [];
-    const results = await this.searchWithFallback(providerName, (p) =>
-      p.searchMovie(query, year ? +year : undefined),
+    const results = await this.searchWithFallback(
+      providerName ?? (await this.providerPreferredFor(mediaId)),
+      (p) => p.searchMovie(query, year ? +year : undefined),
     );
     return this.enrichWithExisting(results, 'movie');
   }
@@ -45,11 +47,13 @@ export class MetadataProvidersController {
     @Query('q') q: string,
     @Query('year') year?: string,
     @Query('provider') providerName?: string,
+    @Query('mediaId') mediaId?: string,
   ) {
     const query = q?.trim();
     if (!query) return [];
-    const results = await this.searchWithFallback(providerName, (p) =>
-      p.searchTvShow(query, year ? +year : undefined),
+    const results = await this.searchWithFallback(
+      providerName ?? (await this.providerPreferredFor(mediaId)),
+      (p) => p.searchTvShow(query, year ? +year : undefined),
     );
     return this.enrichWithExisting(results, 'series');
   }
@@ -209,6 +213,26 @@ export class MetadataProvidersController {
       yearGte: yearGte ? parseInt(yearGte, 10) : undefined,
       yearLte: yearLte ? parseInt(yearLte, 10) : undefined,
     };
+  }
+
+  /**
+   * Re-identifying a media searches the provider that media is refreshed from,
+   * not the global default — same precedence as the metadata service: the
+   * media's own override, then its library's. Unknown media resolves to
+   * undefined, which `resolve` reads as "no preference".
+   */
+  private async providerPreferredFor(
+    mediaId?: string,
+  ): Promise<string | undefined> {
+    const id = mediaId ? parseInt(mediaId, 10) : NaN;
+    if (!Number.isInteger(id) || id < 1) return undefined;
+    const media = await this.mediaRepo.findOne({
+      where: { id },
+      relations: ['library'],
+    });
+    return (
+      media?.preferredProvider ?? media?.library?.preferredProvider ?? undefined
+    );
   }
 
   private async searchWithFallback(

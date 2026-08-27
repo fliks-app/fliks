@@ -14,7 +14,11 @@ import {
 } from '../../../../../core/services/api/metadata.service';
 import { ToastService } from '../../../../../core/services/toast.service';
 
-const result = (tmdbId: number, title: string): MetadataSearchResult => ({
+const result = (
+  tmdbId: number,
+  title: string,
+  extra: Partial<MetadataSearchResult> = {},
+): MetadataSearchResult => ({
   tmdbId,
   provider: 'tmdb',
   title,
@@ -27,6 +31,7 @@ const result = (tmdbId: number, title: string): MetadataSearchResult => ({
   mediaType: 'movie',
   existingMediaId: null,
   existingMediaType: null,
+  ...extra,
 });
 
 const scanResult = (folders: string[]): OrphanScanResult => ({
@@ -99,6 +104,23 @@ describe('OrphanScanPanelComponent.importAll', () => {
     ]);
   });
 
+  it('skips a group whose default pick was deselected', async () => {
+    const { panel, relinked } = setup(['Alpha', 'Beta']);
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    panel.pick(0, panel.groups()[0].pick!); // clicking the selected row clears it
+
+    expect(await panel.importAll(7)).toBe(1);
+    expect(relinked.map((b) => b.folderName)).toEqual(['Beta']);
+  });
+
+  it('selects the first result as soon as a group is searched', async () => {
+    const { panel } = setup(['Alpha']);
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+
+    expect(panel.groups()[0].pick?.title).toBe('First');
+    expect(panel.groups()[0].fromNfo).toBe(false);
+  });
+
   it('keeps an explicit pick over the first result', async () => {
     const { panel, relinked } = setup(['Alpha']);
     await panel.scanPath('/medias', ['movie'], 'tmdb');
@@ -106,6 +128,45 @@ describe('OrphanScanPanelComponent.importAll', () => {
 
     await panel.importAll(7);
     expect(relinked[0].externalId).toBe('22');
+  });
+});
+
+/** A TVDB work TheMovieDB does not know is reported with `tmdbId: 0`, so every
+ *  such row would answer to the same identity. */
+describe('OrphanScanPanelComponent — picking among TVDB-only results', () => {
+  const tvdb = (tvdbId: number, title: string) =>
+    result(0, title, { provider: 'tvdb', tvdbId });
+
+  it('VERDICT: switches the pick between two results that share tmdbId 0', async () => {
+    const { panel } = setup(['Alpha']);
+    await panel.scanPath('/medias', ['movie'], 'tvdb');
+    const first = tvdb(101, 'First');
+    const second = tvdb(202, 'Second');
+
+    panel.pick(0, first);
+    panel.pick(0, second);
+
+    expect(panel.groups()[0].pick).toBe(second);
+  });
+
+  it('still deselects when the same result is clicked twice', async () => {
+    const { panel } = setup(['Alpha']);
+    await panel.scanPath('/medias', ['movie'], 'tvdb');
+    const first = tvdb(101, 'First');
+
+    panel.pick(0, first);
+    panel.pick(0, { ...first });
+
+    expect(panel.groups()[0].pick).toBeNull();
+  });
+
+  it('marks only the picked row as selected', () => {
+    const { panel } = setup(['Alpha']);
+    const first = tvdb(101, 'First');
+    const second = tvdb(202, 'Second');
+
+    expect(panel.isPicked(first, first)).toBe(true);
+    expect(panel.isPicked(first, second)).toBe(false);
   });
 });
 
