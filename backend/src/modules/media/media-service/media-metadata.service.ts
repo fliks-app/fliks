@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Media } from '../entities/media.entity';
@@ -59,6 +65,116 @@ export class MediaMetadataService {
     });
     if (!lib) return undefined;
     return { language: lib.metadataLanguage, region: lib.metadataRegion };
+  }
+
+  /**
+   * Point a media at a different work: write the external ids the caller
+   * picked, re-pull everything from the provider, then drop the seasons and
+   * episodes the new work does not have.
+   *
+   * What survives is the point. `refreshSeriesEpisodes` upserts, so an episode
+   * whose season/episode numbers exist in the new work keeps its row — and with
+   * it every file, playback state, marker, like and playlist entry that points
+   * at it. Only the surplus is deleted, and there the file rows survive too:
+   * `media_files.episodeId` and `subtitle_files.episodeId` are ON DELETE SET
+   * NULL, so the files go back to unmatched rather than away. Playback states
+   * and markers on those episodes do go — they described content this title no
+   * longer contains.
+   */
+  async identify(
+    id: number,
+    // Identification only ever sets ids; an omitted field is left untouched.
+    target: {
+      tmdbId?: number;
+      tvdbId?: number;
+      imdbId?: string;
+      preferredProvider?: string;
+    },
+  ): Promise<Media> {
+    const media = await this.mediaRepo.findOne({ where: { id } });
+    if (!media) throw new NotFoundException(`Media #${id} not found`);
+
+    if (target.tmdbId == null && target.tvdbId == null && !target.imdbId) {
+      throw new BadRequestException(
+        'Provide at least one external id to identify this media against',
+      );
+    }
+
+    // `UQ_media_type_tmdbId` would fail mid-operation, after the ids were
+    // written and before the refresh — refuse up front and say which title.
+    if (target.tmdbId != null && target.tmdbId !== media.tmdbId) {
+      const clash = await this.mediaRepo.findOne({
+        where: { tmdbId: target.tmdbId, type: media.type },
+      });
+      if (clash && clash.id !== id) {
+        throw new ConflictException(
+          `"${clash.title}" (#${clash.id}) already uses TMDB id ${target.tmdbId} in this library`,
+        );
+      }
+    }
+
+    const before = `"${media.title}" tmdb=${media.tmdbId ?? '-'} tvdb=${media.tvdbId ?? '-'}`;
+
+    await this.mediaRepo.update(id, {
+      ...(target.tmdbId !== undefined ? { tmdbId: target.tmdbId } : {}),
+      ...(target.tvdbId !== undefined ? { tvdbId: target.tvdbId } : {}),
+      ...(target.imdbId !== undefined ? { imdbId: target.imdbId } : {}),
+      ...(target.preferredProvider !== undefined
+        ? { preferredProvider: target.preferredProvider }
+        : {}),
+    });
+
+    const refreshed = await this.refreshMetadata(id);
+
+    if (refreshed.type === MediaType.SERIES) {
+      await this.dropSeasonsAbsentFromProvider(refreshed);
+    }
+
+    this.log.log(
+      `identify: ${before} -> "${refreshed.title}" tmdb=${refreshed.tmdbId ?? '-'} tvdb=${refreshed.tvdbId ?? '-'}`,
+    );
+    return (await this.mediaRepo.findOne({ where: { id } })) ?? refreshed;
+  }
+
+  /**
+   * Deletes the seasons and episodes the provider does not list, which after an
+   * identification is precisely what the previous work left behind: the refresh
+   * upserts everything the new work has, so whatever it did not touch is old.
+   */
+  private async dropSeasonsAbsentFromProvider(media: Media): Promise<void> {
+    const seasons = await this.seasonRepo.find({
+      where: { media: { id: media.id } },
+      relations: ['episodes'],
+    });
+    const { provider, externalId } = await this.resolveProviderForMedia(media);
+    const override = await this.loadLibraryOverride(media);
+    const live = await provider.getTvShowSeasons(externalId, override);
+    const liveSeasons = new Map(
+      live.map((sd) => [
+        sd.seasonNumber,
+        new Set((sd.episodes ?? []).map((e) => e.episodeNumber)),
+      ]),
+    );
+
+    for (const season of seasons) {
+      const liveEpisodes = liveSeasons.get(season.seasonNumber);
+      if (!liveEpisodes) {
+        await this.seasonRepo.remove(season);
+        this.log.log(
+          `identify: dropped S${season.seasonNumber} of media#${media.id} — absent from the new work`,
+        );
+        continue;
+      }
+      const surplus = (season.episodes ?? []).filter(
+        (ep) => !liveEpisodes.has(ep.episodeNumber),
+      );
+      if (surplus.length) {
+        await this.episodeRepo.remove(surplus);
+        this.log.log(
+          `identify: dropped ${surplus.length} episode(s) of S${season.seasonNumber} on media#${media.id} — absent from the new work`,
+        );
+      }
+    }
   }
 
   async refreshMetadata(id: number): Promise<Media> {
