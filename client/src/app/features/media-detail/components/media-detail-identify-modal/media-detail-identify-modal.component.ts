@@ -13,6 +13,8 @@ import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
 import {
   MetadataService,
   MetadataSearchResult,
+  searchResultIds,
+  searchResultKey,
 } from '../../../../core/services/api/metadata.service';
 import { MediaService } from '../../../../core/services/api/media.service';
 import { ToastService } from '../../../../core/services/toast.service';
@@ -57,9 +59,10 @@ export class MediaDetailIdentifyModalComponent {
   readonly searching = signal(false);
   readonly searched = signal(false);
   readonly results = signal<MetadataSearchResult[]>([]);
-  /** Index of the result being applied, or -1 for the typed-ids button. Not the
-   *  tmdbId: a TVDB result reports 0 and every card would answer to it. */
-  readonly applyingId = signal<number | null>(null);
+  /** Key of the result being applied, or 'ids' for the typed-ids button. */
+  readonly applyingKey = signal<string | null>(null);
+
+  readonly key = searchResultKey;
 
   open(config: IdentifyModalConfig) {
     this.config.set(config);
@@ -106,25 +109,19 @@ export class MediaDetailIdentifyModalComponent {
     return result.existingMediaId != null && result.existingMediaId !== cfg?.mediaId;
   }
 
-  async apply(result: MetadataSearchResult, index: number) {
+  async apply(result: MetadataSearchResult) {
     const cfg = this.config();
     if (!cfg || this.isTaken(result)) return;
-    this.applyingId.set(index);
+    this.applyingKey.set(searchResultKey(result));
     try {
-      // A TVDB work with no TheMovieDB cross-reference reports tmdbId 0, which
-      // the API rejects — send an id only when the provider really has one.
-      await this.media.identify(cfg.mediaId, {
-        ...(result.tmdbId > 0 ? { tmdbId: result.tmdbId } : {}),
-        ...(result.tvdbId != null ? { tvdbId: result.tvdbId } : {}),
-        ...(result.imdbId ? { imdbId: result.imdbId } : {}),
-      });
+      await this.media.identify(cfg.mediaId, searchResultIds(result));
       this.toast.success(this.translate.instant('media_detail.identify_success'));
       this.close();
       this.identified.emit();
     } catch {
       // the global interceptor surfaces the 409 / provider error
     } finally {
-      this.applyingId.set(null);
+      this.applyingKey.set(null);
     }
   }
 
@@ -138,7 +135,7 @@ export class MediaDetailIdentifyModalComponent {
       ...(this.formImdbId().trim() ? { imdbId: this.formImdbId().trim() } : {}),
     };
     if (!Object.keys(target).length) return;
-    this.applyingId.set(-1);
+    this.applyingKey.set('ids');
     try {
       await this.media.identify(cfg.mediaId, target);
       this.toast.success(this.translate.instant('media_detail.identify_success'));
@@ -147,7 +144,7 @@ export class MediaDetailIdentifyModalComponent {
     } catch {
       // handled by the global interceptor
     } finally {
-      this.applyingId.set(null);
+      this.applyingKey.set(null);
     }
   }
 }

@@ -17,6 +17,7 @@ import { ToastService } from '../../../../../core/services/toast.service';
 import {
   MetadataService,
   MetadataSearchResult,
+  searchResultKey,
 } from '../../../../../core/services/api/metadata.service';
 import {
   ImportsApiService,
@@ -286,9 +287,15 @@ export class OrphanScanPanelComponent {
     }
   }
 
+  readonly key = searchResultKey;
+
+  isPicked(pick: MetadataSearchResult | null, result: MetadataSearchResult): boolean {
+    return !!pick && searchResultKey(pick) === searchResultKey(result);
+  }
+
   pick(index: number, result: MetadataSearchResult) {
-    const current = this.groups()[index]?.pick;
-    const same = current?.provider === result.provider && current?.tmdbId === result.tmdbId;
+    const current = this.groups()[index]?.pick ?? null;
+    const same = this.isPicked(current, result);
     this.patch(index, { pick: same ? null : result, fromNfo: false });
   }
 

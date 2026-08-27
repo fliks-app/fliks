@@ -62,7 +62,7 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
   it('VERDICT: sends no tmdbId when the provider has none, so the API accepts it', async () => {
     const { cmp, identify } = setup();
 
-    await cmp.apply(tvdbOnly, 0);
+    await cmp.apply(tvdbOnly);
 
     expect(identify).toHaveBeenCalledWith(795, { tvdbId: 4242, imdbId: 'tt0499308' });
   });
@@ -70,7 +70,7 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
   it('still sends a real tmdbId', async () => {
     const { cmp, identify } = setup();
 
-    await cmp.apply({ ...tvdbOnly, tmdbId: 77 }, 0);
+    await cmp.apply({ ...tvdbOnly, tmdbId: 77 });
 
     expect(identify).toHaveBeenCalledWith(795, { tmdbId: 77, tvdbId: 4242, imdbId: 'tt0499308' });
   });
@@ -84,11 +84,13 @@ describe('MediaDetailIdentifyModalComponent — a TVDB-only result', () => {
     expect(searchTv).toHaveBeenCalledWith('A Series', undefined, undefined, 795);
   });
 
-  it('keys the in-flight spinner by row, not by the shared 0 id', async () => {
+  it('keys the in-flight spinner by result, not by the shared 0 id', async () => {
     const { cmp } = setup();
-    const pending = cmp.apply(tvdbOnly, 2);
+    const other = { ...tvdbOnly, tvdbId: 5150 };
+    const pending = cmp.apply(tvdbOnly);
 
-    expect(cmp.applyingId()).toBe(2);
+    expect(cmp.applyingKey()).toBe(cmp.key(tvdbOnly));
+    expect(cmp.applyingKey()).not.toBe(cmp.key(other));
     await pending;
   });
 });

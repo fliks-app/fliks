@@ -99,10 +99,10 @@
                   }
 
                   <div class="flex flex-col gap-1 max-h-60 overflow-auto">
-                    @for (r of vm.results; track r.tmdbId) {
+                    @for (r of vm.results; track key(r)) {
                       <button type="button"
                         class="flex items-center gap-3 p-2 rounded text-left hover:bg-base-300/50"
-                        [class.bg-base-300]="vm.pick?.tmdbId === r.tmdbId"
+                        [class.bg-base-300]="isPicked(vm.pick, r)"
                         (click)="pick(i, r)">
                         @if (r.posterUrl) {
                           <img [src]="r.posterUrl | resolveUrl: 'thumb'" alt="" loading="lazy"
@@ -113,7 +113,7 @@
                         <div class="min-w-0">
                           <div class="flex items-center gap-2">
                             <span class="font-medium truncate">{{ r.title }}</span>
-                            @if (vm.fromNfo && vm.pick?.tmdbId === r.tmdbId) {
+                            @if (vm.fromNfo && isPicked(vm.pick, r)) {
                               <span class="badge badge-ghost badge-xs">{{ 'settings.libraries.scan_from_nfo' | translate }}</span>
                             }
                           </div>

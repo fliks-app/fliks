@@ -22,6 +22,27 @@ export interface MetadataSearchResult {
   existingMediaType: MediaType | null;
 }
 
+/**
+ * A result's identity for the UI: TVDB reports `tmdbId: 0` for a work
+ * TheMovieDB does not know, so every one of its rows would share that key.
+ */
+export function searchResultKey(r: MetadataSearchResult): string {
+  return `${r.provider}:${r.tmdbId || 0}:${r.tvdbId || 0}`;
+}
+
+/** The ids worth sending to the API — the 0 above is not an id. */
+export function searchResultIds(r: MetadataSearchResult): {
+  tmdbId?: number;
+  tvdbId?: number;
+  imdbId?: string;
+} {
+  return {
+    ...(r.tmdbId > 0 ? { tmdbId: r.tmdbId } : {}),
+    ...(r.tvdbId ? { tvdbId: r.tvdbId } : {}),
+    ...(r.imdbId ? { imdbId: r.imdbId } : {}),
+  };
+}
+
 /** A cast/crew credit from the provider. */
 export interface MetadataCredit {
   externalId: number;
