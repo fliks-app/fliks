@@ -50,6 +50,8 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
 
     /// UserDefaults key under which the id → relative-path map is persisted.
     private static let assetsDefaultsKey = "fliks_offline_assets"
+    /// UserDefaults key for the ids whose transfer actually finished.
+    private static let completedDefaultsKey = "fliks_offline_completed"
 
     private var downloadSession: AVAssetDownloadURLSession!
     /// taskDescription (our download id) → active aggregate download task.
@@ -64,6 +66,11 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
     /// rule for downloaded HLS assets is to persist the relative path and
     /// rebuild it against `NSHomeDirectory()` at use time.
     private var relativePathById: [String: String] = [:]
+    /// Ids whose transfer finished. A path in `relativePathById` only says
+    /// where the bundle WILL land — AVFoundation hands it over up front, and
+    /// the partial `.movpkg` exists on disk from the first segment — so the
+    /// path alone can't answer "is this downloaded".
+    private var completedIds: Set<String> = []
     /// id → notification strings supplied by the WebView (already localized via
     /// ngx-translate so no user-facing text is hardcoded in native).
     private var notifById: [String: (title: String, complete: String, failed: String)] = [:]
@@ -73,7 +80,13 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         // survive an app restart.
         if let saved = UserDefaults.standard.dictionary(forKey: Self.assetsDefaultsKey) as? [String: String] {
             relativePathById = saved
-            for id in saved.keys { progressById[id] = 100 }
+            // Installs that predate the completed set only ever persisted paths
+            // for downloads they reported as done — adopt them as such.
+            completedIds = Set(
+                UserDefaults.standard.array(forKey: Self.completedDefaultsKey) as? [String]
+                    ?? Array(saved.keys)
+            )
+            for id in completedIds { progressById[id] = 100 }
         }
 
         // A background session survives app suspension AND termination. It must
@@ -223,6 +236,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         activeTasks[id]?.cancel()
         activeTasks.removeValue(forKey: id)
         progressById.removeValue(forKey: id)
+        completedIds.remove(id)
         notifById.removeValue(forKey: id)
 
         // Delete the on-disk bundle (resolved from the stored relative path).
@@ -230,7 +244,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             try? FileManager.default.removeItem(at: url)
         }
         relativePathById.removeValue(forKey: id)
-        persistAssetLocations()
+        persistAssetState()
 
         // Drop any lingering completion banner for this download.
         let notifId = "download-\(id)"
@@ -268,7 +282,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             self.activeTasks = live
 
             // Completed downloads that still exist on disk.
-            for (id, _) in self.relativePathById where live[id] == nil {
+            for id in self.completedIds where live[id] == nil {
                 guard self.resolvedAssetURL(id: id) != nil else { continue }
                 arr.append(["id": id, "progress": 100, "state": "completed"])
             }
@@ -287,7 +301,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             call.resolve(["downloaded": false])
             return
         }
-        call.resolve(["downloaded": resolvedAssetURL(id: id) != nil])
+        call.resolve(["downloaded": completedIds.contains(id) && resolvedAssetURL(id: id) != nil])
     }
 
     /// Return the local `file://` URL for a completed offline asset so the
@@ -323,7 +337,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
     ) {
         guard let id = aggregateAssetDownloadTask.taskDescription else { return }
         relativePathById[id] = location.relativePath
-        persistAssetLocations()
+        persistAssetState()
     }
 
     /// Progress callback — driven by loaded time-ranges, the reliable measure
@@ -359,15 +373,21 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
 
         if let error = error as NSError?, error.code != NSURLErrorCancelled {
             progressById.removeValue(forKey: id)
-            // A failed download leaves no usable bundle — drop its dangling
-            // location so getDownloads / isDownloaded don't report it as ready.
+            // A failed download leaves a partial bundle behind. Delete it and
+            // drop its location so nothing reports it as ready or plays it.
+            if let partial = resolvedAssetURL(id: id) {
+                try? FileManager.default.removeItem(at: partial)
+            }
             relativePathById.removeValue(forKey: id)
-            persistAssetLocations()
+            completedIds.remove(id)
+            persistAssetState()
             NSLog("[Download] task \(id) failed: [\(error.domain) \(error.code)] \(error.localizedDescription)")
             notifyListeners("downloadFailed", data: ["id": id, "progress": 0, "state": "failed"])
             postNotification(id: id, success: false)
         } else if error == nil {
             progressById[id] = 100
+            completedIds.insert(id)
+            persistAssetState()
             notifyListeners("downloadComplete", data: [
                 "id": id,
                 "progress": 100,
@@ -408,8 +428,9 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
 
     // MARK: - Persistence
 
-    private func persistAssetLocations() {
+    private func persistAssetState() {
         UserDefaults.standard.set(relativePathById, forKey: Self.assetsDefaultsKey)
+        UserDefaults.standard.set(Array(completedIds), forKey: Self.completedDefaultsKey)
     }
 
     /// Rebuild the absolute asset URL from the stored relative path and confirm
