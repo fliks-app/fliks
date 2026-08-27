@@ -3,6 +3,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
+import {
+  CardActionsService,
+  type CardAction,
+} from '../../../core/services/card-actions.service';
 import { MediaInfoHeaderComponent } from './media-info-header';
 import { AuthService } from '../../../core/services/auth.service';
 import { OfflinePlaybackSyncService } from '../../../core/services/offline-playback-sync.service';
@@ -208,24 +212,28 @@ function readItem(el: Element): CapturedItem {
   };
 }
 
-/** Scoped to the desktop layout's dropdown — mobile renders an identical
- *  second copy of the same `moreMenuItems` template via its own outlet. */
-function menuItems(root: HTMLElement): CapturedItem[] {
-  const desktopMenu = root.querySelectorAll('app-dropdown-menu')[1];
-  if (!desktopMenu) return [];
-  return Array.from(desktopMenu.querySelectorAll('.dropdown-item')).map(readItem);
+/**
+ * The rows the header hands to the shared card actions panel. The header no
+ * longer renders the menu itself — it registers the actions and the globally
+ * mounted panel draws them — so the assertions read the registry, which is the
+ * header's actual output.
+ */
+function menuActions(fixture: ComponentFixture<MediaInfoHeaderComponent>): CardAction[] {
+  fixture.componentInstance.openActionsMenu(document.createElement('button'));
+  return TestBed.inject(CardActionsService).actions() ?? [];
 }
 
-function labels(root: HTMLElement): string[] {
-  return menuItems(root).map((i) => i.label);
+function menuItems(fixture: ComponentFixture<MediaInfoHeaderComponent>): CapturedItem[] {
+  return menuActions(fixture).map((a) => ({
+    label: a.labelKey ?? a.label ?? '',
+    icon: a.icon ?? null,
+    danger: a.tone === 'danger',
+    disabled: a.disabled === true,
+  }));
 }
 
-/** Raw elements behind {@link menuItems}, in the same order — needed to
- *  dispatch a real click rather than just inspect the rendered row. */
-function dropdownButtons(root: HTMLElement): HTMLButtonElement[] {
-  const desktopMenu = root.querySelectorAll('app-dropdown-menu')[1];
-  if (!desktopMenu) return [];
-  return Array.from(desktopMenu.querySelectorAll('.dropdown-item')) as HTMLButtonElement[];
+function labels(fixture: ComponentFixture<MediaInfoHeaderComponent>): string[] {
+  return menuItems(fixture).map((i) => i.label);
 }
 
 // ── The permission matrix ──
@@ -250,13 +258,14 @@ const SERIES: Omit<MediaFixture, 'mediaType'> = {
 describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
   it('owner (isAdmin): movie root', async () => {
     const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE });
-    expect(labels(fixture.nativeElement)).toEqual([
+    expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'tracking.menu_item',
       'media_detail.edit_profiles',
       'media_detail.edit_library',
       'media_detail.edit_subtitles',
       'media_detail.refresh_metadata',
+      'media_detail.identify',
       'media_detail.analyze',
       'media_detail.unmonitor',
       'media_detail.delete_from_library',
@@ -265,13 +274,14 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
 
   it('owner (isAdmin): series root', async () => {
     const fixture = await createFixture(OWNER, { mediaType: 'series', ...SERIES });
-    expect(labels(fixture.nativeElement)).toEqual([
+    expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'media_detail.mark_series_watched',
       'tracking.menu_item',
       'media_detail.edit_profiles',
       'media_detail.edit_library',
       'media_detail.refresh_metadata',
+      'media_detail.identify',
       'media_detail.analyze',
       'media_detail.unmonitor',
       'media_detail.delete_from_library',
@@ -280,7 +290,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
 
   it('media.read only: movie root', async () => {
     const fixture = await createFixture(READER, { mediaType: 'movie', ...MOVIE });
-    expect(labels(fixture.nativeElement)).toEqual([
+    expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'tracking.menu_item',
       'media_detail.edit_subtitles',
@@ -289,7 +299,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
 
   it('media.read only: series root', async () => {
     const fixture = await createFixture(READER, { mediaType: 'series', ...SERIES });
-    expect(labels(fixture.nativeElement)).toEqual([
+    expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'media_detail.mark_series_watched',
       'tracking.menu_item',
@@ -298,7 +308,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
 
   it('media.read + requests.create: movie root', async () => {
     const fixture = await createFixture(REQUESTER, { mediaType: 'movie', ...MOVIE });
-    expect(labels(fixture.nativeElement)).toEqual([
+    expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'tracking.menu_item',
       'media_detail.request_media',
@@ -309,7 +319,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
 
   it('media.read + requests.create: series root', async () => {
     const fixture = await createFixture(REQUESTER, { mediaType: 'series', ...SERIES });
-    expect(labels(fixture.nativeElement)).toEqual([
+    expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'media_detail.mark_series_watched',
       'tracking.menu_item',
@@ -320,7 +330,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
 
   it('media.delete: movie root', async () => {
     const fixture = await createFixture(DELETER, { mediaType: 'movie', ...MOVIE });
-    expect(labels(fixture.nativeElement)).toEqual([
+    expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'tracking.menu_item',
       'media_detail.edit_subtitles',
@@ -330,7 +340,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
 
   it('media.delete: series root', async () => {
     const fixture = await createFixture(DELETER, { mediaType: 'series', ...SERIES });
-    expect(labels(fixture.nativeElement)).toEqual([
+    expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'media_detail.mark_series_watched',
       'tracking.menu_item',
@@ -344,12 +354,12 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
 describe('MediaInfoHeaderComponent — destructive-item styling and ephemeral guards', () => {
   it('Delete and Request deletion render with danger styling; nothing else does', async () => {
     const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE });
-    const items = menuItems(fixture.nativeElement);
+    const items = menuItems(fixture);
     const dangerLabels = items.filter((i) => i.danger).map((i) => i.label);
     expect(dangerLabels).toEqual(['media_detail.delete_from_library']);
 
     const requester = await createFixture(REQUESTER, { mediaType: 'movie', ...MOVIE });
-    const requesterDanger = menuItems(requester.nativeElement).filter((i) => i.danger).map((i) => i.label);
+    const requesterDanger = menuItems(requester).filter((i) => i.danger).map((i) => i.label);
     expect(requesterDanger).toEqual(['media_detail.request_deletion']);
   });
 
@@ -359,7 +369,7 @@ describe('MediaInfoHeaderComponent — destructive-item styling and ephemeral gu
       { mediaType: 'movie', ...MOVIE },
       { deleteRequestPending: true },
     );
-    expect(labels(fixture.nativeElement)).not.toContain('media_detail.request_deletion');
+    expect(labels(fixture)).not.toContain('media_detail.request_deletion');
   });
 
   it('an existing whole-title request hides Request media even though the permission still holds', async () => {
@@ -368,27 +378,27 @@ describe('MediaInfoHeaderComponent — destructive-item styling and ephemeral gu
       ...MOVIE,
       userHasOpenWholeRequest: true,
     });
-    expect(labels(fixture.nativeElement)).not.toContain('media_detail.request_media');
+    expect(labels(fixture)).not.toContain('media_detail.request_media');
   });
 
   it('a movie that already has a file hides Request media (nothing left to request)', async () => {
     const fixture = await createFixture(REQUESTER, { mediaType: 'movie', ...MOVIE, selectedFileId: 42 });
-    expect(labels(fixture.nativeElement)).not.toContain('media_detail.request_media');
+    expect(labels(fixture)).not.toContain('media_detail.request_media');
   });
 
   it('a series root still offers Request media even with files present — partial availability is requestable', async () => {
     const fixture = await createFixture(REQUESTER, { mediaType: 'series', ...SERIES, selectedFileId: 42 });
-    expect(labels(fixture.nativeElement)).toContain('media_detail.request_media');
+    expect(labels(fixture)).toContain('media_detail.request_media');
   });
 
   it('sharing-disabled hides Recommend for every role, including the owner', async () => {
     const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, sharingDisabled: true });
-    expect(labels(fixture.nativeElement)).not.toContain('recommend.menu_item');
+    expect(labels(fixture)).not.toContain('recommend.menu_item');
   });
 
   it('TV form factor hides Recommend for every role, including the owner', async () => {
     const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, isTv: true });
-    expect(labels(fixture.nativeElement)).not.toContain('recommend.menu_item');
+    expect(labels(fixture)).not.toContain('recommend.menu_item');
   });
 
   it('an episode-level header hides Edit profiles/library and Request deletion for an owner — the parent never binds those inputs there, regardless of permission', async () => {
@@ -398,7 +408,7 @@ describe('MediaInfoHeaderComponent — destructive-item styling and ephemeral gu
       episodeId: 999,
       episodeInstance: true,
     });
-    const shown = labels(fixture.nativeElement);
+    const shown = labels(fixture);
     expect(shown).not.toContain('media_detail.edit_profiles');
     expect(shown).not.toContain('media_detail.edit_library');
     expect(shown).not.toContain('media_detail.request_deletion');
@@ -410,10 +420,10 @@ describe('MediaInfoHeaderComponent — destructive-item styling and ephemeral gu
 
   it('the series-watched toggle swaps its label with the live watched state', async () => {
     const unwatched = await createFixture(OWNER, { mediaType: 'series', ...SERIES, watched: false });
-    expect(labels(unwatched.nativeElement)).toContain('media_detail.mark_series_watched');
+    expect(labels(unwatched)).toContain('media_detail.mark_series_watched');
 
     const watched = await createFixture(OWNER, { mediaType: 'series', ...SERIES, watched: true });
-    expect(labels(watched.nativeElement)).toContain('media_detail.mark_series_unwatched');
+    expect(labels(watched)).toContain('media_detail.mark_series_unwatched');
   });
 });
 
@@ -437,13 +447,13 @@ describe('MediaInfoHeaderComponent — media.actions merges with plugin contribu
         ],
       },
     });
-    const shown = labels(fixture.nativeElement);
+    const shown = labels(fixture);
     expect(shown.indexOf('recommend.menu_item')).toBe(0);
     expect(shown.indexOf('x.between')).toBe(1);
     expect(shown.indexOf('tracking.menu_item')).toBeGreaterThan(1);
   });
 
-  it('an unrecognised icon renders the generic glyph, never blank', async () => {
+  it('passes an unrecognised icon name through — the panel owns the fallback glyph', async () => {
     const fixture = await createFixture(OWNER, {
       mediaType: 'movie',
       ...MOVIE,
@@ -460,8 +470,8 @@ describe('MediaInfoHeaderComponent — media.actions merges with plugin contribu
         ],
       },
     });
-    const item = menuItems(fixture.nativeElement).find((i) => i.label === 'x.weird');
-    expect(item?.icon).toBe('lucideCircle');
+    const item = menuItems(fixture).find((i) => i.label === 'x.weird');
+    expect(item?.icon).toBe('not-a-real-lucide-name');
   });
 
   it('VERDICT: an unknown actionId renders no row — fail closed, not a dead click', async () => {
@@ -480,7 +490,7 @@ describe('MediaInfoHeaderComponent — media.actions merges with plugin contribu
         ],
       },
     });
-    expect(labels(fixture.nativeElement)).not.toContain('x.bogus');
+    expect(labels(fixture)).not.toContain('x.bogus');
   });
 
   it('VERDICT: an unrecognised action.kind renders no row', async () => {
@@ -493,7 +503,7 @@ describe('MediaInfoHeaderComponent — media.actions merges with plugin contribu
         ],
       },
     });
-    expect(labels(fixture.nativeElement)).not.toContain('x.broken');
+    expect(labels(fixture)).not.toContain('x.broken');
   });
 
   it('a plugin can reuse a core actionId (its handler), but must bring its own `when` — core\'s `when` is per-contribution, not per-actionId', async () => {
@@ -510,10 +520,10 @@ describe('MediaInfoHeaderComponent — media.actions merges with plugin contribu
       ],
     };
     const reader = await createFixture(READER, { mediaType: 'movie', ...MOVIE, registry: gatedRegistry });
-    expect(labels(reader.nativeElement)).not.toContain('x.delete_alias');
+    expect(labels(reader)).not.toContain('x.delete_alias');
 
     const deleter = await createFixture(DELETER, { mediaType: 'movie', ...MOVIE, registry: gatedRegistry });
-    expect(labels(deleter.nativeElement)).toContain('x.delete_alias');
+    expect(labels(deleter)).toContain('x.delete_alias');
   });
 
   it('a plugin cannot widen a core action: an alias with no `when` stays hidden from a role core hides it from', async () => {
@@ -531,10 +541,10 @@ describe('MediaInfoHeaderComponent — media.actions merges with plugin contribu
       ],
     };
     const reader = await createFixture(READER, { mediaType: 'movie', ...MOVIE, registry: wideOpen });
-    expect(labels(reader.nativeElement)).not.toContain('x.delete_wide');
+    expect(labels(reader)).not.toContain('x.delete_wide');
 
     const deleter = await createFixture(DELETER, { mediaType: 'movie', ...MOVIE, registry: wideOpen });
-    expect(labels(deleter.nativeElement)).toContain('x.delete_wide');
+    expect(labels(deleter)).toContain('x.delete_wide');
   });
 });
 
@@ -566,14 +576,14 @@ describe('MediaInfoHeaderComponent — release-picker actions are plugin-contrib
 
   it('VERDICT: with no plugin installed, neither entry exists — core carries no acquisition menu item', async () => {
     const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE });
-    const shown = labels(fixture.nativeElement);
+    const shown = labels(fixture);
     expect(shown).not.toContain('x.grab_best');
     expect(shown).not.toContain('x.search_releases');
   });
 
   it('a plugin contribution surfaces both actions and routes clicks to core\'s own outputs', async () => {
     const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, registry: releasePickerRegistry });
-    const shown = labels(fixture.nativeElement);
+    const shown = labels(fixture);
     const grabIdx = shown.indexOf('x.grab_best');
     const searchIdx = shown.indexOf('x.search_releases');
     expect(grabIdx).toBeGreaterThanOrEqual(0);
@@ -584,9 +594,9 @@ describe('MediaInfoHeaderComponent — release-picker actions are plugin-contrib
     fixture.componentInstance.grabBest.subscribe(() => (grabbed = true));
     fixture.componentInstance.loadReleases.subscribe(() => (searched = true));
 
-    const buttons = dropdownButtons(fixture.nativeElement);
-    buttons[grabIdx].click();
-    buttons[searchIdx].click();
+    const rows = menuActions(fixture);
+    rows[grabIdx].run();
+    rows[searchIdx].run();
 
     expect(grabbed).toBe(true);
     expect(searched).toBe(true);
@@ -596,9 +606,9 @@ describe('MediaInfoHeaderComponent — release-picker actions are plugin-contrib
     // Busy swaps the icon slot for a spinner, which shifts readItem's label lookup —
     // so locate the row by index (idle fixture) rather than by its now-blank label.
     const idle = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, registry: releasePickerRegistry });
-    const grabIdx = labels(idle.nativeElement).indexOf('x.grab_best');
+    const grabIdx = labels(idle).indexOf('x.grab_best');
     expect(grabIdx).toBeGreaterThanOrEqual(0);
-    expect(dropdownButtons(idle.nativeElement)[grabIdx].disabled).toBe(false);
+    expect(menuActions(idle)[grabIdx].disabled).toBe(false);
 
     const busy = await createFixture(OWNER, {
       mediaType: 'movie',
@@ -607,7 +617,7 @@ describe('MediaInfoHeaderComponent — release-picker actions are plugin-contrib
       grabBusy: 'best',
       releasesLoading: true,
     });
-    expect(dropdownButtons(busy.nativeElement)[grabIdx].disabled).toBe(true);
+    expect(menuActions(busy)[grabIdx].disabled).toBe(true);
   });
 });
 
