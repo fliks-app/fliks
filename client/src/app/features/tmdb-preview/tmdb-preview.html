@@ -27,13 +27,16 @@
           @if (seasonScope(r) || qualityProfileName(r) || languageProfileName(r)) {
             <div class="flex flex-col gap-0.5 text-sm text-base-content/60">
               @if (seasonScope(r)) {
-                <span>{{ 'requests.seasons_label' | translate }} {{ seasonScope(r) }}</span>
+                <span>
+                  {{ (r.seasons!.length === 1 ? 'requests.seasons_label_one' : 'requests.seasons_label_other') | translate }}
+                  {{ seasonScope(r) }}
+                </span>
               }
               @if (qualityProfileName(r)) {
-                <span>{{ 'discover.quality_profile' | translate }}: {{ qualityProfileName(r) }}</span>
+                <span>{{ 'requests.quality_profile_label' | translate }} {{ qualityProfileName(r) }}</span>
               }
               @if (languageProfileName(r)) {
-                <span>{{ 'discover.language_profile' | translate }}: {{ languageProfileName(r) }}</span>
+                <span>{{ 'requests.language_profile_label' | translate }} {{ languageProfileName(r) }}</span>
               }
             </div>
           }

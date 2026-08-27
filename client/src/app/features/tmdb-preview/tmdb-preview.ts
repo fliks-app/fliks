@@ -133,16 +133,11 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
    *  PENDING with the media already in the library. */
   readonly pendingRequests = signal<FliksRequestRow[]>([]);
 
-  /** Whether a pending request makes a raw import the wrong move — the scope
-   *  rule `hasBlockingRequest` already applies to requesters: any pending
-   *  request for a movie, only a whole-series one for a series. */
-  readonly pendingBlocksImport = computed(() => {
-    const pending = this.pendingRequests();
-    if (!pending.length) return false;
-    return this.type() === 'series'
-      ? pending.some((r) => !r.seasons?.length)
-      : true;
-  });
+  /** Any pending request makes a raw import the wrong move, a per-season one
+   *  included: importing the whole series would satisfy a scope nobody asked
+   *  for, and the request only gets adopted if the profiles happen to cover it.
+   *  Approving it is the way in. */
+  readonly pendingBlocksImport = computed(() => this.pendingRequests().length > 0);
 
   /** The import button stands down while a pending request would be bypassed —
    *  kept apart from `canImport`, which `canRequest` negates as a role test. */

@@ -41,7 +41,7 @@
 
     @if (request().mediaType === 'series' && request().seasons?.length) {
       <p class="text-sm text-base-content/70 m-0">
-        <span class="text-base-content/50">{{ 'requests.seasons_label' | translate }} · </span>
+        <span class="text-base-content/50">{{ (request().seasons!.length === 1 ? 'requests.seasons_label_one' : 'requests.seasons_label_other') | translate }}</span>
         {{ request().seasons?.join(', ') }}
       </p>
     }
@@ -60,11 +60,11 @@
       </p>
       @if (request().kind !== 'delete') {
         <p class="m-0">
-          <span class="text-base-content/50">{{ 'discover.quality_profile' | translate }} · </span>
+          <span class="text-base-content/50">{{ 'requests.quality_profile_label' | translate }}</span>
           {{ qualityProfileName() }}
         </p>
         <p class="m-0">
-          <span class="text-base-content/50">{{ 'discover.language_profile' | translate }} · </span>
+          <span class="text-base-content/50">{{ 'requests.language_profile_label' | translate }}</span>
           {{ languageProfileName() }}
         </p>
       }
