@@ -937,6 +937,73 @@ describe('FliksHostImpl', () => {
   // ===========================================================================
 
   describe('releases.score', () => {
+    // `resolutionUpgradeOnly` once crossed the seam as data and nothing else: core shipped the
+    // flag, the plugin assumed core had folded it into the rejections, and it was inert for every
+    // profile. These cover the derivation itself, not just the rule it feeds.
+    describe('resolution-upgrade-only profile', () => {
+      const withToggle = (resolutionUpgradeOnly: boolean) =>
+        makeMedia({
+          runtime: 120,
+          qualityProfile: { id: 1, cutoff: 20, upgradeAllowed: true, items: [], resolutionUpgradeOnly },
+        });
+
+      const score = async (h: ReturnType<typeof makeHarness>, title: string) => {
+        h.profiles.resolveAllowedForMedia.mockReturnValue({
+          allowed: new Set([16, 21]),
+          allowedLangs: new Set(),
+        });
+        h.qualityDefs.getSizeLimitsMap.mockResolvedValue(new Map());
+        const [row] = await h.host['releases.score']({
+          mediaId: 1,
+          releases: [
+            {
+              id: 'r1',
+              title,
+              size: 4_000_000_000,
+              seeders: 10,
+              leechers: 2,
+              publishDate: new Date().toISOString(),
+              sourceRef: 'source-a',
+              blocked: false,
+            },
+          ],
+        });
+        return (row.rejections as { code: string }[]).map((r) => r.code);
+      };
+
+      it('VERDICT: refuses a same-resolution release using the on-disk file as the floor', async () => {
+        const h = makeHarness();
+        h.mediaRepo.findOne.mockResolvedValue(withToggle(true));
+        h.mediaFileRepo.find.mockResolvedValue([{ quality: 'WEBDL-1080p' }]);
+
+        expect(await score(h, 'A Movie 2020 1080p WEB-DL')).toEqual(['RESOLUTION_NOT_UPGRADED']);
+      });
+
+      it('lets a higher resolution through', async () => {
+        const h = makeHarness();
+        h.mediaRepo.findOne.mockResolvedValue(withToggle(true));
+        h.mediaFileRepo.find.mockResolvedValue([{ quality: 'WEBDL-1080p' }]);
+
+        expect(await score(h, 'A Movie 2020 2160p WEB-DL')).toEqual([]);
+      });
+
+      it('does not gate a missing grab — nothing on disk is no floor', async () => {
+        const h = makeHarness();
+        h.mediaRepo.findOne.mockResolvedValue(withToggle(true));
+        h.mediaFileRepo.find.mockResolvedValue([]);
+
+        expect(await score(h, 'A Movie 2020 1080p WEB-DL')).toEqual([]);
+      });
+
+      it('stays out of the way when the profile does not ask for it', async () => {
+        const h = makeHarness();
+        h.mediaRepo.findOne.mockResolvedValue(withToggle(false));
+        h.mediaFileRepo.find.mockResolvedValue([{ quality: 'WEBDL-1080p' }]);
+
+        expect(await score(h, 'A Movie 2020 1080p WEB-DL')).toEqual([]);
+      });
+    });
+
     it('scores, ranks and carries the caller-supplied release id through', async () => {
       const h = makeHarness();
       h.mediaRepo.findOne.mockResolvedValue(makeMedia({ runtime: 120 }));
