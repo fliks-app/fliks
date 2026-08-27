@@ -653,7 +653,7 @@
   "discover": {
     "seasons_failed": "No se pudieron cargar las temporadas",
     "title": "Añadir a la biblioteca",
-    "subtitle": "Búsqueda en The Movie Database (TMDB) — como en Radarr / Sonarr.",
+    "subtitle": "Búsqueda en The Movie Database (TMDB).",
     "tab_movies": "Películas",
     "tab_series": "Series de TV",
     "search_placeholder": "Título…",
@@ -1535,7 +1535,7 @@
     },
     "quality_profiles": {
       "title": "Perfiles de calidad",
-      "subtitle": "Defina las calidades permitidas y el umbral de corte (como en Radarr).",
+      "subtitle": "Defina las calidades permitidas y el umbral de corte.",
       "back": "Volver",
       "new": "Nuevo perfil",
       "col_name": "Nombre",
@@ -1611,7 +1611,7 @@
     },
     "custom_formats": {
       "title": "Formatos personalizados",
-      "subtitle": "Defina puntuaciones para ponderar las releases (como en Radarr).",
+      "subtitle": "Defina puntuaciones para ponderar las releases.",
       "new": "Nuevo formato",
       "load_error": "No se pueden cargar los formatos.",
       "empty": "No hay formatos personalizados.",
