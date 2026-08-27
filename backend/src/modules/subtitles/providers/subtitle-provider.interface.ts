@@ -56,8 +56,48 @@ export interface SubtitleSearchResult {
   providerType: string;
 }
 
+export interface SubtitleProviderTestResult {
+  ok: boolean;
+  /** Technical reason, shown as-is next to the translated verdict: an HTTP status,
+   *  a missing credential, a network error. Absent on success. */
+  detail?: string;
+}
+
+/** Providers report their probe verdict through this so the failing status reaches the UI. */
+export async function testResultFromResponse(
+  res: Response,
+): Promise<SubtitleProviderTestResult> {
+  if (res.ok) return { ok: true };
+  const reason = await responseMessage(res);
+  const status = `HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`;
+  return {
+    ok: false,
+    detail: reason ? `HTTP ${res.status}: ${reason}` : status,
+  };
+}
+
+/** Providers state their reason in a JSON body ("invalid username/password"); an HTML error
+ *  page or an unreadable stream leaves the status to speak alone. */
+async function responseMessage(res: Response): Promise<string | undefined> {
+  try {
+    const body: unknown = await res.json();
+    if (!body || typeof body !== 'object') return undefined;
+    const record = body as Record<string, unknown>;
+    for (const key of ['message', 'error', 'detail', 'error_description']) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim())
+        return value.trim().slice(0, 200);
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface SubtitleProviderInterface {
   search(params: SubtitleSearchParams): Promise<SubtitleSearchResult[]>;
   download(result: SubtitleSearchResult): Promise<Buffer>;
-  testConnection(settings: Record<string, unknown>): Promise<boolean>;
+  testConnection(
+    settings: Record<string, unknown>,
+  ): Promise<SubtitleProviderTestResult>;
 }

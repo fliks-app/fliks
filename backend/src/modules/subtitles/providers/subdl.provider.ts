@@ -3,6 +3,8 @@ import {
   SubtitleProviderInterface,
   SubtitleSearchParams,
   SubtitleSearchResult,
+  SubtitleProviderTestResult,
+  testResultFromResponse,
 } from './subtitle-provider.interface';
 import { isRateLimited, rateLimitedFetch } from './rate-limiter';
 import { extractSubtitleFromZip } from './zip-utils';
@@ -105,7 +107,9 @@ export class SubdlProvider implements SubtitleProviderInterface {
     return extractSubtitleFromZip(zipBuf);
   }
 
-  async testConnection(settings: Record<string, unknown>): Promise<boolean> {
+  async testConnection(
+    settings: Record<string, unknown>,
+  ): Promise<SubtitleProviderTestResult> {
     const apiKey = (settings.apiKey as string) || this.settings.apiKey;
     const query = new URLSearchParams({
       api_key: apiKey,
@@ -114,6 +118,6 @@ export class SubdlProvider implements SubtitleProviderInterface {
     const res = await fetch(`https://api.subdl.com/api/v1/subtitles?${query}`, {
       headers: { 'User-Agent': 'Fliks/1.0' },
     });
-    return res.ok;
+    return testResultFromResponse(res);
   }
 }

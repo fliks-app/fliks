@@ -3,6 +3,8 @@ import {
   SubtitleProviderInterface,
   SubtitleSearchParams,
   SubtitleSearchResult,
+  SubtitleProviderTestResult,
+  testResultFromResponse,
 } from './subtitle-provider.interface';
 import { isRateLimited, rateLimitedFetch } from './rate-limiter';
 
@@ -77,16 +79,12 @@ export class SupersubtitlesProvider implements SubtitleProviderInterface {
     return Buffer.from(await res.arrayBuffer());
   }
 
-  async testConnection(): Promise<boolean> {
-    try {
-      const res = await fetch(
-        `${BASE_URL}/index.php?term=test&nyelv=0&action=autoname`,
-        { headers: this.headers },
-      );
-      return res.ok;
-    } catch {
-      return false;
-    }
+  async testConnection(): Promise<SubtitleProviderTestResult> {
+    const res = await fetch(
+      `${BASE_URL}/index.php?term=test&nyelv=0&action=autoname`,
+      { headers: this.headers },
+    );
+    return testResultFromResponse(res);
   }
 
   // ---------------------------------------------------------------------------

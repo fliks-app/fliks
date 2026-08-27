@@ -3,6 +3,8 @@ import {
   SubtitleProviderInterface,
   SubtitleSearchParams,
   SubtitleSearchResult,
+  SubtitleProviderTestResult,
+  testResultFromResponse,
 } from './subtitle-provider.interface';
 import { extractSubtitleFromZip } from './zip-utils';
 import { isRateLimited, rateLimitedFetch } from './rate-limiter';
@@ -108,12 +110,12 @@ export class YifyProvider implements SubtitleProviderInterface {
     return extractSubtitleFromZip(zipBuf);
   }
 
-  async testConnection(): Promise<boolean> {
+  async testConnection(): Promise<SubtitleProviderTestResult> {
     const res = await fetch(`${BASE_URL}/movie-imdb/tt0111161`, {
       headers: { 'User-Agent': USER_AGENT },
       redirect: 'manual',
     });
-    return res.ok;
+    return testResultFromResponse(res);
   }
 
   /**
