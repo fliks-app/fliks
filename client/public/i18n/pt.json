@@ -1391,6 +1391,8 @@
     "offline": "Offline",
     "confirm_delete": "Eliminar esta transferência? O ficheiro será removido deste dispositivo.",
     "retry": "Tentar novamente",
+    "queued": "Em fila",
+    "notif_active_count": "{{count}} transferências",
     "notif_progress": "A transferir",
     "notif_complete": "Transferência concluída",
     "notif_failed": "Falha na transferência"

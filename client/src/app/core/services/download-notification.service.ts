@@ -18,6 +18,16 @@ export interface DownloadNotifStrings {
   notifFailed: string;
 }
 
+/** Pre-translated copy for the iOS Live Activity covering the download queue.
+ *  The native side owns the numbers; only the wording comes from here. */
+export interface DownloadActivityCopy {
+  /** Media title for a lone download, a count for a batch. */
+  headline: string;
+  detail: string;
+  complete: string;
+  failed: string;
+}
+
 interface DownloadNotificationPlugin {
   startDownload(
     opts: { id: string; hlsUrl: string; token: string } & Partial<DownloadNotifStrings>,
@@ -29,6 +39,7 @@ interface DownloadNotificationPlugin {
   getOfflineUrl(opts: { id: string }): Promise<{ url: string | null }>;
   pauseDownloads(): Promise<void>;
   resumeDownloads(): Promise<void>;
+  setActivityCopy(opts: DownloadActivityCopy): Promise<void>;
   addListener(event: string, cb: (data: any) => void): Promise<any>;
 }
 
@@ -90,6 +101,13 @@ export class DownloadNotificationService {
     } catch {
       return null;
     }
+  }
+
+  /** Update the copy on the iOS Live Activity tracking the download queue.
+   *  No-op on Android, which builds its own foreground-service notification. */
+  setActivityCopy(copy: DownloadActivityCopy): void {
+    if (!DownloadNotification?.setActivityCopy) return;
+    DownloadNotification.setActivityCopy(copy).catch(() => {});
   }
 
   /** Remove a download (cancel + delete cached data). */

@@ -9,18 +9,20 @@ private func percentLabel(_ progress: Double) -> String {
     progress.formatted(.percent.precision(.fractionLength(0)))
 }
 
-/// Live Activity for an offline download: a lock-screen card, plus the Dynamic
-/// Island presentations on the models that have one.
+private func iconName(_ state: DownloadActivityAttributes.ContentState) -> String {
+    state.finished ? "checkmark.circle.fill" : "arrow.down.circle.fill"
+}
+
+/// Live Activity for the offline download queue: a lock-screen card, plus the
+/// Dynamic Island presentations on the models that have one.
 struct DownloadLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: DownloadActivityAttributes.self) { context in
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    Image(systemName: context.state.finished
-                        ? "checkmark.circle.fill"
-                        : "arrow.down.circle.fill")
+                    Image(systemName: iconName(context.state))
                         .foregroundStyle(.white)
-                    Text(context.attributes.title)
+                    Text(context.state.headline)
                         .font(.headline)
                         .foregroundStyle(.white)
                         .lineLimit(1)
@@ -28,7 +30,7 @@ struct DownloadLiveActivity: Widget {
                 ProgressView(value: context.state.progress)
                     .tint(.white)
                 HStack {
-                    Text(context.state.status)
+                    Text(context.state.detail)
                     Spacer()
                     Text(percentLabel(context.state.progress)).monospacedDigit()
                 }
@@ -41,9 +43,7 @@ struct DownloadLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Image(systemName: context.state.finished
-                        ? "checkmark.circle.fill"
-                        : "arrow.down.circle.fill")
+                    Image(systemName: iconName(context.state))
                         .foregroundStyle(.white)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
@@ -51,19 +51,25 @@ struct DownloadLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(context.attributes.title).font(.caption).lineLimit(1)
+                        Text(context.state.headline).font(.caption).lineLimit(1)
                         ProgressView(value: context.state.progress).tint(.white)
-                        Text(context.state.status)
+                        Text(context.state.detail)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
             } compactLeading: {
-                Image(systemName: "arrow.down")
+                // The queue depth is the one thing worth the few points of room
+                // here; the headline has nowhere to go.
+                if context.state.remaining > 1 && !context.state.finished {
+                    Text("\(context.state.remaining)").monospacedDigit()
+                } else {
+                    Image(systemName: "arrow.down")
+                }
             } compactTrailing: {
                 Text(percentLabel(context.state.progress)).monospacedDigit()
             } minimal: {
-                Image(systemName: "arrow.down")
+                Image(systemName: iconName(context.state))
             }
         }
     }

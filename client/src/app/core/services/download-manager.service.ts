@@ -105,23 +105,58 @@ export class DownloadManagerService {
       // Pre-download subtitles for offline playback (fire-and-forget)
       void this.preDownloadSubtitles(taskId);
     } else if (event.type === 'progress') {
-      this.persistProgress(taskId, event.progress);
+      this.persistProgress(taskId, event.progress, event.state);
     }
+    if (event.type !== 'progress') this.syncActivityCopy();
   });
+
+  /** In-flight statuses, in the order a task moves through them. */
+  private static readonly ACTIVE_STATUSES = ['transcoding', 'queued', 'downloading'];
 
   /** Last percentage persisted per task, so the write below can be throttled. */
   private readonly persistedProgress = new Map<number, number>();
 
-  /** Promote the persisted status out of `transcoding` once the OS daemon is
-   *  actually transferring. {@link recover} keys off that distinction, so a task
-   *  still reading `transcoding` after a relaunch looks like one that never
-   *  started and gets cancelled. Written in 5-point steps — the daemon emits
-   *  progress far more often than localStorage should be rewritten. */
-  private persistProgress(taskId: number, progress: number) {
+  /** Promote the persisted status out of `transcoding` once the OS daemon has
+   *  taken the task. {@link recover} keys off that distinction, so a task still
+   *  reading `transcoding` after a relaunch looks like one that never started
+   *  and gets cancelled. Progress is written in 5-point steps — the daemon emits
+   *  it far more often than localStorage should be rewritten — but a change of
+   *  state always lands, or a queued task would never show it left the queue. */
+  private persistProgress(taskId: number, progress: number, state?: string) {
+    const status = state === 'queued' ? 'queued' : 'downloading';
     const last = this.persistedProgress.get(taskId);
-    if (last !== undefined && progress - last < 5) return;
+    const settled = this.cache.load().find((t) => t.id === taskId)?.status === status;
+    if (settled && last !== undefined && progress - last < 5) return;
     this.persistedProgress.set(taskId, progress);
-    this.updateTaskStatus(taskId, 'downloading', progress);
+    this.updateTaskStatus(taskId, status, progress);
+  }
+
+  /**
+   * Refresh the copy on the iOS Live Activity covering the download queue.
+   *
+   * The native side aggregates the numbers off its own task list — it is the
+   * only thing that knows what is really transferring — but the wording has to
+   * come from here: ngx-translate is the single source of copy and a widget
+   * extension cannot reach it. Called whenever the batch changes shape, which
+   * is the only time the wording can change.
+   */
+  private syncActivityCopy() {
+    if (!this.isNative) return;
+    const active = this.cache
+      .load()
+      .filter((t) => DownloadManagerService.ACTIVE_STATUSES.includes(t.status));
+    if (!active.length) return;
+    const only = active[0];
+    const title = only.media?.title ?? '';
+    this.notif.setActivityCopy({
+      headline:
+        active.length === 1
+          ? (only.episodeLabel ? `${title} · ${only.episodeLabel}` : title)
+          : this.translate.instant('downloads.notif_active_count', { count: active.length }),
+      detail: this.translate.instant('downloads.notif_progress'),
+      complete: this.translate.instant('downloads.notif_complete'),
+      failed: this.translate.instant('downloads.notif_failed'),
+    });
   }
 
   /** Session epoch already recovered, or -1. The task list is scoped to the
@@ -279,6 +314,7 @@ export class DownloadManagerService {
         notifComplete: this.translate.instant('downloads.notif_complete'),
         notifFailed: this.translate.instant('downloads.notif_failed'),
       });
+      this.syncActivityCopy();
     } else {
       this.enqueueWeb(task, hlsUrl);
     }
@@ -488,7 +524,11 @@ export class DownloadManagerService {
         void this.preDownloadSubtitles(task.id);
       } else {
         this.persistedProgress.set(task.id, native.progress);
-        this.updateTaskStatus(task.id, 'downloading', native.progress);
+        this.updateTaskStatus(
+          task.id,
+          native.state === 'queued' ? 'queued' : 'downloading',
+          native.progress,
+        );
       }
       return true;
     }
@@ -552,7 +592,7 @@ export class DownloadManagerService {
       } else if (t.status === 'failed') {
         // Remove stale failed tasks
         this.cache.remove(t.id);
-      } else if (t.status === 'transcoding' || t.status === 'downloading') {
+      } else if (DownloadManagerService.ACTIVE_STATUSES.includes(t.status)) {
         // In-flight when the app last stopped. Ask the native daemon before
         // condemning anything — on web the Shaka store did die with the JS
         // context, but a native transfer very likely didn't.

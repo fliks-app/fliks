@@ -1401,6 +1401,8 @@
     "offline": "Hors ligne",
     "confirm_delete": "Supprimer ce téléchargement ? Le fichier sera supprimé de cet appareil.",
     "retry": "Réessayer",
+    "queued": "En attente",
+    "notif_active_count": "{{count}} téléchargements",
     "notif_progress": "Téléchargement en cours",
     "notif_complete": "Téléchargement terminé",
     "notif_failed": "Échec du téléchargement"

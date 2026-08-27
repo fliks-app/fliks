@@ -1391,6 +1391,8 @@
     "offline": "Offline",
     "confirm_delete": "Diesen Download löschen? Die Datei wird von diesem Gerät gelöscht.",
     "retry": "Erneut versuchen",
+    "queued": "In Warteschlange",
+    "notif_active_count": "{{count}} Downloads",
     "notif_progress": "Wird heruntergeladen",
     "notif_complete": "Download abgeschlossen",
     "notif_failed": "Download fehlgeschlagen"

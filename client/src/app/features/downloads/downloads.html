@@ -30,7 +30,10 @@
             }
             <p class="text-xs text-base-content/50 mt-0.5">{{ task.quality }}</p>
 
-            @if (task.status === 'transcoding' || task.status === 'pending' || task.status === 'downloading') {
+            @if (task.status === 'queued') {
+              <progress class="progress progress-info w-full h-1.5 mt-2"></progress>
+              <p class="text-[10px] text-base-content/40 mt-0.5">{{ 'downloads.queued' | translate }}</p>
+            } @else if (task.status === 'transcoding' || task.status === 'pending' || task.status === 'downloading') {
               <progress class="progress progress-info w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
               <p class="text-[10px] text-base-content/40 mt-0.5">{{ 'downloads.downloading' | translate }} {{ task.progress }}%</p>
             } @else if (task.status === 'failed') {
