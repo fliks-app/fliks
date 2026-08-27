@@ -11,10 +11,12 @@ import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { AppResumeService } from '../../core/services/app-resume.service';
 import { PaginationComponent } from '../../shared/components/pagination/pagination';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
+import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 
 @Component({
   selector: 'app-watch-history',
-  imports: [TranslateModule, ResolveUrlPipe, PaginationComponent, DropdownMenuComponent, LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical],
+  imports: [
+    CachedSrcDirective,TranslateModule, ResolveUrlPipe, PaginationComponent, DropdownMenuComponent, LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './watch-history.html',
 })

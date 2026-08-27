@@ -1,5 +1,6 @@
 import Capacitor
 import AVFoundation
+import UIKit
 import UserNotifications
 
 /// Holds the completion handler iOS hands us when it relaunches the app in the
@@ -147,26 +148,46 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         // No `AVAssetDownloadTaskMinimumRequiredMediaBitrateKey`: the manifest
         // is already scoped to the chosen quality (startQuality in the URL), so
         // AVFoundation takes the highest variant it exposes.
+        // The key load needs a round-trip to the master playlist, and the
+        // transfer only becomes the background session's business once the task
+        // is resumed. Hold a background assertion across that gap so backgrounding
+        // the app right after tapping Download can't suspend us in between and
+        // lose the download before it starts.
         let key = "availableMediaCharacteristicsWithMediaSelectionOptions"
-        asset.loadValuesAsynchronously(forKeys: [key]) { [weak self] in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                let selections = self.allMediaSelections(for: asset)
-                guard let task = self.downloadSession.aggregateAssetDownloadTask(
-                    with: asset,
-                    mediaSelections: selections,
-                    assetTitle: id,
-                    assetArtworkData: nil,
-                    options: nil
-                ) else {
-                    NSLog("[Download] failed to create task id=\(id)")
-                    self.notifyListeners("downloadFailed", data: ["id": id, "progress": 0, "state": "failed"])
-                    return
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            var assertion = UIBackgroundTaskIdentifier.invalid
+            assertion = UIApplication.shared.beginBackgroundTask(withName: "fliks.download.start") {
+                UIApplication.shared.endBackgroundTask(assertion)
+                assertion = .invalid
+            }
+            let release = {
+                guard assertion != .invalid else { return }
+                UIApplication.shared.endBackgroundTask(assertion)
+                assertion = .invalid
+            }
+
+            asset.loadValuesAsynchronously(forKeys: [key]) { [weak self] in
+                DispatchQueue.main.async {
+                    defer { release() }
+                    guard let self = self else { return }
+                    let selections = self.allMediaSelections(for: asset)
+                    guard let task = self.downloadSession.aggregateAssetDownloadTask(
+                        with: asset,
+                        mediaSelections: selections,
+                        assetTitle: id,
+                        assetArtworkData: nil,
+                        options: nil
+                    ) else {
+                        NSLog("[Download] failed to create task id=\(id)")
+                        self.notifyListeners("downloadFailed", data: ["id": id, "progress": 0, "state": "failed"])
+                        return
+                    }
+                    task.taskDescription = id
+                    self.activeTasks[id] = task
+                    self.progressById[id] = 0
+                    task.resume()
                 }
-                task.taskDescription = id
-                self.activeTasks[id] = task
-                self.progressById[id] = 0
-                task.resume()
             }
         }
 
@@ -221,28 +242,43 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         call.resolve()
     }
 
+    /// Ask the session for its tasks rather than reading `activeTasks`: that map
+    /// is repopulated asynchronously in `load()`, and a call landing inside that
+    /// window would report a live transfer as gone — the WebView then fails the
+    /// download and cancels a perfectly healthy background task.
     @objc func getDownloads(_ call: CAPPluginCall) {
-        var arr: [[String: Any]] = []
+        downloadSession.getAllTasks { [weak self] tasks in
+            guard let self = self else {
+                call.resolve(["downloads": "[]"])
+                return
+            }
 
-        // In-flight downloads with their last-known progress.
-        for (id, _) in activeTasks {
-            arr.append([
-                "id": id,
-                "progress": Int(progressById[id] ?? 0),
-                "state": "downloading",
-            ])
-        }
-        // Completed downloads that still exist on disk.
-        for (id, _) in relativePathById where activeTasks[id] == nil {
-            guard resolvedAssetURL(id: id) != nil else { continue }
-            arr.append(["id": id, "progress": 100, "state": "completed"])
-        }
+            var arr: [[String: Any]] = []
+            var live: [String: AVAggregateAssetDownloadTask] = [:]
+            for task in tasks {
+                guard let aggTask = task as? AVAggregateAssetDownloadTask,
+                      let id = aggTask.taskDescription else { continue }
+                live[id] = aggTask
+                arr.append([
+                    "id": id,
+                    "progress": Int(self.progressById[id] ?? 0),
+                    "state": "downloading",
+                ])
+            }
+            self.activeTasks = live
 
-        if let data = try? JSONSerialization.data(withJSONObject: arr),
-           let json = String(data: data, encoding: .utf8) {
-            call.resolve(["downloads": json])
-        } else {
-            call.resolve(["downloads": "[]"])
+            // Completed downloads that still exist on disk.
+            for (id, _) in self.relativePathById where live[id] == nil {
+                guard self.resolvedAssetURL(id: id) != nil else { continue }
+                arr.append(["id": id, "progress": 100, "state": "completed"])
+            }
+
+            if let data = try? JSONSerialization.data(withJSONObject: arr),
+               let json = String(data: data, encoding: .utf8) {
+                call.resolve(["downloads": json])
+            } else {
+                call.resolve(["downloads": "[]"])
+            }
         }
     }
 

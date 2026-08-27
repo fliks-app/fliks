@@ -16,6 +16,7 @@ import { DownloadManagerService } from '../../core/services/download-manager.ser
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { LucideDownload, LucideTrash2, LucidePlay, LucideAlertCircle } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 
 export interface DisplayDownloadTask extends DownloadTask {
   downloadProgress?: number;
@@ -31,7 +32,8 @@ export interface DisplayDownloadTask extends DownloadTask {
  */
 @Component({
   selector: 'app-downloads',
-  imports: [TranslateModule, ResolveUrlPipe, LucideDownload, LucideTrash2, LucidePlay, LucideAlertCircle],
+  imports: [
+    CachedSrcDirective,TranslateModule, ResolveUrlPipe, LucideDownload, LucideTrash2, LucidePlay, LucideAlertCircle],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './downloads.html',
 })

@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { BackgroundService } from '../../../core/services/background.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
+import { CachedSrcDirective } from '../../directives/cached-src.directive';
 
 /**
  * Page-wide background renderer. Mounted once at the layout root so
@@ -20,7 +21,8 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
  */
 @Component({
   selector: 'app-background',
-  imports: [ResolveUrlPipe],
+  imports: [
+    CachedSrcDirective,ResolveUrlPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './background.html',
 })

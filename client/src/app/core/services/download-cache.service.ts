@@ -1,6 +1,7 @@
 import { Injectable, signal, untracked, inject, effect } from '@angular/core';
 import { AuthService } from './auth.service';
 import { ServerConfigService } from './server-config.service';
+import { StorageScopeService } from './storage-scope.service';
 
 /** Client-side download task tracked in localStorage. */
 export interface DownloadTask {
@@ -46,6 +47,7 @@ const LOCAL_IDS_KEY = 'fliks.downloads.localIds';
 export class DownloadCacheService {
   private readonly auth = inject(AuthService);
   private readonly serverConfig = inject(ServerConfigService);
+  private readonly scope = inject(StorageScopeService);
 
   /** Active device downloads with progress % */
   readonly activeDownloads = signal<Map<number, number>>(new Map());
@@ -62,21 +64,13 @@ export class DownloadCacheService {
     });
   }
 
-  /** No signed-in account means no scope to write into: a write between two
-   *  sessions would land in a `::0` bucket nobody reads. */
   private canPersist(): boolean {
-    return untracked(() => !!this.auth.user());
+    return this.scope.canPersist();
   }
 
-  /** localStorage-key suffix isolating downloads to the current (server, user).
-   *  Read untracked so it is safe to call from anywhere (including effects that
-   *  also write localTaskIds) without creating a mutual-invalidation loop. */
+  /** localStorage-key suffix isolating downloads to the current (server, user). */
   scopeSuffix(): string {
-    return untracked(() => {
-      const server = this.serverConfig.serverUrl();
-      const userId = this.auth.user()?.id ?? 0;
-      return `${server}::${userId}`;
-    });
+    return this.scope.suffix();
   }
 
   private storageKey(): string {

@@ -240,7 +240,10 @@ function createHarness(opts: {
         },
       },
       { provide: OfflineStorageService, useValue: { getLocalUrl: vi.fn(), getSmallFileNativeUri: vi.fn() } },
-      { provide: OfflinePlaybackSyncService, useValue: { queue: vi.fn() } },
+      {
+        provide: OfflinePlaybackSyncService,
+        useValue: { queue: vi.fn(), record: vi.fn(), resumePositionFor: vi.fn(() => null) },
+      },
       { provide: AutoDownloadService, useValue: { onItemCompleted: vi.fn(async () => {}) } },
       { provide: NetworkService, useValue: { isOnline: () => true } },
       { provide: DownloadCacheService, useValue: { load: vi.fn(() => []) } },

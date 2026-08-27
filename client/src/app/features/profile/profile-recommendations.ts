@@ -16,13 +16,15 @@ import {
 } from '../../core/services/api/social-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 
 /** The profile "recommendations" tab, own-profile only: content other members
  *  recommended to the viewer, and content the viewer recommended to others.
  *  Rendered as compact tables so the recipient/sender is always visible. */
 @Component({
   selector: 'app-profile-recommendations',
-  imports: [TranslateModule, RouterLink, ResolveUrlPipe],
+  imports: [
+    CachedSrcDirective,TranslateModule, RouterLink, ResolveUrlPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile-recommendations.html',
 })

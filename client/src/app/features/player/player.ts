@@ -1139,6 +1139,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
       }
 
+      // Offline: /api/playback/media/… is uncacheable and the server is out of
+      // reach anyway, so the resume point comes from what this device recorded
+      // the last time it played the file.
+      if (startTime == null && this.isOfflinePlayback && this.mediaId) {
+        const local = this.offlineSync.resumePositionFor(this.mediaId, this.episodeId);
+        if (local && local.positionSeconds > 10) startTime = local.positionSeconds;
+      }
+
       // Set MediaSession metadata
       if ('mediaSession' in navigator) {
         const artwork: MediaImage[] = [];
@@ -4333,6 +4341,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (response?.state?.completed) {
           void this.autoDownload.onItemCompleted(this.mediaFileId);
         }
+        // Keep the device's own resume point current even on the happy path:
+        // the /state route is uncacheable, so once the server goes out of reach
+        // this is all an offline replay has to go on.
+        this.offlineSync.record(offlinePayload);
       } catch {
         this.offlineSync.queue(offlinePayload);
         // The beat never landed, so we never learned whether the session

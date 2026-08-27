@@ -27,7 +27,7 @@
                   <a [routerLink]="contentLink(item)" class="flex items-center gap-3 min-w-0">
                     <div class="w-14 aspect-video rounded bg-base-300 overflow-hidden shrink-0">
                       @if (item.stillUrl ?? item.fanartUrl ?? item.posterUrl; as img) {
-                        <img [src]="img | resolveUrl:'thumb'" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
+                        <img [cachedSrc]="img | resolveUrl:'thumb'" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
                       }
                     </div>
                     <div class="min-w-0">
@@ -72,7 +72,7 @@
                   <a [routerLink]="contentLink(item)" class="flex items-center gap-3 min-w-0">
                     <div class="w-14 aspect-video rounded bg-base-300 overflow-hidden shrink-0">
                       @if (item.stillUrl ?? item.fanartUrl ?? item.posterUrl; as img) {
-                        <img [src]="img | resolveUrl:'thumb'" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
+                        <img [cachedSrc]="img | resolveUrl:'thumb'" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
                       }
                     </div>
                     <div class="min-w-0">

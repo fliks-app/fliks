@@ -35,7 +35,11 @@ import {
   LucideUserPlus,
 } from '@lucide/angular';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
-import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
+import {
+  StreamingApiService,
+  type PlaybackState,
+} from '../../../core/services/api/streaming-api.service';
+import { OfflinePlaybackSyncService } from '../../../core/services/offline-playback-sync.service';
 import { PlayerSettingsService } from '../../../core/services/player-settings.service';
 import { TrackManagerService } from '../../../core/services/track-manager.service';
 import { NavbarService } from '../../../core/services/navbar.service';
@@ -64,6 +68,7 @@ import type { MediaType } from '../../../core/enums/media-type.enum';
 import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { CORE_MEDIA_ACTIONS } from './core-media-actions';
 import type { UiContribution } from '@fliks/plugin-contract/ui';
+import { CachedSrcDirective } from '../../directives/cached-src.directive';
 
 /** One `media.actions` contribution resolved to something the template can
  *  render directly — visibility, handler and icon fallback already decided. */
@@ -119,6 +124,7 @@ interface AudioTrack {
 @Component({
   selector: 'app-media-info-header',
   imports: [
+    CachedSrcDirective,
     MobileFanartHeroComponent,
     ResolveUrlPipe,
     DropdownMenuComponent, DropdownOptionComponent,
@@ -148,6 +154,7 @@ export class MediaInfoHeaderComponent {
   readonly auth = inject(AuthService);
   private readonly playable = inject(PlayableMediaService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly offlineSync = inject(OfflinePlaybackSyncService);
   private readonly pluginUi = inject(PluginUiRegistryService);
 
   // ── Inputs: content ──
@@ -333,23 +340,39 @@ export class MediaInfoHeaderComponent {
       this.playable.loadWatchedState(mediaId, episodeId).then(v => this.watched.set(v));
     }
 
+    // Tracked read: a position queued offline shows up here as soon as it is
+    // recorded, and again as soon as the flush clears it.
+    const queued = this.offlineSync.queuedPositionFor(mediaId, episodeId);
+    this.applyResume(queued, null);
+
     // Load resume position
-    this.streamingApi.getPlaybackState(mediaId, episodeId).then(ps => {
+    this.streamingApi.getPlaybackState(mediaId, episodeId).catch(() => null).then(ps => {
       // A faster episode switch already superseded this request.
       if (this.lastPlaybackKey !== key) return;
-      if (!ps || ps.completed || ps.positionSeconds <= 10) {
-        this.resumePositionSeconds.set(null);
-        this.durationSeconds.set(null);
-        return;
-      }
       // Pre-select last-played file
-      if (ps.mediaFileId && this.files().some(f => f.id === ps.mediaFileId)) {
+      if (ps?.mediaFileId && this.files().some(f => f.id === ps.mediaFileId)) {
         this.selectedFileIdChange.emit(ps.mediaFileId);
       }
-      this.resumePositionSeconds.set(ps.positionSeconds);
-      this.durationSeconds.set(ps.durationSeconds);
-    }).catch(() => {});
+      this.applyResume(queued, ps);
+    });
   });
+
+  /** Show the server's position, unless one queued while the server was out of
+   *  reach is still waiting to reach it — that one is newer by construction. */
+  private applyResume(
+    queued: { positionSeconds: number; durationSeconds: number } | null,
+    ps: PlaybackState | null,
+  ) {
+    const pos = queued?.positionSeconds ?? (ps && !ps.completed ? ps.positionSeconds : 0);
+    const dur = queued?.durationSeconds || ps?.durationSeconds || 0;
+    if (!pos || pos <= 10) {
+      this.resumePositionSeconds.set(null);
+      this.durationSeconds.set(null);
+      return;
+    }
+    this.resumePositionSeconds.set(pos);
+    this.durationSeconds.set(dur || null);
+  }
 
   // ── Audio/subtitle defaults ──
 

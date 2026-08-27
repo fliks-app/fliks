@@ -6,6 +6,7 @@ import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media, CalendarEntry } from '../../core/services/api/media.service';
 import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '../../core/services/api/streaming-api.service';
+import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { PlaylistsApiService, Playlist } from '../../core/services/api/playlists-api.service';
 import { LikesApiService, LikedItem } from '../../core/services/api/likes-api.service';
@@ -98,6 +99,7 @@ import { libraryColorVar } from '../../core/constants/library-appearance';
 export class HomeComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly offlineSync = inject(OfflinePlaybackSyncService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly router = inject(Router);
   private readonly playableMedia = inject(PlayableMediaService);
@@ -140,7 +142,12 @@ export class HomeComponent implements OnInit, OnDestroy {
   });
 
   readonly libraries = signal<LibrarySummary[]>([]);
-  readonly continueWatching = signal<ContinueWatchingItem[]>([]);
+  private readonly continueWatchingRaw = signal<ContinueWatchingItem[]>([]);
+  /** Server list with any position queued while offline layered on top — the
+   *  API keeps returning the pre-offline progress until the queue flushes. */
+  readonly continueWatching = computed(() =>
+    this.offlineSync.overlayProgress(this.continueWatchingRaw()),
+  );
   readonly recentMedia = signal<Media[]>([]);
   readonly comingSoon = signal<CalendarEntry[]>([]);
   readonly recommendations = signal<RecommendationItem[]>([]);
@@ -367,7 +374,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.likesApi.mine(undefined, { force }).catch(() => null),
       ]);
       if (libs) this.libraries.set(libs);
-      if (cw) this.continueWatching.set(cw);
+      if (cw) this.continueWatchingRaw.set(cw);
       if (recs) this.recommendations.set(recs);
       if (pls)
         this.playlists.set(
@@ -627,7 +634,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       // next episode appear in place rather than the card vanishing.
       if (watched) {
         const list = await this.streamingApi.getContinueWatching(undefined, { force: true }).catch(() => null);
-        if (list) this.continueWatching.set(list);
+        if (list) this.continueWatchingRaw.set(list);
       }
     } catch { /* global error toast */ }
   }
@@ -681,7 +688,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (!confirmed) return;
     try {
       await this.streamingApi.hideFromContinueWatching(item.mediaId);
-      this.continueWatching.update(list => list.filter(i => i.mediaId !== item.mediaId));
+      this.continueWatchingRaw.update(list => list.filter(i => i.mediaId !== item.mediaId));
     } catch { /* ignore */ }
   }
 }

@@ -18,6 +18,7 @@ import {
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
 import { PopoverMenuComponent } from '../popover-menu';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
+import { CachedSrcDirective } from '../../directives/cached-src.directive';
 
 /**
  * Singleton actions menu for cards, mounted once at the layout level. It reads
@@ -29,6 +30,7 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
   selector: 'app-card-actions-panel',
   standalone: true,
   imports: [
+    CachedSrcDirective,
     TranslateModule,
     PopoverMenuComponent,
     ResolveUrlPipe,

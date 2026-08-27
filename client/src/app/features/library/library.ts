@@ -21,6 +21,7 @@ import {
 } from '../../core/services/api/social-api.service';
 import { LikesApiService, LikedItem } from '../../core/services/api/likes-api.service';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
+import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
 import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
@@ -87,6 +88,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
 export class LibraryComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly offlineSync = inject(OfflinePlaybackSyncService);
   private readonly socialApi = inject(SocialApiService);
   private readonly likesApi = inject(LikesApiService);
   private readonly profilesService = inject(ProfilesService);
@@ -130,7 +132,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   // ── Suggestions view ────────────────────────────────────────────────
   /** Continue-watching items, scoped to the active library. */
-  readonly suggestionsContinue = signal<ContinueWatchingItem[]>([]);
+  private readonly suggestionsContinueRaw = signal<ContinueWatchingItem[]>([]);
+  /** Server list with any position queued while offline layered on top — the
+   *  API keeps returning the pre-offline progress until the queue flushes. */
+  readonly suggestionsContinue = computed(() =>
+    this.offlineSync.overlayProgress(this.suggestionsContinueRaw()),
+  );
   /** History-based recommendations, scoped to the active library. */
   readonly suggestionsRecommendations = signal<RecommendationItem[]>([]);
   /** Popular among the members the user follows. */
@@ -537,7 +544,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
         this.socialApi.followingRecommendations(lib.id).catch(() => null),
         this.socialApi.receivedRecommendations().catch(() => null),
       ]);
-      if (cw) this.suggestionsContinue.set(cw);
+      if (cw) this.suggestionsContinueRaw.set(cw);
       if (recs) this.suggestionsRecommendations.set(recs);
       if (following) this.suggestionsFromFollowing.set(following);
       if (forYou) this.recommendedForYou.set(forYou);

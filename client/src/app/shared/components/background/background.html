@@ -4,7 +4,7 @@
 <div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none hidden md:block">
   @if (layerA()) {
     <img
-      [src]="layerA()! | resolveUrl:'medium'"
+      [cachedSrc]="layerA()! | resolveUrl:'medium'"
       alt=""
       loading="lazy"
       decoding="async"
@@ -16,7 +16,7 @@
   }
   @if (layerB()) {
     <img
-      [src]="layerB()! | resolveUrl:'medium'"
+      [cachedSrc]="layerB()! | resolveUrl:'medium'"
       alt=""
       loading="lazy"
       decoding="async"

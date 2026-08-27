@@ -15,7 +15,7 @@
       <div class="avatar">
         <div class="w-32 h-32 sm:w-40 sm:h-40 rounded-full">
           @if (d.person.avatarUrl) {
-            <img [src]="d.person.avatarUrl | resolveUrl:'medium'" [alt]="d.person.name" />
+            <img [cachedSrc]="d.person.avatarUrl | resolveUrl:'medium'" [alt]="d.person.name" />
           } @else {
             <div class="bg-base-300 flex items-center justify-center w-full h-full text-4xl font-bold text-base-content/30">
               {{ d.person.name.charAt(0) }}

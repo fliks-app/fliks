@@ -44,7 +44,7 @@
           <!-- Hero clearlogo — kept whether the navbar is transparent (at top)
                or opaque (scrolled), so it doesn't revert to the title text. -->
           <img
-            [src]="navbar.heroLogoUrl()! | resolveUrl:'medium'"
+            [cachedSrc]="navbar.heroLogoUrl()! | resolveUrl:'medium'"
             [alt]="navbar.heroTitle()"
             (error)="onHeroLogoError()"
             class="h-7 w-auto max-w-[50vw] object-contain object-left pl-1 [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.45))]" />
@@ -122,7 +122,7 @@
           </button>
         }
         @if (showHeroLogo()) {
-          <img [src]="navbar.heroLogoUrl()! | resolveUrl:'medium'" [alt]="navbar.heroTitle()"
+          <img [cachedSrc]="navbar.heroLogoUrl()! | resolveUrl:'medium'" [alt]="navbar.heroTitle()"
                (error)="onHeroLogoError()"
                class="h-7 lg:h-8 w-auto max-w-[280px] object-contain [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.45))]" />
         }

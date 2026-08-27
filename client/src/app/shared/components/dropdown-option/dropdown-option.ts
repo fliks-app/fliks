@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
+import { CachedSrcDirective } from '../../directives/cached-src.directive';
 
 /**
  * One option of an `app-dropdown-menu`: an optional thumbnail, a head line, an
@@ -16,7 +17,8 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
  */
 @Component({
   selector: 'app-dropdown-option',
-  imports: [ResolveUrlPipe],
+  imports: [
+    CachedSrcDirective,ResolveUrlPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dropdown-option.html',
   host: { class: 'contents' },
