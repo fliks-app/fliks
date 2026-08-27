@@ -8,7 +8,7 @@ import { MediaType } from '../../../common/enums';
  * with it the files, playback states, markers, likes and playlist entries that
  * reference it. Only the surplus is dropped.
  */
-describe('MediaMetadataService.identify', () => {
+describe('MediaMetadataService identification', () => {
   function harness(opts: {
     media: Record<string, unknown>;
     clash?: Record<string, unknown> | null;
@@ -16,6 +16,11 @@ describe('MediaMetadataService.identify', () => {
     providerSeasons?: { seasonNumber: number; episodes: { episodeNumber: number }[] }[];
   }) {
     const updates: Record<string, unknown>[] = [];
+    const refreshOpts: unknown[] = [];
+    const refreshMetadata = jest.fn((_id: number, o?: unknown) => {
+      refreshOpts.push(o);
+      return Promise.resolve(opts.media);
+    });
     const removedSeasons: number[] = [];
     const removedEpisodes: number[] = [];
 
@@ -49,7 +54,7 @@ describe('MediaMetadataService.identify', () => {
       episodeRepo,
       log: { log: jest.fn(), warn: jest.fn() },
       // the refresh itself is covered elsewhere; identify only orchestrates it
-      refreshMetadata: jest.fn(() => Promise.resolve(opts.media)),
+      refreshMetadata: refreshMetadata,
       resolveProviderForMedia: jest.fn(() =>
         Promise.resolve({
           provider: {
@@ -60,7 +65,7 @@ describe('MediaMetadataService.identify', () => {
       ),
       loadLibraryOverride: jest.fn(() => Promise.resolve(undefined)),
     });
-    return { service, updates, removedSeasons, removedEpisodes, mediaRepo };
+    return { service, updates, removedSeasons, removedEpisodes, mediaRepo, refreshOpts };
   }
 
   const movie = { id: 1, type: MediaType.MOVIE, title: 'Old', tmdbId: 10 };
@@ -68,7 +73,7 @@ describe('MediaMetadataService.identify', () => {
   it('refuses an empty target rather than refreshing against nothing', async () => {
     const { service } = harness({ media: movie });
 
-    await expect(service.identify(1, {})).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.applyIdentity(1, {})).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('VERDICT: refuses a TMDB id another title already holds, before touching the row', async () => {
@@ -77,7 +82,7 @@ describe('MediaMetadataService.identify', () => {
       clash: { id: 99, title: 'Taken', tmdbId: 55 },
     });
 
-    await expect(service.identify(1, { tmdbId: 55 })).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.applyIdentity(1, { tmdbId: 55 })).rejects.toBeInstanceOf(ConflictException);
     expect(updates).toEqual([]); // the ids were never written
   });
 
@@ -86,7 +91,7 @@ describe('MediaMetadataService.identify', () => {
       media: { ...movie, tvdbId: 4242, imdbId: 'tt-old' },
     });
 
-    await service.identify(1, { tvdbId: 99 });
+    await service.applyIdentity(1, { tvdbId: 99 });
 
     // Keeping tmdbId=10 would let `resolveProviderForMedia` fall back to the
     // previous work the moment TVDB is unavailable.
@@ -96,7 +101,7 @@ describe('MediaMetadataService.identify', () => {
   it('writes the full identity when the caller supplies every id', async () => {
     const { service, updates } = harness({ media: movie });
 
-    await service.identify(1, { tmdbId: 77, tvdbId: 88, imdbId: 'tt7' });
+    await service.applyIdentity(1, { tmdbId: 77, tvdbId: 88, imdbId: 'tt7' });
 
     expect(updates).toEqual([{ tmdbId: 77, tvdbId: 88, imdbId: 'tt7' }]);
   });
@@ -104,10 +109,18 @@ describe('MediaMetadataService.identify', () => {
   it('leaves a movie alone past the refresh — no season work', async () => {
     const { service, removedSeasons, removedEpisodes } = harness({ media: movie });
 
-    await service.identify(1, { tmdbId: 77 });
+    await service.completeIdentify(1);
 
     expect(removedSeasons).toEqual([]);
     expect(removedEpisodes).toEqual([]);
+  });
+
+  it('VERDICT: holds back the refresh\'s grab kick — the files are not relinked yet', async () => {
+    const { service, refreshOpts } = harness({ media: movie });
+
+    await service.completeIdentify(1);
+
+    expect(refreshOpts).toEqual([{ deferAcquisitionKick: true }]);
   });
 
   it('VERDICT: drops the surplus of the old work and keeps what the new one has', async () => {
@@ -126,7 +139,7 @@ describe('MediaMetadataService.identify', () => {
       ],
     });
 
-    await service.identify(2, { tmdbId: 77 });
+    await service.completeIdentify(2);
 
     expect(removedSeasons).toEqual([3]);
     expect(removedEpisodes).toEqual([12]); // S01E02 has no counterpart

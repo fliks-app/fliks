@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media } from './entities/media.entity';
@@ -22,6 +22,7 @@ import { MediaQueryService } from './media-service/media-query.service';
 import { MediaRelatedService } from './media-service/media-related.service';
 import { MediaMutationService } from './media-service/media-mutation.service';
 import { MediaRescanService } from './media-service/media-rescan.service';
+import { EventsService } from '../scheduler/events.service';
 
 /**
  * Façade in front of the media sub-services. External callers
@@ -31,6 +32,8 @@ import { MediaRescanService } from './media-service/media-rescan.service';
  */
 @Injectable()
 export class MediaService {
+  private readonly logger = new Logger(MediaService.name);
+
   constructor(
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
@@ -40,6 +43,7 @@ export class MediaService {
     private readonly related: MediaRelatedService,
     private readonly mutation: MediaMutationService,
     private readonly rescan: MediaRescanService,
+    private readonly events: EventsService,
   ) {}
 
   // -- Imports ----------------------------------------------------------------
@@ -204,7 +208,33 @@ export class MediaService {
       preferredProvider?: string;
     },
   ) {
-    return this.metadata.identify(id, target);
+    return this.metadata.applyIdentity(id, target);
+  }
+
+  /**
+   * The provider half of an identification, plus the relink it needs: dropping
+   * the old work's episodes leaves their files with no episode (`ON DELETE SET
+   * NULL`), so the new work's episodes read as missing while the files sit on
+   * disk. The rescan re-parses those filenames against the new numbering, and
+   * only then is it safe to let the auto-grab pipeline look at this media.
+   */
+  async finishIdentify(id: number) {
+    const media = await this.metadata.completeIdentify(id);
+    try {
+      await this.rescan.rescanFiles(id);
+    } catch (err) {
+      // A media with no root path has nothing to relink; anything else is worth
+      // seeing, but neither is a reason to leave the identification unfinished.
+      this.logger.warn(
+        `identify: media#${id} relink skipped — ${(err as Error).message}`,
+      );
+    }
+    this.events.emitDomain({
+      type: 'media.acquisition.requested',
+      mediaIds: [id],
+      reason: 'metadata-refresh',
+    });
+    return media;
   }
 
   refreshMetadata(id: number) {
