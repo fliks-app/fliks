@@ -78,20 +78,31 @@ export class SubtitleSchedulerService {
 
     const opts = await this.resolveSearchOpts();
 
-    const mediaList = await this.mediaRepo.find({
-      where: { monitored: true },
-      relations: [
-        'languageProfile',
-        'files',
-        'files.episode',
-        'files.episode.season',
-      ],
-    });
+    // Walked in batches: hydrating every monitored media with `files` and the
+    // episode/season joins in one query builds the whole library in memory
+    // before the first search even starts. Ordered by id so a batch boundary
+    // cannot skip or repeat a row.
+    const BATCH = 50;
+    for (let skip = 0; ; skip += BATCH) {
+      const batch = await this.mediaRepo.find({
+        where: { monitored: true },
+        relations: [
+          'languageProfile',
+          'files',
+          'files.episode',
+          'files.episode.season',
+        ],
+        order: { id: 'ASC' },
+        take: BATCH,
+        skip,
+      });
+      if (!batch.length) return;
 
-    for (const media of mediaList) {
-      if (!media.files?.length) continue;
-      for (const file of media.files) {
-        await this.searchMissingForFile(media, file, opts);
+      for (const media of batch) {
+        if (!media.files?.length) continue;
+        for (const file of media.files) {
+          await this.searchMissingForFile(media, file, opts);
+        }
       }
     }
   }
@@ -319,33 +330,55 @@ export class SubtitleSchedulerService {
     );
     const opts = await this.resolveSearchOpts();
 
-    const lowScoreSubs = await this.subtitleFileRepo
-      .createQueryBuilder('sf')
-      .where('sf.score < :threshold', { threshold })
-      .andWhere('sf.status != :failed', { failed: SubtitleStatus.FAILED })
-      .andWhere('sf.locked = false')
-      .leftJoinAndSelect('sf.media', 'media')
-      .leftJoinAndSelect('media.languageProfile', 'lp')
-      .leftJoinAndSelect('sf.mediaFile', 'mf')
-      .leftJoinAndSelect('mf.episode', 'mfEpisode')
-      .leftJoinAndSelect('mfEpisode.season', 'mfSeason')
-      .getMany();
+    // Walked by ascending id rather than OFFSET: an upgrade raises the sub's
+    // score past the threshold, so the row leaves the filtered set mid-walk and
+    // a positional cursor would step over its successors. An id cursor cannot.
+    // Batching also bounds `buildMissingLangsByFile`'s `IN (...)` list, which
+    // took every low-score file id at once.
+    const BATCH = 100;
+    let lastId = 0;
+    for (;;) {
+      const lowScoreSubs = await this.subtitleFileRepo
+        .createQueryBuilder('sf')
+        .where('sf.score < :threshold', { threshold })
+        .andWhere('sf.status != :failed', { failed: SubtitleStatus.FAILED })
+        .andWhere('sf.locked = false')
+        .andWhere('sf.id > :lastId', { lastId })
+        .leftJoinAndSelect('sf.media', 'media')
+        .leftJoinAndSelect('media.languageProfile', 'lp')
+        .leftJoinAndSelect('sf.mediaFile', 'mf')
+        .leftJoinAndSelect('mf.episode', 'mfEpisode')
+        .leftJoinAndSelect('mfEpisode.season', 'mfSeason')
+        .orderBy('sf.id', 'ASC')
+        .take(BATCH)
+        .getMany();
+      if (!lowScoreSubs.length) return;
+      lastId = lowScoreSubs[lowScoreSubs.length - 1].id;
 
-    // Build "languages still missing on file F" map upfront so we don't pay
-    // an N+1 inside the upgrade loop. A file with even one required language
-    // and zero (non-failed) subs for it counts as "still missing" — upgrade
-    // defers to the next missing-search pass on those files so we don't
-    // spend provider quota on score bumps while gaps remain.
-    const fileIds = [
-      ...new Set(
-        lowScoreSubs.map((s) => s.mediaFile?.id).filter((id): id is number => id != null),
-      ),
-    ];
-    const missingByFileId = await this.buildMissingLangsByFile(
-      fileIds,
-      lowScoreSubs,
-    );
+      // "Languages still missing on file F", resolved per batch so the upgrade
+      // loop pays no N+1. A file with even one required language and zero
+      // (non-failed) subs for it counts as still missing — upgrade defers to the
+      // next missing-search pass there, rather than spending provider quota on
+      // score bumps while gaps remain.
+      const fileIds = [
+        ...new Set(
+          lowScoreSubs.map((s) => s.mediaFile?.id).filter((id): id is number => id != null),
+        ),
+      ];
+      const missingByFileId = await this.buildMissingLangsByFile(
+        fileIds,
+        lowScoreSubs,
+      );
 
+      await this.upgradeBatch(lowScoreSubs, missingByFileId, opts);
+    }
+  }
+
+  private async upgradeBatch(
+    lowScoreSubs: SubtitleFile[],
+    missingByFileId: Map<number, boolean>,
+    opts: { minScore: number; autoSyncEnabled: boolean; encodeUtf8: boolean },
+  ): Promise<void> {
     for (const sub of lowScoreSubs) {
       // The profile is the contract: a language it doesn't ask for is never
       // searched, downloaded, nor allowed to replace a file on disk.
