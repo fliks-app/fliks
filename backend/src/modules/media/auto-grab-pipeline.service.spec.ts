@@ -76,11 +76,33 @@ describe('AutoGrabPipelineService.classifyForSearch — "skip" still carries ran
     ).toEqual({ mode: 'skip', minRankExclusive: 40, maxRankInclusive: 62, skipReason: 'upgrades-disabled' });
   });
 
-  it('still returns "unprofiled" with no rank data when a profile is missing', () => {
+  it('still returns "unprofiled" with no rank data when the quality profile is missing', () => {
     const unprofiled = { qualityProfile: null, languageProfile: null } as unknown as Media;
     expect(service.classifyForSearch(unprofiled, [])).toEqual({
       mode: 'unprofiled',
     });
+  });
+
+  // A missing language profile used to return `unprofiled` here while the manual grab paths
+  // treated it as permissive, so auto-grab stopped on media the operator could still search
+  // by hand — and with nothing seeded, that is every fresh install.
+  it('VERDICT: searches on with no language profile — no requirement means accept any', () => {
+    const noLanguage = {
+      qualityProfile: { cutoff: 16, upgradeAllowed: true, items: [] },
+      languageProfile: null,
+    } as unknown as Media;
+
+    expect(service.classifyForSearch(noLanguage, [])).toEqual({
+      mode: 'missing',
+      minRankExclusive: 0,
+      maxRankInclusive: Number.POSITIVE_INFINITY,
+    });
+    expect(service.classifyForSearch(noLanguage, [{ quality: 'HDTV-720p' }])).toEqual({
+      mode: 'upgrade',
+      minRankExclusive: 40,
+      maxRankInclusive: 62,
+    });
+    expect(service.shouldSearchMissing(noLanguage, [])).toBe(true);
   });
 });
 
