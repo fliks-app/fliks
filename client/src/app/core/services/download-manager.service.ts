@@ -157,6 +157,7 @@ export class DownloadManagerService {
           ? (only.episodeLabel ? `${title} · ${only.episodeLabel}` : title)
           : this.translate.instant('downloads.notif_active_count', { count: active.length }),
       detail: this.translate.instant('downloads.notif_progress'),
+      stale: this.translate.instant('downloads.notif_stale'),
       complete: this.translate.instant('downloads.notif_complete'),
       failed: this.translate.instant('downloads.notif_failed'),
     });
@@ -314,6 +315,7 @@ export class DownloadManagerService {
       this.notif.startDownload(String(taskId), hlsUrl, token, {
         notifTitle,
         notifProgress: this.translate.instant('downloads.notif_progress'),
+        notifStale: this.translate.instant('downloads.notif_stale'),
         notifComplete: this.translate.instant('downloads.notif_complete'),
         notifFailed: this.translate.instant('downloads.notif_failed'),
       });

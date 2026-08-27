@@ -9,8 +9,21 @@ private func percentLabel(_ progress: Double) -> String {
     progress.formatted(.percent.precision(.fractionLength(0)))
 }
 
-private func iconName(_ state: DownloadActivityAttributes.ContentState) -> String {
-    state.finished ? "checkmark.circle.fill" : "arrow.down.circle.fill"
+private func iconName(
+    _ state: DownloadActivityAttributes.ContentState,
+    stale: Bool
+) -> String {
+    if state.finished { return "checkmark.circle.fill" }
+    return stale ? "exclamationmark.circle.fill" : "arrow.down.circle.fill"
+}
+
+/// The status line, swapped for the stale copy once the system tells us the
+/// content is out of date.
+private func detailLabel(
+    _ state: DownloadActivityAttributes.ContentState,
+    stale: Bool
+) -> String {
+    stale && !state.finished ? state.stale : state.detail
 }
 
 /// Live Activity for the offline download queue: a lock-screen card, plus the
@@ -20,7 +33,7 @@ struct DownloadLiveActivity: Widget {
         ActivityConfiguration(for: DownloadActivityAttributes.self) { context in
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    Image(systemName: iconName(context.state))
+                    Image(systemName: iconName(context.state, stale: context.isStale))
                         .foregroundStyle(.white)
                     Text(context.state.headline)
                         .font(.headline)
@@ -29,8 +42,9 @@ struct DownloadLiveActivity: Widget {
                 }
                 ProgressView(value: context.state.progress)
                     .tint(.white)
+                    .opacity(context.isStale ? 0.4 : 1)
                 HStack {
-                    Text(context.state.detail)
+                    Text(detailLabel(context.state, stale: context.isStale))
                     Spacer()
                     Text(percentLabel(context.state.progress)).monospacedDigit()
                 }
@@ -43,7 +57,7 @@ struct DownloadLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Image(systemName: iconName(context.state))
+                    Image(systemName: iconName(context.state, stale: context.isStale))
                         .foregroundStyle(.white)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
@@ -52,8 +66,10 @@ struct DownloadLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(context.state.headline).font(.caption).lineLimit(1)
-                        ProgressView(value: context.state.progress).tint(.white)
-                        Text(context.state.detail)
+                        ProgressView(value: context.state.progress)
+                            .tint(.white)
+                            .opacity(context.isStale ? 0.4 : 1)
+                        Text(detailLabel(context.state, stale: context.isStale))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -69,7 +85,7 @@ struct DownloadLiveActivity: Widget {
             } compactTrailing: {
                 Text(percentLabel(context.state.progress)).monospacedDigit()
             } minimal: {
-                Image(systemName: iconName(context.state))
+                Image(systemName: iconName(context.state, stale: context.isStale))
             }
         }
     }

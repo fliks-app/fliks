@@ -1396,6 +1396,7 @@
     "queued": "Em fila",
     "notif_active_count": "{{count}} transferências",
     "notif_progress": "A transferir",
+    "notif_stale": "Progresso indisponível",
     "notif_complete": "Transferência concluída",
     "notif_failed": "Falha na transferência"
   },

@@ -1396,6 +1396,7 @@
     "queued": "In Warteschlange",
     "notif_active_count": "{{count}} Downloads",
     "notif_progress": "Wird heruntergeladen",
+    "notif_stale": "Fortschritt nicht verfügbar",
     "notif_complete": "Download abgeschlossen",
     "notif_failed": "Download fehlgeschlagen"
   },

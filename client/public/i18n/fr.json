@@ -1406,6 +1406,7 @@
     "queued": "En attente",
     "notif_active_count": "{{count}} téléchargements",
     "notif_progress": "Téléchargement en cours",
+    "notif_stale": "Progression indisponible",
     "notif_complete": "Téléchargement terminé",
     "notif_failed": "Échec du téléchargement"
   },

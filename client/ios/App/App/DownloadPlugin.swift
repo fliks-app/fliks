@@ -113,9 +113,15 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
     private var batchDone = 0
     private var batchFailed = 0
 
+    /// How long a published state stays believable. Without push updates the
+    /// app can't refresh a suspended queue, so past this the card labels itself
+    /// out of date instead of presenting a frozen percentage as live.
+    private static let activityStaleAfter: TimeInterval = 180
+
     struct NotifCopy {
         let title: String
         let progress: String
+        let stale: String
         let complete: String
         let failed: String
     }
@@ -123,6 +129,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
     struct ActivityCopy {
         var headline: String
         var detail: String
+        var stale: String
         var complete: String
         var failed: String
     }
@@ -174,6 +181,8 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             }
         }
 
+        reclaimOrphanActivities()
+
         // Ask for notification permission up front so the completion banner can
         // actually appear. Silently degrades to no banner if the user declines.
         UNUserNotificationCenter.current().requestAuthorization(
@@ -208,6 +217,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             notifById[id] = NotifCopy(
                 title: title,
                 progress: call.getString("notifProgress") ?? complete,
+                stale: call.getString("notifStale") ?? complete,
                 complete: complete,
                 failed: failed
             )
@@ -476,6 +486,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             self.activityCopy = ActivityCopy(
                 headline: headline,
                 detail: detail,
+                stale: call.getString("stale") ?? self.activityCopy?.stale ?? detail,
                 complete: call.getString("complete") ?? self.activityCopy?.complete ?? "",
                 failed: call.getString("failed") ?? self.activityCopy?.failed ?? ""
             )
@@ -575,6 +586,50 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
 
     // MARK: - Live Activity
 
+    /// Deal with a Live Activity left over from a previous run.
+    ///
+    /// The system owns a running activity, not us: it outlives the process, and
+    /// nothing runs at force-quit to retire it (`applicationWillTerminate` is
+    /// not called when the app is swiped away). So the card can still be on the
+    /// Lock Screen at launch, and without this the next download would publish a
+    /// second one beside it.
+    ///
+    /// A transfer the session still holds means the card is legitimate and gets
+    /// adopted, batch counters included. Otherwise the queue it described is
+    /// gone — force-quit cancels background transfers — and it is retired.
+    private func reclaimOrphanActivities() {
+        let orphans = Activity<DownloadActivityAttributes>.activities
+        guard !orphans.isEmpty else { return }
+
+        downloadSession.getAllTasks { [weak self] tasks in
+            guard let self = self else { return }
+            let liveIds = tasks.compactMap { ($0 as? AVAggregateAssetDownloadTask)?.taskDescription }
+            guard !liveIds.isEmpty, let adopted = orphans.first else {
+                for activity in orphans {
+                    Task { await activity.end(nil, dismissalPolicy: .immediate) }
+                }
+                return
+            }
+            // Keep one, retire any extras, and let the running state carry it
+            // until the WebView pushes fresh copy.
+            self.activity = adopted
+            // Re-seed the batch from what survived, or the first push would
+            // report 0% and the first completion would retire the card.
+            self.batchTotal = max(self.batchTotal, liveIds.count)
+            self.activityCopy = ActivityCopy(
+                headline: adopted.content.state.headline,
+                detail: adopted.content.state.detail,
+                stale: adopted.content.state.stale,
+                complete: adopted.content.state.detail,
+                failed: adopted.content.state.detail
+            )
+            self.activityPercent = -1
+            for extra in orphans.dropFirst() {
+                Task { await extra.end(nil, dismissalPolicy: .immediate) }
+            }
+        }
+    }
+
     /// Fall back to the first download's banner copy so the card is right from
     /// the first frame. The WebView replaces it via `setActivityCopy` as soon as
     /// it has recomputed the batch, which is the only place that knows whether
@@ -584,6 +639,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         activityCopy = ActivityCopy(
             headline: copy.title,
             detail: copy.progress,
+            stale: copy.stale,
             complete: copy.complete,
             failed: copy.failed
         )
@@ -599,12 +655,16 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         do {
             activity = try Activity.request(
                 attributes: DownloadActivityAttributes(),
-                content: .init(state: currentState(with: copy), staleDate: nil)
+                content: .init(state: currentState(with: copy), staleDate: nextStaleDate())
             )
             activityPercent = 0
         } catch {
             NSLog("[Download] Live Activity refused: \(error.localizedDescription)")
         }
+    }
+
+    private func nextStaleDate() -> Date {
+        Date().addingTimeInterval(Self.activityStaleAfter)
     }
 
     /// Progress across the whole batch, finished items counted as complete.
@@ -622,6 +682,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             remaining: max(0, batchTotal - batchDone),
             headline: copy.headline,
             detail: copy.detail,
+            stale: copy.stale,
             finished: false
         )
     }
@@ -634,7 +695,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         guard force || percent != activityPercent else { return }
         activityPercent = percent
         let state = currentState(with: copy)
-        Task { await activity.update(.init(state: state, staleDate: nil)) }
+        Task { await activity.update(.init(state: state, staleDate: nextStaleDate())) }
     }
 
     /// One download stopped, for any reason. When that empties the queue the
@@ -682,6 +743,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             remaining: 0,
             headline: copy.headline,
             detail: outcome == .complete ? copy.complete : copy.failed,
+            stale: copy.stale,
             finished: true
         )
         Task {

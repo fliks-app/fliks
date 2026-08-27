@@ -22,6 +22,11 @@ struct DownloadActivityAttributes: ActivityAttributes {
         var headline: String
         /// Pre-translated status line — downloading / complete / failed.
         var detail: String
+        /// Shown instead of `detail` once the content goes stale. Without push
+        /// updates the app can't refresh a suspended — or force-quit — queue, and
+        /// a frozen percentage presented as live is worse than admitting the
+        /// number is out of date.
+        var stale: String
         /// Drives the icon and stops the count badge from lingering; the copy
         /// itself lives in `detail`.
         var finished: Bool

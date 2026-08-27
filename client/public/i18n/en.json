@@ -1406,6 +1406,7 @@
     "queued": "Queued",
     "notif_active_count": "{{count}} downloads",
     "notif_progress": "Downloading",
+    "notif_stale": "Progress unavailable",
     "notif_complete": "Download complete",
     "notif_failed": "Download failed"
   },

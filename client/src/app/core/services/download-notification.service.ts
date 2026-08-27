@@ -14,6 +14,7 @@ export interface NativeDownloadEvent {
 export interface DownloadNotifStrings {
   notifTitle: string;
   notifProgress: string;
+  notifStale: string;
   notifComplete: string;
   notifFailed: string;
 }
@@ -24,6 +25,8 @@ export interface DownloadActivityCopy {
   /** Media title for a lone download, a count for a batch. */
   headline: string;
   detail: string;
+  /** Replaces `detail` once the system flags the content as out of date. */
+  stale: string;
   complete: string;
   failed: string;
 }

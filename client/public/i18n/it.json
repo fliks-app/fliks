@@ -1396,6 +1396,7 @@
     "queued": "In coda",
     "notif_active_count": "{{count}} download",
     "notif_progress": "Download in corso",
+    "notif_stale": "Avanzamento non disponibile",
     "notif_complete": "Download completato",
     "notif_failed": "Download fallito"
   },
