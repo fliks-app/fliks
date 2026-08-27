@@ -51,7 +51,12 @@ jobs:
           java-version: 21
           cache: gradle
 
+      # Only what `assembleDebug` compiles against. The default package set
+      # pulls the emulator, whose archive has arrived corrupt on the runner and
+      # failed the job before a line of our code was built.
       - uses: android-actions/setup-android@v4
+        with:
+          packages: 'tools platform-tools platforms;android-36'
 
       - name: Install client dependencies
         run: npm ci
