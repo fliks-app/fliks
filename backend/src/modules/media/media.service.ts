@@ -195,6 +195,18 @@ export class MediaService {
 
   // -- Metadata ---------------------------------------------------------------
 
+  identify(
+    id: number,
+    target: {
+      tmdbId?: number;
+      tvdbId?: number;
+      imdbId?: string;
+      preferredProvider?: string;
+    },
+  ) {
+    return this.metadata.identify(id, target);
+  }
+
   refreshMetadata(id: number) {
     return this.metadata.refreshMetadata(id);
   }

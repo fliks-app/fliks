@@ -22,6 +22,7 @@ import { MediaService } from './media.service';
 import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
 import { SearchMediaDto } from './dto/search-media.dto';
+import { IdentifyMediaDto } from './dto/identify-media.dto';
 import { AnalyzeMediaDto } from './dto/analyze-media.dto';
 import { ImportTmdbDto } from './dto/import-tmdb.dto';
 import { ImportMediaDto } from './dto/import-media.dto';
@@ -239,6 +240,26 @@ export class MediaController {
   ) {
     await this.assertMediaAccessible(id, user);
     return this.mediaService.updateProfiles(id, dto);
+  }
+
+  /** Re-point a media at a different work. Synchronous, unlike `:id/refresh`:
+   *  the client replaces the whole page from the result, and an id clash has to
+   *  reach the admin as an error rather than a silent SSE failure. */
+  @Post(':id/identify')
+  @CheckPolicies((ability) => ability.can(Action.Update, Media))
+  async identify(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: IdentifyMediaDto,
+    @CurrentUser() user: User,
+  ) {
+    await this.assertMediaAccessible(id, user);
+    const media = await this.mediaService.identify(id, dto);
+    this.eventsService.emit({
+      type: 'metadata.refreshed',
+      mediaId: id,
+      title: media.title,
+    });
+    return media;
   }
 
   @Post(':id/refresh')
