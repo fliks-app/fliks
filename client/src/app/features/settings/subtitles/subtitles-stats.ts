@@ -34,7 +34,9 @@ export class SubtitlesStatsComponent implements OnInit {
   readonly stats = signal<SubtitleStats | null>(null);
   readonly missing = signal<MissingSubtitleEntry[]>([]);
 
-  readonly missingCount = computed(() => this.missing().length);
+  /** Server-reported total, not the page length. */
+  readonly missingTotal = signal(0);
+  readonly missingCount = computed(() => this.missingTotal());
 
   private readonly statusLabels: Record<string, string> = {
     downloaded: 'Téléchargés',
@@ -63,15 +65,18 @@ export class SubtitlesStatsComponent implements OnInit {
   readonly pageSize = 20;
   readonly page = signal(0);
   readonly totalPages = computed(() =>
-    Math.max(1, Math.ceil(this.missing().length / this.pageSize)),
+    Math.max(1, Math.ceil(this.missingTotal() / this.pageSize)),
   );
-  readonly pagedMissing = computed(() => {
-    const start = this.page() * this.pageSize;
-    return this.missing().slice(start, start + this.pageSize);
-  });
 
-  goToPage(p: number) {
+  async goToPage(p: number) {
     this.page.set(Math.max(0, Math.min(p, this.totalPages() - 1)));
+    await this.loadMissing();
+  }
+
+  private async loadMissing() {
+    const { total, data } = await this.api.getMissing(this.page() + 1, this.pageSize);
+    this.missingTotal.set(total);
+    this.missing.set(data);
   }
 
   rowKey(row: MissingSubtitleEntry): string {
@@ -91,6 +96,7 @@ export class SubtitlesStatsComponent implements OnInit {
         this.missing.update((list) =>
           list.filter((r) => !(r.fileId === row.fileId && r.language === row.language)),
         );
+        this.missingTotal.update((t) => Math.max(0, t - 1));
         this.toast.success(
           this.translate.instant('settings.subtitles.search_one_ok', {
             lang: row.language,
@@ -113,12 +119,8 @@ export class SubtitlesStatsComponent implements OnInit {
 
   async ngOnInit() {
     try {
-      const [stats, missing] = await Promise.all([
-        this.api.getStats(),
-        this.api.getMissing(),
-      ]);
+      const [stats] = await Promise.all([this.api.getStats(), this.loadMissing()]);
       this.stats.set(stats);
-      this.missing.set(missing);
     } catch {
       // handled by global interceptor
     } finally {
