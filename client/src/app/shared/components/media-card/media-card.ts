@@ -7,6 +7,8 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { Media } from '../../../core/services/api/media.service';
 import { Capacitor } from '@capacitor/core';
 import { computeMediaBarStatus, computeMediaBarPercent } from '../../utils/media-status.util';
+import { IdentifyModalService } from '../../../core/services/identify-modal.service';
+import { TrackingModalService } from '../../../core/services/tracking-modal.service';
 import { CardActionsDirective } from '../../directives/card-actions.directive';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
@@ -52,6 +54,8 @@ export class MediaCardComponent {
   private readonly tv = inject(TvService);
   private readonly cardActionsService = inject(CardActionsService);
   private readonly addToPlaylist = inject(AddToPlaylistService);
+  private readonly identifyModal = inject(IdentifyModalService);
+  private readonly trackingModal = inject(TrackingModalService);
   private readonly recommend = inject(RecommendService);
   private readonly auth = inject(AuthService);
   private readonly playableMedia = inject(PlayableMediaService);
@@ -419,11 +423,28 @@ export class MediaCardComponent {
     'media.toggle-watched': () => this.watchedToggled.emit(this.status() !== 'watched'),
     'media.toggle-series-watched': () => this.watchedToggled.emit(this.status() !== 'watched'),
     'media.remove': () => this.dismissed.emit(),
-    'media.open-tracking': () => this.goToDetail('tracking'),
+    'media.open-tracking': () => {
+      const mediaId = this.media()?.id ?? this.playlistMediaId();
+      if (mediaId == null) return;
+      this.trackingModal.open(mediaId, this.media()?.type === 'series' ? { kind: 'series' } : { kind: 'movie' });
+    },
     'media.edit-profiles': () => this.goToDetail('profiles'),
     'media.edit-library': () => this.goToDetail('library'),
     'media.edit-subtitles': () => this.goToDetail('subtitles'),
-    'media.identify': () => this.goToDetail('identify'),
+    'media.identify': () => {
+      const m = this.media();
+      if (!m) return;
+      this.identifyModal.open({
+        mediaId: m.id,
+        mediaType: m.type,
+        title: m.title,
+        year: m.year ?? null,
+        path: m.path ?? null,
+        tmdbId: m.tmdbId ?? null,
+        tvdbId: m.tvdbId ?? null,
+        imdbId: m.imdbId ?? null,
+      });
+    },
     'media.analyze': () => this.goToDetail('analyze'),
     // Not a modal, but routed like one: the refresh reports through the detail
     // page's toast and SSE, so running it from a card would be silent.

@@ -296,6 +296,12 @@
   <!-- Recommend-to-a-member dialog — single instance, opened via RecommendService -->
   <app-recommend-modal />
 
+  <!-- Tracking-status dialog — single instance, opened via TrackingModalService -->
+  <app-tracking-modal-host />
+
+  <!-- Identify dialog — single instance, opened via IdentifyModalService -->
+  <app-identify-modal-host />
+
   <div class="drawer-side z-40" [class.hidden]="isNative && device.isPhone()">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
     <aside class="w-64 min-h-full flex flex-col"
