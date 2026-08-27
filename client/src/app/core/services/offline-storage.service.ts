@@ -214,6 +214,43 @@ export class OfflineStorageService {
     this.removeShakaOfflineUri(mediaFileId);
   }
 
+  /**
+   * Bytes a completed download occupies, or null when it can't be measured.
+   *
+   * Each backend counts it its own way: a `.movpkg` bundle walked on disk
+   * (iOS), the cache's byte tally (Android), the Shaka store's own record
+   * (web), the file on disk (desktop).
+   */
+  async sizeBytes(key: string): Promise<number | null> {
+    const mfid = Number(this.mfidFromKey(key));
+    try {
+      if (this.isDesktop) {
+        const items = await this.downloader!.list();
+        return items.find((i) => i.id === String(mfid))?.size ?? null;
+      }
+      if (this.isNative) {
+        const task = this.cache
+          .load()
+          .find((t) => t.mediaFileId === mfid && t.status === 'ready');
+        if (!task) return null;
+        const bytes = await this.notif.getDownloadSize(String(task.id));
+        return bytes > 0 ? bytes : null;
+      }
+      const uri = this.getShakaOfflineUri(mfid);
+      if (!uri) return null;
+      const shaka = await getShaka();
+      const storage = new shaka.offline.Storage();
+      try {
+        const list = await storage.list();
+        return list.find((c: { offlineUri: string | null }) => c.offlineUri === uri)?.size ?? null;
+      } finally {
+        await storage.destroy();
+      }
+    } catch {
+      return null;
+    }
+  }
+
   async delete(key: string): Promise<void> {
     if (this.isDesktop) return this.downloader!.remove(this.mfidFromKey(key));
     if (this.isNative) return this.deleteNative(key);

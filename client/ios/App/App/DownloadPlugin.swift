@@ -56,6 +56,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         CAPPluginMethod(name: "setActivityCopy", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMaxConcurrentDownloads", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "dismissActivity", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getDownloadSize", returnType: CAPPluginReturnPromise),
     ]
 
     /// Concurrent transfers. HLS aggregate downloads are segment-chatty, so a
@@ -434,6 +435,45 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             return
         }
         call.resolve(["downloaded": completedIds.contains(id) && resolvedAssetURL(id: id) != nil])
+    }
+
+    /// Bytes the download occupies on disk. Zero when it isn't there.
+    @objc func getDownloadSize(_ call: CAPPluginCall) {
+        guard let id = call.getString("id") else {
+            call.resolve(["bytes": 0])
+            return
+        }
+        // `relativePathById` is main-thread state; the walk that follows is not
+        // something to run there — a film's bundle is thousands of segments.
+        DispatchQueue.main.async { [weak self] in
+            guard let url = self?.resolvedAssetURL(id: id) else {
+                call.resolve(["bytes": 0])
+                return
+            }
+            DispatchQueue.global(qos: .utility).async {
+                call.resolve(["bytes": Self.bundleSize(at: url)])
+            }
+        }
+    }
+
+    /// Allocated size of a downloaded asset, walked recursively: a `.movpkg` is
+    /// a directory, so asking the file system about it directly reports the
+    /// folder entry rather than the media inside it.
+    private static func bundleSize(at url: URL) -> Int {
+        let keys: Set<URLResourceKey> = [
+            .isRegularFileKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey,
+        ]
+        guard let walker = FileManager.default.enumerator(
+            at: url, includingPropertiesForKeys: Array(keys)
+        ) else { return 0 }
+
+        var total = 0
+        for case let file as URL in walker {
+            guard let values = try? file.resourceValues(forKeys: keys),
+                  values.isRegularFile == true else { continue }
+            total += values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0
+        }
+        return total
     }
 
     /// Return the local `file://` URL for a completed offline asset so the

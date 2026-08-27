@@ -20,6 +20,10 @@ export interface DownloadTask {
   createdAt: string;
   /** HLS URL used for the download — needed for native offline playback via CacheDataSource. */
   hlsUrl?: string;
+  /** Bytes the finished download occupies on device. Measured once it lands —
+   *  the figure the backends report mid-transfer is the part received so far,
+   *  which is not what a "size on disk" column should show. */
+  sizeBytes?: number;
   /** Pre-downloaded subtitle metadata for offline playback. */
   offlineSubtitles?: { key: string; language: string; label: string; forced?: boolean }[];
   /** Audio stream info for offline audio track picker. */

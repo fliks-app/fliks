@@ -22,6 +22,7 @@ import {
   LucideRotateCcw,
 } from '@lucide/angular';
 import { ToastService } from '../../core/services/toast.service';
+import { formatBytes } from '../../shared/utils/download-format';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 
@@ -70,6 +71,8 @@ export class DownloadsComponent implements OnInit, OnDestroy {
 
   private readonly baseTasks = signal<DownloadTask[]>([]);
   readonly loading = signal(true);
+
+  protected readonly formatBytes = formatBytes;
 
 
   /**

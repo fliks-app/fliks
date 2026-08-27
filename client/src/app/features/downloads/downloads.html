@@ -28,7 +28,9 @@
             @if (task.episodeLabel) {
               <p class="text-xs text-base-content/60 line-clamp-1">{{ task.episodeLabel }}</p>
             }
-            <p class="text-xs text-base-content/50 mt-0.5">{{ task.quality }}</p>
+            <p class="text-xs text-base-content/50 mt-0.5">
+              {{ task.quality }}@if (task.sizeBytes) { · {{ formatBytes(task.sizeBytes) }} }
+            </p>
 
             @if (task.status === 'queued') {
               <progress class="progress progress-info w-full h-1.5 mt-2"></progress>

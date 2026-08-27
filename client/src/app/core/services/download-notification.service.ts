@@ -45,6 +45,7 @@ interface DownloadNotificationPlugin {
   setActivityCopy(opts: DownloadActivityCopy): Promise<void>;
   setMaxConcurrentDownloads(opts: { max: number }): Promise<void>;
   dismissActivity(): Promise<void>;
+  getDownloadSize(opts: { id: string }): Promise<{ bytes: number }>;
   addListener(event: string, cb: (data: any) => void): Promise<any>;
 }
 
@@ -143,6 +144,16 @@ export class DownloadNotificationService {
       return JSON.parse(result.downloads);
     } catch {
       return [];
+    }
+  }
+
+  /** Bytes a completed download occupies on device, or 0 when it isn't there. */
+  async getDownloadSize(id: string): Promise<number> {
+    if (!this.isNative || !DownloadNotification) return 0;
+    try {
+      return (await DownloadNotification.getDownloadSize({ id })).bytes ?? 0;
+    } catch {
+      return 0;
     }
   }
 

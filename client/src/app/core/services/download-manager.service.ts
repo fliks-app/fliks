@@ -107,6 +107,7 @@ export class DownloadManagerService {
       this.updateTaskStatus(taskId, 'ready', 100);
       // Pre-download subtitles for offline playback (fire-and-forget)
       void this.preDownloadSubtitles(taskId);
+      void this.persistSize(taskId);
     } else if (event.type === 'progress') {
       this.persistProgress(taskId, event.progress, event.state);
     }
@@ -209,6 +210,7 @@ export class DownloadManagerService {
       this.updateTaskStatus(task.id, 'ready', 100);
       this.emitEvent('complete', task.id, 100);
       void this.preDownloadSubtitles(task.id);
+      void this.persistSize(task.id);
     } else {
       this.updateTaskStatus(task.id, 'failed', 0);
       this.emitEvent('failed', task.id, 0);
@@ -437,6 +439,7 @@ export class DownloadManagerService {
         this.updateTaskStatus(downloadId, 'ready', 100);
         this.emitEvent('complete', downloadId, 100);
         void this.preDownloadSubtitles(downloadId);
+        void this.persistSize(downloadId);
       } else {
         throw new Error('Shaka offline store returned null');
       }
@@ -522,6 +525,18 @@ export class DownloadManagerService {
       if (!url) continue;
       void this.imageCache.prefetch(this.serverConfig.resolveUrl(imageUrlWithSize(url, size)));
     }
+  }
+
+  /** Measure what the finished download occupies and keep it on the task, so
+   *  the list can show it without a per-row trip to the platform. */
+  private async persistSize(taskId: number) {
+    const task = this.cache.load().find((t) => t.id === taskId);
+    if (!task) return;
+    const bytes = await this.storage.sizeBytes(`download-${task.mediaFileId}`);
+    if (!bytes) return;
+    this.cache.save(
+      this.cache.load().map((t) => (t.id === taskId ? { ...t, sizeBytes: bytes } : t)),
+    );
   }
 
   private persistTask(task: DownloadTask) {
@@ -649,6 +664,12 @@ export class DownloadManagerService {
           this.updateTaskStatus(t.id, 'failed', 0);
         }
       }
+    }
+
+    // Downloads that finished before sizes were recorded, and any the
+    // reconciliation above just promoted to ready.
+    for (const t of this.cache.load()) {
+      if (t.status === 'ready' && t.sizeBytes == null) void this.persistSize(t.id);
     }
 
     // Recovery has just decided what is really still going; a card describing

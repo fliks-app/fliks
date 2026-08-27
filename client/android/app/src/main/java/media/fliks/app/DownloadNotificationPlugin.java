@@ -159,6 +159,20 @@ public class DownloadNotificationPlugin extends Plugin {
         }
     }
 
+    /** Bytes the download occupies in the cache. Zero when it isn't there. */
+    @PluginMethod()
+    public void getDownloadSize(PluginCall call) {
+        JSObject result = new JSObject();
+        try {
+            String id = call.getString("id", "");
+            Download dl = FlixDownloadUtil.getDownloadIndex(getContext()).getDownload(id);
+            result.put("bytes", dl == null ? 0 : dl.getBytesDownloaded());
+        } catch (Exception e) {
+            result.put("bytes", 0);
+        }
+        call.resolve(result);
+    }
+
     private static String stateToString(int state) {
         switch (state) {
             case Download.STATE_QUEUED: return "queued";
