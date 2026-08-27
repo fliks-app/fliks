@@ -12,7 +12,72 @@ import type { UiContribution } from '@fliks/plugin-contract/ui';
  * own label/icon by live state — cosmetic, so the swap lives in the
  * component's `displayLabelKey`/`displayIcon`, not here.
  */
+/**
+ * Section boundaries, as weight bands over the media actions registry:
+ * personal actions, acquisition, editing, maintenance, then destructive.
+ * Bands rather than an explicit field so a plugin contribution groups itself by
+ * the weight it already declares, with no addition to the contract.
+ */
+export function sectionOf(weight: number): string {
+  if (weight < 500) return 'personal';
+  if (weight < 700) return 'acquire';
+  if (weight < 1000) return 'edit';
+  if (weight < 1300) return 'maintain';
+  return 'danger';
+}
+
 export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
+  // ── Rows a card owns ────────────────────────────────────────────────────
+  // Play and Open act on a card's target; on a detail page you are already
+  // there, so they say `surface:card` rather than the lists diverging again.
+  {
+    id: 'core.play',
+    slot: 'media.actions',
+    weight: 50,
+    labelKey: 'media_card.action_play',
+    icon: 'play',
+    when: ['surface:card'],
+    action: { kind: 'action', actionId: 'media.play' },
+  },
+  {
+    id: 'core.open',
+    slot: 'media.actions',
+    weight: 60,
+    labelKey: 'media_card.action_open',
+    icon: 'external-link',
+    when: ['surface:card'],
+    action: { kind: 'action', actionId: 'media.open' },
+  },
+  {
+    id: 'core.add_to_playlist',
+    slot: 'media.actions',
+    weight: 150,
+    labelKey: 'playlists.add_to_playlist',
+    icon: 'list-plus',
+    action: { kind: 'action', actionId: 'media.add-to-playlist' },
+  },
+  {
+    // The series-scoped row above covers a series; this one takes everything
+    // else, so the two are never both offered.
+    id: 'core.toggle_watched',
+    slot: 'media.actions',
+    weight: 210,
+    labelKey: 'media_card.mark_watched',
+    icon: 'eye',
+    when: ['!mediaType:series'],
+    action: { kind: 'action', actionId: 'media.toggle-watched' },
+  },
+  {
+    // Drops the media from the list being browsed, not from the library.
+    id: 'core.remove',
+    slot: 'media.actions',
+    weight: 1350,
+    labelKey: 'media_card.remove_from_list',
+    icon: 'trash-2',
+    tone: 'danger',
+    when: ['surface:card'],
+    action: { kind: 'action', actionId: 'media.remove' },
+  },
   {
     id: 'core.recommend',
     slot: 'media.actions',
@@ -70,14 +135,26 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     when: ['hasPermission:media.edit', '!isEpisode'],
     action: { kind: 'action', actionId: 'media.edit-library' },
   },
+  // Subtitles are per-file, so the row belongs to a movie or to an episode and
+  // to nothing else. That is an OR, which a flat AND-list can't say — but two
+  // contributions on one actionId can, and they stay declarative, so any surface
+  // reading this list gets the gate instead of the header keeping it privately.
   {
     id: 'core.edit_subtitles',
     slot: 'media.actions',
     weight: 900,
     labelKey: 'media_detail.edit_subtitles',
     icon: 'captions',
-    // Original gate is `mediaType:movie OR isEpisode` — an OR, so it can't
-    // live in `when` (a flat AND-list). Full guard in media-info-header.ts.
+    when: ['mediaType:movie'],
+    action: { kind: 'action', actionId: 'media.edit-subtitles' },
+  },
+  {
+    id: 'core.edit_subtitles_episode',
+    slot: 'media.actions',
+    weight: 900,
+    labelKey: 'media_detail.edit_subtitles',
+    icon: 'captions',
+    when: ['isEpisode'],
     action: { kind: 'action', actionId: 'media.edit-subtitles' },
   },
   {

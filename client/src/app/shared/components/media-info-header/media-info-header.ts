@@ -55,26 +55,13 @@ import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-regis
 import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-evaluator';
 import type { MediaType } from '../../../core/enums/media-type.enum';
 import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
-import { CORE_MEDIA_ACTIONS } from './core-media-actions';
+import { CORE_MEDIA_ACTIONS, sectionOf } from './core-media-actions';
+import { resolveMenuContributions } from '../../../core/plugin-ui/resolve-menu-contributions';
 import type { UiContribution } from '@fliks/plugin-contract/ui';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 
 /** One `media.actions` contribution resolved to something the template can
  *  render directly — visibility, handler and icon fallback already decided. */
-/**
- * Section boundaries, as weight bands over the media actions registry:
- * personal actions, acquisition, editing, maintenance, then destructive.
- * Bands rather than an explicit field so a plugin contribution groups itself by
- * the weight it already declares, with no addition to the contract.
- */
-function sectionOf(weight: number): string {
-  if (weight < 500) return 'personal';
-  if (weight < 700) return 'acquire';
-  if (weight < 1000) return 'edit';
-  if (weight < 1300) return 'maintain';
-  return 'danger';
-}
-
 export interface ResolvedMediaAction {
   id: string;
   /** Kept from the contribution: the section boundaries are weight bands, so
@@ -629,7 +616,6 @@ export class MediaInfoHeaderComponent {
       const needsFile = this.mediaType() === 'movie' || !!this.episodeId();
       return !this.userHasOpenWholeRequest() && (!needsFile || !this.selectedFileId());
     },
-    'core.edit_subtitles': () => this.mediaType() === 'movie' || !!this.episodeId(),
     // Already `requests.create && !media.delete && !<pending>` — pending is
     // per-title async state fetched by the parent, not a permission.
     'core.request_deletion': () => this.canRequestDeletion(),
@@ -658,44 +644,18 @@ export class MediaInfoHeaderComponent {
    *  An unknown actionId or action.kind drops the row rather than rendering
    *  a broken one. */
   readonly menuItems = computed<ResolvedMediaAction[]>(() => {
-    const merged = [...CORE_MEDIA_ACTIONS, ...this.pluginUi.contributionsFor('media.actions')]
-      .sort((a, b) => a.weight - b.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-    const ctx = this.mediaActionsContext();
-    const items: ResolvedMediaAction[] = [];
-    for (const c of merged) {
-      if (!evaluateWhen(c.when, ctx)) continue;
-      // Reusing a core actionId reuses core's gating too: a plugin may narrow one of
-      // core's own actions, never widen it to someone core would hide it from.
-      if (!this.passesCoreGateFor(c, ctx)) continue;
-      if (!(this.extraGuards[c.id]?.() ?? true)) continue;
-      const base = {
-        id: c.id,
-        weight: c.weight,
-        labelKey: c.labelKey,
-        icon: c.icon ?? 'circle',
-        tone: c.tone ?? ('default' as const),
-        confirmKey: c.confirmKey,
-      };
-      if (c.action.kind === 'route') {
-        items.push({ ...base, route: c.action.path, handler: null });
-      } else if (c.action.kind === 'action') {
-        const handler = resolveMediaAction(c.action.actionId, this.actionHandlers);
-        if (!handler) continue;
-        items.push({ ...base, actionId: c.action.actionId, handler });
-      }
-      // else: unrecognised action kind — nothing rather than a broken row.
-    }
-    return items;
+    return resolveMenuContributions({
+      contributions: [...CORE_MEDIA_ACTIONS, ...this.pluginUi.contributionsFor('media.actions'),
+        // `card.actions` stays read: it is in the plugin contract and installed
+        // plugins target it. One list on our side, both slots on theirs.
+        ...this.pluginUi.contributionsFor('card.actions'),
+      ],
+      ctx: this.mediaActionsContext(),
+      guards: this.extraGuards,
+      resolveAction: (id) => resolveMediaAction(id, this.actionHandlers),
+      navigate: (path) => void this.router.navigate([path]),
+    }).map((r) => ({ ...r, handler: r.run }));
   });
-
-  /** A contribution pointing at a core actionId must also clear that core item's own
-   *  `when` and extra guard, whoever declared it. */
-  private passesCoreGateFor(c: UiContribution, ctx: WhenContext): boolean {
-    if (c.action.kind !== 'action') return true;
-    const core = CORE_MEDIA_ACTIONS.find((a) => a.action.kind === 'action' && a.action.actionId === (c.action as { actionId: string }).actionId);
-    if (!core || core.id === c.id) return true;
-    return evaluateWhen(core.when, ctx) && (this.extraGuards[core.id]?.() ?? true);
-  }
 
   /** A couple of rows swap their label by live state (watched, monitored) —
    *  cosmetic, so the swap lives here rather than in the static contribution. */

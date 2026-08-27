@@ -19,8 +19,9 @@ import { NavbarService } from '../../../core/services/navbar.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-evaluator';
 import type { UiContribution } from '@fliks/plugin-contract/ui';
-import { resolveCardAction, type CardActionHandlers } from '../../../core/plugin-ui/card-action-registry';
-import { CORE_CARD_ACTIONS } from './core-card-actions';
+import { CORE_MEDIA_ACTIONS, sectionOf } from '../media-info-header/core-media-actions';
+import { resolveMenuContributions } from '../../../core/plugin-ui/resolve-menu-contributions';
+import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 
 export type MediaCardAspect = 'portrait' | 'landscape';
@@ -375,6 +376,7 @@ export class MediaCardComponent {
     isEpisode: this.playlistEpisodeId() != null,
     isTv: this.tv.isTv(),
     isTouch: this.device.isTouch(),
+    surface: 'card',
   }));
 
   /**
@@ -397,21 +399,50 @@ export class MediaCardComponent {
     'core.remove': () => this.dismissable(),
   };
 
-  private readonly actionHandlers: CardActionHandlers = {
-    'card.play': () => (this.clickIntent() === 'play' ? this.onCardClick() : this.onPlayClick(new Event('synthetic'))),
-    'card.open': () => this.openDetail(),
-    'card.add-to-playlist': () => {
+  /**
+   * The `media.actions` ids a card can serve. Those whose UI is a modal on the
+   * detail page navigate there with the action armed, rather than every modal
+   * being hoisted to the layout — the admin lands on the title being edited.
+   * An id left null resolves to nothing and its row is dropped, which is the
+   * registry's fail-closed contract and is how the rows needing page-level
+   * state (requests, releases) stay off a card.
+   */
+  /**
+   * The actions a card can perform. Rows whose id is absent resolve to nothing
+   * and are dropped, which is how the ones needing the detail page's own state
+   * (requests, releases) stay off a card. Those whose UI is a modal on that page
+   * navigate there with the action armed, so no modal has to be hoisted.
+   */
+  private readonly actionHandlers = {
+    'media.play': () => (this.clickIntent() === 'play' ? this.onCardClick() : this.onPlayClick(new Event('synthetic'))),
+    'media.open': () => this.openDetail(),
+    'media.toggle-watched': () => this.watchedToggled.emit(this.status() !== 'watched'),
+    'media.toggle-series-watched': () => this.watchedToggled.emit(this.status() !== 'watched'),
+    'media.remove': () => this.dismissed.emit(),
+    'media.open-tracking': () => this.goToDetail('tracking'),
+    'media.edit-profiles': () => this.goToDetail('profiles'),
+    'media.edit-library': () => this.goToDetail('library'),
+    'media.edit-subtitles': () => this.goToDetail('subtitles'),
+    'media.identify': () => this.goToDetail('identify'),
+    'media.analyze': () => this.goToDetail('analyze'),
+    'media.add-to-playlist': () => {
       const episodeId = this.playlistEpisodeId();
       const mediaId = this.media()?.id ?? this.playlistMediaId();
       this.addToPlaylist.open(episodeId != null ? { episodeId } : { mediaId: mediaId! });
     },
-    'card.recommend': () => {
+    'media.recommend': () => {
       const mediaId = this.media()?.id ?? this.playlistMediaId();
       this.recommend.open({ mediaId: mediaId!, episodeId: this.playlistEpisodeId() ?? undefined });
     },
-    'card.toggle-watched': () => this.watchedToggled.emit(this.status() !== 'watched'),
-    'card.remove': () => this.dismissed.emit(),
-  };
+  } satisfies MediaActionHandlers;
+
+  /** Opens one of the detail page's modals by deep link. */
+  private goToDetail(action: string) {
+    const mediaId = this.media()?.id ?? this.playlistMediaId();
+    if (mediaId == null) return;
+    const type = this.media()?.type === 'series' ? 'tv' : 'movie';
+    void this.router.navigate(['/media', type, mediaId], { queryParams: { action } });
+  }
 
   /**
    * Actions exposed via the contextual panel (TV menu button / mobile long-press).
@@ -424,37 +455,32 @@ export class MediaCardComponent {
   protected readonly cardActions = computed((): CardAction[] => {
     const ctx = this.cardActionsContext();
     const watched = this.status() === 'watched';
-    const merged = [...CORE_CARD_ACTIONS, ...this.pluginUi.contributionsFor('card.actions')]
-      .sort((a, b) => a.weight - b.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const rows = resolveMenuContributions({
+      contributions: [...CORE_MEDIA_ACTIONS, ...this.pluginUi.contributionsFor('media.actions'),
+        // `card.actions` stays read: it is in the plugin contract and installed
+        // plugins target it. One list on our side, both slots on theirs.
+        ...this.pluginUi.contributionsFor('card.actions'),
+      ],
+      ctx,
+      guards: this.extraGuards,
+      resolveAction: (id) => resolveMediaAction(id, this.actionHandlers),
+      navigate: (path) => void this.router.navigate([path]),
+    });
 
-    const resolved: { weight: number; action: CardAction }[] = [];
-    for (const c of merged) {
-      if (!evaluateWhen(c.when, ctx)) continue;
-      // Reusing a core actionId reuses core's gating too: a plugin may narrow one of
-      // core's own actions, never widen it to someone core would hide it from.
-      if (!this.passesCoreGateFor(c, ctx)) continue;
-      if (!(this.extraGuards[c.id]?.() ?? true)) continue;
-
-      let run: (() => void) | null = null;
-      if (c.action.kind === 'route') {
-        const path = c.action.path;
-        run = () => void this.router.navigate([path]);
-      } else if (c.action.kind === 'action') {
-        run = resolveCardAction(c.action.actionId, this.actionHandlers);
-      }
-      if (!run) continue; // unknown actionId, or an unrecognised action.kind
-
-      const isToggle = c.action.kind === 'action' && c.action.actionId === 'card.toggle-watched';
-      resolved.push({
-        weight: c.weight,
+    const resolved = rows.map((r) => {
+      const isToggle = r.actionId === 'media.toggle-watched';
+      return {
+        weight: r.weight,
         action: {
-          labelKey: isToggle ? (watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched') : c.labelKey,
-          icon: isToggle ? (watched ? 'eye-off' : 'eye') : c.icon,
-          tone: c.tone ?? 'default',
-          run,
-        },
-      });
-    }
+          labelKey: isToggle ? (watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched') : r.labelKey,
+          icon: isToggle ? (watched ? 'eye-off' : 'eye') : r.icon,
+          tone: r.tone,
+          section: sectionOf(r.weight),
+          ...(r.route ? { route: r.route } : {}),
+          run: r.run!,
+        } as CardAction,
+      };
+    });
 
     const extra = this.extraActions();
     const actions = resolved.map((r) => r.action);
@@ -465,15 +491,6 @@ export class MediaCardComponent {
     }
     return actions;
   });
-
-  /** A contribution pointing at a core actionId must also clear that core item's own
-   *  `when` and extra guard, whoever declared it. */
-  private passesCoreGateFor(c: UiContribution, ctx: WhenContext): boolean {
-    if (c.action.kind !== 'action') return true;
-    const core = CORE_CARD_ACTIONS.find((a) => a.action.kind === 'action' && a.action.actionId === (c.action as { actionId: string }).actionId);
-    if (!core || core.id === c.id) return true;
-    return evaluateWhen(core.when, ctx) && (this.extraGuards[core.id]?.() ?? true);
-  }
 
   /**
    * Resolved top-right status. Falls back to an auto-detected `'missing'`
