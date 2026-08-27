@@ -21,7 +21,7 @@
       (ngModelChange)="onQuery($event)"
     />
     @if (results().length) {
-      <ul class="flex flex-col gap-1 mt-2 max-h-60 overflow-y-auto">
+      <ul class="flex flex-col gap-1 mt-2 max-h-60 overflow-y-auto scroll-ring-safe">
         @for (u of results(); track u.id) {
           <li>
             <button
