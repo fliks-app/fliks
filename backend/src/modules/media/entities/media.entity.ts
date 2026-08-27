@@ -29,6 +29,7 @@ import { MediaCrew } from './media-crew.entity';
 @Entity('media')
 @Index('idx_media_search_vector', { synchronize: false })
 @Index('UQ_media_type_tmdbId', ['type', 'tmdbId'], { unique: true })
+@Index('IDX_media_addedById', ['addedBy'])
 export class Media extends BaseEntity {
   @Column()
   title: string;
@@ -43,7 +44,7 @@ export class Media extends BaseEntity {
    * France" — still matches if the localised form is in this list.
    * Empty array when the provider returns no aliases.
    */
-  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  @Column({ type: 'jsonb', default: () => "'[]'" })
   alternativeTitles: string[];
 
   @Column({ nullable: true })

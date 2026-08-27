@@ -5,6 +5,7 @@ import {
   OneToMany,
   JoinColumn,
   RelationId,
+  Index,
 } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { PlaylistVisibility } from '../../../common/enums';
@@ -17,11 +18,12 @@ import { PlaylistItem } from './playlist-item.entity';
  * Access for other users is granted per-user through {@link PlaylistShare}.
  */
 @Entity('playlists')
+@Index('IDX_playlists_ownerId', ['owner'])
 export class Playlist extends BaseEntity {
   @Column({ type: 'varchar', length: 255 })
   name: string;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'ownerId' })
   owner: User;
 

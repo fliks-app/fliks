@@ -13,6 +13,7 @@ import { User } from '../../users/entities/user.entity';
  * (forces a full re-login on every device).
  */
 @Entity('refresh_tokens')
+@Index('IDX_refresh_tokens_userId', ['user'])
 export class RefreshToken extends BaseEntity {
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })

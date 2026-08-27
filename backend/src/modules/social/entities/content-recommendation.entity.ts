@@ -20,16 +20,16 @@ import { Episode } from '../../media/entities/episode.entity';
  * library sections without deleting the row.
  */
 @Entity('content_recommendations')
-@Index(['recipient'])
+@Index('IDX_content_recommendations_recipient', ['recipient'])
 export class ContentRecommendation extends BaseEntity {
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'senderId' })
   sender: User;
 
   @RelationId((r: ContentRecommendation) => r.sender)
   senderId: number;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'recipientId' })
   recipient: User;
 
@@ -37,7 +37,7 @@ export class ContentRecommendation extends BaseEntity {
   recipientId: number;
 
   /** The movie, or the parent series for a season/episode recommendation. */
-  @ManyToOne(() => Media, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Media, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'mediaId' })
   media: Media;
 
