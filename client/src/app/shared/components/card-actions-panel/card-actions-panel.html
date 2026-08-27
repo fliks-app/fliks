@@ -5,86 +5,102 @@
   [width]="width()"
   (closed)="onClose()"
 >
-  @if (title()) {
-    <div class="flex items-start gap-3 px-2 pb-3 mb-1 border-b border-base-content/10">
-      @if (imageUrl(); as img) {
-        <img [cachedSrc]="img | resolveUrl" alt="" loading="lazy"
-          class="shrink-0 rounded object-cover bg-base-300"
-          [style.width.px]="imageAspect() === 'landscape' ? 80 : 60"
-          [style.aspect-ratio]="imageAspect() === 'landscape' ? '16 / 9' : '2 / 3'" />
-      }
-      <div class="min-w-0">
-        <div class="text-sm font-semibold line-clamp-2">{{ title() }}</div>
-        @if (subtitle()) {
-          <div class="text-xs text-base-content/60 line-clamp-2">{{ subtitle() }}</div>
+  @if (sheetSub(); as sub) {
+    <div class="panel-slide-fwd">
+    <button type="button" class="dropdown-item mb-1" (click)="backToRoot()">
+      <svg lucideArrowLeft class="h-4 w-4 shrink-0 opacity-60"></svg>
+      <span class="flex-1 truncate text-left font-medium">{{ sub.labelKey ? (sub.labelKey | translate) : sub.label }}</span>
+    </button>
+    <div class="h-px bg-base-content/10 my-1" role="separator"></div>
+    <ng-container *ngTemplateOutlet="childRows; context: { $implicit: sub.children! }" />
+    </div>
+  } @else {
+    <div [class.panel-slide-back]="slide() === 'back'">
+    @if (title()) {
+      <div class="flex items-start gap-3 px-2 pb-3 mb-1 border-b border-base-content/10">
+        @if (imageUrl(); as img) {
+          <img [cachedSrc]="img | resolveUrl" alt="" loading="lazy"
+            class="shrink-0 rounded object-cover bg-base-300"
+            [style.width.px]="imageAspect() === 'landscape' ? 80 : 60"
+            [style.aspect-ratio]="imageAspect() === 'landscape' ? '16 / 9' : '2 / 3'" />
         }
+        <div class="min-w-0">
+          <div class="text-sm font-semibold line-clamp-2">{{ title() }}</div>
+          @if (subtitle()) {
+            <div class="text-xs text-base-content/60 line-clamp-2">{{ subtitle() }}</div>
+          }
+        </div>
       </div>
+    }
+    @for (a of actions(); track $index; let i = $index) {
+      @if (i > 0 && a.section !== actions()[i - 1].section) {
+        <div class="h-px bg-base-content/10 my-1" role="separator"></div>
+      }
+      @if (a.children?.length) {
+        <button
+          #subTrigger
+          type="button"
+          class="dropdown-item"
+          [attr.aria-expanded]="isOpen(a)"
+          (click)="openSub(a, subTrigger)"
+        >
+          <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
+          <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
+          <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60"></svg>
+        </button>
+        <!-- Desktop only: in sheet mode the group takes over the panel above
+             instead, since a second sheet would stack on top of this one. -->
+        <app-popover-menu
+          [open]="isOpen(a)"
+          [anchor]="subAnchor()"
+          placement="right-start"
+          [submenu]="true"
+          [width]="width()"
+          (closed)="closeSub()"
+        >
+          <ng-container *ngTemplateOutlet="childRows; context: { $implicit: a.children! }" />
+        </app-popover-menu>
+      } @else if (a.route) {
+        <a
+          [routerLink]="a.route"
+          class="dropdown-item"
+          [class.text-error]="a.tone === 'danger'"
+          (click)="closeForRoute()"
+        >
+          <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
+          <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
+        </a>
+      } @else {
+        <button
+          type="button"
+          class="dropdown-item"
+          [class.text-error]="a.tone === 'danger'"
+          [disabled]="a.disabled"
+          (click)="trigger(a)"
+        >
+          <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
+          <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
+        </button>
+      }
+    }
     </div>
   }
-  @for (a of actions(); track $index; let i = $index) {
-    @if (i > 0 && a.section !== actions()[i - 1].section) {
-      <div class="h-px bg-base-content/10 my-1" role="separator"></div>
-    }
-    @if (a.children?.length) {
-      <button
-        #subTrigger
-        type="button"
-        class="dropdown-item"
-        [attr.aria-expanded]="isOpen(a)"
-        (click)="openSub(a, subTrigger)"
-      >
-        <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
-        <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
-        <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60"></svg>
-      </button>
-      <!-- Anchored beside its parent row, same mechanism the subtitle actions
-           menu uses. On touch/TV `app-popover-menu` falls back to its sheet, so
-           the group stays reachable where there is no room for a side panel. -->
-      <app-popover-menu
-        [open]="isOpen(a)"
-        [anchor]="subAnchor()"
-        placement="right-start"
-        [submenu]="true"
-        [width]="width()"
-        (closed)="closeSub()"
-      >
-        @for (child of a.children!; track $index) {
-          <button
-            type="button"
-            class="dropdown-item"
-            [class.text-error]="child.tone === 'danger'"
-            [disabled]="child.disabled"
-            (click)="trigger(child)"
-          >
-            <ng-container *ngTemplateOutlet="icon; context: { $implicit: child }" />
-            <span class="flex-1 truncate text-left">{{ child.labelKey ? (child.labelKey | translate) : child.label }}</span>
-          </button>
-        }
-      </app-popover-menu>
-    } @else if (a.route) {
-      <a
-        [routerLink]="a.route"
-        class="dropdown-item"
-        [class.text-error]="a.tone === 'danger'"
-        (click)="closeForRoute()"
-      >
-        <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
-        <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
-      </a>
-    } @else {
-      <button
-        type="button"
-        class="dropdown-item"
-        [class.text-error]="a.tone === 'danger'"
-        [disabled]="a.disabled"
-        (click)="trigger(a)"
-      >
-        <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
-        <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
-      </button>
-    }
-  }
 </app-popover-menu>
+
+<ng-template #childRows let-children>
+  @for (child of children; track $index) {
+    <button
+      type="button"
+      class="dropdown-item"
+      [class.text-error]="child.tone === 'danger'"
+      [disabled]="child.disabled"
+      (click)="trigger(child)"
+    >
+      <ng-container *ngTemplateOutlet="icon; context: { $implicit: child }" />
+      <span class="flex-1 truncate text-left">{{ child.labelKey ? (child.labelKey | translate) : child.label }}</span>
+    </button>
+  }
+</ng-template>
 
 <!-- Curated whitelist: a `card.actions` contribution may name any icon, and an
      unrecognised one must fall back to a glyph rather than render blank. -->

@@ -655,6 +655,33 @@ body.tv .to-base-100\/50 {
   }
 }
 
+/* Sheet submenu navigation: the panel swaps in place, so the incoming list
+   slides in from the side it conceptually comes from. */
+.panel-slide-fwd {
+  animation: panel-slide-fwd 0.18s ease;
+}
+@keyframes panel-slide-fwd {
+  from {
+    opacity: 0;
+    transform: translateX(30%);
+  }
+}
+.panel-slide-back {
+  animation: panel-slide-back 0.18s ease;
+}
+@keyframes panel-slide-back {
+  from {
+    opacity: 0;
+    transform: translateX(-30%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel-slide-fwd,
+  .panel-slide-back {
+    animation: none;
+  }
+}
+
 /* Shared item style for app-dropdown-menu (desktop dropdown + mobile/TV
    bottom sheet). Caller adds a colour utility (`text-white`, `text-error`,
    …) and an icon — everything else (padding, hover, focus, layout) lives
