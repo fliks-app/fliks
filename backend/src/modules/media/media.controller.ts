@@ -242,9 +242,10 @@ export class MediaController {
     return this.mediaService.updateProfiles(id, dto);
   }
 
-  /** Re-point a media at a different work. Synchronous, unlike `:id/refresh`:
-   *  the client replaces the whole page from the result, and an id clash has to
-   *  reach the admin as an error rather than a silent SSE failure. */
+  /** Re-point a media at a different work. The ids are written on the request,
+   *  so a bad target or an id clash still reaches the admin as an HTTP error;
+   *  re-pulling the work walks every season, episode and image, so it runs off
+   *  the request like `:id/refresh` and reports through the same SSE events. */
   @Post(':id/identify')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
   async identify(
@@ -254,11 +255,31 @@ export class MediaController {
   ) {
     await this.assertMediaAccessible(id, user);
     const media = await this.mediaService.identify(id, dto);
-    this.eventsService.emit({
-      type: 'metadata.refreshed',
-      mediaId: id,
-      title: media.title,
-    });
+    const title = media.title;
+
+    this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
+    void this.mediaService.finishIdentify(id).then(
+      (refreshed) => {
+        this.eventsService.emit({
+          type: 'metadata.refreshed',
+          mediaId: id,
+          title: refreshed.title,
+        });
+      },
+      (err) => {
+        const message = (err as Error).message;
+        this.logger.error(
+          `Identification failed after the ids were written — id=${id} error=${message}`,
+          err instanceof Error ? err.stack : err,
+        );
+        this.eventsService.emit({
+          type: 'metadata.failed',
+          mediaId: id,
+          title,
+          error: message,
+        });
+      },
+    );
     return media;
   }
 

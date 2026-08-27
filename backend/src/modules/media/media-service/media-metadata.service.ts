@@ -69,6 +69,10 @@ export class MediaMetadataService {
   }
 
   /**
+   * Write the external ids the caller picked. Validation and the id clash live
+   * here, so they reach the admin as an HTTP error; {@link completeIdentify}
+   * carries the long half.
+   *
    * Point a media at a different work: write the external ids the caller
    * picked, re-pull everything from the provider, then drop the seasons and
    * episodes the new work does not have.
@@ -82,7 +86,7 @@ export class MediaMetadataService {
    * and markers on those episodes do go — they described content this title no
    * longer contains.
    */
-  async identify(
+  async applyIdentity(
     id: number,
     // The supplied ids ARE the new identity: what the caller omits is cleared,
     // never carried over from the work this media used to point at.
@@ -117,6 +121,13 @@ export class MediaMetadataService {
 
     const before = `"${media.title}" tmdb=${media.tmdbId ?? '-'} tvdb=${media.tvdbId ?? '-'}`;
 
+    // The refresh below re-reads the whole work — every season, episode and
+    // image — so without this line a long identify looks like nothing happened.
+    this.log.log(
+      `identify: media#${id} ${before} -> tmdb=${target.tmdbId ?? '-'} ` +
+        `tvdb=${target.tvdbId ?? '-'} imdb=${target.imdbId ?? '-'}, refreshing`,
+    );
+
     // Keeping an id the caller did not supply would leave this media pointing at
     // the previous work on that provider, and `resolveProviderForMedia` falls
     // back to whichever id is set — the old identity would silently return.
@@ -132,14 +143,31 @@ export class MediaMetadataService {
         : {}),
     } as QueryDeepPartialEntity<Media>);
 
-    const refreshed = await this.refreshMetadata(id);
+    return (await this.mediaRepo.findOne({ where: { id } })) ?? media;
+  }
+
+  /**
+   * The half that talks to the provider: re-pull the work and drop what the new
+   * one does not have. Runs after {@link applyIdentity} has committed the ids,
+   * off the request, because it walks every season, episode and image.
+   *
+   * The acquisition kick `refreshMetadata` normally fires is deferred: the
+   * episodes it just inserted have no files yet — the files of the work this
+   * media used to be are sitting unmatched until the caller relinks them, and
+   * grabbing against that state re-downloads what is already on disk.
+   */
+  async completeIdentify(id: number): Promise<Media> {
+    const refreshed = await this.refreshMetadata(id, {
+      deferAcquisitionKick: true,
+    });
 
     if (refreshed.type === MediaType.SERIES) {
       await this.dropSeasonsAbsentFromProvider(refreshed);
     }
 
     this.log.log(
-      `identify: ${before} -> "${refreshed.title}" tmdb=${refreshed.tmdbId ?? '-'} tvdb=${refreshed.tvdbId ?? '-'}`,
+      `identify: media#${id} refreshed — "${refreshed.title}" tmdb=${refreshed.tmdbId ?? '-'} ` +
+        `tvdb=${refreshed.tvdbId ?? '-'} imdb=${refreshed.imdbId ?? '-'}`,
     );
     return (await this.mediaRepo.findOne({ where: { id } })) ?? refreshed;
   }
@@ -185,7 +213,10 @@ export class MediaMetadataService {
     }
   }
 
-  async refreshMetadata(id: number): Promise<Media> {
+  async refreshMetadata(
+    id: number,
+    opts?: { deferAcquisitionKick?: boolean },
+  ): Promise<Media> {
     const media = await this.mediaRepo.findOne({ where: { id } });
     if (!media) throw new NotFoundException(`Media #${id} not found`);
 
@@ -229,7 +260,7 @@ export class MediaMetadataService {
       // New episodes appeared on the provider (typically a fresh season
       // drop): kick the auto-grab pipeline now instead of waiting up to 6 h
       // for the next scheduler tick. Mirrors the post-approval kick.
-      if (insertedCount > 0) {
+      if (insertedCount > 0 && !opts?.deferAcquisitionKick) {
         this.events.emitDomain({
           type: 'media.acquisition.requested',
           mediaIds: [media.id],
