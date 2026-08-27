@@ -17,6 +17,11 @@ export type CoreMediaActionId =
   | 'media.analyze'
   | 'media.toggle-monitored'
   | 'media.delete'
+  | 'media.play'
+  | 'media.open'
+  | 'media.add-to-playlist'
+  | 'media.toggle-watched'
+  | 'media.remove'
   | 'media.identify'
   | 'media.request-deletion';
 
@@ -31,6 +36,11 @@ const CORE_MEDIA_ACTION_IDS: ReadonlySet<string> = new Set<CoreMediaActionId>([
   'media.edit-library',
   'media.edit-subtitles',
   'media.refresh-metadata',
+  'media.play',
+  'media.open',
+  'media.add-to-playlist',
+  'media.toggle-watched',
+  'media.remove',
   'media.identify',
   'media.analyze',
   'media.toggle-monitored',
@@ -38,8 +48,13 @@ const CORE_MEDIA_ACTION_IDS: ReadonlySet<string> = new Set<CoreMediaActionId>([
   'media.request-deletion',
 ]);
 
-/** One concrete handler per core actionId, supplied by whatever component owns the click. */
-export type MediaActionHandlers = Record<CoreMediaActionId, () => void>;
+/**
+ * The handlers a surface supplies. Partial on purpose: the card menu and the
+ * detail menu read one list of actions and each serves the subset it can, so an
+ * id it has no handler for resolves to null and its row is dropped rather than
+ * listed and inert.
+ */
+export type MediaActionHandlers = Partial<Record<CoreMediaActionId, () => void>>;
 
 /**
  * Resolves a contribution's `actionId` to the handler that implements it.
@@ -51,5 +66,6 @@ export function resolveMediaAction(
   actionId: string,
   handlers: MediaActionHandlers,
 ): (() => void) | null {
-  return CORE_MEDIA_ACTION_IDS.has(actionId) ? handlers[actionId as CoreMediaActionId] : null;
+  if (!CORE_MEDIA_ACTION_IDS.has(actionId)) return null;
+  return handlers[actionId as CoreMediaActionId] ?? null;
 }

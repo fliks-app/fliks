@@ -153,8 +153,8 @@ describe('MediaCardComponent — card.actions characterisation', () => {
     expect(shapes(h)).toEqual([
       { labelKey: 'media_card.action_play', icon: 'play', tone: 'default' },
       { labelKey: 'media_card.action_open', icon: 'external-link', tone: 'default' },
-      { labelKey: 'playlists.add_to_playlist', icon: 'list-plus', tone: 'default' },
       { labelKey: 'recommend.menu_item', icon: 'user-plus', tone: 'default' },
+      { labelKey: 'playlists.add_to_playlist', icon: 'list-plus', tone: 'default' },
       { labelKey: 'media_card.mark_watched', icon: 'eye', tone: 'default' },
       { labelKey: 'media_card.remove_from_list', icon: 'trash-2', tone: 'danger' },
     ]);
@@ -172,8 +172,8 @@ describe('MediaCardComponent — card.actions characterisation', () => {
     expect(labels(h)).toEqual([
       'media_card.action_play',
       'media_card.action_open',
-      'playlists.add_to_playlist',
       'recommend.menu_item',
+      'playlists.add_to_playlist',
       'media_card.mark_watched',
       'media_card.remove_from_list',
     ]);
@@ -190,8 +190,8 @@ describe('MediaCardComponent — card.actions characterisation', () => {
     });
     expect(labels(h)).toEqual([
       'media_card.action_open',
-      'playlists.add_to_playlist',
       'recommend.menu_item',
+      'playlists.add_to_playlist',
       'media_card.mark_watched',
       'media_card.remove_from_list',
     ]);
@@ -206,9 +206,11 @@ describe('MediaCardComponent — card.actions characterisation', () => {
     expect(labels(h)).toEqual([
       'media_card.action_play',
       'media_card.action_open',
-      'playlists.add_to_playlist',
       'recommend.menu_item',
+      'playlists.add_to_playlist',
       'media_card.mark_watched',
+      'tracking.menu_item',
+      'media_detail.edit_subtitles',
     ]);
   });
 
@@ -218,7 +220,16 @@ describe('MediaCardComponent — card.actions characterisation', () => {
       status: null,
       interactiveWatched: false,
     });
-    expect(labels(h)).toEqual(['media_card.action_open', 'playlists.add_to_playlist', 'recommend.menu_item']);
+    // A `[media]`-driven card carries the monitored flag and a media type, so the
+    // rows gated on those reach it too - the same list as the detail menu, minus
+    // what this surface has no handler for.
+    expect(labels(h)).toEqual([
+      'media_card.action_open',
+      'recommend.menu_item',
+      'playlists.add_to_playlist',
+      'tracking.menu_item',
+      'media_detail.edit_subtitles',
+    ]);
   });
 
   it('episode row (media-detail-seasons) with a file: play-intent via clickIntent, playlist target from ids', async () => {
@@ -233,8 +244,8 @@ describe('MediaCardComponent — card.actions characterisation', () => {
     expect(labels(h)).toEqual([
       'media_card.action_play',
       'media_card.action_open',
-      'playlists.add_to_playlist',
       'recommend.menu_item',
+      'playlists.add_to_playlist',
       'media_card.mark_watched',
     ]);
   });
@@ -248,7 +259,7 @@ describe('MediaCardComponent — card.actions characterisation', () => {
       interactiveWatched: false,
       clickIntent: 'open',
     });
-    expect(labels(h)).toEqual(['media_card.action_open', 'playlists.add_to_playlist', 'recommend.menu_item']);
+    expect(labels(h)).toEqual(['media_card.action_open', 'recommend.menu_item', 'playlists.add_to_playlist']);
   });
 
   it('season card (media-detail): interactiveWatched only, no playlist target — Add/Recommend absent without an id', async () => {
@@ -377,19 +388,38 @@ describe('MediaCardComponent — card.actions merges with plugin contributions',
       {
         'card.actions': [
           {
+            id: 'fliks.acme.before',
+            slot: 'card.actions',
+            weight: 120,
+            labelKey: 'x.before',
+            action: { kind: 'route', path: '/plugins/acme/before' },
+          },
+          {
             id: 'fliks.acme.between',
             slot: 'card.actions',
             weight: 250,
             labelKey: 'x.between',
             action: { kind: 'route', path: '/plugins/acme/between' },
           },
+          {
+            id: 'fliks.acme.after',
+            slot: 'card.actions',
+            weight: 990,
+            labelKey: 'x.after',
+            action: { kind: 'route', path: '/plugins/acme/after' },
+          },
         ],
       },
     );
+    // Bracketed by two contributions of its own, so the assertion is about the
+    // weight sort and nothing else — adding a core row cannot move it.
     const shown = labels(h);
-    expect(shown.indexOf('media_card.action_open')).toBe(1);
-    expect(shown.indexOf('x.between')).toBe(2);
-    expect(shown.indexOf('playlists.add_to_playlist')).toBeGreaterThan(2);
+    const at = (label: string) => shown.indexOf(label);
+    expect(at('x.before')).toBeGreaterThanOrEqual(0);
+    expect(at('x.between')).toBeGreaterThan(at('x.before'));
+    expect(at('x.after')).toBeGreaterThan(at('x.between'));
+    // and still interleaved with core's own rows, not appended after them
+    expect(at('x.between')).toBeGreaterThan(at('media_card.action_open'));
   });
 
   it('a route-kind plugin action navigates on click', async () => {
@@ -455,7 +485,7 @@ describe('MediaCardComponent — card.actions merges with plugin contributions',
           weight: 850,
           labelKey: 'x.remove_alias',
           when: ['isTv' as const],
-          action: { kind: 'action' as const, actionId: 'card.remove' },
+          action: { kind: 'action' as const, actionId: 'media.remove' },
         },
       ],
     };
@@ -477,7 +507,7 @@ describe('MediaCardComponent — card.actions merges with plugin contributions',
           slot: 'card.actions' as const,
           weight: 850,
           labelKey: 'x.remove_wide',
-          action: { kind: 'action' as const, actionId: 'card.remove' },
+          action: { kind: 'action' as const, actionId: 'media.remove' },
         },
       ],
     };

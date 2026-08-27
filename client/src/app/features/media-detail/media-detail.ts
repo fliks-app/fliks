@@ -887,6 +887,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // Paint from the cache-served media immediately; the uncacheable
       // playback-state calls below must not gate first paint.
       this.loading.set(false);
+      this.openFromQueryParam();
       // Router scroll restoration is 'top' app-wide, so returning here needs the
       // offset put back by hand. Sticky, not a single shot: cast, crew and the
       // hero artwork land after this point, so a one-off scrollTo gets clamped
@@ -1313,6 +1314,36 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     viewChild<ElementRef<HTMLDialogElement>>('analyzeDialog');
   private readonly firstAnalyzeOption =
     viewChild<ElementRef<HTMLInputElement>>('firstAnalyzeOption');
+
+  /**
+   * Opens one of this page's modals from `?action=`, so a media card can offer
+   * the same rows as this menu without every modal being hoisted to the layout:
+   * the card navigates here with the action armed and lands on the title being
+   * edited. The param is stripped once consumed, or a reload would reopen it.
+   */
+  private openFromQueryParam() {
+    const action = this.route.snapshot.queryParamMap.get('action');
+    if (!action) return;
+    const m = this.media();
+    if (!m) return;
+    const openers: Record<string, () => void> = {
+      identify: () => this.openIdentifyModal(),
+      profiles: () => this.openProfilesModal(),
+      library: () => this.openLibraryModal(),
+      subtitles: () => this.openSubtitles(),
+      analyze: () => this.openAnalyzeModal(),
+      tracking: () =>
+        this.openTracking(m.type === 'movie' ? { kind: 'movie' } : { kind: 'series' }),
+    };
+    const open = openers[action];
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { action: null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+    if (open) queueMicrotask(open);
+  }
 
   openIdentifyModal() {
     const m = this.media();
