@@ -18,7 +18,8 @@
       @for (r of releases(); track r.downloadUrl) {
         <tr [class.opacity-50]="r.blocklisted || !r.languageAllowed || r.rejections.length > 0">
           <td class="text-sm min-w-0">
-            <!-- Title scrolls horizontally on its own -->
+            <!-- Each of the row's three lines scrolls on its own, so a long title
+                 or a wide badge run never widens the cell. -->
             <div class="overflow-x-auto overflow-y-hidden">
               <p class="whitespace-nowrap inline-flex items-center gap-1.5">
                 @if (r.isFullSeason) {
@@ -28,34 +29,36 @@
               </p>
             </div>
             <!-- Mobile-only info rows -->
-            <div class="flex items-center justify-between gap-2 mt-1 sm:hidden">
-              <div class="flex flex-col gap-1 min-w-0">
-                <div class="flex flex-wrap gap-1 items-center">
-                  <span class="badge badge-sm badge-ghost">{{ r.qualityName }}</span>
+            <div class="flex items-start justify-between gap-2 mt-1 sm:hidden">
+              <div class="flex flex-col gap-1 min-w-0 flex-1">
+                <div class="flex flex-nowrap gap-1 items-center overflow-x-auto overflow-y-hidden">
+                  <span class="badge badge-sm badge-ghost shrink-0">{{ r.qualityName }}</span>
                   @if (r.videoCodec) {
-                    <span class="badge badge-sm badge-secondary">{{ r.videoCodec }}</span>
+                    <span class="badge badge-sm badge-secondary shrink-0">{{ r.videoCodec }}</span>
                   }
-                  <span class="badge badge-sm" [class]="r.languageAllowed ? 'badge-info' : 'badge-warning'">{{ r.languageName }}</span>
+                  <span class="badge badge-sm shrink-0" [class]="r.languageAllowed ? 'badge-info' : 'badge-warning'">{{ r.languageName }}</span>
                   @if (r.freeleech) {
-                    <span class="badge badge-sm badge-success">FL</span>
+                    <span class="badge badge-sm badge-success shrink-0">FL</span>
                   }
                   @if (r.blocklisted) {
-                    <span class="badge badge-sm badge-error">{{ 'media_detail.blocklisted' | translate }}</span>
+                    <span class="badge badge-sm badge-error shrink-0">{{ 'media_detail.blocklisted' | translate }}</span>
                   } @else if (!r.allowed) {
-                    <span class="badge badge-sm badge-warning">{{ 'media_detail.not_allowed' | translate }}</span>
+                    <span class="badge badge-sm badge-warning shrink-0">{{ 'media_detail.not_allowed' | translate }}</span>
                   }
                   @if (r.rejections.length > 0) {
-                    <div class="tooltip tooltip-top before:whitespace-pre-line" [attr.data-tip]="rejectionText(r.rejections)">
+                    <div class="sm:tooltip sm:tooltip-top before:whitespace-pre-line shrink-0"
+                      [attr.data-tip]="rejectionText(r.rejections)"
+                      [attr.title]="rejectionText(r.rejections)">
                       <svg lucideTriangleAlert class="h-4 w-4 text-warning"></svg>
                     </div>
                   }
                   @if (showCfScore() && r.customFormatScore !== 0) {
-                    <span class="text-sm" [class]="r.customFormatScore > 0 ? 'text-success font-medium' : 'text-error'">
+                    <span class="text-sm shrink-0 whitespace-nowrap" [class]="r.customFormatScore > 0 ? 'text-success font-medium' : 'text-error'">
                       CF {{ r.customFormatScore > 0 ? '+' : '' }}{{ r.customFormatScore }}
                     </span>
                   }
                 </div>
-                <div class="flex gap-3 text-sm tabular-nums text-base-content/70">
+                <div class="flex flex-nowrap gap-3 overflow-x-auto overflow-y-hidden text-sm tabular-nums text-base-content/70 whitespace-nowrap">
                   <span>{{ formatBytes(r.size) }}</span>
                   <span>
                     <span class="text-success">▲{{ r.seeders }}</span>
