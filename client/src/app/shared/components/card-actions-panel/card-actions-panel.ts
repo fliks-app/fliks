@@ -28,12 +28,15 @@ import {
   LucideSearch,
   LucideDownload,
   LucideChevronRight,
+  LucideArrowLeft,
   LucideDatabase,
   LucideSlidersHorizontal,
   LucideHeart,
   LucideCircle,
 } from '@lucide/angular';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
+import { TvService } from '../../../core/services/tv.service';
+import { DeviceService } from '../../../core/services/device.service';
 import { PopoverMenuComponent } from '../popover-menu';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
@@ -70,6 +73,7 @@ import { CachedSrcDirective } from '../../directives/cached-src.directive';
     LucideSearch,
     LucideDownload,
   LucideChevronRight,
+  LucideArrowLeft,
   LucideDatabase,
   LucideSlidersHorizontal,
   LucideHeart,
@@ -82,6 +86,13 @@ import { CachedSrcDirective } from '../../directives/cached-src.directive';
 })
 export class CardActionsPanelComponent {
   readonly service = inject(CardActionsService);
+  private readonly tv = inject(TvService);
+  private readonly device = inject(DeviceService);
+
+  /** Same condition `app-popover-menu` uses to render a sheet instead of an
+   *  anchored dropdown: there is no room beside the panel for a flyout, so a
+   *  submenu takes over the sheet with a back row. */
+  protected readonly sheet = computed(() => this.tv.isTv() || this.device.isTouch());
 
   readonly actions = computed(() => this.service.actions() ?? []);
   readonly title = this.service.title;
@@ -107,7 +118,10 @@ export class CardActionsPanelComponent {
     // Collapse on every open: a group left unfolded from last time would make
     // the menu a different height than the one the user reached for.
     effect(() => {
-      if (this.service.open()) this.closeSub();
+      if (this.service.open()) {
+        this.closeSub();
+        this.slide.set('');
+      }
     });
   }
 
@@ -120,6 +134,13 @@ export class CardActionsPanelComponent {
   private readonly openSubmenu = signal<CardAction | null>(null);
   protected readonly subAnchor = signal<HTMLElement | null>(null);
 
+  /** Which way the sheet panel last moved, so the incoming list slides in
+   *  from the matching side. */
+  protected readonly slide = signal<'' | 'back'>('');
+
+  /** Submenu shown in place of the root list (sheet only). */
+  protected readonly sheetSub = computed(() => (this.sheet() ? this.openSubmenu() : null));
+
   isOpen(a: CardAction): boolean {
     return this.openSubmenu() === a;
   }
@@ -128,6 +149,13 @@ export class CardActionsPanelComponent {
     if (this.isOpen(a)) return this.closeSub();
     this.subAnchor.set(anchor);
     this.openSubmenu.set(a);
+  }
+
+  /** Sheet back row: same as closing the submenu, but the root list slides
+   *  back in from the left. */
+  backToRoot() {
+    this.slide.set('back');
+    this.closeSub();
   }
 
   closeSub() {
