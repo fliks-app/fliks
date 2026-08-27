@@ -14,7 +14,14 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { DownloadCacheService, DownloadTask } from '../../core/services/download-cache.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
-import { LucideDownload, LucideTrash2, LucidePlay, LucideAlertCircle } from '@lucide/angular';
+import {
+  LucideDownload,
+  LucideTrash2,
+  LucidePlay,
+  LucideAlertCircle,
+  LucideRotateCcw,
+} from '@lucide/angular';
+import { ToastService } from '../../core/services/toast.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 
@@ -33,7 +40,15 @@ export interface DisplayDownloadTask extends DownloadTask {
 @Component({
   selector: 'app-downloads',
   imports: [
-    CachedSrcDirective,TranslateModule, ResolveUrlPipe, LucideDownload, LucideTrash2, LucidePlay, LucideAlertCircle],
+    CachedSrcDirective,
+    TranslateModule,
+    ResolveUrlPipe,
+    LucideDownload,
+    LucideTrash2,
+    LucidePlay,
+    LucideAlertCircle,
+    LucideRotateCcw,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './downloads.html',
 })
@@ -46,7 +61,12 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   private readonly dlManager = inject(DownloadManagerService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
+  private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+
+  /** Ids being re-queued, so the button can't be double-tapped into two
+   *  downloads of the same file. */
+  readonly retrying = signal<ReadonlySet<number>>(new Set());
 
   private readonly baseTasks = signal<DownloadTask[]>([]);
   readonly loading = signal(true);
@@ -143,6 +163,24 @@ export class DownloadsComponent implements OnInit, OnDestroy {
     await this.dlManager.deleteDownload(task);
     this.cache.removeLocal(task.id);
     this.baseTasks.update((list) => list.filter((t) => t.id !== task.id));
+  }
+
+  async retryItem(task: DownloadTask) {
+    if (this.retrying().has(task.id)) return;
+    this.retrying.update((s) => new Set(s).add(task.id));
+    try {
+      await this.dlManager.retryDownload(task);
+      await this.load();
+    } catch {
+      this.toast.error(this.translate.instant('downloads.failed'));
+      await this.load();
+    } finally {
+      this.retrying.update((s) => {
+        const next = new Set(s);
+        next.delete(task.id);
+        return next;
+      });
+    }
   }
 
   playOffline(task: DownloadTask) {

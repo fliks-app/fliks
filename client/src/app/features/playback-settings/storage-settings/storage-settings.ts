@@ -1,4 +1,5 @@
 import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ToastService } from '../../../core/services/toast.service';
 import { DownloadManagerService } from '../../../core/services/download-manager.service';
@@ -13,7 +14,7 @@ import { DeviceService } from '../../../core/services/device.service';
 
 @Component({
   selector: 'app-storage-settings',
-  imports: [TranslateModule],
+  imports: [FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './storage-settings.html',
 })
@@ -33,8 +34,8 @@ export class StorageSettingsPageComponent {
   readonly concurrencyChoices = MAX_CONCURRENT_CHOICES;
   readonly maxConcurrent = this.downloadSettings.maxConcurrent;
 
-  onMaxConcurrentChange(value: string) {
-    this.downloadSettings.setMaxConcurrent(Number(value));
+  onMaxConcurrentChange(value: number) {
+    this.downloadSettings.setMaxConcurrent(value);
   }
 
   readonly clearing = signal(false);

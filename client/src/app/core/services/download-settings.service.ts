@@ -27,7 +27,7 @@ export class DownloadSettingsService {
     effect(() => this.notif.setMaxConcurrentDownloads(this.maxConcurrent()));
   }
 
-  setMaxConcurrent(value: number): void {
+  setMaxConcurrent(value: number | string): void {
     const clamped = clamp(value);
     this.maxConcurrent.set(clamped);
     try {
@@ -38,11 +38,12 @@ export class DownloadSettingsService {
   }
 }
 
-function clamp(value: number): number {
+function clamp(value: number | string): number {
   const first = MAX_CONCURRENT_CHOICES[0];
   const last = MAX_CONCURRENT_CHOICES[MAX_CONCURRENT_CHOICES.length - 1];
-  if (!Number.isFinite(value)) return DEFAULT_MAX_CONCURRENT;
-  return Math.min(last, Math.max(first, Math.round(value)));
+  const n = Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_MAX_CONCURRENT;
+  return Math.min(last, Math.max(first, Math.round(n)));
 }
 
 function loadMaxConcurrent(): number {

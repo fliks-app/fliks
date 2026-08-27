@@ -325,6 +325,30 @@ export class DownloadManagerService {
     return task;
   }
 
+  /**
+   * Run a failed download again from the metadata of the one that failed.
+   *
+   * The dead task is dropped first: its id is baked into the native daemon's
+   * bookkeeping and into any partial bundle on disk, so reusing it would have
+   * the retry inherit the corpse of the previous attempt.
+   */
+  async retryDownload(task: DownloadTask): Promise<DownloadTask> {
+    await this.deleteDownload(task);
+    return this.createDownload(
+      task.mediaFileId,
+      task.quality,
+      task.media?.title ?? '',
+      task.episodeLabel,
+      {
+        mediaId: task.mediaId,
+        posterUrl: task.media?.posterUrl ?? null,
+        type: task.media?.type,
+        episodeId: task.episodeId,
+        auto: task.auto,
+      },
+    );
+  }
+
   async deleteDownload(task: DownloadTask) {
     if (this.isNative) {
       await this.notif.removeDownload(String(task.id));

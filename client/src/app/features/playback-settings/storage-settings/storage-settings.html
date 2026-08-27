@@ -26,11 +26,11 @@
         </div>
         <select
           class="select select-sm select-bordered w-20"
-          [value]="maxConcurrent()"
-          (change)="onMaxConcurrentChange($any($event.target).value)"
+          [ngModel]="maxConcurrent()"
+          (ngModelChange)="onMaxConcurrentChange($event)"
         >
           @for (choice of concurrencyChoices; track choice) {
-            <option [value]="choice">{{ choice }}</option>
+            <option [ngValue]="choice">{{ choice }}</option>
           }
         </select>
       </div>
