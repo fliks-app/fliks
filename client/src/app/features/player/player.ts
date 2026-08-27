@@ -330,6 +330,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // outside this band reloads at the offset instead of seeking in place.
   private readonly desktopSeekCacheSlackS = 1;
   private readonly desktopSeekBackWindowS = 15;
+  /** A 1 s tick that comes back this late means the process was frozen — the
+   *  machine slept, or the tab was throttled — not that time passed normally.
+   *  Nothing else in the app notices a wake: `visibilitychange` doesn't fire
+   *  for a sleep, so the clock gap is the signal. */
+  private static readonly wakeGapMs = 5_000;
+  private lastTickAt = 0;
+  /** A heartbeat that died on the network — typically the seconds right after
+   *  a wake, before Wi-Fi is back — leaves us blind to whether the session
+   *  survived. Retry the resume path once we're online instead of swallowing
+   *  the answer we never received. */
+  private resumeDue = false;
+  private lastResumeAt = 0;
+  private readonly resumeRetryMs = 5_000;
+  /** How long buffering has to hold before the overlay explains itself: a
+   *  cold ffmpeg respawn (after a sleep, or a far seek) takes seconds, and a
+   *  bare spinner over a black frame reads as a broken player. */
+  private static readonly preparingAfterMs = 5_000;
+  private stalledSince = 0;
 
   // ── Template-facing signal aliases (delegate to services) ──
   readonly loading = this.state.loading;
@@ -337,6 +355,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly error = this.state.error;
   /** Transient "copied ✓" feedback for the error card's copy button. */
   readonly errorCopied = signal(false);
+  /** Buffering has lasted long enough to be worth a word on screen. */
+  readonly preparing = signal(false);
   readonly paused = this.state.paused;
   readonly currentTime = this.state.currentTime;
   readonly duration = this.state.duration;
@@ -1450,7 +1470,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.loadSpriteMetadata();
 
       // Update stats every second
+      this.lastTickAt = Date.now();
       this.statsInterval = setInterval(() => {
+        this.tickClockWatch();
         this.checkStall();
         const stats = this.engine?.getStats();
         const variant = stats?.activeVariant;
@@ -3175,6 +3197,100 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return (v?.dvProfile ?? 0) > 0;
   }
 
+  /**
+   * Ticked once a second from the stats interval, before {@link checkStall}.
+   * Two jobs, both keyed off the wall clock rather than off playback: notice
+   * that the process was frozen and came back, and decide when a long buffer
+   * deserves an explanation on screen.
+   */
+  private tickClockWatch(): void {
+    const now = Date.now();
+    const gap = now - this.lastTickAt;
+    this.lastTickAt = now;
+    if (gap > PlayerComponent.wakeGapMs) {
+      // The frozen interval is not a frozen playhead: without this the stall
+      // watchdog fires on the same tick and reloads the engine — the very
+      // black-screen reload the resume path exists to avoid.
+      this.resetStallWatchdog();
+      void this.resumeAfterGap(gap);
+    } else if (
+      this.resumeDue &&
+      this.network.isOnline() &&
+      now - this.lastResumeAt >= this.resumeRetryMs
+    ) {
+      void this.resumeAfterGap(0);
+    }
+    if (!this.loading() && !this.buffering()) {
+      this.stalledSince = 0;
+      this.preparing.set(false);
+      return;
+    }
+    if (!this.stalledSince) this.stalledSince = now;
+    this.preparing.set(
+      now - this.stalledSince >= PlayerComponent.preparingAfterMs,
+    );
+  }
+
+  /**
+   * The player was frozen (laptop sleep) or cut off from the server, and is
+   * back. The backend killed our encoder while we were away but still answers
+   * on the same sid for a while, so the cheap path is: refresh the stream
+   * token, re-fetch the manifest at the playhead — which revives the session
+   * and respawns ffmpeg at the resume segment while the user is still paused —
+   * then beat once, so a session that is genuinely gone is caught now instead
+   * of up to 10 s later. No engine reload: the picture and the sid survive.
+   */
+  private async resumeAfterGap(gapMs: number): Promise<void> {
+    if (this.destroyed || !this.mediaFileId) return;
+    if (this.castService.isConnected()) return;
+    if (!this.network.isOnline()) {
+      this.resumeDue = true;
+      return;
+    }
+    this.resumeDue = false;
+    this.lastResumeAt = Date.now();
+    if (gapMs) {
+      console.log(
+        `[Player] resuming after a ${Math.round(gapMs / 1000)}s clock gap`,
+      );
+    }
+    try {
+      await this.authService.ensureStreamToken();
+      await this.prewarmCurrentStream();
+    } catch {
+      // Best effort: the heartbeat below is what actually drives recovery.
+    }
+    await this.savePosition();
+  }
+
+  /** GET the HLS manifest on the live sid, anchored at the playhead. The
+   *  backend reads it as a keep-alive plus a prewarm, so it revives a GC'd
+   *  session and starts ffmpeg at the resume segment; it is a no-op when an
+   *  encoder is already running. Skipped off the HLS path (direct play has no
+   *  encoder to warm) and offline. */
+  private async prewarmCurrentStream(): Promise<void> {
+    const sid = this.playbackInfo?.sessionId;
+    if (!sid || this.isOfflinePlayback || this.playbackMode() === 'direct') {
+      return;
+    }
+    // A hidden tab hits the same clock gap from timer throttling, and nobody
+    // is waiting on a warm encoder there — reviving via the heartbeat is
+    // enough. Only a visible player earns the respawn.
+    if (typeof document !== 'undefined' && document.hidden) return;
+    const pos = Math.floor(
+      this.engine?.currentTime || this.state.currentTime() || 0,
+    );
+    await fetch(
+      this.streamingApi.getHlsUrl(
+        this.mediaFileId!,
+        this.resolveStartQuality(),
+        pos,
+        sid,
+      ),
+      { cache: 'no-store' },
+    );
+  }
+
   /** Ticked once a second from the stats interval. Detects a frozen playhead
    *  during intended playback and routes it through the same recovery as a
    *  lost session (re-mint sid + reload at position). */
@@ -4219,9 +4335,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
       } catch {
         this.offlineSync.queue(offlinePayload);
+        // The beat never landed, so we never learned whether the session
+        // survived. Re-run the resume path once we're back online rather than
+        // waiting for a 410 on the next segment.
+        this.resumeDue = true;
       }
     } else {
       this.offlineSync.queue(offlinePayload);
+      this.resumeDue = true;
     }
   }
 

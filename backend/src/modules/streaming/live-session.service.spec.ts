@@ -240,6 +240,48 @@ describe('LiveSessionRegistry GC', () => {
     expect(svc.size()).toBe(1);
   });
 
+  it('revives a GC\'d session on the sid it already holds', async () => {
+    // Laptop sleep: heartbeats stop, GC drops the session, then the client
+    // comes back with the same sid. It must resume, not 410.
+    process.env.STREAM_LIVE_SESSION_TTL_MS = '50';
+    process.env.STREAM_LIVE_SESSION_GC_INTERVAL_MS = '20';
+    svc = new LiveSessionRegistry();
+    svc.onModuleInit();
+    const session = svc.create({ ...BASE, position: 640 });
+    await new Promise((r) => setTimeout(r, 100));
+    expect(svc.size()).toBe(0);
+    expect(svc.touch(session.sessionId)).toBe(true);
+    expect(svc.size()).toBe(1);
+    // Revived with its context intact — that is what lets the segment route
+    // respawn ffmpeg instead of demanding a fresh playback-info.
+    expect(svc.get(session.sessionId)!.position).toBe(640);
+    expect(svc.get(session.sessionId)!.profileHash).toBe('aaaaaaaaaa');
+    // And the heartbeat no longer reports the session as lost.
+    expect(svc.heartbeat(session.sessionId, { position: 650 })).not.toBeNull();
+  });
+
+  it('does not revive past the revive window', async () => {
+    process.env.STREAM_LIVE_SESSION_TTL_MS = '20';
+    process.env.STREAM_LIVE_SESSION_GC_INTERVAL_MS = '10';
+    process.env.STREAM_SESSION_REVIVE_TTL_MS = '60';
+    svc = new LiveSessionRegistry();
+    svc.onModuleInit();
+    const session = svc.create(BASE);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(svc.touch(session.sessionId)).toBe(false);
+    expect(svc.heartbeat(session.sessionId, {})).toBeNull();
+  });
+
+  it('an explicit stop is not revivable', async () => {
+    process.env.STREAM_LIVE_SESSION_TTL_MS = '50';
+    process.env.STREAM_LIVE_SESSION_GC_INTERVAL_MS = '20';
+    svc = new LiveSessionRegistry();
+    svc.onModuleInit();
+    const session = svc.create(BASE);
+    expect(svc.stop(session.sessionId)).toBe(true);
+    expect(svc.touch(session.sessionId)).toBe(false);
+  });
+
   it('keeps sessions kept alive by segment-fetch touches alone', async () => {
     // No client heartbeat at all — the receiver pulling segments must be
     // enough to survive the ttl (the Cast crash repro).
