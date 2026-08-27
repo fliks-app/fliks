@@ -14,6 +14,8 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NgTemplateOutlet } from '@angular/common';
+import { IdentifyModalService } from '../../core/services/identify-modal.service';
+import { TrackingModalService } from '../../core/services/tracking-modal.service';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
@@ -50,12 +52,8 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
 import { MediaDetailSeasonsComponent } from './components/media-detail-seasons/media-detail-seasons.component';
 import { ReleasesModalComponent } from './components/releases-modal/releases-modal.component';
 import {
-  TrackingStatusModalComponent,
   TrackingScope,
 } from '../../shared/components/tracking-status-modal/tracking-status-modal';
-import {
-  MediaDetailIdentifyModalComponent,
-} from './components/media-detail-identify-modal/media-detail-identify-modal.component';
 import { MediaDetailProfilesModalComponent } from './components/media-detail-profiles-modal/media-detail-profiles-modal.component';
 import { MediaDetailLibraryModalComponent } from './components/media-detail-library-modal/media-detail-library-modal.component';
 import { RequestModalComponent } from '../tmdb-preview/components/request-modal/request-modal.component';
@@ -113,8 +111,6 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     MediaFileInfoComponent,
     MediaDetailSeasonsComponent,
     ReleasesModalComponent,
-    TrackingStatusModalComponent,
-    MediaDetailIdentifyModalComponent,
     MediaDetailProfilesModalComponent,
     MediaDetailLibraryModalComponent,
     RequestModalComponent,
@@ -133,6 +129,8 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
   templateUrl: './media-detail.html',
 })
 export class MediaDetailComponent implements OnInit, OnDestroy {
+  private readonly identifyModalService = inject(IdentifyModalService);
+  private readonly trackingModalService = inject(TrackingModalService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly mediaService = inject(MediaService);
@@ -767,12 +765,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly profilesModal = viewChild(MediaDetailProfilesModalComponent);
   readonly libraryModal = viewChild(MediaDetailLibraryModalComponent);
   readonly subtitleSection = viewChild(SubtitlesModalComponent);
-  readonly trackingModal = viewChild(TrackingStatusModalComponent);
 
   openTracking(scope: TrackingScope): void {
     const id = this.media()?.id;
     if (id == null) return;
-    void this.trackingModal()?.open(id, scope);
+    this.trackingModalService.open(id, scope);
   }
 
   readonly episodeDialogFiles = computed(() => {
@@ -1309,7 +1306,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   /** Refs to the native <dialog>. `showModal()` gives us focus trapping,
    *  Tab cycling and Escape-to-close for free — no manual keydown
    *  handling required. */
-  private readonly identifyModal = viewChild(MediaDetailIdentifyModalComponent);
   private readonly analyzeDialog =
     viewChild<ElementRef<HTMLDialogElement>>('analyzeDialog');
   private readonly firstAnalyzeOption =
@@ -1349,7 +1345,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   openIdentifyModal() {
     const m = this.media();
     if (!m) return;
-    this.identifyModal()?.open({
+    this.identifyModalService.open({
       mediaId: m.id,
       mediaType: m.type,
       title: m.title,
@@ -1363,6 +1359,21 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   /** The title, art and whole episode tree change, so the page reloads rather
    *  than patching the row — same path the rescan takes. */
+  /** The dialog is mounted at the layout now, so it reports through a counter
+   *  rather than an output. Ignores the first read: an effect fires once on
+   *  creation, which would reload the page on arrival. */
+  private seenIdentified = -1;
+  private readonly identifiedEffect = effect(() => {
+    const n = this.identifyModalService.identified();
+    if (this.seenIdentified < 0) {
+      this.seenIdentified = n;
+      return;
+    }
+    if (n === this.seenIdentified) return;
+    this.seenIdentified = n;
+    this.onIdentified();
+  });
+
   onIdentified() {
     const m = this.media();
     if (m) void this.reloadAfterRescan(m.id);

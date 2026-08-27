@@ -335,7 +335,6 @@
 
     <!-- Modals (shared between modes) -->
     <div>
-      <app-tracking-status-modal #trackingModal />
       <app-releases-modal #movieReleasesModal
         [title]="'media_detail.releases_title' | translate"
         [releases]="releases()"
@@ -394,8 +393,6 @@
         (draftLanguageProfileIdChange)="draftLanguageProfileId.set($event)"
         (save)="saveProfiles()"
       />
-
-      <app-media-detail-identify-modal (identified)="onIdentified()" />
 
       <app-media-detail-library-modal
         [libraries]="libraries()"

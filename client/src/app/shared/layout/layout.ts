@@ -34,6 +34,8 @@ import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
 import { AddToPlaylistModalComponent } from '../components/add-to-playlist-modal/add-to-playlist-modal.component';
 import { RecommendModalComponent } from '../components/recommend-modal/recommend-modal.component';
+import { IdentifyModalHostComponent } from '../components/identify-modal-host/identify-modal-host';
+import { TrackingModalHostComponent } from '../components/tracking-modal-host/tracking-modal-host';
 import { UserMenuComponent } from '../components/user-menu';
 import { AppUpdateModalComponent } from '../components/app-update-modal/app-update-modal';
 import { AppUpdateService } from '../../core/services/app-update.service';
@@ -72,6 +74,8 @@ const SIDEBAR_COUNTS_DEBOUNCE_MS = 400;
     CardActionsPanelComponent,
     AddToPlaylistModalComponent,
     RecommendModalComponent,
+    TrackingModalHostComponent,
+    IdentifyModalHostComponent,
     UserMenuComponent,
     AppUpdateModalComponent,
     LucideIconComponent,
