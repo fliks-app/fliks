@@ -3,6 +3,11 @@
 ## [3.3.0](https://github.com/fliks-app/fliks/compare/v3.2.1...v3.3.0) (2026-08-27)
 
 
+### Features
+
+* **offline:** rework downloads, artwork cache and playback sync ([#1060](https://github.com/fliks-app/fliks/issues/1060)) ([9a6ba72](https://github.com/fliks-app/fliks/commit/9a6ba721d033f5e490ed166c7d27a4c1f2f9a66a))
+
+
 ### Bug Fixes
 
 * **release:** restore the iOS version markers and fail on unreadable commits ([#1061](https://github.com/fliks-app/fliks/issues/1061)) ([c8750b8](https://github.com/fliks-app/fliks/commit/c8750b830c878e3aab33511b00ae7d5bf05ad70c))
