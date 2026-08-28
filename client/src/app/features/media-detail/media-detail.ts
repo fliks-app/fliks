@@ -466,16 +466,16 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   });
 
   /**
-   * Sibling seasons rendered as cards under the "more from season N" row on
-   * the episode detail page. Hides the currently-focused season and any
-   * empty season (no episodes → no link target).
+   * Seasons rendered as cards under the "more from season N" row on the
+   * episode detail page. Keeps the focused season in place — highlighted, so
+   * the row doubles as a position indicator. Empty seasons drop out: no
+   * episodes, no link target.
    */
-  readonly otherSeasons = computed<Season[]>(() => {
+  readonly seasonsRow = computed<Season[]>(() => {
     const m = this.media();
-    const focused = this.focusedSeason();
-    if (!m?.seasons || !focused) return [];
+    if (!m?.seasons || !this.focusedSeason()) return [];
     return m.seasons
-      .filter((s) => s.id !== focused.id && (s.episodes?.length ?? 0) > 0)
+      .filter((s) => (s.episodes?.length ?? 0) > 0)
       .slice()
       .sort((a, b) => a.seasonNumber - b.seasonNumber);
   });
