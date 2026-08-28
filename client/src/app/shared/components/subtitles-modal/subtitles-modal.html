@@ -71,10 +71,10 @@
         <p class="text-sm text-base-content/50">{{ 'media_detail.no_subtitles' | translate }}</p>
       } @else {
         <!-- Phone only: -mx-6 cancels the modal-box's 1.5rem padding so the
-             rule reaches both edges, like the header and footer bars. Top rule
-             only — the footer's own border closes the band. From sm it goes
-             back to an inset, rounded card. -->
-        <div class="-mx-6 border-t border-base-200 overflow-x-auto sm:mx-0 sm:rounded-lg sm:border">
+             table reaches both edges, like the header and footer bars. No
+             border of its own — the header and footer rules frame it. From sm
+             it goes back to an inset, rounded card. -->
+        <div class="-mx-6 overflow-x-auto sm:mx-0 sm:rounded-lg sm:border sm:border-base-200">
           <table class="table">
             <thead>
               <tr>
