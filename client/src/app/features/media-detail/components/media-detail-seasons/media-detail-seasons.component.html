@@ -159,7 +159,7 @@
     <app-dropdown-menu placement="bottom-start">
       <button trigger type="button" class="select select-bordered w-fit shrink-0 text-left text-lg font-bold cursor-pointer transition-colors hover:bg-base-content/10">
         @if (selSeason) {
-          {{ 'media_detail.season_number' | translate:{ number: selSeason.seasonNumber } }}
+          {{ selSeason.seasonNumber | seasonLabel }}
         } @else {
           {{ 'media_detail.season' | translate }}
         }
@@ -167,7 +167,7 @@
       @for (season of displaySeasons(); track season.id) {
         <app-dropdown-option
           [imageUrl]="season.posterUrl ?? m.posterUrl"
-          [head]="'media_detail.season_number' | translate:{ number: season.seasonNumber }"
+          [head]="season.seasonNumber | seasonLabel"
           [sub]="(tabEpisodeCount(season) <= 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: tabEpisodeCount(season) }"
           [selected]="season.id === activeSeasonId()"
           (click)="selectSeason.emit(season.id)"

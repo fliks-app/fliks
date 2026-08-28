@@ -953,6 +953,7 @@
     "seasons_section": "Staffeln & Folgen",
     "season": "Staffel",
     "season_number": "Staffel {{number}}",
+    "specials": "Specials",
     "more_from_season": "Mehr aus Staffel {{season}}",
     "other_seasons_of": "Andere Staffeln von {{title}}",
     "col_ep": "F.",

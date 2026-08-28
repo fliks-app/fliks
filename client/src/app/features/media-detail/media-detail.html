@@ -104,7 +104,7 @@
                   class="shrink-0 w-28 sm:w-32 lg:w-40"
                   [aspect]="'portrait'"
                   [imageUrl]="other.posterUrl ?? m.posterUrl"
-                  [title]="('media_detail.season' | translate) + ' ' + other.seasonNumber"
+                  [title]="other.seasonNumber | seasonLabel"
                   [subtitle]="other.episodes.length + ' ' + ('media_detail.episodes' | translate)"
                   [link]="seasonLink(m, other)"
                   [replaceUrl]="true"

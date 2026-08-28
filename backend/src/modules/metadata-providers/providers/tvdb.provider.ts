@@ -352,7 +352,6 @@ export class TvdbProvider implements IMetadataProvider {
     // Group episodes by season
     const seasonMap = new Map<number, TvdbEpisodeBase[]>();
     for (const ep of allEpisodes) {
-      if (ep.seasonNumber === 0) continue; // skip specials
       const list = seasonMap.get(ep.seasonNumber) ?? [];
       list.push(ep);
       seasonMap.set(ep.seasonNumber, list);

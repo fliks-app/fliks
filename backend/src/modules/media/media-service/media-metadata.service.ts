@@ -362,7 +362,8 @@ export class MediaMetadataService {
           this.seasonRepo.create({
             media,
             seasonNumber: sd.seasonNumber,
-            monitored: true,
+            // Specials arrive unmonitored: nobody wants a season 0 grabbed implicitly.
+            monitored: sd.seasonNumber > 0,
           }),
         );
         dbSeason.episodes = [];

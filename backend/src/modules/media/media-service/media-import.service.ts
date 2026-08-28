@@ -426,9 +426,10 @@ export class MediaImportService {
 
     // A season-scoped request only monitors the seasons it asked for; the rest
     // import unmonitored so the auto-grab leaves them alone. An empty/absent
-    // scope (whole-series request or admin add) monitors every season.
+    // scope (whole-series request or admin add) monitors every season but the
+    // specials, which are only monitored when asked for by number.
     const inScope = (n: number) =>
-      !monitoredSeasons?.length || monitoredSeasons.includes(n);
+      monitoredSeasons?.length ? monitoredSeasons.includes(n) : n > 0;
 
     for (const sd of seasons) {
       const sSaved = await this.seasonRepo.save(
