@@ -5,13 +5,14 @@
     <section class="space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         @if (canManage()) {
-          <!-- Wraps rather than overflowing: the three labels don't fit one
-               phone-width line, and an overflow here scrolls the whole modal. -->
-          <div class="flex flex-wrap justify-end gap-2 ml-auto">
+          <!-- The three labels don't fit one phone-width line. `min-w-0` keeps
+               the overflow inside this row, so it scrolls on its own instead of
+               dragging the whole dialog sideways. -->
+          <div class="flex gap-2 ml-auto min-w-0 max-w-full overflow-x-auto py-0.5">
             @if (hasMissing()) {
               <button
                 type="button"
-                class="btn btn-ghost btn-sm"
+                class="btn btn-ghost btn-sm shrink-0"
                 [disabled]="searchDisabled() || subtitleActionBusy()"
                 [attr.title]="
                   searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null
@@ -34,7 +35,7 @@
               />
               <button
                 type="button"
-                class="btn btn-ghost btn-sm"
+                class="btn btn-ghost btn-sm shrink-0"
                 [disabled]="searchDisabled() || subtitleActionBusy()"
                 [attr.title]="
                   searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null
@@ -47,7 +48,7 @@
             }
             <button
               type="button"
-              class="btn btn-primary btn-sm"
+              class="btn btn-primary btn-sm shrink-0"
               [disabled]="searchDisabled() || subtitleActionBusy()"
               [attr.title]="
                 searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null
