@@ -32,7 +32,7 @@ async function settle(fixture: ComponentFixture<unknown>) {
   fixture.detectChanges();
 }
 
-async function createComponent(installed: [string, string][]) {
+async function createComponent(installed: [string, string][], allowOlderVersions = false) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -48,6 +48,7 @@ async function createComponent(installed: [string, string][]) {
   const fixture = TestBed.createComponent(PluginCatalogueComponent);
   fixture.componentRef.setInput('installedIds', new Set(installed.map(([id]) => id)));
   fixture.componentRef.setInput('installedVersions', new Map(installed));
+  fixture.componentRef.setInput('allowOlderVersions', allowOlderVersions);
   fixture.detectChanges();
   http.expectOne({ url: '/api/plugins/sources', method: 'GET' }).flush([{ id: 1, url: 'https://src', enabled: true }]);
   await settle(fixture);
@@ -119,5 +120,63 @@ describe('PluginCatalogueComponent — what a card states', () => {
     expect(fixture.componentInstance.installedVersion(fixture.componentInstance.rows()[0])).toBeNull();
     expect(text(fixture)).not.toContain('settings.plugins.catalogue.installed_version');
     expect(fixture.nativeElement.querySelector('.badge-info')).toBeNull();
+  });
+});
+
+/**
+ * With older versions allowed, the action and the version list are one control: the left half
+ * acts, the right half lists what the source offers. A plugin already on the newest version has
+ * nothing to act on, so the left half states what runs instead of offering an update.
+ */
+describe('PluginCatalogueComponent — the version picker', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  function versionButtons(fixture: ComponentFixture<unknown>): string[] {
+    return Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.dropdown-content button'),
+    ).map((b) => b.querySelector('span')?.textContent?.trim() ?? '');
+  }
+
+  it('offers no picker at all while the setting is off', async () => {
+    const { fixture } = await createComponent([['fliks.acme', '1.0.0']]);
+    expect(fixture.nativeElement.querySelector('.dropdown-content')).toBeNull();
+  });
+
+  it('VERDICT: lists every version the source offers, newest first', async () => {
+    const { fixture } = await createComponent([['fliks.acme', '1.0.0']], true);
+    expect(versionButtons(fixture)).toEqual(['1.1.0', '1.0.0']);
+  });
+
+  it('VERDICT: states the running version on the left half when nothing is newer', async () => {
+    const { fixture } = await createComponent([['fliks.acme', '1.1.0']], true);
+    const row = fixture.componentInstance.rows()[0];
+
+    expect(fixture.componentInstance.primaryVersion(row)).toBeNull();
+    expect(buttonLabels(fixture).join(' ')).toContain('settings.plugins.catalogue.version_installed');
+    // …and the picker is still there, which is the only way back to an older build.
+    expect(versionButtons(fixture)).toEqual(['1.1.0', '1.0.0']);
+  });
+
+  it('VERDICT: installs the version picked, not the newest', async () => {
+    const { fixture, http } = await createComponent([['fliks.acme', '1.1.0']], true);
+    const older = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.dropdown-content button'),
+    ).find((b) => b.textContent?.includes('1.0.0'));
+
+    older!.click();
+    await settle(fixture);
+
+    const req = http.expectOne({ url: '/api/plugins/sources/1/inspect', method: 'POST' });
+    expect(req.request.body).toEqual({ pluginId: 'fliks.acme', version: '1.0.0' });
+    req.flush({ pluginId: 'fliks.acme', version: '1.0.0' });
+    await settle(fixture);
+  });
+
+  it('leaves the installed version unpickable', async () => {
+    const { fixture } = await createComponent([['fliks.acme', '1.1.0']], true);
+    const installed = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.dropdown-content button'),
+    ).find((b) => b.textContent?.includes('1.1.0'));
+    expect(installed!.disabled).toBe(true);
   });
 });

@@ -1,6 +1,13 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, input, output, signal } from '@angular/core';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { CatalogPluginEntry, PluginInspectReport, PluginsApiService } from '../../../../core/services/api/plugins-api.service';
+import { LucideChevronDown } from '@lucide/angular';
+import {
+  CatalogPluginEntry,
+  CatalogVersionEntry,
+  PluginInspectReport,
+  PluginsApiService,
+} from '../../../../core/services/api/plugins-api.service';
+import { DropdownMenuComponent } from '../../../../shared/components/dropdown-menu';
 
 interface CatalogueRow {
   sourceId: number;
@@ -14,7 +21,7 @@ interface CatalogueRow {
 /** What every cached catalog offers, merged across sources. */
 @Component({
   selector: 'app-plugin-catalogue',
-  imports: [TranslateModule],
+  imports: [TranslateModule, DropdownMenuComponent, LucideChevronDown],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-catalogue.html',
 })
@@ -26,6 +33,10 @@ export class PluginCatalogueComponent implements OnInit {
   /** Installed version per plugin id — what makes "already installed" and "out of date"
    *  distinguishable on a card. */
   readonly installedVersions = input<ReadonlyMap<string, string>>(new Map());
+  /** `plugins.allow_older_versions`: off, a card installs the newest and nothing else; on, it
+   *  splits into an action and a version picker. The list itself is whatever the source cached —
+   *  which the compatibility setting has already widened or narrowed. */
+  readonly allowOlderVersions = input(false);
 
   /** A version was inspected and staged; the parent owns the consent sheet and opens it with this report. */
   readonly install = output<PluginInspectReport>();
@@ -97,12 +108,23 @@ export class PluginCatalogueComponent implements OnInit {
     (event.target as HTMLImageElement).style.display = 'none';
   }
 
-  async installLatest(row: CatalogueRow): Promise<void> {
-    if (!row.latestVersion) return;
-    const key = `${row.sourceId}:${row.plugin.id}:${row.latestVersion}`;
-    this.inspectingKey.set(key);
+  /** What the version picker lists, newest first — a version list is read top down. */
+  versionsFor(row: CatalogueRow): CatalogVersionEntry[] {
+    return [...row.plugin.installable].reverse();
+  }
+
+  /** The version the button's left half acts on: the update target, else the newest for a plugin
+   *  that is absent. Null once the newest is already running — the half then only states it. */
+  primaryVersion(row: CatalogueRow): string | null {
+    if (!this.isInstalled(row.plugin.id)) return row.latestVersion;
+    return this.updateTarget(row);
+  }
+
+  async installVersion(row: CatalogueRow, version: string | null): Promise<void> {
+    if (!version) return;
+    this.inspectingKey.set(`${row.sourceId}:${row.plugin.id}:${version}`);
     try {
-      const report = await this.api.inspectFromCatalog(row.sourceId, row.plugin.id, row.latestVersion);
+      const report = await this.api.inspectFromCatalog(row.sourceId, row.plugin.id, version);
       this.install.emit(report);
     } catch {
       // The global error interceptor already toasts the server's message; a second one here
@@ -112,7 +134,8 @@ export class PluginCatalogueComponent implements OnInit {
     }
   }
 
+  /** Any version of this card being staged, so both halves disable together. */
   isInspecting(row: CatalogueRow): boolean {
-    return this.inspectingKey() === `${row.sourceId}:${row.plugin.id}:${row.latestVersion}`;
+    return this.inspectingKey()?.startsWith(`${row.sourceId}:${row.plugin.id}:`) ?? false;
   }
 }

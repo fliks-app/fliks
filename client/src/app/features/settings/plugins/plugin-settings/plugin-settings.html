@@ -14,13 +14,27 @@
         <span class="loading loading-spinner loading-lg"></span>
       </div>
     } @else {
-      <div class="mt-6">
+      <div class="mt-6 flex flex-col gap-4">
         <app-toggle-field
           [value]="autoUpdate()"
           (valueChange)="toggleAutoUpdate($event)"
           [disabled]="saving()"
           [label]="'settings.plugins.settings.auto_update' | translate"
           [hint]="'settings.plugins.settings.auto_update_hint' | translate"
+        />
+        <app-toggle-field
+          [value]="skipCompatibility()"
+          (valueChange)="toggleSkipCompatibility($event)"
+          [disabled]="saving()"
+          [label]="'settings.plugins.settings.skip_compatibility' | translate"
+          [hint]="'settings.plugins.settings.skip_compatibility_hint' | translate"
+        />
+        <app-toggle-field
+          [value]="allowOlderVersions()"
+          (valueChange)="toggleAllowOlderVersions($event)"
+          [disabled]="saving()"
+          [label]="'settings.plugins.settings.allow_older_versions' | translate"
+          [hint]="'settings.plugins.settings.allow_older_versions_hint' | translate"
         />
       </div>
     }

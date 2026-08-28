@@ -43,26 +43,71 @@
 
           <div class="mt-auto pt-2 flex items-center justify-between">
             <span class="text-xs text-base-content/40 truncate">{{ row.sourceUrl }}</span>
-            @if (!isInstalled(row.plugin.id)) {
-              @if (row.latestVersion) {
-                <button type="button" class="btn btn-primary btn-xs shrink-0" [disabled]="isInspecting(row)" (click)="installLatest(row)">
+            @if (!row.plugin.installable.length) {
+              <span class="text-xs text-base-content/40 shrink-0">{{ 'settings.plugins.catalogue.no_installable' | translate }}</span>
+            } @else if (!allowOlderVersions()) {
+              @if (!isInstalled(row.plugin.id)) {
+                <button type="button" class="btn btn-primary btn-xs shrink-0" [disabled]="isInspecting(row)" (click)="installVersion(row, primaryVersion(row))">
                   @if (isInspecting(row)) {
                     <span class="loading loading-spinner loading-xs"></span>
                   }
                   {{ 'settings.plugins.catalogue.install' | translate }}
                 </button>
-              } @else {
-                <span class="text-xs text-base-content/40 shrink-0">{{ 'settings.plugins.catalogue.no_installable' | translate }}</span>
+              } @else if (updateTarget(row); as version) {
+                <div class="flex flex-col items-end gap-0.5 shrink-0">
+                  <button type="button" class="btn btn-primary btn-xs" [disabled]="isInspecting(row)" (click)="installVersion(row, version)">
+                    @if (isInspecting(row)) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                    }
+                    {{ 'settings.plugins.catalogue.switch_to' | translate: { version: version } }}
+                  </button>
+                  <span class="text-[0.7rem] text-base-content/50">{{ 'settings.plugins.catalogue.update_keeps_data' | translate }}</span>
+                </div>
               }
-            } @else if (updateTarget(row); as version) {
+            } @else {
+              <!-- Split button: the left half is the action, the right half every other version
+                   the source offers. Nothing to update to leaves the left half stating what runs. -->
               <div class="flex flex-col items-end gap-0.5 shrink-0">
-                <button type="button" class="btn btn-primary btn-xs" [disabled]="isInspecting(row)" (click)="installLatest(row)">
-                  @if (isInspecting(row)) {
-                    <span class="loading loading-spinner loading-xs"></span>
-                  }
-                  {{ 'settings.plugins.catalogue.switch_to' | translate: { version: version } }}
-                </button>
-                <span class="text-[0.7rem] text-base-content/50">{{ 'settings.plugins.catalogue.update_keeps_data' | translate }}</span>
+                <div class="flex items-stretch">
+                  <button type="button" class="btn btn-primary btn-xs rounded-r-none"
+                    [disabled]="isInspecting(row) || !primaryVersion(row)"
+                    (click)="installVersion(row, primaryVersion(row))">
+                    @if (isInspecting(row)) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                    }
+                    @if (primaryVersion(row); as version) {
+                      @if (isInstalled(row.plugin.id)) {
+                        {{ 'settings.plugins.catalogue.switch_to' | translate: { version: version } }}
+                      } @else {
+                        {{ 'settings.plugins.catalogue.install' | translate }}
+                      }
+                    } @else {
+                      {{ 'settings.plugins.catalogue.version_installed' | translate: { version: installedVersion(row) } }}
+                    }
+                  </button>
+                  <app-dropdown-menu placement="bottom-end" class="contents">
+                    <button trigger type="button"
+                      class="btn btn-primary btn-xs rounded-l-none border-l border-primary-content/25 px-1"
+                      [disabled]="isInspecting(row)"
+                      [attr.aria-label]="'settings.plugins.catalogue.pick_version' | translate">
+                      <svg lucideChevronDown class="h-3 w-3"></svg>
+                    </button>
+                    <p class="px-3 py-2 text-xs text-base-content/50">{{ 'settings.plugins.catalogue.pick_version' | translate }}</p>
+                    @for (entry of versionsFor(row); track entry.version) {
+                      <button type="button" class="btn btn-ghost btn-sm w-full justify-between font-normal"
+                        [disabled]="entry.version === installedVersion(row)"
+                        (click)="installVersion(row, entry.version)">
+                        <span>{{ entry.version }}</span>
+                        @if (entry.version === installedVersion(row)) {
+                          <span class="badge badge-success badge-xs">{{ 'settings.plugins.catalogue.installed' | translate }}</span>
+                        }
+                      </button>
+                    }
+                  </app-dropdown-menu>
+                </div>
+                @if (isInstalled(row.plugin.id)) {
+                  <span class="text-[0.7rem] text-base-content/50">{{ 'settings.plugins.catalogue.update_keeps_data' | translate }}</span>
+                }
               </div>
             }
           </div>

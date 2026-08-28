@@ -206,6 +206,7 @@ describe('PluginInstallService', () => {
       fakePluginJobsService() as never,
       fakeScheduledJobRegistry() as never,
       fakeCountsCache() as never,
+      { get: async () => null } as never,
     );
     staging = new PluginStagingService();
     pluginDb = fakePluginDb();

@@ -128,7 +128,8 @@ export interface FilteredCatalogEntry {
   kind: PluginKind;
   logo?: string;
   /** Only versions installable on this core build, oldest to newest, so the last entry is the one
-   *  to offer as an update. A caller iterating this list cannot offer an incompatible version. */
+   *  to offer as an update. A caller iterating this list cannot offer an incompatible version —
+   *  unless the admin turned the `fliks` range check off, which widens what lands here. */
   installable: CatalogVersionEntry[];
   /** Null when nothing is hidden. A plugin with an empty `installable` list still
    *  appears in the result, carrying this instead — never a bare empty page. */
@@ -159,10 +160,15 @@ function hasVerifiableArchive(v: CatalogVersionEntry): boolean {
   return typeof sha256 === 'string' && SHA256_PATTERN.test(sha256) && sha256 !== PLACEHOLDER_SHA256;
 }
 
-function isInstallable(v: CatalogVersionEntry, supportedApiVersions: readonly number[], fliksVersion: string): boolean {
+function isInstallable(
+  v: CatalogVersionEntry,
+  supportedApiVersions: readonly number[],
+  fliksVersion: string,
+  skipFliksRange: boolean,
+): boolean {
   return (
     supportedApiVersions.includes(v.pluginApi) &&
-    semver.satisfies(fliksRangeVersion(fliksVersion), v.fliks) &&
+    (skipFliksRange || semver.satisfies(fliksRangeVersion(fliksVersion), v.fliks)) &&
     hasVerifiableArchive(v)
   );
 }
@@ -190,14 +196,21 @@ export function filterCatalog(
   document: CatalogDocument,
   supportedApiVersions: readonly number[],
   fliksVersion: string,
+  /** The admin opted out of the `fliks` range check. The `pluginApi` check stays: that one is
+   *  the RPC protocol itself, and a mismatch is not something a warning can survive. */
+  opts: { skipFliksRange?: boolean } = {},
 ): FilteredCatalog {
+  const skipFliksRange = opts.skipFliksRange ?? false;
   return {
     denyList: document.denyList ?? [],
     plugins: document.plugins.map((entry) => {
       const installable: CatalogVersionEntry[] = [];
       const hidden: CatalogVersionEntry[] = [];
       for (const version of entry.versions) {
-        (isInstallable(version, supportedApiVersions, fliksVersion) ? installable : hidden).push(version);
+        (isInstallable(version, supportedApiVersions, fliksVersion, skipFliksRange)
+          ? installable
+          : hidden
+        ).push(version);
       }
       // A catalogue document lists versions in whatever order it likes; consumers read the last as newest.
       installable.sort((a, b) => semver.compare(a.version, b.version));
