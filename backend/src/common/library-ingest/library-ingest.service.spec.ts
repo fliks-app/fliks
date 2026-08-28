@@ -91,6 +91,20 @@ function buildMovie(over: Partial<Media> & { path: string }): Media {
   } as unknown as Media;
 }
 
+function buildSeries(over: Partial<Media> & { path: string }): Media {
+  return {
+    id: 20,
+    title: 'Nova Skyline',
+    originalTitle: undefined,
+    year: 2025,
+    type: MediaType.SERIES,
+    tmdbId: undefined,
+    library: { id: 10 },
+    folderName: 'Nova Skyline',
+    ...over,
+  } as unknown as Media;
+}
+
 describe('LibraryIngestService.ingest', () => {
   let srcDir: string;
 
@@ -107,7 +121,10 @@ describe('LibraryIngestService.ingest', () => {
     const srcFile = path.join(srcDir, 'Lonely.Harbor.2021.mkv');
     fs.writeFileSync(srcFile, 'x'.repeat(4096));
 
-    const media = buildMovie({ id: 7, path: '/library/movies/Lonely Harbor (2021)' });
+    const media = buildMovie({
+      id: 7,
+      path: '/library/movies/Lonely Harbor (2021)',
+    });
     h.mediaRepo.findOne.mockResolvedValue(media);
 
     const existingRow = {
@@ -186,5 +203,52 @@ describe('LibraryIngestService.ingest', () => {
     expect(h.logger.warn).toHaveBeenCalledWith(
       'Ingest[Coral Drift]: post-import enrichment failed — ffprobe crashed',
     );
+  });
+
+  /**
+   * A special's number is nowhere in its filename — only its title is. Without the title
+   * match the file imports as season 1 episode 1 (or not at all).
+   */
+  it('VERDICT: places a special with no numbering into season 0 by its title', async () => {
+    const h = buildHarness();
+    const srcFile = path.join(
+      srcDir,
+      'Nova.Skyline.Behind.The.Scenes.1080p.WEB-DL.mkv',
+    );
+    fs.writeFileSync(srcFile, 'z'.repeat(2048));
+
+    h.mediaRepo.findOne.mockResolvedValue(
+      buildSeries({ id: 20, path: '/library/tv/Nova Skyline' }),
+    );
+    h.seasonRepo.findOne.mockResolvedValue({
+      id: 900,
+      seasonNumber: 0,
+      episodes: [
+        { id: 9001, episodeNumber: 1, title: 'Teaser', airDate: null },
+        {
+          id: 9002,
+          episodeNumber: 2,
+          title: 'Behind the Scenes',
+          airDate: null,
+        },
+      ],
+    });
+
+    const result = await h.service.ingest({
+      mediaId: 20,
+      files: [{ path: srcFile }],
+      transfer: 'copy',
+      fallbackQuality: 'WEBDL-1080p',
+      sourceLabel: 'Nova Skyline',
+    });
+
+    expect(h.seasonRepo.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { media: { id: 20 }, seasonNumber: 0 },
+      }),
+    );
+    expect(result.imported[0].file.relativePath).toContain('Season 00');
+    expect(result.imported[0].file.relativePath).toContain('S00E02');
+    expect(h.episodeRepo.update).toHaveBeenCalledWith(9002, { hasFile: true });
   });
 });

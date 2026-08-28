@@ -21,6 +21,35 @@ const DEFAULT_FORMATS: NamingFormats = {
   seasonFolder: 'Season {season:00}',
 };
 
+/** `OVA 02`, `SP01`, `Special 3`, `NCED 1` — the marker owns the number that follows it. */
+const NUMBERED_SPECIAL =
+  /(?:^|[^a-z0-9])(?:specials?|ova|oav|ovd|sp|ncop|nced)[ ._-]*(\d{1,2})(?![0-9])/i;
+
+/** The same markers standing alone — no number to take. `sp` is left out: too short to
+ *  tell apart from a release tag without a number bound to it. */
+const SPECIAL_TOKEN =
+  /(?:^|[^a-z0-9])(?:specials?|ova|oav|ovd|ncop|nced)(?:[^a-z0-9]|$)/i;
+
+/** A `Specials` / `Season 00` folder anywhere in the path. */
+const SPECIALS_FOLDER =
+  /(?:^|[\\/])(?:specials?|(?:season|saison)[ ._-]*0+)(?:[\\/])/i;
+
+/** The `.5` interstitial anime uses for a special between two episodes. */
+const DECIMAL_EPISODE = /(?:^|[^0-9])\d{1,3}\.5(?:[^0-9]|$)/;
+
+/** `S01E00` / `1x00`: a special the release names by its parent season, not by its number. */
+const EPISODE_ZERO = /(?:[Ss](\d{1,2})[ ._-]*[Ee]|(\d{1,2})[xX])0+(?![0-9])/;
+
+/** Same treatment on both sides of a title comparison: accents, case and punctuation gone. */
+function normalizeTitle(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 @Injectable()
 export class NamingService {
   constructor(private readonly dataSource: DataSource) {}
@@ -209,6 +238,9 @@ export class NamingService {
    */
   parseEpisodeNumbers(
     sourceTitle: string,
+    /** Full path when the caller has one: a `Specials` folder is a season-0 signal the
+     *  filename alone does not carry. Only read for that — never parsed for numbers. */
+    filePath?: string,
   ): { season: number; episode: number; episodeEnd?: number } | null {
     // Normalize separators: dots/underscores → spaces (but keep S01E01 intact)
     const normalized = sourceTitle
@@ -221,6 +253,9 @@ export class NamingService {
       episode: number;
       /** Group index of the range-end number (only the multi-episode regex has one). */
       episodeEnd?: number;
+      /** The name states its season and episode. The looser patterns below guess from any
+       *  number they find, which is why a marked special must not trust them. */
+      explicit?: boolean;
     }[] = [
       // ---- Standard S01E01 patterns ----
 
@@ -232,18 +267,24 @@ export class NamingService {
         season: 1,
         episode: 2,
         episodeEnd: 3,
+        explicit: true,
       },
 
       // S01E01 standard (most common)
-      { re: /[Ss](\d{1,2})\s*[Ee](\d{1,3})/, season: 1, episode: 2 },
+      { re: /[Ss](\d{1,2})\s*[Ee](\d{1,3})/, season: 1, episode: 2, explicit: true },
 
       // S01.E01 / S01 E01 / S01_E01
-      { re: /[Ss](\d{1,2})\s*[.\- _][Ee](\d{1,3})/, season: 1, episode: 2 },
+      {
+        re: /[Ss](\d{1,2})\s*[.\- _][Ee](\d{1,3})/,
+        season: 1,
+        episode: 2,
+        explicit: true,
+      },
 
       // ---- Cross/x notation ----
 
       // 1x05 / 01x05
-      { re: /(\d{1,2})[xX](\d{2,3})/, season: 1, episode: 2 },
+      { re: /(\d{1,2})[xX](\d{2,3})/, season: 1, episode: 2, explicit: true },
 
       // ---- Bare season + episode (no letter prefix) ----
 
@@ -267,16 +308,30 @@ export class NamingService {
       { re: /[Ee](\d{2,3})(?:[^a-zA-Z\d]|$)/, season: -1, episode: 1 },
     ];
 
+    // A special names its own number, so `Show - OVA - 01` is S00E01 and never S01E01.
+    const numberedSpecial = sourceTitle.match(NUMBERED_SPECIAL);
+    if (numberedSpecial) {
+      const episode = parseInt(numberedSpecial[1], 10);
+      if (episode >= 1) return { season: 0, episode };
+    }
+    const special = this.isSpecialFile(filePath ?? sourceTitle);
+
     for (const {
       re,
       season: sIdx,
       episode: eIdx,
       episodeEnd: endIdx,
+      explicit,
     } of patterns) {
       const m = normalized.match(re) ?? sourceTitle.match(re);
       if (!m) continue;
       const episode = parseInt(m[eIdx], 10);
+      // `SxxE00` states a special without stating which one; a looser pattern would only
+      // find an unrelated number, so stop here and let the caller match it by title.
+      if (explicit && episode === 0) return null;
       if (!Number.isFinite(episode) || episode < 1) continue;
+      // Same reason, for a name that only carries a marker: no number here is trustworthy.
+      if (special && !explicit) return null;
 
       let episodeEnd: number | undefined;
       if (endIdx != null && m[endIdx] != null) {
@@ -294,6 +349,53 @@ export class NamingService {
     }
 
     return null;
+  }
+
+  /**
+   * Whether this path names a special: a `Specials` folder, an `OVA`/`SP`/`NCED` marker, a
+   * `.5` interstitial, or a `SxxE00` numbering. Accepts a full path — the folder counts.
+   */
+  isSpecialFile(pathOrName: string): boolean {
+    return (
+      SPECIALS_FOLDER.test(pathOrName) ||
+      SPECIAL_TOKEN.test(pathOrName) ||
+      NUMBERED_SPECIAL.test(pathOrName) ||
+      DECIMAL_EPISODE.test(pathOrName) ||
+      EPISODE_ZERO.test(pathOrName)
+    );
+  }
+
+  /**
+   * The season-0 episode whose title the filename contains. Longest title wins at equal
+   * position, so "The Making Of" beats "Making" on the same file.
+   *
+   * This is how a special with no usable numbering gets placed: its number lives nowhere in
+   * the name, only its title does. No match means the file stays unmatched — guessing a
+   * number would attach it to the wrong special.
+   */
+  matchSpecialByTitle<T extends { title?: string | null }>(
+    filename: string,
+    specials: T[],
+  ): T | null {
+    const haystack = normalizeTitle(
+      path.basename(filename, path.extname(filename)),
+    );
+    let best: { position: number; length: number; special: T } | null = null;
+    for (const special of specials) {
+      const needle = normalizeTitle(special.title ?? '');
+      // A two-letter title would match half the release names on disk.
+      if (needle.length < 4) continue;
+      const position = haystack.indexOf(needle);
+      if (position < 0) continue;
+      if (
+        !best ||
+        position < best.position ||
+        (position === best.position && needle.length > best.length)
+      ) {
+        best = { position, length: needle.length, special };
+      }
+    }
+    return best?.special ?? null;
   }
 
   /**

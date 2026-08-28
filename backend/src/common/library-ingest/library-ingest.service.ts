@@ -136,7 +136,7 @@ export class LibraryIngestService {
 
       if (media.type !== MediaType.MOVIE) {
         const epNums =
-          this.naming.parseEpisodeNumbers(sourceBase) ??
+          this.naming.parseEpisodeNumbers(sourceBase, file.path) ??
           (req.releaseName ? this.naming.parseEpisodeNumbers(req.releaseName) : null);
         seasonNumber = epNums?.season;
         episodeNumber = epNums?.episode;
@@ -175,6 +175,28 @@ export class LibraryIngestService {
                 await this.episodeRepo.save(episode);
               }
             }
+          }
+        } else {
+          // No numbering at all: the name may still carry a special's title, which is the
+          // only thing a special is identifiable by. No title match means no link.
+          const season = await this.seasonRepo.findOne({
+            where: { media: { id: media.id }, seasonNumber: 0 },
+            relations: ['episodes'],
+          });
+          const episode = this.naming.matchSpecialByTitle(
+            sourceBase,
+            season?.episodes ?? [],
+          );
+          if (season && episode) {
+            seasonId = season.id;
+            seasonNumber = 0;
+            episodeNumber = episode.episodeNumber;
+            episodeId = episode.id;
+            episodeTitle = episode.title ?? undefined;
+            airDate = episode.airDate ?? undefined;
+            this.logger.log(
+              `Ingest[${req.sourceLabel}]: "${sourceBase}" → special S00E${String(episode.episodeNumber).padStart(2, '0')} "${episode.title ?? ''}" matched by title`,
+            );
           }
         }
         if (isSeasonPack) {
