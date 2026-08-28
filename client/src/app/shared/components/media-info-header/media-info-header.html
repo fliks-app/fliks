@@ -467,28 +467,24 @@
       @if (subtitles().length) {
         <div class="flex items-center gap-2">
           <span class="text-base-content/50">{{ 'media_info.subtitles' | translate }}</span>
-          @if (subtitles().length === 1) {
-            <span>{{ subtitles()[0].label }}</span>
-          } @else {
-            <app-dropdown-menu placement="bottom-end">
-              <button trigger type="button" class="select select-bordered select-sm w-fit text-left cursor-pointer transition-colors hover:bg-base-content/10">
-                {{ selectedSubtitle()?.head || selectedSubtitle()?.label || ('player.off' | translate) }}
-              </button>
+          <app-dropdown-menu placement="bottom-end">
+            <button trigger type="button" class="select select-bordered select-sm w-fit text-left cursor-pointer transition-colors hover:bg-base-content/10">
+              {{ selectedSubtitle()?.head || selectedSubtitle()?.label || ('player.off' | translate) }}
+            </button>
+            <app-dropdown-option
+              [head]="'player.off' | translate"
+              [selected]="!selectedSubtitleId()"
+              (click)="onSubtitleChange(null)"
+            />
+            @for (s of subtitles(); track s.id) {
               <app-dropdown-option
-                [head]="'player.off' | translate"
-                [selected]="!selectedSubtitleId()"
-                (click)="onSubtitleChange(null)"
+                [head]="s.head || s.label"
+                [sub]="s.sub"
+                [selected]="s.id === selectedSubtitleId()"
+                (click)="onSubtitleChange(s.id)"
               />
-              @for (s of subtitles(); track s.id) {
-                <app-dropdown-option
-                  [head]="s.head || s.label"
-                  [sub]="s.sub"
-                  [selected]="s.id === selectedSubtitleId()"
-                  (click)="onSubtitleChange(s.id)"
-                />
-              }
-            </app-dropdown-menu>
-          }
+            }
+          </app-dropdown-menu>
         </div>
       }
     </div>
