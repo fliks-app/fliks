@@ -1,6 +1,7 @@
 /** Narrow shapes for TMDB JSON used by TmdbProvider (not full API schemas). */
 
-export interface TmdbNamed {
+export interface TmdbGenre {
+  id: number;
   name: string;
 }
 
@@ -118,7 +119,7 @@ export interface TmdbMovieDetailsResponse {
   poster_path?: string | null;
   backdrop_path?: string | null;
   vote_average?: number;
-  genres?: TmdbNamed[];
+  genres?: TmdbGenre[];
   runtime?: number;
   status?: string;
   budget?: number;
@@ -150,7 +151,7 @@ export interface TmdbTvDetailsResponse {
   poster_path?: string | null;
   backdrop_path?: string | null;
   vote_average?: number;
-  genres?: TmdbNamed[];
+  genres?: TmdbGenre[];
   external_ids?: { imdb_id?: string | null };
   episode_run_time?: number[];
   number_of_seasons?: number;
