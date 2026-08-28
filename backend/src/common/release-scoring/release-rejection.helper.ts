@@ -1,6 +1,7 @@
 import { QualityProfileItem } from '../../modules/profiles/entities/quality-profile.entity';
 import { AudioLanguageItem } from '../../modules/profiles/entities/language-profile.entity';
 import { APP_LANGUAGES } from '../constants/app-languages';
+import { getAppQualityById } from '../constants/app-qualities';
 import {
   parseReleaseLanguage,
   parseReleaseQuality,
@@ -574,9 +575,10 @@ export function computeRejections(opts: {
  * 3. Language allowed > not allowed
  * 4. Alive (seeders > 0) > dead — a zero-seeder release can't be downloaded,
  *    so it sinks below every live release regardless of quality.
- * 5. Quality rank (higher = better)
- * 6. Full-season pack (`preferFullSeason` only) — one pack beats loose
- *    episodes of the same quality, but never outranks a better quality.
+ * 5. Full-season pack (`preferFullSeason` only) — one pack beats loose
+ *    episodes at the same resolution whatever the source, but never
+ *    outranks a higher resolution.
+ * 6. Quality rank (higher = better)
  * 7. Freeleech bonus
  * 8. Custom format score (higher = better)
  * 9. Seeders (more = better, log scale to avoid over-weighting)
@@ -590,6 +592,7 @@ export function computeRejections(opts: {
  */
 export function sortReleasesByRelevance<
   T extends {
+    qualityId: number;
     rank: number;
     allowed: boolean;
     blocklisted: boolean;
@@ -626,12 +629,16 @@ export function sortReleasesByRelevance<
     const bAlive = b.seeders > 0 ? 1 : 0;
     if (aAlive !== bAlive) return bAlive - aAlive;
 
-    // 5. Quality rank desc
-    if (a.rank !== b.rank) return b.rank - a.rank;
+    // 5. One pack over loose episodes at the same resolution — a weaker
+    //    source is worth less than eight files to stitch together.
+    if (opts?.preferFullSeason && !!a.isFullSeason !== !!b.isFullSeason) {
+      const aRes = getAppQualityById(a.qualityId)?.resolution ?? 0;
+      const bRes = getAppQualityById(b.qualityId)?.resolution ?? 0;
+      if (aRes === bRes) return a.isFullSeason ? -1 : 1;
+    }
 
-    // 6. One pack over loose episodes, but only at equal quality.
-    if (opts?.preferFullSeason && !!a.isFullSeason !== !!b.isFullSeason)
-      return a.isFullSeason ? -1 : 1;
+    // 6. Quality rank desc
+    if (a.rank !== b.rank) return b.rank - a.rank;
 
     // 7. Freeleech bonus
     if (a.freeleech !== b.freeleech) return a.freeleech ? -1 : 1;
