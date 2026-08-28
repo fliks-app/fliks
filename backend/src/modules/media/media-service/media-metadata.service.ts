@@ -30,6 +30,9 @@ import { mapWithConcurrency } from '../../../common/utils/concurrency';
 import { buildMediaFieldsFromTmdb } from './tmdb-mapping.util';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 
+const episodeNumbersOf = (sd: SeasonDetails): Set<number> =>
+  new Set((sd.episodes ?? []).map((e) => e.episodeNumber));
+
 @Injectable()
 export class MediaMetadataService {
   private readonly log = new Logger(MediaMetadataService.name);
@@ -352,6 +355,9 @@ export class MediaMetadataService {
     const dbSeasonMap = new Map(dbSeasons.map((s) => [s.seasonNumber, s]));
 
     let insertedCount = 0;
+    // What the provider listed, per DB season, so the prune below only touches a season
+    // this run actually applied — a season it never answered for keeps its rows.
+    const applied = new Map<number, Set<number>>();
 
     // 2. Upsert seasons + apply media-level episode data, skipping seasons
     //    whose override points elsewhere (handled in the second pass).
@@ -375,6 +381,7 @@ export class MediaMetadataService {
         continue;
       }
       insertedCount += (await this.applySeasonDetails(dbSeason, sd)).insertedCount;
+      applied.set(dbSeason.id, episodeNumbersOf(sd));
     }
 
     // 3. Second pass: re-fetch overridden seasons from their own provider.
@@ -385,7 +392,6 @@ export class MediaMetadataService {
         s.preferredProvider &&
         s.preferredProvider !== mediaResolve.provider.name,
     );
-    if (!overridden.length) return { insertedCount };
     const cache = new Map<string, SeasonDetails[]>();
     for (const dbSeason of overridden) {
       let overrideResolve: {
@@ -407,6 +413,7 @@ export class MediaMetadataService {
         );
         if (fallback) {
           insertedCount += (await this.applySeasonDetails(dbSeason, fallback)).insertedCount;
+          applied.set(dbSeason.id, episodeNumbersOf(fallback));
         }
         continue;
       }
@@ -428,12 +435,49 @@ export class MediaMetadataService {
         );
         if (fallback) {
           insertedCount += (await this.applySeasonDetails(dbSeason, fallback)).insertedCount;
+          applied.set(dbSeason.id, episodeNumbersOf(fallback));
         }
         continue;
       }
       insertedCount += (await this.applySeasonDetails(dbSeason, seasonData)).insertedCount;
+      applied.set(dbSeason.id, episodeNumbersOf(seasonData));
     }
+    await this.dropEpisodesAbsentFromProvider(media, applied);
     return { insertedCount };
+  }
+
+  /**
+   * Delete the episodes of an applied season that the provider no longer lists. Without it a
+   * media that once read another provider keeps its surplus rows forever, and the season ends
+   * up a mix of both — one provider's episode list with the other's titles.
+   *
+   * Only seasons this run applied are touched, and only when the provider listed at least one
+   * episode for them: a failed or truncated fetch must never look like an empty season. Files
+   * survive as unmatched (`media_files.episodeId` is ON DELETE SET NULL); playback states and
+   * markers on those episodes go, as they described content the work does not have.
+   */
+  private async dropEpisodesAbsentFromProvider(
+    media: Media,
+    applied: Map<number, Set<number>>,
+  ): Promise<void> {
+    if (!applied.size) return;
+    const seasons = await this.seasonRepo.find({
+      where: { media: { id: media.id } },
+      relations: ['episodes'],
+    });
+    for (const season of seasons) {
+      const live = applied.get(season.id);
+      if (!live?.size) continue;
+      const surplus = (season.episodes ?? []).filter(
+        (ep) => !live.has(ep.episodeNumber),
+      );
+      if (!surplus.length) continue;
+      await this.episodeRepo.remove(surplus);
+      this.log.log(
+        `refresh: dropped ${surplus.length} episode(s) of S${season.seasonNumber} on media#${media.id} ` +
+          `(${surplus.map((e) => e.episodeNumber).join(', ')}) — absent from the provider`,
+      );
+    }
   }
 
   /** Upsert episodes of one DB season from provider season details, download
