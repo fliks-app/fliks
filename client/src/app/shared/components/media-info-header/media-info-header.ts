@@ -342,9 +342,12 @@ export class MediaInfoHeaderComponent {
     // playback_state row as before.
     if (this.mediaType() === 'series' && !episodeId) {
       this.watched.set(this.seriesFullyWatched());
-    } else {
-      this.playable.loadWatchedState(mediaId, episodeId).then(v => this.watched.set(v));
+      // A series' own row (episode IS NULL) is never its resume target, so
+      // reading it here only flashes a bar that the real episode then clears.
+      // The parent resolves `resumeEpisodeId` a moment later and re-runs this.
+      return;
     }
+    this.playable.loadWatchedState(mediaId, episodeId).then(v => this.watched.set(v));
 
     // Tracked read: a position queued offline shows up here as soon as it is
     // recorded, and again as soon as the flush clears it.
