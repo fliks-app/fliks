@@ -37,6 +37,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
 import { SpoilerDirective } from '../../directives/spoiler.directive';
 import { SynopsisComponent } from '../synopsis/synopsis';
+import { SpoilerService } from '../../../core/services/spoiler.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import {
   bucketResolutionLabel,
@@ -144,6 +145,7 @@ export class MediaInfoHeaderComponent {
   private readonly device = inject(DeviceService);
   readonly auth = inject(AuthService);
   private readonly playable = inject(PlayableMediaService);
+  private readonly spoilers = inject(SpoilerService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
   private readonly pluginUi = inject(PluginUiRegistryService);
@@ -201,7 +203,8 @@ export class MediaInfoHeaderComponent {
   readonly posterMode = input<'poster' | 'still'>('poster');
   /** Anti-spoiler: blur the hero and the still until clicked. */
   readonly spoilerImage = input(false);
-  /** Anti-spoiler: blur the synopsis until clicked. */
+  /** Anti-spoiler: blur the synopsis until clicked. Episode mode only — a
+   *  movie's own watched state lives here, so its mask is derived below. */
   readonly spoilerOverview = input(false);
   /** Route the title text links to (e.g. the series, from an episode page). */
   readonly backRoute = input<string[]>(['/']);
@@ -295,6 +298,12 @@ export class MediaInfoHeaderComponent {
   // ── Internal state ──
 
   readonly watched = signal(false);
+
+  protected readonly overviewMasked = computed(() =>
+    this.mediaType() === 'movie'
+      ? this.spoilers.overview(this.watched())
+      : this.spoilerOverview(),
+  );
   readonly resumePositionSeconds = signal<number | null>(null);
   readonly durationSeconds = signal<number | null>(null);
   readonly selectedAudioIndex = signal<number | null>(null);
