@@ -113,4 +113,24 @@ export class UpdateUserDto {
   @IsBoolean()
   @IsOptional()
   shareDisabled?: boolean;
+
+  /** Self-editable: mask what would spoil an unwatched episode. */
+  @IsBoolean()
+  @IsOptional()
+  hideSpoilers?: boolean;
+
+  /** Self-editable: blur unwatched episode stills and the episode backdrop. */
+  @IsBoolean()
+  @IsOptional()
+  spoilerHideStills?: boolean;
+
+  /** Self-editable: blur unwatched episode synopses. */
+  @IsBoolean()
+  @IsOptional()
+  spoilerHideOverviews?: boolean;
+
+  /** Self-editable: replace unwatched episode names with their number. */
+  @IsBoolean()
+  @IsOptional()
+  spoilerHideTitles?: boolean;
 }

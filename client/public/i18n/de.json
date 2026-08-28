@@ -159,7 +159,8 @@
     "nav": {
       "password": "Passwort",
       "recommendations": "Empfehlungen",
-      "privacy": "Datenschutz"
+      "privacy": "Datenschutz",
+      "spoilers": "Spoiler"
     },
     "recommendations": {
       "reset_title": "Ausgeblendete Empfehlungen zurücksetzen",
@@ -170,6 +171,21 @@
       "confirm_body": "{{n}} ausgeblendete Empfehlung(en) werden wieder berücksichtigt. Fortfahren?",
       "reset_success": "{{n}} Empfehlung(en) wiederhergestellt."
     }
+  },
+  "spoilers": {
+    "title": "Spoilerschutz",
+    "intro": "Verbirg alles, was eine noch nicht gesehene Folge verderben könnte.",
+    "hide": "Spoiler-Informationen ausblenden",
+    "hide_hint": "Verbirgt, was eine noch nicht gesehene Folge verraten könnte. Klicke auf ein verdecktes Element, um es einzublenden, oder markiere die Folge als gesehen, um es dauerhaft freizugeben.",
+    "hide_stills": "Vorschaubilder unscharf machen",
+    "hide_stills_hint": "Betrifft das Vorschaubild der Folge und das Hintergrundbild ihrer Seite.",
+    "hide_overviews": "Inhaltsangaben unscharf machen",
+    "hide_overviews_hint": "Betrifft die Handlungsbeschreibung ungesehener Folgen.",
+    "hide_titles": "Folgentitel ausblenden",
+    "hide_titles_hint": "Zeigt „Folge 3“ statt eines Titels, der die Handlung verrät.",
+    "episode_title": "Folge {{number}}",
+    "reveal": "Zum Anzeigen klicken",
+    "saved": "Einstellung gespeichert"
   },
   "app_settings": {
     "title": "Einstellungen",

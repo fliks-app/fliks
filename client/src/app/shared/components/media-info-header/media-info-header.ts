@@ -35,6 +35,8 @@ import { TvService } from '../../../core/services/tv.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
+import { SpoilerDirective } from '../../directives/spoiler.directive';
+import { SynopsisComponent } from '../synopsis/synopsis';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import {
   bucketResolutionLabel,
@@ -46,7 +48,6 @@ import { DropdownMenuComponent } from '../dropdown-menu';
 import { DropdownOptionComponent } from '../dropdown-option/dropdown-option';
 import { ProgressBadgeComponent } from '../progress-badge/progress-badge.component';
 import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
-import { ClampToggleDirective } from '../../directives/clamp-toggle.directive';
 import { TvRowDirective } from '../../directives/tv-row.directive';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { NgTemplateOutlet } from '@angular/common';
@@ -121,7 +122,8 @@ interface AudioTrack {
     DropdownMenuComponent, DropdownOptionComponent,
     ProgressBadgeComponent,
     ImgFadeInDirective,
-    ClampToggleDirective,
+    SpoilerDirective,
+    SynopsisComponent,
     TvRowDirective,
     TvSelectDirective,
     NgTemplateOutlet,
@@ -197,6 +199,10 @@ export class MediaInfoHeaderComponent {
   readonly fanartUrl = input<string | null>(null);
   readonly posterUrl = input<string | null>(null);
   readonly posterMode = input<'poster' | 'still'>('poster');
+  /** Anti-spoiler: blur the hero and the still until clicked. */
+  readonly spoilerImage = input(false);
+  /** Anti-spoiler: blur the synopsis until clicked. */
+  readonly spoilerOverview = input(false);
   /** Route the title text links to (e.g. the series, from an episode page). */
   readonly backRoute = input<string[]>(['/']);
 

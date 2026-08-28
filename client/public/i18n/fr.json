@@ -164,7 +164,8 @@
     "nav": {
       "password": "Mot de passe",
       "recommendations": "Recommandations",
-      "privacy": "Confidentialité"
+      "privacy": "Confidentialité",
+      "spoilers": "Divulgâchage"
     },
     "recommendations": {
       "reset_title": "Réinitialiser les recommandations masquées",
@@ -175,6 +176,21 @@
       "confirm_body": "{{n}} recommandation(s) masquée(s) redeviendront éligibles. Continuer ?",
       "reset_success": "{{n}} recommandation(s) restaurée(s)."
     }
+  },
+  "spoilers": {
+    "title": "Protection anti-divulgâchage",
+    "intro": "Masquez ce qui pourrait gâcher un épisode que vous n'avez pas encore vu.",
+    "hide": "Cacher les informations de divulgâchage",
+    "hide_hint": "Masque ce qui pourrait dévoiler un épisode que vous n'avez pas encore vu. Cliquez sur un élément masqué pour le révéler, ou marquez l'épisode comme vu pour le démasquer définitivement.",
+    "hide_stills": "Flouter les vignettes",
+    "hide_stills_hint": "Couvre la vignette de l'épisode et l'image de fond de sa fiche.",
+    "hide_overviews": "Flouter les synopsis",
+    "hide_overviews_hint": "Couvre le résumé des épisodes non vus.",
+    "hide_titles": "Cacher les noms d'épisode",
+    "hide_titles_hint": "Affiche « Épisode 3 » au lieu d’un titre qui dévoile l’intrigue.",
+    "episode_title": "Épisode {{number}}",
+    "reveal": "Cliquer pour révéler",
+    "saved": "Préférence enregistrée"
   },
   "app_settings": {
     "title": "Paramètres",

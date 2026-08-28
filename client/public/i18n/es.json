@@ -159,7 +159,8 @@
     "nav": {
       "password": "Contraseña",
       "recommendations": "Recomendaciones",
-      "privacy": "Privacidad"
+      "privacy": "Privacidad",
+      "spoilers": "Spoilers"
     },
     "recommendations": {
       "reset_title": "Restablecer las recomendaciones ocultas",
@@ -170,6 +171,21 @@
       "confirm_body": "{{n}} recomendación(es) oculta(s) volverán a ser elegibles. ¿Continuar?",
       "reset_success": "{{n}} recomendación(es) restaurada(s)."
     }
+  },
+  "spoilers": {
+    "title": "Protección contra spoilers",
+    "intro": "Oculta lo que podría estropear un episodio que aún no has visto.",
+    "hide": "Ocultar información con spoilers",
+    "hide_hint": "Oculta lo que podría revelar un episodio que aún no has visto. Haz clic en un elemento oculto para revelarlo, o marca el episodio como visto para descubrirlo definitivamente.",
+    "hide_stills": "Difuminar las miniaturas",
+    "hide_stills_hint": "Cubre la miniatura del episodio y el fondo de su ficha.",
+    "hide_overviews": "Difuminar las sinopsis",
+    "hide_overviews_hint": "Cubre el resumen de los episodios no vistos.",
+    "hide_titles": "Ocultar los nombres de episodio",
+    "hide_titles_hint": "Muestra «Episodio 3» en lugar de un título que revela la trama.",
+    "episode_title": "Episodio {{number}}",
+    "reveal": "Haz clic para revelar",
+    "saved": "Preferencia guardada"
   },
   "app_settings": {
     "title": "Ajustes",

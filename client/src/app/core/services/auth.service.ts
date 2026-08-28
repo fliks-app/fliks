@@ -41,6 +41,14 @@ export interface User {
   shareStats: boolean;
   /** Opt out of the whole social layer (undiscoverable + can't use sharing). */
   shareDisabled: boolean;
+  /** Mask what would spoil an episode not yet watched. */
+  hideSpoilers: boolean;
+  /** Blur unwatched episode stills and the episode backdrop. */
+  spoilerHideStills: boolean;
+  /** Blur unwatched episode synopses. */
+  spoilerHideOverviews: boolean;
+  /** Replace unwatched episode names with their number. */
+  spoilerHideTitles: boolean;
 }
 
 /** Public = instant follow + shared content; private = follow on approval. */

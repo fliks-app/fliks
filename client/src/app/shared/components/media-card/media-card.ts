@@ -12,6 +12,7 @@ import { ToastService } from '../../../core/services/toast.service';
 import { IdentifyModalService } from '../../../core/services/identify-modal.service';
 import { TrackingModalService } from '../../../core/services/tracking-modal.service';
 import { CardActionsDirective } from '../../directives/card-actions.directive';
+import { SpoilerDirective } from '../../directives/spoiler.directive';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../../core/services/recommend.service';
@@ -46,7 +47,7 @@ export type CardStatus = 'watched' | 'missing' | null;
   imports: [
     CachedSrcDirective,RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslateModule,
     LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX,
-    CardActionsDirective],
+    CardActionsDirective, SpoilerDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-card.html',
 })
@@ -98,7 +99,8 @@ export class MediaCardComponent {
 
   // Image (override media.posterUrl)
   readonly imageUrl = input<string | null>(null);
-  readonly imageBlurred = input(false);
+  /** Mask the image behind a blur until the viewer clicks it (anti-spoiler). */
+  readonly spoiler = input(false);
 
   // Text (override media.title / media.rating)
   readonly title = input('');

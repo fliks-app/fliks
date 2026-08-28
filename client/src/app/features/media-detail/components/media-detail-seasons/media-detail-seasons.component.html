@@ -240,7 +240,7 @@
                 widthClass="shrink-0 w-28 sm:w-48 lg:w-56"
                 [id]="'episode-row-' + ep.id"
                 [imageUrl]="ep.stillUrl ?? null"
-                [title]="ep.title ?? ('media_detail.ep_no_title' | translate)"
+                [title]="episodeTitle(ep)"
                 [subtitle]="episodeCardSubtitle((ep.airDate | localeDate), ep.runtime)"
                 [topLeftBadge]="episodeBadgeLabel(ep)"
                 [status]="watchedEpisodeIds().has(ep.id) ? 'watched' : (!ep.hasFile ? 'missing' : null)"
@@ -255,6 +255,7 @@
                 [hideCaption]="true"
                 [dimmed]="!ep.monitored"
                 [grayscale]="episodeGrayscale(ep)"
+                [spoiler]="episodeStillSpoiler(ep)"
                 (clicked)="ep.hasFile && playEpisode(ep)"
                 (played)="playEpisode(ep)"
                 (watchedToggled)="toggleEpisodeWatched.emit({ episode: ep, watched: $event })"
@@ -265,7 +266,7 @@
                   [routerLink]="episodeRoute(ep)"
                   [replaceUrl]="hideControls()"
                   class="text-base sm:text-lg font-medium hover:underline line-clamp-2"
-                >{{ ep.title ?? ('media_detail.ep_no_title' | translate) }}</a>
+                >{{ episodeTitle(ep) }}</a>
                 <span class="text-sm text-base-content/50 tabular-nums">
                   {{ episodeCardSubtitle((ep.airDate | localeDate), ep.runtime) }}
                 </span>
@@ -275,21 +276,13 @@
                    than claiming a third row the image doesn't span. -->
               <div class="col-span-2 sm:col-span-1 sm:col-start-2">
                 @if (ep.overview) {
-                  <p
-                    [appClampToggle]="ep.overview"
-                    #syn="clampToggle"
-                    class="text-sm sm:text-base text-base-content/70"
-                    [class.line-clamp-3]="!syn.expanded()"
-                  >{{ ep.overview }}</p>
-                  @if (syn.showToggle()) {
-                    <button
-                      type="button"
-                      class="link link-primary no-underline hover:underline text-sm mt-0.5 cursor-pointer"
-                      (click)="syn.toggle()"
-                    >
-                      {{ (syn.expanded() ? 'common.show_less' : 'common.show_more') | translate }}
-                    </button>
-                  }
+                  <app-synopsis
+                    [text]="ep.overview"
+                    [spoiler]="episodeOverviewSpoiler(ep)"
+                    [lines]="3"
+                    textClass="text-sm sm:text-base text-base-content/70"
+                    toggleClass="mt-0.5"
+                  />
                 } @else {
                   <p class="text-sm sm:text-base text-base-content/35 italic">{{ 'media_detail.ep_no_overview' | translate }}</p>
                 }
@@ -307,7 +300,7 @@
           <app-media-card [aspect]="'landscape'"
             [id]="'episode-' + ep.id"
             [imageUrl]="ep.stillUrl ?? null"
-            [title]="ep.title ?? ('media_detail.ep_no_title' | translate)"
+            [title]="episodeTitle(ep)"
             [subtitle]="episodeCardSubtitle((ep.airDate | localeDate), ep.runtime)"
             [topLeftBadge]="episodeBadgeLabel(ep)"
             [status]="watchedEpisodeIds().has(ep.id) ? 'watched' : (!ep.hasFile ? 'missing' : null)"
@@ -320,6 +313,7 @@
             [interactiveWatched]="ep.hasFile"
             [dimmed]="!ep.monitored"
             [grayscale]="episodeGrayscale(ep)"
+            [spoiler]="episodeStillSpoiler(ep)"
             [highlighted]="ep.id === activeEpisodeId()"
             (played)="playEpisode(ep)"
             (watchedToggled)="toggleEpisodeWatched.emit({ episode: ep, watched: $event })"

@@ -164,7 +164,8 @@
     "nav": {
       "password": "Password",
       "recommendations": "Recommendations",
-      "privacy": "Privacy"
+      "privacy": "Privacy",
+      "spoilers": "Spoilers"
     },
     "recommendations": {
       "reset_title": "Reset dismissed recommendations",
@@ -175,6 +176,21 @@
       "confirm_body": "{{n}} dismissed recommendation(s) will become eligible again. Continue?",
       "reset_success": "{{n}} recommendation(s) restored."
     }
+  },
+  "spoilers": {
+    "title": "Spoiler protection",
+    "intro": "Hide what could spoil an episode you have not watched yet.",
+    "hide": "Hide spoiler information",
+    "hide_hint": "Masks what could give away an episode you have not watched yet. Click a masked item to reveal it, or mark the episode as watched to unmask it for good.",
+    "hide_stills": "Blur thumbnails",
+    "hide_stills_hint": "Covers the episode still and the backdrop of the episode page.",
+    "hide_overviews": "Blur synopses",
+    "hide_overviews_hint": "Covers the plot summary of unwatched episodes.",
+    "hide_titles": "Hide episode names",
+    "hide_titles_hint": "Shows \"Episode 3\" instead of a title that gives the plot away.",
+    "episode_title": "Episode {{number}}",
+    "reveal": "Click to reveal",
+    "saved": "Preference saved"
   },
   "app_settings": {
     "title": "Settings",
