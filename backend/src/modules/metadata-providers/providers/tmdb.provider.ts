@@ -478,7 +478,6 @@ export class TmdbProvider implements IMetadataProvider {
 
     const seasons: SeasonDetails[] = [];
     for (const s of show.seasons ?? []) {
-      if (s.season_number === 0) continue;
       try {
         const { data: season } = await this.client.get<TmdbTvSeasonResponse>(
           `/tv/${tmdbId}/season/${s.season_number}`,
@@ -505,7 +504,9 @@ export class TmdbProvider implements IMetadataProvider {
         });
       } catch (err) {
         this.logger.warn(
-          `Failed to fetch season ${s.season_number} for TV ${tmdbId}`,
+          `Failed to fetch season ${s.season_number} for TV ${tmdbId}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
         );
       }
     }

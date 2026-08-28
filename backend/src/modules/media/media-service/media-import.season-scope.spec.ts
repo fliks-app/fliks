@@ -85,15 +85,22 @@ describe('MediaImportService — season monitoring scope on import', () => {
     ).toEqual([0, 5, 6]);
   });
 
-  it('monitors every season when the scope is null (whole series / admin add)', async () => {
+  it('monitors every season but the specials when the scope is null (whole series / admin add)', async () => {
     const { svc, created } = makeService();
     await svc.importFromTmdb(dto, null, null);
-    expect(created.every((s) => s.monitored)).toBe(true);
+    expect(monitoredNumbers(created)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
-  it('monitors every season when the scope is an empty array', async () => {
+  it('monitors every season but the specials when the scope is an empty array', async () => {
     const { svc, created } = makeService();
     await svc.importFromTmdb(dto, null, []);
-    expect(created.every((s) => s.monitored)).toBe(true);
+    expect(monitoredNumbers(created)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  /** Season 0 is only ever monitored on purpose, by number. */
+  it('VERDICT: monitors the specials when the scope names season 0', async () => {
+    const { svc, created } = makeService();
+    await svc.importFromTmdb(dto, null, [0]);
+    expect(monitoredNumbers(created)).toEqual([0]);
   });
 });

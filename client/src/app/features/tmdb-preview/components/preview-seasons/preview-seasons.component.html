@@ -14,7 +14,7 @@
         [class.btn-ghost]="s.seasonNumber !== activeSeasonNumber()"
         (click)="selectSeason(s.seasonNumber)"
       >
-        {{ 'media_detail.season' | translate }} {{ s.seasonNumber }}
+        {{ s.seasonNumber | seasonLabel }}
         <span class="opacity-60 tabular-nums">{{ s.episodeCount }}</span>
       </button>
     }

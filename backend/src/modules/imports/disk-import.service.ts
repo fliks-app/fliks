@@ -719,7 +719,7 @@ export class DiskImportService {
           this.seasonRepo.create({
             media: { id: matched.id } as Media,
             seasonNumber: epNums.season,
-            monitored: true,
+            monitored: epNums.season > 0,
           }),
         );
         dirtyMediaIds?.add(matched.id);

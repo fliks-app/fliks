@@ -87,6 +87,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { SseService, type SseEvent } from '../../core/services/sse.service';
 import { MediaType } from '../../core/enums/media-type.enum';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { SeasonLabelPipe } from '../../core/pipes/season-label.pipe';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { ImgFadeInDirective } from '../../shared/directives/img-fade-in.directive';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
@@ -130,6 +131,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     RouterLink,
     NgTemplateOutlet,
     ResolveUrlPipe,
+    SeasonLabelPipe,
     ImgFadeInDirective,
     TvSectionDirective,
   ],

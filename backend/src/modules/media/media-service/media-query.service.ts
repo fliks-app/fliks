@@ -661,7 +661,9 @@ export class MediaQueryService {
       throw new NotFoundException(`Media #${id} not found`);
     }
     if (media.seasons?.length) {
-      media.seasons.sort((a, b) => a.seasonNumber - b.seasonNumber);
+      // Specials (season 0) sort last: an appendix, not the opening season.
+      const rank = (n: number) => (n === 0 ? Number.MAX_SAFE_INTEGER : n);
+      media.seasons.sort((a, b) => rank(a.seasonNumber) - rank(b.seasonNumber));
       for (const s of media.seasons) {
         s.episodes?.sort((a, b) => a.episodeNumber - b.episodeNumber);
       }

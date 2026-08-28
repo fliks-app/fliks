@@ -847,7 +847,7 @@ export class MediaRescanService {
         this.seasonRepo.create({
           media,
           seasonNumber: epNums.season,
-          monitored: true,
+          monitored: epNums.season > 0,
         }),
       );
       created = true;

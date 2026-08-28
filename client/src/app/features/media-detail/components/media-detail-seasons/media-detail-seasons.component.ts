@@ -52,6 +52,7 @@ import { TvService } from '../../../../core/services/tv.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { DeviceService } from '../../../../core/services/device.service';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
+import { SeasonLabelPipe } from '../../../../core/pipes/season-label.pipe';
 import { PluginUiRegistryService } from '../../../../core/plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen, type WhenContext } from '../../../../core/plugin-ui/when-evaluator';
 import { resolveSeasonAction, type CoreSeasonActionId, type SeasonActionHandlers } from '../../../../core/plugin-ui/season-action-registry';
@@ -72,7 +73,7 @@ function readEpisodeViewFromStorage(): EpisodeView {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, UpperCasePipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, CollapsibleSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, ClampToggleDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
+  imports: [TranslateModule, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, CollapsibleSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, ClampToggleDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })

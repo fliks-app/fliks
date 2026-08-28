@@ -13,6 +13,7 @@ import {
   MetadataService,
 } from '../../../../core/services/api/metadata.service';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
+import { SeasonLabelPipe } from '../../../../core/pipes/season-label.pipe';
 import { ImgFadeInDirective } from '../../../../shared/directives/img-fade-in.directive';
 import { ClampToggleDirective } from '../../../../shared/directives/clamp-toggle.directive';
 import { TvRowDirective } from '../../../../shared/directives/tv-row.directive';
@@ -22,6 +23,7 @@ import { TvRowDirective } from '../../../../shared/directives/tv-row.directive';
   imports: [
     TranslateModule,
     LocaleDatePipe,
+    SeasonLabelPipe,
     ImgFadeInDirective,
     ClampToggleDirective,
     TvRowDirective,
