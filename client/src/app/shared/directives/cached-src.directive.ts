@@ -27,6 +27,13 @@ export class CachedSrcDirective {
         this.el.setAttribute('src', url);
         return;
       }
+      // Same frame when the cache can answer without the bridge: awaiting it
+      // leaves a whole cold-start grid src-less for as long as the round-trip.
+      const now = this.cache.resolveNow(url);
+      if (now) {
+        this.el.setAttribute('src', now);
+        return;
+      }
       void this.cache.resolve(url).then((resolved) => {
         if (token === this.seq) this.el.setAttribute('src', resolved);
       });

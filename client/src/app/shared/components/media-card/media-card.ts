@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, ElementRef, input, output, computed, inject, viewChild } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ElementRef, input, output, computed, inject, linkedSignal, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -180,6 +180,15 @@ export class MediaCardComponent {
 
   // Resolved template values (explicit input wins over media-derived default)
   protected readonly _img = computed(() => this.imageUrl() ?? this.media()?.posterUrl ?? null);
+  /** Both reset by every new image, so a card recycled by @for retries. */
+  protected readonly imgLoaded = linkedSignal<string | null, boolean>({
+    source: this._img,
+    computation: () => false,
+  });
+  protected readonly imgFailed = linkedSignal<string | null, boolean>({
+    source: this._img,
+    computation: () => false,
+  });
   protected readonly _title = computed(() => this.title() || this.media()?.title || '');
   protected readonly _rating = computed(() => this.rating() || this.media()?.rating || 0);
   protected readonly _link = computed(() => {
