@@ -5,11 +5,13 @@
     <section class="space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         @if (canManage()) {
-          <div class="flex gap-2 ml-auto">
+          <!-- Wraps rather than overflowing: the three labels don't fit one
+               phone-width line, and an overflow here scrolls the whole modal. -->
+          <div class="flex flex-wrap justify-end gap-2 ml-auto">
             @if (hasMissing()) {
               <button
                 type="button"
-                class="btn btn-ghost btn-sm shrink-0"
+                class="btn btn-ghost btn-sm"
                 [disabled]="searchDisabled() || subtitleActionBusy()"
                 [attr.title]="
                   searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null
@@ -32,7 +34,7 @@
               />
               <button
                 type="button"
-                class="btn btn-ghost btn-sm shrink-0"
+                class="btn btn-ghost btn-sm"
                 [disabled]="searchDisabled() || subtitleActionBusy()"
                 [attr.title]="
                   searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null
@@ -45,7 +47,7 @@
             }
             <button
               type="button"
-              class="btn btn-primary btn-sm shrink-0"
+              class="btn btn-primary btn-sm"
               [disabled]="searchDisabled() || subtitleActionBusy()"
               [attr.title]="
                 searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null

@@ -13,6 +13,7 @@ import { RequestPosterComponent } from '../request-poster';
 import { RequestStatusBadgeComponent } from '../request-status-badge/request-status-badge.component';
 import { FliksRequestRow } from '../../../core/services/api/requests.service';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
+import { clearPosterStamps } from '../../../shared/utils/view-transition';
 
 /**
  * Compact request card for the home "Demandes récentes" scroller: a fanart
@@ -73,6 +74,10 @@ export class RequestCardComponent {
    *  their own action without also navigating. */
   protected onCardActivate(event?: Event): void {
     event?.preventDefault();
+    // This card has no poster to morph from, so drop whatever card was stamped
+    // last — otherwise the media page animates in from an unrelated card that
+    // happens to show the same title.
+    clearPosterStamps();
     void this.router.navigate(this.mediaLink());
   }
 
