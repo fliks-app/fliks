@@ -2273,9 +2273,9 @@
         "auto_update_hint": "Attivo per impostazione predefinita. Una volta al giorno, dopo l’aggiornamento delle sorgenti, installa la versione più recente offerta per un plugin installato. Senza intervento viene installato solo un archivio firmato dal catalogo della sorgente: il resto richiede la tua conferma.",
         "saved": "Impostazioni dei plugin salvate",
         "skip_compatibility": "Disattiva il controllo di compatibilità",
-        "skip_compatibility_hint": "Disattivato per impostazione predefinita. Non verifica più la versione di un plugin rispetto a questa versione di Fliks, né all’installazione né al caricamento: viene eseguita una build non testata e un metodo host che si aspetta potrebbe non esistere. Il controllo dell’API dei plugin resta attivo: quello è il protocollo stesso. Attivandolo, ogni sorgente viene aggiornata perché compaia l’elenco ampliato.",
+        "skip_compatibility_hint": "Installa e carica una versione di plugin anche se non dichiara il supporto per questa versione di Fliks. Il controllo dell’API dei plugin resta valido.",
         "allow_older_versions": "Consenti l’installazione di versioni precedenti",
-        "allow_older_versions_hint": "Disattivato per impostazione predefinita. Aggiunge un selettore di versione accanto a ogni pulsante di installazione e aggiornamento del catalogo, con ciò che la sorgente offre: tutte le versioni o solo quelle compatibili, secondo l’opzione sopra."
+        "allow_older_versions_hint": "Aggiunge un selettore di versione accanto ai pulsanti di installazione e aggiornamento del catalogo."
       }
     }
   },

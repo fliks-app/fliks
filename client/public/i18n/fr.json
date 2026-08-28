@@ -2300,9 +2300,9 @@
         "auto_update_hint": "Activé par défaut. Une fois par jour, après le rafraîchissement des sources, installe la version la plus récente proposée pour un plugin installé. Seule une archive signée par le catalogue de la source est installée sans intervention : le reste demande toujours une validation.",
         "saved": "Paramètres des plugins enregistrés",
         "skip_compatibility": "Désactiver la vérification de compatibilité",
-        "skip_compatibility_hint": "Désactivé par défaut. Ne vérifie plus la version d'un plugin face à cette version de Fliks, ni à l'installation ni au chargement : un build non testé s'exécute alors, et une méthode hôte qu'il attend peut tout simplement ne pas exister. La vérification de l'API plugin reste appliquée — celle-là est le protocole lui-même. Activer cette option rafraîchit chaque source pour faire apparaître la liste élargie.",
+        "skip_compatibility_hint": "Installe et charge une version de plugin même si elle ne déclare pas prendre en charge cette version de Fliks. La vérification de l'API plugin s'applique toujours.",
         "allow_older_versions": "Autoriser l'installation d'anciennes versions",
-        "allow_older_versions_hint": "Désactivé par défaut. Ajoute un sélecteur de version à côté des boutons d'installation et de mise à jour du catalogue, listant ce que la source propose — toutes les versions, ou seulement les compatibles, selon l'option ci-dessus."
+        "allow_older_versions_hint": "Ajoute un sélecteur de version à côté des boutons d'installation et de mise à jour du catalogue."
       }
     }
   },

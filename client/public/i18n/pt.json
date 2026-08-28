@@ -2273,9 +2273,9 @@
         "auto_update_hint": "Ativado por predefinição. Uma vez por dia, após atualizar as fontes, instala a versão mais recente oferecida para um plugin instalado. Sem intervenção só é instalado um arquivo assinado pelo catálogo da fonte: o resto continua a exigir a tua confirmação.",
         "saved": "Definições dos plugins guardadas",
         "skip_compatibility": "Desativar a verificação de compatibilidade",
-        "skip_compatibility_hint": "Desativado por predefinição. Deixa de verificar a versão de um plugin face a esta versão do Fliks, nem na instalação nem no carregamento: passa a correr uma compilação não testada e um método do host que ela espera pode não existir. A verificação da API de plugins continua a ser aplicada — essa é o próprio protocolo. Ao ativar, todas as fontes são atualizadas para aparecer a lista ampliada.",
+        "skip_compatibility_hint": "Instala e carrega uma versão de plugin mesmo que não declare suporte para esta versão do Fliks. A verificação da API de plugins continua a aplicar-se.",
         "allow_older_versions": "Permitir instalar versões anteriores",
-        "allow_older_versions_hint": "Desativado por predefinição. Adiciona um seletor de versão junto a cada botão de instalação e atualização do catálogo, com o que a fonte oferece — todas as versões ou apenas as compatíveis, conforme a opção acima."
+        "allow_older_versions_hint": "Adiciona um seletor de versão junto aos botões de instalação e atualização do catálogo."
       }
     }
   },

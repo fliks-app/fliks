@@ -2300,9 +2300,9 @@
         "auto_update_hint": "On by default. Once a day, after the sources are refreshed, installs the newest version each source offers for an installed plugin. Only an archive signed by the source catalogue is installed unattended: anything else still needs your acknowledgement.",
         "saved": "Plugin settings saved",
         "skip_compatibility": "Disable the compatibility check",
-        "skip_compatibility_hint": "Off by default. Stops checking a plugin version against this Fliks version, at install and at load: an untested build then runs, and a host method it expects may simply not exist. The plugin API check stays enforced — that one is the protocol itself. Turning this on refreshes every source so the wider version list appears.",
+        "skip_compatibility_hint": "Installs and loads a plugin version even when it does not declare support for this Fliks version. The plugin API check still applies.",
         "allow_older_versions": "Allow installing older versions",
-        "allow_older_versions_hint": "Off by default. Adds a version picker next to each catalogue install and update button, listing what the source offers — every version, or only the compatible ones, depending on the setting above."
+        "allow_older_versions_hint": "Adds a version picker next to the catalogue's install and update buttons."
       }
     }
   },
