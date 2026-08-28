@@ -1088,7 +1088,10 @@
       "TITLE_MISMATCH": "Titre ne correspond pas au média",
       "EPISODE_MISMATCH": "La release ne correspond pas à {{expected}} (trouvé {{actual}})",
       "FULL_SEASON_FOR_EPISODE": "Saison complète alors que seul {{expected}} est voulu",
-      "RESOLUTION_NOT_UPGRADED": "Pas une montée de résolution ({{actual}}p, il faut plus de {{min}}p)"
+      "RESOLUTION_NOT_UPGRADED": "Pas une montée de résolution ({{actual}}p, il faut plus de {{min}}p)",
+      "SEQUEL_MISMATCH": "Suite {{number}}, pas le film voulu",
+      "YEAR_MISMATCH": "Année {{actual}}, attendue {{expected}}",
+      "COLLECTION_PACK": "Pack multi-films ({{word}})"
     },
     "like": "J’aime",
     "metadata_group": "Métadonnées",

@@ -1080,7 +1080,10 @@
       "TITLE_MISMATCH": "Il titolo non corrisponde al file multimediale",
       "EPISODE_MISMATCH": "La release non corrisponde a {{expected}} (trovato {{actual}})",
       "FULL_SEASON_FOR_EPISODE": "Stagione completa, ma serve solo {{expected}}",
-      "RESOLUTION_NOT_UPGRADED": "Non migliora la risoluzione ({{actual}}p, serve più di {{min}}p)"
+      "RESOLUTION_NOT_UPGRADED": "Non migliora la risoluzione ({{actual}}p, serve più di {{min}}p)",
+      "SEQUEL_MISMATCH": "Sequel {{number}}, non il film cercato",
+      "YEAR_MISMATCH": "Anno {{actual}}, atteso {{expected}}",
+      "COLLECTION_PACK": "Pacchetto multi-film ({{word}})"
     },
     "like": "Mi piace",
     "metadata_group": "Metadati",
