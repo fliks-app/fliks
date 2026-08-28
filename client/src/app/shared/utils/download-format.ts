@@ -177,12 +177,19 @@ function fallbackDescriptor(
 function collectLeaves(
   progress: MediaDownloadProgress,
   seasonFilter?: number[],
+  episodeFilter?: number,
 ): DownloadLeaf[] {
   if (!progress.seasons) return [];
   const out: DownloadLeaf[] = [];
   for (const [seasonNumber, sp] of progress.seasons) {
     if (seasonFilter?.length && !seasonFilter.includes(seasonNumber)) continue;
-    for (const leaf of sp.leaves.values()) out.push(leaf);
+    for (const [key, leaf] of sp.leaves) {
+      // A season pack carries the episode too, so it counts in an episode scope.
+      if (episodeFilter != null && key !== episodeFilter && key !== 'PACK') {
+        continue;
+      }
+      out.push(leaf);
+    }
   }
   return out;
 }
@@ -196,13 +203,26 @@ function collectLeaves(
  */
 export function describeBadge(
   progress: MediaDownloadProgress | null,
-  opts: { monitored: boolean; downloaded: boolean; seasonFilter?: number[] },
+  opts: {
+    monitored: boolean;
+    downloaded: boolean;
+    seasonFilter?: number[];
+    /** Narrow to one episode — its own torrent, or a pack that contains it. */
+    episodeFilter?: number;
+  },
 ): DownloadBadgeDescriptor {
   if (!progress) return fallbackDescriptor(opts.monitored, opts.downloaded);
 
   let fold: LeafFold;
-  if (progress.seasons && opts.seasonFilter?.length) {
-    const leaves = collectLeaves(progress, opts.seasonFilter);
+  if (
+    progress.seasons &&
+    (opts.seasonFilter?.length || opts.episodeFilter != null)
+  ) {
+    const leaves = collectLeaves(
+      progress,
+      opts.seasonFilter,
+      opts.episodeFilter,
+    );
     if (!leaves.length) {
       return fallbackDescriptor(opts.monitored, opts.downloaded);
     }

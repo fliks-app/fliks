@@ -1074,7 +1074,9 @@ export class FliksHostImpl implements PluginHostApi {
     state: DownloadProgressState;
   }): Promise<void> {
     const media = await this.mediaRepo.findOne({ where: { id: p.mediaId } });
-    const recipients = await this.sseAudience.recipientsForMedia(p.mediaId);
+    // Progress is passive page state, not a notification: everyone who can open
+    // the media's page sees it, not just whoever requested the title.
+    const recipients = await this.sseAudience.viewersForMedia(p.mediaId);
     if (!recipients.length) return;
     this.events.emitToUsers(recipients, {
       type: 'download.progress',

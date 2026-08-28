@@ -5,10 +5,12 @@ import { SseAudienceService } from './sse-audience.service';
 import { DownloadProgressCacheService } from './download-progress-cache.service';
 import { FliksRequest } from '../requests/entities/request.entity';
 import { User } from '../users/entities/user.entity';
+import { Media } from '../media/entities/media.entity';
+import { LibraryUserAccess } from '../libraries/entities/library-user-access.entity';
 
 @Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([FliksRequest, User])],
+  imports: [TypeOrmModule.forFeature([FliksRequest, User, Media, LibraryUserAccess])],
   providers: [EventsService, SseAudienceService, DownloadProgressCacheService],
   exports: [EventsService, SseAudienceService],
 })

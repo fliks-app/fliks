@@ -17,6 +17,7 @@ describe('RequestLifecycleService onMediaRemoved (kind-aware)', () => {
       {} as never,
       { subscribe: jest.fn() } as never,
       {} as never,
+      { viewersForMedia: jest.fn(async () => []) } as never,
     );
   });
 
@@ -90,6 +91,7 @@ describe('RequestLifecycleService onMediaImported — acquisition announcement',
       { envelopeCovers: jest.fn(async () => opts.covers) } as never,
       events as never,
       {} as never,
+      { viewersForMedia: jest.fn(async () => []) } as never,
     );
     return { service, events, requestRepo };
   }
