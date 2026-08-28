@@ -17,7 +17,9 @@
   } @else {
     <div [class.panel-slide-back]="slide() === 'back'">
       @if (title()) {
-        <div class="flex items-start gap-3 px-2 pb-3 mb-1 border-b border-base-content/10">
+        <!-- pt matches the pb: the panel's own p-2 alone left the header
+             crowding the top edge. -->
+        <div class="flex items-start gap-3 px-2 pt-2 pb-3 mb-1 border-b border-base-content/10">
           @if (imageUrl(); as img) {
             <img [cachedSrc]="img | resolveUrl" alt="" loading="lazy"
               class="shrink-0 rounded object-cover bg-base-300"
