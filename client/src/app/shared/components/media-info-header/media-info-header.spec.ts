@@ -693,4 +693,33 @@ describe('MediaInfoHeaderComponent — resume state across an episode switch', (
     expect(fixture.componentInstance.resumePositionSeconds()).toBeNull();
     expect(fixture.componentInstance.durationSeconds()).toBeNull();
   });
+
+  /** Opening a series from the home page renders the header before the parent
+   *  has resolved which episode the resume button targets. Reading the series'
+   *  own row (episode IS NULL) in that window flashed a progress bar that the
+   *  real episode then cleared. */
+  it('shows no progress on a series root until the resume episode is known', async () => {
+    const fixture = await createFixture(OWNER, {
+      mediaType: 'series',
+      selectedFileId: null,
+      monitored: true,
+      qualityProfileName: 'HD-1080p',
+      // A stale series-level row: what the header used to read and render.
+      playbackStates: {
+        0: { positionSeconds: 1200, durationSeconds: 3600, completed: false, mediaFileId: 30 },
+        3: { positionSeconds: 1992, durationSeconds: 3660, completed: false, mediaFileId: 31 },
+      },
+    });
+    expect(fixture.componentInstance.resumePositionSeconds()).toBeNull();
+
+    // The parent resolves the resume target — now the episode's own row shows.
+    fixture.componentRef.setInput('resumeEpisodeId', 3);
+    fixture.detectChanges();
+    // The fetch starts inside the effect, so let its promise chain settle
+    // before reading — `whenStable` alone doesn't track a bare promise.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.resumePositionSeconds()).toBe(1992);
+  });
 });
