@@ -186,17 +186,20 @@ export class MediaRescanService {
     let episodeId: number | null = null;
     let created = false;
     if (media.type === MediaType.SERIES) {
-      const epNums = p.epNums ?? this.naming.parseEpisodeNumbers(filename);
+      const epNums = p.epNums ?? this.naming.parseEpisodeNumbers(filename, absPath);
       if (!epNums) {
-        return { error: 'no SxxEyy pattern found' };
+        const special = await this.matchSpecialFile(media.id, absPath);
+        if (!special) return { error: 'no SxxEyy pattern found' };
+        episodeId = special.id;
+      } else {
+        const { ep, created: c } = await this.ensureSeasonAndEpisode(
+          media,
+          epNums,
+          media.id,
+        );
+        episodeId = ep?.id ?? null;
+        created = c;
       }
-      const { ep, created: c } = await this.ensureSeasonAndEpisode(
-        media,
-        epNums,
-        media.id,
-      );
-      episodeId = ep?.id ?? null;
-      created = c;
     }
 
     let size = 0;
@@ -546,7 +549,7 @@ export class MediaRescanService {
       // (e.g. "S07E11-E12.mkv" already imported as E11 gets endEpisodeNumber
       // set retroactively).
       if (media.type === MediaType.SERIES) {
-        const epNums = this.naming.parseEpisodeNumbers(filename);
+        const epNums = this.naming.parseEpisodeNumbers(filename, absPath);
         if (epNums && dbFile.episodeId == null) {
           try {
             const { ep, created } = await this.ensureSeasonAndEpisode(
@@ -576,6 +579,14 @@ export class MediaRescanService {
               `Rescan[media #${mediaId}]: failed to create season/episode for refresh "${normPath}"`,
               err instanceof Error ? err.stack : err,
             );
+          }
+        } else if (!epNums && dbFile.episodeId == null) {
+          const special = await this.matchSpecialFile(mediaId, absPath);
+          if (special) {
+            dbFile.episode = special;
+            await this.mediaFileRepo.save(dbFile);
+            await this.episodeRepo.update(special.id, { hasFile: true });
+            updated++;
           }
         } else if (epNums?.episodeEnd != null && dbFile.episodeId != null) {
           // Already-linked file: retroactively apply the range on its Episode.
@@ -667,7 +678,7 @@ export class MediaRescanService {
       // Try to match episode for series — create season/episode on the fly if missing
       let episodeId: number | undefined;
       if (media.type === MediaType.SERIES) {
-        const epNums = this.naming.parseEpisodeNumbers(filename);
+        const epNums = this.naming.parseEpisodeNumbers(filename, absPath);
         if (epNums) {
           try {
             const { ep, created } = await this.ensureSeasonAndEpisode(
@@ -684,10 +695,15 @@ export class MediaRescanService {
             );
           }
         } else {
-          this.log.warn(
-            `Rescan[media #${mediaId}]: series file name has no SxxEyy pattern — "${filename}" (skipped, alien file in series folder)`,
-          );
-          continue;
+          const special = await this.matchSpecialFile(mediaId, absPath);
+          if (special) {
+            episodeId = special.id;
+          } else {
+            this.log.warn(
+              `Rescan[media #${mediaId}]: series file name has no SxxEyy pattern — "${filename}" (skipped, alien file in series folder)`,
+            );
+            continue;
+          }
         }
       }
 
@@ -829,6 +845,32 @@ export class MediaRescanService {
    * episode when the freshly-parsed filename reveals it's a multi-episode
    * file (e.g. "S07E11-E12.mkv" originally indexed as E11 only).
    */
+  /**
+   * A file that names itself a special but no episode number: match it against the season-0
+   * rows by title. Never creates a row — an unplaceable special stays unmatched rather than
+   * taking a number, which would attach it to the wrong one.
+   */
+  private async matchSpecialFile(
+    mediaId: number,
+    absPath: string,
+  ): Promise<Episode | null> {
+    const season = await this.seasonRepo.findOne({
+      where: { media: { id: mediaId }, seasonNumber: 0 },
+      relations: ['episodes'],
+    });
+    const ep = this.naming.matchSpecialByTitle(
+      path.basename(absPath),
+      season?.episodes ?? [],
+    );
+    if (ep) {
+      this.log.log(
+        `Rescan[media #${mediaId}]: matched special S00E${String(ep.episodeNumber).padStart(2, '0')} ` +
+          `"${ep.title ?? ''}" by title — "${path.basename(absPath)}"`,
+      );
+    }
+    return ep;
+  }
+
   private async ensureSeasonAndEpisode(
     media: Media,
     epNums: {

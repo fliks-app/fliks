@@ -671,4 +671,125 @@ describe('NamingService', () => {
       expect(svc.parseEpisodeNumbers('')).toBeNull();
     });
   });
+  /**
+   * A special carries no reliable episode number: the loose patterns would hand it the first
+   * number they find, which is a real episode of season 1. Season 0 or nothing.
+   */
+  describe('parseEpisodeNumbers — specials', () => {
+    const svc = buildService();
+
+    it('reads an explicit S00Exx as season 0', () => {
+      expect(
+        svc.parseEpisodeNumbers('Nova.Skyline.S00E03.Backstage.mkv'),
+      ).toEqual({
+        season: 0,
+        episode: 3,
+        episodeEnd: undefined,
+      });
+    });
+
+    it.each([
+      ['[Grp] Nova Skyline - OVA - 01 [1080p].mkv', 1],
+      ['Nova.Skyline.SP02.Prologue.mkv', 2],
+      ['Nova Skyline Special 3 1080p.mkv', 3],
+    ])(
+      'VERDICT: gives a numbered special to season 0 — %s',
+      (name, episode) => {
+        expect(svc.parseEpisodeNumbers(name)).toEqual({ season: 0, episode });
+      },
+    );
+
+    it.each([
+      'Nova.Skyline.S01E00.Recap.1080p.WEB-DL.mkv',
+      'Nova.Skyline.2x00.Recap.mkv',
+      '[Grp] Nova Skyline - 05.5 [SP] [1080p].mkv',
+      'Nova.Skyline.Special.Winter.1080p.mkv',
+    ])('VERDICT: refuses to number an unplaceable special — %s', (name) => {
+      expect(svc.parseEpisodeNumbers(name)).toBeNull();
+    });
+
+    it('VERDICT: a Specials folder blocks a loose number from taking a real episode', () => {
+      expect(
+        svc.parseEpisodeNumbers(
+          'Nova Skyline - 05.mkv',
+          '/medias/tv/Nova Skyline/Specials/Nova Skyline - 05.mkv',
+        ),
+      ).toBeNull();
+      // Same file under a numbered season keeps its episode.
+      expect(
+        svc.parseEpisodeNumbers(
+          'Nova Skyline - 05.mkv',
+          '/medias/tv/Nova Skyline/Season 01/Nova Skyline - 05.mkv',
+        ),
+      ).toEqual({ season: 1, episode: 5, episodeEnd: undefined });
+    });
+
+    it('still trusts an explicit SxxExx whose episode title says "special"', () => {
+      expect(
+        svc.parseEpisodeNumbers(
+          'Nova.Skyline.S01E05.The.Winter.Special.1080p.mkv',
+        ),
+      ).toEqual({ season: 1, episode: 5, episodeEnd: undefined });
+    });
+  });
+
+  describe('isSpecialFile', () => {
+    const svc = buildService();
+
+    it.each([
+      '/medias/tv/Nova Skyline/Specials/Backstage.mkv',
+      '/medias/tv/Nova Skyline/Season 00/Nova - Winter.mkv',
+      'Nova.Skyline.S01E00.Recap.mkv',
+      '[Grp] Nova Skyline - 05.5 [SP].mkv',
+      'Nova.Skyline.NCED.mkv',
+    ])('flags %s', (p) => expect(svc.isSpecialFile(p)).toBe(true));
+
+    it.each([
+      '/medias/tv/Nova Skyline/Season 01/Nova.Skyline.S01E05.mkv',
+      'Nova.Skyline.S02E10.1080p.WEB-DL.mkv',
+    ])('leaves %s alone', (p) => expect(svc.isSpecialFile(p)).toBe(false));
+  });
+
+  /** The number lives nowhere in the name — only the title does. */
+  describe('matchSpecialByTitle', () => {
+    const svc = buildService();
+    const specials = [
+      { title: 'Behind the Scenes', episodeNumber: 1 },
+      { title: 'The Making Of', episodeNumber: 2 },
+      { title: 'Making', episodeNumber: 3 },
+      { title: 'Spécial Hiver', episodeNumber: 4 },
+      { title: null, episodeNumber: 5 },
+    ];
+
+    it('VERDICT: prefers the longest title match, not the first that fits', () => {
+      expect(
+        svc.matchSpecialByTitle(
+          'Nova - The Making Of - 1080p.WEB-DL.mkv',
+          specials,
+        )?.episodeNumber,
+      ).toBe(2);
+    });
+
+    it('ignores punctuation, case and accents', () => {
+      expect(
+        svc.matchSpecialByTitle(
+          'Nova.Skyline.SPECIAL.HIVER.1080p.mkv',
+          specials,
+        )?.episodeNumber,
+      ).toBe(4);
+      expect(
+        svc.matchSpecialByTitle('Nova.Behind.the.scenes.1080p.mkv', specials)
+          ?.episodeNumber,
+      ).toBe(1);
+    });
+
+    it('VERDICT: returns null rather than guessing when no title is in the name', () => {
+      expect(
+        svc.matchSpecialByTitle(
+          'Nova.Skyline.Unknown.Extra.1080p.mkv',
+          specials,
+        ),
+      ).toBeNull();
+    });
+  });
 });

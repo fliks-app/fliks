@@ -207,10 +207,14 @@ export class DiskImportService {
       if (linkedSet.has(path.resolve(abs))) continue;
 
       const filename = path.basename(abs);
-      const epNums = this.naming.parseEpisodeNumbers(filename);
+      const epNums = this.naming.parseEpisodeNumbers(filename, abs);
       // Skip files whose inferred type the library doesn't accept (e.g. a
       // series file under a movies-only library) — they can't be re-linked here.
-      const inferredType = epNums ? MediaType.SERIES : MediaType.MOVIE;
+      // A special carries no numbering, so its own markers are what make it a series file.
+      const inferredType =
+        epNums || this.naming.isSpecialFile(abs)
+          ? MediaType.SERIES
+          : MediaType.MOVIE;
       if (!mediaTypes.includes(inferredType)) continue;
       orphanCount++;
 
@@ -408,14 +412,19 @@ export class DiskImportService {
                   episode: f.episodeNumber,
                   episodeEnd: f.episodeEnd ?? null,
                 }
-              : this.naming.parseEpisodeNumbers(filename);
+              : this.naming.parseEpisodeNumbers(filename, f.filePath);
           if (!epNums) {
-            errors.push(`${filename}: no SxxEyy pattern found`);
-            continue;
+            const special = await this.matchSpecialFile(media.id, f.filePath);
+            if (!special) {
+              errors.push(`${filename}: no SxxEyy pattern found`);
+              continue;
+            }
+            episodeId = special.id;
+          } else {
+            const ep = await this.mediaService.ensureSeriesEpisode(media, epNums);
+            episodeId = ep.episodeId ?? undefined;
+            slotCreated ||= ep.created;
           }
-          const ep = await this.mediaService.ensureSeriesEpisode(media, epNums);
-          episodeId = ep.episodeId ?? undefined;
-          slotCreated ||= ep.created;
         }
         entries.push({
           filePath: f.filePath,
@@ -703,12 +712,19 @@ export class DiskImportService {
     }
 
     const { quality } = parseReleaseQuality(filename);
-    const epNums = this.naming.parseEpisodeNumbers(filename);
+    const epNums = this.naming.parseEpisodeNumbers(filename, filePath);
     const extractedTitle = this.extractTitle(filename);
     const matched = matchMedia(extractedTitle, allMedia);
 
     let episodeId: number | null = null;
     let episodeTitle: string | null = null;
+    let special: Episode | null = null;
+
+    if (matched?.type === 'series' && !epNums) {
+      special = await this.matchSpecialFile(matched.id, filePath);
+      episodeId = special?.id ?? null;
+      episodeTitle = special?.title ?? null;
+    }
 
     if (matched?.type === 'series' && epNums) {
       let season = await this.seasonRepo.findOne({
@@ -754,8 +770,8 @@ export class DiskImportService {
       size,
       qualityName: quality.name,
       qualityId: quality.id,
-      seasonNumber: epNums?.season ?? null,
-      episodeNumber: epNums?.episode ?? null,
+      seasonNumber: epNums?.season ?? (special ? 0 : null),
+      episodeNumber: epNums?.episode ?? special?.episodeNumber ?? null,
       mediaId: matched?.id ?? null,
       mediaTitle: matched?.title ?? null,
       mediaYear: matched?.year ?? null,
@@ -764,6 +780,25 @@ export class DiskImportService {
       episodeTitle,
       existingQuality: null,
     };
+  }
+
+  /**
+   * A file that names itself a special but no episode number: match it against the season-0
+   * rows by title. Never creates a row — an unplaceable special stays unmatched rather than
+   * taking a number, which would attach it to the wrong one.
+   */
+  private async matchSpecialFile(
+    mediaId: number,
+    filePath: string,
+  ): Promise<Episode | null> {
+    const season = await this.seasonRepo.findOne({
+      where: { media: { id: mediaId }, seasonNumber: 0 },
+      relations: ['episodes'],
+    });
+    return this.naming.matchSpecialByTitle(
+      path.basename(filePath),
+      season?.episodes ?? [],
+    );
   }
 
   private extractTitle(filename: string): string {
