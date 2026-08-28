@@ -8,6 +8,9 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * `priority` goes with it. Rules are OR'd (one match approves), so the ordering it defined never
  * changed an outcome.
+ *
+ * Both `ADD COLUMN`s are `NOT NULL` without a default: the `DELETE` above leaves no row to
+ * backfill, and a default the entity does not declare fails the schema-drift check.
  */
 export class AutoApprovalCriteria1784200000000 implements MigrationInterface {
   name = 'AutoApprovalCriteria1784200000000';
@@ -21,7 +24,7 @@ export class AutoApprovalCriteria1784200000000 implements MigrationInterface {
       `ALTER TABLE "auto_approval_rules" DROP COLUMN "priority"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "auto_approval_rules" ADD "criteria" jsonb NOT NULL DEFAULT '{}'`,
+      `ALTER TABLE "auto_approval_rules" ADD "criteria" jsonb NOT NULL`,
     );
   }
 
