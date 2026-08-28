@@ -23,6 +23,12 @@
   border-color: transparent;
 }
 
+/* Squared on the class rather than via `--radius-selector`: `.toggle` derives
+   its pill shape from that same token and needs the large value. */
+.checkbox {
+  border-radius: 0.25rem;
+}
+
 /* daisyUI draws the dropdown chevron ~16px from the trailing edge but only
    reserves 1.75rem of end padding, so the value text crowds the arrow. Give
    every select a touch more trailing room (logical property keeps it RTL-safe).
