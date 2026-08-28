@@ -332,6 +332,7 @@ describe('FliksHostImpl', () => {
       expect(result?.episode).toEqual({
         id: 100,
         number: 1,
+        title: 'Pilot',
         endNumber: null,
         airDate: '2020-01-01',
       });
@@ -391,6 +392,47 @@ describe('FliksHostImpl', () => {
 
       expect(seen).toHaveLength(4);
       expect(seen[0].season).toBeUndefined();
+    });
+
+    /**
+     * A special is never published as `S00Exx`, so its title is the only query that can find
+     * it. The plugin cannot invent one — it has to come down with the target.
+     */
+    it('VERDICT: carries the episode title so a special can be searched by name', async () => {
+      const h = makeHarness();
+      const series = makeMedia({ id: 2, type: MediaType.SERIES });
+      const specials = makeSeason({ id: 20, mediaId: 2, seasonNumber: 0 });
+      const special = makeEpisode({
+        id: 201,
+        season: specials,
+        episodeNumber: 3,
+        title: 'Behind the Scenes',
+      });
+
+      h.acquisitionCandidates.listMovieTargets.mockResolvedValue([]);
+      h.acquisitionCandidates.listEpisodeTargets.mockResolvedValue([
+        { media: series, season: specials, episode: special, files: [] },
+      ]);
+      h.acquisitionCandidates.groupIntoSeasonPacks.mockResolvedValue([]);
+      h.autoGrab.classifyForSearch.mockReturnValue({
+        mode: 'missing',
+        minRankExclusive: 0,
+        maxRankInclusive: 10,
+      });
+
+      const page = await h.host['acquisition.candidates']({
+        availableOn: '2099-01-01',
+        limit: 10,
+      });
+
+      expect(page.items[0].episode).toEqual({
+        id: 201,
+        number: 3,
+        endNumber: null,
+        airDate: '2020-01-01',
+        title: 'Behind the Scenes',
+      });
+      expect(page.items[0].season?.number).toBe(0);
     });
 
     // The pack used to be the only candidate for its season, so nothing was left to fall back
