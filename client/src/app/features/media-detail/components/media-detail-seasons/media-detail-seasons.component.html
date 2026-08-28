@@ -217,7 +217,11 @@
         </div>
 
         @if (selSeason.overview) {
-          <p class="text-sm text-base-content/80">{{ selSeason.overview }}</p>
+          <app-synopsis
+            [text]="selSeason.overview"
+            [spoiler]="seasonOverviewSpoiler(selSeason)"
+            textClass="text-sm text-base-content/80"
+          />
         }
       </div>
     }
