@@ -164,7 +164,7 @@ export class TvdbProvider implements IMetadataProvider {
       tvdbId: m.id,
       imdbId,
       provider: 'tvdb',
-      title: localized?.name ?? m.name,
+      title: localized?.name || m.name,
       originalTitle: m.name,
       overview: localized?.overview ?? '',
       year: m.year ? parseInt(m.year) : null,
@@ -243,7 +243,7 @@ export class TvdbProvider implements IMetadataProvider {
       tvdbId: s.id,
       imdbId,
       provider: 'tvdb',
-      title: localized?.name ?? s.name,
+      title: localized?.name || s.name,
       originalTitle: s.name,
       overview: localized?.overview ?? '',
       year: s.year ? parseInt(s.year) : null,
@@ -373,8 +373,10 @@ export class TvdbProvider implements IMetadataProvider {
           const tr = epTranslations.get(ep.id);
           return {
             episodeNumber: ep.number,
-            title: tr?.name ?? ep.name,
-            overview: tr?.overview ?? ep.overview ?? null,
+            // An advertised translation can come back with an empty name (overview-only
+            // translations do), and an empty title would leave the previous provider's in place.
+            title: tr?.name || ep.name,
+            overview: tr?.overview || ep.overview || null,
             airDate: ep.aired ?? null,
             runtime: ep.runtime ?? null,
             stillUrl: ep.image ?? null,
