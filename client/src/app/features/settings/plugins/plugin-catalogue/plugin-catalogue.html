@@ -65,36 +65,37 @@
                 </div>
               }
             } @else {
-              <!-- Split button: the left half is the action, the right half every other version
-                   the source offers. Nothing to update to leaves the left half stating what runs. -->
+              <!-- daisyUI split button: `join` owns the seam (its radii beat `.btn`'s), and the
+                   dropdown wraps both halves so the panel anchors to them. -->
               <div class="flex flex-col items-end gap-0.5 shrink-0">
-                <div class="flex items-stretch">
-                  <button type="button" class="btn btn-primary btn-xs rounded-r-none"
-                    [disabled]="isInspecting(row) || !primaryVersion(row)"
-                    (click)="installVersion(row, primaryVersion(row))">
-                    @if (isInspecting(row)) {
-                      <span class="loading loading-spinner loading-xs"></span>
-                    }
-                    @if (primaryVersion(row); as version) {
-                      @if (isInstalled(row.plugin.id)) {
-                        {{ 'settings.plugins.catalogue.switch_to' | translate: { version: version } }}
-                      } @else {
-                        {{ 'settings.plugins.catalogue.install' | translate }}
+                <div class="dropdown dropdown-end">
+                  <div class="join">
+                    <button type="button" class="btn btn-primary btn-xs join-item"
+                      [disabled]="isInspecting(row) || !primaryVersion(row)"
+                      (click)="installVersion(row, primaryVersion(row))">
+                      @if (isInspecting(row)) {
+                        <span class="loading loading-spinner loading-xs"></span>
                       }
-                    } @else {
-                      {{ 'settings.plugins.catalogue.version_installed' | translate: { version: installedVersion(row) } }}
-                    }
-                  </button>
-                  <app-dropdown-menu placement="bottom-end" class="contents">
-                    <button trigger type="button"
-                      class="btn btn-primary btn-xs rounded-l-none border-l border-primary-content/25 px-1"
+                      @if (primaryVersion(row); as version) {
+                        @if (isInstalled(row.plugin.id)) {
+                          {{ 'settings.plugins.catalogue.switch_to' | translate: { version: version } }}
+                        } @else {
+                          {{ 'settings.plugins.catalogue.install' | translate }}
+                        }
+                      } @else {
+                        {{ 'settings.plugins.catalogue.version_installed' | translate: { version: installedVersion(row) } }}
+                      }
+                    </button>
+                    <button appDropdownToggle type="button" class="btn btn-primary btn-xs join-item px-1.5"
                       [disabled]="isInspecting(row)"
                       [attr.aria-label]="'settings.plugins.catalogue.pick_version' | translate">
                       <svg lucideChevronDown class="h-3 w-3"></svg>
                     </button>
+                  </div>
+                  <div class="dropdown-content bg-base-200 rounded-box shadow-xl min-w-52 max-h-[70vh] p-1 z-[101] overflow-y-auto">
                     <p class="px-3 py-2 text-xs text-base-content/50">{{ 'settings.plugins.catalogue.pick_version' | translate }}</p>
                     @for (entry of versionsFor(row); track entry.version) {
-                      <button type="button" class="btn btn-ghost btn-sm w-full justify-between font-normal"
+                      <button type="button" class="dropdown-item justify-between"
                         [disabled]="entry.version === installedVersion(row)"
                         (click)="installVersion(row, entry.version)">
                         <span>{{ entry.version }}</span>
@@ -103,7 +104,7 @@
                         }
                       </button>
                     }
-                  </app-dropdown-menu>
+                  </div>
                 </div>
                 @if (isInstalled(row.plugin.id)) {
                   <span class="text-[0.7rem] text-base-content/50">{{ 'settings.plugins.catalogue.update_keeps_data' | translate }}</span>
