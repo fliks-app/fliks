@@ -1,41 +1,75 @@
 import {
   IsString,
+  IsNotEmpty,
   IsBoolean,
-  IsNumber,
+  IsInt,
   IsArray,
   IsOptional,
+  IsEnum,
+  IsDefined,
   ValidateNested,
-  IsIn,
   Min,
+  Max,
 } from 'class-validator';
-import { Type } from 'class-transformer';
-import type { AutoApprovalCondition } from '../entities/auto-approval-rule.entity';
+import { Transform, Type } from 'class-transformer';
+import { MediaType } from '../../../common/enums';
+import type { AutoApprovalCriteria } from '../entities/auto-approval-rule.entity';
 
-class ConditionDto implements AutoApprovalCondition {
-  @IsIn(['role', 'genre', 'year', 'seasons', 'userId'])
-  field: AutoApprovalCondition['field'];
+export class AutoApprovalCriteriaDto implements AutoApprovalCriteria {
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  userIds?: number[];
 
-  @IsIn(['equals', 'notEquals', 'greaterThan', 'lessThan', 'contains'])
-  operator: AutoApprovalCondition['operator'];
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  roleIds?: number[];
 
-  value: string | number;
+  @IsOptional()
+  @IsEnum(MediaType)
+  mediaType?: MediaType;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  libraryIds?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  genreIds?: number[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxSeasons?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1900)
+  @Max(2200)
+  yearFrom?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1900)
+  @Max(2200)
+  yearTo?: number;
 }
 
 export class CreateAutoApprovalRuleDto {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
+  @IsNotEmpty()
   name: string;
 
   @IsBoolean()
   @IsOptional()
   enabled?: boolean;
 
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ConditionDto)
-  conditions: ConditionDto[];
-
-  @IsNumber()
-  @Min(0)
-  @IsOptional()
-  priority?: number;
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => AutoApprovalCriteriaDto)
+  criteria: AutoApprovalCriteriaDto;
 }

@@ -33,8 +33,7 @@ export class AutoApprovalRulesController {
     const row = this.repo.create({
       name: dto.name,
       enabled: dto.enabled ?? true,
-      conditions: dto.conditions,
-      priority: dto.priority ?? 0,
+      criteria: dto.criteria,
     });
     return this.repo.save(row);
   }
@@ -42,7 +41,7 @@ export class AutoApprovalRulesController {
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   findAll() {
-    return this.repo.find({ order: { priority: 'DESC', id: 'ASC' } });
+    return this.repo.find({ order: { name: 'ASC' } });
   }
 
   @Get(':id')
@@ -61,10 +60,9 @@ export class AutoApprovalRulesController {
   ) {
     const rule = await this.repo.findOne({ where: { id } });
     if (!rule) throw new NotFoundException(`Rule #${id} not found`);
-    if (dto.name !== undefined) rule.name = dto.name;
-    if (dto.enabled !== undefined) rule.enabled = dto.enabled;
-    if (dto.conditions !== undefined) rule.conditions = dto.conditions;
-    if (dto.priority !== undefined) rule.priority = dto.priority;
+    rule.name = dto.name;
+    rule.enabled = dto.enabled ?? true;
+    rule.criteria = dto.criteria;
     return this.repo.save(rule);
   }
 

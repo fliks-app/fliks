@@ -12,7 +12,7 @@ import { FliksRequest } from './entities/request.entity';
 import { RequestComment } from './entities/request-comment.entity';
 import {
   AutoApprovalRule,
-  AutoApprovalCondition,
+  AutoApprovalCriteria,
 } from './entities/auto-approval-rule.entity';
 import { User } from '../users/entities/user.entity';
 import { QualityProfile } from '../profiles/entities/quality-profile.entity';
@@ -129,64 +129,113 @@ export class RequestsService {
   // Auto-approval
   // ---------------------------------------------------------------------------
 
-  private evalCondition(
-    cond: AutoApprovalCondition,
-    context: {
-      role: string;
+  private async fetchAutoApprovalMetadata(dto: CreateRequestDto): Promise<{
+    genreIds: number[];
+    year: number | null;
+    seasonCount: number | null;
+  } | null> {
+    try {
+      const details =
+        dto.mediaType === MediaType.MOVIE
+          ? await this.tmdb.getMovieDetails(String(dto.tmdbId))
+          : await this.tmdb.getTvShowDetails(String(dto.tmdbId));
+      return {
+        genreIds: details.genreIds ?? [],
+        year: details.year,
+        seasonCount: details.seasonCount,
+      };
+    } catch (err) {
+      this.logger.warn(
+        `Auto-approval: metadata lookup failed for ${dto.mediaType} ${dto.tmdbId}, ` +
+          `genre/year/season criteria cannot match: ${String(err)}`,
+      );
+      return null;
+    }
+  }
+
+  /** A criterion the context cannot answer (metadata lookup failed, request
+   *  targets no library) fails the rule rather than being skipped. */
+  private matchesCriteria(
+    c: AutoApprovalCriteria,
+    ctx: {
       userId: number;
-      mediaType: string;
-      tmdbId: number;
-      title: string;
+      roleId: number | null;
+      mediaType: MediaType;
+      libraryId: number | null;
+      genreIds: number[];
+      year: number | null;
+      seasonCount: number | null;
     },
   ): boolean {
-    let actual: string | number;
-    switch (cond.field) {
-      case 'role':
-        actual = context.role;
-        break;
-      case 'userId':
-        actual = context.userId;
-        break;
-      default:
-        return true; // genre/year/seasons require metadata lookup — skip for now
+    if (c.userIds?.length || c.roleIds?.length) {
+      const isTargeted =
+        !!c.userIds?.includes(ctx.userId) ||
+        (ctx.roleId != null && !!c.roleIds?.includes(ctx.roleId));
+      if (!isTargeted) return false;
     }
-    switch (cond.operator) {
-      case 'equals':
-        return String(actual) === String(cond.value);
-      case 'notEquals':
-        return String(actual) !== String(cond.value);
-      case 'greaterThan':
-        return Number(actual) > Number(cond.value);
-      case 'lessThan':
-        return Number(actual) < Number(cond.value);
-      case 'contains':
-        return String(actual).includes(String(cond.value));
-      default:
-        return false;
+    if (c.mediaType && c.mediaType !== ctx.mediaType) return false;
+    if (
+      c.libraryIds?.length &&
+      (ctx.libraryId == null || !c.libraryIds.includes(ctx.libraryId))
+    )
+      return false;
+    if (c.genreIds?.length && !c.genreIds.some((g) => ctx.genreIds.includes(g)))
+      return false;
+    if (c.maxSeasons != null && ctx.mediaType === MediaType.SERIES) {
+      if (ctx.seasonCount == null || ctx.seasonCount > c.maxSeasons) return false;
     }
+    if (c.yearFrom != null && (ctx.year == null || ctx.year < c.yearFrom))
+      return false;
+    if (c.yearTo != null && (ctx.year == null || ctx.year > c.yearTo))
+      return false;
+    return true;
   }
 
   private async shouldAutoApprove(
     user: User,
     dto: CreateRequestDto,
   ): Promise<boolean> {
-    const rules = await this.ruleRepo.find({
-      where: { enabled: true },
-      order: { priority: 'DESC' },
-    });
+    const rules = await this.ruleRepo.find({ where: { enabled: true } });
     if (!rules.length) return false;
 
-    const context = {
-      role: user.userRole?.name?.toLowerCase() ?? 'user',
+    const needsMetadata = rules.some(
+      (r) =>
+        r.criteria.genreIds?.length ||
+        r.criteria.yearFrom != null ||
+        r.criteria.yearTo != null ||
+        (r.criteria.maxSeasons != null && !dto.seasons?.length),
+    );
+    const metadata = needsMetadata
+      ? await this.fetchAutoApprovalMetadata(dto)
+      : null;
+
+    // A request usually omits `libraryId` and lands in the default library for
+    // its type, so compare against that target rather than the raw dto.
+    const needsLibrary = rules.some((r) => r.criteria.libraryIds?.length);
+    const libraryId =
+      dto.libraryId ??
+      (needsLibrary
+        ? ((await this.libraries.getDefaultForType(dto.mediaType))?.id ?? null)
+        : null);
+
+    const ctx = {
       userId: user.id,
+      roleId: user.userRole?.id ?? null,
       mediaType: dto.mediaType,
-      tmdbId: dto.tmdbId,
-      title: dto.title,
+      libraryId,
+      genreIds: metadata?.genreIds ?? [],
+      year: metadata?.year ?? null,
+      seasonCount: dto.seasons?.length ?? metadata?.seasonCount ?? null,
     };
 
-    return rules.some((rule) =>
-      rule.conditions.every((cond) => this.evalCondition(cond, context)),
-    );
+    const matched = rules.find((r) => this.matchesCriteria(r.criteria, ctx));
+    if (matched) {
+      this.logger.log(
+        `Auto-approving ${dto.mediaType} ${dto.tmdbId} for user ${user.id}: ` +
+          `rule "${matched.name}" (#${matched.id})`,
+      );
+    }
+    return !!matched;
   }
 
   // ---------------------------------------------------------------------------

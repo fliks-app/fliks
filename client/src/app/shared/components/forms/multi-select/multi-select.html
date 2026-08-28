@@ -1,0 +1,66 @@
+<button
+  #trigger
+  type="button"
+  class="select select-bordered select-sm w-full h-auto min-h-8 py-1 text-left flex items-center gap-1 flex-wrap"
+  [disabled]="disabled()"
+  (click)="toggleOpen()"
+>
+  @if (chips().length === 0) {
+    <span class="text-base-content/50 truncate">{{ placeholder() }}</span>
+  } @else {
+    @for (opt of chips(); track opt.value) {
+      <span class="badge badge-sm badge-primary gap-1 max-w-full">
+        <span class="truncate">{{ opt.label }}</span>
+        <span
+          role="button"
+          tabindex="-1"
+          class="cursor-pointer opacity-70 hover:opacity-100"
+          (click)="remove(opt.value, $event)"
+          >✕</span
+        >
+      </span>
+    }
+    @if (overflowCount() > 0) {
+      <span class="badge badge-sm badge-ghost">+{{ overflowCount() }}</span>
+    }
+  }
+</button>
+
+<app-popover-menu
+  [open]="open()"
+  [anchor]="anchor()"
+  [width]="panelWidth()"
+  placement="bottom-start"
+  (closed)="open.set(false)"
+>
+  <!-- Pinned: the popover owns the scroll, so the filter would scroll away. -->
+  <div class="sticky -top-2 z-10 bg-base-200 pt-2 pb-1">
+    <input
+      autofocus
+      type="text"
+      class="input input-bordered input-sm w-full"
+      [placeholder]="'common.search' | translate"
+      [ngModel]="query()"
+      (ngModelChange)="query.set($event)"
+    />
+  </div>
+  <ul>
+    @for (opt of filtered(); track opt.value) {
+      <li>
+        <label
+          class="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-base-300 cursor-pointer"
+        >
+          <input
+            type="checkbox"
+            class="checkbox checkbox-xs"
+            [checked]="isPicked(opt.value)"
+            (change)="toggleOption(opt.value)"
+          />
+          <span class="truncate" [title]="opt.label">{{ opt.label }}</span>
+        </label>
+      </li>
+    } @empty {
+      <li class="px-2 py-2 text-sm text-base-content/50 italic">—</li>
+    }
+  </ul>
+</app-popover-menu>

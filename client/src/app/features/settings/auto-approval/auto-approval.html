@@ -29,8 +29,7 @@
         <thead>
           <tr>
             <th>{{ 'settings.auto_approval.col_name' | translate }}</th>
-            <th>{{ 'settings.auto_approval.col_priority' | translate }}</th>
-            <th>{{ 'settings.auto_approval.col_conditions' | translate }}</th>
+            <th>{{ 'settings.auto_approval.col_criteria' | translate }}</th>
             <th>{{ 'settings.auto_approval.col_enabled' | translate }}</th>
             <th></th>
           </tr>
@@ -43,8 +42,13 @@
                   {{ rule.name }}
                 </button>
               </td>
-              <td>{{ rule.priority }}</td>
-              <td class="text-sm text-base-content/70">{{ rule.conditions.length }}</td>
+              <td>
+                <div class="flex flex-wrap gap-1">
+                  @for (chip of summary(rule); track $index) {
+                    <span class="badge badge-sm badge-ghost">{{ chip }}</span>
+                  }
+                </div>
+              </td>
               <td>
                 <span
                   class="badge badge-sm"
@@ -54,15 +58,13 @@
                 </span>
               </td>
               <td class="text-end">
-                <div class="flex justify-end gap-1">
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs text-error"
-                    (click)="remove(rule)"
-                  >
-                    {{ 'settings.auto_approval.delete' | translate }}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs text-error"
+                  (click)="remove(rule)"
+                >
+                  {{ 'settings.auto_approval.delete' | translate }}
+                </button>
               </td>
             </tr>
           }
@@ -73,7 +75,7 @@
 </div>
 
 <dialog #editorDialog class="modal">
-  <div class="modal-box max-w-lg">
+  <div class="modal-box max-w-2xl">
     <app-modal-header
       [title]="
         (editingId() != null
@@ -82,30 +84,21 @@
         ) | translate
       "
     />
-    <div class="flex flex-col gap-4">
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.auto_approval.field_name' | translate }}</span>
-        <input
-          type="text"
-          class="input input-bordered input-sm w-full"
-          [ngModel]="formName()"
-          (ngModelChange)="formName.set($event)"
-        />
-      </label>
-      <div class="flex gap-4">
+    <div class="flex flex-col gap-5">
+      <div class="flex flex-col sm:flex-row gap-4 sm:items-end">
         <label class="form-control flex-1">
-          <span class="label-text">{{ 'settings.auto_approval.field_priority' | translate }}</span>
+          <span class="label-text">{{ 'settings.auto_approval.field_name' | translate }}</span>
           <input
-            type="number"
+            type="text"
             class="input input-bordered input-sm w-full"
-            [ngModel]="formPriority()"
-            (ngModelChange)="formPriority.set(+$event)"
+            [ngModel]="formName()"
+            (ngModelChange)="formName.set($event)"
           />
         </label>
-        <label class="form-control flex-none flex-row items-center gap-2 mt-6">
+        <label class="label cursor-pointer justify-start gap-2">
           <input
             type="checkbox"
-            class="checkbox checkbox-sm"
+            class="toggle toggle-sm toggle-primary"
             [ngModel]="formEnabled()"
             (ngModelChange)="formEnabled.set($event)"
           />
@@ -113,63 +106,160 @@
         </label>
       </div>
 
-      <div>
-        <div class="flex items-center justify-between mb-2">
-          <span class="label-text font-medium">{{
-            'settings.auto_approval.conditions' | translate
-          }}</span>
-          <button type="button" class="btn btn-ghost btn-xs" (click)="addCondition()">
-            + {{ 'settings.auto_approval.add_condition' | translate }}
-          </button>
+      <p class="text-sm text-base-content/60">
+        {{ 'settings.auto_approval.logic_hint' | translate }}
+      </p>
+
+      @if (matchesEverything()) {
+        <div role="alert" class="alert alert-warning text-sm py-2">
+          {{ 'settings.auto_approval.warn_matches_everything' | translate }}
         </div>
-        @if (formConditions().length === 0) {
-          <p class="text-sm text-base-content/50">
-            {{ 'settings.auto_approval.no_conditions' | translate }}
-          </p>
-        }
-        @for (cond of formConditions(); track $index; let i = $index) {
-          <div class="flex items-center gap-2 mb-2 p-2 border border-base-200 rounded">
-            <select
-              class="select select-bordered select-xs flex-1"
-              [ngModel]="cond.field"
-              (ngModelChange)="updateCondition(i, { field: $event })"
-            >
-              @for (f of fields; track f) {
-                <option [value]="f">{{ 'settings.auto_approval.field_' + f | translate }}</option>
-              }
-            </select>
-            <select
-              class="select select-bordered select-xs flex-1"
-              [ngModel]="cond.operator"
-              (ngModelChange)="updateCondition(i, { operator: $event })"
-            >
-              @for (op of operators; track op) {
-                <option [value]="op">{{ 'settings.auto_approval.op_' + op | translate }}</option>
-              }
-            </select>
-            <input
-              type="text"
-              class="input input-bordered input-xs flex-1"
-              [ngModel]="cond.value"
-              (ngModelChange)="updateCondition(i, { value: $event })"
-              [placeholder]="'settings.auto_approval.value_placeholder' | translate"
-            />
-            <button
-              type="button"
-              class="btn btn-ghost btn-xs text-error"
-              (click)="removeCondition(i)"
-            >
-              ✕
-            </button>
+      }
+
+      <div class="flex flex-col md:flex-row md:gap-2">
+        <section class="flex flex-col gap-3 flex-1 min-w-0">
+          <div>
+            <h3 class="font-semibold">{{ 'settings.auto_approval.who' | translate }}</h3>
+            <p class="text-xs leading-tight text-base-content/50">
+              {{ 'settings.auto_approval.who_hint' | translate }}
+            </p>
           </div>
-        }
+
+          <div class="form-control">
+            <span class="label-text">{{ 'settings.auto_approval.users' | translate }}</span>
+            <app-multi-select
+              class="mt-1"
+              [options]="userOptions()"
+              [(value)]="formUserIds"
+              [placeholder]="'settings.auto_approval.any_user' | translate"
+            />
+          </div>
+
+          <div class="divider my-0 text-xs text-base-content/50">
+            {{ 'settings.auto_approval.or' | translate }}
+          </div>
+
+          <div class="form-control">
+            <span class="label-text">{{ 'settings.auto_approval.roles' | translate }}</span>
+            <app-multi-select
+              class="mt-1"
+              [options]="roleOptions()"
+              [(value)]="formRoleIds"
+              [placeholder]="'settings.auto_approval.any_role' | translate"
+            />
+          </div>
+        </section>
+
+        <div class="divider md:divider-horizontal my-2 md:my-0"></div>
+
+        <section class="flex flex-col gap-3 flex-1 min-w-0">
+          <div>
+            <h3 class="font-semibold">{{ 'settings.auto_approval.what' | translate }}</h3>
+            <p class="text-xs leading-tight text-base-content/50">
+              {{ 'settings.auto_approval.what_hint' | translate }}
+            </p>
+          </div>
+
+          <label class="form-control">
+            <span class="label-text">{{
+              'settings.auto_approval.field_media_type' | translate
+            }}</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              [ngModel]="formMediaType()"
+              (ngModelChange)="setMediaType($event)"
+            >
+              <option value="">{{ 'settings.auto_approval.media_type_any' | translate }}</option>
+              <option value="movie">
+                {{ 'settings.auto_approval.media_type_movie' | translate }}
+              </option>
+              <option value="series">
+                {{ 'settings.auto_approval.media_type_series' | translate }}
+              </option>
+            </select>
+          </label>
+
+          <div class="form-control">
+            <span class="label-text">{{ 'settings.auto_approval.libraries' | translate }}</span>
+            <app-multi-select
+              class="mt-1"
+              [options]="libraryOptions()"
+              [(value)]="formLibraryIds"
+              [placeholder]="'settings.auto_approval.any_library' | translate"
+            />
+          </div>
+
+          <div class="form-control">
+            <span class="label-text">{{ 'settings.auto_approval.genres' | translate }}</span>
+            <app-multi-select
+              class="mt-1"
+              [options]="genreOptions()"
+              [(value)]="formGenreIds"
+              [placeholder]="'settings.auto_approval.any_genre' | translate"
+            />
+          </div>
+
+          @if (formMediaType() !== 'movie') {
+            <label class="form-control">
+              <span class="label-text">{{
+                'settings.auto_approval.field_max_seasons' | translate
+              }}</span>
+              <input
+                type="number"
+                min="1"
+                class="input input-bordered input-sm w-full mt-1"
+                [placeholder]="'settings.auto_approval.no_limit' | translate"
+                [ngModel]="formMaxSeasons()"
+                (ngModelChange)="setNumber('maxSeasons', $event)"
+              />
+              <span class="block text-xs leading-tight text-base-content/50 mt-1">
+                {{ 'settings.auto_approval.max_seasons_hint' | translate }}
+              </span>
+            </label>
+          }
+
+          <div class="flex gap-2">
+            <label class="form-control flex-1">
+              <span class="label-text">{{
+                'settings.auto_approval.field_year_from' | translate
+              }}</span>
+              <input
+                type="number"
+                class="input input-bordered input-sm w-full"
+                [placeholder]="'settings.auto_approval.no_limit' | translate"
+                [ngModel]="formYearFrom()"
+                (ngModelChange)="setNumber('yearFrom', $event)"
+              />
+            </label>
+            <label class="form-control flex-1">
+              <span class="label-text">{{
+                'settings.auto_approval.field_year_to' | translate
+              }}</span>
+              <input
+                type="number"
+                class="input input-bordered input-sm w-full"
+                [placeholder]="'settings.auto_approval.no_limit' | translate"
+                [ngModel]="formYearTo()"
+                (ngModelChange)="setNumber('yearTo', $event)"
+              />
+            </label>
+          </div>
+          <p class="text-xs leading-tight text-base-content/50 -mt-2">
+            {{ 'settings.auto_approval.year_hint' | translate }}
+          </p>
+        </section>
       </div>
 
       <app-modal-footer>
         <button type="button" class="btn btn-ghost" (click)="closeEditor()">
           {{ 'common.cancel' | translate }}
         </button>
-        <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="saving() || !formName().trim()"
+          (click)="save()"
+        >
           @if (saving()) {
             <span class="loading loading-spinner loading-xs"></span>
           }
