@@ -41,6 +41,7 @@ import {
 import {
   displayMediaFilePath,
   episodeBadgeLabel,
+  episodeUnreleased,
   filesForEpisode,
   filterSeasonEpisodesOnDisk,
   onDiskEpisodeNumbers,
@@ -51,6 +52,7 @@ import { AddToPlaylistService } from '../../../../core/services/add-to-playlist.
 import { TvService } from '../../../../core/services/tv.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { DeviceService } from '../../../../core/services/device.service';
+import { DisplaySettingsService } from '../../../../core/services/display-settings.service';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 import { SeasonLabelPipe } from '../../../../core/pipes/season-label.pipe';
 import { PluginUiRegistryService } from '../../../../core/plugin-ui/plugin-ui-registry.service';
@@ -85,6 +87,7 @@ export class MediaDetailSeasonsComponent {
   readonly auth = inject(AuthService);
   private readonly device = inject(DeviceService);
   private readonly pluginUi = inject(PluginUiRegistryService);
+  private readonly displaySettings = inject(DisplaySettingsService);
   readonly media = input.required<Media>();
   readonly selectedSeason = input<Season | null>(null);
   readonly activeSeasonId = input.required<number | null>();
@@ -116,6 +119,8 @@ export class MediaDetailSeasonsComponent {
   /** Optional override for the horizontal-scroller title. Defaults to
    *  the generic "Episodes" string when null. */
   readonly sectionTitle = input<string | null>(null);
+  /** Episode the page is already showing — its card is framed instead of hidden. */
+  readonly activeEpisodeId = input<number | null>(null);
   /** Season ids the viewer has liked — drives the season heart entry. */
   readonly likedSeasonIds = input<number[]>([]);
 
@@ -283,6 +288,10 @@ export class MediaDetailSeasonsComponent {
   }
 
   episodeBadgeLabel = episodeBadgeLabel;
+  /** Grey still for an episode that hasn't aired, unless the viewer turned it off. */
+  episodeGrayscale(ep: Episode): boolean {
+    return this.displaySettings.settings().grayUnreleased && episodeUnreleased(ep);
+  }
 
   episodeRoute(ep: Episode): string[] {
     return ['/series', String(this.media().id), 'episode', String(ep.id)];

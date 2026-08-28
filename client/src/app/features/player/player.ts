@@ -4056,7 +4056,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.isLandscape.set(screen.orientation?.type?.startsWith('landscape') ?? false);
     // iOS WKWebView sometimes doesn't reflow fixed-position elements after
     // rotation, leaving the player UI oversized. Force a layout recalc.
-    window.scrollTo(0, 0);
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     document.documentElement.style.setProperty('--vh', `${window.innerHeight}px`);
     // Native subtitle bottom margin is a % of video height — reapply after
     // orientation change so the value is recalculated against the new dimensions.

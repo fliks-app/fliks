@@ -89,6 +89,13 @@ export class MediaCardComponent {
    */
   readonly widthClass = input<string | null>(null);
 
+  /** Frames the card in the primary colour — marks the card as the one
+   *  the current page is already showing. */
+  readonly highlighted = input(false);
+
+  /** Desaturates the image — marks content that hasn't aired/released yet. */
+  readonly grayscale = input(false);
+
   // Image (override media.posterUrl)
   readonly imageUrl = input<string | null>(null);
   readonly imageBlurred = input(false);
@@ -279,6 +286,9 @@ export class MediaCardComponent {
     // Pointless where the router runs no transition (Capacitor) or the engine has
     // none (Chromium <111, Tizen 5.5 WebKit, webOS 5) — and it costs a querySelectorAll per click.
     if (this.isNative || !('startViewTransition' in document)) return;
+    // Episode stills never pair: the episode page stamps the SERIES id on its
+    // still, so an episode name only ever animates in or out on its own.
+    if (this.link()?.includes('episode')) return;
     const id = this.resolveMediaId();
     const img = this.imgRef()?.nativeElement;
     if (id == null || !img) return;

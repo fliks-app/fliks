@@ -196,6 +196,8 @@
     "title": "Anzeige",
     "home_background": "Hintergrundbild auf der Startseite",
     "home_background_hint": "Zeigt ein Poster im Vollbild hinter den Bereichen der Startseite an.",
+    "gray_unreleased": "Unveröffentlichte Folgen ausgrauen",
+    "gray_unreleased_hint": "Zeigt das Standbild in Schwarz-Weiß, bis die Folge ausgestrahlt wird.",
     "language": "App-Sprache",
     "language_auto": "System",
     "language_hint": "Sprache der Oberfläche. Standardmäßig die deines Browsers oder Systems."

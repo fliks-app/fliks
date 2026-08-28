@@ -43,7 +43,7 @@ export class ScrollMemoryService {
     const y = this.positions.get(key);
     if (!y) return;
     afterNextRender(() => {
-      window.scrollTo(0, y);
+      window.scrollTo({ top: y, left: 0, behavior: 'instant' });
     }, { injector });
   }
 

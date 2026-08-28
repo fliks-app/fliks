@@ -196,6 +196,8 @@
     "title": "Visualizzazione",
     "home_background": "Immagine di sfondo nella home",
     "home_background_hint": "Mostra un poster a schermo intero dietro le sezioni della home.",
+    "gray_unreleased": "Episodi non ancora usciti in bianco e nero",
+    "gray_unreleased_hint": "Mostra l'immagine in bianco e nero finché l'episodio non va in onda.",
     "language": "Lingua dell'app",
     "language_auto": "Sistema",
     "language_hint": "Lingua dell'interfaccia. Per impostazione predefinita, quella del browser o del sistema."

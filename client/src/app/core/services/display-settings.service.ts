@@ -7,6 +7,8 @@ export interface DisplaySettings {
   onlyMyRequests: boolean;
   /** UI language override (ISO 639-1). Empty = follow the browser/OS language. */
   language: string;
+  /** Desaturate the still of an episode that hasn't aired yet. */
+  grayUnreleased: boolean;
 }
 
 const STORAGE_KEY = 'display.settings';
@@ -15,6 +17,7 @@ const DEFAULTS: DisplaySettings = {
   homeBackground: true,
   onlyMyRequests: false,
   language: '',
+  grayUnreleased: true,
 };
 
 @Injectable({ providedIn: 'root' })
