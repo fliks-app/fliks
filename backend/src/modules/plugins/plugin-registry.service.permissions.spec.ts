@@ -39,6 +39,7 @@ function makeService(): PluginRegistryService {
     fakePluginJobsService() as never,
     fakeScheduledJobRegistry() as never,
     fakeCountsCache() as never,
+    { get: async () => null } as never,
   );
 }
 

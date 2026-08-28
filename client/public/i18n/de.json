@@ -2259,7 +2259,9 @@
         "install": "Installieren",
         "no_installable": "Keine installierbare Version",
         "switch_to": "Auf {{version}} aktualisieren",
-        "update_keeps_data": "Deine Einstellungen bleiben erhalten."
+        "update_keeps_data": "Deine Einstellungen bleiben erhalten.",
+        "pick_version": "Version auswählen",
+        "version_installed": "v{{version}} installiert"
       },
       "status_disabled": "Deaktiviert",
       "status_unavailable": "Nicht verfügbar",
@@ -2269,7 +2271,11 @@
         "subtitle": "Wie Fliks installierte Plugins verwaltet.",
         "auto_update": "Plugins automatisch aktualisieren",
         "auto_update_hint": "Standardmäßig aktiviert. Installiert einmal täglich, nach dem Aktualisieren der Quellen, die neueste angebotene Version eines installierten Plugins. Unbeaufsichtigt wird nur ein Archiv installiert, das der Quellkatalog signiert hat; alles andere braucht weiterhin deine Bestätigung.",
-        "saved": "Plugin-Einstellungen gespeichert"
+        "saved": "Plugin-Einstellungen gespeichert",
+        "skip_compatibility": "Kompatibilitätsprüfung deaktivieren",
+        "skip_compatibility_hint": "Installiert und lädt eine Plugin-Version auch dann, wenn sie diese Fliks-Version nicht als unterstützt angibt. Die Prüfung der Plugin-API gilt weiterhin.",
+        "allow_older_versions": "Installation älterer Versionen erlauben",
+        "allow_older_versions_hint": "Ergänzt die Installations- und Aktualisierungsknöpfe im Katalog um eine Versionsauswahl."
       }
     }
   },

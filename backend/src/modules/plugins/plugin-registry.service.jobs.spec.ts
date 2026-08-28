@@ -70,6 +70,7 @@ function makeService(startResult?: PluginProcessStartResult, publishedJobNames: 
     pluginJobs,
     scheduledJobs as never,
     fakeCountsCache() as never,
+    { get: async () => null } as never,
   );
   return { service, registry, pluginJobs };
 }

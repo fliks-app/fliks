@@ -19,6 +19,7 @@ import { getPluginsSocketDir } from '../../common/constants/paths';
 import { PluginCountsCacheService } from './host/plugin-counts-cache.service';
 import { allocateChildUid } from './supervisor/spawn-plan';
 import { arePluginsDisabled, FLIKS_PLUGINS_DISABLED_ENV } from '../../common/constants/plugin-flags';
+import { SettingsService } from '../settings/settings.service';
 import {
   SUPPORTED_PLUGIN_API_VERSIONS,
   fliksRangeVersion,
@@ -170,6 +171,10 @@ function formFieldKeys(pages: ConfigPage[]): ReadonlySet<string> {
   return keys;
 }
 
+/** Turns the manifest's `fliks` range from a gate into a warning, at load and in the catalogue
+ *  alike. Off unless the value is the explicit `'true'` the settings dialog writes. */
+export const PLUGIN_SKIP_COMPATIBILITY_SETTING = 'plugins.skip_compatibility_check';
+
 @Injectable()
 export class PluginRegistryService implements OnModuleInit {
   private readonly logger = new Logger(PluginRegistryService.name);
@@ -200,7 +205,13 @@ export class PluginRegistryService implements OnModuleInit {
     private readonly pluginJobs: PluginJobsService,
     private readonly scheduledJobs: ScheduledJobRegistry,
     private readonly countsCache: PluginCountsCacheService,
+    private readonly settings: SettingsService,
   ) {}
+
+  /** Read live, never cached: an admin flipping it expects the next load to obey it. */
+  async skipCompatibilityCheck(): Promise<boolean> {
+    return (await this.settings.get(PLUGIN_SKIP_COMPATIBILITY_SETTING)) === 'true';
+  }
 
   async onModuleInit(): Promise<void> {
     // Kills a plugin child leaked by a previous crash before anything new claims its socket path.
@@ -268,10 +279,14 @@ export class PluginRegistryService implements OnModuleInit {
       );
     }
     if (!semver.satisfies(fliksRangeVersion(CURRENT_FLIKS_VERSION), manifest.fliks)) {
-      return this.fail(
-        pkg.pluginId,
-        'incompatible-fliks',
-        `manifest requires fliks "${manifest.fliks}", running ${CURRENT_FLIKS_VERSION}`,
+      const detail = `manifest requires fliks "${manifest.fliks}", running ${CURRENT_FLIKS_VERSION}`;
+      if (!(await this.skipCompatibilityCheck())) {
+        return this.fail(pkg.pluginId, 'incompatible-fliks', detail);
+      }
+      // Loading anyway is the admin's explicit choice, and the reason it broke has to be in the
+      // log before the plugin starts calling host methods that may no longer exist.
+      this.logger.warn(
+        `${pkg.pluginId}: ${detail} — loading anyway, the compatibility check is disabled`,
       );
     }
 

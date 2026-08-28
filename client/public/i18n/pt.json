@@ -2259,7 +2259,9 @@
         "install": "Instalar",
         "no_installable": "Sem versão instalável",
         "switch_to": "Atualizar para {{version}}",
-        "update_keeps_data": "As tuas configurações são mantidas."
+        "update_keeps_data": "As tuas configurações são mantidas.",
+        "pick_version": "Escolher uma versão",
+        "version_installed": "v{{version}} instalada"
       },
       "status_disabled": "Desativado",
       "status_unavailable": "Indisponível",
@@ -2269,7 +2271,11 @@
         "subtitle": "Como o Fliks gere os plugins instalados.",
         "auto_update": "Atualizar os plugins automaticamente",
         "auto_update_hint": "Ativado por predefinição. Uma vez por dia, após atualizar as fontes, instala a versão mais recente oferecida para um plugin instalado. Sem intervenção só é instalado um arquivo assinado pelo catálogo da fonte: o resto continua a exigir a tua confirmação.",
-        "saved": "Definições dos plugins guardadas"
+        "saved": "Definições dos plugins guardadas",
+        "skip_compatibility": "Desativar a verificação de compatibilidade",
+        "skip_compatibility_hint": "Instala e carrega uma versão de plugin mesmo que não declare suporte para esta versão do Fliks. A verificação da API de plugins continua a aplicar-se.",
+        "allow_older_versions": "Permitir instalar versões anteriores",
+        "allow_older_versions_hint": "Adiciona um seletor de versão junto aos botões de instalação e atualização do catálogo."
       }
     }
   },

@@ -10,6 +10,7 @@ import {
   PluginInspectReport,
   PluginInstallResult,
 } from '../../../../core/services/api/plugins-api.service';
+import { SettingsApiService } from '../../../../core/services/api/settings-api.service';
 import { PluginInstallConsentComponent } from '../plugin-install-consent/plugin-install-consent';
 import { PluginCatalogueComponent } from './plugin-catalogue';
 
@@ -22,6 +23,7 @@ import { PluginCatalogueComponent } from './plugin-catalogue';
 })
 export class PluginCataloguePageComponent implements OnInit {
   private readonly api = inject(PluginsApiService);
+  private readonly settings = inject(SettingsApiService);
   private readonly registry = inject(PluginUiRegistryService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
@@ -29,11 +31,23 @@ export class PluginCataloguePageComponent implements OnInit {
   private readonly consentSheet = viewChild<PluginInstallConsentComponent>('consentSheet');
 
   private readonly rows = signal<PluginSummary[]>([]);
+  /** `plugins.allow_older_versions` — read here so the grid stays input-driven. */
+  readonly allowOlderVersions = signal(false);
   readonly installedIds = computed(() => new Set(this.rows().map((r) => r.pluginId)));
   readonly installedVersions = computed(() => new Map(this.rows().map((r) => [r.pluginId, r.version])));
 
   ngOnInit(): void {
     this.reload();
+    void this.loadOlderVersionsSetting();
+  }
+
+  private async loadOlderVersionsSetting(): Promise<void> {
+    try {
+      const row = await this.settings.get('plugins.allow_older_versions');
+      this.allowOlderVersions.set(row?.value === 'true');
+    } catch {
+      this.allowOlderVersions.set(false);
+    }
   }
 
   async reload(): Promise<void> {

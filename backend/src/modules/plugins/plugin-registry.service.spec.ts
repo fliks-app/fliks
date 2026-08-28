@@ -1,5 +1,6 @@
 jest.mock('./supervisor/pid-file', () => ({ sweepOrphans: jest.fn() }));
 
+import { Logger } from '@nestjs/common';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PLUGIN_UID_MIN } from './supervisor/spawn-plan';
 import { PluginPackage } from './entities/plugin-package.entity';
@@ -61,6 +62,8 @@ function makeService(
   rows: PluginPackage[] = [],
   processResult: PluginProcessStartResult = { ok: true },
   sources: Array<{ enabled: boolean; cachedCatalog: Record<string, unknown> | null }> = [],
+  /** Stored app settings the service reads — only `plugins.skip_compatibility_check` so far. */
+  settings: Record<string, string> = {},
 ) {
   const repo = repoMock(rows);
   // The shared helper honours `where`, so the enabled-only filter is the code's job, not the mock's.
@@ -76,6 +79,7 @@ function makeService(
     pluginJobs as never,
     fakeScheduledJobRegistry() as never,
     fakeCountsCache() as never,
+    { get: async (key: string) => settings[key] ?? null } as never,
   );
   return { service, repo, sourceRepo, registrationRepo, processService, pluginJobs };
 }
@@ -350,6 +354,37 @@ describe('PluginRegistryService.register()', () => {
       reason: 'incompatible-fliks',
       detail: expect.any(String),
     });
+  });
+
+  /**
+   * The range check is the one an admin can waive: it says this build was not tested here, not
+   * that it cannot speak the protocol. Waiving it must still leave the reason in the log.
+   */
+  it('VERDICT: registers an out-of-range plugin when the compatibility check is disabled', async () => {
+    const manifest = minimalDataManifest({ fliks: '>=99.0.0' });
+    const pkg = makePackage(manifest);
+    const { service } = makeService([], { ok: true }, [], {
+      'plugins.skip_compatibility_check': 'true',
+    });
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+    const result = await service.register(pkg);
+
+    expect(result.ok).toBe(true);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('compatibility check is disabled'));
+    warn.mockRestore();
+  });
+
+  it('an api mismatch is refused even with the compatibility check disabled', async () => {
+    const manifest = minimalDataManifest({ fliks: COMPATIBLE_RANGE, pluginApi: 99 });
+    const pkg = makePackage(manifest);
+    const { service } = makeService([], { ok: true }, [], {
+      'plugins.skip_compatibility_check': 'true',
+    });
+
+    const result = await service.register(pkg);
+
+    expect(result).toMatchObject({ ok: false, reason: 'incompatible-api' });
   });
 
   describe('process tier', () => {

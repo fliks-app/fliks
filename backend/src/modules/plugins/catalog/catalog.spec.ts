@@ -223,6 +223,41 @@ describe('filterCatalog()', () => {
     expect(result.plugins[0].hidden?.count).toBe(1);
   });
 
+  /**
+   * An admin who turns the compatibility check off is asking to see versions this core's
+   * version range refuses — never versions whose protocol or archive it cannot handle.
+   */
+  describe('with the fliks range check disabled', () => {
+    const opts = { skipFliksRange: true };
+
+    it('VERDICT: offers a version whose fliks range excludes this core', () => {
+      const tooNew = version({ fliks: '>=5.0.0 <6.0.0' });
+      const result = filterCatalog(document({ versions: [tooNew] }), SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1', opts);
+      expect(result.plugins[0].installable).toEqual([tooNew]);
+      expect(result.plugins[0].hidden).toBeNull();
+    });
+
+    it('VERDICT: still hides a pluginApi mismatch — the RPC protocol is not a preference', () => {
+      const mismatched = version({ pluginApi: PLUGIN_API_VERSION + 1 });
+      const result = filterCatalog(document({ versions: [mismatched] }), SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1', opts);
+      expect(result.plugins[0].installable).toEqual([]);
+      expect(result.plugins[0].hidden?.count).toBe(1);
+    });
+
+    it('still hides a version whose archive could never be verified', () => {
+      const unsigned = version({ sha256: '0'.repeat(64) });
+      const result = filterCatalog(document({ versions: [unsigned] }), SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1', opts);
+      expect(result.plugins[0].installable).toEqual([]);
+    });
+
+    it('keeps the oldest-to-newest order the callers read as "newest last"', () => {
+      const older = version({ version: '1.0.0', fliks: '>=5.0.0 <6.0.0' });
+      const newer = version({ version: '2.0.0' });
+      const result = filterCatalog(document({ versions: [newer, older] }), SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1', opts);
+      expect(result.plugins[0].installable.map((v) => v.version)).toEqual(['1.0.0', '2.0.0']);
+    });
+  });
+
   it('separates installable and hidden versions of the same plugin', () => {
     const ok = version({ version: '1.0.0' });
     const tooNew = version({ version: '2.0.0', fliks: '>=5.0.0 <6.0.0' });

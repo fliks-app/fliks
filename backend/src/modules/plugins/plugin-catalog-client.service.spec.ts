@@ -60,8 +60,11 @@ function fakePackageRepo(rows: PluginPackage[] = []) {
   return { find: jest.fn(async () => rows), save: jest.fn(async (row: PluginPackage) => row) };
 }
 
-function fakeRegistry() {
-  return { revoke: jest.fn(async () => undefined) };
+function fakeRegistry(skipCompatibilityCheck = false) {
+  return {
+    revoke: jest.fn(async () => undefined),
+    skipCompatibilityCheck: jest.fn(async () => skipCompatibilityCheck),
+  };
 }
 
 /** Routes a GET by URL suffix — `catalog.json` and `catalog.json.sig` never collide since
@@ -194,6 +197,34 @@ describe('PluginCatalogClientService', () => {
     const catalog = source.cachedCatalog as { plugins: { installable: unknown[]; hidden: { count: number; minFliksVersion: string } }[] };
     expect(catalog.plugins[0].installable).toEqual([]);
     expect(catalog.plugins[0].hidden).toEqual({ count: 1, minFliksVersion: '5.0.0' });
+  });
+
+  /**
+   * The cached blob is filtered under whichever value the setting held at refresh time, and every
+   * reader downstream — the catalogue page, the install gate, the auto-update job — trusts it. A
+   * refresh that ignored the setting is what would leave an admin who turned the check off still
+   * looking at the narrow list.
+   */
+  it('VERDICT: caches an out-of-range version as installable when the compatibility check is disabled', async () => {
+    const { privateKey, rawPublicKey } = generateTestKeypair();
+    const doc = catalogWith({ fliks: '>=5.0.0 <6.0.0' });
+    const bytes = Buffer.from(JSON.stringify(doc), 'utf8');
+    const sig = Buffer.from(signManifestBase64(privateKey, bytes), 'utf8');
+    axios.defaults.adapter = adapterFor({ 'catalog.json.sig': sig, 'catalog.json': bytes });
+
+    const repo = repoStub();
+    const service = new PluginCatalogClientService(
+      repo as never,
+      fakePackageRepo() as never,
+      fakeRegistry(true) as never,
+    );
+    const source = fakeSource({ publicKey: rawPublicKey });
+
+    await service.refreshSource(source);
+
+    const catalog = source.cachedCatalog as { plugins: { installable: unknown[]; hidden: unknown }[] };
+    expect(catalog.plugins[0].installable).toHaveLength(1);
+    expect(catalog.plugins[0].hidden).toBeNull();
   });
 
   it('stops and marks failed an installed package a landed revocation denies, immediately — not on next reboot', async () => {

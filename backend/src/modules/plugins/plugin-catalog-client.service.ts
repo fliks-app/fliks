@@ -124,7 +124,15 @@ export class PluginCatalogClientService implements OnApplicationBootstrap {
       return this.fail(source, 'malformed-catalog', 'catalog signature verified but the document did not parse');
     }
 
-    const filtered: FilteredCatalog = filterCatalog(document, SUPPORTED_PLUGIN_API_VERSIONS, CURRENT_FLIKS_VERSION);
+    // Read per refresh, not once at boot: flipping the setting and refreshing is how an admin
+    // makes the wider list appear, and this cached blob is what every reader downstream trusts —
+    // the catalogue page and the install gate alike.
+    const filtered: FilteredCatalog = filterCatalog(
+      document,
+      SUPPORTED_PLUGIN_API_VERSIONS,
+      CURRENT_FLIKS_VERSION,
+      { skipFliksRange: await this.registry.skipCompatibilityCheck() },
+    );
     const signedByKeyId = trust.signedByKeyId ?? null;
     source.cachedCatalog = { ...filtered, signedByKeyId } as unknown as Record<string, unknown>;
     source.lastRefreshedAt = new Date();

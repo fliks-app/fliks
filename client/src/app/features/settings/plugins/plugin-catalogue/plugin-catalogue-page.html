@@ -4,7 +4,12 @@
     {{ 'settings.plugins.catalogue.back' | translate }}
   </a>
 
-  <app-plugin-catalogue [installedIds]="installedIds()" [installedVersions]="installedVersions()" (install)="onInspected($event)" />
+  <app-plugin-catalogue
+  [installedIds]="installedIds()"
+  [installedVersions]="installedVersions()"
+  [allowOlderVersions]="allowOlderVersions()"
+  (install)="onInspected($event)"
+/>
 </div>
 
 <app-plugin-install-consent #consentSheet (installed)="onInstalled($event)" />
