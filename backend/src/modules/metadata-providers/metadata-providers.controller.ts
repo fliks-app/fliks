@@ -1,11 +1,14 @@
 import {
   Controller,
   Get,
+  Logger,
   Param,
   Query,
+  ServiceUnavailableException,
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
+import axios from 'axios';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { TmdbProvider, DiscoverOptions } from './providers/tmdb.provider';
@@ -14,9 +17,29 @@ import { MetadataSearchResult } from './interfaces/metadata-provider.interface';
 import { Media } from '../media/entities/media.entity';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 
+/** What the upstream actually said: TMDB/TVDB answer a `status_message`, a dead socket
+ *  only carries a code, and the breaker carries just its own message. */
+function upstreamReason(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const status = err.response?.status;
+    const upstream = err.response?.data as
+      | { status_message?: string; message?: string }
+      | undefined;
+    return [
+      status ? `HTTP ${status}` : (err.code ?? 'network error'),
+      upstream?.status_message ?? upstream?.message ?? err.message,
+    ]
+      .filter(Boolean)
+      .join(' — ');
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 @Controller('metadata')
 @UseGuards(JwtOrApiKeyGuard)
 export class MetadataProvidersController {
+  private readonly logger = new Logger(MetadataProvidersController.name);
+
   constructor(
     private readonly tmdb: TmdbProvider,
     private readonly registry: MetadataProviderRegistry,
@@ -38,6 +61,7 @@ export class MetadataProvidersController {
     const results = await this.searchWithFallback(
       providerName ?? (await this.providerPreferredFor(mediaId)),
       (p) => p.searchMovie(query, year ? +year : undefined),
+      `movie q="${query}" year=${year ?? '-'}`,
     );
     return this.enrichWithExisting(results, 'movie');
   }
@@ -54,6 +78,7 @@ export class MetadataProvidersController {
     const results = await this.searchWithFallback(
       providerName ?? (await this.providerPreferredFor(mediaId)),
       (p) => p.searchTvShow(query, year ? +year : undefined),
+      `tv q="${query}" year=${year ?? '-'}`,
     );
     return this.enrichWithExisting(results, 'series');
   }
@@ -241,18 +266,35 @@ export class MetadataProvidersController {
       searchMovie: any;
       searchTvShow: any;
     }) => Promise<MetadataSearchResult[]>,
+    label: string,
   ): Promise<MetadataSearchResult[]> {
     const provider = this.registry.resolve(providerName ?? null);
-    let results = await searchFn(provider);
+    try {
+      let results = await searchFn(provider);
 
-    // Fallback if empty and another provider is available
-    if (!results.length) {
-      const fallback = this.registry.getFallback(provider.name);
-      if (fallback) {
-        results = await searchFn(fallback);
+      // Fallback if empty and another provider is available
+      if (!results.length) {
+        const fallback = this.registry.getFallback(provider.name);
+        if (fallback) {
+          this.logger.log(
+            `Search empty on ${provider.name}, retrying ${fallback.name} — ${label}`,
+          );
+          results = await searchFn(fallback);
+        }
       }
+      return results;
+    } catch (err) {
+      // A raw throw here reaches the client as a bare 500, which says nothing about
+      // the key, the quota or the outage that actually caused it.
+      const reason = upstreamReason(err);
+      this.logger.error(
+        `Search failed on ${provider.name} — ${label}: ${reason}`,
+        err instanceof Error ? err.stack : undefined,
+      );
+      throw new ServiceUnavailableException(
+        `Metadata search failed on ${provider.name}: ${reason}`,
+      );
     }
-    return results;
   }
 
   private async enrichWithExisting(

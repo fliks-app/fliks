@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
@@ -62,7 +63,7 @@ const scanResult = (folders: string[]): OrphanScanResult => ({
   orphanCount: folders.length,
 });
 
-function setup(folders: string[]) {
+function setup(folders: string[], metadataOverrides: Record<string, unknown> = {}) {
   const relinked: RelinkOrphansBody[] = [];
   const importsApi = {
     previewOrphans: () => Promise.resolve(scanResult(folders)),
@@ -74,6 +75,7 @@ function setup(folders: string[]) {
   const metadata = {
     searchMovie: () => Promise.resolve([result(11, 'First'), result(22, 'Second')]),
     searchTv: () => Promise.resolve([]),
+    ...metadataOverrides,
   };
 
   TestBed.configureTestingModule({
@@ -134,8 +136,7 @@ describe('OrphanScanPanelComponent.importAll', () => {
 /** A TVDB work TheMovieDB does not know is reported with `tmdbId: 0`, so every
  *  such row would answer to the same identity. */
 describe('OrphanScanPanelComponent — picking among TVDB-only results', () => {
-  const tvdb = (tvdbId: number, title: string) =>
-    result(0, title, { provider: 'tvdb', tvdbId });
+  const tvdb = (tvdbId: number, title: string) => result(0, title, { provider: 'tvdb', tvdbId });
 
   it('VERDICT: switches the pick between two results that share tmdbId 0', async () => {
     const { panel } = setup(['Alpha']);
@@ -167,6 +168,24 @@ describe('OrphanScanPanelComponent — picking among TVDB-only results', () => {
 
     expect(panel.isPicked(first, first)).toBe(true);
     expect(panel.isPicked(first, second)).toBe(false);
+  });
+});
+
+describe('OrphanScanPanelComponent — a failing search', () => {
+  it('VERDICT: shows the server\'s own reason instead of a bare "scan failed"', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { panel } = setup(['Alpha'], {
+      searchMovie: () =>
+        Promise.reject({
+          status: 503,
+          error: { message: 'Metadata search failed on tmdb: HTTP 401 — Invalid API key' },
+        }),
+    });
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+
+    expect(panel.groups()[0].error).toBe(
+      'Metadata search failed on tmdb: HTTP 401 — Invalid API key (HTTP 503)',
+    );
   });
 });
 
