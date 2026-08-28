@@ -44,6 +44,32 @@ export class ImageCacheService {
   /** The sandbox container path changes across installs, so it is resolved at
    *  runtime rather than assumed. */
   private baseUri: Promise<string | null> | null = null;
+  /** Settled value of {@link baseUri}, for the synchronous path. */
+  private baseUriValue: string | null = null;
+
+  /** Resolve the container path up front. Every cached image otherwise awaits
+   *  this one bridge call, which leaves a whole cold-start grid without a src. */
+  async warm(): Promise<void> {
+    if (!this.enabled) return;
+    this.load();
+    await this.resolveBaseUri();
+  }
+
+  /**
+   * Same as {@link resolve} but without the bridge, so a binding can set `src`
+   * in the same frame. Null when the answer isn't already in memory — the
+   * caller falls back to the async path.
+   */
+  resolveNow(remoteUrl: string): string | null {
+    if (!this.cacheable(remoteUrl)) return remoteUrl;
+    if (!this.baseUriValue) return null;
+    this.load();
+    const key = cacheKey(remoteUrl);
+    const entry = this.index.get(key);
+    if (!entry) return null;
+    this.index.set(key, [entry[0], Date.now()]);
+    return Capacitor.convertFileSrc(`${this.baseUriValue}/${entry[0]}`);
+  }
 
   /**
    * URL to actually render for a remote image: the on-disk copy when there is
@@ -160,6 +186,7 @@ export class ImageCacheService {
       try {
         const { Filesystem, Directory } = await getFs();
         const { uri } = await Filesystem.getUri({ path: DIR, directory: Directory.Data });
+        this.baseUriValue = uri;
         return uri;
       } catch {
         return null;

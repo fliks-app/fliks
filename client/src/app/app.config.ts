@@ -39,6 +39,7 @@ import { SessionStoreService } from './core/services/session-store.service';
 import { translateBrowserLoaderFactory } from './utils/translate-loader';
 import { PluginUiRegistryService } from './core/plugin-ui/plugin-ui-registry.service';
 import { PluginI18nService } from './core/plugin-ui/plugin-i18n.service';
+import { ImageCacheService } from './core/services/image-cache.service';
 
 /** Read the persisted server URL, sessions and credentials before bootstrap:
  *  guards, interceptors and the first /auth/me all depend on them. Resolves
@@ -52,7 +53,8 @@ export function loadPersistedState(): Promise<unknown> {
   const auth = inject(AuthService);
   const pluginUi = inject(PluginUiRegistryService);
   const pluginI18n = inject(PluginI18nService);
-  return Promise.all([serverConfig.load(), sessions.load()])
+  const imageCache = inject(ImageCacheService);
+  return Promise.all([serverConfig.load(), sessions.load(), imageCache.warm()])
     .then(() => void auth.loadPersistedSession())
     .then(() => pluginUi.load())
     .then(() => pluginI18n.init())

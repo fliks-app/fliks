@@ -22,23 +22,27 @@
     (keydown.enter)="onCardClick()"
     (keydown.space)="onCardClick(); $event.preventDefault()"
   >
-    @if (_img()) {
+    @if (_img() && !imgFailed()) {
       <img
         #cardImg
         [cachedSrc]="_img()! | resolveUrl:'thumb'"
         [alt]="_title()"
-        class="w-full h-full object-cover select-none"
+        class="w-full h-full object-cover select-none transition-opacity duration-200"
         style="-webkit-user-drag: none; user-drag: none;"
         draggable="false"
         [appSpoiler]="spoiler()"
         #spoilerImg="spoiler"
         [class.scale-110]="spoilerImg.masked()"
         [class.grayscale]="grayscale()"
+        [class.opacity-0]="!imgLoaded()"
         loading="lazy"
         decoding="async"
+        (load)="imgLoaded.set(true)"
+        (error)="imgFailed.set(true)"
       />
-    } @else {
-      <div class="flex items-center justify-center w-full h-full text-base-content/20">
+    }
+    @if (!imgLoaded()) {
+      <div class="absolute inset-0 flex items-center justify-center bg-base-300 text-base-content/20">
         <svg lucideFilm class="h-12 w-12" [strokeWidth]="1.5"></svg>
       </div>
     }

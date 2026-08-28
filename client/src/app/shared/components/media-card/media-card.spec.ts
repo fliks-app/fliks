@@ -541,3 +541,51 @@ describe('MediaCardComponent — card.actions merges with plugin contributions',
     expect(labels(notInLibrary)).not.toContain('media_detail.refresh_metadata');
   });
 });
+
+/**
+ * Artwork placeholder. Android resolves cached posters over the Capacitor
+ * bridge, so a card can hold an unpainted <img> for a frame or two at cold
+ * start; a poster URL that outlived its file never paints at all. Both must
+ * show the film glyph rather than the WebView's broken-image icon.
+ */
+describe('media-card artwork placeholder', () => {
+  const placeholder = (h: Harness) =>
+    h.fixture.nativeElement.querySelector('svg.lucide-film');
+  const img = (h: Harness): HTMLImageElement | null =>
+    h.fixture.nativeElement.querySelector('img');
+
+  it('shows the placeholder with no poster at all', async () => {
+    const h = await createFixture(FULL_MEMBER, { media: makeMedia() });
+    expect(placeholder(h)).toBeTruthy();
+    expect(img(h)).toBeNull();
+  });
+
+  it('keeps the placeholder until the poster actually loads', async () => {
+    const h = await createFixture(FULL_MEMBER, {
+      media: makeMedia({ posterUrl: '/api/images/1.jpg' }),
+    });
+    expect(placeholder(h)).toBeTruthy();
+    expect(img(h)!.classList).toContain('opacity-0');
+
+    img(h)!.dispatchEvent(new Event('load'));
+    h.fixture.detectChanges();
+    await h.fixture.whenStable();
+    h.fixture.detectChanges();
+
+    expect(placeholder(h)).toBeNull();
+    expect(img(h)!.classList).not.toContain('opacity-0');
+  });
+
+  it('falls back to the placeholder when the poster fails to load', async () => {
+    const h = await createFixture(FULL_MEMBER, {
+      media: makeMedia({ posterUrl: '/api/images/gone.jpg' }),
+    });
+    img(h)!.dispatchEvent(new Event('error'));
+    h.fixture.detectChanges();
+    await h.fixture.whenStable();
+    h.fixture.detectChanges();
+
+    expect(img(h)).toBeNull();
+    expect(placeholder(h)).toBeTruthy();
+  });
+});
