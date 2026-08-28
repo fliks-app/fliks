@@ -14,6 +14,7 @@ import { MediaType } from '../../../../../core/enums/media-type.enum';
 import { PaginationComponent } from '../../../../../shared/components/pagination/pagination';
 import { ResolveUrlPipe } from '../../../../../core/pipes/resolve-url.pipe';
 import { ToastService } from '../../../../../core/services/toast.service';
+import { serverMessage } from '../../../../../core/utils/server-message';
 import {
   MetadataService,
   MetadataSearchResult,
@@ -172,8 +173,8 @@ export class OrphanScanPanelComponent {
         })),
       );
       await this.searchPage();
-    } catch {
-      this.scanError.set(this.translate.instant('settings.libraries.scan_error'));
+    } catch (err: unknown) {
+      this.scanError.set(this.failure('scan', err));
     } finally {
       this.scanning.set(false);
     }
@@ -244,6 +245,19 @@ export class OrphanScanPanelComponent {
     };
   }
 
+  /** The server's own reason plus the status, so a bare 500 or a dropped request is still
+   *  identifiable; the raw error stays in the console. */
+  private failure(context: string, err: unknown): string {
+    console.error(`[orphan-scan] ${context} failed:`, err);
+    const message = serverMessage(
+      err,
+      this.translate,
+      'settings.libraries.scan_error',
+    );
+    const status = (err as { status?: number })?.status;
+    return status ? `${message} (HTTP ${status})` : message;
+  }
+
   private patch(index: number, partial: Partial<GroupVM>) {
     this.groups.update((list) =>
       list.map((g, i) => (i === index ? { ...g, ...partial } : g)),
@@ -281,11 +295,11 @@ export class OrphanScanPanelComponent {
         pick: auto ?? results[0] ?? null,
         fromNfo: !!auto,
       });
-    } catch {
+    } catch (err: unknown) {
       this.patch(index, {
         searching: false,
         searched: true,
-        error: this.translate.instant('settings.libraries.scan_error'),
+        error: this.failure(`search "${query}"`, err),
       });
     }
   }
@@ -330,12 +344,9 @@ export class OrphanScanPanelComponent {
         });
       }
     } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
       this.patch(index, {
         linking: false,
-        error:
-          httpErr.error?.message ??
-          this.translate.instant('settings.libraries.scan_error'),
+        error: this.failure(`link "${vm.group.folderName}"`, err),
       });
     }
   }
