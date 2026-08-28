@@ -31,10 +31,12 @@ import type { SlotId, UiContribution } from '@fliks/plugin-contract/ui';
 interface Role {
   isTv?: boolean;
   sharingDisabled?: boolean;
+  isAdmin?: boolean;
 }
 const FULL_MEMBER: Role = {};
 const TV_VIEWER: Role = { isTv: true };
 const SHARING_DISABLED: Role = { sharingDisabled: true };
+const ADMIN: Role = { isAdmin: true };
 
 interface Harness {
   fixture: ComponentFixture<MediaCardComponent>;
@@ -67,7 +69,7 @@ async function createFixture(
       {
         provide: AuthService,
         useValue: {
-          hasPermission: () => false,
+          hasPermission: () => !!role.isAdmin,
           sharingDisabled: () => !!role.sharingDisabled,
         },
       },
@@ -520,5 +522,22 @@ describe('MediaCardComponent — card.actions merges with plugin contributions',
     canDelete.fixture.componentInstance.dismissed.subscribe(() => (dismissed = true));
     findAction(canDelete, 'x.remove_wide').run();
     expect(dismissed).toBe(true);
+  });
+
+  it('the metadata group needs a library row: offered on a card bound to media, absent on a search-page card without one', async () => {
+    const inLibrary = await createFixture(ADMIN, { media: makeMedia(), link: ['/movies', '5'] });
+    expect(labels(inLibrary)).toContain('media_detail.metadata_group');
+    const group = findAction(inLibrary, 'media_detail.metadata_group');
+    expect(group.children.map((c: { labelKey: string }) => c.labelKey)).toEqual([
+      'media_detail.identify',
+      'media_detail.refresh_metadata',
+    ]);
+
+    // A discovery / external-search card carries no `media`, so Identify and
+    // Refresh would be no-ops — the group must not be offered at all.
+    const notInLibrary = await createFixture(ADMIN, { title: 'Not here', link: null });
+    expect(labels(notInLibrary)).not.toContain('media_detail.metadata_group');
+    expect(labels(notInLibrary)).not.toContain('media_detail.identify');
+    expect(labels(notInLibrary)).not.toContain('media_detail.refresh_metadata');
   });
 });

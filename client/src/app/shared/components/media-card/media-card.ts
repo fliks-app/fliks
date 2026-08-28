@@ -405,6 +405,11 @@ export class MediaCardComponent {
     },
     'core.toggle_watched': () => this.interactiveWatched(),
     'core.remove': () => this.dismissable(),
+    // Identity and a metadata re-read need a library row. A card for a title
+    // that isn't in the library (search, discovery) has none, and the enclosing
+    // group drops itself once both children are gone.
+    'core.identify': () => this.media()?.id != null,
+    'core.refresh_metadata': () => this.media()?.id != null,
   };
 
   /**
