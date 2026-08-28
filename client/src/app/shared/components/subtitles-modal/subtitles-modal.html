@@ -2,7 +2,9 @@
   <div class="modal-box w-11/12 max-w-5xl">
     <app-modal-header [title]="'media_detail.edit_subtitles' | translate" />
 
-    <section class="space-y-3">
+    <!-- On a phone the table band runs into the footer, whose own top border
+         closes it; -mb-6 cancels the footer bar's 1.5rem top margin. -->
+    <section class="space-y-3 -mb-6 sm:mb-0">
       <div class="flex flex-wrap items-center justify-between gap-2">
         @if (canManage()) {
           <!-- The three labels don't fit one phone-width line. `min-w-0` keeps
