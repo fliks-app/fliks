@@ -18,6 +18,7 @@ import { ImportMediaDto } from '../dto/import-media.dto';
 import { TmdbProvider } from '../../metadata-providers/providers/tmdb.provider';
 import { MetadataProviderRegistry } from '../../metadata-providers/metadata-provider.registry';
 import {
+  IMetadataProvider,
   MetadataDetails,
   SeasonDetails,
 } from '../../metadata-providers/interfaces/metadata-provider.interface';
@@ -105,8 +106,11 @@ export class MediaImportService {
     const fmtMap = Object.fromEntries(fmtRows.map((r) => [r.key, r.value]));
 
     if (dto.type === MediaType.MOVIE) {
-      const details = await this.tmdb.getMovieDetails(
+      const { details } = await this.readForLibrary(
+        dto.type,
+        this.tmdb,
         String(dto.tmdbId),
+        library,
         override,
       );
       const movieFolderFormat =
@@ -128,12 +132,16 @@ export class MediaImportService {
       );
     }
 
-    const details = await this.tmdb.getTvShowDetails(
+    const read = await this.readForLibrary(
+      dto.type,
+      this.tmdb,
       String(dto.tmdbId),
+      library,
       override,
     );
-    const seasons = await this.tmdb.getTvShowSeasons(
-      String(dto.tmdbId),
+    const details = read.details;
+    const seasons = await read.provider.getTvShowSeasons(
+      read.externalId,
       override,
     );
     const seriesFolderFormat =
@@ -212,7 +220,13 @@ export class MediaImportService {
     const fmtMap = Object.fromEntries(fmtRows.map((r) => [r.key, r.value]));
 
     if (dto.type === MediaType.MOVIE) {
-      const details = await provider.getMovieDetails(dto.externalId, override);
+      const { details } = await this.readForLibrary(
+        dto.type,
+        provider,
+        dto.externalId,
+        library,
+        override,
+      );
       if (!details.tmdbId && details.tvdbId && this.tmdb.findByExternalId) {
         const cross = await this.tmdb.findByExternalId(
           'tvdb',
@@ -239,8 +253,18 @@ export class MediaImportService {
       );
     }
 
-    const details = await provider.getTvShowDetails(dto.externalId, override);
-    const seasons = await provider.getTvShowSeasons(dto.externalId, override);
+    const read = await this.readForLibrary(
+      dto.type,
+      provider,
+      dto.externalId,
+      library,
+      override,
+    );
+    const details = read.details;
+    const seasons = await read.provider.getTvShowSeasons(
+      read.externalId,
+      override,
+    );
     if (!details.tmdbId && details.tvdbId && this.tmdb.findByExternalId) {
       const cross = await this.tmdb.findByExternalId(
         'tvdb',
@@ -265,6 +289,92 @@ export class MediaImportService {
       libraryId,
       addedByUserId,
     );
+  }
+
+  /**
+   * Read a title through the provider the destination library prefers.
+   *
+   * A search answers from whichever provider is configured globally, and the library is only
+   * picked afterwards, so importing what the search returned wrote TMDB rows into a TVDB
+   * library — episode lists from one provider, titles from the other. The ids the first
+   * provider knew are kept, so nothing loses its cross-reference.
+   *
+   * Falls back to the provider that found the title (with a warning) when the preferred one
+   * is unavailable or holds no id for this work: an import that still happens beats none.
+   */
+  private async readForLibrary(
+    type: MediaType,
+    found: IMetadataProvider,
+    externalId: string,
+    library: Library | null,
+    override?: MetadataLanguageOverride,
+  ): Promise<{
+    provider: IMetadataProvider;
+    externalId: string;
+    details: MetadataDetails;
+  }> {
+    const details =
+      type === MediaType.MOVIE
+        ? await found.getMovieDetails(externalId, override)
+        : await found.getTvShowDetails(externalId, override);
+    const keep = { provider: found, externalId, details };
+
+    const pref = library?.preferredProvider;
+    if (!pref || pref === found.name) return keep;
+    if (!this.providerRegistry.isAvailable(pref)) {
+      this.log.warn(
+        `import: library prefers ${pref} but it is not available (no API key?) — ` +
+          `importing "${details.title}" from ${found.name}`,
+      );
+      return keep;
+    }
+
+    const target = this.providerRegistry.get(pref)!;
+    const targetId = await this.crossReferenceId(target, details, override);
+    if (!targetId) {
+      this.log.warn(
+        `import: no ${pref} id for "${details.title}" (cross-reference failed) — ` +
+          `importing from ${found.name}`,
+      );
+      return keep;
+    }
+
+    const preferred =
+      type === MediaType.MOVIE
+        ? await target.getMovieDetails(targetId, override)
+        : await target.getTvShowDetails(targetId, override);
+    this.log.log(
+      `import: "${details.title}" read from ${pref} (id=${targetId}) — library preference`,
+    );
+    return {
+      provider: target,
+      externalId: targetId,
+      details: {
+        ...preferred,
+        tmdbId: preferred.tmdbId || details.tmdbId,
+        tvdbId: preferred.tvdbId ?? details.tvdbId,
+        imdbId: preferred.imdbId ?? details.imdbId,
+      },
+    };
+  }
+
+  /** The id `target` knows this work by: its own id off the details, else an IMDB lookup. */
+  private async crossReferenceId(
+    target: IMetadataProvider,
+    details: MetadataDetails,
+    override?: MetadataLanguageOverride,
+  ): Promise<string | null> {
+    if (target.name === 'tmdb' && details.tmdbId) return String(details.tmdbId);
+    if (target.name === 'tvdb' && details.tvdbId) return String(details.tvdbId);
+    if (details.imdbId && target.findByExternalId) {
+      const cross = await target.findByExternalId(
+        'imdb',
+        details.imdbId,
+        override,
+      );
+      if (cross) return cross.id;
+    }
+    return null;
   }
 
   async create(dto: CreateMediaDto): Promise<Media> {
