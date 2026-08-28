@@ -47,6 +47,8 @@
           [fanartUrl]="ep.stillUrl ?? m.fanartUrl ?? null"
           [posterUrl]="ep.stillUrl ?? m.fanartUrl ?? null"
           [posterMode]="'still'"
+          [spoilerImage]="episodeSpoilerImage()"
+          [spoilerOverview]="episodeSpoilerOverview()"
           [backRoute]="episodeSeriesRoute()"
           [subtitles]="subtitleSection()?.headerSubtitles() ?? []"
           [ocrLanguages]="subtitleSection()?.ocrInProgress() ?? []"

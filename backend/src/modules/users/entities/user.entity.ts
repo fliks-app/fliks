@@ -125,6 +125,23 @@ export class User extends BaseEntity {
   @Column({ default: false })
   shareDisabled: boolean;
 
+  /** Mask what would spoil an episode the user hasn't watched yet. Off by
+   *  default; the three switches below pick what the mask covers. */
+  @Column({ default: false })
+  hideSpoilers: boolean;
+
+  /** Blur unwatched episode stills and the episode backdrop. */
+  @Column({ default: true })
+  spoilerHideStills: boolean;
+
+  /** Blur unwatched episode synopses. */
+  @Column({ default: true })
+  spoilerHideOverviews: boolean;
+
+  /** Replace unwatched episode names with their number. */
+  @Column({ default: true })
+  spoilerHideTitles: boolean;
+
   /** Computed permissions from the linked role (isAdmin overrides with all). */
   get permissions(): string[] {
     if (this.isAdmin) {

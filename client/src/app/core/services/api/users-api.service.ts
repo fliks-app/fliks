@@ -51,6 +51,14 @@ export interface UpdateUserBody {
   shareStats?: boolean;
   /** Self-editable: opt out of the whole social/sharing layer. */
   shareDisabled?: boolean;
+  /** Self-editable: mask what would spoil an unwatched episode. */
+  hideSpoilers?: boolean;
+  /** Self-editable: blur unwatched episode stills and the episode backdrop. */
+  spoilerHideStills?: boolean;
+  /** Self-editable: blur unwatched episode synopses. */
+  spoilerHideOverviews?: boolean;
+  /** Self-editable: replace unwatched episode names with their number. */
+  spoilerHideTitles?: boolean;
 }
 
 /** Aggregated stats payload for the admin user-detail Statistics tab. */

@@ -1,0 +1,31 @@
+<!-- The tooltip rides on a wrapper: `filter: blur()` would blur its
+     pseudo-element bubble along with the text, and `w-fit` keeps the bubble
+     over a short synopsis. -->
+<div
+  class="block w-fit max-w-full"
+  [class.tooltip]="spoilerText.masked()"
+  [attr.data-tip]="spoilerText.masked() ? ('spoilers.reveal' | translate) : null"
+>
+  <p
+    [appClampToggle]="text()"
+    #clamp="clampToggle"
+    [appSpoiler]="spoiler()"
+    #spoilerText="spoiler"
+    [soft]="true"
+    [revealLabel]="'spoilers.reveal' | translate"
+    [class]="textClass()"
+    [class.text-left]="true"
+    [class.line-clamp-3]="!clamp.expanded() && lines() === 3"
+    [class.line-clamp-4]="!clamp.expanded() && lines() === 4"
+  >{{ text() }}</p>
+</div>
+@if (clamp.showToggle() && !spoilerText.masked()) {
+  <button
+    type="button"
+    class="link link-primary no-underline hover:underline text-sm cursor-pointer"
+    [class]="toggleClass()"
+    (click)="clamp.toggle()"
+  >
+    {{ (clamp.expanded() ? 'common.show_less' : 'common.show_more') | translate }}
+  </button>
+}

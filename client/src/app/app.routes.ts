@@ -290,6 +290,13 @@ export const routes: Routes = [
             (m) => m.AccountPrivacyComponent,
           ),
       },
+      {
+        path: 'spoilers',
+        loadComponent: () =>
+          import('./features/account/spoilers').then(
+            (m) => m.AccountSpoilersComponent,
+          ),
+      },
     ],
   },
   // App settings — own layout with sidebar

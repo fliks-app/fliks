@@ -31,7 +31,7 @@ import { MediaCardComponent } from '../../../../shared/components/media-card/med
 import { DropdownMenuComponent } from '../../../../shared/components/dropdown-menu';
 import { DropdownOptionComponent } from '../../../../shared/components/dropdown-option/dropdown-option';
 import { TvRowDirective } from '../../../../shared/directives/tv-row.directive';
-import { ClampToggleDirective } from '../../../../shared/directives/clamp-toggle.directive';
+import { SynopsisComponent } from '../../../../shared/components/synopsis/synopsis';
 import { CollapsibleSectionComponent } from '../../../../shared/components/collapsible-section/collapsible-section';
 import {
   Episode,
@@ -51,6 +51,7 @@ import { PlayableMediaService } from '../../../../core/services/playable-media.s
 import { AddToPlaylistService } from '../../../../core/services/add-to-playlist.service';
 import { TvService } from '../../../../core/services/tv.service';
 import { AuthService } from '../../../../core/services/auth.service';
+import { SpoilerService } from '../../../../core/services/spoiler.service';
 import { DeviceService } from '../../../../core/services/device.service';
 import { DisplaySettingsService } from '../../../../core/services/display-settings.service';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
@@ -75,7 +76,7 @@ function readEpisodeViewFromStorage(): EpisodeView {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, CollapsibleSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, ClampToggleDirective, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
+  imports: [TranslateModule, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, CollapsibleSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, SynopsisComponent, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
@@ -85,6 +86,7 @@ export class MediaDetailSeasonsComponent {
   private readonly translate = inject(TranslateService);
   readonly tv = inject(TvService);
   readonly auth = inject(AuthService);
+  private readonly spoilers = inject(SpoilerService);
   private readonly device = inject(DeviceService);
   private readonly pluginUi = inject(PluginUiRegistryService);
   private readonly displaySettings = inject(DisplaySettingsService);
@@ -289,6 +291,22 @@ export class MediaDetailSeasonsComponent {
 
   episodeBadgeLabel = episodeBadgeLabel;
   /** Grey still for an episode that hasn't aired, unless the viewer turned it off. */
+  episodeStillSpoiler(ep: Episode): boolean {
+    return this.spoilers.still(this.watchedEpisodeIds().has(ep.id));
+  }
+
+  episodeOverviewSpoiler(ep: Episode): boolean {
+    return this.spoilers.overview(this.watchedEpisodeIds().has(ep.id));
+  }
+
+  episodeTitle(ep: Episode): string {
+    return this.spoilers.title(
+      this.watchedEpisodeIds().has(ep.id),
+      episodeBadgeLabel(ep),
+      ep.title,
+    );
+  }
+
   episodeGrayscale(ep: Episode): boolean {
     return this.displaySettings.settings().grayUnreleased && episodeUnreleased(ep);
   }

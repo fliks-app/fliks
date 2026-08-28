@@ -1,6 +1,11 @@
 <!-- ===== MOBILE layout ===== -->
 <div class="md:hidden tv:hidden">
-  <app-mobile-fanart-hero [fanartUrl]="fanartUrl()" />
+  <app-mobile-fanart-hero
+    class="block"
+    [appSpoiler]="spoilerImage()"
+    [revealLabel]="'spoilers.reveal' | translate"
+    [fanartUrl]="fanartUrl()"
+  />
 
   <div class="-mt-16 relative z-20">
     <!-- Title -->
@@ -166,14 +171,12 @@
 
     <!-- Overview -->
     @if (overview()) {
-      <p [appClampToggle]="overview()" #syn="clampToggle"
-         class="mt-4 text-base-content/80 leading-relaxed"
-         [class.line-clamp-4]="!syn.expanded()">{{ overview() }}</p>
-      @if (syn.showToggle()) {
-        <button type="button" class="link link-primary no-underline hover:underline text-sm mt-1" (click)="syn.toggle()">
-          {{ (syn.expanded() ? 'common.show_less' : 'common.show_more') | translate }}
-        </button>
-      }
+      <app-synopsis
+        class="mt-4"
+        [text]="overview()!"
+        [spoiler]="spoilerOverview()"
+        textClass="text-base-content/80 leading-relaxed"
+      />
     }
 
   </div>
@@ -189,7 +192,7 @@
     <!-- Poster / Still (desktop only). Compact on the md-to-lg range (landscape
          phones / small windows) so the title keeps room in a short viewport;
          200 px from lg, 220 from xl, full 280 px from 2xl up. -->
-    <div class="shrink-0"
+    <div class="shrink-0 rounded-xl overflow-hidden"
          [class.w-[140px]]="posterMode() === 'poster'"
          [class.lg:w-[200px]]="posterMode() === 'poster'"
          [class.xl:w-[220px]]="posterMode() === 'poster'"
@@ -200,6 +203,10 @@
           appImgFadeIn
           [cachedSrc]="posterUrl()! | resolveUrl:'medium'" [alt]="title()"
           loading="eager" fetchpriority="high" decoding="async"
+          [appSpoiler]="spoilerImage()"
+          #posterSpoiler="spoiler"
+          [revealLabel]="'spoilers.reveal' | translate"
+          [class.scale-110]="posterSpoiler.masked()"
           class="w-full rounded-xl object-cover bg-base-300"
           [class.aspect-2/3]="posterMode() === 'poster'"
           [class.aspect-video]="posterMode() === 'still'"
@@ -382,14 +389,12 @@
 
       <!-- Overview -->
       @if (overview()) {
-        <p [appClampToggle]="overview()" #synDesktop="clampToggle"
-           class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line"
-           [class.line-clamp-4]="!synDesktop.expanded()">{{ overview() }}</p>
-        @if (synDesktop.showToggle()) {
-          <button type="button" class="link link-primary no-underline hover:underline text-sm mt-1" (click)="synDesktop.toggle()">
-            {{ (synDesktop.expanded() ? 'common.show_less' : 'common.show_more') | translate }}
-          </button>
-        }
+        <app-synopsis
+          class="mt-4"
+          [text]="overview()!"
+          [spoiler]="spoilerOverview()"
+          textClass="text-base-content/90 leading-relaxed whitespace-pre-line"
+        />
       }
 
     </div>

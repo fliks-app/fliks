@@ -1,0 +1,35 @@
+<div class="max-w-2xl">
+  <h1 class="text-xl font-bold mb-1">{{ 'spoilers.title' | translate }}</h1>
+  <p class="text-sm text-base-content/60 mb-6">{{ 'spoilers.intro' | translate }}</p>
+
+  <div class="flex flex-col gap-4">
+    <app-toggle-field
+      [value]="hideSpoilers()"
+      (valueChange)="onHideSpoilersChange($event)"
+      [label]="'spoilers.hide' | translate"
+      [hint]="'spoilers.hide_hint' | translate"
+    />
+
+    @if (hideSpoilers()) {
+      <div class="divider my-0"></div>
+      <app-toggle-field
+        [value]="hideStills()"
+        (valueChange)="onHideStillsChange($event)"
+        [label]="'spoilers.hide_stills' | translate"
+        [hint]="'spoilers.hide_stills_hint' | translate"
+      />
+      <app-toggle-field
+        [value]="hideOverviews()"
+        (valueChange)="onHideOverviewsChange($event)"
+        [label]="'spoilers.hide_overviews' | translate"
+        [hint]="'spoilers.hide_overviews_hint' | translate"
+      />
+      <app-toggle-field
+        [value]="hideTitles()"
+        (valueChange)="onHideTitlesChange($event)"
+        [label]="'spoilers.hide_titles' | translate"
+        [hint]="'spoilers.hide_titles_hint' | translate"
+      />
+    }
+  </div>
+</div>

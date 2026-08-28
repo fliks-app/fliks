@@ -37,6 +37,7 @@ import {
   type IndexerRosterEntry,
 } from './release-search-stream.service';
 import { AuthService } from '../../core/services/auth.service';
+import { SpoilerService } from '../../core/services/spoiler.service';
 import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -74,6 +75,7 @@ import { describeBadge } from '../../shared/utils/download-format';
 import { TvService } from '../../core/services/tv.service';
 import { DownloadProgressService } from '../../core/services/download-progress.service';
 import {
+  episodeBadgeLabel,
   filesForEpisode,
   filterSeasonEpisodesOnDisk,
   hideShadowedEpisodes,
@@ -148,6 +150,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly releaseStream = inject(ReleaseSearchStreamService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly auth = inject(AuthService);
+  private readonly spoilers = inject(SpoilerService);
   private readonly translate = inject(TranslateService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly navbarService = inject(NavbarService);
@@ -378,7 +381,12 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       ep.endEpisodeNumber != null && ep.endEpisodeNumber > ep.episodeNumber
         ? `E${start}-E${String(ep.endEpisodeNumber).padStart(2, '0')}`
         : `E${start}`;
-    return `S${sn}:${epPart} - ${ep.title ?? ''}`;
+    const title = this.spoilers.title(
+      this.watchedEpisodeIds().has(ep.id),
+      episodeBadgeLabel(ep),
+      ep.title ?? '',
+    );
+    return `S${sn}:${epPart} - ${title}`;
   });
 
   readonly episodeDateLabel = computed(() => {
@@ -638,6 +646,24 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly canEditProfiles = computed(() => this.auth.hasPermission('media.edit'));
   readonly canDelete = computed(() => this.auth.hasPermission('media.delete'));
   readonly isAdmin = computed(() => this.auth.hasPermission('settings.access'));
+
+  /** Anti-spoiler masks for the focused episode's hero, still and synopsis. */
+  readonly episodeSpoilerImage = computed(() =>
+    this.focusedEpisodeWatched() === null
+      ? false
+      : this.spoilers.still(this.focusedEpisodeWatched()!),
+  );
+  readonly episodeSpoilerOverview = computed(() =>
+    this.focusedEpisodeWatched() === null
+      ? false
+      : this.spoilers.overview(this.focusedEpisodeWatched()!),
+  );
+
+  /** Watched state of the focused episode, `null` outside episode mode. */
+  private readonly focusedEpisodeWatched = computed(() => {
+    const ep = this.focusedEpisode();
+    return ep ? this.watchedEpisodeIds().has(ep.id) : null;
+  });
 
   /** Regular requester (no `media.create` permission). The Demander
    *  actions are only surfaced for them — admins use Grab/Search. */
