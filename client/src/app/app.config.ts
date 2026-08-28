@@ -59,6 +59,8 @@ export function loadPersistedState(): Promise<unknown> {
     .catch(() => undefined);
 }
 
+const EPISODE_PATH = 'series/:id/episode/:episodeId';
+
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
@@ -70,7 +72,22 @@ export const appConfig: ApplicationConfig = {
       withInMemoryScrolling({ scrollPositionRestoration: 'top' }),
       // Poster→hero morph. Off on Capacitor: its WebView never completes a snapshot
       // capture for a launch-created document, so every navigation waits Chrome's 4s timeout.
-      ...(Capacitor.isNativePlatform() ? [] : [withViewTransitions()]),
+      ...(Capacitor.isNativePlatform()
+        ? []
+        : [
+            withViewTransitions({
+              // Episode → episode: the cross-fade keeps the old page (and its scroll
+              // offset) on screen, so the jump to top only lands once it ends.
+              onViewTransitionCreated: ({ transition, from, to }) => {
+                if (
+                  from.routeConfig?.path === EPISODE_PATH &&
+                  to.routeConfig?.path === EPISODE_PATH
+                ) {
+                  transition.skipTransition();
+                }
+              },
+            }),
+          ]),
     ),
     { provide: RouteReuseStrategy, useExisting: CachingReuseStrategy },
     provideHttpClient(

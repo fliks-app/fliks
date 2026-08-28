@@ -97,14 +97,14 @@
           />
         }
 
-        @if (otherSeasons().length) {
+        @if (seasonsRow().length > 1) {
           <div class="divider my-6"></div>
           <app-collapsible-section
             [heading]="'media_detail.other_seasons_of' | translate: { title: m.title }"
             persistKey="otherSeasons"
           >
             <app-horizontal-scroller>
-              @for (other of otherSeasons(); track other.id) {
+              @for (other of seasonsRow(); track other.id) {
                 <app-media-card
                   class="shrink-0 w-28 sm:w-32 lg:w-40"
                   [aspect]="'portrait'"
@@ -115,6 +115,7 @@
                   [replaceUrl]="true"
                   [interactiveWatched]="true"
                   [status]="seasonFullyWatched(other) ? 'watched' : null"
+                  [highlighted]="other.id === focusedSeason()?.id"
                   (watchedToggled)="onToggleSeasonWatched(m.id, other, $event)"
                 />
               }
