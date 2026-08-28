@@ -10,6 +10,7 @@ type Row = Parameters<typeof sortReleasesByRelevance>[0][number];
 
 function row(over: Partial<Row> & { id: string }): Row & { id: string } {
   return {
+    qualityId: 16, // WEBDL-1080p
     rank: 100,
     allowed: true,
     blocklisted: false,
@@ -327,14 +328,25 @@ describe('sortReleasesByRelevance — season-scoped pack preference', () => {
     ).toEqual(['pack', 'single']);
   });
 
-  it('keeps a better-quality single episode above a weaker pack', () => {
-    const single = row({ id: 'single-1080p', rank: 200 });
-    const seasonPack = pack({ id: 'pack-720p', rank: 100 });
+  it('keeps a higher-resolution single episode above a weaker pack', () => {
+    const single = row({ id: 'single-1080p', qualityId: 16, rank: 200 });
+    const seasonPack = pack({ id: 'pack-720p', qualityId: 12, rank: 100 });
     expect(
       sortReleasesByRelevance([seasonPack, single], {
         preferFullSeason: true,
       }).map((r) => r.id),
     ).toEqual(['single-1080p', 'pack-720p']);
+  });
+
+  it('prefers a weaker-source pack at the same resolution', () => {
+    // WEBRip-1080p ranks below WEBDL-1080p, same 1080p resolution.
+    const single = row({ id: 'single-webdl', qualityId: 16, rank: 62 });
+    const seasonPack = pack({ id: 'pack-webrip', qualityId: 17, rank: 60 });
+    expect(
+      sortReleasesByRelevance([single, seasonPack], {
+        preferFullSeason: true,
+      }).map((r) => r.id),
+    ).toEqual(['pack-webrip', 'single-webdl']);
   });
 
   it('ignores pack status when the search is not season-scoped', () => {
