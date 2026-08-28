@@ -184,11 +184,12 @@ connects to your server like the mobile apps do, it doesn't host one.
   recommendations weighted by what you've actually watched.
 - **Calendar** of upcoming episodes for the series you follow.
 - **Spoiler protection** — an account-wide switch that blurs the
-  thumbnail, the backdrop and the synopsis of an episode you haven't
-  watched, and shows *Episode 3* in place of a title that gives the plot
-  away. Click a masked item to reveal it, or mark the episode as watched
-  and it unmasks for good. Each of the three is its own toggle, and the
-  setting follows your account onto every device.
+  synopsis of a film, a season or an episode you haven't watched, along
+  with an unwatched episode's thumbnail and backdrop, and shows
+  *Episode 3* in place of a title that gives the plot away. Click a
+  masked item to reveal it, or mark it as watched and it unmasks for
+  good. Each of the three is its own toggle, and the setting follows
+  your account onto every device.
 
 ### Sharing with the household
 
