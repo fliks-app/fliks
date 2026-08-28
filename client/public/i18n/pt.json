@@ -196,6 +196,8 @@
     "title": "Visualização",
     "home_background": "Imagem de fundo no início",
     "home_background_hint": "Mostra um poster em ecrã inteiro atrás das secções do início.",
+    "gray_unreleased": "Episódios por estrear a preto e branco",
+    "gray_unreleased_hint": "Mostra a imagem a preto e branco até o episódio ser emitido.",
     "language": "Idioma da aplicação",
     "language_auto": "Sistema",
     "language_hint": "Idioma da interface. Por predefinição, o do seu navegador ou sistema."

@@ -8,6 +8,8 @@
     class="group relative bg-base-300 rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow cursor-pointer"
     [class.aspect-2/3]="aspect() === 'portrait'"
     [class.aspect-video]="aspect() === 'landscape'"
+    [class.border-2]="highlighted()"
+    [class.border-primary]="highlighted()"
     tabindex="0"
     role="button"
     [attr.aria-label]="_title()"
@@ -30,6 +32,7 @@
         draggable="false"
         [class.opacity-35]="imageBlurred()"
         [class.scale-105]="imageBlurred()"
+        [class.grayscale]="grayscale()"
         loading="lazy"
         decoding="async"
       />

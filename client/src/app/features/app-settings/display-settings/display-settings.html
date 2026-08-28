@@ -22,5 +22,12 @@
       [label]="'display_settings.home_background' | translate"
       [hint]="'display_settings.home_background_hint' | translate"
     />
+
+    <app-toggle-field
+      [value]="grayUnreleased()"
+      (valueChange)="onGrayUnreleasedChange($event)"
+      [label]="'display_settings.gray_unreleased' | translate"
+      [hint]="'display_settings.gray_unreleased_hint' | translate"
+    />
   </div>
 </div>

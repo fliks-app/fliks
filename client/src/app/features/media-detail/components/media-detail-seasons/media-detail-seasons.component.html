@@ -254,6 +254,7 @@
                 [clickIntent]="ep.hasFile ? 'play' : 'open'"
                 [hideCaption]="true"
                 [dimmed]="!ep.monitored"
+                [grayscale]="episodeGrayscale(ep)"
                 (clicked)="ep.hasFile && playEpisode(ep)"
                 (played)="playEpisode(ep)"
                 (watchedToggled)="toggleEpisodeWatched.emit({ episode: ep, watched: $event })"
@@ -318,6 +319,8 @@
             [playable]="ep.hasFile"
             [interactiveWatched]="ep.hasFile"
             [dimmed]="!ep.monitored"
+            [grayscale]="episodeGrayscale(ep)"
+            [highlighted]="ep.id === activeEpisodeId()"
             (played)="playEpisode(ep)"
             (watchedToggled)="toggleEpisodeWatched.emit({ episode: ep, watched: $event })"
           />

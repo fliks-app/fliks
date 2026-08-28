@@ -201,6 +201,8 @@
     "title": "Affichage",
     "home_background": "Image de fond sur l'accueil",
     "home_background_hint": "Affiche une affiche en plein écran derrière les sections de l'accueil.",
+    "gray_unreleased": "Épisodes non sortis en noir et blanc",
+    "gray_unreleased_hint": "Affiche l'image en noir et blanc tant que l'épisode n'est pas diffusé.",
     "language": "Langue de l'application",
     "language_auto": "Système",
     "language_hint": "Langue de l'interface. Par défaut, celle de votre navigateur ou de votre système."

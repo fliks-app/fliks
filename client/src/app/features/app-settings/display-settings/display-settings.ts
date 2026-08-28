@@ -16,6 +16,7 @@ export class DisplaySettingsPageComponent implements OnInit {
   private readonly translate = inject(TranslateService);
 
   readonly homeBackground = signal(true);
+  readonly grayUnreleased = signal(true);
   readonly languageOptions = SUPPORTED_LOCALES;
   /** '' = follow the browser/OS language. */
   readonly language = signal('');
@@ -23,12 +24,18 @@ export class DisplaySettingsPageComponent implements OnInit {
   ngOnInit() {
     const s = this.displaySettings.get();
     this.homeBackground.set(s.homeBackground);
+    this.grayUnreleased.set(s.grayUnreleased);
     this.language.set(s.language);
   }
 
   onHomeBackgroundChange(value: boolean) {
     this.homeBackground.set(value);
     this.displaySettings.save({ homeBackground: value });
+  }
+
+  onGrayUnreleasedChange(value: boolean) {
+    this.grayUnreleased.set(value);
+    this.displaySettings.save({ grayUnreleased: value });
   }
 
   onLanguageChange(value: string) {

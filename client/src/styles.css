@@ -71,6 +71,15 @@
   background-color: rgba(29, 35, 42, 0.95);
 }
 
+/* Router scroll-to-top on navigation goes through window.scrollTo, so smooth
+   here animates the jump instead of teleporting. Scroll restores that must land
+   instantly pass behavior:'instant'. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 /* Sidebar veil when a fanart background is showing — frosted
    look without depending on Tailwind's color-mix-based
    `bg-base-100/40`. Phones/tablets/desktop: 40 % alpha. TV: a

@@ -196,6 +196,8 @@
     "title": "Pantalla",
     "home_background": "Imagen de fondo en el inicio",
     "home_background_hint": "Muestra un póster a pantalla completa detrás de las secciones del inicio.",
+    "gray_unreleased": "Episodios no estrenados en blanco y negro",
+    "gray_unreleased_hint": "Muestra la imagen en blanco y negro hasta que se emita el episodio.",
     "language": "Idioma de la aplicación",
     "language_auto": "Sistema",
     "language_hint": "Idioma de la interfaz. Por defecto, el de tu navegador o sistema."

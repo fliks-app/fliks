@@ -201,6 +201,8 @@
     "title": "Display",
     "home_background": "Background image on home",
     "home_background_hint": "Shows a full-screen poster behind the home sections.",
+    "gray_unreleased": "Grey out unreleased episodes",
+    "gray_unreleased_hint": "Shows the still in black and white until the episode airs.",
     "language": "Application language",
     "language_auto": "System",
     "language_hint": "Interface language. Defaults to your browser or system language."

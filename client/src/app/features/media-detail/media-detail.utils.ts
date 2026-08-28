@@ -96,6 +96,11 @@ export function episodeBadgeLabel(ep: Episode): string {
     : String(ep.episodeNumber);
 }
 
+/** Episode whose air date is still ahead — nothing to download yet. */
+export function episodeUnreleased(ep: Episode): boolean {
+  return !!ep.airDate && new Date(ep.airDate) > new Date();
+}
+
 /** Saisons à afficher dans les onglets : toutes, ou seulement celles avec ≥1 épisode sur disque. */
 export function seasonsVisibleWithDiskFilter(media: Media, onlyOnDisk: boolean): Season[] {
   const list = media.seasons ?? [];
