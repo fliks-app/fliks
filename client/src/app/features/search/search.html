@@ -159,7 +159,7 @@
             @if (state.discoveryRecommendations().length) {
               <app-horizontal-scroller [title]="'search.discover_suggestions' | translate" class="block">
                 @for (rec of state.discoveryRecommendations(); track rec.media.id) {
-                  <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="rec.media.posterUrl" [title]="rec.media.title" [subtitle]="'' + (rec.media.year ?? '')" [link]="recLink(rec)" [status]="rec.media.available ? null : 'missing'" [playable]="rec.media.available" />
+                  <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="rec.media.posterUrl" [title]="rec.media.title" [subtitle]="'' + rec.media.year" [link]="recLink(rec)" [status]="rec.media.available ? null : 'missing'" [playable]="rec.media.available" />
                 }
               </app-horizontal-scroller>
             } @else {
