@@ -48,6 +48,11 @@ export class ReleaseSearchStreamService {
       return await fetch(searchId);
     } finally {
       stop();
+      // The answer ends the search: an indexer still pending never got its completion
+      // event, and its tab would spin forever.
+      sinks.indexers.update((roster) =>
+        roster.map((ix) => (ix.state === 'pending' ? { ...ix, state: 'done' } : ix)),
+      );
     }
   }
 

@@ -129,6 +129,25 @@ describe('ReleaseSearchStreamService', () => {
     expect(releases()).toEqual([]);
   });
 
+  it('VERDICT: an indexer left pending when the answer lands stops spinning', async () => {
+    const { service, releases, indexers, deliver } = setup();
+    const f = deferredFetch();
+    const run = service.run(f.fetch, { releases, indexers });
+
+    await deliver(`plugin.${PLUGIN_ID}.search.state`, {
+      searchId: f.searchId(),
+      indexers: [
+        { id: 1, name: 'alpha', state: 'done' },
+        { id: 2, name: 'beta', state: 'pending' },
+        { id: 3, name: 'gamma', state: 'failed' },
+      ],
+    });
+    f.finish([]);
+    await run;
+
+    expect(indexers().map((i) => i.state)).toEqual(['done', 'done', 'failed']);
+  });
+
   it('ignores another plugin’s events entirely', async () => {
     const { service, releases, indexers, deliver } = setup();
     const f = deferredFetch();
