@@ -13,6 +13,7 @@ import { IdentifyModalService } from '../../../core/services/identify-modal.serv
 import { TrackingModalService } from '../../../core/services/tracking-modal.service';
 import { CardActionsDirective } from '../../directives/card-actions.directive';
 import { SpoilerDirective } from '../../directives/spoiler.directive';
+import { stampPoster } from '../../utils/view-transition';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../../core/services/recommend.service';
@@ -294,12 +295,7 @@ export class MediaCardComponent {
     const id = this.resolveMediaId();
     const img = this.imgRef()?.nativeElement;
     if (id == null || !img) return;
-    document
-      .querySelectorAll<HTMLImageElement>('img[style*="view-transition-name"]')
-      .forEach((el) => {
-        if (el !== img) el.style.viewTransitionName = '';
-      });
-    img.style.viewTransitionName = `media-poster-${id}`;
+    stampPoster(img, id);
   }
   protected readonly _playable = computed(() => {
     if (this.playable()) return true;
