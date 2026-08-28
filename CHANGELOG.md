@@ -1,5 +1,42 @@
 # Changelog
 
+## [3.5.0](https://github.com/fliks-app/fliks/compare/v3.4.1...v3.5.0) (2026-08-28)
+
+
+### Features
+
+* **account:** add spoiler protection for unwatched episodes ([#1108](https://github.com/fliks-app/fliks/issues/1108)) ([e22a4eb](https://github.com/fliks-app/fliks/commit/e22a4eb23171bb8c4e66632a55da7de65a6e3ac2))
+* **acquisition:** hand the episode title down with the target ([#1103](https://github.com/fliks-app/fliks/issues/1103)) ([6f6bb78](https://github.com/fliks-app/fliks/commit/6f6bb787ca8ed4c846ab5eb7f2bf4b8364a902bd))
+* **media-detail:** polish the season episode row ([#1107](https://github.com/fliks-app/fliks/issues/1107)) ([ff1b444](https://github.com/fliks-app/fliks/commit/ff1b444358fcb5488d344786dbd08aac7ceab798))
+* **plugins:** let an admin waive the compatibility check and pick a version ([#1104](https://github.com/fliks-app/fliks/issues/1104)) ([b38f48a](https://github.com/fliks-app/fliks/commit/b38f48aab28d57f3943bcdb75f66f38a5d4d4456))
+* **series:** keep the specials season instead of dropping it ([#1100](https://github.com/fliks-app/fliks/issues/1100)) ([4aded79](https://github.com/fliks-app/fliks/commit/4aded791e6fcfe78217c2f5e2b33a4b3970b09d0))
+* **specials:** place a special file in season 0 instead of on a real episode ([#1102](https://github.com/fliks-app/fliks/issues/1102)) ([a9b0aa4](https://github.com/fliks-app/fliks/commit/a9b0aa4a26ddf7d7539828f9f9ca8c4231b8546b))
+* **subtitles:** bleed the table to the modal edges on a phone ([#1118](https://github.com/fliks-app/fliks/issues/1118)) ([45ebadf](https://github.com/fliks-app/fliks/commit/45ebadfba2b74557a440e96ffccc4efd091ea6c2))
+
+
+### Bug Fixes
+
+* **auto-approval:** type the rule criteria and rebuild the editor ([#1092](https://github.com/fliks-app/fliks/issues/1092)) ([5c8a747](https://github.com/fliks-app/fliks/commit/5c8a747b71b2c645ff49d071c57d8381af8abc40))
+* **bottom-sheet:** keep the host out of an enclosing modal's grid ([#1117](https://github.com/fliks-app/fliks/issues/1117)) ([5ff45ae](https://github.com/fliks-app/fliks/commit/5ff45ae3f865c47bf5b296cd1cc94e66268f4a09))
+* **card-actions:** pad and bold the actions panel header ([#1116](https://github.com/fliks-app/fliks/issues/1116)) ([bc81dff](https://github.com/fliks-app/fliks/commit/bc81dffaad33575f14635d6ce6f5eed1f8664203))
+* **downloads:** show download progress to everyone who can see the media ([#1112](https://github.com/fliks-app/fliks/issues/1112)) ([4bcf7e3](https://github.com/fliks-app/fliks/commit/4bcf7e32065fb8400cb3517f56073c6a2e9d13df))
+* **home:** don't morph an unrelated poster when opening a recent request ([#1114](https://github.com/fliks-app/fliks/issues/1114)) ([b41e024](https://github.com/fliks-app/fliks/commit/b41e024d9149b81a60eb423ee97d879c86bbeff2))
+* **import:** read a new title through the provider its library prefers ([#1101](https://github.com/fliks-app/fliks/issues/1101)) ([f5d7964](https://github.com/fliks-app/fliks/commit/f5d7964d37517ec0d00f56526c6995809edff106))
+* **media-card:** hide the metadata actions on a card with no library row ([#1094](https://github.com/fliks-app/fliks/issues/1094)) ([8460f65](https://github.com/fliks-app/fliks/commit/8460f65ecd484447fad19f1b43b5a02333f4706e))
+* **media-card:** place artwork behind a placeholder and drop the cold-start bridge wait ([#1120](https://github.com/fliks-app/fliks/issues/1120)) ([83b601c](https://github.com/fliks-app/fliks/commit/83b601c456ff3c38bbab1e7dc2cc7318311f0b25))
+* **media-detail:** close the highlighted card border and keep the current season in the row ([#1119](https://github.com/fliks-app/fliks/issues/1119)) ([133d305](https://github.com/fliks-app/fliks/commit/133d305a31b91a5951a63a48f16f55e6f7da330a))
+* **media-detail:** stop the resume bar flashing on a series page ([#1113](https://github.com/fliks-app/fliks/issues/1113)) ([56dc906](https://github.com/fliks-app/fliks/commit/56dc906ecc2b4de805706b58a94614fa94533e2e))
+* **media-info:** always show the subtitle picker without the origin hint ([#1106](https://github.com/fliks-app/fliks/issues/1106)) ([a466d07](https://github.com/fliks-app/fliks/commit/a466d07abfa5e1bbe36be3a04cff0690851976cd))
+* **metadata-search:** report why a provider search failed instead of a bare 500 ([#1098](https://github.com/fliks-app/fliks/issues/1098)) ([f0e83b1](https://github.com/fliks-app/fliks/commit/f0e83b1a08c06ec9f6273ee61cdbb2d2952d70ee))
+* **migrations:** drop the criteria column default that fails the drift check ([#1095](https://github.com/fliks-app/fliks/issues/1095)) ([6379940](https://github.com/fliks-app/fliks/commit/6379940a813c7f2f32cac84a664c5ce353e5f1c8))
+* **release-scoring:** refuse a sequel, another year, or a multi-film pack ([#1105](https://github.com/fliks-app/fliks/issues/1105)) ([7c6e764](https://github.com/fliks-app/fliks/commit/7c6e764bc016d07c8b79b56034ef81998d627c5c))
+* **release-search:** stop an indexer tab spinning after the search answered ([#1097](https://github.com/fliks-app/fliks/issues/1097)) ([ad0232a](https://github.com/fliks-app/fliks/commit/ad0232ae66721367e931ae89c97bc99e4f9a6d1b))
+* **release-sort:** rank a season pack above loose episodes at equal resolution ([#1096](https://github.com/fliks-app/fliks/issues/1096)) ([8c443ac](https://github.com/fliks-app/fliks/commit/8c443ac3267d0293544a16e677e88ac6664c1085))
+* **series-refresh:** converge a season on one provider instead of mixing two ([#1099](https://github.com/fliks-app/fliks/issues/1099)) ([a29fac3](https://github.com/fliks-app/fliks/commit/a29fac39945469d212d1cac6014e6ab884408c2c))
+* **spoilers:** mask the season synopsis too ([#1109](https://github.com/fliks-app/fliks/issues/1109)) ([64a05df](https://github.com/fliks-app/fliks/commit/64a05df51d221ad4b2d2a788feb28400d8e8f7c7))
+* **spoilers:** mask the synopsis of an unwatched movie ([#1110](https://github.com/fliks-app/fliks/issues/1110)) ([d587035](https://github.com/fliks-app/fliks/commit/d587035105cefa368547533c5d4b074bb13f0a91))
+* **subtitles:** scroll the modal action row instead of wrapping it ([#1115](https://github.com/fliks-app/fliks/issues/1115)) ([46378b1](https://github.com/fliks-app/fliks/commit/46378b1ac55a9c2cf3d44bb15ad4f0eb544dde4e))
+
 ## [3.4.1](https://github.com/fliks-app/fliks/compare/v3.4.0...v3.4.1) (2026-08-27)
 
 
