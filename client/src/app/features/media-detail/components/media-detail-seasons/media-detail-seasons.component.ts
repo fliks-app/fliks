@@ -295,6 +295,11 @@ export class MediaDetailSeasonsComponent {
     return this.spoilers.still(this.watchedEpisodeIds().has(ep.id));
   }
 
+  /** A season's synopsis gives away episodes the viewer hasn't reached yet. */
+  seasonOverviewSpoiler(season: Season): boolean {
+    return this.spoilers.overview(this.seasonFullyWatched(season));
+  }
+
   episodeOverviewSpoiler(ep: Episode): boolean {
     return this.spoilers.overview(this.watchedEpisodeIds().has(ep.id));
   }
