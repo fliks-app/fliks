@@ -199,6 +199,27 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       clickable: d.isClickable && !this.tv.isTv(),
     };
   });
+
+  /** Same badge on the episode page, narrowed to that episode's own torrent
+   *  (or the season pack that carries it). */
+  readonly episodeHeaderBadge = computed<MediaInfoHeaderBadge | null>(() => {
+    const ep = this.focusedEpisode();
+    const season = this.focusedSeason();
+    if (!ep || !season) return null;
+    const d = describeBadge(this.activeDownload(), {
+      monitored: ep.monitored,
+      downloaded: ep.hasFile,
+      seasonFilter: [season.seasonNumber],
+      episodeFilter: ep.episodeNumber,
+    });
+    if (!d.labelKey) return null;
+    return {
+      labelKey: d.labelKey,
+      percent: d.percent,
+      badgeClass: d.badgeClass,
+      clickable: d.isClickable && !this.tv.isTv(),
+    };
+  });
   private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
   private readonly downloadDetailModal =
     viewChild<DownloadDetailModalComponent>('downloadDetailModal');

@@ -16,6 +16,7 @@ import { MediaService } from '../media/media.service';
 import { onDiskEpisodeNumbers } from '../media/episode-coverage.util';
 import { ProfilesService } from '../profiles/profiles.service';
 import { EventsService } from '../scheduler/events.service';
+import { SseAudienceService } from '../scheduler/sse-audience.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { User } from '../users/entities/user.entity';
 import {
@@ -64,6 +65,7 @@ export class RequestLifecycleService
     private readonly profiles: ProfilesService,
     private readonly events: EventsService,
     private readonly notifications: NotificationsService,
+    private readonly sseAudience: SseAudienceService,
   ) {}
 
   onModuleInit(): void {
@@ -211,15 +213,10 @@ export class RequestLifecycleService
           mediaType: r.mediaType,
         });
       }
-      // Push a 0% progress event to the requesters so the bar + PROCESSING
-      // state appear immediately, without waiting for the next poll tick.
-      const userIds = [
-        ...new Set(
-          touched
-            .map((r) => r.userId)
-            .filter((id): id is number => id != null),
-        ),
-      ];
+      // Push a 0% progress event so the bar + PROCESSING state appear
+      // immediately, without waiting for the next poll tick. Same audience as
+      // the plugin's own ticks — everyone who can open the media's page.
+      const userIds = await this.sseAudience.viewersForMedia(mediaId);
       if (userIds.length) {
         this.events.emitToUsers(userIds, {
           type: 'download.progress',

@@ -149,7 +149,7 @@ interface Harness {
     emitDomain: jest.Mock;
     emitRaw: jest.Mock;
   };
-  sseAudience: { recipientsForMedia: jest.Mock };
+  sseAudience: { recipientsForMedia: jest.Mock; viewersForMedia: jest.Mock };
   countsCache: PluginCountsCacheService;
 }
 
@@ -191,7 +191,10 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
     emitDomain: jest.fn(),
     emitRaw: jest.fn(),
   };
-  const sseAudience = { recipientsForMedia: jest.fn().mockResolvedValue([9]) };
+  const sseAudience = {
+    recipientsForMedia: jest.fn().mockResolvedValue([9]),
+    viewersForMedia: jest.fn().mockResolvedValue([9]),
+  };
   const countsCache = new PluginCountsCacheService();
 
   // Fakes stand in for 19 constructor params — a plain unit test of the class,
@@ -1779,7 +1782,7 @@ describe('FliksHostImpl', () => {
 
     it('emits nothing when the audience is empty', async () => {
       const h = makeHarness();
-      h.sseAudience.recipientsForMedia.mockResolvedValue([]);
+      h.sseAudience.viewersForMedia.mockResolvedValue([]);
       await h.host['progress.set']({
         mediaId: 1,
         ref: 'r',

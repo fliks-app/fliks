@@ -109,7 +109,10 @@ function makeStack() {
       emitDomain: jest.fn(),
       emitRaw: jest.fn(),
     },
-    { recipientsForMedia: jest.fn().mockResolvedValue([]) },
+    {
+      recipientsForMedia: jest.fn().mockResolvedValue([]),
+      viewersForMedia: jest.fn().mockResolvedValue([]),
+    },
     countsCache,
   ) as FliksHostImpl;
 
