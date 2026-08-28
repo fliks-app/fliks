@@ -339,6 +339,10 @@ function significantTokens(tokens: string[]): string[] {
 export interface TitleExpectationIndex {
   /** Significant tokens per readable reading; empty when nothing in the expectation is comparable. */
   readings: string[][];
+  /** Number-like tokens the expected titles carry themselves, single characters included — those
+   *  are dropped from `readings`, so a title ending in a number would otherwise
+   *  read as a sequel of itself. */
+  numbers: Set<string>;
   /** True when the expectation list was empty, which matches anything. */
   vacuous: boolean;
 }
@@ -348,20 +352,102 @@ export function indexTitleExpectations(expected: string | string[]): TitleExpect
   const candidates = (Array.isArray(expected) ? expected : [expected]).filter(
     (s): s is string => !!s && s.trim().length > 0,
   );
-  if (!candidates.length) return { readings: [], vacuous: true };
+  if (!candidates.length) return { readings: [], numbers: new Set(), vacuous: true };
   const readings: string[][] = [];
+  const numbers = new Set<string>();
   for (const cand of candidates) {
     for (const reading of titleReadings(cand)) {
+      for (const token of reading) {
+        if (/^\d+$/.test(token)) numbers.add(token);
+      }
       const tokens = significantTokens(reading);
       if (tokens.length) readings.push(tokens);
     }
   }
-  return { readings, vacuous: false };
+  return { readings, numbers, vacuous: false };
 }
 
 /** The release side of the same comparison, hoisted so it is computed once per release title. */
 export function releaseTitleTokens(releaseTitle: string): ReadonlySet<string> {
   return new Set(titleReadings(releaseTitle).flat());
+}
+
+/** Ordered readings of a release title — the sequel check needs what follows the expected
+ *  title, which a token set cannot say. */
+function releaseTitleReadings(releaseTitle: string): string[][] {
+  return titleReadings(releaseTitle);
+}
+
+/** A number a sequel wears: `2`…`99`, or a roman numeral. `v` and `x` are left out — alone they
+ *  read as a title word far more often than as a number. */
+const SEQUEL_NUMBER = /^([2-9]|[1-9]\d|ii|iii|iv|vi|vii|viii|ix)$/;
+
+/** Words that name a multi-film pack rather than a film. */
+const COLLECTION_WORD =
+  /^(collection|collections|duology|trilogy|quadrilogy|tetralogy|pentalogy|hexalogy|anthology|saga|filmography)$/;
+
+/** Index of the release token right after the expected title's last token, matching the expected
+ *  tokens in order but tolerating anything between them (a release keeps stopwords the expectation
+ *  dropped). Null when this reading does not carry the whole expectation. */
+function tokenAfterExpectation(release: string[], expected: string[]): number | null {
+  let at = 0;
+  for (const token of expected) {
+    const found = release.indexOf(token, at);
+    if (found === -1) return null;
+    at = found + 1;
+  }
+  return at;
+}
+
+/**
+ * The number this release appends to the title we asked for — `Nova Skyline 2` against
+ * `Nova Skyline`. That is another film, and the token-inclusion check cannot see it: every
+ * token of the expectation is there, the release simply says more.
+ *
+ * Null as soon as one reading of one expected title carries no such number, so a media whose own
+ * title ends in a number, and an alternative title that matches cleanly, both stay untouched.
+ */
+export function appendedSequelNumber(
+  releaseTitle: string,
+  index: TitleExpectationIndex,
+): string | null {
+  if (index.vacuous || !index.readings.length) return null;
+  let found: string | null = null;
+  for (const release of releaseTitleReadings(releaseTitle)) {
+    for (const expected of index.readings) {
+      const at = tokenAfterExpectation(release, expected);
+      if (at === null) continue;
+      const next = release[at];
+      if (
+        next === undefined ||
+        !SEQUEL_NUMBER.test(next) ||
+        expected.includes(next) ||
+        index.numbers.has(next)
+      ) {
+        return null;
+      }
+      found ??= next;
+    }
+  }
+  return found;
+}
+
+/** The pack word this release wears, when the title we asked for does not wear it itself. */
+export function collectionPackWord(
+  releaseTitle: string,
+  index: TitleExpectationIndex,
+): string | null {
+  const expected = new Set(index.readings.flat());
+  for (const token of releaseTitleReadings(releaseTitle).flat()) {
+    if (COLLECTION_WORD.test(token) && !expected.has(token)) return token;
+  }
+  return null;
+}
+
+/** Years a release title states. `1080p`, `x264` and `DDP5.1` never read as one — the word
+ *  boundary after four digits is what rules them out. */
+export function releaseYears(releaseTitle: string): number[] {
+  return [...releaseTitle.matchAll(/\b(?:19|20)\d{2}\b/g)].map((m) => Number(m[0]));
 }
 
 export function matchesIndexedExpectation(
@@ -439,15 +525,43 @@ export function computeRejections(opts: {
   /** From `want.minResolution`: the resolution already on disk when the profile allows only a
    *  resolution upgrade. 0 or absent means the rule does not apply. */
   minResolution?: number;
+  /** Release year of the media. A release stating another year names another work — the
+   *  token-inclusion title check cannot tell `Nova Skyline 2 2015` from `Nova Skyline`. */
+  expectedYear?: number | null;
 }): ReleaseRejection[] {
   const out: ReleaseRejection[] = [];
 
-  if (
-    opts.expectedTitle &&
-    opts.releaseTitle &&
-    !titleMatchesExpectation(opts.releaseTitle, opts.expectedTitle)
-  ) {
-    out.push({ code: 'TITLE_MISMATCH' });
+  if (opts.expectedTitle && opts.releaseTitle) {
+    const index = indexTitleExpectations(opts.expectedTitle);
+    if (!matchesIndexedExpectation(releaseTitleTokens(opts.releaseTitle), index)) {
+      out.push({ code: 'TITLE_MISMATCH' });
+    } else {
+      // Everything below only applies to a release that already passed as this title: they name
+      // what a token-inclusion check cannot see — what the release says *beyond* the expectation.
+      const sequel = appendedSequelNumber(opts.releaseTitle, index);
+      if (sequel !== null) {
+        out.push({ code: 'SEQUEL_MISMATCH', params: { number: sequel } });
+      }
+      // A pack of films answers a request for one of them by fetching all of them. Left alone for
+      // a season-scoped search, where a pack is exactly what is wanted.
+      const pack = opts.expectedSeason == null || opts.expectedEpisode != null
+        ? collectionPackWord(opts.releaseTitle, index)
+        : null;
+      if (pack !== null) {
+        out.push({ code: 'COLLECTION_PACK', params: { word: pack } });
+      }
+    }
+  }
+
+  // A release that states no year is not judged on one: most name theirs, some never do.
+  if (opts.releaseTitle && opts.expectedYear) {
+    const years = releaseYears(opts.releaseTitle);
+    if (years.length && !years.some((y) => Math.abs(y - opts.expectedYear!) <= 1)) {
+      out.push({
+        code: 'YEAR_MISMATCH',
+        params: { expected: opts.expectedYear, actual: years.join(', ') },
+      });
+    }
   }
 
   if (
@@ -729,6 +843,8 @@ export async function scoreAndSortReleases(
     /** From `want.minResolution`: the resolution already on disk when the profile only allows a
      *  resolution upgrade. 0 or absent means the rule does not apply. */
     minResolution?: number;
+    /** Release year of the media — a release naming another year names another work. */
+    expectedYear?: number | null;
   },
   deps: ReleaseScorerDeps,
 ): Promise<ScoredRelease[]> {
@@ -763,6 +879,7 @@ export async function scoreAndSortReleases(
         expectedSeason: opts.expectedSeason,
         expectedEpisode: opts.expectedEpisode,
         minResolution: opts.minResolution,
+        expectedYear: opts.expectedYear,
       });
       return {
         ...r,

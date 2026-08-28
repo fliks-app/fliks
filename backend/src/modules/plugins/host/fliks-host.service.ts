@@ -583,6 +583,9 @@ export class FliksHostImpl implements PluginHostApi {
         expectedTitle: expectedTitles,
         expectedSeason: p.seasonNumber,
         expectedEpisode: p.episodeNumber,
+        // A series' year is its first-aired year, which says nothing about a later season's
+        // releases — only a movie's year identifies the work a release must be.
+        expectedYear: media.type === MediaType.MOVIE ? media.year : null,
         // Recomputed here rather than sent by the caller: only core can map a quality to a
         // resolution, and the profile's "upgrade resolution only" toggle had no enforcement
         // anywhere after the acquisition split.

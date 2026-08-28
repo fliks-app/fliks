@@ -236,6 +236,100 @@ describe('resolveSearchTitles + titleMatchesExpectation', () => {
   });
 });
 
+/**
+ * The title check is a token-inclusion test, so a sequel passes it: every token of the title we
+ * asked for is there, the release simply says more. That is how a sequel with the most seeders
+ * came out first for the film it is a sequel of.
+ */
+describe('computeRejections — the wrong work under the right title', () => {
+  const reject = (
+    releaseTitle: string,
+    expectedTitle: string | string[] = ['Nova Skyline', 'La voix du succès'],
+    expectedYear: number | null = 2012,
+    scope: { expectedSeason?: number; expectedEpisode?: number } = {},
+  ) =>
+    computeRejections({
+      qualityId: 1,
+      allowed: new Set([1]),
+      languageId: 1,
+      allowedLangs: new Set<number>(),
+      isBlocklisted: false,
+      sizeBytes: 0,
+      runtimeMinutes: 112,
+      sizeByQuality: new Map(),
+      seeders: 10,
+      sourceId: 0,
+      sourceMinSeeders: new Map(),
+      releaseTitle,
+      expectedTitle,
+      expectedYear,
+      ...scope,
+    }).map((r) => r.code);
+
+  it('VERDICT: refuses a sequel of the film that was asked for', () => {
+    expect(reject('Nova.Skyline.2.2015.1080p.BluRay.x264-GRP')).toEqual([
+      'SEQUEL_MISMATCH',
+      'YEAR_MISMATCH',
+    ]);
+  });
+
+  it('VERDICT: refuses a multi-film pack when one film was asked for', () => {
+    expect(reject('Nova.Skyline.Collection.(2012-2017).MULTi.1080p.BluRay.x264-GRP')).toEqual([
+      'COLLECTION_PACK',
+    ]);
+  });
+
+  it.each([
+    'Nova.Skyline.2012.1080p.BluRay.DD.7.1.x265-GRP',
+    'Nova Skyline (2012) 1080p BrRip x264 GRP',
+    'Nova-Skyline-(2012)[1080p-BDRip--Original-Auds-]',
+    'La.voix.du.succes.(2012).[1080p].MULTI.VF2.Bluray.x264-GRP',
+    'Nova.Skyline.2012.UNRATED.1080p',
+  ])('takes the film that was asked for — %s', (title) => {
+    expect(reject(title)).toEqual([]);
+  });
+
+  it('VERDICT: takes its own release for a media whose title ends in a number', () => {
+    expect(reject('Nova.Skyline.2.2015.1080p.BluRay.x264-GRP', ['Nova Skyline 2'], 2015)).toEqual(
+      [],
+    );
+    // …and still refuses the film it is a sequel of.
+    expect(reject('Nova.Skyline.2012.1080p.BluRay', ['Nova Skyline 2'], 2015)).toEqual([
+      'YEAR_MISMATCH',
+    ]);
+  });
+
+  it('judges no year on a release that states none', () => {
+    expect(reject('Nova.Skyline.1080p.BluRay.x264-GRP')).toEqual([]);
+  });
+
+  it('allows a year one off, which a staggered release date produces', () => {
+    expect(reject('Nova.Skyline.2013.1080p.BluRay')).toEqual([]);
+    expect(reject('Nova.Skyline.2014.1080p.BluRay')).toEqual(['YEAR_MISMATCH']);
+  });
+
+  it('reads a resolution or a codec as neither a year nor a sequel number', () => {
+    expect(reject('Nova.Skyline.2012.2160p.x264.DDP5.1.HDR10')).toEqual([]);
+  });
+
+  it('VERDICT: leaves a title that is itself a year, or itself a pack word, alone', () => {
+    expect(reject('2012.2009.1080p.BluRay', ['2012'], 2009)).toEqual([]);
+    expect(reject('The.Collection.2012.1080p', ['The Collection'], 2012)).toEqual([]);
+  });
+
+  it('takes a season pack for a season-scoped search, pack word and all', () => {
+    expect(
+      reject('Nova.Skyline.Complete.Collection.1080p', ['Nova Skyline'], null, {
+        expectedSeason: 4,
+      }),
+    ).toEqual([]);
+  });
+
+  it('says nothing about a release the title check already refused', () => {
+    expect(reject('Other.Show.2.2015.1080p')).toEqual(['TITLE_MISMATCH', 'YEAR_MISMATCH']);
+  });
+});
+
 describe('computeRejections — episode targeting', () => {
   const reject = (releaseTitle: string, expectedSeason?: number, expectedEpisode?: number) =>
     computeRejections({
