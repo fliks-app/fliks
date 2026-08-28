@@ -42,6 +42,9 @@ export interface AcquisitionTarget {
     number: number;
     endNumber: number | null;
     airDate: string | null;
+    /** The only handle on a special: season 0 is never published as `S00Exx`, so a plugin
+     *  searching one has to query the episode title. Null when the provider has none. */
+    title: string | null;
   };
 }
 

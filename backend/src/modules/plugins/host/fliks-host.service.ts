@@ -237,6 +237,7 @@ export class FliksHostImpl implements PluginHostApi {
         number: episode.episodeNumber,
         endNumber: episode.endEpisodeNumber,
         airDate: episode.airDate ?? null,
+        title: episode.title ?? null,
       };
     }
     return target;
@@ -1224,6 +1225,7 @@ export class FliksHostImpl implements PluginHostApi {
       number: t.episode.episodeNumber,
       endNumber: t.episode.endEpisodeNumber,
       airDate: t.episode.airDate ?? null,
+      title: t.episode.title ?? null,
     };
     return target;
   }
