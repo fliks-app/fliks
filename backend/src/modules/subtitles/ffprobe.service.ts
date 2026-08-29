@@ -7,6 +7,24 @@ import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codec
 
 const execFileAsync = promisify(execFile);
 
+/** Seconds of packet timestamps sampled to measure the real frame rate. The
+ *  cost is the seek, not the read — 20s and 60s both measured ~26ms — so this
+ *  buys statistical margin for free. */
+const FPS_WINDOW_SECONDS = 60;
+/** Below this a file is too short to spare a representative middle window. */
+const MIN_MEASURABLE_SECONDS = 90;
+/** Fewer frames than this in the window means a broken or empty sample. */
+const MIN_SAMPLE_FRAMES = 100;
+const MIN_PLAUSIBLE_FPS = 1;
+const MAX_PLAUSIBLE_FPS = 480;
+/** Relative gap at which the packets win over the header. */
+const FPS_DISAGREEMENT = 0.001;
+
+/** Decimal fps string, the shape the segment grid and the client both read. */
+function formatFps(fps: number): string {
+  return fps.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+}
+
 export interface EmbeddedSubtitleStream {
   streamIndex: number;
   codec: string;
@@ -372,6 +390,9 @@ export class FfprobeService {
       const durationSeconds = parsed.format?.duration
         ? Number(parsed.format.duration)
         : undefined;
+      // One extra ffprobe (~25ms, the same cost as the probe above) — the
+      // declared rate is only a header field, see `measureFrameRate`.
+      const measuredFps = await this.measureFrameRate(videoPath, durationSeconds);
       const formatBitRateRaw = parsed.format?.bit_rate
         ? Number(parsed.format.bit_rate)
         : undefined;
@@ -393,7 +414,15 @@ export class FfprobeService {
             height: s.height,
             displayAspectRatio: s.display_aspect_ratio,
             pixelFormat: s.pix_fmt,
-            frameRate: this.parseFrameRate(s.r_frame_rate, s.avg_frame_rate),
+            frameRate: this.reconcileFrameRate(
+              this.parseFrameRate(s.r_frame_rate, s.avg_frame_rate),
+              // Only the first video stream is sampled; a second one (cover
+              // art, thumbnail track) is never what the grid encodes.
+              s.index === streams.find((x) => x.codec_type === 'video')?.index
+                ? measuredFps
+                : undefined,
+              path.basename(videoPath),
+            ),
             startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
             bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
             bitDepth: s.bits_per_raw_sample
@@ -547,6 +576,89 @@ export class FfprobeService {
    * value would drop them onto the integer grid and drift the audio off the
    * video IDR cadence on a fractional-fps source.
    */
+  /**
+   * Frame rate measured from the real packet cadence, or undefined when it
+   * can't be established. A container's declared rate is a header field, not an
+   * observation: a remuxer that writes Matroska's `DefaultDuration` in whole
+   * milliseconds turns 1/23.976 (41.708 ms) into 42 ms, i.e. 500/21 = 23.81,
+   * and reports it as BOTH `r_frame_rate` and `avg_frame_rate` — so no choice
+   * between those two fields can detect it.
+   *
+   * It matters because the segment grid counts frames, not seconds
+   * (`buildSegmentGrid`): 95 frames labelled 3.99s but really lasting 3.962s
+   * put the media seconds away from the grid the player is told to expect,
+   * dragging the picture off subtitles authored in source time.
+   *
+   * Sampled rather than counted: a `-count_packets` pass over a 2.8 GB file
+   * costs ~2.5 s, this ~25 ms, and the two agreed to 0.004% in testing. The
+   * window is taken from the middle — the opening minutes carry logos and
+   * title sequences whose cadence need not match the body.
+   */
+  private async measureFrameRate(
+    videoPath: string,
+    durationSeconds?: number,
+  ): Promise<number | undefined> {
+    if (!durationSeconds || durationSeconds < MIN_MEASURABLE_SECONDS) {
+      return undefined;
+    }
+    const from = Math.max(0, Math.floor(durationSeconds / 2 - FPS_WINDOW_SECONDS / 2));
+    try {
+      const { stdout } = await execFileAsync(
+        'ffprobe',
+        [
+          '-v', 'error',
+          '-select_streams', 'v:0',
+          '-show_entries', 'packet=pts_time',
+          '-read_intervals', `${from}%+${FPS_WINDOW_SECONDS}`,
+          '-of', 'csv=p=0',
+          videoPath,
+        ],
+        { timeout: 30_000 },
+      );
+      const times = stdout
+        .split('\n')
+        .map((l) => Number.parseFloat(l))
+        .filter((n) => Number.isFinite(n))
+        .sort((a, b) => a - b);
+      if (times.length < MIN_SAMPLE_FRAMES) return undefined;
+      const span = times[times.length - 1] - times[0];
+      if (span <= 0) return undefined;
+      const fps = (times.length - 1) / span;
+      // A measurement outside anything a real source uses is a broken sample,
+      // not a discovery — trusting it would be worse than the declared value.
+      return fps >= MIN_PLAUSIBLE_FPS && fps <= MAX_PLAUSIBLE_FPS ? fps : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * The declared rate, unless the packets say otherwise by more than
+   * {@link FPS_DISAGREEMENT}. Sane files sit two orders of magnitude inside
+   * that threshold (measured: <=0.03% across a sample library, vs 0.7% for a
+   * file with a mis-written DefaultDuration), so this only ever fires on a
+   * container that is actually lying.
+   */
+  private reconcileFrameRate(
+    declared: string | undefined,
+    measured: number | undefined,
+    label: string,
+  ): string | undefined {
+    if (!declared || measured === undefined) return declared;
+    const declaredFps = Number(declared);
+    if (!Number.isFinite(declaredFps) || declaredFps <= 0) return declared;
+    const off = Math.abs(measured - declaredFps) / measured;
+    if (off <= FPS_DISAGREEMENT) return declared;
+    const corrected = formatFps(measured);
+    this.logger.warn(
+      `"${label}": container declares ${declared} fps but its packets run at ` +
+        `${corrected} fps (${(off * 100).toFixed(2)}% off) — using the measured rate. ` +
+        `The segment grid counts frames, so the declared value would shift the ` +
+        `picture off subtitles authored in source time.`,
+    );
+    return corrected;
+  }
+
   private parseFrameRate(rate?: string, avgRate?: string): string | undefined {
     const normalise = (r?: string): string | undefined => {
       if (!r || r === '0/0') return undefined;
@@ -555,9 +667,7 @@ export class FfprobeService {
       const den = Number(parts[1]);
       if (!den || !num) return r;
       const fps = num / den;
-      return fps > 0
-        ? fps.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
-        : undefined;
+      return fps > 0 ? formatFps(fps) : undefined;
     };
     return normalise(rate) ?? normalise(avgRate);
   }

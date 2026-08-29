@@ -1688,6 +1688,7 @@ export class StreamingController {
           this.segDur(videoSession),
           videoSession.sourceFps,
         ),
+        startPts: videoSession.sourceStartPts,
       },
     );
   }
@@ -1924,7 +1925,10 @@ export class StreamingController {
           res,
           initPath,
           segmentContentType(segment),
-          { segDuration: realSegmentSeconds(this.segDur(src), src.sourceFps) },
+          {
+            segDuration: realSegmentSeconds(this.segDur(src), src.sourceFps),
+            startPts: src.sourceStartPts,
+          },
         );
         return;
       }
@@ -1960,6 +1964,7 @@ export class StreamingController {
           segPath,
           segmentContentType(segment),
           {
+            startPts: existing.sourceStartPts,
             segDuration: realSegmentSeconds(
               this.segDur(existing),
               existing.sourceFps,
@@ -2064,6 +2069,7 @@ export class StreamingController {
                 this.segDur(earlySession),
                 earlySession.sourceFps,
               ),
+              startPts: earlySession.sourceStartPts,
             },
           );
           return;
@@ -2157,6 +2163,7 @@ export class StreamingController {
       segmentContentType(segment),
       {
         segDuration: realSegmentSeconds(this.segDur(session), session.sourceFps),
+        startPts: session.sourceStartPts,
         skipTimelineRewrite: quality === 'remux',
       },
     );

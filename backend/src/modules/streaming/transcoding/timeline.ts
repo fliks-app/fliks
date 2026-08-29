@@ -159,25 +159,40 @@ export function rewriteSegmentTfdt(
   tracks: Map<number, TrackInfo>,
   segIndex: number,
   segDuration: number,
+  startPts = 0,
 ): Buffer {
   if (tracks.size === 0) return segBuf;
   const frags = collectTfdts(segBuf);
   if (frags.length === 0) return segBuf;
 
-  const segStart = segIndex * segDuration;
+  // The source's own start_time is part of the origin: a run spawned at 0 keeps
+  // it (ffmpeg's -copyts passes absolute PTS through), so a run spawned mid-file
+  // must be anchored onto it too or the two disagree by exactly start_time —
+  // and the WebVTT X-TIMESTAMP-MAP, which adds it unconditionally, is only
+  // right for one of them.
+  const segStart = segIndex * segDuration + startPts;
   const video = frags.find((f) => tracks.get(f.trackId)?.isVideo);
-  let runStart: number;
-  if (video) {
-    const ts = tracks.get(video.trackId)!.timescale;
-    runStart = segStart - video.original / ts;
-  } else {
-    const ref = frags[0];
-    const ts = tracks.get(ref.trackId)?.timescale;
-    if (!ts) return segBuf;
+  const ref = video ?? frags[0];
+  const refTs = tracks.get(ref.trackId)?.timescale;
+  if (!refTs) return segBuf;
+  const refTime = ref.original / refTs;
+
+  // Already absolute: the run started at 0, so ffmpeg's timeline is the one we
+  // want. Tested before any snapping — the snap below assumes a run-relative
+  // fragment, and applied to an absolute one it would invent a shift.
+  if (Math.abs(segStart - refTime) < segDuration / 2) return segBuf;
+
+  let runStart = segStart - refTime;
+  if (!video) {
+    // Audio-only rendition (var_stream_map): no video fragment to anchor on, so
+    // the run offset is snapped to the grid to shed sub-frame jitter. Only the
+    // *content* part is a grid multiple — start_time is not — so it is removed
+    // before snapping and restored after. Rounding it away here would shift an
+    // audio rendition off the video it belongs to by exactly start_time, which
+    // is the whole class of A/V desync #756/#771/#791 exist to prevent.
     runStart =
-      Math.round((segStart - ref.original / ts) / segDuration) * segDuration;
+      Math.round((runStart - startPts) / segDuration) * segDuration + startPts;
   }
-  if (runStart <= 0) return segBuf; // already absolute (run started at 0)
 
   const buf = Buffer.from(segBuf);
   for (const f of frags) {
