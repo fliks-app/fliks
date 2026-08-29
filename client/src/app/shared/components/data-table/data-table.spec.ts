@@ -546,3 +546,28 @@ describe('DataTableComponent — refreshing', () => {
     }
   });
 });
+
+/**
+ * The spinner is raised by a visible load and cleared by whichever load finishes
+ * last. Gating that clear on the *finishing* load being visible stranded it: an
+ * automatic refresh that lands mid-load bars the load it superseded from
+ * clearing, then declines to clear it itself.
+ */
+describe('DataTableComponent — the spinner always comes down', () => {
+  it('clears when a silent refresh supersedes the load that raised it', async () => {
+    const http: FakeHttp = { get: () => of([{ id: 1, name: 'a' }] as TableRow[]) };
+
+    const fixture = await createComponent({ http });
+    const table = fixture.componentInstance as unknown as {
+      loading: WritableSignal<boolean>;
+      loadRows: (o?: { silent?: boolean }) => Promise<void>;
+    };
+    // A visible load raised the spinner and was then superseded, so it can no
+    // longer clear it — the auto-refresh below is the only one left that can.
+    table.loading.set(true);
+
+    await table.loadRows({ silent: true });
+
+    expect(table.loading()).toBe(false);
+  });
+});

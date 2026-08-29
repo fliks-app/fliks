@@ -7,6 +7,7 @@ import { TranslateLoader, TranslateService, provideTranslateService } from '@ngx
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 import { PluginViewComponent } from './plugin-view';
+import { NavbarService } from '../../core/services/navbar.service';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
 import type { AnyConfigPage } from './view-kinds.types';
 
@@ -35,6 +36,11 @@ function createComponent(
       { provide: ActivatedRoute, useValue: { paramMap: of(convertToParamMap(params)) } },
       { provide: Router, useValue: { navigateByUrl } },
       { provide: PluginUiRegistryService, useValue: registry },
+      // The real one subscribes to router events; this suite stubs Router.
+      {
+        provide: NavbarService,
+        useValue: { setPageTitle: () => undefined, clearPageTitle: () => undefined },
+      },
     ],
   });
   const http = TestBed.inject(HttpTestingController);
