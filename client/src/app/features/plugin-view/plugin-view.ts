@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
@@ -8,6 +8,7 @@ import { LucideTriangleAlert } from '@lucide/angular';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
 import { SettingsApiService } from '../../core/services/api/settings-api.service';
 import { ToastService } from '../../core/services/toast.service';
+import { NavbarService } from '../../core/services/navbar.service';
 import { SchemaFormComponent, SchemaFormValue } from '../../shared/components/schema-form/schema-form';
 import { ProviderListComponent } from '../../shared/components/provider-list/provider-list';
 import {
@@ -114,7 +115,7 @@ const PLUGIN_PROVIDER_LABELS: ProviderListLabels = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-view.html',
 })
-export class PluginViewComponent {
+export class PluginViewComponent implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly registry = inject(PluginUiRegistryService);
   private readonly http = inject(HttpClient);
@@ -131,6 +132,22 @@ export class PluginViewComponent {
   readonly view = computed(() => this.params()?.get('view') ?? '');
 
   readonly page = computed<AnyConfigPage | undefined>(() => this.registry.configPage(this.pluginId(), this.view()));
+
+  /**
+   * A plugin route is resolved at runtime, so it carries no `data.titleKey` for
+   * the layout to read and the navbar fell back to the app name. The page's own
+   * label is the title, set here and cleared on the way out — the convention
+   * {@link NavbarService} documents for routes that name themselves.
+   */
+  private readonly navbar = inject(NavbarService);
+  private readonly pageTitleEffect = effect(() => {
+    const key = this.page()?.labelKey;
+    this.navbar.setPageTitle(key ? this.translate.instant(key) : '');
+  });
+
+  ngOnDestroy(): void {
+    this.navbar.clearPageTitle();
+  }
 
   readonly reason = computed<UnavailableReason | null>(() => {
     if (!this.registry.hasPlugin(this.pluginId())) return 'unknown_plugin';

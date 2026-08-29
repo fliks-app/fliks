@@ -1584,15 +1584,39 @@ describe('FliksHostImpl', () => {
   describe('events.publish', () => {
     it('emits only the domain event for acquisition.grabbed — no direct call site emits queue.updated', async () => {
       const h = makeHarness();
+      h.mediaRepo.findOne.mockResolvedValue(makeMedia());
       await h.host['events.publish']([
-        { type: 'acquisition.grabbed', mediaId: 1, seasonNumber: 4 },
+        { type: 'acquisition.grabbed', mediaId: 1, seasonNumber: 4, episodeNumber: 8 },
       ]);
       expect(h.events.emitDomain).toHaveBeenCalledWith({
         type: 'acquisition.grabbed',
         mediaId: 1,
         seasonNumber: 4,
+        episodeNumber: 8,
       });
       expect(h.events.emit).not.toHaveBeenCalled();
+    });
+
+    // The badge has to come up on the grab: the acquisition plugin's own poll
+    // can be a minute out, and a direct grab matches no request, so nothing
+    // else would speak for it.
+    it('pushes a queued 0% for the grabbed scope so the badge appears at once', async () => {
+      const h = makeHarness();
+      h.mediaRepo.findOne.mockResolvedValue(makeMedia());
+      await h.host['events.publish']([
+        { type: 'acquisition.grabbed', mediaId: 1, seasonNumber: 4, episodeNumber: 8 },
+      ]);
+      expect(h.events.emitToUsers).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({
+          type: 'download.progress',
+          mediaId: 1,
+          seasonNumber: 4,
+          episodeNumber: 8,
+          progress: 0,
+          state: 'queued',
+        }),
+      );
     });
 
     it('handles queue.changed and the batched acquisition.progress variant', async () => {
@@ -1743,7 +1767,27 @@ describe('FliksHostImpl', () => {
       );
     });
 
-    it('coalesces to one emission per media per second, and the trailing one carries the latest', async () => {
+    // The gate coalesces per torrent, not per media: every consumer keys a leaf
+    // by (media, season, episode, ref), so a sibling dropped inside the window
+    // is never seen at all — not late, missing, until the client sweeps it.
+    it('does not hold one torrent of a series behind another', async () => {
+      jest.useFakeTimers();
+      try {
+        const h = makeHarness();
+        h.mediaRepo.findOne.mockResolvedValue(makeMedia({ type: MediaType.SERIES }));
+
+        await h.host['progress.set']({ mediaId: 7, seasonNumber: 1, episodeNumber: 6, ref: 'a', progress: 0.1, state: 'active' });
+        await h.host['progress.set']({ mediaId: 7, seasonNumber: 1, episodeNumber: 7, ref: 'b', progress: 0.2, state: 'active' });
+        await h.host['progress.set']({ mediaId: 7, seasonNumber: 1, episodeNumber: 8, ref: 'c', progress: 0.3, state: 'active' });
+
+        expect(h.events.emitToUsers).toHaveBeenCalledTimes(3);
+        expect(h.events.emitToUsers.mock.calls.map((c) => c[1].hash).sort()).toEqual(['a', 'b', 'c']);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('coalesces to one emission per torrent per second, and the trailing one carries the latest', async () => {
       jest.useFakeTimers();
       try {
         const h = makeHarness();

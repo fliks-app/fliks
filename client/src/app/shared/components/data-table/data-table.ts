@@ -206,7 +206,10 @@ export class DataTableComponent implements OnInit {
     } catch {
       if (seq === this.loadSeq) this.listError.set(this.translate.instant(this.loadErrorKey()));
     } finally {
-      if (seq === this.loadSeq && !opts?.silent) this.loading.set(false);
+      // The newest load clears the spinner whatever raised it. Skipping this
+      // when the newest happens to be a silent auto-refresh stranded the
+      // spinner for good: the load it superseded is barred from clearing it.
+      if (seq === this.loadSeq) this.loading.set(false);
     }
   }
 

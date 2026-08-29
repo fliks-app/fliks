@@ -47,7 +47,13 @@ export class SseService implements OnDestroy {
     // and let the layout re-open it for the next one.
     effect(() => {
       this.auth.sessionEpoch();
-      untracked(() => this.close());
+      untracked(() => {
+        this.close();
+        // Progress is keyed by media, not by account. Dropping it with the
+        // stream that fed it also stops the sweep timer of a session nobody
+        // is watching any more.
+        this.downloadProgress.reset();
+      });
     });
   }
 
@@ -93,6 +99,11 @@ export class SseService implements OnDestroy {
           if (typeof id === 'string' && id) {
             this.connectionId.set(id);
           }
+          // The server replays its live leaves right after this event, so the
+          // burst that follows is a full snapshot. Everything else finished
+          // while we were disconnected: nothing announces that, and a leaf kept
+          // here shows a download badge that never goes away.
+          this.downloadProgress.reset();
           return;
         }
         this.handleEvent(data);

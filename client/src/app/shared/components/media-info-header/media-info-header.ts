@@ -102,6 +102,9 @@ export interface MediaInfoHeaderBadge {
   percent: number | null;
   /** daisyUI colour class, e.g. `badge-info` / `badge-ghost`. */
   badgeClass: string;
+  /** Interpolation for {@link labelKey} — the torrent count, when the chip
+   *  stands for several at once. */
+  labelParams: Record<string, unknown> | null;
   /** When true the badge renders as a button that emits openDownloadDetail. */
   clickable: boolean;
 }
@@ -248,15 +251,23 @@ export class MediaInfoHeaderComponent {
    *  openDownloadDetail. */
   readonly badge = input<MediaInfoHeaderBadge | null>(null);
 
+  protected badgeLabel(b: MediaInfoHeaderBadge): string {
+    return this.translate.instant(b.labelKey, b.labelParams ?? undefined);
+  }
+
   // ── Inputs: series-specific ──
   readonly mediaType = input<string>('movie');
-  readonly episodeStats = input<{ downloadedEpisodes: number; totalEpisodes: number } | null>(null);
   /**
    * Derived watched status for a series (true iff every downloaded episode in a
    * non-special season is marked as watched). Used instead of a series-level
    * PlaybackState row, which does not exist for series.
    */
   readonly seriesFullyWatched = input<boolean>(false);
+  /** A series root marks every episode at once, so it needs no selected file;
+   *  a movie or a single episode toggles one file and does need one. */
+  readonly canToggleWatched = computed(
+    () => (this.mediaType() === 'series' && !this.episodeId()) || !!this.selectedFileId(),
+  );
 
   // ── Outputs (delegated to parent) ──
   readonly selectedFileIdChange = output<number>();
@@ -337,17 +348,25 @@ export class MediaInfoHeaderComponent {
     }
 
 
-    // Watched state: for a series without an episode context, derive from the
-    // aggregate `seriesFullyWatched` input (see parent). Otherwise, read the
-    // playback_state row as before.
-    if (this.mediaType() === 'series' && !episodeId) {
+    // Watched state: a series root toggle marks every episode at once, so it
+    // reads the aggregate `seriesFullyWatched` input (see parent). Keyed on the
+    // episode input rather than the resume fallback below — the resume
+    // episode's own flag would disagree with what the toggle does.
+    if (this.mediaType() === 'series' && !this.episodeId()) {
       this.watched.set(this.seriesFullyWatched());
+    } else {
+      this.playable.loadWatchedState(mediaId, episodeId).then((v) => {
+        // A faster episode switch already superseded this request.
+        if (this.lastPlaybackKey === key) this.watched.set(v);
+      });
+    }
+
+    if (this.mediaType() === 'series' && !episodeId) {
       // A series' own row (episode IS NULL) is never its resume target, so
       // reading it here only flashes a bar that the real episode then clears.
       // The parent resolves `resumeEpisodeId` a moment later and re-runs this.
       return;
     }
-    this.playable.loadWatchedState(mediaId, episodeId).then(v => this.watched.set(v));
 
     // Tracked read: a position queued offline shows up here as soon as it is
     // recorded, and again as soon as the flush clears it.

@@ -3,51 +3,51 @@
     <app-modal-header [title]="'media_detail.download_detail_title' | translate" />
 
     @if (progress(); as p) {
-      <div class="flex flex-col gap-1.5">
-        @if (p.percent !== null) {
-          <app-progress-bar [percent]="p.percent" [variant]="overallVariant()" />
-        }
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-base-content/70">
-          <span class="font-medium">{{ overallStateLabelKey() | translate }}</span>
+      @if (isSingleTorrent()) {
+        <div class="flex flex-col gap-1.5">
           @if (p.percent !== null) {
-            <span class="tabular-nums">{{ p.percent }}%</span>
+            <app-progress-bar [percent]="p.percent" [variant]="overallVariant()" />
           }
-          @if (speedLabel(); as sp) {
-            <span>↓ {{ sp }}</span>
-          }
-          @if (etaLabel(); as e) {
-            <span>{{ 'activity.eta' | translate }} {{ e }}</span>
-          }
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-base-content/70">
+            <span class="font-medium">{{ overallStateLabelKey() | translate }}</span>
+            @if (p.percent !== null) {
+              <span class="tabular-nums">{{ p.percent }}%</span>
+            }
+            @if (speedLabel(); as sp) {
+              <span>↓ {{ sp }}</span>
+            }
+            @if (etaLabel(); as e) {
+              <span>{{ 'activity.eta' | translate }} {{ e }}</span>
+            }
+          </div>
         </div>
-      </div>
-
-      @if (seasonRows().length) {
-        <div class="divider my-3"></div>
-        <div class="flex flex-col gap-4 max-h-[50vh] overflow-y-auto">
+      } @else {
+        <div class="flex flex-col gap-4 max-h-[min(60vh,100vh-12rem)] overflow-y-auto">
           @for (s of seasonRows(); track s.seasonNumber) {
-            <div class="flex flex-col gap-1">
-              <div class="flex items-center justify-between gap-3">
-                <span class="text-sm font-medium">{{
-                  'tracking.season' | translate: { number: s.seasonNumber }
-                }}</span>
-                <span class="text-sm text-base-content/60">
-                  {{ s.stateLabelKey | translate }}
-                  @if (s.percent !== null) {
-                    · {{ s.percent }}%
+            <div class="flex flex-col gap-3">
+              <span class="text-base font-semibold">{{
+                'tracking.season' | translate: { number: s.seasonNumber }
+              }}</span>
+              @for (l of s.leaves; track l.key) {
+                <div class="flex flex-col gap-1">
+                  <div class="flex items-center justify-between gap-3 text-sm">
+                    <span>{{ l.labelKey | translate: { number: l.labelNumber } }}</span>
+                    <span class="text-base-content/60">
+                      {{ l.stateLabelKey | translate
+                      }}@if (l.percent !== null) {<span class="tabular-nums"> · {{ l.percent }}%</span>}
+                    </span>
+                  </div>
+                  @if (l.percent !== null) {
+                    <app-progress-bar [percent]="l.percent" [variant]="l.variant" />
                   }
-                </span>
-              </div>
-              @if (s.percent !== null) {
-                <app-progress-bar [percent]="s.percent" [variant]="s.variant" />
-              }
-              @if (s.leaves.length) {
-                <div class="flex flex-col gap-1 pl-3 mt-1">
-                  @for (l of s.leaves; track l.key) {
-                    <div
-                      class="flex items-center justify-between gap-3 text-xs text-base-content/60"
-                    >
-                      <span>{{ l.labelKey | translate: { number: l.labelNumber } }}</span>
-                      <span>{{ l.stateLabelKey | translate }} · {{ l.percent }}%</span>
+                  @if (l.speed || l.eta) {
+                    <div class="flex flex-wrap items-center gap-x-3 text-xs text-base-content/50">
+                      @if (l.speed) {
+                        <span>↓ {{ l.speed }}</span>
+                      }
+                      @if (l.eta) {
+                        <span>{{ 'activity.eta' | translate }} {{ l.eta }}</span>
+                      }
                     </div>
                   }
                 </div>

@@ -16,7 +16,6 @@ import { MediaService } from '../media/media.service';
 import { onDiskEpisodeNumbers } from '../media/episode-coverage.util';
 import { ProfilesService } from '../profiles/profiles.service';
 import { EventsService } from '../scheduler/events.service';
-import { SseAudienceService } from '../scheduler/sse-audience.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { User } from '../users/entities/user.entity';
 import {
@@ -65,7 +64,6 @@ export class RequestLifecycleService
     private readonly profiles: ProfilesService,
     private readonly events: EventsService,
     private readonly notifications: NotificationsService,
-    private readonly sseAudience: SseAudienceService,
   ) {}
 
   onModuleInit(): void {
@@ -211,22 +209,6 @@ export class RequestLifecycleService
         void this.notifications.dispatch('request.processing', {
           title: r.title,
           mediaType: r.mediaType,
-        });
-      }
-      // Push a 0% progress event so the bar + PROCESSING state appear
-      // immediately, without waiting for the next poll tick. Same audience as
-      // the plugin's own ticks — everyone who can open the media's page.
-      const userIds = await this.sseAudience.viewersForMedia(mediaId);
-      if (userIds.length) {
-        this.events.emitToUsers(userIds, {
-          type: 'download.progress',
-          mediaId,
-          mediaType: touched[0].mediaType as 'movie' | 'series',
-          seasonNumber,
-          progress: 0,
-          dlspeed: 0,
-          eta: 0,
-          state: 'active',
         });
       }
     }

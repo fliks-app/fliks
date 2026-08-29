@@ -723,3 +723,56 @@ describe('MediaInfoHeaderComponent — resume state across an episode switch', (
     expect(fixture.componentInstance.resumePositionSeconds()).toBe(1992);
   });
 });
+
+/**
+ * Watched toggle reach. A movie or a single episode marks one file, so it needs
+ * one selected; a series root marks every episode at once through
+ * `toggleSeriesWatched` and needs no file — it used to be hidden there purely
+ * because the same gate was used for both.
+ */
+describe('MediaInfoHeaderComponent — watched toggle availability', () => {
+  const canToggle = (f: ComponentFixture<MediaInfoHeaderComponent>) =>
+    (f.componentInstance as unknown as { canToggleWatched: () => boolean }).canToggleWatched();
+
+  it('offers the toggle on a series root with no selected file', async () => {
+    const f = await createFixture(READER, {
+      mediaType: 'series',
+      selectedFileId: null,
+      monitored: true,
+      qualityProfileName: null,
+    });
+    expect(canToggle(f)).toBe(true);
+  });
+
+  it('withholds it on a movie with no selected file', async () => {
+    const f = await createFixture(READER, {
+      mediaType: 'movie',
+      selectedFileId: null,
+      monitored: true,
+      qualityProfileName: null,
+    });
+    expect(canToggle(f)).toBe(false);
+  });
+
+  it('withholds it on an episode with no selected file', async () => {
+    const f = await createFixture(READER, {
+      mediaType: 'series',
+      episodeId: 42,
+      selectedFileId: null,
+      monitored: true,
+      qualityProfileName: null,
+      episodeInstance: true,
+    });
+    expect(canToggle(f)).toBe(false);
+  });
+
+  it('offers it on a movie once a file is selected', async () => {
+    const f = await createFixture(READER, {
+      mediaType: 'movie',
+      selectedFileId: 7,
+      monitored: true,
+      qualityProfileName: null,
+    });
+    expect(canToggle(f)).toBe(true);
+  });
+});

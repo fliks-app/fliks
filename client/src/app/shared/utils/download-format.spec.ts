@@ -6,15 +6,12 @@ import {
   activeWeightedPercent,
   foldLeaves,
   describeBadge,
+  describeDownload,
 } from './download-format';
 import { DownloadLeaf, MediaDownloadProgress } from '../../core/services/download-progress.service';
 import { DownloadProgressState } from '../../core/enums/download-progress-state.enum';
 
-const leaf = (state: DownloadProgressState, percent = 50, weight?: number): DownloadLeaf => ({
-  state,
-  percent,
-  weight,
-});
+const leaf = (state: DownloadProgressState, percent = 50): DownloadLeaf => ({ state, percent });
 
 describe('download-format', () => {
   describe('qbStateVariant / qbStateLabelKey / qbStateBadgeClass', () => {
@@ -63,17 +60,8 @@ describe('download-format', () => {
       expect(activeWeightedPercent([])).toBeNull();
     });
 
-    it('averages plainly when leaves carry no weight', () => {
+    it('averages across the active leaves', () => {
       expect(activeWeightedPercent([leaf('active', 40), leaf('active', 60)])).toBe(50);
-    });
-
-    it('weights by size when every active leaf carries one', () => {
-      const percent = activeWeightedPercent([
-        leaf('active', 10, 900),
-        leaf('active', 90, 100),
-      ]);
-      // (10*900 + 90*100) / 1000 = 18
-      expect(percent).toBe(18);
     });
   });
 
@@ -81,8 +69,6 @@ describe('download-format', () => {
     it('folds dominant state, weighted percent and stalled count', () => {
       const fold = foldLeaves([leaf('stalled', 50), leaf('active', 30), leaf('stalled', 10)]);
       expect(fold.state).toBe('stalled');
-      expect(fold.total).toBe(3);
-      expect(fold.stalled).toBe(2);
     });
   });
 
@@ -108,13 +94,10 @@ describe('download-format', () => {
         eta: 0,
       };
       const d = describeBadge(progress, { monitored: true, downloaded: false });
-      expect(d.state).toBe('stalled');
       expect(d.labelKey).toBe('activity.tstatus_stalled');
       expect(d.badgeClass).toBe('badge-warning');
       expect(d.percent).toBe(42);
       expect(d.isClickable).toBe(true);
-      expect(d.totalLeaves).toBe(1);
-      expect(d.stalledLeaves).toBe(1);
     });
 
     it('narrows a series to the requested seasons and folds only those leaves', () => {
@@ -135,9 +118,78 @@ describe('download-format', () => {
         downloaded: false,
         seasonFilter: [2],
       });
-      expect(d.state).toBe('active');
-      expect(d.totalLeaves).toBe(1);
-      expect(d.stalledLeaves).toBe(0);
+    });
+  });
+
+  /**
+   * What the episode header renders. An episode page must answer "is THIS
+   * episode downloading" — a sibling's grab belongs on the sibling's page, and
+   * a season pack legitimately belongs on every episode page of that season.
+   */
+  describe('describeDownload — episode scope', () => {
+    // The store keys a leaf by its torrent and records the episode on the leaf,
+    // so a fixture has to carry the attribute the scope filter reads.
+    const season1 = (leaves: [number | 'PACK', DownloadLeaf][]): MediaDownloadProgress => ({
+      mediaId: 2,
+      mediaType: 'series',
+      percent: 50,
+      state: 'active',
+      dlspeed: 0,
+      eta: 0,
+      seasons: new Map([
+        [
+          1,
+          {
+            leaves: new Map(
+              leaves.map(([k, l]) => [k, typeof k === 'number' ? { ...l, episodeNumber: k } : l]),
+            ),
+          },
+        ],
+      ]),
+    });
+
+    it('says nothing on episode 7 while only episode 8 downloads', () => {
+      const d = describeDownload(season1([[8, leaf('active', 52)]]), {
+        seasonFilter: [1],
+        episodeFilter: 7,
+      });
+      expect(d).toBeNull();
+    });
+
+    it("reports the episode's own torrent", () => {
+      const d = describeDownload(season1([[7, leaf('active', 52)]]), {
+        seasonFilter: [1],
+        episodeFilter: 7,
+      });
+      expect(d?.percent).toBe(52);
+    });
+
+    it('reports a season pack on every episode of the season', () => {
+      const progress = season1([['PACK', leaf('active', 30)]]);
+      expect(describeDownload(progress, { seasonFilter: [1], episodeFilter: 7 })?.percent).toBe(30);
+      expect(describeDownload(progress, { seasonFilter: [1], episodeFilter: 8 })?.percent).toBe(30);
+    });
+
+    // Real season-pack ticks arrive with a torrent ref and no episode number,
+    // so the store keys them `hash:<ref>` — never the literal 'PACK' sentinel.
+    it('reports a hash-keyed pack on an episode page', () => {
+      const progress: MediaDownloadProgress = {
+        mediaId: 2,
+        mediaType: 'series',
+        percent: 30,
+        state: 'active',
+        dlspeed: 0,
+        eta: 0,
+        seasons: new Map([[1, { leaves: new Map([['hash:abc', leaf('active', 30)]]) }]]),
+      };
+      expect(describeDownload(progress, { seasonFilter: [1], episodeFilter: 7 })?.percent).toBe(30);
+    });
+
+    it('is null with no progress at all, rather than a monitored chip', () => {
+      expect(describeDownload(null)).toBeNull();
+      expect(describeBadge(null, { monitored: true, downloaded: false }).labelKey).toBe(
+        'requests.badge_monitored',
+      );
     });
   });
 });

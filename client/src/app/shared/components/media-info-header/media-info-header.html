@@ -117,28 +117,30 @@
       </div>
     }
 
+    <!-- A download in flight is the page's headline state, so it gets the play
+         button's footprint: its own full-width bar rather than a chip sharing
+         the action row, where it would crowd the icons on a narrow phone. -->
+    @if (badge(); as b) {
+      <div class="flex mt-4">
+        <ng-container
+          *ngTemplateOutlet="downloadBadge; context: { $implicit: 'xl', badge: b }"
+        ></ng-container>
+      </div>
+    }
+
     <!-- Action icons row -->
-    <div
-      class="flex items-center gap-6 mt-4"
-      [class.justify-between]="badge()"
-      [class.justify-center]="!badge()"
-    >
-      @if (badge()) {
-        <ng-container *ngTemplateOutlet="downloadBadge"></ng-container>
-      } @else if (!selectedFileId()) {
-        <div class="flex-1"></div>
-      }
-      @if (selectedFileId()) {
+    <div class="flex items-center justify-around gap-2 mt-4">
+      @if (canToggleWatched()) {
         <button class="flex flex-col items-center gap-1 text-sm" [class.text-success]="watched()" (click)="onToggleWatched()">
           <svg lucideCheck class="h-5 w-5"></svg>
           {{ 'media_info.watched' | translate }}
         </button>
-        @if ((mediaType() === 'movie' || episodeId()) && !tv.isTv()) {
-          <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
-            <svg lucideDownload class="h-5 w-5"></svg>
-            {{ 'downloads.download' | translate }}
-          </button>
-        }
+      }
+      @if (selectedFileId() && (mediaType() === 'movie' || episodeId()) && !tv.isTv()) {
+        <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
+          <svg lucideDownload class="h-5 w-5"></svg>
+          {{ 'downloads.download' | translate }}
+        </button>
       }
       <!-- Like is a taste signal, not a playback action — available on movies,
            series and episodes, with or without a local file. -->
@@ -157,17 +159,6 @@
         {{ 'common.more' | translate }}
       </button>
     </div>
-
-    <!-- Series episode progress -->
-    @if (mediaType() === 'series' && episodeStats()) {
-      <div class="mt-4">
-        <div class="flex justify-between mb-1">
-          <span class="text-base-content/60">{{ 'media_detail.episode_progress' | translate }}</span>
-          <span class="tabular-nums font-medium">{{ episodeStats()!.downloadedEpisodes }} / {{ episodeStats()!.totalEpisodes }}</span>
-        </div>
-        <progress class="progress progress-primary w-full h-1.5" [attr.value]="episodeStats()!.totalEpisodes ? (100 * episodeStats()!.downloadedEpisodes / episodeStats()!.totalEpisodes) : 0" max="100"></progress>
-      </div>
-    }
 
     <!-- Overview -->
     @if (overview()) {
@@ -311,18 +302,20 @@
               {{ 'player.play_from_start' | translate }}
             </button>
           }
-          @if (mediaType() !== 'series' || episodeId()) {
-            <button type="button" class="btn btn-outline btn btn-circle" [class.btn-success]="watched()" [class.btn-ghost]="!watched()" (click)="onToggleWatched()">
-              <svg lucideCheck class="h-4 w-4"></svg>
-            </button>
-          }
-          @if (mediaType() === 'movie' || episodeId()) {
+          @if ((mediaType() === 'movie' || episodeId()) && !tv.isTv()) {
             <button type="button" class="btn btn-ghost btn btn-circle" (click)="openDownload.emit()">
               <svg lucideDownload class="h-4 w-4"></svg>
             </button>
           }
         }
-        <ng-container *ngTemplateOutlet="downloadBadge"></ng-container>
+        @if (canToggleWatched()) {
+          <button type="button" class="btn btn-outline btn btn-circle" [attr.aria-label]="'media_info.watched' | translate" [class.btn-success]="watched()" [class.btn-ghost]="!watched()" (click)="onToggleWatched()">
+            <svg lucideCheck class="h-4 w-4"></svg>
+          </button>
+        }
+        @if (badge(); as b) {
+          <ng-container *ngTemplateOutlet="downloadBadge; context: { badge: b }"></ng-container>
+        }
         <!-- Like is a taste signal, not a playback action — available on movies,
              series and episodes, with or without a local file. -->
         @if (mediaType() === 'movie' || mediaType() === 'series' || episodeId()) {
@@ -376,17 +369,6 @@
         </div>
       }
 
-      <!-- Series episode progress -->
-      @if (mediaType() === 'series' && episodeStats()) {
-        <div class="mt-4 max-w-md">
-          <div class="flex justify-between mb-1">
-            <span class="text-base-content/70">{{ 'media_detail.episode_progress' | translate }}</span>
-            <span class="tabular-nums font-medium">{{ episodeStats()!.downloadedEpisodes }} / {{ episodeStats()!.totalEpisodes }}</span>
-          </div>
-          <progress class="progress progress-primary w-full h-2" [attr.value]="episodeStats()!.totalEpisodes ? (100 * episodeStats()!.downloadedEpisodes / episodeStats()!.totalEpisodes) : 0" max="100"></progress>
-        </div>
-      }
-
       <!-- Overview -->
       @if (overview()) {
         <app-synopsis
@@ -404,28 +386,29 @@
 <!-- Download status / progress chip, shared by the mobile metadata row and the
      desktop action row. Clickable (opens the detail modal) only while a grab is
      in flight; otherwise a plain status chip. -->
-<ng-template #downloadBadge>
-  @if (badge(); as b) {
-    @if (b.clickable) {
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm px-1.5"
-        [title]="'media_detail.download_detail_title' | translate"
-        (click)="openDownloadDetail.emit()"
-      >
-        <app-progress-badge
-          [label]="b.labelKey | translate"
-          [percent]="b.percent"
-          [badgeClass]="b.badgeClass"
-        />
-      </button>
-    } @else {
+<ng-template #downloadBadge let-size let-b="badge">
+  @if (b.clickable) {
+    <button
+      type="button"
+      [class]="size === 'xl' ? 'flex-1 cursor-pointer' : 'btn btn-ghost btn-sm px-1.5'"
+      [title]="'media_detail.download_detail_title' | translate"
+      (click)="openDownloadDetail.emit()"
+    >
       <app-progress-badge
-        [label]="b.labelKey | translate"
+        [label]="badgeLabel(b)"
         [percent]="b.percent"
         [badgeClass]="b.badgeClass"
+        [size]="size ?? 'sm'"
       />
-    }
+    </button>
+  } @else {
+    <app-progress-badge
+      [class.flex-1]="size === 'xl'"
+      [label]="badgeLabel(b)"
+      [percent]="b.percent"
+      [badgeClass]="b.badgeClass"
+      [size]="size ?? 'sm'"
+    />
   }
 </ng-template>
 
