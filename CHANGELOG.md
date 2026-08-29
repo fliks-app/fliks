@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.6.0](https://github.com/fliks-app/fliks/compare/v3.5.0...v3.6.0) (2026-08-29)
+
+
+### Features
+
+* **media-detail:** show every grab phase in the header download badge ([#1121](https://github.com/fliks-app/fliks/issues/1121)) ([940eb9a](https://github.com/fliks-app/fliks/commit/940eb9ad0909295a781fae8875597962892829fd))
+
+
+### Bug Fixes
+
+* **desktop:** make a playback glitch diagnosable, and leave the buffering state ([#1124](https://github.com/fliks-app/fliks/issues/1124)) ([0b16a9f](https://github.com/fliks-app/fliks/commit/0b16a9fff73da6b8d7378d401634579efcd8c3ea))
+* make library scans survivable on a low-power CPU ([#1126](https://github.com/fliks-app/fliks/issues/1126)) ([611af9f](https://github.com/fliks-app/fliks/commit/611af9f0414a5f58d4655bc6339beb25ad0c0de3))
+* **streaming:** measure the real frame rate, and anchor every run onto the source start_time ([#1123](https://github.com/fliks-app/fliks/issues/1123)) ([e37897a](https://github.com/fliks-app/fliks/commit/e37897a15497dbeeeef7b952e9a3b8455ae8bad5))
+
 ## [3.5.0](https://github.com/fliks-app/fliks/compare/v3.4.1...v3.5.0) (2026-08-28)
 
 
