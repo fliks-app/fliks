@@ -923,6 +923,7 @@
     "download_section": "Téléchargement",
     "releases_title": "Releases disponibles",
     "download_detail_title": "Détails du téléchargement",
+    "downloads_in_progress": "{{count}} téléchargements en cours",
     "download_pack": "Pack",
     "quality_profile_label": "Profil de qualité",
     "no_quality_profile": "Aucun profil de qualité ou de langue : attribuez les deux (ou réimportez) pour activer la recherche de releases.",

@@ -71,13 +71,7 @@ import { MediaCardComponent } from '../../shared/components/media-card/media-car
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
-import {
-  collectScopedLeaves,
-  describeDownload,
-  qbStateBadgeClass,
-  qbStateLabelKey,
-} from '../../shared/utils/download-format';
-import { episodeLabel } from '../../shared/utils/episode-label';
+import { collectScopedLeaves, describeDownload } from '../../shared/utils/download-format';
 import { TvService } from '../../core/services/tv.service';
 import { DownloadProgressService } from '../../core/services/download-progress.service';
 import {
@@ -187,63 +181,62 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   });
 
   /**
-   * One header chip per in-flight torrent in scope. A media can have several at
-   * once — two episodes, or a pack alongside a straggler — and folding them into
-   * a single chip averaged percentages that belong to different files. Each chip
-   * names the episode it is for, unless there is only one thing it could be.
+   * The header's download chip. One torrent shows its own state and percent;
+   * several show how many there are and open the modal for the breakdown —
+   * folding their states into one label read "stalled" for a whole show
+   * whenever a single episode was, and averaged percentages that belong to
+   * different files.
    *
    * Downloads only: the monitored/unmonitored state has its own chip in the
    * metadata row and its entry in the actions menu, and on an ongoing series it
    * would otherwise sit in the header for the life of the show.
    */
-  private downloadBadges(
+  private downloadBadge(
     scope: { seasonFilter?: number[]; episodeFilter?: number } = {},
-  ): MediaInfoHeaderBadge[] {
+  ): MediaInfoHeaderBadge | null {
     const progress = this.activeDownload();
-    if (!progress) return [];
-    // A movie has no season dimension: one torrent, and the fold is that torrent.
-    if (!progress.seasons) {
-      const d = describeDownload(progress, scope);
-      return d?.labelKey
-        ? [{ id: 'movie', labelKey: d.labelKey, percent: d.percent, badgeClass: d.badgeClass, scopeLabel: null, clickable: !this.tv.isTv() }]
-        : [];
+    if (!progress) return null;
+    // Non-interactive on TV: a focusable header button would add a second D-pad
+    // stop. The download detail is a web/mobile drill-down.
+    const clickable = !this.tv.isTv();
+
+    const leaves = progress.seasons
+      ? collectScopedLeaves(progress, scope.seasonFilter, scope.episodeFilter)
+      : [];
+    if (leaves.length > 1) {
+      return {
+        // Only ever reached with several, so the label needs no singular form.
+        labelKey: 'media_detail.downloads_in_progress',
+        labelParams: { count: leaves.length },
+        percent: null,
+        badgeClass: 'badge-info',
+        clickable,
+      };
     }
-    const leaves = collectScopedLeaves(progress, scope.seasonFilter, scope.episodeFilter);
-    return leaves.map(({ seasonNumber, key, leaf }) => ({
-      // The torrent's own key: two releases grabbed for the same episode are two
-      // chips, and @for needs to tell them apart.
-      id: `${seasonNumber}:${key}`,
-      labelKey: qbStateLabelKey(leaf.state),
-      percent: leaf.state === 'searching' ? null : leaf.percent,
-      badgeClass: qbStateBadgeClass(leaf.state),
-      // Naming the episode only earns its place when there is more than one
-      // chip to tell apart; a lone one is already unambiguous from the page.
-      scopeLabel:
-        leaves.length > 1
-          ? episodeLabel({
-              seasonNumber,
-              episodeNumber: leaf.episodeNumber ?? null,
-              episodeTitle: null,
-            }) || `S${String(seasonNumber).padStart(2, '0')}`
-          : null,
-      // Non-interactive on TV: a focusable in-card/header button would add a
-      // second D-pad stop. The download detail is a web/mobile drill-down.
-      clickable: !this.tv.isTv(),
-    }));
+
+    const d = describeDownload(progress, scope);
+    if (!d?.labelKey) return null;
+    return {
+      labelKey: d.labelKey,
+      labelParams: null,
+      percent: d.percent,
+      badgeClass: d.badgeClass,
+      clickable,
+    };
   }
 
   /** Whole-media download progress, on the movie/series header. */
-  readonly headerBadges = computed<MediaInfoHeaderBadge[]>(() =>
-    this.media() ? this.downloadBadges() : [],
+  readonly headerBadge = computed<MediaInfoHeaderBadge | null>(() =>
+    this.media() ? this.downloadBadge() : null,
   );
 
-  /** Same chips on the episode page, narrowed to that episode's own torrent or
+  /** Same chip on the episode page, narrowed to that episode's own torrents or
    *  the season pack that carries it — a sibling episode's grab stays off it. */
-  readonly episodeHeaderBadges = computed<MediaInfoHeaderBadge[]>(() => {
+  readonly episodeHeaderBadge = computed<MediaInfoHeaderBadge | null>(() => {
     const ep = this.focusedEpisode();
     const season = this.focusedSeason();
-    if (!ep || !season) return [];
-    return this.downloadBadges({
+    if (!ep || !season) return null;
+    return this.downloadBadge({
       seasonFilter: [season.seasonNumber],
       episodeFilter: ep.episodeNumber,
     });

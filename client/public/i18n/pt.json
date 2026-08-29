@@ -918,6 +918,7 @@
     "download_section": "Transferência",
     "releases_title": "Releases disponíveis",
     "download_detail_title": "Detalhes da transferência",
+    "downloads_in_progress": "{{count}} transferências em curso",
     "download_pack": "Pack",
     "quality_profile_label": "Perfil de qualidade",
     "no_quality_profile": "Sem perfil de qualidade ou de idioma: atribua ambos (ou reimporte) para ativar a busca de releases.",

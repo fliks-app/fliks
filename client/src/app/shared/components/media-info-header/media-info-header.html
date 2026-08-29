@@ -120,15 +120,11 @@
     <!-- A download in flight is the page's headline state, so it gets the play
          button's footprint: its own full-width bar rather than a chip sharing
          the action row, where it would crowd the icons on a narrow phone. -->
-    @if (badges().length) {
-      <div class="flex flex-col gap-2 mt-4">
-        @for (b of badges(); track b.id) {
-          <div class="flex">
-            <ng-container
-              *ngTemplateOutlet="downloadBadge; context: { $implicit: 'xl', badge: b }"
-            ></ng-container>
-          </div>
-        }
+    @if (badge(); as b) {
+      <div class="flex mt-4">
+        <ng-container
+          *ngTemplateOutlet="downloadBadge; context: { $implicit: 'xl', badge: b }"
+        ></ng-container>
       </div>
     }
 
@@ -317,7 +313,7 @@
             <svg lucideCheck class="h-4 w-4"></svg>
           </button>
         }
-        @for (b of badges(); track b.id) {
+        @if (badge(); as b) {
           <ng-container *ngTemplateOutlet="downloadBadge; context: { badge: b }"></ng-container>
         }
         <!-- Like is a taste signal, not a playback action — available on movies,

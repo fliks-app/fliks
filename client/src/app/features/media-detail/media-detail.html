@@ -47,7 +47,7 @@
           [fanartUrl]="ep.stillUrl ?? m.fanartUrl ?? null"
           [posterUrl]="ep.stillUrl ?? m.fanartUrl ?? null"
           [posterMode]="'still'"
-          [badges]="episodeHeaderBadges()"
+          [badge]="episodeHeaderBadge()"
           (openDownloadDetail)="openDownloadDetailModal()"
           [spoilerImage]="episodeSpoilerImage()"
           [spoilerOverview]="episodeSpoilerOverview()"
@@ -209,7 +209,7 @@
           [liked]="focusedLiked()"
           (likeToggled)="toggleLike()"
           (openTracking)="openTracking(m.type === 'movie' ? { kind: 'movie' } : { kind: 'series' })"
-          [badges]="headerBadges()"
+          [badge]="headerBadge()"
           (openDownloadDetail)="openDownloadDetailModal()"
         />
 

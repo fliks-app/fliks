@@ -918,6 +918,7 @@
     "download_section": "Download",
     "releases_title": "Release disponibili",
     "download_detail_title": "Dettagli del download",
+    "downloads_in_progress": "{{count}} download in corso",
     "download_pack": "Pack",
     "quality_profile_label": "Profilo di qualità",
     "no_quality_profile": "Nessun profilo di qualità o di lingua: assegnali entrambi (o reimporta) per abilitare la ricerca di release.",

@@ -923,6 +923,7 @@
     "download_section": "Downloading",
     "releases_title": "Available releases",
     "download_detail_title": "Download details",
+    "downloads_in_progress": "{{count}} downloads in progress",
     "download_pack": "Pack",
     "quality_profile_label": "Quality profile",
     "no_quality_profile": "No quality or language profile: assign both (or re-import) to enable release search.",

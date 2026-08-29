@@ -96,18 +96,15 @@ export interface MediaInfoHeaderSubtitle {
 }
 
 export interface MediaInfoHeaderBadge {
-  /** Stable per-torrent identity, so two releases grabbed for the same episode
-   *  render as two chips rather than one. */
-  id: string;
   /** ngx-translate key for the badge text. */
   labelKey: string;
   /** 0–100 progress fill, or null for a plain status chip. */
   percent: number | null;
   /** daisyUI colour class, e.g. `badge-info` / `badge-ghost`. */
   badgeClass: string;
-  /** `S01E06` when several chips share the header and need telling apart;
-   *  null when there is only one and the page already says what it is for. */
-  scopeLabel: string | null;
+  /** Interpolation for {@link labelKey} — the torrent count, when the chip
+   *  stands for several at once. */
+  labelParams: Record<string, unknown> | null;
   /** When true the badge renders as a button that emits openDownloadDetail. */
   clickable: boolean;
 }
@@ -252,13 +249,10 @@ export class MediaInfoHeaderComponent {
   /** Status badge rendered next to the kebab menu (download progress, or the
    *  monitored state), or null to show none. A clickable badge emits
    *  openDownloadDetail. */
-  readonly badges = input<MediaInfoHeaderBadge[]>([]);
+  readonly badge = input<MediaInfoHeaderBadge | null>(null);
 
-  /** `S01E06 — Téléchargement` when several chips need telling apart, the state
-   *  alone when there is only one. */
   protected badgeLabel(b: MediaInfoHeaderBadge): string {
-    const state = this.translate.instant(b.labelKey);
-    return b.scopeLabel ? `${b.scopeLabel} — ${state}` : state;
+    return this.translate.instant(b.labelKey, b.labelParams ?? undefined);
   }
 
   // ── Inputs: series-specific ──
