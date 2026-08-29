@@ -56,6 +56,89 @@ describe('DownloadProgressService', () => {
   });
 
   /**
+   * The store is fed by events alone, so a torrent that simply stops being
+   * reported — deleted from the download client, or announced by a plugin too
+   * old to retire it — would sit at its last percent for the life of the app.
+   * The sweep is the backstop, on the same horizon the backend's replay cache
+   * uses: three missed ticks of a once-a-minute publisher.
+   */
+  describe('staleness sweep', () => {
+    const make = () => {
+      TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+      return TestBed.inject(DownloadProgressService);
+    };
+    const sweep = (svc: DownloadProgressService) =>
+      (svc as unknown as { sweepStale: () => void }).sweepStale();
+    const age = (svc: DownloadProgressService, ms: number) => {
+      for (const entry of svc.progress().values()) {
+        if (entry.updatedAt != null) entry.updatedAt -= ms;
+        for (const sp of entry.seasons?.values() ?? []) {
+          for (const l of sp.leaves.values()) if (l.updatedAt != null) l.updatedAt -= ms;
+        }
+      }
+    };
+    const tick = (svc: DownloadProgressService, hash: string) =>
+      svc.applyProgress({
+        mediaId: 1,
+        mediaType: 'series',
+        seasonNumber: 1,
+        episodeNumber: 8,
+        hash,
+        progress: 0.5,
+        dlspeed: 0,
+        eta: 0,
+        state: 'active',
+      });
+
+    it('keeps a leaf that is still being reported', () => {
+      const svc = make();
+      tick(svc, 'aaa');
+
+      sweep(svc);
+
+      expect(svc.progress().size).toBe(1);
+    });
+
+    it('drops only the leaf that went quiet', () => {
+      const svc = make();
+      tick(svc, 'aaa');
+      age(svc, 4 * 60_000);
+      tick(svc, 'bbb');
+
+      sweep(svc);
+
+      expect([...svc.progress().get(1)!.seasons!.get(1)!.leaves.keys()]).toEqual(['hash:bbb']);
+    });
+
+    it('drops the media once its last leaf goes quiet', () => {
+      const svc = make();
+      tick(svc, 'aaa');
+      age(svc, 4 * 60_000);
+
+      sweep(svc);
+
+      expect(svc.progress().size).toBe(0);
+    });
+
+    it("sweeps a movie's entry, which is its own leaf", () => {
+      const svc = make();
+      svc.applyProgress({
+        mediaId: 2,
+        mediaType: 'movie',
+        progress: 0.5,
+        dlspeed: 0,
+        eta: 0,
+        state: 'active',
+      });
+      age(svc, 4 * 60_000);
+
+      sweep(svc);
+
+      expect(svc.progress().size).toBe(0);
+    });
+  });
+
+  /**
    * Two releases grabbed for the same episode — a second tracker's copy racing
    * the first. The leaf used to be keyed by episode number, so the second
    * overwrote the first and the header showed one download where there were two.

@@ -17,6 +17,8 @@ export interface DownloadLeaf {
   /** The episode this torrent is for, when it names one. Held on the leaf
    *  rather than in its key, which now identifies the torrent itself. */
   episodeNumber?: number;
+  /** When this leaf was last reported, for the staleness sweep. */
+  updatedAt?: number;
   weight?: number; // torrent size in bytes, for a size-weighted percent (see foldLeaves)
   /** This torrent's own speed and ETA. Held per leaf because concurrent
    *  episodes each have their own, and a media-level pair could only ever
@@ -42,6 +44,9 @@ export interface MediaDownloadProgress {
   dlspeed: number;
   eta: number;
   seasons?: Map<number, SeasonProgress>;
+  /** When this entry was last reported, for the staleness sweep. Only a movie
+   *  needs it here — a series is swept leaf by leaf. */
+  updatedAt?: number;
 }
 
 /** Payload of a `download.progress` SSE event. */
@@ -56,6 +61,12 @@ export interface DownloadProgressEvent {
   eta: number;
   state: DownloadProgressState;
 }
+
+/** How long a leaf may go unreported before the sweep drops it. The publisher
+ *  ticks about once a minute; three missed ticks is gone, not slow. Same
+ *  horizon the backend's replay cache uses, for the same reason. */
+const STALE_AFTER_MS = 3 * 60_000;
+const SWEEP_INTERVAL_MS = 30_000;
 
 function leafKey(episodeNumber?: number, hash?: string): LeafKey {
   if (hash) return `hash:${hash}`;
@@ -107,11 +118,70 @@ function rollupSeasons(seasons: Map<number, SeasonProgress>): {
 export class DownloadProgressService {
   readonly progress = signal<Map<number, MediaDownloadProgress>>(new Map());
 
+  private sweepHandle: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * Drop leaves nothing has reported in a while. The store is fed by events
+   * alone, so a torrent that stops being reported — deleted from the download
+   * client, or an acquisition plugin too old to announce its retirement — would
+   * otherwise sit here at its last percent for the life of the app.
+   *
+   * Mirrors the backend's own replay cache, down to the horizon: the publisher
+   * ticks about once a minute, so three missed ticks is a leaf that is gone
+   * rather than one that was slow.
+   */
+  private sweepStale(): void {
+    const cutoff = Date.now() - STALE_AFTER_MS;
+    const prev = this.progress();
+    let changed = false;
+    const next = new Map(prev);
+
+    for (const [mediaId, entry] of prev) {
+      if (!entry.seasons) {
+        // A movie's single torrent: the entry itself is the leaf.
+        if ((entry.updatedAt ?? 0) < cutoff) {
+          next.delete(mediaId);
+          changed = true;
+        }
+        continue;
+      }
+      const seasons = new Map(entry.seasons);
+      let touched = false;
+      for (const [seasonNumber, sp] of entry.seasons) {
+        const leaves = new Map([...sp.leaves].filter(([, l]) => (l.updatedAt ?? 0) >= cutoff));
+        if (leaves.size === sp.leaves.size) continue;
+        touched = true;
+        if (leaves.size === 0) seasons.delete(seasonNumber);
+        else seasons.set(seasonNumber, { leaves });
+      }
+      if (!touched) continue;
+      changed = true;
+      if (seasons.size === 0) next.delete(mediaId);
+      else next.set(mediaId, { ...entry, seasons, ...rollupSeasons(seasons) });
+    }
+
+    if (changed) this.progress.set(next);
+    if (!next.size) this.stopSweep();
+  }
+
+  /** Runs only while something is in flight — an idle app keeps no timer. */
+  private startSweep(): void {
+    if (this.sweepHandle != null || typeof setInterval === 'undefined') return;
+    this.sweepHandle = setInterval(() => this.sweepStale(), SWEEP_INTERVAL_MS);
+  }
+
+  private stopSweep(): void {
+    if (this.sweepHandle == null) return;
+    clearInterval(this.sweepHandle);
+    this.sweepHandle = null;
+  }
+
   /** Drop everything, for the SSE connect snapshot. Progress is only ever
    *  retired by an event, so a download that ended while the stream was down
    *  would otherwise sit here at its last percent for the life of the app. */
   reset(): void {
     if (this.progress().size) this.progress.set(new Map());
+    this.stopSweep();
   }
 
   /** Apply a `download.progress` SSE event. Updates a single leaf; deletes it
@@ -124,6 +194,7 @@ export class DownloadProgressService {
    *  stays the SSE shape so nothing suggests the backend sends `searching`. */
   private applyPhase(e: Omit<DownloadProgressEvent, 'state'> & { state: ProgressPhase }): void {
     const percent = Math.round(e.progress * 100);
+    this.startSweep();
     this.progress.update((prev) => {
       const next = new Map(prev);
 
@@ -144,6 +215,7 @@ export class DownloadProgressService {
             episodeNumber: e.episodeNumber,
             dlspeed: e.dlspeed,
             eta: e.eta,
+            updatedAt: Date.now(),
           });
         }
 
@@ -177,7 +249,14 @@ export class DownloadProgressService {
         if (e.progress >= 1) leaves.delete(sole.key);
         else {
           const prev = known.seasons.get(sole.seasonNumber)!.leaves.get(sole.key)!;
-          leaves.set(sole.key, { ...prev, percent, state: e.state, dlspeed: e.dlspeed, eta: e.eta });
+          leaves.set(sole.key, {
+            ...prev,
+            percent,
+            state: e.state,
+            dlspeed: e.dlspeed,
+            eta: e.eta,
+            updatedAt: Date.now(),
+          });
         }
         const seasons = new Map(known.seasons);
         if (leaves.size === 0) seasons.delete(sole.seasonNumber);
@@ -203,6 +282,7 @@ export class DownloadProgressService {
         state: f.state || 'active',
         dlspeed: e.dlspeed,
         eta: e.eta,
+        updatedAt: Date.now(),
       });
       return next;
     });
