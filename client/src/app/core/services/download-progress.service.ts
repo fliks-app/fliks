@@ -53,6 +53,17 @@ function leafKey(episodeNumber?: number, hash?: string): LeafKey {
   return 'PACK';
 }
 
+/** The one leaf a media holds, when it holds exactly one — the only case where
+ *  an unattributed series tick can be placed without guessing. */
+function soleLeafPath(
+  seasons: Map<number, SeasonProgress>,
+): { seasonNumber: number; key: LeafKey } | null {
+  if (seasons.size !== 1) return null;
+  const [seasonNumber, sp] = [...seasons.entries()][0];
+  if (sp.leaves.size !== 1) return null;
+  return { seasonNumber, key: [...sp.leaves.keys()][0] };
+}
+
 /** Fold every season leaf into the media-level state + percent. Callers only
  *  reach here with at least one leaf, so `f.state` is never the empty sentinel. */
 function rollupSeasons(seasons: Map<number, SeasonProgress>): {
@@ -123,6 +134,36 @@ export class DownloadProgressService {
           dlspeed: e.dlspeed,
           eta: e.eta,
           seasons,
+        });
+        return next;
+      }
+
+      // A series tick with no season can't be attributed. Older plugin builds
+      // sent these; taking the movie branch below would replace the entry and
+      // destroy the season map with it — the detail modal loses the episode it
+      // was naming, and the badge goes back to every episode page of the show.
+      // Update the one leaf they can only belong to instead, and otherwise keep
+      // the structure and let the next attributed tick correct it.
+      const known = next.get(e.mediaId);
+      if (e.mediaType === 'series' && known?.seasons) {
+        const sole = soleLeafPath(known.seasons);
+        if (!sole) return next;
+        const leaves = new Map(known.seasons.get(sole.seasonNumber)!.leaves);
+        if (e.progress >= 1) leaves.delete(sole.key);
+        else leaves.set(sole.key, { percent, state: e.state });
+        const seasons = new Map(known.seasons);
+        if (leaves.size === 0) seasons.delete(sole.seasonNumber);
+        else seasons.set(sole.seasonNumber, { leaves });
+        if (seasons.size === 0) {
+          next.delete(e.mediaId);
+          return next;
+        }
+        next.set(e.mediaId, {
+          ...known,
+          seasons,
+          dlspeed: e.dlspeed,
+          eta: e.eta,
+          ...rollupSeasons(seasons),
         });
         return next;
       }
