@@ -243,9 +243,20 @@ export class PlayerSession {
       // every segment URL, and this write is synchronous on the main thread.
       if (/^\[(error|fatal|warn)\]/.test(s)) appendLog(`[mpv] ${s.trimEnd()}`);
     });
-    mpv.on('exit', (e) => console.error('[mpv] process exit', JSON.stringify(e)));
+    // A packaged GUI build has no console, so anything that only reaches
+    // `console.*` is unretrievable in the field. These four are what separate a
+    // playback glitch's causes from one another — an `error` followed by a
+    // `firstFrame` is a re-open, a lone `buffering` is a cache underrun, and
+    // neither is an event below the IPC layer — so they go to the file too.
+    // Deliberately not `timeUpdate`: it fires several times a second.
+    mpv.on('exit', (e) => {
+      const line = `[mpv] process exit ${JSON.stringify(e)}`;
+      console.error(line);
+      appendLog(line);
+    });
     mpv.on('stateChanged', (p) => {
       console.log('[player] state:', p.state);
+      appendLog(`[player] state: ${p.state}`);
       setPlaybackKeepAwake(keepAwakeForState(p.state));
       this.emit({ type: 'stateChanged', payload: p });
     });
@@ -256,6 +267,7 @@ export class PlayerSession {
     });
     mpv.on('firstFrame', () => {
       console.log('[player] firstFrame');
+      appendLog('[player] firstFrame');
       setPlaybackKeepAwake(true);
       // Now that playback owns the window, paint the frame black: a video gap
       // (decoder re-init on a seek) then reads as loading, not a brand flash.
@@ -264,6 +276,7 @@ export class PlayerSession {
     });
     mpv.on('error', (p) => {
       console.log('[player] error:', JSON.stringify(p));
+      appendLog(`[player] error: ${JSON.stringify(p)}`);
       setPlaybackKeepAwake(false);
       this.emit({ type: 'error', payload: p });
     });

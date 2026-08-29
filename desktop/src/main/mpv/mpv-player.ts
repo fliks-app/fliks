@@ -94,6 +94,9 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
    *  end is detected from that property. Guards against mpv re-sending the
    *  property-change so the end-vs-failure decision runs once. */
   private sawEof = false;
+  /** mpv's own `pause` property, so leaving a cache stall can restore the state
+   *  the user actually left playback in rather than assuming `playing`. */
+  private paused = false;
   private duration = 0;
   private cacheEnd = 0;
   /** Last `time-pos` seen; compared against `duration` when `eof-reached` fires
@@ -356,10 +359,18 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
         }
         break;
       case 'pause':
-        this.emit('stateChanged', { state: data ? 'paused' : 'playing' });
+        this.paused = data === true;
+        this.emit('stateChanged', { state: this.paused ? 'paused' : 'playing' });
         break;
       case 'paused-for-cache':
-        if (data) this.emit('stateChanged', { state: 'buffering' });
+        // Both edges. Emitting only the rising one left the UI reporting
+        // `buffering` for the rest of the session: mpv resumes on its own once
+        // the cache refills and never re-sends `pause`, so nothing followed to
+        // clear it. The falling edge restores the state the user left playback
+        // in, not an assumed `playing`.
+        this.emit('stateChanged', {
+          state: data ? 'buffering' : this.paused ? 'paused' : 'playing',
+        });
         break;
       case 'track-list':
         this.emit('tracksChanged', mapTrackList((data as MpvTrack[]) ?? []));
