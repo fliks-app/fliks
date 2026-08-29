@@ -5,6 +5,7 @@
 import type { ProgressPhase } from '../../core/enums/download-progress-state.enum';
 import type {
   DownloadLeaf,
+  LeafKey,
   MediaDownloadProgress,
 } from '../../core/services/download-progress.service';
 
@@ -180,13 +181,21 @@ function fallbackDescriptor(
     : { ...base, labelKey: 'requests.badge_unmonitored', badgeClass: 'badge-ghost' };
 }
 
-function collectLeaves(
+/** A leaf with the scope it was found under, for callers that render one row
+ *  per torrent rather than a fold. */
+export interface ScopedLeaf {
+  seasonNumber: number;
+  key: LeafKey;
+  leaf: DownloadLeaf;
+}
+
+export function collectScopedLeaves(
   progress: MediaDownloadProgress,
   seasonFilter?: number[],
   episodeFilter?: number,
-): DownloadLeaf[] {
+): ScopedLeaf[] {
   if (!progress.seasons) return [];
-  const out: DownloadLeaf[] = [];
+  const out: ScopedLeaf[] = [];
   for (const [seasonNumber, sp] of progress.seasons) {
     if (seasonFilter?.length && !seasonFilter.includes(seasonNumber)) continue;
     for (const [key, leaf] of sp.leaves) {
@@ -196,10 +205,18 @@ function collectLeaves(
       if (episodeFilter != null && typeof key === 'number' && key !== episodeFilter) {
         continue;
       }
-      out.push(leaf);
+      out.push({ seasonNumber, key, leaf });
     }
   }
   return out;
+}
+
+function collectLeaves(
+  progress: MediaDownloadProgress,
+  seasonFilter?: number[],
+  episodeFilter?: number,
+): DownloadLeaf[] {
+  return collectScopedLeaves(progress, seasonFilter, episodeFilter).map((s) => s.leaf);
 }
 
 /**

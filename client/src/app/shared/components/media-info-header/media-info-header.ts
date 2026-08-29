@@ -102,6 +102,9 @@ export interface MediaInfoHeaderBadge {
   percent: number | null;
   /** daisyUI colour class, e.g. `badge-info` / `badge-ghost`. */
   badgeClass: string;
+  /** `S01E06` when several chips share the header and need telling apart;
+   *  null when there is only one and the page already says what it is for. */
+  scopeLabel: string | null;
   /** When true the badge renders as a button that emits openDownloadDetail. */
   clickable: boolean;
 }
@@ -246,7 +249,14 @@ export class MediaInfoHeaderComponent {
   /** Status badge rendered next to the kebab menu (download progress, or the
    *  monitored state), or null to show none. A clickable badge emits
    *  openDownloadDetail. */
-  readonly badge = input<MediaInfoHeaderBadge | null>(null);
+  readonly badges = input<MediaInfoHeaderBadge[]>([]);
+
+  /** `S01E06 — Téléchargement` when several chips need telling apart, the state
+   *  alone when there is only one. */
+  protected badgeLabel(b: MediaInfoHeaderBadge): string {
+    const state = this.translate.instant(b.labelKey);
+    return b.scopeLabel ? `${b.scopeLabel} — ${state}` : state;
+  }
 
   // ── Inputs: series-specific ──
   readonly mediaType = input<string>('movie');
