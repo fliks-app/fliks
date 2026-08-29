@@ -19,7 +19,6 @@ export interface DownloadLeaf {
   episodeNumber?: number;
   /** When this leaf was last reported, for the staleness sweep. */
   updatedAt?: number;
-  weight?: number; // torrent size in bytes, for a size-weighted percent (see foldLeaves)
   /** This torrent's own speed and ETA. Held per leaf because concurrent
    *  episodes each have their own, and a media-level pair could only ever
    *  report whichever of them ticked last. */
@@ -71,17 +70,6 @@ const SWEEP_INTERVAL_MS = 30_000;
 function leafKey(episodeNumber?: number, hash?: string): LeafKey {
   if (hash) return `hash:${hash}`;
   return episodeNumber ?? 'PACK';
-}
-
-/** The one leaf a media holds, when it holds exactly one — the only case where
- *  an unattributed series tick can be placed without guessing. */
-function soleLeafPath(
-  seasons: Map<number, SeasonProgress>,
-): { seasonNumber: number; key: LeafKey } | null {
-  if (seasons.size !== 1) return null;
-  const [seasonNumber, sp] = [...seasons.entries()][0];
-  if (sp.leaves.size !== 1) return null;
-  return { seasonNumber, key: [...sp.leaves.keys()][0] };
 }
 
 /** Fold every season leaf into the media-level state, percent, speed and ETA.
@@ -204,11 +192,12 @@ export class DownloadProgressService {
         const leaves = new Map(seasons.get(e.seasonNumber)?.leaves ?? []);
         const key = leafKey(e.episodeNumber, e.hash);
 
+        // A torrent with a ref stands in for the placeholder its grab put up
+        // for the same scope, which has no identity to be matched on — on a
+        // retirement as much as on a live tick.
+        if (e.hash) leaves.delete(e.episodeNumber ?? 'PACK');
         if (e.progress >= 1) leaves.delete(key);
         else {
-          // A torrent with a ref supersedes the placeholder its grab put up for
-          // the same scope, which has no identity to be matched on.
-          if (e.hash) leaves.delete(e.episodeNumber ?? 'PACK');
           leaves.set(key, {
             percent,
             state: e.state,
@@ -235,39 +224,13 @@ export class DownloadProgressService {
         return next;
       }
 
-      // A series tick with no season can't be attributed. Older plugin builds
-      // sent these; taking the movie branch below would replace the entry and
-      // destroy the season map with it — the detail modal loses the episode it
-      // was naming, and the badge goes back to every episode page of the show.
-      // Update the one leaf they can only belong to instead, and otherwise keep
-      // the structure and let the next attributed tick correct it.
-      const known = next.get(e.mediaId);
-      if (e.mediaType === 'series' && known?.seasons) {
-        const sole = soleLeafPath(known.seasons);
-        if (!sole) return next;
-        const leaves = new Map(known.seasons.get(sole.seasonNumber)!.leaves);
-        if (e.progress >= 1) leaves.delete(sole.key);
-        else {
-          const prev = known.seasons.get(sole.seasonNumber)!.leaves.get(sole.key)!;
-          leaves.set(sole.key, {
-            ...prev,
-            percent,
-            state: e.state,
-            dlspeed: e.dlspeed,
-            eta: e.eta,
-            updatedAt: Date.now(),
-          });
-        }
-        const seasons = new Map(known.seasons);
-        if (leaves.size === 0) seasons.delete(sole.seasonNumber);
-        else seasons.set(sole.seasonNumber, { leaves });
-        if (seasons.size === 0) {
-          next.delete(e.mediaId);
-          return next;
-        }
-        next.set(e.mediaId, { ...known, seasons, ...rollupSeasons(seasons) });
-        return next;
-      }
+      // A series tick with no season number cannot be placed. The plugin sends
+      // these for a history row that never got a season/episode id, so it is a
+      // steady state, not a blip. Merging one onto whichever leaf happens to be
+      // alone would attribute another torrent's percent to it, and taking the
+      // movie branch below would flatten the entry and lose the season map with
+      // it. Drop it: the next attributed tick carries the same truth.
+      if (e.mediaType === 'series') return next;
 
       // Movie (single torrent — no season dimension).
       if (e.progress >= 1) {
@@ -350,8 +313,13 @@ export class DownloadProgressService {
     const cur = this.progress().get(e.mediaId);
     if (!cur) return undefined;
     if (!cur.seasons || e.seasonNumber == null) return cur.state;
-    return cur.seasons.get(e.seasonNumber)?.leaves.get(leafKey(e.episodeNumber))
-      ?.state;
+    // Matched on the leaf's own episode: the key identifies the torrent, so a
+    // live download is keyed by its hash and reconstructing a key from the
+    // episode number could only ever find the placeholder.
+    for (const leaf of cur.seasons.get(e.seasonNumber)?.leaves.values() ?? []) {
+      if (leaf.episodeNumber === e.episodeNumber) return leaf.state;
+    }
+    return undefined;
   }
 
   /** Retire progress for a finished import. With an `episodeNumber` on a series
@@ -373,8 +341,12 @@ export class DownloadProgressService {
         const sp = seasons.get(seasonNumber);
         if (sp) {
           if (episodeNumber != null) {
-            const leaves = new Map(sp.leaves);
-            leaves.delete(episodeNumber);
+            // By the leaf's own episode, for the same reason as `leafState`.
+            // Narrower than the scope filter used for rendering: a leaf naming
+            // no episode is a pack, which one episode's import doesn't finish.
+            const leaves = new Map(
+              [...sp.leaves].filter(([, l]) => l.episodeNumber !== episodeNumber),
+            );
             if (leaves.size === 0) seasons.delete(seasonNumber);
             else seasons.set(seasonNumber, { leaves });
           } else {
@@ -384,13 +356,7 @@ export class DownloadProgressService {
         if (seasons.size === 0) {
           next.delete(mediaId);
         } else {
-          const rolled = rollupSeasons(seasons);
-          next.set(mediaId, {
-            ...cur,
-            seasons,
-            state: rolled.state,
-            percent: rolled.percent,
-          });
+          next.set(mediaId, { ...cur, seasons, ...rollupSeasons(seasons) });
         }
       } else {
         next.delete(mediaId);

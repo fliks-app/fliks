@@ -56,8 +56,7 @@ export function qbStateVariant(state: ProgressPhase | ''): ProgressVariant {
   return state ? VARIANT_BY_STATE[state] : 'primary';
 }
 
-/** Closed-state → `activity.*` i18n key (reuses the existing torrent/import
- *  status keys so no new translations are needed). */
+/** Closed-state → `activity.*` i18n key. */
 const LABEL_KEY_BY_STATE: Record<ProgressPhase, string> = {
   queued: 'activity.tstatus_queued',
   active: 'activity.tstatus_downloading',
@@ -116,33 +115,21 @@ export function dominantState(
   return best;
 }
 
-/** Size-weighted mean percent over the still-downloading leaves only — a leaf
- *  already at 100% is excluded (rounding can land a near-complete leaf there
- *  just before the store retires it), so a finishing pack never shows a
- *  misleading "downloading 96%". Weighted by torrent size when every active
- *  leaf carries one (seeded from the queue), else a plain leaf-count mean.
- *  Null when nothing is actively downloading. */
+/** Mean percent over the still-downloading leaves only — a leaf already at 100%
+ *  is excluded (rounding can land a near-complete leaf there just before the
+ *  store retires it), so a finishing pack never shows a misleading
+ *  "downloading 96%". Null when nothing is actively downloading. */
 export function activeWeightedPercent(leaves: DownloadLeaf[]): number | null {
   // A leaf still being searched for has no size and no progress — counting its
   // 0 would drag a real download's percent down and label a lone search "0%".
   const active = leaves.filter((l) => l.state !== 'searching' && l.percent < 100);
   if (!active.length) return null;
-  if (active.every((l) => l.weight != null && l.weight > 0)) {
-    const total = active.reduce((a, l) => a + (l.weight as number), 0);
-    const sum = active.reduce(
-      (a, l) => a + l.percent * (l.weight as number),
-      0,
-    );
-    return Math.round(sum / total);
-  }
   return Math.round(active.reduce((a, l) => a + l.percent, 0) / active.length);
 }
 
 export interface LeafFold {
   state: ProgressPhase | '';
   percent: number | null;
-  total: number;
-  stalled: number;
 }
 
 /** Fold a set of leaves into one status — dominant state + active percent +
@@ -152,29 +139,23 @@ export function foldLeaves(leaves: DownloadLeaf[]): LeafFold {
   return {
     state: dominantState(leaves.map((l) => l.state)),
     percent: activeWeightedPercent(leaves),
-    total: leaves.length,
-    stalled: leaves.filter((l) => l.state === 'stalled').length,
   };
 }
 
 export interface DownloadBadgeDescriptor {
-  /** Representative state; '' when no download is in flight. */
-  state: ProgressPhase | '';
   /** ngx-translate key for the badge, or null to render nothing. */
   labelKey: string | null;
   badgeClass: string;
   percent: number | null;
   /** True iff there is ≥1 in-flight leaf in scope (so the modal has content). */
   isClickable: boolean;
-  totalLeaves: number;
-  stalledLeaves: number;
 }
 
 function fallbackDescriptor(
   monitored: boolean,
   downloaded: boolean,
 ): DownloadBadgeDescriptor {
-  const base = { state: '' as const, percent: null, isClickable: false, totalLeaves: 0, stalledLeaves: 0 };
+  const base = { percent: null, isClickable: false };
   if (downloaded) return { ...base, labelKey: null, badgeClass: '' };
   return monitored
     ? { ...base, labelKey: 'requests.badge_monitored', badgeClass: 'badge-info' }
@@ -275,32 +256,17 @@ export function describeDownload(
     );
     if (!leaves.length) return null;
     fold = foldLeaves(leaves);
-  } else if (progress.seasons) {
-    const leaves = collectLeaves(progress);
-    if (!leaves.length) return null;
-    fold = {
-      state: progress.state,
-      percent: progress.percent,
-      total: leaves.length,
-      stalled: leaves.filter((l) => l.state === 'stalled').length,
-    };
   } else {
-    // Movie: a single torrent; state/percent already folded onto the entry.
-    fold = {
-      state: progress.state,
-      percent: progress.percent,
-      total: 1,
-      stalled: progress.state === 'stalled' ? 1 : 0,
-    };
+    // Unscoped, or a movie's single torrent: the entry already carries the fold
+    // of everything under it. A series with no leaf left is nothing in flight.
+    if (progress.seasons && !collectLeaves(progress).length) return null;
+    fold = { state: progress.state, percent: progress.percent };
   }
 
   return {
-    state: fold.state,
     labelKey: qbStateLabelKey(fold.state),
     badgeClass: qbStateBadgeClass(fold.state),
     percent: fold.percent,
     isClickable: true,
-    totalLeaves: fold.total,
-    stalledLeaves: fold.stalled,
   };
 }

@@ -355,7 +355,10 @@ export class MediaInfoHeaderComponent {
     if (this.mediaType() === 'series' && !this.episodeId()) {
       this.watched.set(this.seriesFullyWatched());
     } else {
-      this.playable.loadWatchedState(mediaId, episodeId).then(v => this.watched.set(v));
+      this.playable.loadWatchedState(mediaId, episodeId).then((v) => {
+        // A faster episode switch already superseded this request.
+        if (this.lastPlaybackKey === key) this.watched.set(v);
+      });
     }
 
     if (this.mediaType() === 'series' && !episodeId) {

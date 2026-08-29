@@ -56,6 +56,84 @@ describe('DownloadProgressService', () => {
   });
 
   /**
+   * `import.complete` is what retires a finished episode. It arrives with a
+   * season and episode number, never a torrent ref, so it has to find the leaf
+   * by the episode the leaf names — the key identifies the torrent.
+   */
+  describe('clearMedia', () => {
+    const make = () => {
+      TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+      return TestBed.inject(DownloadProgressService);
+    };
+    const tick = (
+      svc: DownloadProgressService,
+      hash: string,
+      episodeNumber: number | undefined,
+    ) =>
+      svc.applyProgress({
+        mediaId: 1,
+        mediaType: 'series',
+        seasonNumber: 1,
+        episodeNumber,
+        hash,
+        progress: 0.5,
+        dlspeed: 0,
+        eta: 0,
+        state: 'active',
+      });
+
+    it('retires the hash-keyed leaf of the imported episode', () => {
+      const svc = make();
+      tick(svc, 'aaa', 8);
+
+      svc.clearMedia(1, 1, 8);
+
+      expect(svc.progress().size).toBe(0);
+    });
+
+    it("leaves a sibling episode's torrent alone", () => {
+      const svc = make();
+      tick(svc, 'aaa', 8);
+      tick(svc, 'bbb', 9);
+
+      svc.clearMedia(1, 1, 8);
+
+      expect([...svc.progress().get(1)!.seasons!.get(1)!.leaves.keys()]).toEqual(['hash:bbb']);
+    });
+
+    it('retires both releases when two were racing for that episode', () => {
+      const svc = make();
+      tick(svc, 'aaa', 8);
+      tick(svc, 'bbb', 8);
+
+      svc.clearMedia(1, 1, 8);
+
+      expect(svc.progress().size).toBe(0);
+    });
+
+    // One episode landing does not finish the pack that carries the rest.
+    it('keeps a season pack, which names no episode', () => {
+      const svc = make();
+      tick(svc, 'aaa', 8);
+      tick(svc, 'pack', undefined);
+
+      svc.clearMedia(1, 1, 8);
+
+      expect([...svc.progress().get(1)!.seasons!.get(1)!.leaves.keys()]).toEqual(['hash:pack']);
+    });
+
+    it('drops the whole season when given no episode', () => {
+      const svc = make();
+      tick(svc, 'aaa', 8);
+      tick(svc, 'bbb', 9);
+
+      svc.clearMedia(1, 1);
+
+      expect(svc.progress().size).toBe(0);
+    });
+  });
+
+  /**
    * The store is fed by events alone, so a torrent that simply stops being
    * reported — deleted from the download client, or announced by a plugin too
    * old to retire it — would sit at its last percent for the life of the app.
@@ -274,10 +352,11 @@ describe('DownloadProgressService', () => {
   });
 
   /**
-   * A series tick with no season number. Older plugin builds sent these, and
-   * the movie branch used to replace the whole entry — destroying the season
-   * map, so the detail modal lost the episode it was naming and the badge went
-   * back to showing on every episode page of the show.
+   * A series tick with no season number cannot be placed. The plugin sends one
+   * for a history row that never got a season/episode id, so it is a steady
+   * state — merging it onto whichever leaf happened to be alone attributed
+   * another torrent's percent to that episode, and taking the movie branch
+   * flattened the entry and lost the season map with it.
    */
   describe('a series tick with no season', () => {
     const make = () => {
@@ -290,72 +369,46 @@ describe('DownloadProgressService', () => {
         mediaType: 'series',
         seasonNumber: 1,
         episodeNumber: 8,
+        hash: 'aaa',
         progress: 0.1,
         dlspeed: 0,
         eta: 0,
         state: 'active',
       });
-
-    it('updates the sole leaf instead of flattening the entry', () => {
-      const svc = make();
-      seed(svc);
-
+    const unattributed = (svc: DownloadProgressService, progress: number) =>
       svc.applyProgress({
         mediaId: 1,
         mediaType: 'series',
-        progress: 0.6,
+        progress,
         dlspeed: 9,
         eta: 5,
         state: 'active',
       });
 
-      const leaf = svc.progress().get(1)?.seasons?.get(1)?.leaves.get(8);
-      expect(leaf?.percent).toBe(60);
-      expect(svc.progress().get(1)?.dlspeed).toBe(9);
-    });
-
-    it('retires the sole leaf when it reports done', () => {
+    it("leaves a known leaf's own percent alone", () => {
       const svc = make();
       seed(svc);
 
-      svc.applyProgress({
-        mediaId: 1,
-        mediaType: 'series',
-        progress: 1,
-        dlspeed: 0,
-        eta: 0,
-        state: 'active',
-      });
+      unattributed(svc, 0.6);
+
+      expect(svc.progress().get(1)?.seasons?.get(1)?.leaves.get('hash:aaa')?.percent).toBe(10);
+    });
+
+    it('never flattens the entry into the movie shape', () => {
+      const svc = make();
+      seed(svc);
+
+      unattributed(svc, 0.6);
+
+      expect(svc.progress().get(1)?.seasons?.size).toBe(1);
+    });
+
+    it('creates nothing when there is no entry to place it against', () => {
+      const svc = make();
+
+      unattributed(svc, 0.6);
 
       expect(svc.progress().size).toBe(0);
-    });
-
-    it('keeps the structure rather than guessing when several leaves are in flight', () => {
-      const svc = make();
-      seed(svc);
-      svc.applyProgress({
-        mediaId: 1,
-        mediaType: 'series',
-        seasonNumber: 1,
-        episodeNumber: 9,
-        progress: 0.2,
-        dlspeed: 0,
-        eta: 0,
-        state: 'active',
-      });
-
-      svc.applyProgress({
-        mediaId: 1,
-        mediaType: 'series',
-        progress: 0.9,
-        dlspeed: 0,
-        eta: 0,
-        state: 'active',
-      });
-
-      const leaves = svc.progress().get(1)?.seasons?.get(1)?.leaves;
-      expect(leaves?.get(8)?.percent).toBe(10);
-      expect(leaves?.get(9)?.percent).toBe(20);
     });
   });
 
@@ -385,25 +438,30 @@ describe('DownloadProgressService', () => {
       expect(svc.progress().size).toBe(0);
     });
 
+    // Every real tick carries a ref, so these use one: a hash-less payload is a
+    // shape production never emits, and it is exactly the shape where a guard
+    // that reconstructs a key from the episode number passes by accident.
     it('leaves a real torrent alone once it takes over', () => {
       const svc = make();
       const release = svc.markGrabbing(episode);
-      svc.applyProgress({ ...episode, progress: 0.4, dlspeed: 1, eta: 2, state: 'active' });
+      svc.applyProgress({ ...episode, hash: 'aaa', progress: 0.4, dlspeed: 1, eta: 2, state: 'active' });
 
       release();
 
-      expect(svc.progress().get(1)?.seasons?.get(1)?.leaves.get(8)).toEqual(
+      expect(svc.progress().get(1)?.seasons?.get(1)?.leaves.get('hash:aaa')).toEqual(
         expect.objectContaining({ state: 'active', percent: 40 }),
       );
     });
 
     it('never downgrades a torrent already reporting to a search', () => {
       const svc = make();
-      svc.applyProgress({ ...episode, progress: 0.4, dlspeed: 1, eta: 2, state: 'active' });
+      svc.applyProgress({ ...episode, hash: 'aaa', progress: 0.4, dlspeed: 1, eta: 2, state: 'active' });
 
       svc.markGrabbing(episode)();
 
-      expect(svc.progress().get(1)?.seasons?.get(1)?.leaves.get(8)?.state).toBe('active');
+      const leaves = svc.progress().get(1)!.seasons!.get(1)!.leaves;
+      expect([...leaves.keys()]).toEqual(['hash:aaa']);
+      expect(leaves.get('hash:aaa')?.state).toBe('active');
     });
 
     it("drops only its own leaf, not a sibling's download", () => {
@@ -413,6 +471,7 @@ describe('DownloadProgressService', () => {
         mediaType: 'series',
         seasonNumber: 1,
         episodeNumber: 3,
+        hash: 'bbb',
         progress: 0.5,
         dlspeed: 1,
         eta: 2,
@@ -421,7 +480,9 @@ describe('DownloadProgressService', () => {
 
       svc.markGrabbing(episode)();
 
-      expect([...(svc.progress().get(1)?.seasons?.get(1)?.leaves.keys() ?? [])]).toEqual([3]);
+      expect([...(svc.progress().get(1)?.seasons?.get(1)?.leaves.keys() ?? [])]).toEqual([
+        'hash:bbb',
+      ]);
     });
   });
 });

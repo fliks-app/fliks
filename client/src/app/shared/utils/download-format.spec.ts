@@ -11,11 +11,7 @@ import {
 import { DownloadLeaf, MediaDownloadProgress } from '../../core/services/download-progress.service';
 import { DownloadProgressState } from '../../core/enums/download-progress-state.enum';
 
-const leaf = (state: DownloadProgressState, percent = 50, weight?: number): DownloadLeaf => ({
-  state,
-  percent,
-  weight,
-});
+const leaf = (state: DownloadProgressState, percent = 50): DownloadLeaf => ({ state, percent });
 
 describe('download-format', () => {
   describe('qbStateVariant / qbStateLabelKey / qbStateBadgeClass', () => {
@@ -64,17 +60,8 @@ describe('download-format', () => {
       expect(activeWeightedPercent([])).toBeNull();
     });
 
-    it('averages plainly when leaves carry no weight', () => {
+    it('averages across the active leaves', () => {
       expect(activeWeightedPercent([leaf('active', 40), leaf('active', 60)])).toBe(50);
-    });
-
-    it('weights by size when every active leaf carries one', () => {
-      const percent = activeWeightedPercent([
-        leaf('active', 10, 900),
-        leaf('active', 90, 100),
-      ]);
-      // (10*900 + 90*100) / 1000 = 18
-      expect(percent).toBe(18);
     });
   });
 
@@ -82,8 +69,6 @@ describe('download-format', () => {
     it('folds dominant state, weighted percent and stalled count', () => {
       const fold = foldLeaves([leaf('stalled', 50), leaf('active', 30), leaf('stalled', 10)]);
       expect(fold.state).toBe('stalled');
-      expect(fold.total).toBe(3);
-      expect(fold.stalled).toBe(2);
     });
   });
 
@@ -109,13 +94,10 @@ describe('download-format', () => {
         eta: 0,
       };
       const d = describeBadge(progress, { monitored: true, downloaded: false });
-      expect(d.state).toBe('stalled');
       expect(d.labelKey).toBe('activity.tstatus_stalled');
       expect(d.badgeClass).toBe('badge-warning');
       expect(d.percent).toBe(42);
       expect(d.isClickable).toBe(true);
-      expect(d.totalLeaves).toBe(1);
-      expect(d.stalledLeaves).toBe(1);
     });
 
     it('narrows a series to the requested seasons and folds only those leaves', () => {
@@ -136,9 +118,6 @@ describe('download-format', () => {
         downloaded: false,
         seasonFilter: [2],
       });
-      expect(d.state).toBe('active');
-      expect(d.totalLeaves).toBe(1);
-      expect(d.stalledLeaves).toBe(0);
     });
   });
 

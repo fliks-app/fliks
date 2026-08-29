@@ -64,13 +64,10 @@ export class RequestStatusBadgeComponent {
       });
     }
     return {
-      state: '',
       labelKey: 'requests.status.' + r.status,
       badgeClass: this.statusBadgeClass(r.status),
       percent: null,
       isClickable: false,
-      totalLeaves: 0,
-      stalledLeaves: 0,
     };
   });
 

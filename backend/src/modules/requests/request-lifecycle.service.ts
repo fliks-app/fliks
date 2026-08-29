@@ -16,7 +16,6 @@ import { MediaService } from '../media/media.service';
 import { onDiskEpisodeNumbers } from '../media/episode-coverage.util';
 import { ProfilesService } from '../profiles/profiles.service';
 import { EventsService } from '../scheduler/events.service';
-import { SseAudienceService } from '../scheduler/sse-audience.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { User } from '../users/entities/user.entity';
 import {
@@ -65,7 +64,6 @@ export class RequestLifecycleService
     private readonly profiles: ProfilesService,
     private readonly events: EventsService,
     private readonly notifications: NotificationsService,
-    private readonly sseAudience: SseAudienceService,
   ) {}
 
   onModuleInit(): void {

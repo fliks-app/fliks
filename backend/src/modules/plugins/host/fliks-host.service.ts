@@ -57,7 +57,18 @@ import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
 import { PluginHostContext } from './plugin-host-context';
 import { DownloadProgressState } from '../../../common/constants/download-progress-state';
 
-/** The rate `progress.set` promises: at most one SSE emission per media per second. */
+/** One gate per leaf, matching how every consumer identifies one — the replay
+ *  cache's own key and the client's leaf key. */
+function progressGateKey(p: {
+  mediaId: number;
+  seasonNumber?: number;
+  episodeNumber?: number;
+  ref?: string;
+}): string {
+  return `${p.mediaId}:${p.seasonNumber ?? ''}:${p.episodeNumber ?? ''}:${p.ref ?? ''}`;
+}
+
+/** The rate `progress.set` promises: at most one SSE emission per torrent per second. */
 const PROGRESS_MIN_INTERVAL_MS = 1_000;
 
 interface ProgressGate {
@@ -123,7 +134,7 @@ export class FliksHostImpl implements PluginHostApi {
 
   private readonly logger = new Logger(FliksHostImpl.name);
 
-  private readonly progressGates = new Map<number, ProgressGate>();
+  private readonly progressGates = new Map<string, ProgressGate>();
 
   /** The enumerated list a cursor walks. One entry: a walk is sequential, and a second caller
    *  starting its own walk simply re-enumerates rather than reading someone else's page. */
@@ -1045,33 +1056,40 @@ export class FliksHostImpl implements PluginHostApi {
     etaSeconds?: number;
     state: DownloadProgressState;
   }): Promise<void> {
-    const gate = this.progressGates.get(p.mediaId);
+    const key = progressGateKey(p);
+    const gate = this.progressGates.get(key);
     const now = Date.now();
     if (gate && now - gate.lastEmitMs < PROGRESS_MIN_INTERVAL_MS) {
-      // Newest wins: the trailing emit carries the latest state, so nothing is merely dropped.
+      // Newest wins — for this leaf. Coalescing per media would drop every
+      // sibling torrent of a season reported in the same window, and the
+      // consumers key per leaf, so a dropped one is never seen at all.
       gate.pending = p;
       if (!gate.timer) {
         gate.timer = setTimeout(
-          () => this.flushProgress(p.mediaId),
+          () => this.flushProgress(key),
           PROGRESS_MIN_INTERVAL_MS - (now - gate.lastEmitMs),
         );
         gate.timer.unref();
       }
       return;
     }
-    this.progressGates.set(p.mediaId, { lastEmitMs: now, pending: null, timer: null });
+    // A due-but-unfired flush would otherwise delete the gate installed here,
+    // resetting the rate limit for the next push.
+    if (gate?.timer) clearTimeout(gate.timer);
+    this.progressGates.set(key, { lastEmitMs: now, pending: null, timer: null });
     await this.pushProgress(p);
   }
 
-  private flushProgress(mediaId: number): void {
-    const gate = this.progressGates.get(mediaId);
+  private flushProgress(key: string): void {
+    const gate = this.progressGates.get(key);
     if (!gate) return;
     gate.timer = null;
     const pending = gate.pending;
     gate.pending = null;
     if (!pending) {
-      // Idle for a whole window: drop the gate so the map cannot grow with every media ever seen.
-      this.progressGates.delete(mediaId);
+      // Idle for a whole window: drop the gate so the map cannot grow with
+      // every torrent ever seen.
+      this.progressGates.delete(key);
       return;
     }
     gate.lastEmitMs = Date.now();

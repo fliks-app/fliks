@@ -22,7 +22,7 @@
           </div>
         </div>
       } @else {
-        <div class="flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
+        <div class="flex flex-col gap-4 max-h-[min(60vh,100vh-12rem)] overflow-y-auto">
           @for (s of seasonRows(); track s.seasonNumber) {
             <div class="flex flex-col gap-3">
               <span class="text-base font-semibold">{{

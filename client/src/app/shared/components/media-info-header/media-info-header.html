@@ -302,7 +302,7 @@
               {{ 'player.play_from_start' | translate }}
             </button>
           }
-          @if (mediaType() === 'movie' || episodeId()) {
+          @if ((mediaType() === 'movie' || episodeId()) && !tv.isTv()) {
             <button type="button" class="btn btn-ghost btn btn-circle" (click)="openDownload.emit()">
               <svg lucideDownload class="h-4 w-4"></svg>
             </button>

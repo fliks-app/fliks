@@ -47,7 +47,13 @@ export class SseService implements OnDestroy {
     // and let the layout re-open it for the next one.
     effect(() => {
       this.auth.sessionEpoch();
-      untracked(() => this.close());
+      untracked(() => {
+        this.close();
+        // Progress is keyed by media, not by account. Dropping it with the
+        // stream that fed it also stops the sweep timer of a session nobody
+        // is watching any more.
+        this.downloadProgress.reset();
+      });
     });
   }
 
