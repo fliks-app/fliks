@@ -257,6 +257,11 @@ export class MediaInfoHeaderComponent {
    * PlaybackState row, which does not exist for series.
    */
   readonly seriesFullyWatched = input<boolean>(false);
+  /** A series root marks every episode at once, so it needs no selected file;
+   *  a movie or a single episode toggles one file and does need one. */
+  readonly canToggleWatched = computed(
+    () => (this.mediaType() === 'series' && !this.episodeId()) || !!this.selectedFileId(),
+  );
 
   // ── Outputs (delegated to parent) ──
   readonly selectedFileIdChange = output<number>();
@@ -337,17 +342,22 @@ export class MediaInfoHeaderComponent {
     }
 
 
-    // Watched state: for a series without an episode context, derive from the
-    // aggregate `seriesFullyWatched` input (see parent). Otherwise, read the
-    // playback_state row as before.
-    if (this.mediaType() === 'series' && !episodeId) {
+    // Watched state: a series root toggle marks every episode at once, so it
+    // reads the aggregate `seriesFullyWatched` input (see parent). Keyed on the
+    // episode input rather than the resume fallback below — the resume
+    // episode's own flag would disagree with what the toggle does.
+    if (this.mediaType() === 'series' && !this.episodeId()) {
       this.watched.set(this.seriesFullyWatched());
+    } else {
+      this.playable.loadWatchedState(mediaId, episodeId).then(v => this.watched.set(v));
+    }
+
+    if (this.mediaType() === 'series' && !episodeId) {
       // A series' own row (episode IS NULL) is never its resume target, so
       // reading it here only flashes a bar that the real episode then clears.
       // The parent resolves `resumeEpisodeId` a moment later and re-runs this.
       return;
     }
-    this.playable.loadWatchedState(mediaId, episodeId).then(v => this.watched.set(v));
 
     // Tracked read: a position queued offline shows up here as soon as it is
     // recorded, and again as soon as the flush clears it.

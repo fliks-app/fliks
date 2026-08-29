@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { MediaType } from '../enums/media-type.enum';
-import { DownloadProgressState } from '../enums/download-progress-state.enum';
+import { DownloadProgressState, ProgressPhase } from '../enums/download-progress-state.enum';
 import { foldLeaves } from '../../shared/utils/download-format';
 
 /** Identifies one torrent within a season: the episode number, an explicit
@@ -11,7 +11,7 @@ export type LeafKey = number | 'PACK' | `hash:${string}`;
 /** One in-flight torrent contributing to a media's download progress. */
 export interface DownloadLeaf {
   percent: number; // 0–100
-  state: DownloadProgressState;
+  state: ProgressPhase;
   weight?: number; // torrent size in bytes, for a size-weighted percent (see foldLeaves)
 }
 
@@ -28,7 +28,7 @@ export interface MediaDownloadProgress {
   mediaId: number;
   mediaType: MediaType;
   percent: number | null; // active-weighted mean; null when nothing is active
-  state: DownloadProgressState; // dominant state across all leaves
+  state: ProgressPhase; // dominant state across all leaves
   dlspeed: number;
   eta: number;
   seasons?: Map<number, SeasonProgress>;
@@ -56,7 +56,7 @@ function leafKey(episodeNumber?: number, hash?: string): LeafKey {
 /** Fold every season leaf into the media-level state + percent. Callers only
  *  reach here with at least one leaf, so `f.state` is never the empty sentinel. */
 function rollupSeasons(seasons: Map<number, SeasonProgress>): {
-  state: DownloadProgressState;
+  state: ProgressPhase;
   percent: number | null;
 } {
   const leaves: DownloadLeaf[] = [];
@@ -78,9 +78,22 @@ function rollupSeasons(seasons: Map<number, SeasonProgress>): {
 export class DownloadProgressService {
   readonly progress = signal<Map<number, MediaDownloadProgress>>(new Map());
 
+  /** Drop everything, for the SSE connect snapshot. Progress is only ever
+   *  retired by an event, so a download that ended while the stream was down
+   *  would otherwise sit here at its last percent for the life of the app. */
+  reset(): void {
+    if (this.progress().size) this.progress.set(new Map());
+  }
+
   /** Apply a `download.progress` SSE event. Updates a single leaf; deletes it
    *  (and any now-empty season/media) once it reaches 100%. */
   applyProgress(e: DownloadProgressEvent): void {
+    this.applyPhase(e);
+  }
+
+  /** Same, for a phase the wire can't carry. {@link DownloadProgressEvent}
+   *  stays the SSE shape so nothing suggests the backend sends `searching`. */
+  private applyPhase(e: Omit<DownloadProgressEvent, 'state'> & { state: ProgressPhase }): void {
     const percent = Math.round(e.progress * 100);
     this.progress.update((prev) => {
       const next = new Map(prev);
@@ -130,6 +143,72 @@ export class DownloadProgressService {
       });
       return next;
     });
+  }
+
+  /**
+   * Mark a grab as under way for a scope, before any torrent exists: the header
+   * says "searching" from the click instead of from the download client's first
+   * tick, seconds later. Returns the release to call when the request settles —
+   * either way, since a failed search must not leave the badge up.
+   *
+   * Modelled as an ordinary leaf so scoping, folding and rendering need no
+   * special case: an episode grab is keyed to that episode and stays off its
+   * siblings' pages, exactly like the torrent that replaces it.
+   */
+  markGrabbing(e: {
+    mediaId: number;
+    mediaType: MediaType;
+    seasonNumber?: number;
+    episodeNumber?: number;
+  }): () => void {
+    const key = leafKey(e.episodeNumber);
+    // A torrent already reporting for this scope says strictly more than
+    // "searching" — leave it, and make the release a no-op.
+    if (this.leafState(e) !== undefined) return () => undefined;
+
+    this.applyPhase({ ...e, progress: 0, dlspeed: 0, eta: 0, state: 'searching' });
+
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      // Real progress landed while the request was in flight: it owns the leaf.
+      if (this.leafState(e) !== 'searching') return;
+      this.progress.update((prev) => {
+        const cur = prev.get(e.mediaId);
+        if (!cur) return prev;
+        const next = new Map(prev);
+        if (!cur.seasons || e.seasonNumber == null) {
+          next.delete(e.mediaId);
+          return next;
+        }
+        const seasons = new Map(cur.seasons);
+        const leaves = new Map(seasons.get(e.seasonNumber)?.leaves ?? []);
+        leaves.delete(key);
+        if (leaves.size === 0) seasons.delete(e.seasonNumber);
+        else seasons.set(e.seasonNumber, { leaves });
+        if (seasons.size === 0) {
+          next.delete(e.mediaId);
+          return next;
+        }
+        const rolled = rollupSeasons(seasons);
+        next.set(e.mediaId, { ...cur, seasons, ...rolled });
+        return next;
+      });
+    };
+  }
+
+  /** Phase of the leaf a grab scope maps to, or undefined when there is none. */
+  private leafState(e: {
+    mediaId: number;
+    seasonNumber?: number;
+    episodeNumber?: number;
+  }): ProgressPhase | undefined {
+    const cur = this.progress().get(e.mediaId);
+    if (!cur) return undefined;
+    if (!cur.seasons || e.seasonNumber == null) return cur.state;
+    return cur.seasons.get(e.seasonNumber)?.leaves.get(leafKey(e.episodeNumber))
+      ?.state;
   }
 
   /** Retire progress for a finished import. With an `episodeNumber` on a series

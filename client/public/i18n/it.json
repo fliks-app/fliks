@@ -1183,6 +1183,7 @@
     "col_score": "Punteggio",
     "col_flags": "Flag",
     "tstatus_downloading": "Download",
+    "tstatus_searching": "Ricerca del file",
     "tstatus_stalled": "Bloccato",
     "tstatus_paused": "In pausa",
     "tstatus_queued": "In coda",

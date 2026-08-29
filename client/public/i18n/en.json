@@ -1191,6 +1191,7 @@
     "col_score": "Score",
     "col_flags": "Flags",
     "tstatus_downloading": "Downloading",
+    "tstatus_searching": "Searching",
     "tstatus_stalled": "Stalled",
     "tstatus_paused": "Paused",
     "tstatus_queued": "Queued",

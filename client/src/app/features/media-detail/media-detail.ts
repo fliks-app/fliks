@@ -71,7 +71,7 @@ import { MediaCardComponent } from '../../shared/components/media-card/media-car
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
-import { describeBadge } from '../../shared/utils/download-format';
+import { describeDownload } from '../../shared/utils/download-format';
 import { TvService } from '../../core/services/tv.service';
 import { DownloadProgressService } from '../../core/services/download-progress.service';
 import {
@@ -107,6 +107,14 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
     return false;
   }
 }
+
+/** Season / episode a grab targets, matching the leaf its torrent lands under.
+ *  Empty for a movie, or a whole-series grab with no season scope. */
+type GrabScope = { seasonNumber?: number; episodeNumber?: number };
+
+/** How long a successful grab keeps the search phase while the download
+ *  client's first tick makes its way over SSE. */
+const GRAB_HANDOFF_MS = 8000;
 
 @Component({
   selector: 'app-media-detail',
@@ -172,53 +180,40 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return m ? (this.downloadProgress.progress().get(m.id) ?? null) : null;
   });
 
-  /** Status badge shown next to the kebab on the movie/series header. Hidden
-   *  once the content is downloaded (movie file present / every episode in).
-   *  While a download is in flight it shows the mean percent and is clickable
-   *  (opens the detail modal); otherwise it reflects the monitored state. */
-  readonly headerBadge = computed<MediaInfoHeaderBadge | null>(() => {
-    const m = this.media();
-    if (!m) return null;
-    const downloaded =
-      m.type === 'series'
-        ? !!m.episodeStats &&
-          m.episodeStats.totalEpisodes > 0 &&
-          m.episodeStats.downloadedEpisodes >= m.episodeStats.totalEpisodes
-        : this.mediaFiles().length > 0;
-    const d = describeBadge(this.activeDownload(), {
-      monitored: m.monitored,
-      downloaded,
-    });
-    if (!d.labelKey) return null;
+  /** In-flight download for a scope, shaped for the header chip. Only that —
+   *  the monitored/unmonitored state has its own chip in the metadata row and
+   *  its entry in the actions menu, and on an ongoing series it would otherwise
+   *  sit in the header for the life of the show. */
+  private downloadBadge(
+    scope: { seasonFilter?: number[]; episodeFilter?: number } = {},
+  ): MediaInfoHeaderBadge | null {
+    const d = describeDownload(this.activeDownload(), scope);
+    if (!d?.labelKey) return null;
     return {
       labelKey: d.labelKey,
       percent: d.percent,
       badgeClass: d.badgeClass,
       // Non-interactive on TV: a focusable in-card/header button would add a
       // second D-pad stop. The download detail is a web/mobile drill-down.
-      clickable: d.isClickable && !this.tv.isTv(),
+      clickable: !this.tv.isTv(),
     };
-  });
+  }
 
-  /** Same badge on the episode page, narrowed to that episode's own torrent
-   *  (or the season pack that carries it). */
+  /** Whole-media download progress, on the movie/series header. */
+  readonly headerBadge = computed<MediaInfoHeaderBadge | null>(() =>
+    this.media() ? this.downloadBadge() : null,
+  );
+
+  /** Same badge on the episode page, narrowed to that episode's own torrent or
+   *  the season pack that carries it — a sibling episode's grab stays off it. */
   readonly episodeHeaderBadge = computed<MediaInfoHeaderBadge | null>(() => {
     const ep = this.focusedEpisode();
     const season = this.focusedSeason();
     if (!ep || !season) return null;
-    const d = describeBadge(this.activeDownload(), {
-      monitored: ep.monitored,
-      downloaded: ep.hasFile,
+    return this.downloadBadge({
       seasonFilter: [season.seasonNumber],
       episodeFilter: ep.episodeNumber,
     });
-    if (!d.labelKey) return null;
-    return {
-      labelKey: d.labelKey,
-      percent: d.percent,
-      badgeClass: d.badgeClass,
-      clickable: d.isClickable && !this.tv.isTv(),
-    };
   });
   private readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
   private readonly downloadDetailModal =
@@ -1155,15 +1150,52 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   /** Runs one grab-best, tracked by target id so a grab on another movie, episode
    *  or season neither spins nor disables this one. Re-entry on the same id is
    *  dropped, which is what stops a double-click grabbing twice. */
+  /**
+   * Run a grab with the header badge showing its search phase from the click,
+   * so the user isn't left with a silent button while the indexers are queried.
+   * The badge hands over to the real torrent as soon as the first progress
+   * event lands; on failure the phase clears with the settled request.
+   */
+  private async withGrabPhase<T>(
+    scope: GrabScope,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const m = this.media();
+    const release = m
+      ? this.downloadProgress.markGrabbing({ mediaId: m.id, mediaType: m.type, ...scope })
+      : () => undefined;
+    try {
+      const out = await run();
+      // Success: the grab is real, so keep the phase up while the download
+      // client's first tick makes its way over SSE. Only ever clears a leaf
+      // still marked `searching`, so a torrent that lands sooner is untouched.
+      setTimeout(release, GRAB_HANDOFF_MS);
+      return out;
+    } catch (err) {
+      release();
+      throw err;
+    }
+  }
+
+  /** Grab scope for an episode id — the leaf key its torrent will land under. */
+  private episodeScope(episodeId: number): GrabScope {
+    for (const s of this.media()?.seasons ?? []) {
+      const ep = s.episodes?.find((e) => e.id === episodeId);
+      if (ep) return { seasonNumber: s.seasonNumber, episodeNumber: ep.episodeNumber };
+    }
+    return {};
+  }
+
   private async runGrabBest(
     busy: WritableSignal<ReadonlySet<number>>,
     id: number,
+    scope: GrabScope,
     grab: () => Promise<void>,
   ): Promise<void> {
     if (busy().has(id)) return;
     busy.update((s) => new Set(s).add(id));
     try {
-      await grab();
+      await this.withGrabPhase(scope, grab);
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       /* error toast surfaced by the global interceptor */
@@ -1179,7 +1211,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   async grabBest() {
     const m = this.media();
     if (!m || m.type !== 'movie') return;
-    await this.runGrabBest(this.movieGrabBestBusy, m.id, () =>
+    await this.runGrabBest(this.movieGrabBestBusy, m.id, {}, () =>
       this.releasePickerApi.grabMovie(m.id, {}),
     );
   }
@@ -1686,7 +1718,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   async grabEpisodeBest(mediaId: number, episodeId: number) {
-    await this.runGrabBest(this.epGrabBestBusy, episodeId, () =>
+    await this.runGrabBest(this.epGrabBestBusy, episodeId, this.episodeScope(episodeId), () =>
       this.releasePickerApi.grabEpisode(mediaId, episodeId, {}),
     );
   }
@@ -1694,7 +1726,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   async grabEpisodeRelease(mediaId: number, episodeId: number, r: MovieRelease, key: string) {
     this.epGrabBusy.set(key);
     try {
-      await this.releasePickerApi.grabEpisode(mediaId, episodeId, releaseGrabBody(r));
+      await this.withGrabPhase(this.episodeScope(episodeId), () =>
+        this.releasePickerApi.grabEpisode(mediaId, episodeId, releaseGrabBody(r)),
+      );
       this.epGrabState.update((s) => new Map(s).set(key, 'ok'));
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
@@ -1734,8 +1768,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   async grabSeasonAuto(mediaId: number, season: Season) {
-    await this.runGrabBest(this.seasonGrabBestBusy, season.id, () =>
-      this.releasePickerApi.grabSeason(mediaId, season.id, {}),
+    await this.runGrabBest(
+      this.seasonGrabBestBusy,
+      season.id,
+      { seasonNumber: season.seasonNumber },
+      () => this.releasePickerApi.grabSeason(mediaId, season.id, {}),
     );
   }
 
@@ -1748,7 +1785,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   async grabSeasonRelease(mediaId: number, season: Season, r: MovieRelease, key: string) {
     this.seasonGrabBusy.set(key);
     try {
-      await this.releasePickerApi.grabSeason(mediaId, season.id, releaseGrabBody(r));
+      await this.withGrabPhase({ seasonNumber: season.seasonNumber }, () =>
+        this.releasePickerApi.grabSeason(mediaId, season.id, releaseGrabBody(r)),
+      );
       this.seasonReleaseGrabState.update((s) => new Map(s).set(key, 'ok'));
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
@@ -1867,7 +1906,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!m || m.type !== 'movie') return;
     this.grabBusy.set(key);
     try {
-      await this.releasePickerApi.grabMovie(m.id, releaseGrabBody(r));
+      await this.withGrabPhase({}, () =>
+        this.releasePickerApi.grabMovie(m.id, releaseGrabBody(r)),
+      );
       this.grabState.update((s) => new Map(s).set(key, 'ok'));
       this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {

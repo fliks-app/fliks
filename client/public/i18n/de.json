@@ -1183,6 +1183,7 @@
     "col_score": "Score",
     "col_flags": "Flags",
     "tstatus_downloading": "Wird heruntergeladen",
+    "tstatus_searching": "Datei wird gesucht",
     "tstatus_stalled": "Blockiert",
     "tstatus_paused": "Pausiert",
     "tstatus_queued": "In Warteschlange",

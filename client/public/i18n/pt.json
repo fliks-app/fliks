@@ -1183,6 +1183,7 @@
     "col_score": "Pontuação",
     "col_flags": "Flags",
     "tstatus_downloading": "A transferir",
+    "tstatus_searching": "A procurar ficheiro",
     "tstatus_stalled": "Bloqueado",
     "tstatus_paused": "Em pausa",
     "tstatus_queued": "Na fila de espera",

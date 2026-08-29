@@ -117,28 +117,28 @@
       </div>
     }
 
+    <!-- A download in flight is the page's headline state, so it gets the play
+         button's footprint: its own full-width bar rather than a chip sharing
+         the action row, where it would crowd the icons on a narrow phone. -->
+    @if (badge()) {
+      <div class="flex mt-4">
+        <ng-container *ngTemplateOutlet="downloadBadge; context: { $implicit: 'xl' }"></ng-container>
+      </div>
+    }
+
     <!-- Action icons row -->
-    <div
-      class="flex items-center gap-6 mt-4"
-      [class.justify-between]="badge()"
-      [class.justify-center]="!badge()"
-    >
-      @if (badge()) {
-        <ng-container *ngTemplateOutlet="downloadBadge"></ng-container>
-      } @else if (!selectedFileId()) {
-        <div class="flex-1"></div>
-      }
-      @if (selectedFileId()) {
+    <div class="flex items-center justify-around gap-2 mt-4">
+      @if (canToggleWatched()) {
         <button class="flex flex-col items-center gap-1 text-sm" [class.text-success]="watched()" (click)="onToggleWatched()">
           <svg lucideCheck class="h-5 w-5"></svg>
           {{ 'media_info.watched' | translate }}
         </button>
-        @if ((mediaType() === 'movie' || episodeId()) && !tv.isTv()) {
-          <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
-            <svg lucideDownload class="h-5 w-5"></svg>
-            {{ 'downloads.download' | translate }}
-          </button>
-        }
+      }
+      @if (selectedFileId() && (mediaType() === 'movie' || episodeId()) && !tv.isTv()) {
+        <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
+          <svg lucideDownload class="h-5 w-5"></svg>
+          {{ 'downloads.download' | translate }}
+        </button>
       }
       <!-- Like is a taste signal, not a playback action — available on movies,
            series and episodes, with or without a local file. -->
@@ -311,16 +311,16 @@
               {{ 'player.play_from_start' | translate }}
             </button>
           }
-          @if (mediaType() !== 'series' || episodeId()) {
-            <button type="button" class="btn btn-outline btn btn-circle" [class.btn-success]="watched()" [class.btn-ghost]="!watched()" (click)="onToggleWatched()">
-              <svg lucideCheck class="h-4 w-4"></svg>
-            </button>
-          }
           @if (mediaType() === 'movie' || episodeId()) {
             <button type="button" class="btn btn-ghost btn btn-circle" (click)="openDownload.emit()">
               <svg lucideDownload class="h-4 w-4"></svg>
             </button>
           }
+        }
+        @if (canToggleWatched()) {
+          <button type="button" class="btn btn-outline btn btn-circle" [attr.aria-label]="'media_info.watched' | translate" [class.btn-success]="watched()" [class.btn-ghost]="!watched()" (click)="onToggleWatched()">
+            <svg lucideCheck class="h-4 w-4"></svg>
+          </button>
         }
         <ng-container *ngTemplateOutlet="downloadBadge"></ng-container>
         <!-- Like is a taste signal, not a playback action — available on movies,
@@ -404,12 +404,12 @@
 <!-- Download status / progress chip, shared by the mobile metadata row and the
      desktop action row. Clickable (opens the detail modal) only while a grab is
      in flight; otherwise a plain status chip. -->
-<ng-template #downloadBadge>
+<ng-template #downloadBadge let-size>
   @if (badge(); as b) {
     @if (b.clickable) {
       <button
         type="button"
-        class="btn btn-ghost btn-sm px-1.5"
+        [class]="size === 'xl' ? 'flex-1 cursor-pointer' : 'btn btn-ghost btn-sm px-1.5'"
         [title]="'media_detail.download_detail_title' | translate"
         (click)="openDownloadDetail.emit()"
       >
@@ -417,13 +417,16 @@
           [label]="b.labelKey | translate"
           [percent]="b.percent"
           [badgeClass]="b.badgeClass"
+          [size]="size ?? 'sm'"
         />
       </button>
     } @else {
       <app-progress-badge
+        [class.flex-1]="size === 'xl'"
         [label]="b.labelKey | translate"
         [percent]="b.percent"
         [badgeClass]="b.badgeClass"
+        [size]="size ?? 'sm'"
       />
     }
   }

@@ -93,6 +93,11 @@ export class SseService implements OnDestroy {
           if (typeof id === 'string' && id) {
             this.connectionId.set(id);
           }
+          // The server replays its live leaves right after this event, so the
+          // burst that follows is a full snapshot. Everything else finished
+          // while we were disconnected: nothing announces that, and a leaf kept
+          // here shows a download badge that never goes away.
+          this.downloadProgress.reset();
           return;
         }
         this.handleEvent(data);

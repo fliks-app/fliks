@@ -34,8 +34,8 @@ interface SeasonRow {
   percent: number | null;
   variant: ProgressVariant;
   stateLabelKey: string;
-  /** Per-torrent rows — only populated when a season has more than one leaf
-   *  (loose episodes), so a single-pack season stays a single line. */
+  /** Per-torrent rows. Empty only for a season whose single leaf is a pack —
+   *  that one restates the season line above it. */
   leaves: LeafRow[];
 }
 
@@ -80,23 +80,24 @@ export class DownloadDetailModalComponent {
       .map(([seasonNumber, sp]) => {
         const entries = [...sp.leaves.entries()];
         const fold = foldLeaves(entries.map(([, l]) => l));
+        const leaves = entries
+          .sort((a, b) => this.leafOrder(a[0]) - this.leafOrder(b[0]))
+          .map(([key, l]) => ({
+            key: String(key),
+            ...this.leafLabel(key),
+            percent: l.percent,
+            variant: qbStateVariant(l.state),
+            stateLabelKey: qbStateLabelKey(l.state),
+          }));
         return {
           seasonNumber,
           percent: fold.percent,
           variant: qbStateVariant(fold.state),
           stateLabelKey: qbStateLabelKey(fold.state),
+          // A lone season pack restates the season line; a lone episode does
+          // not — without its row the modal never says which one is downloading.
           leaves:
-            entries.length > 1
-              ? entries
-                  .sort((a, b) => this.leafOrder(a[0]) - this.leafOrder(b[0]))
-                  .map(([key, l]) => ({
-                    key: String(key),
-                    ...this.leafLabel(key),
-                    percent: l.percent,
-                    variant: qbStateVariant(l.state),
-                    stateLabelKey: qbStateLabelKey(l.state),
-                  }))
-              : [],
+            leaves.length === 1 && leaves[0].labelNumber === null ? [] : leaves,
         };
       });
   });

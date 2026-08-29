@@ -902,6 +902,10 @@ export class FliksHostImpl implements PluginHostApi {
           type: 'acquisition.grabbed',
           mediaId: event.mediaId,
           seasonNumber: event.seasonNumber,
+          // Carried through so a single-episode grab is announced as that
+          // episode's leaf: without it every grab reads as a season pack, and
+          // a pack shows on every episode page of the season.
+          episodeNumber: event.episodeNumber,
         });
         return;
       case 'acquisition.imported': {

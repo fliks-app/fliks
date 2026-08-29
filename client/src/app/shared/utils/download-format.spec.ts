@@ -6,6 +6,7 @@ import {
   activeWeightedPercent,
   foldLeaves,
   describeBadge,
+  describeDownload,
 } from './download-format';
 import { DownloadLeaf, MediaDownloadProgress } from '../../core/services/download-progress.service';
 import { DownloadProgressState } from '../../core/enums/download-progress-state.enum';
@@ -138,6 +139,67 @@ describe('download-format', () => {
       expect(d.state).toBe('active');
       expect(d.totalLeaves).toBe(1);
       expect(d.stalledLeaves).toBe(0);
+    });
+  });
+
+  /**
+   * What the episode header renders. An episode page must answer "is THIS
+   * episode downloading" — a sibling's grab belongs on the sibling's page, and
+   * a season pack legitimately belongs on every episode page of that season.
+   */
+  describe('describeDownload — episode scope', () => {
+    const season1 = (leaves: [number | 'PACK', DownloadLeaf][]): MediaDownloadProgress => ({
+      mediaId: 2,
+      mediaType: 'series',
+      percent: 50,
+      state: 'active',
+      dlspeed: 0,
+      eta: 0,
+      seasons: new Map([[1, { leaves: new Map(leaves) }]]),
+    });
+
+    it('says nothing on episode 7 while only episode 8 downloads', () => {
+      const d = describeDownload(season1([[8, leaf('active', 52)]]), {
+        seasonFilter: [1],
+        episodeFilter: 7,
+      });
+      expect(d).toBeNull();
+    });
+
+    it("reports the episode's own torrent", () => {
+      const d = describeDownload(season1([[7, leaf('active', 52)]]), {
+        seasonFilter: [1],
+        episodeFilter: 7,
+      });
+      expect(d?.percent).toBe(52);
+    });
+
+    it('reports a season pack on every episode of the season', () => {
+      const progress = season1([['PACK', leaf('active', 30)]]);
+      expect(describeDownload(progress, { seasonFilter: [1], episodeFilter: 7 })?.percent).toBe(30);
+      expect(describeDownload(progress, { seasonFilter: [1], episodeFilter: 8 })?.percent).toBe(30);
+    });
+
+    // Real season-pack ticks arrive with a torrent ref and no episode number,
+    // so the store keys them `hash:<ref>` — never the literal 'PACK' sentinel.
+    it('reports a hash-keyed pack on an episode page', () => {
+      const progress: MediaDownloadProgress = {
+        mediaId: 2,
+        mediaType: 'series',
+        percent: 30,
+        state: 'active',
+        dlspeed: 0,
+        eta: 0,
+        seasons: new Map([[1, { leaves: new Map([['hash:abc', leaf('active', 30)]]) }]]),
+      };
+      expect(describeDownload(progress, { seasonFilter: [1], episodeFilter: 7 })?.percent).toBe(30);
+    });
+
+    it('is null with no progress at all, rather than a monitored chip', () => {
+      expect(describeDownload(null)).toBeNull();
+      expect(describeBadge(null, { monitored: true, downloaded: false }).labelKey).toBe(
+        'requests.badge_monitored',
+      );
     });
   });
 });
