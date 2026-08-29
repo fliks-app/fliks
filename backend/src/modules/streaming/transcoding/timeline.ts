@@ -172,22 +172,27 @@ export function rewriteSegmentTfdt(
   // right for one of them.
   const segStart = segIndex * segDuration + startPts;
   const video = frags.find((f) => tracks.get(f.trackId)?.isVideo);
-  let runStart: number;
-  if (video) {
-    const ts = tracks.get(video.trackId)!.timescale;
-    runStart = segStart - video.original / ts;
-  } else {
-    const ref = frags[0];
-    const ts = tracks.get(ref.trackId)?.timescale;
-    if (!ts) return segBuf;
+  const ref = video ?? frags[0];
+  const refTs = tracks.get(ref.trackId)?.timescale;
+  if (!refTs) return segBuf;
+  const refTime = ref.original / refTs;
+
+  // Already absolute: the run started at 0, so ffmpeg's timeline is the one we
+  // want. Tested before any snapping — the snap below assumes a run-relative
+  // fragment, and applied to an absolute one it would invent a shift.
+  if (Math.abs(segStart - refTime) < segDuration / 2) return segBuf;
+
+  let runStart = segStart - refTime;
+  if (!video) {
+    // Audio-only rendition (var_stream_map): no video fragment to anchor on, so
+    // the run offset is snapped to the grid to shed sub-frame jitter. Only the
+    // *content* part is a grid multiple — start_time is not — so it is removed
+    // before snapping and restored after. Rounding it away here would shift an
+    // audio rendition off the video it belongs to by exactly start_time, which
+    // is the whole class of A/V desync #756/#771/#791 exist to prevent.
     runStart =
-      Math.round((segStart - ref.original / ts) / segDuration) * segDuration;
+      Math.round((runStart - startPts) / segDuration) * segDuration + startPts;
   }
-  // Already absolute (the run started at 0, so ffmpeg's own timeline is the one
-  // we want). Epsilon rather than `<= 0`: an absolute run lands within a frame
-  // of the grid, and shifting it by that would nudge a segment nothing asked to
-  // move. Half a segment is far below any real run offset.
-  if (Math.abs(runStart) < segDuration / 2) return segBuf;
 
   const buf = Buffer.from(segBuf);
   for (const f of frags) {
