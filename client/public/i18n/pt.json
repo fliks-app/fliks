@@ -958,7 +958,6 @@
     "delete_short": "Elim.",
     "confirm_delete": "Eliminar «{{title}}» da biblioteca? Os ficheiros associados serão também eliminados do disco. Esta ação é irreversível.",
     "library_details": "Detalhes da biblioteca",
-    "episode_progress": "Progresso dos episódios",
     "ep_no_overview": "Nenhuma sinopse para este episódio.",
     "episodes_only_with_file": "Apenas episódios em disco",
     "episodes_available_only": "Apenas episódios disponíveis",

@@ -958,7 +958,6 @@
     "delete_short": "Elim.",
     "confirm_delete": "Eliminare « {{title}} » dalla libreria? Anche i file associati verranno eliminati dal disco. Questa azione è irreversibile.",
     "library_details": "Dettagli libreria",
-    "episode_progress": "Avanzamento degli episodi",
     "ep_no_overview": "Nessuna sinossi per questo episodio.",
     "episodes_only_with_file": "Solo episodi su disco",
     "episodes_available_only": "Solo episodi disponibili",

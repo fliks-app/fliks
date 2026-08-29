@@ -963,7 +963,6 @@
     "delete_short": "Del.",
     "confirm_delete": "Delete \"{{title}}\" from the library? The associated files will also be deleted from disk. This action is irreversible.",
     "library_details": "Library details",
-    "episode_progress": "Episode progress",
     "ep_no_overview": "No synopsis for this episode.",
     "episodes_only_with_file": "Episodes on disk only",
     "episodes_available_only": "Available episodes only",

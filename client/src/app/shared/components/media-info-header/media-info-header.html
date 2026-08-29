@@ -158,17 +158,6 @@
       </button>
     </div>
 
-    <!-- Series episode progress -->
-    @if (mediaType() === 'series' && episodeStats()) {
-      <div class="mt-4">
-        <div class="flex justify-between mb-1">
-          <span class="text-base-content/60">{{ 'media_detail.episode_progress' | translate }}</span>
-          <span class="tabular-nums font-medium">{{ episodeStats()!.downloadedEpisodes }} / {{ episodeStats()!.totalEpisodes }}</span>
-        </div>
-        <progress class="progress progress-primary w-full h-1.5" [attr.value]="episodeStats()!.totalEpisodes ? (100 * episodeStats()!.downloadedEpisodes / episodeStats()!.totalEpisodes) : 0" max="100"></progress>
-      </div>
-    }
-
     <!-- Overview -->
     @if (overview()) {
       <app-synopsis
@@ -373,17 +362,6 @@
               }
             </div>
           }
-        </div>
-      }
-
-      <!-- Series episode progress -->
-      @if (mediaType() === 'series' && episodeStats()) {
-        <div class="mt-4 max-w-md">
-          <div class="flex justify-between mb-1">
-            <span class="text-base-content/70">{{ 'media_detail.episode_progress' | translate }}</span>
-            <span class="tabular-nums font-medium">{{ episodeStats()!.downloadedEpisodes }} / {{ episodeStats()!.totalEpisodes }}</span>
-          </div>
-          <progress class="progress progress-primary w-full h-2" [attr.value]="episodeStats()!.totalEpisodes ? (100 * episodeStats()!.downloadedEpisodes / episodeStats()!.totalEpisodes) : 0" max="100"></progress>
         </div>
       }
 

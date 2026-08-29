@@ -55,25 +55,29 @@ describe('DownloadDetailModalComponent — one row per torrent', () => {
 
     expect(six.labelNumber).toBe(6);
     expect(six.percent).toBe(3);
+    expect(six.stateLabelKey).toBe('activity.tstatus_downloading');
     expect(six.speed).toBe('1.0 KB/s');
     expect(six.eta).toBeTruthy();
     expect(eight.percent).toBe(19);
     expect(eight.speed).toBe('2.0 KB/s');
   });
 
-  it('leaves speed and ETA off a torrent that reports neither', async () => {
+  it('states a stall — the row has no other way to explain itself', async () => {
     const f = await render([[1, [[7, { state: 'stalled', percent: 0 }]]]]);
     const [seven] = f.componentInstance.seasonRows()[0].leaves;
 
+    expect(seven.stateLabelKey).toBe('activity.tstatus_stalled');
     expect(seven.speed).toBeNull();
     expect(seven.eta).toBeNull();
     expect(seven.percent).toBe(0);
   });
 
-  it('shows no percentage for a torrent that does not exist yet', async () => {
+  it('names the search, with no percentage, before a torrent exists', async () => {
     const f = await render([[1, [[8, { state: 'searching', percent: 0 }]]]]);
+    const [row] = f.componentInstance.seasonRows()[0].leaves;
 
-    expect(f.componentInstance.seasonRows()[0].leaves[0].percent).toBeNull();
+    expect(row.percent).toBeNull();
+    expect(row.stateLabelKey).toBe('activity.tstatus_searching');
   });
 
   it('groups rows under every season in flight', async () => {

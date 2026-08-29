@@ -250,7 +250,6 @@ export class MediaInfoHeaderComponent {
 
   // ── Inputs: series-specific ──
   readonly mediaType = input<string>('movie');
-  readonly episodeStats = input<{ downloadedEpisodes: number; totalEpisodes: number } | null>(null);
   /**
    * Derived watched status for a series (true iff every downloaded episode in a
    * non-special season is marked as watched). Used instead of a series-level

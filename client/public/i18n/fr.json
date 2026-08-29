@@ -963,7 +963,6 @@
     "delete_short": "Suppr.",
     "confirm_delete": "Supprimer « {{title}} » de la bibliothèque ? Les fichiers associés seront également supprimés du disque. Cette action est irréversible.",
     "library_details": "Détails bibliothèque",
-    "episode_progress": "Progression des épisodes",
     "ep_no_overview": "Aucun synopsis pour cet épisode.",
     "episodes_only_with_file": "Épisodes sur disque uniquement",
     "episodes_available_only": "Épisodes disponibles uniquement",

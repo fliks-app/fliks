@@ -9,8 +9,9 @@
             <app-progress-bar [percent]="p.percent" [variant]="overallVariant()" />
           }
           <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-base-content/70">
+            <span class="font-medium">{{ overallStateLabelKey() | translate }}</span>
             @if (p.percent !== null) {
-              <span class="tabular-nums font-medium">{{ p.percent }}%</span>
+              <span class="tabular-nums">{{ p.percent }}%</span>
             }
             @if (speedLabel(); as sp) {
               <span>↓ {{ sp }}</span>
@@ -31,9 +32,10 @@
                 <div class="flex flex-col gap-1">
                   <div class="flex items-center justify-between gap-3 text-sm">
                     <span>{{ l.labelKey | translate: { number: l.labelNumber } }}</span>
-                    @if (l.percent !== null) {
-                      <span class="tabular-nums text-base-content/60">{{ l.percent }}%</span>
-                    }
+                    <span class="text-base-content/60">
+                      {{ l.stateLabelKey | translate
+                      }}@if (l.percent !== null) {<span class="tabular-nums"> · {{ l.percent }}%</span>}
+                    </span>
                   </div>
                   @if (l.percent !== null) {
                     <app-progress-bar [percent]="l.percent" [variant]="l.variant" />

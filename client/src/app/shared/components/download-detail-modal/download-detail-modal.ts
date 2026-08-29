@@ -12,6 +12,7 @@ import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { ModalHeaderComponent } from '../modal-header';
 import {
   qbStateVariant,
+  qbStateLabelKey,
   formatSpeed,
   formatEta,
   ProgressVariant,
@@ -26,6 +27,9 @@ interface LeafRow {
    *  to be a percentage of yet. */
   percent: number | null;
   variant: ProgressVariant;
+  /** Always stated: "searching" and "stalled" are the two a row most needs to
+   *  explain itself, and neither shows up in a bar or a percentage. */
+  stateLabelKey: string;
   speed: string | null;
   eta: string | null;
 }
@@ -64,6 +68,10 @@ export class DownloadDetailModalComponent {
   /** A movie's single torrent: no season to group under, so it is its own row. */
   readonly isSingleTorrent = computed(() => !this.progress()?.seasons);
 
+  readonly overallStateLabelKey = computed(() =>
+    qbStateLabelKey(this.progress()?.state ?? ''),
+  );
+
   readonly overallVariant = computed<ProgressVariant>(() =>
     qbStateVariant(this.progress()?.state ?? ''),
   );
@@ -90,6 +98,7 @@ export class DownloadDetailModalComponent {
             ...this.leafLabel(key),
             percent: l.state === 'searching' ? null : l.percent,
             variant: qbStateVariant(l.state),
+            stateLabelKey: qbStateLabelKey(l.state),
             speed: l.dlspeed && l.dlspeed > 0 ? formatSpeed(l.dlspeed) : null,
             eta: l.eta && l.eta > 0 ? formatEta(l.eta) : null,
           })),

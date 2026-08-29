@@ -958,7 +958,6 @@
     "delete_short": "Löschen",
     "confirm_delete": "„{{title}}“ aus der Bibliothek löschen? Die zugehörigen Dateien werden ebenfalls von der Festplatte gelöscht. Diese Aktion ist unwiderruflich.",
     "library_details": "Bibliotheksdetails",
-    "episode_progress": "Fortschritt der Folgen",
     "ep_no_overview": "Keine Zusammenfassung für diese Folge.",
     "episodes_only_with_file": "Nur Folgen auf der Festplatte",
     "episodes_available_only": "Nur verfügbare Folgen",
