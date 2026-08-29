@@ -77,4 +77,54 @@ describe('rewriteSegmentTfdt', () => {
     const out = rewriteSegmentTfdt(buildSeg(98 * TS), tracks, 25, SEG);
     expect(readTfdt(out)).toBe(100 * TS); // 98s corrupted to 100s — the bug
   });
+
+  /**
+   * A source whose video starts at a non-zero PTS (TS captures, PVR rips). The
+   * run spawned at 0 keeps that origin — ffmpeg's `-copyts` passes absolute PTS
+   * through — so a run spawned mid-file has to be anchored onto it as well, or
+   * the two disagree by exactly `start_time`. The WebVTT `X-TIMESTAMP-MAP` adds
+   * `start_time` unconditionally, so it can only ever be right for one of them:
+   * subtitles ran `start_time` late on every seeked or resumed session.
+   */
+  describe('a source with a non-zero start_time', () => {
+    const START = 2.8;
+
+    it('leaves a run started at 0 exactly where ffmpeg put it', () => {
+      // seg-25 of an absolute run decodes at 100 + 2.8 = its own tfdt already.
+      const out = rewriteSegmentTfdt(
+        buildSeg((100 + START) * TS),
+        tracks,
+        25,
+        SEG,
+        START,
+      );
+      expect(readTfdt(out)).toBe((100 + START) * TS);
+    });
+
+    it('anchors a mid-file run onto the same origin, not onto bare content time', () => {
+      const out = rewriteSegmentTfdt(buildSeg(0), tracks, 25, SEG, START);
+      expect(readTfdt(out)).toBe((100 + START) * TS);
+    });
+
+    it('puts both runs on one timeline — the whole point', () => {
+      const fromZero = rewriteSegmentTfdt(
+        buildSeg((100 + START) * TS),
+        tracks,
+        25,
+        SEG,
+        START,
+      );
+      const seeked = rewriteSegmentTfdt(buildSeg(0), tracks, 25, SEG, START);
+      expect(readTfdt(seeked)).toBe(readTfdt(fromZero));
+    });
+
+    // The absolute run lands within a frame of the grid, never exactly on it.
+    // `runStart <= 0` used to catch that; an epsilon has to, or a segment
+    // nothing asked to move gets nudged by the rounding.
+    it('does not nudge an absolute run that is a frame off the grid', () => {
+      const off = Math.round((100 + START) * TS) + 0.04 * TS;
+      const out = rewriteSegmentTfdt(buildSeg(off), tracks, 25, SEG, START);
+      expect(readTfdt(out)).toBe(off);
+    });
+  });
 });

@@ -72,6 +72,8 @@ export class SessionContextBuilder {
       // accurate GOP so IDR frames fall on the same boundary regardless of
       // source fps. Falls back to 24 when unknown.
       sourceFps: parseSourceFps(si?.video?.[0]?.frameRate),
+      // Source video start_time — the origin the served timeline is anchored to.
+      sourceStartPts: si?.video?.[0]?.startTimeSeconds ?? 0,
       // Source colorimetry — preserved through an SDR transcode so the output
       // signals the source's real matrix/primaries/transfer, not a forced BT.709.
       sourceColorSpace: si?.video?.[0]?.colorSpace,

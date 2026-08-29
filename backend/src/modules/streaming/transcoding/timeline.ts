@@ -159,12 +159,18 @@ export function rewriteSegmentTfdt(
   tracks: Map<number, TrackInfo>,
   segIndex: number,
   segDuration: number,
+  startPts = 0,
 ): Buffer {
   if (tracks.size === 0) return segBuf;
   const frags = collectTfdts(segBuf);
   if (frags.length === 0) return segBuf;
 
-  const segStart = segIndex * segDuration;
+  // The source's own start_time is part of the origin: a run spawned at 0 keeps
+  // it (ffmpeg's -copyts passes absolute PTS through), so a run spawned mid-file
+  // must be anchored onto it too or the two disagree by exactly start_time —
+  // and the WebVTT X-TIMESTAMP-MAP, which adds it unconditionally, is only
+  // right for one of them.
+  const segStart = segIndex * segDuration + startPts;
   const video = frags.find((f) => tracks.get(f.trackId)?.isVideo);
   let runStart: number;
   if (video) {
@@ -177,7 +183,11 @@ export function rewriteSegmentTfdt(
     runStart =
       Math.round((segStart - ref.original / ts) / segDuration) * segDuration;
   }
-  if (runStart <= 0) return segBuf; // already absolute (run started at 0)
+  // Already absolute (the run started at 0, so ffmpeg's own timeline is the one
+  // we want). Epsilon rather than `<= 0`: an absolute run lands within a frame
+  // of the grid, and shifting it by that would nudge a segment nothing asked to
+  // move. Half a segment is far below any real run offset.
+  if (Math.abs(runStart) < segDuration / 2) return segBuf;
 
   const buf = Buffer.from(segBuf);
   for (const f of frags) {

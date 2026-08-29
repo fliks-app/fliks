@@ -36,7 +36,12 @@ export class SegmentPackagingService {
     res: Response,
     filePath: string,
     contentType: string,
-    opts: { segDuration: number; skipTimelineRewrite?: boolean },
+    opts: {
+      segDuration: number;
+      /** Source video `start_time`, the origin every run is anchored onto. */
+      startPts?: number;
+      skipTimelineRewrite?: boolean;
+    },
   ): Promise<void> {
     // TS segments aren't fMP4/CMAF — the CMAF rewrite and tfdt anchoring are
     // no-ops on them, and running an ISO-BMFF box parser over MPEG-TS bytes is
@@ -74,7 +79,12 @@ export class SegmentPackagingService {
     // the anchor is a no-op — only remux must skip it.
     const out = opts.skipTimelineRewrite
       ? buf
-      : await this.anchorSegmentTimeline(filePath, buf, opts.segDuration);
+      : await this.anchorSegmentTimeline(
+          filePath,
+          buf,
+          opts.segDuration,
+          opts.startPts ?? 0,
+        );
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', String(out.length));
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -88,20 +98,21 @@ export class SegmentPackagingService {
   }
 
   /** Anchor a media segment onto the single absolute presentation timeline:
-   *  rewrite its `tfdt` so `seg-N` decodes at its true content time
-   *  `N · segDuration` (per-track timescale), instead of FFmpeg's per-run
-   *  0-based reset. Init segments and MPEG-TS segments carry no `tfdt` and pass
+   *  rewrite its `tfdt` so `seg-N` decodes at its true presentation time
+   *  `N · segDuration + startPts` (per-track timescale), instead of FFmpeg's
+   *  per-run 0-based reset. Init segments and MPEG-TS segments carry no `tfdt` and pass
    *  through unchanged. */
   private async anchorSegmentTimeline(
     filePath: string,
     buf: Buffer,
     segDuration: number,
+    startPts: number,
   ): Promise<Buffer> {
     const m = /(?:^|\/)seg-(\d+)\.m4s$/.exec(filePath);
     if (!m) return buf;
     const tracks = await this.tracksForDir(path.dirname(filePath));
     if (tracks.size === 0) return buf;
-    return rewriteSegmentTfdt(buf, tracks, Number(m[1]), segDuration);
+    return rewriteSegmentTfdt(buf, tracks, Number(m[1]), segDuration, startPts);
   }
 
   private async tracksForDir(
