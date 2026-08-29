@@ -96,6 +96,9 @@ export interface MediaInfoHeaderSubtitle {
 }
 
 export interface MediaInfoHeaderBadge {
+  /** Stable per-torrent identity, so two releases grabbed for the same episode
+   *  render as two chips rather than one. */
+  id: string;
   /** ngx-translate key for the badge text. */
   labelKey: string;
   /** 0–100 progress fill, or null for a plain status chip. */

@@ -199,10 +199,14 @@ export function collectScopedLeaves(
   for (const [seasonNumber, sp] of progress.seasons) {
     if (seasonFilter?.length && !seasonFilter.includes(seasonNumber)) continue;
     for (const [key, leaf] of sp.leaves) {
-      // Only another episode's own torrent is out of scope. A leaf with no
-      // episode identity — a season pack, or a torrent whose episode couldn't
-      // be resolved — may well carry this one, so it counts.
-      if (episodeFilter != null && typeof key === 'number' && key !== episodeFilter) {
+      // Only another episode's own torrent is out of scope. A leaf naming no
+      // episode — a season pack, or one whose episode couldn't be resolved —
+      // may well carry this one, so it counts.
+      if (
+        episodeFilter != null &&
+        leaf.episodeNumber != null &&
+        leaf.episodeNumber !== episodeFilter
+      ) {
         continue;
       }
       out.push({ seasonNumber, key, leaf });

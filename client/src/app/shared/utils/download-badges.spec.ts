@@ -8,7 +8,16 @@ const series = (leaves: [number, [number | 'PACK', { state: 'active'; percent: n
   state: 'active',
   dlspeed: 0,
   eta: 0,
-  seasons: new Map(leaves.map(([n, l]) => [n, { leaves: new Map(l) }])),
+  seasons: new Map(
+    leaves.map(([n, l]) => [
+      n,
+      {
+        leaves: new Map(
+          l.map(([k, leaf]) => [k, typeof k === 'number' ? { ...leaf, episodeNumber: k } : leaf]),
+        ),
+      },
+    ]),
+  ),
 });
 
 /**

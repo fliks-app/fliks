@@ -3,15 +3,20 @@ import { MediaType } from '../enums/media-type.enum';
 import { DownloadProgressState, ProgressPhase } from '../enums/download-progress-state.enum';
 import { foldLeaves } from '../../shared/utils/download-format';
 
-/** Identifies one torrent within a season: the episode number, an explicit
- *  season `'PACK'`, or `hash:<h>` when an episode torrent couldn't be resolved
- *  (so loose episodes never collide under a shared bucket). */
+/** Identifies one torrent within a season. `hash:<h>` whenever the torrent has
+ *  a ref — its own identity, so two releases grabbed for the *same* episode stay
+ *  two leaves instead of overwriting each other. The episode number (or `'PACK'`)
+ *  keys the placeholder a grab puts up before any torrent exists; the first real
+ *  tick for that scope supersedes it. */
 export type LeafKey = number | 'PACK' | `hash:${string}`;
 
 /** One in-flight torrent contributing to a media's download progress. */
 export interface DownloadLeaf {
   percent: number; // 0–100
   state: ProgressPhase;
+  /** The episode this torrent is for, when it names one. Held on the leaf
+   *  rather than in its key, which now identifies the torrent itself. */
+  episodeNumber?: number;
   weight?: number; // torrent size in bytes, for a size-weighted percent (see foldLeaves)
   /** This torrent's own speed and ETA. Held per leaf because concurrent
    *  episodes each have their own, and a media-level pair could only ever
@@ -53,9 +58,8 @@ export interface DownloadProgressEvent {
 }
 
 function leafKey(episodeNumber?: number, hash?: string): LeafKey {
-  if (episodeNumber != null) return episodeNumber;
   if (hash) return `hash:${hash}`;
-  return 'PACK';
+  return episodeNumber ?? 'PACK';
 }
 
 /** The one leaf a media holds, when it holds exactly one — the only case where
@@ -130,7 +134,18 @@ export class DownloadProgressService {
         const key = leafKey(e.episodeNumber, e.hash);
 
         if (e.progress >= 1) leaves.delete(key);
-        else leaves.set(key, { percent, state: e.state, dlspeed: e.dlspeed, eta: e.eta });
+        else {
+          // A torrent with a ref supersedes the placeholder its grab put up for
+          // the same scope, which has no identity to be matched on.
+          if (e.hash) leaves.delete(e.episodeNumber ?? 'PACK');
+          leaves.set(key, {
+            percent,
+            state: e.state,
+            episodeNumber: e.episodeNumber,
+            dlspeed: e.dlspeed,
+            eta: e.eta,
+          });
+        }
 
         if (leaves.size === 0) seasons.delete(e.seasonNumber);
         else seasons.set(e.seasonNumber, { leaves });
@@ -160,7 +175,10 @@ export class DownloadProgressService {
         if (!sole) return next;
         const leaves = new Map(known.seasons.get(sole.seasonNumber)!.leaves);
         if (e.progress >= 1) leaves.delete(sole.key);
-        else leaves.set(sole.key, { percent, state: e.state, dlspeed: e.dlspeed, eta: e.eta });
+        else {
+          const prev = known.seasons.get(sole.seasonNumber)!.leaves.get(sole.key)!;
+          leaves.set(sole.key, { ...prev, percent, state: e.state, dlspeed: e.dlspeed, eta: e.eta });
+        }
         const seasons = new Map(known.seasons);
         if (leaves.size === 0) seasons.delete(sole.seasonNumber);
         else seasons.set(sole.seasonNumber, { leaves });

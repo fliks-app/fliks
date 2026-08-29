@@ -148,6 +148,8 @@ describe('download-format', () => {
    * a season pack legitimately belongs on every episode page of that season.
    */
   describe('describeDownload — episode scope', () => {
+    // The store keys a leaf by its torrent and records the episode on the leaf,
+    // so a fixture has to carry the attribute the scope filter reads.
     const season1 = (leaves: [number | 'PACK', DownloadLeaf][]): MediaDownloadProgress => ({
       mediaId: 2,
       mediaType: 'series',
@@ -155,7 +157,16 @@ describe('download-format', () => {
       state: 'active',
       dlspeed: 0,
       eta: 0,
-      seasons: new Map([[1, { leaves: new Map(leaves) }]]),
+      seasons: new Map([
+        [
+          1,
+          {
+            leaves: new Map(
+              leaves.map(([k, l]) => [k, typeof k === 'number' ? { ...l, episodeNumber: k } : l]),
+            ),
+          },
+        ],
+      ]),
     });
 
     it('says nothing on episode 7 while only episode 8 downloads', () => {

@@ -205,11 +205,14 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!progress.seasons) {
       const d = describeDownload(progress, scope);
       return d?.labelKey
-        ? [{ labelKey: d.labelKey, percent: d.percent, badgeClass: d.badgeClass, scopeLabel: null, clickable: !this.tv.isTv() }]
+        ? [{ id: 'movie', labelKey: d.labelKey, percent: d.percent, badgeClass: d.badgeClass, scopeLabel: null, clickable: !this.tv.isTv() }]
         : [];
     }
     const leaves = collectScopedLeaves(progress, scope.seasonFilter, scope.episodeFilter);
     return leaves.map(({ seasonNumber, key, leaf }) => ({
+      // The torrent's own key: two releases grabbed for the same episode are two
+      // chips, and @for needs to tell them apart.
+      id: `${seasonNumber}:${key}`,
       labelKey: qbStateLabelKey(leaf.state),
       percent: leaf.state === 'searching' ? null : leaf.percent,
       badgeClass: qbStateBadgeClass(leaf.state),
@@ -219,7 +222,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         leaves.length > 1
           ? episodeLabel({
               seasonNumber,
-              episodeNumber: typeof key === 'number' ? key : null,
+              episodeNumber: leaf.episodeNumber ?? null,
               episodeTitle: null,
             }) || `S${String(seasonNumber).padStart(2, '0')}`
           : null,

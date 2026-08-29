@@ -30,7 +30,16 @@ async function render(
     state: 'active',
     dlspeed: 0,
     eta: 0,
-    seasons: new Map(seasons.map(([n, l]) => [n, { leaves: new Map(l) }])),
+    seasons: new Map(
+      seasons.map(([n, l]) => [
+        n,
+        {
+          leaves: new Map(
+            l.map(([k, leaf]) => [k, typeof k === 'number' ? { ...leaf, episodeNumber: k } : leaf]),
+          ),
+        },
+      ]),
+    ),
   };
   fixture.componentRef.setInput('progress', progress);
   fixture.detectChanges();

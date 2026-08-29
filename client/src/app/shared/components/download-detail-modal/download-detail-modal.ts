@@ -7,7 +7,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
-import { LeafKey, MediaDownloadProgress } from '../../../core/services/download-progress.service';
+import { MediaDownloadProgress } from '../../../core/services/download-progress.service';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { ModalHeaderComponent } from '../modal-header';
 import {
@@ -92,10 +92,10 @@ export class DownloadDetailModalComponent {
       .map(([seasonNumber, sp]) => ({
         seasonNumber,
         leaves: [...sp.leaves.entries()]
-          .sort((a, b) => this.leafOrder(a[0]) - this.leafOrder(b[0]))
+          .sort((a, b) => this.leafOrder(a[1]) - this.leafOrder(b[1]))
           .map(([key, l]) => ({
             key: String(key),
-            ...this.leafLabel(key),
+            ...this.leafLabel(l.episodeNumber),
             percent: l.state === 'searching' ? null : l.percent,
             variant: qbStateVariant(l.state),
             stateLabelKey: qbStateLabelKey(l.state),
@@ -105,15 +105,17 @@ export class DownloadDetailModalComponent {
       }));
   });
 
-  private leafLabel(key: LeafKey): { labelKey: string; labelNumber: number | null } {
-    if (typeof key === 'number') {
-      return { labelKey: 'tracking.episode', labelNumber: key };
+  private leafLabel(episodeNumber?: number): { labelKey: string; labelNumber: number | null } {
+    if (episodeNumber != null) {
+      return { labelKey: 'tracking.episode', labelNumber: episodeNumber };
     }
     return { labelKey: 'media_detail.download_pack', labelNumber: null };
   }
 
-  private leafOrder(key: LeafKey): number {
-    return typeof key === 'number' ? key : Number.MAX_SAFE_INTEGER;
+  /** Episode order, packs last. The key identifies the torrent now, so it says
+   *  nothing about where the row belongs in the list. */
+  private leafOrder(leaf: { episodeNumber?: number }): number {
+    return leaf.episodeNumber ?? Number.MAX_SAFE_INTEGER;
   }
 
   open(): void {

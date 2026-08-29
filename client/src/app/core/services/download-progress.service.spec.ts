@@ -56,6 +56,77 @@ describe('DownloadProgressService', () => {
   });
 
   /**
+   * Two releases grabbed for the same episode — a second tracker's copy racing
+   * the first. The leaf used to be keyed by episode number, so the second
+   * overwrote the first and the header showed one download where there were two.
+   */
+  describe('two torrents for one episode', () => {
+    const make = () => {
+      TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+      return TestBed.inject(DownloadProgressService);
+    };
+    const tick = (svc: DownloadProgressService, hash: string, percent: number, state: 'active' | 'stalled' = 'active') =>
+      svc.applyProgress({
+        mediaId: 1,
+        mediaType: 'series',
+        seasonNumber: 1,
+        episodeNumber: 8,
+        hash,
+        progress: percent / 100,
+        dlspeed: 0,
+        eta: 0,
+        state,
+      });
+
+    it('keeps both, each with its own state and percent', () => {
+      const svc = make();
+      tick(svc, 'aaa', 12);
+      tick(svc, 'bbb', 0, 'stalled');
+
+      const leaves = svc.progress().get(1)!.seasons!.get(1)!.leaves;
+      expect(leaves.size).toBe(2);
+      expect([...leaves.values()].map((l) => [l.state, l.percent])).toEqual([
+        ['active', 12],
+        ['stalled', 0],
+      ]);
+    });
+
+    it('records the episode on each, so both stay in that episode\'s scope', () => {
+      const svc = make();
+      tick(svc, 'aaa', 12);
+      tick(svc, 'bbb', 0, 'stalled');
+
+      const leaves = svc.progress().get(1)!.seasons!.get(1)!.leaves;
+      expect([...leaves.values()].every((l) => l.episodeNumber === 8)).toBe(true);
+    });
+
+    it('retires only the one that finished', () => {
+      const svc = make();
+      tick(svc, 'aaa', 12);
+      tick(svc, 'bbb', 0, 'stalled');
+
+      tick(svc, 'aaa', 100);
+
+      const leaves = svc.progress().get(1)!.seasons!.get(1)!.leaves;
+      expect([...leaves.keys()]).toEqual(['hash:bbb']);
+    });
+
+    // The grab puts up a placeholder before any torrent exists; it has no ref to
+    // be matched on, so the first real tick has to stand in for it explicitly.
+    it('supersedes the placeholder its own grab put up', () => {
+      const svc = make();
+      const release = svc.markGrabbing({ mediaId: 1, mediaType: 'series', seasonNumber: 1, episodeNumber: 8 });
+
+      tick(svc, 'aaa', 12);
+
+      const leaves = svc.progress().get(1)!.seasons!.get(1)!.leaves;
+      expect([...leaves.keys()]).toEqual(['hash:aaa']);
+      release();
+      expect([...svc.progress().get(1)!.seasons!.get(1)!.leaves.keys()]).toEqual(['hash:aaa']);
+    });
+  });
+
+  /**
    * Speed and ETA are per torrent. They used to be written onto the media
    * entry by every tick, so with concurrent episodes the figure shown was
    * whichever leaf happened to report last, not the download's.
