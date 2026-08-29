@@ -56,6 +56,70 @@ describe('DownloadProgressService', () => {
   });
 
   /**
+   * Speed and ETA are per torrent. They used to be written onto the media
+   * entry by every tick, so with concurrent episodes the figure shown was
+   * whichever leaf happened to report last, not the download's.
+   */
+  describe('speed and ETA across concurrent episodes', () => {
+    const make = () => {
+      TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+      return TestBed.inject(DownloadProgressService);
+    };
+    const tick = (svc: DownloadProgressService, episodeNumber: number, dlspeed: number, eta: number) =>
+      svc.applyProgress({
+        mediaId: 1,
+        mediaType: 'series',
+        seasonNumber: 1,
+        episodeNumber,
+        progress: 0.5,
+        dlspeed,
+        eta,
+        state: 'active',
+      });
+
+    it('keeps each leaf its own', () => {
+      const svc = make();
+      tick(svc, 6, 1000, 120);
+      tick(svc, 8, 2000, 60);
+
+      const leaves = svc.progress().get(1)!.seasons!.get(1)!.leaves;
+      expect(leaves.get(6)?.dlspeed).toBe(1000);
+      expect(leaves.get(8)?.dlspeed).toBe(2000);
+    });
+
+    it('sums the speed and takes the longest ETA for the media', () => {
+      const svc = make();
+      tick(svc, 6, 1000, 120);
+      tick(svc, 8, 2000, 60);
+
+      const entry = svc.progress().get(1)!;
+      expect(entry.dlspeed).toBe(3000);
+      expect(entry.eta).toBe(120);
+    });
+
+    it('drops a finished leaf from the totals', () => {
+      const svc = make();
+      tick(svc, 6, 1000, 120);
+      tick(svc, 8, 2000, 60);
+
+      svc.applyProgress({
+        mediaId: 1,
+        mediaType: 'series',
+        seasonNumber: 1,
+        episodeNumber: 6,
+        progress: 1,
+        dlspeed: 0,
+        eta: 0,
+        state: 'active',
+      });
+
+      const entry = svc.progress().get(1)!;
+      expect(entry.dlspeed).toBe(2000);
+      expect(entry.eta).toBe(60);
+    });
+  });
+
+  /**
    * A series tick with no season number. Older plugin builds sent these, and
    * the movie branch used to replace the whole entry — destroying the season
    * map, so the detail modal lost the episode it was naming and the badge went

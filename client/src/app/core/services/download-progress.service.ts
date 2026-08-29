@@ -13,6 +13,11 @@ export interface DownloadLeaf {
   percent: number; // 0–100
   state: ProgressPhase;
   weight?: number; // torrent size in bytes, for a size-weighted percent (see foldLeaves)
+  /** This torrent's own speed and ETA. Held per leaf because concurrent
+   *  episodes each have their own, and a media-level pair could only ever
+   *  report whichever of them ticked last. */
+  dlspeed?: number;
+  eta?: number;
 }
 
 export interface SeasonProgress {
@@ -64,18 +69,27 @@ function soleLeafPath(
   return { seasonNumber, key: [...sp.leaves.keys()][0] };
 }
 
-/** Fold every season leaf into the media-level state + percent. Callers only
- *  reach here with at least one leaf, so `f.state` is never the empty sentinel. */
+/** Fold every season leaf into the media-level state, percent, speed and ETA.
+ *  Callers only reach here with at least one leaf, so `f.state` is never the
+ *  empty sentinel. Speed sums across concurrent torrents and the ETA is the
+ *  longest of them — the media is done when its slowest leaf is. */
 function rollupSeasons(seasons: Map<number, SeasonProgress>): {
   state: ProgressPhase;
   percent: number | null;
+  dlspeed: number;
+  eta: number;
 } {
   const leaves: DownloadLeaf[] = [];
   for (const sp of seasons.values()) {
     for (const l of sp.leaves.values()) leaves.push(l);
   }
   const f = foldLeaves(leaves);
-  return { state: f.state || 'active', percent: f.percent };
+  return {
+    state: f.state || 'active',
+    percent: f.percent,
+    dlspeed: leaves.reduce((a, l) => a + (l.dlspeed ?? 0), 0),
+    eta: leaves.reduce((a, l) => Math.max(a, l.eta ?? 0), 0),
+  };
 }
 
 /**
@@ -116,7 +130,7 @@ export class DownloadProgressService {
         const key = leafKey(e.episodeNumber, e.hash);
 
         if (e.progress >= 1) leaves.delete(key);
-        else leaves.set(key, { percent, state: e.state });
+        else leaves.set(key, { percent, state: e.state, dlspeed: e.dlspeed, eta: e.eta });
 
         if (leaves.size === 0) seasons.delete(e.seasonNumber);
         else seasons.set(e.seasonNumber, { leaves });
@@ -125,15 +139,11 @@ export class DownloadProgressService {
           next.delete(e.mediaId);
           return next;
         }
-        const rolled = rollupSeasons(seasons);
         next.set(e.mediaId, {
           mediaId: e.mediaId,
           mediaType: 'series',
-          percent: rolled.percent,
-          state: rolled.state,
-          dlspeed: e.dlspeed,
-          eta: e.eta,
           seasons,
+          ...rollupSeasons(seasons),
         });
         return next;
       }
@@ -150,7 +160,7 @@ export class DownloadProgressService {
         if (!sole) return next;
         const leaves = new Map(known.seasons.get(sole.seasonNumber)!.leaves);
         if (e.progress >= 1) leaves.delete(sole.key);
-        else leaves.set(sole.key, { percent, state: e.state });
+        else leaves.set(sole.key, { percent, state: e.state, dlspeed: e.dlspeed, eta: e.eta });
         const seasons = new Map(known.seasons);
         if (leaves.size === 0) seasons.delete(sole.seasonNumber);
         else seasons.set(sole.seasonNumber, { leaves });
@@ -158,13 +168,7 @@ export class DownloadProgressService {
           next.delete(e.mediaId);
           return next;
         }
-        next.set(e.mediaId, {
-          ...known,
-          seasons,
-          dlspeed: e.dlspeed,
-          eta: e.eta,
-          ...rollupSeasons(seasons),
-        });
+        next.set(e.mediaId, { ...known, seasons, ...rollupSeasons(seasons) });
         return next;
       }
 

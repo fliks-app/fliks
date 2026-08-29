@@ -8,9 +8,6 @@ import {
   LeafKey,
   MediaDownloadProgress,
 } from '../../../core/services/download-progress.service';
-import { ProgressPhase } from '../../../core/enums/download-progress-state.enum';
-
-const leaf = (state: ProgressPhase, percent = 50): DownloadLeaf => ({ state, percent });
 
 async function render(
   seasons: [number, [LeafKey, DownloadLeaf][]][],
@@ -42,54 +39,79 @@ async function render(
 }
 
 /**
- * The modal stacks three levels — overall, per season, per torrent. With a
- * single torrent in flight they all carry the same words, so the breakdown is
- * replaced by one line naming the episode: the one thing the headline can't say.
+ * One torrent, one row: bar, percent, speed and ETA. There is deliberately no
+ * rollup above them — the media-level speed was whichever leaf ticked last, and
+ * a folded state read "stalled" for a whole show whenever one episode was.
  */
-describe('DownloadDetailModalComponent — level de-duplication', () => {
-  it('names the sole episode instead of repeating the state three times', async () => {
-    const f = await render([[1, [[8, leaf('searching', 0)]]]]);
-
-    expect(f.componentInstance.soleLeaf()).toEqual({
-      seasonNumber: 1,
-      labelKey: 'tracking.episode',
-      labelNumber: 8,
-    });
-    expect(f.componentInstance.seasonRows()).toEqual([]);
-  });
-
-  it('keeps the breakdown once a season holds several torrents', async () => {
-    const f = await render([[1, [[8, leaf('active', 50)], [9, leaf('active', 20)]]]]);
-
-    expect(f.componentInstance.soleLeaf()).toBeNull();
-    expect(f.componentInstance.seasonRows()[0].leaves.map((l) => l.labelNumber)).toEqual([8, 9]);
-  });
-
-  it('keeps the breakdown across several seasons', async () => {
+describe('DownloadDetailModalComponent — one row per torrent', () => {
+  it('gives every episode its own bar, speed and ETA', async () => {
     const f = await render([
-      [1, [[8, leaf('active', 50)]]],
-      [2, [['PACK', leaf('active', 20)]]],
+      [1, [
+        [6, { state: 'active', percent: 3, dlspeed: 1024, eta: 120 }],
+        [8, { state: 'active', percent: 19, dlspeed: 2048, eta: 60 }],
+      ]],
     ]);
+    const [six, eight] = f.componentInstance.seasonRows()[0].leaves;
 
-    expect(f.componentInstance.soleLeaf()).toBeNull();
-    expect(f.componentInstance.seasonRows().map((s) => s.seasonNumber)).toEqual([1, 2]);
+    expect(six.labelNumber).toBe(6);
+    expect(six.percent).toBe(3);
+    expect(six.speed).toBe('1.0 KB/s');
+    expect(six.eta).toBeTruthy();
+    expect(eight.percent).toBe(19);
+    expect(eight.speed).toBe('2.0 KB/s');
   });
 
-  // `stalled` outranks `active`, so the stalled leaf is the one that agrees
-  // with the season line and the downloading one is the exception.
-  it('states a leaf only where it diverges from its season', async () => {
-    const f = await render([[1, [[8, leaf('active', 50)], [9, leaf('stalled', 10)]]]]);
-    const [diverging, same] = f.componentInstance.seasonRows()[0].leaves;
+  it('leaves speed and ETA off a torrent that reports neither', async () => {
+    const f = await render([[1, [[7, { state: 'stalled', percent: 0 }]]]]);
+    const [seven] = f.componentInstance.seasonRows()[0].leaves;
 
-    expect(same.stateLabelKey).toBeNull();
-    expect(diverging.stateLabelKey).toBe('activity.tstatus_downloading');
+    expect(seven.speed).toBeNull();
+    expect(seven.eta).toBeNull();
+    expect(seven.percent).toBe(0);
   });
 
   it('shows no percentage for a torrent that does not exist yet', async () => {
-    const f = await render([[1, [[8, leaf('searching', 0)], [9, leaf('active', 40)]]]]);
-    const [eight, nine] = f.componentInstance.seasonRows()[0].leaves;
+    const f = await render([[1, [[8, { state: 'searching', percent: 0 }]]]]);
 
-    expect(eight.percent).toBeNull();
-    expect(nine.percent).toBe(40);
+    expect(f.componentInstance.seasonRows()[0].leaves[0].percent).toBeNull();
+  });
+
+  it('groups rows under every season in flight', async () => {
+    const f = await render([
+      [2, [['PACK', { state: 'active', percent: 20 }]]],
+      [1, [[8, { state: 'active', percent: 50 }]]],
+    ]);
+
+    expect(f.componentInstance.seasonRows().map((s) => s.seasonNumber)).toEqual([1, 2]);
+  });
+
+  // A movie has one torrent and no season to group it under, so the headline is
+  // the row rather than a rollup over anything.
+  it('keeps a single headline for a movie', async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTranslateService({
+          lang: 'en',
+          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+        }),
+      ],
+    });
+    const fixture = TestBed.createComponent(DownloadDetailModalComponent);
+    fixture.componentRef.setInput('progress', {
+      mediaId: 1,
+      mediaType: 'movie',
+      percent: 42,
+      state: 'active',
+      dlspeed: 1024,
+      eta: 60,
+    } satisfies MediaDownloadProgress);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.isSingleTorrent()).toBe(true);
+    expect(fixture.componentInstance.seasonRows()).toEqual([]);
+    expect(fixture.componentInstance.speedLabel()).toBe('1.0 KB/s');
   });
 });

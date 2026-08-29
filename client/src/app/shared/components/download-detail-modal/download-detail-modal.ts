@@ -12,8 +12,6 @@ import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { ModalHeaderComponent } from '../modal-header';
 import {
   qbStateVariant,
-  qbStateLabelKey,
-  foldLeaves,
   formatSpeed,
   formatEta,
   ProgressVariant,
@@ -28,28 +26,28 @@ interface LeafRow {
    *  to be a percentage of yet. */
   percent: number | null;
   variant: ProgressVariant;
-  /** Null when the leaf agrees with its season, which the line above already
-   *  states — only a divergence is worth the words. */
-  stateLabelKey: string | null;
+  speed: string | null;
+  eta: string | null;
 }
 
 interface SeasonRow {
   seasonNumber: number;
-  percent: number | null;
-  variant: ProgressVariant;
-  stateLabelKey: string;
-  /** Per-torrent rows. Empty for a season whose single leaf is a pack — that
-   *  one restates the season line above it. */
+  /** One row per torrent. The season itself carries no folded status: with
+   *  concurrent episodes it could only ever be a rollup that contradicts the
+   *  rows under it. */
   leaves: LeafRow[];
 }
 
 /**
- * Detail view behind the header / request download badge. The badge shows the
- * folded status + mean percent (a single chip can't convey several concurrent
- * season/episode torrents); this modal breaks that down into the overall
- * speed/ETA, a per-season status, and — when a season has several torrents —
- * a per-episode list. The parent passes its live `progress` so the modal keeps
- * updating from SSE while it stays open.
+ * Detail view behind the header / request download badge. The badge can only
+ * fold several concurrent torrents into one chip; this modal is where they come
+ * apart — one bar, speed and ETA per torrent, under the season it belongs to.
+ * No rollup above them: with concurrent episodes it could only ever be an
+ * aggregate that contradicts the rows beneath it. A movie has a single torrent
+ * and no season dimension, so it keeps a single headline instead.
+ *
+ * The parent passes its live `progress` so the modal keeps updating from SSE
+ * while it stays open.
  */
 @Component({
   selector: 'app-download-detail-modal',
@@ -63,7 +61,9 @@ export class DownloadDetailModalComponent {
 
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
-  readonly overallStateLabelKey = computed(() => qbStateLabelKey(this.progress()?.state ?? ''));
+  /** A movie's single torrent: no season to group under, so it is its own row. */
+  readonly isSingleTorrent = computed(() => !this.progress()?.seasons);
+
   readonly overallVariant = computed<ProgressVariant>(() =>
     qbStateVariant(this.progress()?.state ?? ''),
   );
@@ -76,48 +76,24 @@ export class DownloadDetailModalComponent {
     return d && d.eta > 0 ? formatEta(d.eta) : null;
   });
 
-  /**
-   * The single torrent in flight, when that is all there is. The season and
-   * leaf breakdown would then restate the headline word for word at all three
-   * levels — but the headline alone never says *which* episode, so it is
-   * replaced by one identity line.
-   */
-  readonly soleLeaf = computed<{ seasonNumber: number; labelKey: string; labelNumber: number | null } | null>(() => {
-    const seasons = this.progress()?.seasons;
-    if (!seasons || seasons.size !== 1) return null;
-    const [seasonNumber, sp] = [...seasons.entries()][0];
-    if (sp.leaves.size !== 1) return null;
-    return { seasonNumber, ...this.leafLabel([...sp.leaves.keys()][0]) };
-  });
-
   readonly seasonRows = computed<SeasonRow[]>(() => {
     const seasons = this.progress()?.seasons;
-    if (!seasons || this.soleLeaf()) return [];
+    if (!seasons) return [];
     return [...seasons.entries()]
       .sort((a, b) => a[0] - b[0])
-      .map(([seasonNumber, sp]) => {
-        const entries = [...sp.leaves.entries()];
-        const fold = foldLeaves(entries.map(([, l]) => l));
-        const leaves = entries
+      .map(([seasonNumber, sp]) => ({
+        seasonNumber,
+        leaves: [...sp.leaves.entries()]
           .sort((a, b) => this.leafOrder(a[0]) - this.leafOrder(b[0]))
           .map(([key, l]) => ({
             key: String(key),
             ...this.leafLabel(key),
             percent: l.state === 'searching' ? null : l.percent,
             variant: qbStateVariant(l.state),
-            stateLabelKey: l.state === fold.state ? null : qbStateLabelKey(l.state),
-          }));
-        return {
-          seasonNumber,
-          percent: fold.percent,
-          variant: qbStateVariant(fold.state),
-          stateLabelKey: qbStateLabelKey(fold.state),
-          // A lone season pack restates the season line; a lone episode does
-          // not — without its row the modal never says which one is downloading.
-          leaves:
-            leaves.length === 1 && leaves[0].labelNumber === null ? [] : leaves,
-        };
-      });
+            speed: l.dlspeed && l.dlspeed > 0 ? formatSpeed(l.dlspeed) : null,
+            eta: l.eta && l.eta > 0 ? formatEta(l.eta) : null,
+          })),
+      }));
   });
 
   private leafLabel(key: LeafKey): { labelKey: string; labelNumber: number | null } {
