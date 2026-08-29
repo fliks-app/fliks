@@ -41,6 +41,10 @@ export class StreamingSettingsComponent implements OnInit {
    *  ladder. Explicit quality picks are unaffected. */
   readonly autoQualityMode = signal<'directplay' | 'abr'>('directplay');
   readonly autoQualityModes = ['directplay', 'abr'] as const;
+  /** When embedded subtitles are extracted to WebVTT. Extraction reads the
+   *  whole container, so this only picks where that read happens — every mode
+   *  still extracts on demand for a track nobody prepared. */
+  readonly subtitlePrewarm = signal<'off' | 'playback' | 'import'>('playback');
   /** Tonemap algorithms the server reports as runnable on this host.
    *  When the list has a single entry (`['auto']` — e.g. macOS, or a
    *  Linux box with no OpenCL stack and no Intel iGPU), we hide the
@@ -69,6 +73,10 @@ export class StreamingSettingsComponent implements OnInit {
       this.autoQualityMode.set(
         all['streaming_auto_quality_mode'] === 'abr' ? 'abr' : 'directplay',
       );
+      const prewarm = all['streaming_subtitle_prewarm'];
+      this.subtitlePrewarm.set(
+        prewarm === 'off' || prewarm === 'import' ? prewarm : 'playback',
+      );
       this.tonemapAlgosAvailable.set(algos.available ?? ['auto']);
       // If the persisted value isn't runnable on this host (e.g. opencl
       // saved on a box where the probe failed after a driver change),
@@ -94,6 +102,7 @@ export class StreamingSettingsComponent implements OnInit {
         streaming_tonemap_algo: this.tonemapAlgo(),
         streaming_gpu_render_node: this.gpuRenderNode(),
         streaming_auto_quality_mode: this.autoQualityMode(),
+        streaming_subtitle_prewarm: this.subtitlePrewarm(),
         streaming_auto_crop_enabled: String(this.autoCropEnabled()),
       });
       this.toast.success(this.translate.instant('settings.streaming.saved'));

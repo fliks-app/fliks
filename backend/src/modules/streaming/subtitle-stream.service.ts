@@ -16,6 +16,7 @@ import * as path from 'path';
 import { StreamingService } from './streaming.service';
 import { User } from '../users/entities/user.entity';
 import { EventsService } from '../scheduler/events.service';
+import { StreamingSettingsCache } from './streaming-settings-cache.service';
 import { Command } from '../scheduler/entities/command.entity';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
@@ -81,6 +82,7 @@ export class SubtitleStreamService {
     private readonly commandRepo: Repository<Command>,
     private readonly streamingService: StreamingService,
     private readonly eventsService: EventsService,
+    private readonly streamingSettings: StreamingSettingsCache,
   ) {}
 
   /** ACL is checked on the subtitle's OWN media, so a foreign id can't be read
@@ -287,11 +289,17 @@ export class SubtitleStreamService {
   }
 
   /**
-   * Pre-extract all non-bitmap embedded subtitles of a media file to disk.
-   * Called at import / rescan so the first playback doesn't pay the
-   * extraction cost. Skips image-based subs (PGS / VOBSUB / DVB) which
-   * need burn-in, not VTT conversion. Fire-and-forget friendly — errors
-   * are logged but don't propagate.
+   * Pre-extract all non-bitmap embedded subtitles of a media file to disk, so
+   * opening the subtitle menu doesn't pay for a full container read. Skips
+   * image-based subs (PGS / VOBSUB / DVB) which need burn-in, not VTT
+   * conversion. Fire-and-forget friendly — errors are logged but don't
+   * propagate.
+   *
+   * `trigger` is what caused the call; whether it runs is the admin's
+   * `subtitlePrewarm` setting. Gated here rather than at the call sites so the
+   * three of them can't drift from it. Nothing depends on this having run: a
+   * client asking for an unextracted track gets it extracted then, by the same
+   * batched code.
    */
   async warmupCache(
     absolutePath: string,
@@ -299,9 +307,12 @@ export class SubtitleStreamService {
     mediaFileId: number,
     subtitles: { streamIndex: number; isImageBased: boolean }[] | undefined,
     mediaTitle?: string,
+    trigger: 'import' | 'playback' = 'import',
   ): Promise<void> {
     if (!mediaRoot) return;
     if (!subtitles?.length) return;
+    const mode = (await this.streamingSettings.get()).subtitlePrewarm;
+    if (mode === 'off' || (mode === 'playback' && trigger === 'import')) return;
     if (this.activeBatches.has(mediaFileId)) {
       this.log.debug?.(
         `warmupCache: batch already running for media file #${mediaFileId}, ignoring duplicate call`,
