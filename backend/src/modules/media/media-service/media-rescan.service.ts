@@ -262,7 +262,7 @@ export class MediaRescanService {
     absPath: string,
   ): Promise<void> {
     try {
-      const result = computeMovieHash(absPath);
+      const result = await computeMovieHash(absPath);
       file.osdbHash = result?.hash ?? null;
       file.osdbBytesize = result?.bytesize ?? null;
       await this.mediaFileRepo.save(file);
@@ -294,7 +294,6 @@ export class MediaRescanService {
         streamInfo.durationSeconds,
         v.width,
         v.height,
-        !!v.hdrFormat,
       );
       v.crop = crop ?? undefined;
       file.streamInfo = streamInfo;
@@ -956,7 +955,6 @@ export class MediaRescanService {
           streamInfo.durationSeconds,
           v.width,
           v.height,
-          !!v.hdrFormat,
         );
         if (crop) v.crop = crop;
       } catch (err) {

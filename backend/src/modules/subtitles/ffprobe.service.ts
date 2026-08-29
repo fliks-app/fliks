@@ -4,8 +4,52 @@ import { promisify } from 'util';
 import * as path from 'path';
 import { inferLanguageCodeFromTitle } from '../../common/release-parsing/language.parser';
 import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codecs';
+import { cpus } from 'os';
+import { existsSync } from 'fs';
+import { vaapiRenderNode } from '../streaming/transcoding/hw-device';
+import { mapWithConcurrency } from '../../common/utils/concurrency';
 
 const execFileAsync = promisify(execFile);
+
+/** Concurrent cropdetect probes per file. The software path decodes on the
+ *  CPU, so six at once means ~6x the cores in decoder threads — enough on a
+ *  4-thread box to starve the event loop for a whole rescan. */
+const CROP_SAMPLE_CONCURRENCY = Math.max(
+  2,
+  Math.min(6, Math.floor(cpus().length / 2)),
+);
+
+/** `format=nv12` before cropdetect is not cosmetic: cropdetect compares `limit`
+ *  to raw sample values, and 10-bit black sits near 64, so the 8-bit default of
+ *  24 sees nothing black and reports no bars. Normalising to 8-bit makes one
+ *  limit correct for SDR, 10-bit SDR and HDR alike. */
+const CROP_FILTER =
+  'format=nv12,cropdetect=limit=24:round=16:reset=0:skip=24';
+
+type CropSample = {
+  ss: number;
+  w: number;
+  h: number;
+  x: number;
+  y: number;
+} | null;
+
+/** VAAPI decode args for the crop probe, or null when there is no usable
+ *  render node. Covers Intel and AMD on Linux; NVIDIA (cuda) and Windows
+ *  (qsv / d3d11va) need their own decode args. */
+function cropHwDecodeArgs(): string[] | null {
+  if (process.platform !== 'linux') return null;
+  const node = vaapiRenderNode();
+  if (!existsSync(node)) return null;
+  return [
+    '-hwaccel',
+    'vaapi',
+    '-hwaccel_device',
+    node,
+    '-hwaccel_output_format',
+    'vaapi',
+  ];
+}
 
 /** Seconds of packet timestamps sampled to measure the real frame rate. The
  *  cost is the seek, not the read — 20s and 60s both measured ~26ms — so this
@@ -682,77 +726,38 @@ export class FfprobeService {
     durationSeconds?: number,
     originalWidth?: number,
     originalHeight?: number,
-    isHdr = false,
   ): Promise<CropInfo | null> {
     const label = path.basename(videoPath);
-    this.logger.log(
-      `cropdetect started for "${label}" (${originalWidth}x${originalHeight}, hdr=${isHdr})`,
-    );
     try {
-      // Sample 6 timestamps spread across the file (5–80%) — animated 4K
-      // Blurays often mix full-frame action with cinema-aspect dialogue
-      // scenes, and a tight 3-sample run repeatedly hit only full-frame
-      // moments and reported 'no crop needed' on a clearly letterboxed
-      // source. Six samples in parallel finish faster than
-      // three sequential, so the wider coverage is free.
+      // Sample 6 timestamps spread across the file (5–80%): 4K animation mixes
+      // full-frame action with cinema-aspect dialogue, and a 3-sample run hits
+      // only full-frame moments often enough to miss a real letterbox.
       const dur = durationSeconds ?? 600;
       const fractions = [0.05, 0.15, 0.3, 0.45, 0.6, 0.8];
       const timestamps = fractions.map((f) => Math.floor(dur * f));
 
-      // limit (cropdetect threshold for "this pixel is black"):
-      //   - SDR encodes black around luma 16 (BT.709 narrow range), so
-      //     limit=24 is ffmpeg's cropdetect default and works.
-      //   - HDR (PQ / HLG) encodes black around luma 50–70 — limit=24
-      //     misses every 4K HDR Bluray we touched. limit=64 catches the
-      //     letterbox but on SDR it pulls in low-luma scene content
-      //     ('most of a dim scene is below 64') and falsely shrinks the
-      //     crop. Pick per-source so neither side gets the wrong default.
-      const limit = isHdr ? 64 : 24;
+      // Whether the GPU can decode this file depends on its codec, not just on
+      // the host, so the only honest check is the first sample. Software
+      // produces the same nv12 pixels, so a mid-file switch stays consistent.
+      let hw = cropHwDecodeArgs() !== null;
+      const first = await this.cropSample(videoPath, timestamps[0], hw);
+      if (hw && first.failed) {
+        this.logger.log(
+          `cropdetect "${label}": HW decode rejected this file — falling back to software`,
+        );
+        hw = false;
+      }
+      const head = hw || !first.failed
+        ? first.sample
+        : (await this.cropSample(videoPath, timestamps[0], false)).sample;
 
-      // skip=24 drops the first 24 frames per pass so fades / transition
-      // black don't shift the detected edges. round=16 keeps the result
-      // mod-16 to match HW encoder constraints.
-      const cropFilter = `cropdetect=limit=${limit}:round=16:reset=0:skip=24`;
-
-      const sampleResults = await Promise.all(
-        timestamps.map(async (ss) => {
-          try {
-            const { stderr } = await execFileAsync(
-              'ffmpeg',
-              [
-                '-ss',
-                String(Math.floor(ss)),
-                '-i',
-                videoPath,
-                '-t',
-                '5',
-                '-vf',
-                cropFilter,
-                '-an',
-                '-f',
-                'null',
-                '-',
-              ],
-              { timeout: 30_000 },
-            );
-            const lines = stderr.split('\n');
-            for (let i = lines.length - 1; i >= 0; i--) {
-              const m = lines[i].match(/crop=(\d+):(\d+):(\d+):(\d+)/);
-              if (m) {
-                return {
-                  ss,
-                  w: parseInt(m[1], 10),
-                  h: parseInt(m[2], 10),
-                  x: parseInt(m[3], 10),
-                  y: parseInt(m[4], 10),
-                };
-              }
-            }
-            return null;
-          } catch {
-            return null;
-          }
-        }),
+      const rest = await mapWithConcurrency(
+        timestamps.slice(1),
+        CROP_SAMPLE_CONCURRENCY,
+        async (ss) => (await this.cropSample(videoPath, ss, hw)).sample,
+      );
+      this.logger.log(
+        `cropdetect "${label}" (${originalWidth}x${originalHeight}, decode=${hw ? 'vaapi' : 'sw'})`,
       );
 
       // Aggregate: pick the LARGEST crop observed (the loosest box that
@@ -762,7 +767,7 @@ export class FfprobeService {
       let bestCrop: { w: number; h: number; x: number; y: number } | null =
         null;
       const seenSamples: string[] = [];
-      for (const r of sampleResults) {
+      for (const r of [head, ...rest]) {
         if (!r) continue;
         seenSamples.push(`@${r.ss}s=${r.w}:${r.h}:${r.x}:${r.y}`);
         if (!bestCrop || r.w * r.h > bestCrop.w * bestCrop.h) {
@@ -793,6 +798,60 @@ export class FfprobeService {
     } catch (err) {
       this.logger.warn(`cropdetect failed for ${videoPath}: ${err}`);
       return null;
+    }
+  }
+
+  /** One cropdetect probe. `failed` separates "the decoder refused the file"
+   *  (retry in software) from "this scene has no bars". */
+  private async cropSample(
+    videoPath: string,
+    ss: number,
+    hw: boolean,
+  ): Promise<{ failed: boolean; sample: CropSample }> {
+    const decode = hw
+      ? (cropHwDecodeArgs() ?? [])
+      : // Fewer decoder threads is markedly less total CPU for the same frames;
+        // the extra wall time is free on a background probe.
+        ['-threads', '2'];
+    try {
+      const { stderr } = await execFileAsync(
+        'ffmpeg',
+        [
+          ...decode,
+          '-ss',
+          String(Math.floor(ss)),
+          '-i',
+          videoPath,
+          '-t',
+          '5',
+          '-vf',
+          hw ? `hwdownload,${CROP_FILTER}` : CROP_FILTER,
+          '-an',
+          '-f',
+          'null',
+          '-',
+        ],
+        { timeout: 30_000 },
+      );
+      const lines = stderr.split('\n');
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const m = lines[i].match(/crop=(\d+):(\d+):(\d+):(\d+)/);
+        if (m) {
+          return {
+            failed: false,
+            sample: {
+              ss,
+              w: parseInt(m[1], 10),
+              h: parseInt(m[2], 10),
+              x: parseInt(m[3], 10),
+              y: parseInt(m[4], 10),
+            },
+          };
+        }
+      }
+      return { failed: false, sample: null };
+    } catch {
+      return { failed: true, sample: null };
     }
   }
 }
