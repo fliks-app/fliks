@@ -151,7 +151,9 @@ VOLUME /app/conf /app/images /app/transcode
 
 EXPOSE 4848
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+# Generous: a scan saturates a low-power CPU with ffmpeg probes, and an
+# orchestrator that restarts unhealthy containers would kill the scan it caused.
+HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
   CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||4848)+'/api/system/liveness',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 CMD ["node", "dist/main"]

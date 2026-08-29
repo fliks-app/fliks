@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 
 const HASH_CHUNK_SIZE = 65536; // 64 KiB
 
@@ -6,19 +6,22 @@ const HASH_CHUNK_SIZE = 65536; // 64 KiB
  * Compute OpenSubtitles moviehash for a video file.
  * Algorithm: sum of first 64KiB + last 64KiB (as uint64 little-endian words) + filesize.
  * Returns { hash, bytesize } or null if file is too small or unreadable.
+ *
+ * Async: the tail read is a real seek on a multi-GB file, once per file of a
+ * rescan — sync reads would hold the event loop for the whole run.
  */
-export function computeMovieHash(
+export async function computeMovieHash(
   filePath: string,
-): { hash: string; bytesize: number } | null {
-  let fd: number;
+): Promise<{ hash: string; bytesize: number } | null> {
+  let fd: fs.FileHandle;
   try {
-    fd = fs.openSync(filePath, 'r');
+    fd = await fs.open(filePath, 'r');
   } catch {
     return null;
   }
 
   try {
-    const stat = fs.fstatSync(fd);
+    const stat = await fd.stat();
     const bytesize = stat.size;
 
     if (bytesize < HASH_CHUNK_SIZE * 2) return null;
@@ -26,10 +29,9 @@ export function computeMovieHash(
     const buf = Buffer.alloc(HASH_CHUNK_SIZE * 2);
 
     // Read first 64 KiB
-    fs.readSync(fd, buf, 0, HASH_CHUNK_SIZE, 0);
+    await fd.read(buf, 0, HASH_CHUNK_SIZE, 0);
     // Read last 64 KiB
-    fs.readSync(
-      fd,
+    await fd.read(
       buf,
       HASH_CHUNK_SIZE,
       HASH_CHUNK_SIZE,
@@ -61,6 +63,6 @@ export function computeMovieHash(
 
     return { hash, bytesize };
   } finally {
-    fs.closeSync(fd);
+    await fd.close();
   }
 }

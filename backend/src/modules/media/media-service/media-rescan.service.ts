@@ -262,7 +262,7 @@ export class MediaRescanService {
     absPath: string,
   ): Promise<void> {
     try {
-      const result = computeMovieHash(absPath);
+      const result = await computeMovieHash(absPath);
       file.osdbHash = result?.hash ?? null;
       file.osdbBytesize = result?.bytesize ?? null;
       await this.mediaFileRepo.save(file);
@@ -294,7 +294,6 @@ export class MediaRescanService {
         streamInfo.durationSeconds,
         v.width,
         v.height,
-        !!v.hdrFormat,
       );
       v.crop = crop ?? undefined;
       file.streamInfo = streamInfo;
@@ -308,11 +307,9 @@ export class MediaRescanService {
   }
 
   /**
-   * Fire-and-forget clear + warmup of the embedded-subtitle cache for a
-   * file. Called after every import so the first playback doesn't pay the
-   * per-track extraction cost (very visible on ExoPlayer / Android TV,
-   * which blocks `prepare` until every SubtitleConfiguration URL has been
-   * fetched).
+   * Fire-and-forget clear + warmup of the embedded-subtitle cache for a file.
+   * Whether the warmup actually runs is the admin's `subtitlePrewarm` setting,
+   * enforced inside `warmupCache`.
    */
   private rebuildSubtitleCacheForFile(
     file: MediaFile,
@@ -328,6 +325,11 @@ export class MediaRescanService {
           file.id,
           file.streamInfo?.subtitles,
           media?.title,
+        ),
+      )
+      .catch((err) =>
+        this.log.warn(
+          `Subtitle cache rebuild failed for file #${file.id}: ${err instanceof Error ? err.message : err}`,
         ),
       );
   }
@@ -956,7 +958,6 @@ export class MediaRescanService {
           streamInfo.durationSeconds,
           v.width,
           v.height,
-          !!v.hdrFormat,
         );
         if (crop) v.crop = crop;
       } catch (err) {

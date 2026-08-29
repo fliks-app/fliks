@@ -19,6 +19,21 @@
       </div>
     </div>
 
+    <!-- When embedded subtitles get extracted. Extraction reads the whole
+         container, so this picks where that read happens. -->
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.subtitle_prewarm' | translate }}</span></label>
+      <select class="select select-bordered w-full" [ngModel]="subtitlePrewarm()" (ngModelChange)="subtitlePrewarm.set($event)">
+        <option value="playback">{{ 'settings.streaming.subtitle_prewarm_playback' | translate }} ({{ 'settings.streaming.default' | translate }})</option>
+        <option value="import">{{ 'settings.streaming.subtitle_prewarm_import' | translate }}</option>
+        <option value="off">{{ 'settings.streaming.subtitle_prewarm_off' | translate }}</option>
+      </select>
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.subtitle_prewarm_help' | translate }}</span></label>
+      <div class="mt-1 rounded-lg bg-base-200 p-3 text-sm text-base-content/70">
+        {{ ('settings.streaming.subtitle_prewarm_' + subtitlePrewarm() + '_help') | translate }}
+      </div>
+    </div>
+
     <!-- Segment duration -->
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.segment_duration' | translate }}</span></label>

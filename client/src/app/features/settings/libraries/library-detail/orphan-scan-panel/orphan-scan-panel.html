@@ -35,6 +35,12 @@
       <div class="flex flex-col items-center gap-3 py-12">
         <span class="loading loading-spinner loading-lg"></span>
         <p class="text-sm text-base-content/60">{{ 'settings.libraries.scan_scanning' | translate }}</p>
+        @if (scanProgress(); as p) {
+          <progress class="progress progress-primary w-64" [value]="p.current" [max]="p.total"></progress>
+          <p class="text-xs text-base-content/50">
+            {{ 'settings.libraries.scan_progress' | translate: { done: p.current, total: p.total } }}
+          </p>
+        }
       </div>
     } @else if (scanError()) {
       <div role="alert" class="alert alert-error">{{ scanError() }}</div>

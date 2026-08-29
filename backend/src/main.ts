@@ -96,11 +96,15 @@ async function bootstrap() {
 
 const bootstrapLogger = new Logger('Bootstrap');
 
-// `restart: unless-stopped` retries forever on a silent crash — log and exit visibly instead.
+// These come from fire-and-forget background jobs (sprite, subtitle warmup,
+// media-server dispatch): log loudly, but don't drop live playback over them.
 process.on('unhandledRejection', (reason) => {
-  bootstrapLogger.error('Unhandled rejection', reason as Error);
-  process.exit(1);
+  bootstrapLogger.error(
+    `Unhandled rejection: ${reason instanceof Error ? reason.message : String(reason)}`,
+    reason instanceof Error ? reason.stack : undefined,
+  );
 });
+// State is unknown here — exit so `restart: unless-stopped` gives a clean process.
 process.on('uncaughtException', (err) => {
   bootstrapLogger.error('Uncaught exception', err.stack);
   process.exit(1);

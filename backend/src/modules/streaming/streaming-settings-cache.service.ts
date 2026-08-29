@@ -40,9 +40,22 @@ export interface StreamingSettings {
    *  (default) to let the host pick. On a multi-GPU box, pinning a specific
    *  `/dev/dri/renderD*` keeps sessions off the wrong adapter. */
   gpuRenderNode: string;
+  /**
+   * When embedded subtitles get extracted to WebVTT. Pulling a subtitle out of
+   * a container means reading the whole file, so the choice is where to spend
+   * that read:
+   *   - `'playback'` (default): when a file starts playing, so the wait is gone
+   *     by the time anyone opens the subtitle menu, and only for what is watched.
+   *   - `'import'`: also at import and rescan — every file ready up front, at the
+   *     cost of reading a whole library that may never be watched with subtitles.
+   *   - `'off'`: only when a client actually requests a track.
+   * Every mode still extracts on demand; they only differ on what runs ahead.
+   */
+  subtitlePrewarm: SubtitlePrewarm;
 }
 
 export type AutoQualityMode = 'directplay' | 'abr';
+export type SubtitlePrewarm = 'off' | 'playback' | 'import';
 
 const KEYS = [
   'streaming_segment_duration',
@@ -52,10 +65,12 @@ const KEYS = [
   'streaming_auto_quality_mode',
   'streaming_auto_crop_enabled',
   'streaming_gpu_render_node',
+  'streaming_subtitle_prewarm',
 ] as const;
 
 const TONEMAP_ALGOS: TonemapAlgo[] = ['auto', 'opencl', 'vaapi', 'qsv'];
 const AUTO_QUALITY_MODES: AutoQualityMode[] = ['directplay', 'abr'];
+const SUBTITLE_PREWARMS: SubtitlePrewarm[] = ['off', 'playback', 'import'];
 
 @Injectable()
 export class StreamingSettingsCache implements OnModuleInit {
@@ -105,6 +120,7 @@ export class StreamingSettingsCache implements OnModuleInit {
       autoQualityMode,
       autoCropEnabled,
       gpuRenderNode,
+      subtitlePrewarm,
     ] = values;
     return {
       segmentDuration: parseFloat(duration ?? '3') || 3,
@@ -123,6 +139,11 @@ export class StreamingSettingsCache implements OnModuleInit {
       autoCropEnabled: autoCropEnabled !== 'false',
       // 'auto' (or unset) lets the host pick the default render node.
       gpuRenderNode: gpuRenderNode?.trim() || 'auto',
+      subtitlePrewarm: SUBTITLE_PREWARMS.includes(
+        subtitlePrewarm as SubtitlePrewarm,
+      )
+        ? (subtitlePrewarm as SubtitlePrewarm)
+        : 'playback',
     };
   }
 }

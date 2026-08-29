@@ -62,7 +62,7 @@ export class SubtitlesService {
   ): Promise<SubtitleSearchResult[]> {
     // Compute moviehash if filePath is provided and hash not yet set
     if (params.filePath && !params.moviehash) {
-      const hashResult = computeMovieHash(params.filePath);
+      const hashResult = await computeMovieHash(params.filePath);
       if (hashResult) {
         params.moviehash = hashResult.hash;
         params.moviebytesize = hashResult.bytesize;

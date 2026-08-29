@@ -8,7 +8,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { Readable } from 'stream';
-import { execFile, spawn, type ChildProcess } from 'child_process';
+import {
+  execFile,
+  spawn,
+  type ChildProcess,
+  type SpawnOptions,
+} from 'child_process';
 import { promisify } from 'util';
 import * as fsSync from 'fs';
 import * as fs from 'fs/promises';
@@ -16,6 +21,7 @@ import * as path from 'path';
 import { StreamingService } from './streaming.service';
 import { User } from '../users/entities/user.entity';
 import { EventsService } from '../scheduler/events.service';
+import { StreamingSettingsCache } from './streaming-settings-cache.service';
 import { Command } from '../scheduler/entities/command.entity';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
@@ -29,6 +35,12 @@ const execFileAsync = promisify(execFile);
  * ffmpeg processes fighting for disk I/O.
  */
 const WARMUP_CONCURRENCY = 2;
+
+/** Cap on one extraction. Generous on purpose — the cost is a full container
+ *  read (40s for a 22 GB remux on SSD, minutes on a NAS) — but a hung ffmpeg on
+ *  a broken file or a dead mount would otherwise hold a warmup slot, and its
+ *  `inflight` promise, forever. */
+const EXTRACT_TIMEOUT_MS = 15 * 60_000;
 
 interface WarmupTask {
   absolutePath: string;
@@ -81,6 +93,7 @@ export class SubtitleStreamService {
     private readonly commandRepo: Repository<Command>,
     private readonly streamingService: StreamingService,
     private readonly eventsService: EventsService,
+    private readonly streamingSettings: StreamingSettingsCache,
   ) {}
 
   /** ACL is checked on the subtitle's OWN media, so a foreign id can't be read
@@ -287,11 +300,17 @@ export class SubtitleStreamService {
   }
 
   /**
-   * Pre-extract all non-bitmap embedded subtitles of a media file to disk.
-   * Called at import / rescan so the first playback doesn't pay the
-   * extraction cost. Skips image-based subs (PGS / VOBSUB / DVB) which
-   * need burn-in, not VTT conversion. Fire-and-forget friendly — errors
-   * are logged but don't propagate.
+   * Pre-extract all non-bitmap embedded subtitles of a media file to disk, so
+   * opening the subtitle menu doesn't pay for a full container read. Skips
+   * image-based subs (PGS / VOBSUB / DVB) which need burn-in, not VTT
+   * conversion. Fire-and-forget friendly — errors are logged but don't
+   * propagate.
+   *
+   * `trigger` is what caused the call; whether it runs is the admin's
+   * `subtitlePrewarm` setting. Gated here rather than at the call sites so the
+   * three of them can't drift from it. Nothing depends on this having run: a
+   * client asking for an unextracted track gets it extracted then, by the same
+   * batched code.
    */
   async warmupCache(
     absolutePath: string,
@@ -299,9 +318,12 @@ export class SubtitleStreamService {
     mediaFileId: number,
     subtitles: { streamIndex: number; isImageBased: boolean }[] | undefined,
     mediaTitle?: string,
+    trigger: 'import' | 'playback' = 'import',
   ): Promise<void> {
     if (!mediaRoot) return;
     if (!subtitles?.length) return;
+    const mode = (await this.streamingSettings.get()).subtitlePrewarm;
+    if (mode === 'off' || (mode === 'playback' && trigger === 'import')) return;
     if (this.activeBatches.has(mediaFileId)) {
       this.log.debug?.(
         `warmupCache: batch already running for media file #${mediaFileId}, ignoring duplicate call`,
@@ -665,23 +687,27 @@ export class SubtitleStreamService {
 
     try {
       await new Promise<void>((resolve, reject) => {
+        const opts: SpawnOptions = {
+          stdio: ['ignore', 'ignore', 'pipe'],
+          timeout: EXTRACT_TIMEOUT_MS,
+        };
         // Low priority — this is a background warmup batch, not a live request.
         const proc =
           process.platform === 'linux'
-            ? spawn('ionice', ['-c3', 'nice', '-n19', 'ffmpeg', ...args], {
-                stdio: ['ignore', 'ignore', 'pipe'],
-              })
-            : spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+            ? spawn('ionice', ['-c3', 'nice', '-n19', 'ffmpeg', ...args], opts)
+            : spawn('ffmpeg', args, opts);
         let stderrTail = '';
         proc.stderr?.on('data', (chunk: Buffer) => {
           stderrTail = (stderrTail + chunk.toString()).slice(-2000);
         });
-        proc.on('close', (code) => {
+        proc.on('close', (code, signal) => {
           if (code === 0) resolve();
           else
             reject(
               new Error(
-                `ffmpeg batch subtitle extract failed (${code}): ${stderrTail}`,
+                signal
+                  ? `ffmpeg batch subtitle extract killed by ${signal} after ${EXTRACT_TIMEOUT_MS / 60_000}min`
+                  : `ffmpeg batch subtitle extract failed (${code}): ${stderrTail}`,
               ),
             );
         });
@@ -690,14 +716,15 @@ export class SubtitleStreamService {
 
       // All outputs written, promote .tmp → final atomically.
       await Promise.all(
-        outputs.map((out) =>
-          fs.rename(out.tmp, out.final).catch((err) => {
+        outputs.map(async (out) => {
+          await this.assertExtracted(out.tmp);
+          await fs.rename(out.tmp, out.final).catch((err) => {
             this.log.warn(
               `Failed to promote subtitle cache "${out.tmp}" → "${out.final}": ${err instanceof Error ? err.message : err}`,
             );
             throw err;
-          }),
-        ),
+          });
+        }),
       );
     } catch (err) {
       // Best-effort cleanup of any leftover .tmp files so a retry starts clean.
@@ -741,27 +768,42 @@ export class SubtitleStreamService {
             '-y',
             tmpPath,
           ],
-          { stdio: ['ignore', 'ignore', 'pipe'] },
+          { stdio: ['ignore', 'ignore', 'pipe'], timeout: EXTRACT_TIMEOUT_MS },
         );
         let stderrTail = '';
         proc.stderr?.on('data', (chunk: Buffer) => {
           stderrTail = (stderrTail + chunk.toString()).slice(-1000);
         });
-        proc.on('close', (code) => {
+        proc.on('close', (code, signal) => {
           if (code === 0) resolve();
           else
             reject(
               new Error(
-                `ffmpeg subtitle extract failed (${code}): ${stderrTail}`,
+                signal
+                  ? `ffmpeg subtitle extract killed by ${signal} after ${EXTRACT_TIMEOUT_MS / 60_000}min`
+                  : `ffmpeg subtitle extract failed (${code}): ${stderrTail}`,
               ),
             );
         });
         proc.on('error', reject);
       });
+      await this.assertExtracted(tmpPath);
       await fs.rename(tmpPath, cachePath);
     } catch (err) {
       await fs.rm(tmpPath, { force: true }).catch(() => {});
       throw err;
+    }
+  }
+
+  /** ffmpeg can exit 0 having written nothing (a mislabelled track, a stream it
+   *  could not decode). Promoting that caches an empty track forever, and the
+   *  player shows a subtitle that renders nothing. A track with no cues is
+   *  legitimate and still carries its WEBVTT header, so only zero bytes is a
+   *  failure. */
+  private async assertExtracted(tmpPath: string): Promise<void> {
+    const { size } = await fs.stat(tmpPath);
+    if (size === 0) {
+      throw new Error(`ffmpeg wrote an empty subtitle file: "${tmpPath}"`);
     }
   }
 

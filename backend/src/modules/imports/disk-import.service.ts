@@ -29,6 +29,7 @@ import {
   RelinkResult,
 } from './dto/orphan-scan.dto';
 import { NfoMetadataService } from './nfo-metadata.service';
+import { EventsService } from '../scheduler/events.service';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { MediaService } from '../media/media.service';
 import { MediaMetadataService } from '../media/media-service/media-metadata.service';
@@ -60,6 +61,10 @@ export interface ScanCandidate {
 /** The scan shares a 30-connection pool with everything else the server is
  *  serving; unbounded fan-out starved it and the UI stalled until the scan ended. */
 const SCAN_CONCURRENCY = 8;
+
+/** SSE task keys: the folder walk, then the background relink of its groups. */
+export const ORPHAN_SCAN_PROGRESS = 'OrphanScan';
+export const ORPHAN_IMPORT_PROGRESS = 'OrphanImport';
 
 export interface NormalizedTitles {
   normTitle: string;
@@ -131,6 +136,7 @@ export class DiskImportService {
     private readonly nfo: NfoMetadataService,
     private readonly libraryIngest: LibraryIngestService,
     private readonly mediaServers: MediaServersService,
+    private readonly events: EventsService,
   ) {}
 
   /**
@@ -143,9 +149,16 @@ export class DiskImportService {
     const library = await this.libraries.requirePathFor(libraryId);
 
     // Absolute paths already linked in this library — never offered again.
+    // Only the two columns the loop reads: the full rows drag every file's
+    // `streamInfo` JSONB into the heap for nothing.
     const linkedRows = await this.fileRepo.find({
       where: { media: { library: { id: libraryId } } },
-      relations: ['media', 'media.library'],
+      select: {
+        id: true,
+        relativePath: true,
+        media: { id: true, folderName: true, library: { id: true, path: true } },
+      },
+      relations: { media: { library: true } },
     });
     const linkedSet = new Set<string>();
     for (const f of linkedRows) {
@@ -199,88 +212,117 @@ export class DiskImportService {
     this.logger.log(`Orphan scan started — ${label} root="${root}"`);
 
     const allFiles = await this.collectVideoFiles(root, 0);
+    const unlinked = allFiles.filter((abs) => !linkedSet.has(path.resolve(abs)));
+
+    // One slot past the file count: the client retires a task at current >= total,
+    // and the .nfo pass still runs after the last file is stat'd.
+    let done = 0;
+    const emit = (current: number) =>
+      this.events.emit({
+        type: 'task.progress',
+        command: ORPHAN_SCAN_PROGRESS,
+        current,
+        total: unlinked.length + 1,
+        message: root,
+      });
+    emit(0);
+
+    // Pass 1 — one stat per file, in parallel: a sequential walk of a few
+    // thousand files is minutes of round-trips on a NAS mount.
+    const scanned = await mapWithConcurrency(
+      unlinked,
+      SCAN_CONCURRENCY,
+      async (abs) => {
+        if (++done % 25 === 0) emit(done);
+        const filename = path.basename(abs);
+        const epNums = this.naming.parseEpisodeNumbers(filename, abs);
+        // Skip files whose inferred type the library doesn't accept (e.g. a
+        // series file under a movies-only library) — they can't be re-linked here.
+        // A special carries no numbering, so its own markers are what make it a series file.
+        const inferredType =
+          epNums || this.naming.isSpecialFile(abs)
+            ? MediaType.SERIES
+            : MediaType.MOVIE;
+        if (!mediaTypes.includes(inferredType)) return null;
+
+        const { quality } = parseReleaseQuality(filename);
+        let size = 0;
+        try {
+          size = (await fsp.stat(abs)).size;
+        } catch {
+          /* ignore */
+        }
+        const rel = relativePathUnderMediaRoot(root, abs);
+        const segments = rel ? rel.split('/') : [];
+        return {
+          abs,
+          epNums,
+          mediaType: inferredType,
+          // A file directly at the library root has a single segment (its name).
+          folderName: segments.length > 1 ? segments[0] : '',
+          entry: {
+            filePath: abs,
+            filename,
+            size,
+            qualityName: quality.name,
+            qualityId: quality.id,
+            seasonNumber: epNums?.season ?? null,
+            episodeNumber: epNums?.episode ?? null,
+            episodeEnd: epNums?.episodeEnd ?? null,
+          } satisfies OrphanFileEntry,
+        };
+      },
+    );
+
+    // Pass 2 — group in walk order, so a group's first file is its sample.
     const groups = new Map<string, OrphanGroup>();
+    const sampleFile = new Map<string, string>();
     const looseFiles: OrphanFileEntry[] = [];
     let orphanCount = 0;
-
-    for (const abs of allFiles) {
-      if (linkedSet.has(path.resolve(abs))) continue;
-
-      const filename = path.basename(abs);
-      const epNums = this.naming.parseEpisodeNumbers(filename, abs);
-      // Skip files whose inferred type the library doesn't accept (e.g. a
-      // series file under a movies-only library) — they can't be re-linked here.
-      // A special carries no numbering, so its own markers are what make it a series file.
-      const inferredType =
-        epNums || this.naming.isSpecialFile(abs)
-          ? MediaType.SERIES
-          : MediaType.MOVIE;
-      if (!mediaTypes.includes(inferredType)) continue;
+    for (const f of scanned) {
+      if (!f) continue;
       orphanCount++;
-
-      const { quality } = parseReleaseQuality(filename);
-      let size = 0;
-      try {
-        size = (await fsp.stat(abs)).size;
-      } catch {
-        /* ignore */
-      }
-      const entry: OrphanFileEntry = {
-        filePath: abs,
-        filename,
-        size,
-        qualityName: quality.name,
-        qualityId: quality.id,
-        seasonNumber: epNums?.season ?? null,
-        episodeNumber: epNums?.episode ?? null,
-        episodeEnd: epNums?.episodeEnd ?? null,
-      };
-
-      const rel = relativePathUnderMediaRoot(root, abs);
-      const segments = rel ? rel.split('/') : [];
-      // A file directly at the library root has a single segment (its name).
-      const folderName = segments.length > 1 ? segments[0] : '';
-      if (!folderName) {
-        looseFiles.push(entry);
+      if (!f.folderName) {
+        looseFiles.push(f.entry);
         continue;
       }
-
-      if (epNums) {
-        // Series: one group per show folder.
-        const key = `series:${folderName}`;
-        let group = groups.get(key);
-        if (!group) {
-          const extracted = extractMediaTitle(filename);
-          const nfo = await this.nfo.readForVideoFile(abs);
-          group = {
-            groupKey: key,
-            mediaType: MediaType.SERIES,
-            folderName,
-            guessTitle: nfo?.title ?? extracted.title ?? folderName,
-            guessYear: nfo?.year ?? extracted.year ?? null,
-            nfo,
-            suggestedProvider,
-            files: [],
-          };
-          groups.set(key, group);
-        }
-        group.files.push(entry);
-      } else {
-        // Movie: one group per file.
-        const extracted = extractMediaTitle(filename);
-        const nfo = await this.nfo.readForVideoFile(abs);
-        groups.set(`movie:${abs}`, {
-          groupKey: `movie:${abs}`,
-          mediaType: MediaType.MOVIE,
-          folderName,
-          guessTitle: nfo?.title ?? extracted.title ?? folderName,
-          guessYear: nfo?.year ?? extracted.year ?? null,
-          nfo,
-          suggestedProvider,
-          files: [entry],
-        });
+      const key =
+        f.mediaType === MediaType.SERIES
+          ? `series:${f.folderName}`
+          : `movie:${f.abs}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.files.push(f.entry);
+        continue;
       }
+      groups.set(key, {
+        groupKey: key,
+        mediaType: f.mediaType,
+        folderName: f.folderName,
+        guessTitle: f.folderName,
+        guessYear: null,
+        nfo: null,
+        suggestedProvider,
+        files: [f.entry],
+      });
+      sampleFile.set(key, f.abs);
     }
+
+    // Pass 3 — one .nfo probe per group instead of per file (each probe is up
+    // to four reads), in parallel.
+    await mapWithConcurrency(
+      [...groups.values()],
+      SCAN_CONCURRENCY,
+      async (group) => {
+        const abs = sampleFile.get(group.groupKey)!;
+        const extracted = extractMediaTitle(path.basename(abs));
+        const nfo = await this.nfo.readForVideoFile(abs);
+        group.nfo = nfo;
+        group.guessTitle = nfo?.title ?? extracted.title ?? group.folderName;
+        group.guessYear = nfo?.year ?? extracted.year ?? null;
+      },
+    );
+    emit(unlinked.length + 1);
 
     this.logger.log(
       `Orphan scan finished — ${label} scanned=${allFiles.length} orphans=${orphanCount} groups=${groups.size} loose=${looseFiles.length}`,
@@ -306,7 +348,15 @@ export class DiskImportService {
     let created = 0;
     let linked = 0;
     let failed = 0;
+    let index = 0;
     for (const item of items) {
+      this.events.emit({
+        type: 'task.progress',
+        command: ORPHAN_IMPORT_PROGRESS,
+        current: index++,
+        total: items.length,
+        message: item.folderName,
+      });
       try {
         const res = await this.relinkOrphans(item, userId);
         if (res.created) created++;
@@ -319,6 +369,13 @@ export class DiskImportService {
         );
       }
     }
+    this.events.emit({
+      type: 'task.progress',
+      command: ORPHAN_IMPORT_PROGRESS,
+      current: items.length,
+      total: items.length,
+      message: '',
+    });
     this.logger.log(
       `Orphan batch finished — library #${items[0]?.libraryId} groups=${items.length} created=${created} linked=${linked} failed=${failed}`,
     );
@@ -597,7 +654,7 @@ export class DiskImportService {
 
         // Verify the source still exists before we touch the DB.
         try {
-          fs.statSync(entry.filePath);
+          await fsp.stat(entry.filePath);
         } catch {
           errors.push(
             `${path.basename(entry.filePath)}: source file not found`,
@@ -680,21 +737,27 @@ export class DiskImportService {
     depth: number,
   ): Promise<string[]> {
     if (depth > 3) return [];
-    const files: string[] = [];
     let entries: fs.Dirent[];
     try {
       entries = await fsp.readdir(dir, { withFileTypes: true });
     } catch {
       return [];
     }
+    const files: string[] = [];
+    const subdirs: string[] = [];
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        files.push(...(await this.collectVideoFiles(fullPath, depth + 1)));
-      } else if (VIDEO_EXTS.has(path.extname(entry.name).toLowerCase())) {
+      if (entry.isDirectory()) subdirs.push(fullPath);
+      else if (VIDEO_EXTS.has(path.extname(entry.name).toLowerCase())) {
         files.push(fullPath);
       }
     }
+    // A library root holds one folder per title: descending them one at a time
+    // is a few thousand serial round-trips on a NAS mount.
+    const nested = await mapWithConcurrency(subdirs, SCAN_CONCURRENCY, (sub) =>
+      this.collectVideoFiles(sub, depth + 1),
+    );
+    for (const chunk of nested) files.push(...chunk);
     return files;
   }
 

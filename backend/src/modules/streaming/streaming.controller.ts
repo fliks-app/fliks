@@ -684,6 +684,22 @@ export class StreamingController {
     const user = req.user as User;
     const userId = user.id;
 
+    // Extracting an embedded track reads the whole container, so start it now:
+    // the menu is usually opened well after playback begins. No-op unless the
+    // admin left prewarm on, and never blocks the response.
+    void this.subtitleStreamService
+      .warmupCache(
+        resolved.absolutePath,
+        resolved.media.path,
+        mediaFileId,
+        resolved.mediaFile.streamInfo?.subtitles,
+        resolved.media.title,
+        'playback',
+      )
+      .catch(() => {
+        /* prewarm is best-effort — the on-demand path still serves the track */
+      });
+
     // Quality the client is requesting (absent / 'auto' = let the server
     // decide per autoQualityMode; 'original' = source rung; anything else =
     // a lower rung that must transcode). Drives DirectPlay-vs-ladder routing.
