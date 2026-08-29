@@ -14,6 +14,7 @@ import { MediaType } from '../../../../../core/enums/media-type.enum';
 import { PaginationComponent } from '../../../../../shared/components/pagination/pagination';
 import { ResolveUrlPipe } from '../../../../../core/pipes/resolve-url.pipe';
 import { ToastService } from '../../../../../core/services/toast.service';
+import { SseService } from '../../../../../core/services/sse.service';
 import { serverMessage } from '../../../../../core/utils/server-message';
 import {
   MetadataService,
@@ -65,6 +66,7 @@ export class OrphanScanPanelComponent {
   private readonly metadata = inject(MetadataService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
+  private readonly sse = inject(SseService);
 
   /** Collect picks without linking — the library does not exist yet. */
   readonly deferLink = input(false);
@@ -80,6 +82,10 @@ export class OrphanScanPanelComponent {
   readonly orphanCount = signal(0);
   readonly looseCount = signal(0);
   readonly groups = signal<GroupVM[]>([]);
+
+  /** Live file counter pushed by the server walk, so a multi-minute scan of a
+   *  NAS folder isn't a bare spinner. */
+  readonly scanProgress = computed(() => this.sse.activeProgress().get('OrphanScan') ?? null);
 
   readonly page = signal(1);
   /** Groups imported so far / to import, for the creation wizard's progress. */
@@ -172,12 +178,12 @@ export class OrphanScanPanelComponent {
           collapsed: false,
         })),
       );
-      await this.searchPage();
     } catch (err: unknown) {
       this.scanError.set(this.failure('scan', err));
     } finally {
       this.scanning.set(false);
     }
+    await this.searchPage();
   }
 
   async goToPage(page: number) {

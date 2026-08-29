@@ -1890,6 +1890,7 @@
       "scan_queued": "Import of {{count}} media started in the background.",
       "scan_title": "Folder scan",
       "scan_scanning": "Scanning files…",
+      "scan_progress": "Scanning {{done}}/{{total}} files…",
       "scan_no_orphans": "No orphan files found.",
       "scan_orphan_count": "{{count}} orphan file(s) detected",
       "scan_group_movie": "Movie",

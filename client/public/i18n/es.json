@@ -1873,6 +1873,7 @@
       "scan_queued": "Importación de {{count}} medios iniciada en segundo plano.",
       "scan_title": "Análisis de la carpeta",
       "scan_scanning": "Análisis de los archivos en curso…",
+      "scan_progress": "Analizando {{done}}/{{total}} archivos…",
       "scan_no_orphans": "No se encontró ningún archivo huérfano.",
       "scan_orphan_count": "{{count}} archivo(s) huérfano(s) detectado(s)",
       "scan_group_movie": "Película",

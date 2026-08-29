@@ -1873,6 +1873,7 @@
       "scan_queued": "Import von {{count}} Medien im Hintergrund gestartet.",
       "scan_title": "Ordner-Scan",
       "scan_scanning": "Dateien werden gescannt…",
+      "scan_progress": "{{done}}/{{total}} Dateien werden geprüft…",
       "scan_no_orphans": "Keine verwaiste Datei gefunden.",
       "scan_orphan_count": "{{count}} verwaiste Datei(en) erkannt",
       "scan_group_movie": "Film",

@@ -1890,6 +1890,7 @@
       "scan_queued": "Import de {{count}} médias lancé en arrière-plan.",
       "scan_title": "Analyse du dossier",
       "scan_scanning": "Analyse des fichiers en cours…",
+      "scan_progress": "Analyse de {{done}}/{{total}} fichiers…",
       "scan_no_orphans": "Aucun fichier orphelin trouvé.",
       "scan_orphan_count": "{{count}} fichier(s) orphelin(s) détecté(s)",
       "scan_group_movie": "Film",

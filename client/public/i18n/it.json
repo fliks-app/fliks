@@ -1873,6 +1873,7 @@
       "scan_queued": "Importazione di {{count}} file multimediali avviata in background.",
       "scan_title": "Analisi della cartella",
       "scan_scanning": "Analisi dei file in corso…",
+      "scan_progress": "Analisi di {{done}}/{{total}} file…",
       "scan_no_orphans": "Nessun file orfano trovato.",
       "scan_orphan_count": "{{count}} file orfano/i rilevato/i",
       "scan_group_movie": "Film",
