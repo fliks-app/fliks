@@ -907,6 +907,17 @@ export class FliksHostImpl implements PluginHostApi {
           // a pack shows on every episode page of the season.
           episodeNumber: event.episodeNumber,
         });
+        // Put the download badge up on the grab rather than on the client's
+        // next poll tick, which can be a minute out. Same push the ticks
+        // themselves use, so the media type and audience are resolved
+        // identically and the first real tick simply supersedes this.
+        await this.pushProgress({
+          mediaId: event.mediaId,
+          seasonNumber: event.seasonNumber,
+          episodeNumber: event.episodeNumber,
+          progress: 0,
+          state: 'queued',
+        });
         return;
       case 'acquisition.imported': {
         const media = await this.mediaRepo.findOne({

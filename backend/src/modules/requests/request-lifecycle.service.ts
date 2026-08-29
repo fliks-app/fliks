@@ -90,15 +90,6 @@ export class RequestLifecycleService
     this.subscriptions.add(
       this.events.onDomain((event) => {
         if (event.type !== 'acquisition.grabbed') return;
-        this.announceGrab(
-          event.mediaId,
-          event.seasonNumber,
-          event.episodeNumber,
-        ).catch((err) => {
-          this.log.warn(
-            `announceGrab failed for media#${event.mediaId}: ${(err as Error).message}`,
-          );
-        });
         this.markInProgress(event.mediaId, event.seasonNumber).catch((err) => {
           this.log.warn(
             `markInProgress failed for media#${event.mediaId}: ${(err as Error).message}`,
@@ -223,39 +214,6 @@ export class RequestLifecycleService
         });
       }
     }
-  }
-
-  /**
-   * Push a 0% progress event on every grab, so the download badge appears when
-   * the user presses the button instead of on the acquisition plugin's next
-   * poll tick — which can be a minute out. Deliberately outside
-   * {@link markInProgress}: a direct grab matches no APPROVED request, and
-   * this used to return before ever reaching the emit. Same audience as the
-   * plugin's own ticks — everyone who can open the media's page.
-   */
-  private async announceGrab(
-    mediaId: number,
-    seasonNumber?: number,
-    episodeNumber?: number,
-  ): Promise<void> {
-    const userIds = await this.sseAudience.viewersForMedia(mediaId);
-    if (!userIds.length) return;
-    this.events.emitToUsers(userIds, {
-      type: 'download.progress',
-      mediaId,
-      // The discriminator the rest of the pipeline already uses: a leaf carries
-      // a season number iff it belongs to a series.
-      mediaType: seasonNumber == null ? 'movie' : 'series',
-      seasonNumber,
-      // Keyed to the episode when the grab named one, so episode 7's page stays
-      // clear while only episode 8 downloads. Absent means a season pack, which
-      // legitimately shows on every episode of that season.
-      episodeNumber,
-      progress: 0,
-      dlspeed: 0,
-      eta: 0,
-      state: 'active',
-    });
   }
 
   /**

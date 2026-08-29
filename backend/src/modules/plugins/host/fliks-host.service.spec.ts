@@ -1584,15 +1584,39 @@ describe('FliksHostImpl', () => {
   describe('events.publish', () => {
     it('emits only the domain event for acquisition.grabbed — no direct call site emits queue.updated', async () => {
       const h = makeHarness();
+      h.mediaRepo.findOne.mockResolvedValue(makeMedia());
       await h.host['events.publish']([
-        { type: 'acquisition.grabbed', mediaId: 1, seasonNumber: 4 },
+        { type: 'acquisition.grabbed', mediaId: 1, seasonNumber: 4, episodeNumber: 8 },
       ]);
       expect(h.events.emitDomain).toHaveBeenCalledWith({
         type: 'acquisition.grabbed',
         mediaId: 1,
         seasonNumber: 4,
+        episodeNumber: 8,
       });
       expect(h.events.emit).not.toHaveBeenCalled();
+    });
+
+    // The badge has to come up on the grab: the acquisition plugin's own poll
+    // can be a minute out, and a direct grab matches no request, so nothing
+    // else would speak for it.
+    it('pushes a queued 0% for the grabbed scope so the badge appears at once', async () => {
+      const h = makeHarness();
+      h.mediaRepo.findOne.mockResolvedValue(makeMedia());
+      await h.host['events.publish']([
+        { type: 'acquisition.grabbed', mediaId: 1, seasonNumber: 4, episodeNumber: 8 },
+      ]);
+      expect(h.events.emitToUsers).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({
+          type: 'download.progress',
+          mediaId: 1,
+          seasonNumber: 4,
+          episodeNumber: 8,
+          progress: 0,
+          state: 'queued',
+        }),
+      );
     });
 
     it('handles queue.changed and the batched acquisition.progress variant', async () => {

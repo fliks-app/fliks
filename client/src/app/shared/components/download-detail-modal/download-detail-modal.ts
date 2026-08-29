@@ -24,9 +24,13 @@ interface LeafRow {
   key: string;
   labelKey: string;
   labelNumber: number | null;
-  percent: number;
+  /** Null while the release is still being searched for — there is no torrent
+   *  to be a percentage of yet. */
+  percent: number | null;
   variant: ProgressVariant;
-  stateLabelKey: string;
+  /** Null when the leaf agrees with its season, which the line above already
+   *  states — only a divergence is worth the words. */
+  stateLabelKey: string | null;
 }
 
 interface SeasonRow {
@@ -34,8 +38,8 @@ interface SeasonRow {
   percent: number | null;
   variant: ProgressVariant;
   stateLabelKey: string;
-  /** Per-torrent rows. Empty only for a season whose single leaf is a pack —
-   *  that one restates the season line above it. */
+  /** Per-torrent rows. Empty for a season whose single leaf is a pack — that
+   *  one restates the season line above it. */
   leaves: LeafRow[];
 }
 
@@ -72,9 +76,23 @@ export class DownloadDetailModalComponent {
     return d && d.eta > 0 ? formatEta(d.eta) : null;
   });
 
+  /**
+   * The single torrent in flight, when that is all there is. The season and
+   * leaf breakdown would then restate the headline word for word at all three
+   * levels — but the headline alone never says *which* episode, so it is
+   * replaced by one identity line.
+   */
+  readonly soleLeaf = computed<{ seasonNumber: number; labelKey: string; labelNumber: number | null } | null>(() => {
+    const seasons = this.progress()?.seasons;
+    if (!seasons || seasons.size !== 1) return null;
+    const [seasonNumber, sp] = [...seasons.entries()][0];
+    if (sp.leaves.size !== 1) return null;
+    return { seasonNumber, ...this.leafLabel([...sp.leaves.keys()][0]) };
+  });
+
   readonly seasonRows = computed<SeasonRow[]>(() => {
     const seasons = this.progress()?.seasons;
-    if (!seasons) return [];
+    if (!seasons || this.soleLeaf()) return [];
     return [...seasons.entries()]
       .sort((a, b) => a[0] - b[0])
       .map(([seasonNumber, sp]) => {
@@ -85,9 +103,9 @@ export class DownloadDetailModalComponent {
           .map(([key, l]) => ({
             key: String(key),
             ...this.leafLabel(key),
-            percent: l.percent,
+            percent: l.state === 'searching' ? null : l.percent,
             variant: qbStateVariant(l.state),
-            stateLabelKey: qbStateLabelKey(l.state),
+            stateLabelKey: l.state === fold.state ? null : qbStateLabelKey(l.state),
           }));
         return {
           seasonNumber,

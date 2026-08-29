@@ -21,6 +21,15 @@
         </div>
       </div>
 
+      @if (soleLeaf(); as one) {
+        <p class="text-sm text-base-content/60 mt-2">
+          {{ 'tracking.season' | translate: { number: one.seasonNumber } }}
+          @if (one.labelNumber !== null) {
+            · {{ one.labelKey | translate: { number: one.labelNumber } }}
+          }
+        </p>
+      }
+
       @if (seasonRows().length) {
         <div class="divider my-3"></div>
         <div class="flex flex-col gap-4 max-h-[50vh] overflow-y-auto">
@@ -47,7 +56,14 @@
                       class="flex items-center justify-between gap-3 text-xs text-base-content/60"
                     >
                       <span>{{ l.labelKey | translate: { number: l.labelNumber } }}</span>
-                      <span>{{ l.stateLabelKey | translate }} · {{ l.percent }}%</span>
+                      <span>
+                        @if (l.stateLabelKey) {
+                          {{ l.stateLabelKey | translate }}@if (l.percent !== null) { · }
+                        }
+                        @if (l.percent !== null) {
+                          {{ l.percent }}%
+                        }
+                      </span>
                     </div>
                   }
                 </div>
