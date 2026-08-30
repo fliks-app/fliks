@@ -242,17 +242,6 @@ export function buildAllowedQualityIds(
   return set;
 }
 
-export function buildSourceMinSeeders(
-  sources: { id: number; settings?: Record<string, unknown> | null }[],
-): Map<number, number> {
-  return new Map(
-    sources.map((ix) => [
-      ix.id,
-      Math.max(0, Number(ix.settings?.['minSeeders']) || 0),
-    ]),
-  );
-}
-
 /**
  * Compute every reason a release does **not** perfectly match the user's criteria.
  * Returns an empty array when the release fully matches.

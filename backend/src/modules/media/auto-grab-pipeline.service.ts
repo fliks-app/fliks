@@ -1,23 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Media } from './entities/media.entity';
-import { QualityDefinitionsService } from '../profiles/quality-definitions.service';
 import { getAppQualityById } from '../../common/constants/app-qualities';
-import {
-  SizeLimits,
-  buildSourceMinSeeders,
-  rankFromQualityString,
-} from '../../common/release-scoring';
-
-/**
- * Scoring context that's identical across many media in the same SearchMissing
- * / RssSync pass. Build once with {@link AutoGrabPipelineService.buildScoringContext}
- * before iterating a batch.
- */
-export interface AutoGrabScoringContext {
-  sizeByQuality: Map<number, SizeLimits>;
-  sourceMinSeeders: Map<number, number>;
-  sourceUnknownLang: Map<number, string | undefined>;
-}
+import { rankFromQualityString } from '../../common/release-scoring';
 
 /** Outcome of {@link AutoGrabPipelineService.classifyForSearch}. */
 export type SearchDecision =
@@ -34,33 +18,11 @@ export type SearchDecision =
     };
 
 /**
- * Classification for the auto-grab pipeline: whether a media needs a search
- * (missing / upgrade / skip / unprofiled) and the per-run scoring context
- * a release source contributes (size limits, min seeders, unknown-language
- * fallback). Grab execution — scoring releases, picking one, recording
- * DownloadHistory — is a separate concern.
+ * Whether a media needs a search, and against which rank window — the one half of
+ * acquisition that reads a quality profile, so the one half core still owns.
  */
 @Injectable()
 export class AutoGrabPipelineService {
-  constructor(private readonly qualityDefs: QualityDefinitionsService) {}
-
-  /** Takes the structural shape `buildSourceMinSeeders` declares, so core needs
-   *  no entity class from whoever owns the release sources. */
-  async buildScoringContext(
-    sources: { id: number; settings?: Record<string, unknown> | null }[],
-  ): Promise<AutoGrabScoringContext> {
-    return {
-      sizeByQuality: await this.qualityDefs.getSizeLimitsMap(),
-      sourceMinSeeders: buildSourceMinSeeders(sources),
-      sourceUnknownLang: new Map(
-        sources.map((ix) => [
-          ix.id,
-          ix.settings?.['unknownLanguageIsoCode'] as string | undefined,
-        ]),
-      ),
-    };
-  }
-
   /**
    * Decide what (if anything) SearchMissing should do for a given media.
    *
