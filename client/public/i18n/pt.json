@@ -1089,7 +1089,6 @@
     "confirm_delete_subtitle": "Eliminar esta legenda?",
     "rejection": {
       "QUALITY_NOT_ALLOWED": "Qualidade fora do perfil",
-      "QUALITY_ABOVE_PROFILE": "Qualidade acima do perfil",
       "LANGUAGE_NOT_ALLOWED": "Idioma fora do perfil",
       "BLOCKLISTED": "Release bloqueada",
       "SIZE_TOO_LOW": "Tamanho demasiado baixo\n({{actual}} MB < {{min}} MB)",

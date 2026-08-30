@@ -79,11 +79,15 @@ export class ReleasesModalComponent {
     if (active !== null && !roster.some((ix) => ix.id === active)) this.activeTab.set(null);
   });
 
-  /** Everything the picker will ever show. A release better than the profile allows is dropped
-   *  here rather than in the row list, so a tab's count can never promise rows it then hides. */
-  private readonly offered = computed(() =>
-    this.releases().filter((r) => !r.rejections.some((x) => x.code === 'QUALITY_ABOVE_PROFILE')),
-  );
+  /**
+   * Everything the picker will ever show: the profile's allowed qualities exactly — not a
+   * ceiling. A release above them is not wanted and one below them is not a fallback, so
+   * neither is listed. Other rejections (size, seeders, language, blocklist) still show, and
+   * still confirm before grabbing: those are judgements, this one is the profile itself.
+   *
+   * Filtered here rather than in the row list, so a tab's count can never promise rows it hides.
+   */
+  private readonly offered = computed(() => this.releases().filter((r) => r.allowed));
 
   readonly tabs = computed<TabView[]>(() => {
     const roster = this.indexers();

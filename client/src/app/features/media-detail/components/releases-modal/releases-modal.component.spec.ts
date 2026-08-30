@@ -261,35 +261,46 @@ describe('ReleasesModalComponent — per-indexer tabs', () => {
   });
 });
 
-describe('ReleasesModalComponent — releases above the profile', () => {
-  const above = (sourceId: number, title: string): MovieRelease => ({
+describe('ReleasesModalComponent — only what the profile allows', () => {
+  const outside = (sourceId: number, title: string, code: string): MovieRelease => ({
     ...release(sourceId, title),
     allowed: false,
-    rejections: [{ code: 'QUALITY_ABOVE_PROFILE' }],
+    rejections: [{ code }],
   });
 
-  it('VERDICT: never lists a release better than the profile allows', async () => {
+  it('VERDICT: a quality above the profile is never listed', async () => {
     const fixture = await createFixture({
-      releases: [release(1, 'in-profile'), above(1, 'remux')],
+      releases: [release(1, 'in-profile'), outside(1, 'remux-2160p', 'QUALITY_NOT_ALLOWED')],
     });
     expect(fixture.componentInstance.visibleReleases().map((r) => r.title)).toEqual(['in-profile']);
   });
 
-  it("VERDICT: the tab counts drop it too — a count that promises a row the list hides is a bug", async () => {
+  it('VERDICT: a quality below it is not a fallback either — membership, not a ceiling', async () => {
     const fixture = await createFixture({
-      releases: [release(1, 'in-profile'), above(1, 'remux'), above(2, 'remux-2')],
+      releases: [release(1, 'in-profile'), outside(1, 'sd-720p', 'QUALITY_NOT_ALLOWED')],
+    });
+    expect(fixture.componentInstance.visibleReleases().map((r) => r.title)).toEqual(['in-profile']);
+  });
+
+  it('the tab counts drop them too — a count that promises a hidden row is a bug', async () => {
+    const fixture = await createFixture({
+      releases: [
+        release(1, 'in-profile'),
+        outside(1, 'remux', 'QUALITY_NOT_ALLOWED'),
+        outside(2, 'sd', 'QUALITY_NOT_ALLOWED'),
+      ],
       indexers: ROSTER,
     });
     expect(fixture.componentInstance.tabs().map((t) => t.count)).toEqual([1, 1, null, 0]);
   });
 
-  it('keeps a release merely outside the profile — it is still grabbable by hand', async () => {
-    const outside: MovieRelease = {
-      ...release(1, 'below'),
-      allowed: false,
-      rejections: [{ code: 'QUALITY_NOT_ALLOWED' }],
+  it('a release the profile allows but something else rejects still shows, to be forced by hand', async () => {
+    const seedless: MovieRelease = {
+      ...release(1, 'few-seeders'),
+      allowed: true,
+      rejections: [{ code: 'MIN_SEEDERS', params: { actual: 0, min: 5 } }],
     };
-    const fixture = await createFixture({ releases: [outside] });
-    expect(fixture.componentInstance.visibleReleases().map((r) => r.title)).toEqual(['below']);
+    const fixture = await createFixture({ releases: [seedless] });
+    expect(fixture.componentInstance.visibleReleases().map((r) => r.title)).toEqual(['few-seeders']);
   });
 });
