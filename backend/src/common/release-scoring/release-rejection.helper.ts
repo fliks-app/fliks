@@ -475,6 +475,19 @@ export function titleMatchesExpectation(
   return matchesIndexedExpectation(releaseTitleTokens(releaseTitle), index, whenUnreadable);
 }
 
+/**
+ * Better than everything the profile allows, as opposed to merely outside it. The picker hides
+ * these rows instead of offering them for a forced grab: a 2160p remux under a 1080p profile is
+ * not a fallback anyone wants, while a 720p one under the same profile still is.
+ */
+function rankExceedsProfile(qualityId: number, allowed: Set<number>): boolean {
+  const rank = getAppQualityById(qualityId)?.rank;
+  if (rank == null || allowed.size === 0) return false;
+  let best = 0;
+  for (const id of allowed) best = Math.max(best, getAppQualityById(id)?.rank ?? 0);
+  return rank > best;
+}
+
 /** `S04E03`, `S04`, or `?` — the display params of an EPISODE_MISMATCH. */
 function formatSeasonEpisode(
   season: number | null | undefined,
@@ -590,7 +603,11 @@ export function computeRejections(opts: {
   }
 
   if (!opts.allowed.has(opts.qualityId)) {
-    out.push({ code: 'QUALITY_NOT_ALLOWED' });
+    out.push({
+      code: rankExceedsProfile(opts.qualityId, opts.allowed)
+        ? 'QUALITY_ABOVE_PROFILE'
+        : 'QUALITY_NOT_ALLOWED',
+    });
   }
 
   // "Upgrade resolution only": the profile refuses a same-resolution tier hop, so a 1080p Bluray

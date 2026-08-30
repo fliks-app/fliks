@@ -79,18 +79,24 @@ export class ReleasesModalComponent {
     if (active !== null && !roster.some((ix) => ix.id === active)) this.activeTab.set(null);
   });
 
+  /** Everything the picker will ever show. A release better than the profile allows is dropped
+   *  here rather than in the row list, so a tab's count can never promise rows it then hides. */
+  private readonly offered = computed(() =>
+    this.releases().filter((r) => !r.rejections.some((x) => x.code === 'QUALITY_ABOVE_PROFILE')),
+  );
+
   readonly tabs = computed<TabView[]>(() => {
     const roster = this.indexers();
     if (!roster.length) return [];
     const counts = new Map<number, number>();
-    for (const r of this.releases()) counts.set(r.sourceId, (counts.get(r.sourceId) ?? 0) + 1);
+    for (const r of this.offered()) counts.set(r.sourceId, (counts.get(r.sourceId) ?? 0) + 1);
     // `count: null` is the spinner slot — a tab still working. Tous spins for as long as any
     // indexer does, so the whole strip follows one rule instead of the header carrying its own.
     return [
       {
         id: null,
         label: '',
-        count: this.loading() ? null : this.releases().length,
+        count: this.loading() ? null : this.offered().length,
         state: 'all' as const,
       },
       ...roster.map((ix) => ({
@@ -106,7 +112,7 @@ export class ReleasesModalComponent {
    *  per-indexer tab is a filter over it, so neither sorts anything client-side. */
   readonly visibleReleases = computed(() => {
     const tab = this.activeTab();
-    const all = this.releases();
+    const all = this.offered();
     return tab === null ? all : all.filter((r) => r.sourceId === tab);
   });
 

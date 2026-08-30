@@ -260,3 +260,36 @@ describe('ReleasesModalComponent — per-indexer tabs', () => {
     expect(fixture.nativeElement.querySelector('svg[lucideSearchX]')).not.toBeNull();
   });
 });
+
+describe('ReleasesModalComponent — releases above the profile', () => {
+  const above = (sourceId: number, title: string): MovieRelease => ({
+    ...release(sourceId, title),
+    allowed: false,
+    rejections: [{ code: 'QUALITY_ABOVE_PROFILE' }],
+  });
+
+  it('VERDICT: never lists a release better than the profile allows', async () => {
+    const fixture = await createFixture({
+      releases: [release(1, 'in-profile'), above(1, 'remux')],
+    });
+    expect(fixture.componentInstance.visibleReleases().map((r) => r.title)).toEqual(['in-profile']);
+  });
+
+  it("VERDICT: the tab counts drop it too — a count that promises a row the list hides is a bug", async () => {
+    const fixture = await createFixture({
+      releases: [release(1, 'in-profile'), above(1, 'remux'), above(2, 'remux-2')],
+      indexers: ROSTER,
+    });
+    expect(fixture.componentInstance.tabs().map((t) => t.count)).toEqual([1, 1, null, 0]);
+  });
+
+  it('keeps a release merely outside the profile — it is still grabbable by hand', async () => {
+    const outside: MovieRelease = {
+      ...release(1, 'below'),
+      allowed: false,
+      rejections: [{ code: 'QUALITY_NOT_ALLOWED' }],
+    };
+    const fixture = await createFixture({ releases: [outside] });
+    expect(fixture.componentInstance.visibleReleases().map((r) => r.title)).toEqual(['below']);
+  });
+});
