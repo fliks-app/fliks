@@ -1605,6 +1605,27 @@ describe('FliksHostImpl', () => {
     // The badge has to come up on the grab: the acquisition plugin's own poll
     // can be a minute out, and a direct grab matches no request, so nothing
     // else would speak for it.
+    // The optimistic badge extends the media's last known set instead of replacing it. A push
+    // states the whole set, so stating this grab alone would retire every other download the
+    // media has in flight — the exact failure the snapshot shape exists to prevent.
+    it('VERDICT: a grab keeps the downloads the media already had in flight', async () => {
+      const h = makeHarness();
+      h.mediaRepo.findOne.mockResolvedValue(makeMedia({ type: MediaType.SERIES }));
+      await h.host['progress.set']({
+        mediaId: 1,
+        downloads: [{ ref: 'live', seasonNumber: 4, episodeNumber: 1, progress: 0.3, state: 'active' }],
+      });
+      h.progressCache.record([9], h.events.emitToUsers.mock.calls[0][1]);
+      h.events.emitToUsers.mockClear();
+
+      await h.host['events.publish']([
+        { type: 'acquisition.grabbed', mediaId: 1, seasonNumber: 4, episodeNumber: 8 },
+      ]);
+
+      const refs = h.events.emitToUsers.mock.calls[0][1].downloads.map((d: { ref: string }) => d.ref);
+      expect(refs).toEqual(['live', 'pending:4:8']);
+    });
+
     it('pushes a queued 0% for the grabbed scope so the badge appears at once', async () => {
       const h = makeHarness();
       h.mediaRepo.findOne.mockResolvedValue(makeMedia());
