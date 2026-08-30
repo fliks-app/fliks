@@ -397,6 +397,7 @@
       <app-progress-badge
         [label]="badgeLabel(b)"
         [percent]="b.percent"
+        [busy]="b.busy"
         [badgeClass]="b.badgeClass"
         [size]="size ?? 'sm'"
       />
@@ -406,6 +407,7 @@
       [class.flex-1]="size === 'xl'"
       [label]="badgeLabel(b)"
       [percent]="b.percent"
+        [busy]="b.busy"
       [badgeClass]="b.badgeClass"
       [size]="size ?? 'sm'"
     />

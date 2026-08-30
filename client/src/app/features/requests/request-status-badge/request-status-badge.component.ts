@@ -68,6 +68,7 @@ export class RequestStatusBadgeComponent {
       badgeClass: this.statusBadgeClass(r.status),
       percent: null,
       isClickable: false,
+      busy: false,
     };
   });
 

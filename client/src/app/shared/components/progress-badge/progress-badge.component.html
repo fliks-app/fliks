@@ -8,7 +8,10 @@
       [style.width.%]="100 - (percent() ?? 0)"
     ></span>
   }
-  <span class="relative"
-    >{{ label() }}@if (percent() !== null) { · {{ percent() }}%}</span
-  >
+  <span class="relative inline-flex items-center gap-1.5">
+    @if (busy()) {
+      <span class="loading loading-spinner loading-xs"></span>
+    }
+    <span>{{ label() }}@if (percent() !== null) { · {{ percent() }}%}</span>
+  </span>
 </span>

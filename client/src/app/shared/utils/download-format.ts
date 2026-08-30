@@ -149,13 +149,16 @@ export interface DownloadBadgeDescriptor {
   percent: number | null;
   /** True iff there is ≥1 in-flight leaf in scope (so the modal has content). */
   isClickable: boolean;
+  /** A search has no percentage to fill the badge with, so it says nothing is happening. The
+   *  spinner is what carries that it is. */
+  busy: boolean;
 }
 
 function fallbackDescriptor(
   monitored: boolean,
   downloaded: boolean,
 ): DownloadBadgeDescriptor {
-  const base = { percent: null, isClickable: false };
+  const base = { percent: null, isClickable: false, busy: false };
   if (downloaded) return { ...base, labelKey: null, badgeClass: '' };
   return monitored
     ? { ...base, labelKey: 'requests.badge_monitored', badgeClass: 'badge-info' }
@@ -268,5 +271,6 @@ export function describeDownload(
     badgeClass: qbStateBadgeClass(fold.state),
     percent: fold.percent,
     isClickable: true,
+    busy: fold.state === 'searching',
   };
 }
