@@ -934,6 +934,7 @@
     "col_peers": "Seeds/Leech",
     "col_source": "Quelle",
     "season_pack": "Staffel-Pack",
+    "open_on_indexer": "Beim Indexer öffnen",
     "blocklisted": "Blockiert",
     "releases_empty": "Keine Release gefunden. Überprüfen Sie Ihre konfigurierten Quellen.",
     "releases_tab_all": "Alle",

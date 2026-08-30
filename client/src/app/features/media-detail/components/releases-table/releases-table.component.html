@@ -25,7 +25,19 @@
                 @if (r.isFullSeason) {
                   <svg lucidePackage class="h-4 w-4 shrink-0 text-info" [attr.title]="'media_detail.season_pack' | translate"></svg>
                 }
-                <span>{{ r.title }}</span>
+                @if (indexerPage(r); as page) {
+                  <a
+                    class="link link-hover"
+                    [href]="page"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    [attr.title]="'media_detail.open_on_indexer' | translate"
+                    (click)="$event.stopPropagation()"
+                    >{{ r.title }}</a
+                  >
+                } @else {
+                  <span>{{ r.title }}</span>
+                }
               </p>
             </div>
             <!-- Mobile-only info rows -->

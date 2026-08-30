@@ -934,6 +934,7 @@
     "col_peers": "Seed/Leech",
     "col_source": "Fonte",
     "season_pack": "Pack di stagione",
+    "open_on_indexer": "Apri sull'indicizzatore",
     "blocklisted": "Bloccato",
     "releases_empty": "Nessuna release trovata. Verifica le tue fonti configurate.",
     "releases_tab_all": "Tutti",
