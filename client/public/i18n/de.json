@@ -1606,7 +1606,7 @@
       "field_cutoff_hint": "Sobald eine Datei diese Qualität erreicht, wird kein Upgrade mehr gesucht. Der erste Download wird davon nicht begrenzt: ohne Datei auf der Platte gewinnt die beste erlaubte Qualität.",
       "field_upgrade": "Qualitäts-Upgrades erlauben",
       "field_resolution_upgrade_only": "Upgrade nur, wenn die Auflösung steigt",
-      "field_resolution_upgrade_only_hint": "Lehnt ein Upgrade bei gleicher Auflösung ab – eine 1080p-Bluray ersetzt kein 1080p-WEB-DL.",
+      "field_resolution_upgrade_only_hint": "Lehnt ein Upgrade bei gleicher Auflösung ab: eine 1080p-Bluray ersetzt kein 1080p-WEB-DL.",
       "qualities_group": "Für die Suche erlaubte Qualitäten",
       "save": "Speichern",
       "cancel": "Abbrechen",
