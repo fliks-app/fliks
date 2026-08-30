@@ -118,3 +118,25 @@ describe('ReleasesTableComponent — grab control gating', () => {
     expect(emitted).toBe(false);
   });
 });
+
+describe('ReleasesTableComponent — the tracker page behind the title', () => {
+  const withUrl = (infoUrl?: string) => ({ ...makeRelease(), infoUrl });
+
+  it('links the title to the page the feed named', async () => {
+    const { fixture } = await createFixture([withUrl('https://tracker.example/details/42')]);
+    const link = fixture.nativeElement.querySelector('a[target="_blank"]') as HTMLAnchorElement;
+    expect(link?.getAttribute('href')).toBe('https://tracker.example/details/42');
+    expect(link?.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('VERDICT: refuses a non-http url — the feed that supplied it is not trusted', async () => {
+    // eslint-disable-next-line no-script-url
+    const { fixture } = await createFixture([withUrl('javascript:alert(1)')]);
+    expect(fixture.nativeElement.querySelector('a[target="_blank"]')).toBeNull();
+  });
+
+  it('a release whose feed named no page renders plain text, never a dead link', async () => {
+    const { fixture } = await createFixture([withUrl(undefined)]);
+    expect(fixture.nativeElement.querySelector('a[target="_blank"]')).toBeNull();
+  });
+});

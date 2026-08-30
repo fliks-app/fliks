@@ -16,6 +16,7 @@ import {
 import { MovieRelease } from '../../media-detail-release-picker.service';
 import { formatMediaDetailBytes } from '../../media-detail.utils';
 import { formatReleaseRejection } from '../../media-detail-release.utils';
+import { safeExternalUrl } from '../../../../shared/utils/safe-url';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 
 @Component({
@@ -64,6 +65,12 @@ export class ReleasesTableComponent {
 
   formatRejection(r: { code: string; params?: Record<string, number | string> }): string {
     return formatReleaseRejection(this.translate, r);
+  }
+
+  /** The tracker's own page for this release, when the feed named one and it is safe to link.
+   *  Undefined renders the title as plain text rather than as a link that goes nowhere. */
+  indexerPage(r: MovieRelease): string | undefined {
+    return safeExternalUrl(r.infoUrl);
   }
 
   formatBytes(bytes: number): string {

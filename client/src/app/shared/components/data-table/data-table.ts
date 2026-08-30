@@ -16,6 +16,7 @@ import { firstValueFrom } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { formatBytes, formatSpeed } from '../../utils/download-format';
+import { safeExternalUrl } from '../../utils/safe-url';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SseService } from '../../../core/services/sse.service';
 import { PaginationComponent } from '../pagination/pagination';
@@ -285,18 +286,6 @@ export class DataTableComponent implements OnInit {
     return BADGE_CLASSES[tone] ?? BADGE_CLASSES.ghost;
   }
 
-  /** A URL a row supplies is indexer data, not manifest data: anything but http(s) — a
-   *  `javascript:` payload above all — renders as plain text instead of an anchor. */
-  private safeHref(value: CellValue): string | undefined {
-    if (typeof value !== 'string' || !value) return undefined;
-    try {
-      const url = new URL(value);
-      return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
   /** A cell's link handler, or undefined when the column declares none, the id is unknown, or
    *  this row cannot resolve it — the cell is then plain text, never a dead link. */
   cellLink(col: TableColumn, row: TableRow): (() => void) | undefined {
@@ -309,7 +298,7 @@ export class DataTableComponent implements OnInit {
       const value = row[field.key];
       if (value === null || value === undefined || value === '') continue;
       if (field.kind === 'link') {
-        const href = this.safeHref(value);
+        const href = safeExternalUrl(value);
         if (href) lines.push({ labelKey: field.labelKey, text: this.translate.instant(field.textKey), href });
         continue;
       }
