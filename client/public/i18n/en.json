@@ -939,7 +939,6 @@
     "col_peers": "Seeds/Leech",
     "col_source": "Source",
     "season_pack": "Season pack",
-    "open_on_indexer": "Open on the indexer",
     "blocklisted": "Blocked",
     "releases_empty": "No releases found. Check your configured sources.",
     "releases_tab_all": "All",
