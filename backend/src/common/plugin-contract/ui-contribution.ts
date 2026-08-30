@@ -247,6 +247,19 @@ export interface TableColumn {
   detailField?: string;
   /** Title of that dialog. Falls back to the column's own `labelKey`. */
   detailTitleKey?: string;
+  /** Names a 0–100 field on the row; a badged cell then fills left-to-right with it and appends
+   *  the percent. A moving value belongs inside the badge naming what is moving — as its own
+   *  column it costs width and reads as unrelated to the state beside it. Ignored on a cell that
+   *  declares no `badges`, and on a row whose named field is not a number. */
+  progressField?: string;
+}
+
+/** One `rowActions[]` visibility clause, read off the row itself: the action renders only when
+ *  the row's `key` holds one of `in`. Pausing a paused download is not an action, it is a button
+ *  that fails. Distinct from `when`, which reads the viewer rather than the row. */
+export interface TableRowCondition {
+  key: string;
+  in: (string | number | boolean)[];
 }
 
 /** One proxied route lists instances, another lists the implementations and their fields. */
@@ -328,10 +341,39 @@ export interface TableConfigPage extends ConfigPageBase {
   list: string;
   columns: TableColumn[];
   filters?: TableFilter[];
+  /**
+   * `when` gates on the viewer (the same closed predicate vocabulary `ui.contributions[]` uses —
+   * a mutating action names the permission its route is declared under, so the button is absent
+   * rather than answering 403); `visibleWhen` gates on the row. Both are presentation only:
+   * the route behind the button is CASL-guarded regardless.
+   *
+   * A `proxy` path may carry `:id`, substituted with the row's own `id` before the request fires.
+   */
   rowActions?: (
-    | { kind: 'route'; labelKey: string; path: string }
-    | { kind: 'action'; labelKey: string; actionId: TableRowActionId }
-    | { kind: 'proxy'; labelKey: string; method: 'POST' | 'DELETE'; path: string; confirmKey?: string }
+    | { kind: 'route'; labelKey: string; path: string; when?: WhenPredicate[]; visibleWhen?: TableRowCondition }
+    | {
+        kind: 'action';
+        labelKey: string;
+        actionId: TableRowActionId;
+        when?: WhenPredicate[];
+        visibleWhen?: TableRowCondition;
+      }
+    | {
+        kind: 'proxy';
+        labelKey: string;
+        method: 'POST' | 'DELETE';
+        path: string;
+        confirmKey?: string;
+        /** Renders a checkbox inside that confirmation and sends its state as the query
+         *  parameter `param`. Needs `confirmKey`: a toggle with no dialog to sit in never
+         *  renders, and would silently send its default. */
+        confirmToggle?: { labelKey: string; param: string };
+        /** Danger styling on the button — a destructive row action must not look like the
+         *  two beside it. */
+        tone?: 'default' | 'danger';
+        when?: WhenPredicate[];
+        visibleWhen?: TableRowCondition;
+      }
   )[];
   defaultSortKey?: string;
   /** `list` answers `{data,total,page,pageSize}` rather than a bare array — a

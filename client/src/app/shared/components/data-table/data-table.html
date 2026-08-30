@@ -134,9 +134,11 @@
                           }
                         </button>
                       } @else if (badgeClass(col, row[col.key]); as badge) {
-                        <span class="badge badge-sm" [class]="badge">{{
-                          cellLabel(col, row[col.key])
-                        }}</span>
+                        <app-progress-badge
+                          [label]="cellLabel(col, row[col.key])"
+                          [percent]="cellProgress(col, row)"
+                          [badgeClass]="badge"
+                        />
                       } @else {
                         {{ cellLabel(col, row[col.key]) }}
                       }
@@ -169,6 +171,7 @@
                     <button
                       type="button"
                       class="btn btn-ghost btn-xs"
+                      [class.text-error]="item.action.kind === 'proxy' && item.action.tone === 'danger'"
                       (click)="item.run()"
                       [disabled]="
                         busy() ===

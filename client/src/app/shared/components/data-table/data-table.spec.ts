@@ -31,6 +31,7 @@ async function createComponent(opts: {
   refreshMs?: number;
   refreshOn?: string[];
   sseEvent?: WritableSignal<{ type: string } | null>;
+  confirmation?: unknown;
 }) {
   TestBed.configureTestingModule({
     providers: [
@@ -41,7 +42,13 @@ async function createComponent(opts: {
       }),
       { provide: HttpClient, useValue: opts.http as unknown as HttpClient },
       { provide: Router, useValue: { navigateByUrl: vi.fn() } },
-      { provide: ConfirmationService, useValue: { confirm: () => Promise.resolve(true) } },
+      {
+        provide: ConfirmationService,
+        useValue: opts.confirmation ?? {
+          confirm: () => Promise.resolve(true),
+          confirmWithToggle: () => Promise.resolve({ ok: true, toggle: true }),
+        },
+      },
       {
         provide: SseService,
         useValue: { lastEvent: opts.sseEvent ?? signal(null) } as unknown as SseService,
@@ -569,5 +576,137 @@ describe('DataTableComponent — the spinner always comes down', () => {
     await table.loadRows({ silent: true });
 
     expect(table.loading()).toBe(false);
+  });
+});
+
+describe('DataTableComponent — row-scoped proxy actions', () => {
+  const ROW = { id: 7, name: 'A', state: 'active' };
+
+  it('VERDICT: substitutes :id with the row it sits on — a shared path would hit one row for all', async () => {
+    const del = vi.fn(() => of({}));
+    const fixture = await createComponent({
+      http: { get: () => of([ROW]), delete: del },
+      rowActions: [{ kind: 'proxy', labelKey: 'x.rm', method: 'DELETE', path: '/api/p/queue/:id' }],
+    });
+    await fixture.componentInstance.visibleActions(ROW)[0].run();
+    expect(del).toHaveBeenCalledWith('/api/p/queue/7');
+  });
+
+  it('renders an action whose visibleWhen matches the row', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of([ROW]) },
+      rowActions: [
+        {
+          kind: 'proxy',
+          labelKey: 'x.pause',
+          method: 'POST',
+          path: '/api/p/queue/:id/pause',
+          visibleWhen: { key: 'state', in: ['active', 'stalled'] },
+        },
+      ],
+    });
+    expect(fixture.componentInstance.visibleActions(ROW).length).toBe(1);
+  });
+
+  it('VERDICT: hides it when the row is in another state — pausing a paused row is a button that fails', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of([{ ...ROW, state: 'paused' }]) },
+      rowActions: [
+        {
+          kind: 'proxy',
+          labelKey: 'x.pause',
+          method: 'POST',
+          path: '/api/p/queue/:id/pause',
+          visibleWhen: { key: 'state', in: ['active', 'stalled'] },
+        },
+      ],
+    });
+    expect(fixture.componentInstance.visibleActions({ ...ROW, state: 'paused' })).toEqual([]);
+  });
+
+  it('fails closed on a condition naming a field the row does not carry', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of([ROW]) },
+      rowActions: [
+        {
+          kind: 'proxy',
+          labelKey: 'x.pause',
+          method: 'POST',
+          path: '/api/p/queue/:id/pause',
+          visibleWhen: { key: 'nosuchfield', in: ['active'] },
+        },
+      ],
+    });
+    expect(fixture.componentInstance.visibleActions(ROW)).toEqual([]);
+  });
+});
+
+describe('DataTableComponent — a confirmation that carries a decision', () => {
+  const ROW = { id: 7, name: 'A' };
+  const REMOVE: RowAction = {
+    kind: 'proxy',
+    labelKey: 'x.rm',
+    method: 'DELETE',
+    path: '/api/p/queue/:id',
+    confirmKey: 'x.confirm_rm',
+    confirmToggle: { labelKey: 'x.delete_files', param: 'deleteFiles' },
+  };
+
+  it("VERDICT: sends the checkbox's answer, not its default", async () => {
+    const del = vi.fn(() => of({}));
+    const fixture = await createComponent({
+      http: { get: () => of([ROW]), delete: del },
+      rowActions: [REMOVE],
+      confirmation: { confirmWithToggle: () => Promise.resolve({ ok: true, toggle: false }) },
+    });
+    await fixture.componentInstance.visibleActions(ROW)[0].run();
+    expect(del).toHaveBeenCalledWith('/api/p/queue/7?deleteFiles=false');
+  });
+
+  it('calls nothing when the confirmation is declined', async () => {
+    const del = vi.fn(() => of({}));
+    const fixture = await createComponent({
+      http: { get: () => of([ROW]), delete: del },
+      rowActions: [REMOVE],
+      confirmation: { confirmWithToggle: () => Promise.resolve({ ok: false, toggle: true }) },
+    });
+    await fixture.componentInstance.visibleActions(ROW)[0].run();
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('a toggle declared without a confirmKey is dropped rather than sent silently', async () => {
+    const del = vi.fn(() => of({}));
+    const fixture = await createComponent({
+      http: { get: () => of([ROW]), delete: del },
+      rowActions: [{ ...REMOVE, confirmKey: undefined }],
+    });
+    await fixture.componentInstance.visibleActions(ROW)[0].run();
+    expect(del).toHaveBeenCalledWith('/api/p/queue/7');
+  });
+});
+
+describe('DataTableComponent — progress inside a badge', () => {
+  const COL: TableColumn = {
+    key: 'state',
+    labelKey: 'x.state',
+    badges: { active: 'info' },
+    progressField: 'progress',
+  };
+
+  it('rounds the named field into a 0–100 fill', async () => {
+    const fixture = await createComponent({ http: { get: () => of([]) } });
+    expect(fixture.componentInstance.cellProgress(COL, { id: 1, state: 'active', progress: 47.4 })).toBe(47);
+  });
+
+  it('VERDICT: a row reporting no number stays flat — an unreachable client is not 0%', async () => {
+    const fixture = await createComponent({ http: { get: () => of([]) } });
+    expect(fixture.componentInstance.cellProgress(COL, { id: 1, state: 'active', progress: null })).toBeNull();
+  });
+
+  it('a column declaring no progressField never fills', async () => {
+    const fixture = await createComponent({ http: { get: () => of([]) } });
+    expect(
+      fixture.componentInstance.cellProgress({ key: 'state', labelKey: 'x.state' }, { id: 1, progress: 50 }),
+    ).toBeNull();
   });
 });

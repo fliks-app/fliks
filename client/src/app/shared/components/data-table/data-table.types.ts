@@ -37,6 +37,14 @@ export interface TableColumn {
   detailField?: string;
   /** Title of that dialog; falls back to the column's `labelKey`. */
   detailTitleKey?: string;
+  /** Names a 0–100 field on the row; a badged cell fills with it and appends the percent. */
+  progressField?: string;
+}
+
+/** One `rowActions[]` visibility clause read off the row — `when` reads the viewer instead. */
+export interface TableRowCondition {
+  key: string;
+  in: CellValue[];
 }
 
 /** `TableConfigPage.filters[]` — value sent to `list` as a query param named by `key`. */
@@ -64,9 +72,19 @@ export interface PagedResult<T> {
  * — a plugin row invoking a flow it doesn't own.
  */
 export type RowAction =
-  | { kind: 'route'; labelKey: string; path: string }
-  | { kind: 'action'; labelKey: string; actionId: string }
-  | { kind: 'proxy'; labelKey: string; method: 'POST' | 'DELETE'; path: string; confirmKey?: string };
+  | { kind: 'route'; labelKey: string; path: string; visibleWhen?: TableRowCondition }
+  | { kind: 'action'; labelKey: string; actionId: string; visibleWhen?: TableRowCondition }
+  | {
+      kind: 'proxy';
+      labelKey: string;
+      method: 'POST' | 'DELETE';
+      path: string;
+      confirmKey?: string;
+      /** A checkbox inside the confirmation; its state rides along as the query param `param`. */
+      confirmToggle?: { labelKey: string; param: string };
+      tone?: 'default' | 'danger';
+      visibleWhen?: TableRowCondition;
+    };
 
 /** List-scope action (`TableConfigPage.listActions[]`) — rendered once, not per row. */
 export interface ListAction {
