@@ -106,7 +106,7 @@ describe('EventsService — download.progress replay on connect', () => {
 });
 
 /**
- * The staleness backstop: a torrent can stop existing without ever routing
+ * The staleness backstop: a download can stop existing without ever routing
  * through `import.complete` (stalled-removed, user-deleted in the client,
  * the media itself deleted…). Without an age check, that leaf's last known
  * percent would replay forever. A fake, manually-advanced clock is injected

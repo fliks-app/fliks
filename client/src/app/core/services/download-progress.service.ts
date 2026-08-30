@@ -3,23 +3,22 @@ import { MediaType } from '../enums/media-type.enum';
 import { DownloadProgressState, ProgressPhase } from '../enums/download-progress-state.enum';
 import { foldLeaves } from '../../shared/utils/download-format';
 
-/** Identifies one torrent within a season. `hash:<h>` whenever the torrent has
- *  a ref — its own identity, so two releases grabbed for the *same* episode stay
- *  two leaves instead of overwriting each other. The episode number (or `'PACK'`)
- *  keys the placeholder a grab puts up before any torrent exists; the first real
- *  tick for that scope supersedes it. */
-export type LeafKey = number | 'PACK' | `hash:${string}`;
+/** Identifies one download within a season. `ref:<r>` whenever the report carries one —
+ *  its own identity, so two releases grabbed for the *same* episode stay two leaves instead
+ *  of overwriting each other. The episode number (or `'PACK'`) keys the placeholder a grab
+ *  puts up before any download exists; the first real tick for that scope supersedes it. */
+export type LeafKey = number | 'PACK' | `ref:${string}`;
 
-/** One in-flight torrent contributing to a media's download progress. */
+/** One in-flight download contributing to a media's download progress. */
 export interface DownloadLeaf {
   percent: number; // 0–100
   state: ProgressPhase;
-  /** The episode this torrent is for, when it names one. Held on the leaf
-   *  rather than in its key, which now identifies the torrent itself. */
+  /** The episode this download is for, when it names one. Held on the leaf
+   *  rather than in its key, which now identifies the download itself. */
   episodeNumber?: number;
   /** When this leaf was last reported, for the staleness sweep. */
   updatedAt?: number;
-  /** This torrent's own speed and ETA. Held per leaf because concurrent
+  /** This download's own speed and ETA. Held per leaf because concurrent
    *  episodes each have their own, and a media-level pair could only ever
    *  report whichever of them ticked last. */
   dlspeed?: number;
@@ -32,8 +31,8 @@ export interface SeasonProgress {
 
 /** Live download progress for one media, keyed by `mediaId`. For a series the
  *  `seasons` sub-map holds per-(season, leaf) progress (a leaf is a season pack
- *  or an individual episode torrent); `state`/`percent` are the folded
- *  media-level rollup. A movie has no `seasons` — its single torrent's folded
+ *  or an individual episode download); `state`/`percent` are the folded
+ *  media-level rollup. A movie has no `seasons` — its single download's folded
  *  state and percent sit directly on the entry. */
 export interface MediaDownloadProgress {
   mediaId: number;
@@ -54,7 +53,7 @@ export interface DownloadProgressEvent {
   mediaType: MediaType;
   seasonNumber?: number;
   episodeNumber?: number;
-  hash?: string;
+  ref?: string;
   progress: number; // 0–1
   dlspeed: number;
   eta: number;
@@ -67,14 +66,14 @@ export interface DownloadProgressEvent {
 const STALE_AFTER_MS = 3 * 60_000;
 const SWEEP_INTERVAL_MS = 30_000;
 
-function leafKey(episodeNumber?: number, hash?: string): LeafKey {
-  if (hash) return `hash:${hash}`;
+function leafKey(episodeNumber?: number, ref?: string): LeafKey {
+  if (ref) return `ref:${ref}`;
   return episodeNumber ?? 'PACK';
 }
 
 /** Fold every season leaf into the media-level state, percent, speed and ETA.
  *  Callers only reach here with at least one leaf, so `f.state` is never the
- *  empty sentinel. Speed sums across concurrent torrents and the ETA is the
+ *  empty sentinel. Speed sums across concurrent downloads and the ETA is the
  *  longest of them — the media is done when its slowest leaf is. */
 function rollupSeasons(seasons: Map<number, SeasonProgress>): {
   state: ProgressPhase;
@@ -110,7 +109,7 @@ export class DownloadProgressService {
 
   /**
    * Drop leaves nothing has reported in a while. The store is fed by events
-   * alone, so a torrent that stops being reported — deleted from the download
+   * alone, so a download that stops being reported — deleted from the download
    * client, or an acquisition plugin too old to announce its retirement — would
    * otherwise sit here at its last percent for the life of the app.
    *
@@ -126,7 +125,7 @@ export class DownloadProgressService {
 
     for (const [mediaId, entry] of prev) {
       if (!entry.seasons) {
-        // A movie's single torrent: the entry itself is the leaf.
+        // A movie's single download: the entry itself is the leaf.
         if ((entry.updatedAt ?? 0) < cutoff) {
           next.delete(mediaId);
           changed = true;
@@ -190,12 +189,12 @@ export class DownloadProgressService {
         const cur = next.get(e.mediaId);
         const seasons = new Map(cur?.seasons ?? []);
         const leaves = new Map(seasons.get(e.seasonNumber)?.leaves ?? []);
-        const key = leafKey(e.episodeNumber, e.hash);
+        const key = leafKey(e.episodeNumber, e.ref);
 
-        // A torrent with a ref stands in for the placeholder its grab put up
+        // A download with a ref stands in for the placeholder its grab put up
         // for the same scope, which has no identity to be matched on — on a
         // retirement as much as on a live tick.
-        if (e.hash) leaves.delete(e.episodeNumber ?? 'PACK');
+        if (e.ref) leaves.delete(e.episodeNumber ?? 'PACK');
         if (e.progress >= 1) leaves.delete(key);
         else {
           leaves.set(key, {
@@ -227,12 +226,12 @@ export class DownloadProgressService {
       // A series tick with no season number cannot be placed. The plugin sends
       // these for a history row that never got a season/episode id, so it is a
       // steady state, not a blip. Merging one onto whichever leaf happens to be
-      // alone would attribute another torrent's percent to it, and taking the
+      // alone would attribute another download's percent to it, and taking the
       // movie branch below would flatten the entry and lose the season map with
       // it. Drop it: the next attributed tick carries the same truth.
       if (e.mediaType === 'series') return next;
 
-      // Movie (single torrent — no season dimension).
+      // Movie (single download — no season dimension).
       if (e.progress >= 1) {
         next.delete(e.mediaId);
         return next;
@@ -252,14 +251,14 @@ export class DownloadProgressService {
   }
 
   /**
-   * Mark a grab as under way for a scope, before any torrent exists: the header
+   * Mark a grab as under way for a scope, before any download exists: the header
    * says "searching" from the click instead of from the download client's first
    * tick, seconds later. Returns the release to call when the request settles —
    * either way, since a failed search must not leave the badge up.
    *
    * Modelled as an ordinary leaf so scoping, folding and rendering need no
    * special case: an episode grab is keyed to that episode and stays off its
-   * siblings' pages, exactly like the torrent that replaces it.
+   * siblings' pages, exactly like the download that replaces it.
    */
   markGrabbing(e: {
     mediaId: number;
@@ -268,7 +267,7 @@ export class DownloadProgressService {
     episodeNumber?: number;
   }): () => void {
     const key = leafKey(e.episodeNumber);
-    // A torrent already reporting for this scope says strictly more than
+    // A download already reporting for this scope says strictly more than
     // "searching" — leave it, and make the release a no-op.
     if (this.leafState(e) !== undefined) return () => undefined;
 
@@ -313,8 +312,8 @@ export class DownloadProgressService {
     const cur = this.progress().get(e.mediaId);
     if (!cur) return undefined;
     if (!cur.seasons || e.seasonNumber == null) return cur.state;
-    // Matched on the leaf's own episode: the key identifies the torrent, so a
-    // live download is keyed by its hash and reconstructing a key from the
+    // Matched on the leaf's own episode: the key identifies the download, so a
+    // live download is keyed by its ref and reconstructing a key from the
     // episode number could only ever find the placeholder.
     for (const leaf of cur.seasons.get(e.seasonNumber)?.leaves.values() ?? []) {
       if (leaf.episodeNumber === e.episodeNumber) return leaf.state;

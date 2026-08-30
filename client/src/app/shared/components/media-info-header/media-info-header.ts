@@ -102,7 +102,7 @@ export interface MediaInfoHeaderBadge {
   percent: number | null;
   /** daisyUI colour class, e.g. `badge-info` / `badge-ghost`. */
   badgeClass: string;
-  /** Interpolation for {@link labelKey} — the torrent count, when the chip
+  /** Interpolation for {@link labelKey} — the download count, when the chip
    *  stands for several at once. */
   labelParams: Record<string, unknown> | null;
   /** When true the badge renders as a button that emits openDownloadDetail. */

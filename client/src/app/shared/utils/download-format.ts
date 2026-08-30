@@ -29,8 +29,8 @@ export function formatSpeed(bytesPerSec: number): string {
 }
 
 export function formatEta(seconds: number): string {
-  // qBittorrent reports 8640000s (100 days) as its "infinite" ETA sentinel for
-  // stalled / no-progress torrents — show ∞ rather than a bogus "2400h 0m".
+  // 8640000s (100 days) is the "infinite" ETA sentinel a stalled download reports —
+  // show ∞ rather than a bogus "2400h 0m".
   if (!isFinite(seconds) || seconds >= 8640000) return '∞';
   if (seconds <= 0) return '—';
   const h = Math.floor(seconds / 3600);
@@ -94,7 +94,7 @@ const STATE_RANK: Record<ProgressPhase, number> = {
   queued: 3,
   importing: 4,
   paused: 5,
-  // Last: any torrent that actually exists says more than "still looking".
+  // Last: any download that actually exists says more than "still looking".
   searching: 6,
 };
 
@@ -163,7 +163,7 @@ function fallbackDescriptor(
 }
 
 /** A leaf with the scope it was found under, for callers that render one row
- *  per torrent rather than a fold. */
+ *  per download rather than a fold. */
 export interface ScopedLeaf {
   seasonNumber: number;
   key: LeafKey;
@@ -180,7 +180,7 @@ export function collectScopedLeaves(
   for (const [seasonNumber, sp] of progress.seasons) {
     if (seasonFilter?.length && !seasonFilter.includes(seasonNumber)) continue;
     for (const [key, leaf] of sp.leaves) {
-      // Only another episode's own torrent is out of scope. A leaf naming no
+      // Only another episode's own download is out of scope. A leaf naming no
       // episode — a season pack, or one whose episode couldn't be resolved —
       // may well carry this one, so it counts.
       if (
@@ -217,7 +217,7 @@ export function describeBadge(
     monitored: boolean;
     downloaded: boolean;
     seasonFilter?: number[];
-    /** Narrow to one episode — its own torrent, or a pack that contains it. */
+    /** Narrow to one episode — its own download, or a pack that contains it. */
     episodeFilter?: number;
   },
 ): DownloadBadgeDescriptor {
@@ -228,7 +228,7 @@ export function describeBadge(
 }
 
 /**
- * The in-flight half of {@link describeBadge}: what a scope's torrents are
+ * The in-flight half of {@link describeBadge}: what a scope's downloads are
  * doing, or null when none of them are. Callers that only surface downloads
  * (the media header) use this directly — the monitored / unmonitored fallback
  * is a request-view concern and would otherwise sit on an ongoing series for
@@ -238,7 +238,7 @@ export function describeDownload(
   progress: MediaDownloadProgress | null,
   scope: {
     seasonFilter?: number[];
-    /** Narrow to one episode — its own torrent, or a pack that contains it. */
+    /** Narrow to one episode — its own download, or a pack that contains it. */
     episodeFilter?: number;
   } = {},
 ): DownloadBadgeDescriptor | null {
@@ -257,7 +257,7 @@ export function describeDownload(
     if (!leaves.length) return null;
     fold = foldLeaves(leaves);
   } else {
-    // Unscoped, or a movie's single torrent: the entry already carries the fold
+    // Unscoped, or a movie's single download: the entry already carries the fold
     // of everything under it. A series with no leaf left is nothing in flight.
     if (progress.seasons && !collectLeaves(progress).length) return null;
     fold = { state: progress.state, percent: progress.percent };

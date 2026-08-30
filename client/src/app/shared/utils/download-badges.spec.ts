@@ -23,11 +23,11 @@ const series = (leaves: [number, [number | 'PACK', { state: 'active'; percent: n
 /**
  * A media can be downloading several things at once — two episodes, or a season
  * pack alongside a straggler. The header used to fold them into one chip, which
- * averaged percentages belonging to different files; each torrent now gets its
+ * averaged percentages belonging to different files; each download now gets its
  * own, so the scoped listing has to keep them apart and keep their identity.
  */
-describe('collectScopedLeaves — several torrents on one media', () => {
-  it('keeps every torrent, with the season it was found under', () => {
+describe('collectScopedLeaves — several downloads on one media', () => {
+  it('keeps every download, with the season it was found under', () => {
     const found = collectScopedLeaves(
       series([[1, [[6, { state: 'active', percent: 3 }], [8, { state: 'active', percent: 19 }]]]]),
     );

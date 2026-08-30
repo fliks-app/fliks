@@ -1770,7 +1770,7 @@ describe('FliksHostImpl', () => {
     // The gate coalesces per torrent, not per media: every consumer keys a leaf
     // by (media, season, episode, ref), so a sibling dropped inside the window
     // is never seen at all — not late, missing, until the client sweeps it.
-    it('does not hold one torrent of a series behind another', async () => {
+    it('does not hold one download of a series behind another', async () => {
       jest.useFakeTimers();
       try {
         const h = makeHarness();
@@ -1781,7 +1781,7 @@ describe('FliksHostImpl', () => {
         await h.host['progress.set']({ mediaId: 7, seasonNumber: 1, episodeNumber: 8, ref: 'c', progress: 0.3, state: 'active' });
 
         expect(h.events.emitToUsers).toHaveBeenCalledTimes(3);
-        expect(h.events.emitToUsers.mock.calls.map((c) => c[1].hash).sort()).toEqual(['a', 'b', 'c']);
+        expect(h.events.emitToUsers.mock.calls.map((c) => c[1].ref).sort()).toEqual(['a', 'b', 'c']);
       } finally {
         jest.useRealTimers();
       }

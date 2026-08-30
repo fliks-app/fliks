@@ -127,7 +127,7 @@ describe('download-format', () => {
    * a season pack legitimately belongs on every episode page of that season.
    */
   describe('describeDownload — episode scope', () => {
-    // The store keys a leaf by its torrent and records the episode on the leaf,
+    // The store keys a leaf by its download and records the episode on the leaf,
     // so a fixture has to carry the attribute the scope filter reads.
     const season1 = (leaves: [number | 'PACK', DownloadLeaf][]): MediaDownloadProgress => ({
       mediaId: 2,
@@ -156,7 +156,7 @@ describe('download-format', () => {
       expect(d).toBeNull();
     });
 
-    it("reports the episode's own torrent", () => {
+    it("reports the episode's own download", () => {
       const d = describeDownload(season1([[7, leaf('active', 52)]]), {
         seasonFilter: [1],
         episodeFilter: 7,
@@ -170,9 +170,9 @@ describe('download-format', () => {
       expect(describeDownload(progress, { seasonFilter: [1], episodeFilter: 8 })?.percent).toBe(30);
     });
 
-    // Real season-pack ticks arrive with a torrent ref and no episode number,
-    // so the store keys them `hash:<ref>` — never the literal 'PACK' sentinel.
-    it('reports a hash-keyed pack on an episode page', () => {
+    // Real season-pack ticks arrive with a download ref and no episode number,
+    // so the store keys them `ref:<r>` — never the literal 'PACK' sentinel.
+    it('reports a ref-keyed pack on an episode page', () => {
       const progress: MediaDownloadProgress = {
         mediaId: 2,
         mediaType: 'series',
@@ -180,7 +180,7 @@ describe('download-format', () => {
         state: 'active',
         dlspeed: 0,
         eta: 0,
-        seasons: new Map([[1, { leaves: new Map([['hash:abc', leaf('active', 30)]]) }]]),
+        seasons: new Map([[1, { leaves: new Map([['ref:abc', leaf('active', 30)]]) }]]),
       };
       expect(describeDownload(progress, { seasonFilter: [1], episodeFilter: 7 })?.percent).toBe(30);
     });

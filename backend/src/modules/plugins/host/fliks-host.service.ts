@@ -1117,7 +1117,7 @@ export class FliksHostImpl implements PluginHostApi {
       mediaType: media?.type === MediaType.MOVIE ? 'movie' : 'series',
       seasonNumber: p.seasonNumber,
       episodeNumber: p.episodeNumber,
-      hash: p.ref,
+      ref: p.ref,
       progress: p.progress,
       dlspeed: p.bytesPerSecond ?? 0,
       eta: p.etaSeconds ?? 0,

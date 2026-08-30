@@ -48,11 +48,11 @@ async function render(
 }
 
 /**
- * One torrent, one row: bar, percent, speed and ETA. There is deliberately no
+ * One download, one row: bar, percent, speed and ETA. There is deliberately no
  * rollup above them — the media-level speed was whichever leaf ticked last, and
  * a folded state read "stalled" for a whole show whenever one episode was.
  */
-describe('DownloadDetailModalComponent — one row per torrent', () => {
+describe('DownloadDetailModalComponent — one row per download', () => {
   it('gives every episode its own bar, speed and ETA', async () => {
     const f = await render([
       [1, [
@@ -81,7 +81,7 @@ describe('DownloadDetailModalComponent — one row per torrent', () => {
     expect(seven.percent).toBe(0);
   });
 
-  it('names the search, with no percentage, before a torrent exists', async () => {
+  it('names the search, with no percentage, before a download exists', async () => {
     const f = await render([[1, [[8, { state: 'searching', percent: 0 }]]]]);
     const [row] = f.componentInstance.seasonRows()[0].leaves;
 
@@ -98,7 +98,7 @@ describe('DownloadDetailModalComponent — one row per torrent', () => {
     expect(f.componentInstance.seasonRows().map((s) => s.seasonNumber)).toEqual([1, 2]);
   });
 
-  // A movie has one torrent and no season to group it under, so the headline is
+  // A movie has one download and no season to group it under, so the headline is
   // the row rather than a rollup over anything.
   it('keeps a single headline for a movie', async () => {
     TestBed.resetTestingModule();
@@ -123,7 +123,7 @@ describe('DownloadDetailModalComponent — one row per torrent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(fixture.componentInstance.isSingleTorrent()).toBe(true);
+    expect(fixture.componentInstance.isSingleDownload()).toBe(true);
     expect(fixture.componentInstance.seasonRows()).toEqual([]);
     expect(fixture.componentInstance.speedLabel()).toBe('1.0 KB/s');
   });

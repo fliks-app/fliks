@@ -108,7 +108,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
   }
 }
 
-/** Season / episode a grab targets, matching the leaf its torrent lands under.
+/** Season / episode a grab targets, matching the leaf its download lands under.
  *  Empty for a movie, or a whole-series grab with no season scope. */
 type GrabScope = { seasonNumber?: number; episodeNumber?: number };
 
@@ -181,7 +181,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   });
 
   /**
-   * The header's download chip. One torrent shows its own state and percent;
+   * The header's download chip. One download shows its own state and percent;
    * several show how many there are and open the modal for the breakdown —
    * folding their states into one label read "stalled" for a whole show
    * whenever a single episode was, and averaged percentages that belong to
@@ -230,7 +230,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.media() ? this.downloadBadge() : null,
   );
 
-  /** Same chip on the episode page, narrowed to that episode's own torrents or
+  /** Same chip on the episode page, narrowed to that episode's own downloads or
    *  the season pack that carries it — a sibling episode's grab stays off it. */
   readonly episodeHeaderBadge = computed<MediaInfoHeaderBadge | null>(() => {
     const ep = this.focusedEpisode();
@@ -1180,7 +1180,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   /**
    * Run a grab with the header badge showing its search phase from the click,
    * so the user isn't left with a silent button while the indexers are queried.
-   * The badge hands over to the real torrent as soon as the first progress
+   * The badge hands over to the real download as soon as the first progress
    * event lands; on failure the phase clears with the settled request.
    */
   private async withGrabPhase<T>(
@@ -1195,7 +1195,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       const out = await run();
       // Success: the grab is real, so keep the phase up while the download
       // client's first tick makes its way over SSE. Only ever clears a leaf
-      // still marked `searching`, so a torrent that lands sooner is untouched.
+      // still marked `searching`, so a download that lands sooner is untouched.
       setTimeout(release, GRAB_HANDOFF_MS);
       return out;
     } catch (err) {
@@ -1204,7 +1204,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Grab scope for an episode id — the leaf key its torrent will land under. */
+  /** Grab scope for an episode id — the leaf key its download will land under. */
   private episodeScope(episodeId: number): GrabScope {
     for (const s of this.media()?.seasons ?? []) {
       const ep = s.episodes?.find((e) => e.id === episodeId);
