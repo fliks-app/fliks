@@ -915,6 +915,12 @@ export class FliksHostImpl implements PluginHostApi {
         // which can be a minute out. Added to the media's last known set rather than replacing
         // it: a push states the whole set, so announcing this grab alone would retire whatever
         // else the media already had in flight. The first real snapshot supersedes it.
+        //
+        // This reads the replay cache for correctness, not just for replay. It is safe because
+        // the cache and a viewer's own store cannot disagree about what exists: a client resets
+        // its store on `sse.connected`, so a core restart empties both, and both expire on the
+        // same horizon. A cold cache therefore means the viewer holds nothing either, and
+        // stating a set of one erases nothing from their screen.
         await this.pushProgress({
           mediaId: event.mediaId,
           downloads: [
