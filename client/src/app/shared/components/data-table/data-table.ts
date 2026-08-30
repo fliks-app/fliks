@@ -313,7 +313,8 @@ export class DataTableComponent implements OnInit {
         if (href) lines.push({ labelKey: field.labelKey, text: this.translate.instant(field.textKey), href });
         continue;
       }
-      lines.push({ labelKey: field.labelKey, text: this.subValueText(field, value) });
+      const text = this.subValueText(field, value);
+      lines.push({ labelKey: field.labelKey, text: field.format ? text : this.resolveMessage(text) });
     }
     return lines;
   }
@@ -330,11 +331,23 @@ export class DataTableComponent implements OnInit {
     return typeof value === 'number' ? Math.round(value) : null;
   }
 
+  /**
+   * A message a plugin puts on a row is sometimes one of its own i18n keys ("removed by an
+   * operator") and sometimes raw text from whatever it talks to (a filesystem error). A key
+   * resolves through the plugin's manifest dictionary, merged into the active language at boot;
+   * anything else is shown as it came, which is the same fallback the provider pages use.
+   */
+  private resolveMessage(text: string): string {
+    const translated = this.translate.instant(text);
+    return translated === text ? text : translated;
+  }
+
   /** The row's detail text for this column, or '' when there is none to open. A cell only
    *  becomes a button when it has something to show. */
   detailText(col: TableColumn, row: TableRow): string {
     if (!col.detailField) return '';
-    return String(row[col.detailField] ?? '').trim();
+    const raw = String(row[col.detailField] ?? '').trim();
+    return raw ? this.resolveMessage(raw) : '';
   }
 
   openDetail(col: TableColumn, row: TableRow): void {
