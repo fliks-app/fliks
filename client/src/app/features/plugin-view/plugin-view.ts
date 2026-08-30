@@ -383,16 +383,25 @@ export class PluginViewComponent implements OnDestroy {
   }
 
   /** Resolves a `TableRowActionId` against its row — today only jumping to that row's own media
-   *  page via its `mediaId`/`mediaType` columns; anything else renders no button. */
+   *  page via its `mediaId`/`mediaType` columns; anything else renders no button.
+   *
+   *  A row naming an episode lands on that episode rather than on the series root: a queue row
+   *  is read to reach the thing it is downloading, and a series page does not say which. */
   tableResolveAction = (actionId: string, row: TableRow): (() => void) | undefined => {
     if (!isTableRowActionId(actionId)) return undefined;
     const id = row['mediaId'];
     const type = row['mediaType'];
     // Both columns or no button: guessing the type sends a series to a movie page.
     if (id == null || (type !== 'series' && type !== 'movie')) return undefined;
-    const base = type === 'series' ? '/series' : '/movies';
+    const episodeId = row['episodeId'];
+    const url =
+      type === 'series'
+        ? episodeId == null
+          ? `/series/${id}`
+          : `/series/${id}/episode/${episodeId}`
+        : `/movies/${id}`;
     return () => {
-      void this.router.navigateByUrl(`${base}/${id}`);
+      void this.router.navigateByUrl(url);
     };
   };
 }

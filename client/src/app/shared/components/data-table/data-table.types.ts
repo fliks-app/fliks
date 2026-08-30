@@ -39,7 +39,20 @@ export interface TableColumn {
   detailTitleKey?: string;
   /** Names a 0–100 field on the row; a badged cell fills with it and appends the percent. */
   progressField?: string;
+  /** Turns the cell into a link running this core action against its row. */
+  linkActionId?: string;
 }
+
+/** One line of a `detail` dialog. `kind: 'link'` anchors `textKey` to the URL under `key`. */
+export type TableDetailField =
+  | {
+      kind?: 'value';
+      key: string;
+      labelKey: string;
+      format?: 'date' | 'bytes' | 'percent' | 'speed';
+      labelKeys?: Record<string, string>;
+    }
+  | { kind: 'link'; key: string; labelKey: string; textKey: string };
 
 /** One `rowActions[]` visibility clause read off the row — `when` reads the viewer instead. */
 export interface TableRowCondition {
@@ -74,6 +87,13 @@ export interface PagedResult<T> {
 export type RowAction =
   | { kind: 'route'; labelKey: string; path: string; visibleWhen?: TableRowCondition }
   | { kind: 'action'; labelKey: string; actionId: string; visibleWhen?: TableRowCondition }
+  | {
+      kind: 'detail';
+      labelKey: string;
+      titleKey?: string;
+      fields: TableDetailField[];
+      visibleWhen?: TableRowCondition;
+    }
   | {
       kind: 'proxy';
       labelKey: string;

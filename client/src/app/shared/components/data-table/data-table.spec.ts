@@ -710,3 +710,82 @@ describe('DataTableComponent — progress inside a badge', () => {
     ).toBeNull();
   });
 });
+
+describe('DataTableComponent — the detail row action', () => {
+  const ROW = {
+    id: 7,
+    name: 'A',
+    quality: 'WEBDL-1080p',
+    infoUrl: 'https://tracker.example/details/42',
+    empty: '',
+  };
+  const DETAIL: RowAction = {
+    kind: 'detail',
+    labelKey: 'x.info',
+    titleKey: 'x.info_title',
+    fields: [
+      { key: 'quality', labelKey: 'x.quality' },
+      { key: 'empty', labelKey: 'x.empty' },
+      { kind: 'link', key: 'infoUrl', labelKey: 'x.indexer', textKey: 'x.open_on_indexer' },
+    ],
+  };
+
+  const openDetail = async (row: TableRow, action: RowAction = DETAIL) => {
+    const fixture = await createComponent({ http: { get: () => of([row]) }, rowActions: [action] });
+    await fixture.componentInstance.visibleActions(row)[0].run();
+    return fixture.componentInstance.rowDetail()!;
+  };
+
+  it('opens a dialog titled by titleKey, skipping fields the row leaves empty', async () => {
+    const open = await openDetail(ROW);
+    expect(open.titleKey).toBe('x.info_title');
+    expect(open.lines.map((l) => l.labelKey)).toEqual(['x.quality', 'x.indexer']);
+  });
+
+  it('anchors a link field to the row url', async () => {
+    const open = await openDetail(ROW);
+    expect(open.lines.find((l) => l.labelKey === 'x.indexer')?.href).toBe(
+      'https://tracker.example/details/42',
+    );
+  });
+
+  it('VERDICT: refuses a non-http url — a row value is indexer data, not manifest data', async () => {
+    // eslint-disable-next-line no-script-url
+    const open = await openDetail({ ...ROW, infoUrl: 'javascript:alert(1)' });
+    expect(open.lines.map((l) => l.labelKey)).toEqual(['x.quality']);
+  });
+
+  it('refuses a value that is not a url at all', async () => {
+    const open = await openDetail({ ...ROW, infoUrl: 'not a url' });
+    expect(open.lines.map((l) => l.labelKey)).toEqual(['x.quality']);
+  });
+});
+
+describe('DataTableComponent — a cell that links', () => {
+  const COL: TableColumn = { key: 'name', labelKey: 'x.name', linkActionId: 'table.open-media' };
+
+  it('renders a handler when core resolves the action for the row', async () => {
+    const run = vi.fn();
+    const fixture = await createComponent({
+      http: { get: () => of([{ id: 1, name: 'A' }]) },
+      columns: [COL],
+      resolveAction: () => run,
+    });
+    fixture.componentInstance.cellLink(COL, { id: 1, name: 'A' })!();
+    expect(run).toHaveBeenCalled();
+  });
+
+  it('VERDICT: plain text when the row cannot resolve it, never a dead link', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of([{ id: 1, name: 'A' }]) },
+      columns: [COL],
+      resolveAction: () => undefined,
+    });
+    expect(fixture.componentInstance.cellLink(COL, { id: 1, name: 'A' })).toBeUndefined();
+  });
+
+  it('a column declaring no linkActionId never links', async () => {
+    const fixture = await createComponent({ http: { get: () => of([]) }, resolveAction: () => vi.fn() });
+    expect(fixture.componentInstance.cellLink({ key: 'name', labelKey: 'x' }, { id: 1 })).toBeUndefined();
+  });
+});

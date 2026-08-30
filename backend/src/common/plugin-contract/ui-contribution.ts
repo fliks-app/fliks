@@ -247,12 +247,32 @@ export interface TableColumn {
   detailField?: string;
   /** Title of that dialog. Falls back to the column's own `labelKey`. */
   detailTitleKey?: string;
+  /** Turns the cell into a link running this core action against its row. Same closed
+   *  vocabulary as a row action's `actionId`, and the same fail-closed rule: an id core does not
+   *  recognise, or a row the action cannot resolve, renders plain text rather than a dead link. */
+  linkActionId?: TableRowActionId;
   /** Names a 0–100 field on the row; a badged cell then fills left-to-right with it and appends
    *  the percent. A moving value belongs inside the badge naming what is moving — as its own
    *  column it costs width and reads as unrelated to the state beside it. Ignored on a cell that
    *  declares no `badges`, and on a row whose named field is not a number. */
   progressField?: string;
 }
+
+/**
+ * One line of a `detail` row action's dialog. A plain field renders its value; `kind: 'link'`
+ * renders `textKey` as an anchor to the URL the row holds under `key`, which core refuses
+ * unless it is `http:` or `https:` — the value comes from an indexer, not from the manifest.
+ * A field whose row value is empty is skipped, so one dialog serves rows of differing shape.
+ */
+export type TableDetailField =
+  | {
+      kind?: 'value';
+      key: string;
+      labelKey: string;
+      format?: 'date' | 'bytes' | 'percent' | 'speed';
+      labelKeys?: Record<string, string>;
+    }
+  | { kind: 'link'; key: string; labelKey: string; textKey: string };
 
 /** One `rowActions[]` visibility clause, read off the row itself: the action renders only when
  *  the row's `key` holds one of `in`. Pausing a paused download is not an action, it is a button
@@ -355,6 +375,16 @@ export interface TableConfigPage extends ConfigPageBase {
         kind: 'action';
         labelKey: string;
         actionId: TableRowActionId;
+        when?: WhenPredicate[];
+        visibleWhen?: TableRowCondition;
+      }
+    /** Opens a dialog of declared fields read off the row. Needs no route: everything it shows
+     *  is already on the row the table loaded. */
+    | {
+        kind: 'detail';
+        labelKey: string;
+        titleKey?: string;
+        fields: TableDetailField[];
         when?: WhenPredicate[];
         visibleWhen?: TableRowCondition;
       }
