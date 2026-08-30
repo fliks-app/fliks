@@ -8,6 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { RouterLink } from '@angular/router';
 import { LucideChevronLeft } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -23,6 +24,7 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
     ModalFooterComponent,
     ModalHeaderComponent,
     FormsModule,
+    ToggleFieldComponent,
     LucideChevronLeft,
     RouterLink,
     TranslateModule,
