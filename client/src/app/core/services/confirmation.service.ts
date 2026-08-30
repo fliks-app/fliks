@@ -16,12 +16,15 @@ export interface ConfirmOptions {
  *  since it changes what the confirmed action does rather than whether it runs. */
 export interface ConfirmToggleOptions extends ConfirmOptions {
   toggleLabel: string;
+  /** One line under the checkbox, for what the choice does not do. */
+  toggleHint?: string;
   toggleDefault?: boolean;
 }
 
 interface InternalConfirmState extends ConfirmOptions {
   alertOnly: boolean;
   toggleLabel?: string;
+  toggleHint?: string;
   resolve: (value: boolean | null) => void;
 }
 

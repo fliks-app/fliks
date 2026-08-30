@@ -652,6 +652,38 @@ describe('DataTableComponent — a confirmation that carries a decision', () => 
     confirmToggle: { labelKey: 'x.delete_files', param: 'deleteFiles' },
   };
 
+  it('passes the hint through to the confirmation, for what the choice does not do', async () => {
+    let seen: { toggleHint?: string } | undefined;
+    const fixture = await createComponent({
+      http: { get: () => of([ROW]), delete: () => of({}) },
+      rowActions: [{ ...REMOVE, confirmToggle: { labelKey: 'x.delete_files', param: 'deleteFiles', hintKey: 'x.kept' } }],
+      confirmation: {
+        confirmWithToggle: (o: { toggleHint?: string }) => {
+          seen = o;
+          return Promise.resolve({ ok: false, toggle: false });
+        },
+      },
+    });
+    await fixture.componentInstance.visibleActions(ROW)[0].run();
+    expect(seen?.toggleHint).toBe('x.kept');
+  });
+
+  it('sends no hint when the action declares none', async () => {
+    let seen: { toggleHint?: string } | undefined;
+    const fixture = await createComponent({
+      http: { get: () => of([ROW]), delete: () => of({}) },
+      rowActions: [REMOVE],
+      confirmation: {
+        confirmWithToggle: (o: { toggleHint?: string }) => {
+          seen = o;
+          return Promise.resolve({ ok: false, toggle: false });
+        },
+      },
+    });
+    await fixture.componentInstance.visibleActions(ROW)[0].run();
+    expect('toggleHint' in (seen ?? {})).toBe(false);
+  });
+
   it("VERDICT: sends the checkbox's answer, not its default", async () => {
     const del = vi.fn(() => of({}));
     const fixture = await createComponent({
