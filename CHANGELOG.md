@@ -1,5 +1,28 @@
 # Changelog
 
+## [3.7.0](https://github.com/fliks-app/fliks/compare/v3.6.0...v3.7.0) (2026-08-30)
+
+
+### Features
+
+* **downloads:** spin the badge while a release is being searched for ([#1151](https://github.com/fliks-app/fliks/issues/1151)) ([c9ff716](https://github.com/fliks-app/fliks/commit/c9ff716118c51d6ca9b88b7ea5207314eaee673b))
+* **plugins:** give a confirmation toggle a hint line ([#1148](https://github.com/fliks-app/fliks/issues/1148)) ([a41a014](https://github.com/fliks-app/fliks/commit/a41a014511ba8b7758993fa25cac1e233b0959c0))
+* **plugins:** let a table row action address its own row ([#1136](https://github.com/fliks-app/fliks/issues/1136)) ([47a31e6](https://github.com/fliks-app/fliks/commit/47a31e6593ce883f878fbab62dd92ff4a8fb65a2))
+* **plugins:** let a table row open its media and explain itself ([#1142](https://github.com/fliks-app/fliks/issues/1142)) ([b0f49ed](https://github.com/fliks-app/fliks/commit/b0f49ed568e1a74f031be4a380a870366e4e3c07))
+* **releases:** link a release title to the tracker's own page ([#1149](https://github.com/fliks-app/fliks/issues/1149)) ([c1e0700](https://github.com/fliks-app/fliks/commit/c1e0700bb10e8fad16e61320c2469331dfef3a0b))
+* **releases:** list only the qualities the profile allows ([#1139](https://github.com/fliks-app/fliks/issues/1139)) ([8f3a02f](https://github.com/fliks-app/fliks/commit/8f3a02f5c7ee3fddea08ae3fd67b544656c04912))
+* **releases:** stop offering releases better than the profile allows ([#1134](https://github.com/fliks-app/fliks/issues/1134)) ([d46968e](https://github.com/fliks-app/fliks/commit/d46968efd3e9a2da316703c23f3d36849b7d58b1))
+
+
+### Bug Fixes
+
+* **media-detail:** stop dimming every episode of an unmonitored series ([#1141](https://github.com/fliks-app/fliks/issues/1141)) ([835dd74](https://github.com/fliks-app/fliks/commit/835dd74815deadfb68db935d15261285dcf8c8f7))
+* **plugins:** translate a plugin message that names one of its own keys ([#1143](https://github.com/fliks-app/fliks/issues/1143)) ([4d02394](https://github.com/fliks-app/fliks/commit/4d023949743ea075e06fd4ed8cded81b150a029d))
+* **quality-profiles:** make the profile editor readable ([#1140](https://github.com/fliks-app/fliks/issues/1140)) ([af4bc85](https://github.com/fliks-app/fliks/commit/af4bc85296ea530354d7b187a6a29982df5724dc))
+* **releases:** keep the tracker page through a manual grab ([#1144](https://github.com/fliks-app/fliks/issues/1144)) ([2075878](https://github.com/fliks-app/fliks/commit/207587847a846c4ac1f7a9c5205c0e2b47c9d32e))
+* **sse:** an event with no downloads is not an event saying there are none ([#1147](https://github.com/fliks-app/fliks/issues/1147)) ([288313c](https://github.com/fliks-app/fliks/commit/288313cc0f459c6eea82522f2c28b8f75ac2daad))
+* **streaming:** stop the subtitle-guard spec from typing its subject as never ([#1137](https://github.com/fliks-app/fliks/issues/1137)) ([0f11d27](https://github.com/fliks-app/fliks/commit/0f11d27a79fc4723c290c1cd07f9245eacae9ed9))
+
 ## [3.6.0](https://github.com/fliks-app/fliks/compare/v3.5.0...v3.6.0) (2026-08-29)
 
 
