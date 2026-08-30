@@ -75,24 +75,28 @@ export type SseEvent =
     }
   | { type: 'import.failed'; mediaId: number; title: string; error: string }
   | {
-      // Live progress for an in-flight grab, delivered to the media's
-      // request audience. `progress` is 0–1; `state` is core's closed
-      // vocabulary (the client maps it to a label/colour). Season/episode set
-      // for the matched scope of a series.
+      /**
+       * Every download in flight for this media, delivered to its request audience. A
+       * replacement, never a delta: whatever is absent has been retired, and an empty array
+       * retires the media. A per-download event could not say that, so a consumer had to infer
+       * a removal from a compensating event or a timeout.
+       */
       type: 'download.progress';
       mediaId: number;
       mediaType: 'movie' | 'series';
-      seasonNumber?: number;
-      episodeNumber?: number;
-      /** Opaque per-download identity, straight from `progress.set`'s `ref` — whatever the
-       *  plugin that reported it uses to tell its own downloads apart. Disambiguates concurrent
-       *  leaves of the same season when the episode relation couldn't be resolved (loose
-       *  episodes with no episodeNumber would otherwise collide). */
-      ref?: string;
-      progress: number;
-      dlspeed: number;
-      eta: number;
-      state: DownloadProgressState;
+      downloads: {
+        /** Opaque per-download identity, straight from `progress.set`'s `ref`. Disambiguates
+         *  concurrent downloads of the same season when the episode relation could not be
+         *  resolved (loose episodes with no episodeNumber would otherwise collide). */
+        ref: string;
+        seasonNumber?: number;
+        episodeNumber?: number;
+        /** 0–1. */
+        progress: number;
+        dlspeed: number;
+        eta: number;
+        state: DownloadProgressState;
+      }[];
     }
   | { type: 'stalled.removed'; title: string }
   | { type: 'queue.updated' }

@@ -35,7 +35,8 @@ async function render(
         n,
         {
           leaves: new Map(
-            l.map(([k, leaf]) => [k, typeof k === 'number' ? { ...leaf, episodeNumber: k } : leaf]),
+            // The key is the reporter's own ref; the episode a leaf belongs to lives on the leaf.
+            l,
           ),
         },
       ]),
@@ -56,8 +57,8 @@ describe('DownloadDetailModalComponent — one row per download', () => {
   it('gives every episode its own bar, speed and ETA', async () => {
     const f = await render([
       [1, [
-        [6, { state: 'active', percent: 3, dlspeed: 1024, eta: 120 }],
-        [8, { state: 'active', percent: 19, dlspeed: 2048, eta: 60 }],
+        ['ref:e6', { state: 'active', percent: 3, dlspeed: 1024, eta: 120, episodeNumber: 6 }],
+        ['ref:e8', { state: 'active', percent: 19, dlspeed: 2048, eta: 60, episodeNumber: 8 }],
       ]],
     ]);
     const [six, eight] = f.componentInstance.seasonRows()[0].leaves;
@@ -72,7 +73,7 @@ describe('DownloadDetailModalComponent — one row per download', () => {
   });
 
   it('states a stall — the row has no other way to explain itself', async () => {
-    const f = await render([[1, [[7, { state: 'stalled', percent: 0 }]]]]);
+    const f = await render([[1, [['ref:e7', { state: 'stalled', percent: 0, episodeNumber: 7 }]]]]);
     const [seven] = f.componentInstance.seasonRows()[0].leaves;
 
     expect(seven.stateLabelKey).toBe('activity.tstatus_stalled');
@@ -82,7 +83,7 @@ describe('DownloadDetailModalComponent — one row per download', () => {
   });
 
   it('names the search, with no percentage, before a download exists', async () => {
-    const f = await render([[1, [[8, { state: 'searching', percent: 0 }]]]]);
+    const f = await render([[1, [['ref:e8', { state: 'searching', percent: 0, episodeNumber: 8 }]]]]);
     const [row] = f.componentInstance.seasonRows()[0].leaves;
 
     expect(row.percent).toBeNull();
@@ -91,8 +92,8 @@ describe('DownloadDetailModalComponent — one row per download', () => {
 
   it('groups rows under every season in flight', async () => {
     const f = await render([
-      [2, [['PACK', { state: 'active', percent: 20 }]]],
-      [1, [[8, { state: 'active', percent: 50 }]]],
+      [2, [['ref:pack', { state: 'active', percent: 20 }]]],
+      [1, [['ref:e8', { state: 'active', percent: 50, episodeNumber: 8 }]]],
     ]);
 
     expect(f.componentInstance.seasonRows().map((s) => s.seasonNumber)).toEqual([1, 2]);

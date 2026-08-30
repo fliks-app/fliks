@@ -1,23 +1,20 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, computed, signal } from '@angular/core';
 import { MediaType } from '../enums/media-type.enum';
 import { DownloadProgressState, ProgressPhase } from '../enums/download-progress-state.enum';
 import { foldLeaves } from '../../shared/utils/download-format';
 
-/** Identifies one download within a season. `ref:<r>` whenever the report carries one —
- *  its own identity, so two releases grabbed for the *same* episode stay two leaves instead
- *  of overwriting each other. The episode number (or `'PACK'`) keys the placeholder a grab
- *  puts up before any download exists; the first real tick for that scope supersedes it. */
-export type LeafKey = number | 'PACK' | `ref:${string}`;
+/** Identifies one download within a season. `ref:<r>` is the reporter's own identity for it, so
+ *  two releases grabbed for the *same* episode stay two leaves instead of overwriting each other.
+ *  `pending:<scope>` keys the placeholder a grab puts up before any download exists. */
+export type LeafKey = `ref:${string}` | `pending:${string}`;
 
 /** One in-flight download contributing to a media's download progress. */
 export interface DownloadLeaf {
   percent: number; // 0–100
   state: ProgressPhase;
   /** The episode this download is for, when it names one. Held on the leaf
-   *  rather than in its key, which now identifies the download itself. */
+   *  rather than in its key, which identifies the download itself. */
   episodeNumber?: number;
-  /** When this leaf was last reported, for the staleness sweep. */
-  updatedAt?: number;
   /** This download's own speed and ETA. Held per leaf because concurrent
    *  episodes each have their own, and a media-level pair could only ever
    *  report whichever of them ticked last. */
@@ -32,8 +29,8 @@ export interface SeasonProgress {
 /** Live download progress for one media, keyed by `mediaId`. For a series the
  *  `seasons` sub-map holds per-(season, leaf) progress (a leaf is a season pack
  *  or an individual episode download); `state`/`percent` are the folded
- *  media-level rollup. A movie has no `seasons` — its single download's folded
- *  state and percent sit directly on the entry. */
+ *  media-level rollup. A movie has no `seasons` — its downloads fold straight
+ *  onto the entry. */
 export interface MediaDownloadProgress {
   mediaId: number;
   mediaType: MediaType;
@@ -42,33 +39,57 @@ export interface MediaDownloadProgress {
   dlspeed: number;
   eta: number;
   seasons?: Map<number, SeasonProgress>;
-  /** When this entry was last reported, for the staleness sweep. Only a movie
-   *  needs it here — a series is swept leaf by leaf. */
+  /** When the snapshot behind this entry arrived, for the staleness sweep. */
   updatedAt?: number;
 }
 
-/** Payload of a `download.progress` SSE event. */
-export interface DownloadProgressEvent {
-  mediaId: number;
-  mediaType: MediaType;
+/** One download inside a `download.progress` snapshot. */
+export interface DownloadProgressItem {
+  ref: string;
   seasonNumber?: number;
   episodeNumber?: number;
-  ref?: string;
   progress: number; // 0–1
   dlspeed: number;
   eta: number;
   state: DownloadProgressState;
 }
 
-/** How long a leaf may go unreported before the sweep drops it. The publisher
- *  ticks about once a minute; three missed ticks is gone, not slow. Same
- *  horizon the backend's replay cache uses, for the same reason. */
+/**
+ * Payload of a `download.progress` SSE event: every download in flight for one media.
+ *
+ * A replacement, never a delta. Whatever is absent has been retired, and an empty `downloads`
+ * retires the media. That is what makes a phantom leaf impossible rather than merely unlikely:
+ * there is no removal to miss, because absence is the removal.
+ */
+export interface DownloadProgressEvent {
+  mediaId: number;
+  mediaType: MediaType;
+  downloads: DownloadProgressItem[];
+}
+
+/** A grab the user just started, before any download exists to report it. */
+interface GrabbingScope {
+  mediaType: MediaType;
+  seasonNumber?: number;
+  episodeNumber?: number;
+}
+
+/**
+ * How long a media may go unreported before the sweep drops it. The publisher ticks about once a
+ * minute; three missed ticks is gone, not slow. Same horizon the backend's replay cache uses.
+ *
+ * This is a backstop for a publisher that died or was reconfigured, not the removal mechanism:
+ * a download that stops is absent from the very next snapshot.
+ */
 const STALE_AFTER_MS = 3 * 60_000;
 const SWEEP_INTERVAL_MS = 30_000;
 
-function leafKey(episodeNumber?: number, ref?: string): LeafKey {
-  if (ref) return `ref:${ref}`;
-  return episodeNumber ?? 'PACK';
+function pendingKey(scope: GrabbingScope): LeafKey {
+  return `pending:${scope.seasonNumber ?? ''}:${scope.episodeNumber ?? ''}`;
+}
+
+function sameScope(a: GrabbingScope, b: { seasonNumber?: number; episodeNumber?: number }): boolean {
+  return a.seasonNumber === b.seasonNumber && a.episodeNumber === b.episodeNumber;
 }
 
 /** Fold every season leaf into the media-level state, percent, speed and ETA.
@@ -94,60 +115,136 @@ function rollupSeasons(seasons: Map<number, SeasonProgress>): {
   };
 }
 
+function toLeaf(d: DownloadProgressItem): DownloadLeaf {
+  return {
+    percent: Math.round(d.progress * 100),
+    state: d.state,
+    episodeNumber: d.episodeNumber,
+    dlspeed: d.dlspeed,
+    eta: d.eta,
+  };
+}
+
+/** Build a media entry from one snapshot. A series groups by season; a movie folds flat. */
+function toEntry(e: DownloadProgressEvent, at: number): MediaDownloadProgress | null {
+  if (!e.downloads.length) return null;
+
+  if (e.mediaType !== 'series') {
+    const f = foldLeaves(e.downloads.map(toLeaf));
+    return {
+      mediaId: e.mediaId,
+      mediaType: e.mediaType,
+      percent: f.percent,
+      state: f.state || 'active',
+      dlspeed: e.downloads.reduce((a, d) => a + d.dlspeed, 0),
+      eta: e.downloads.reduce((a, d) => Math.max(a, d.eta), 0),
+      updatedAt: at,
+    };
+  }
+
+  const seasons = new Map<number, SeasonProgress>();
+  for (const d of e.downloads) {
+    // A series download the reporter could not attribute to a season cannot be placed under
+    // one. Dropping it is right: merging it onto whichever leaf happens to be alone would
+    // attribute another download's percent to it.
+    if (d.seasonNumber == null) continue;
+    const leaves = seasons.get(d.seasonNumber)?.leaves ?? new Map<LeafKey, DownloadLeaf>();
+    leaves.set(`ref:${d.ref}`, toLeaf(d));
+    seasons.set(d.seasonNumber, { leaves });
+  }
+  if (!seasons.size) return null;
+  return {
+    mediaId: e.mediaId,
+    mediaType: e.mediaType,
+    seasons,
+    updatedAt: at,
+    ...rollupSeasons(seasons),
+  };
+}
+
 /**
- * App-wide store of in-flight download progress, fed by `download.progress`
- * SSE events (via {@link SseService}). One shared signal — the requests
- * views and media-detail read it by `mediaId`. The status itself
- * (label/colour/aggregation) is derived on read via the pure helpers in
- * `download-format`, so this store stays a plain data holder.
+ * App-wide store of in-flight download progress, fed by `download.progress` SSE events (via
+ * {@link SseService}). One shared signal — the requests views and media-detail read it by
+ * `mediaId`. The status itself (label/colour/aggregation) is derived on read via the pure
+ * helpers in `download-format`, so this store stays a plain data holder.
+ *
+ * Two sources, deliberately kept apart: `reported` is what the server said, replaced wholesale
+ * per media by each snapshot, and `grabbing` is local optimism for a grab the user just clicked.
+ * Merging them at read time is what lets a snapshot replace without erasing a placeholder it
+ * knows nothing about.
  */
 @Injectable({ providedIn: 'root' })
 export class DownloadProgressService {
-  readonly progress = signal<Map<number, MediaDownloadProgress>>(new Map());
+  /** Server truth. Never merged into, only replaced per media. */
+  private readonly reported = signal<Map<number, MediaDownloadProgress>>(new Map());
+
+  /** Grabs started here that no snapshot has reported yet. */
+  private readonly grabbing = signal<Map<number, GrabbingScope[]>>(new Map());
+
+  readonly progress = computed(() => this.merged());
 
   private sweepHandle: ReturnType<typeof setInterval> | null = null;
 
-  /**
-   * Drop leaves nothing has reported in a while. The store is fed by events
-   * alone, so a download that stops being reported — deleted from the download
-   * client, or an acquisition plugin too old to announce its retirement — would
-   * otherwise sit here at its last percent for the life of the app.
-   *
-   * Mirrors the backend's own replay cache, down to the horizon: the publisher
-   * ticks about once a minute, so three missed ticks is a leaf that is gone
-   * rather than one that was slow.
-   */
-  private sweepStale(): void {
-    const cutoff = Date.now() - STALE_AFTER_MS;
-    const prev = this.progress();
-    let changed = false;
-    const next = new Map(prev);
+  private merged(): Map<number, MediaDownloadProgress> {
+    const reported = this.reported();
+    const grabbing = this.grabbing();
+    if (!grabbing.size) return reported;
 
-    for (const [mediaId, entry] of prev) {
-      if (!entry.seasons) {
-        // A movie's single download: the entry itself is the leaf.
-        if ((entry.updatedAt ?? 0) < cutoff) {
-          next.delete(mediaId);
-          changed = true;
+    const out = new Map(reported);
+    for (const [mediaId, scopes] of grabbing) {
+      if (!scopes.length) continue;
+      const cur = out.get(mediaId);
+      const mediaType = cur?.mediaType ?? scopes[0]!.mediaType;
+
+      if (mediaType !== 'series') {
+        // Nothing to place a movie placeholder under, and a reported movie already says more.
+        if (!cur) {
+          out.set(mediaId, {
+            mediaId,
+            mediaType,
+            percent: null,
+            state: 'searching',
+            dlspeed: 0,
+            eta: 0,
+          });
         }
         continue;
       }
-      const seasons = new Map(entry.seasons);
-      let touched = false;
-      for (const [seasonNumber, sp] of entry.seasons) {
-        const leaves = new Map([...sp.leaves].filter(([, l]) => (l.updatedAt ?? 0) >= cutoff));
-        if (leaves.size === sp.leaves.size) continue;
-        touched = true;
-        if (leaves.size === 0) seasons.delete(seasonNumber);
-        else seasons.set(seasonNumber, { leaves });
-      }
-      if (!touched) continue;
-      changed = true;
-      if (seasons.size === 0) next.delete(mediaId);
-      else next.set(mediaId, { ...entry, seasons, ...rollupSeasons(seasons) });
-    }
 
-    if (changed) this.progress.set(next);
+      const seasons = new Map(cur?.seasons ?? []);
+      for (const scope of scopes) {
+        const seasonNumber = scope.seasonNumber ?? 0;
+        const leaves = new Map(seasons.get(seasonNumber)?.leaves ?? []);
+        leaves.set(pendingKey(scope), {
+          percent: 0,
+          state: 'searching',
+          episodeNumber: scope.episodeNumber,
+          dlspeed: 0,
+          eta: 0,
+        });
+        seasons.set(seasonNumber, { leaves });
+      }
+      out.set(mediaId, {
+        mediaId,
+        mediaType,
+        seasons,
+        updatedAt: cur?.updatedAt,
+        ...rollupSeasons(seasons),
+      });
+    }
+    return out;
+  }
+
+  /**
+   * Drop a media whose snapshot has stopped arriving. The store is fed by events alone, so a
+   * publisher that died would otherwise leave its last snapshot on screen for the life of the
+   * app. Removal within a media needs no sweep: the next snapshot states the whole set.
+   */
+  private sweepStale(): void {
+    const cutoff = Date.now() - STALE_AFTER_MS;
+    const prev = this.reported();
+    const next = new Map([...prev].filter(([, entry]) => (entry.updatedAt ?? 0) >= cutoff));
+    if (next.size !== prev.size) this.reported.set(next);
     if (!next.size) this.stopSweep();
   }
 
@@ -163,102 +260,51 @@ export class DownloadProgressService {
     this.sweepHandle = null;
   }
 
-  /** Drop everything, for the SSE connect snapshot. Progress is only ever
-   *  retired by an event, so a download that ended while the stream was down
-   *  would otherwise sit here at its last percent for the life of the app. */
+  /** Drop everything, for the SSE connect snapshot: the replay that follows re-states whatever
+   *  is still in flight, and anything that ended while the stream was down never will. */
   reset(): void {
-    if (this.progress().size) this.progress.set(new Map());
+    if (this.reported().size) this.reported.set(new Map());
+    if (this.grabbing().size) this.grabbing.set(new Map());
     this.stopSweep();
   }
 
-  /** Apply a `download.progress` SSE event. Updates a single leaf; deletes it
-   *  (and any now-empty season/media) once it reaches 100%. */
+  /** Apply one media's snapshot, replacing whatever was held for it. */
   applyProgress(e: DownloadProgressEvent): void {
-    this.applyPhase(e);
-  }
+    const entry = toEntry(e, Date.now());
+    if (entry) this.startSweep();
 
-  /** Same, for a phase the wire can't carry. {@link DownloadProgressEvent}
-   *  stays the SSE shape so nothing suggests the backend sends `searching`. */
-  private applyPhase(e: Omit<DownloadProgressEvent, 'state'> & { state: ProgressPhase }): void {
-    const percent = Math.round(e.progress * 100);
-    this.startSweep();
-    this.progress.update((prev) => {
-      const next = new Map(prev);
-
-      if (e.mediaType === 'series' && e.seasonNumber != null) {
-        const cur = next.get(e.mediaId);
-        const seasons = new Map(cur?.seasons ?? []);
-        const leaves = new Map(seasons.get(e.seasonNumber)?.leaves ?? []);
-        const key = leafKey(e.episodeNumber, e.ref);
-
-        // A download with a ref stands in for the placeholder its grab put up
-        // for the same scope, which has no identity to be matched on — on a
-        // retirement as much as on a live tick.
-        if (e.ref) leaves.delete(e.episodeNumber ?? 'PACK');
-        if (e.progress >= 1) leaves.delete(key);
-        else {
-          leaves.set(key, {
-            percent,
-            state: e.state,
-            episodeNumber: e.episodeNumber,
-            dlspeed: e.dlspeed,
-            eta: e.eta,
-            updatedAt: Date.now(),
-          });
-        }
-
-        if (leaves.size === 0) seasons.delete(e.seasonNumber);
-        else seasons.set(e.seasonNumber, { leaves });
-
-        if (seasons.size === 0) {
-          next.delete(e.mediaId);
-          return next;
-        }
-        next.set(e.mediaId, {
-          mediaId: e.mediaId,
-          mediaType: 'series',
-          seasons,
-          ...rollupSeasons(seasons),
-        });
-        return next;
-      }
-
-      // A series tick with no season number cannot be placed. The plugin sends
-      // these for a history row that never got a season/episode id, so it is a
-      // steady state, not a blip. Merging one onto whichever leaf happens to be
-      // alone would attribute another download's percent to it, and taking the
-      // movie branch below would flatten the entry and lose the season map with
-      // it. Drop it: the next attributed tick carries the same truth.
-      if (e.mediaType === 'series') return next;
-
-      // Movie (single download — no season dimension).
-      if (e.progress >= 1) {
+    this.reported.update((prev) => {
+      if (!entry) {
+        if (!prev.has(e.mediaId)) return prev;
+        const next = new Map(prev);
         next.delete(e.mediaId);
         return next;
       }
-      const f = foldLeaves([{ percent, state: e.state }]);
-      next.set(e.mediaId, {
-        mediaId: e.mediaId,
-        mediaType: e.mediaType,
-        percent: f.percent,
-        state: f.state || 'active',
-        dlspeed: e.dlspeed,
-        eta: e.eta,
-        updatedAt: Date.now(),
-      });
+      return new Map(prev).set(e.mediaId, entry);
+    });
+
+    // A scope the snapshot now reports has a real download: the placeholder has been superseded.
+    this.dropGrabbing(e.mediaId, (scope) => e.downloads.some((d) => sameScope(scope, d)));
+  }
+
+  private dropGrabbing(mediaId: number, matches: (scope: GrabbingScope) => boolean): void {
+    this.grabbing.update((prev) => {
+      const scopes = prev.get(mediaId);
+      if (!scopes?.length) return prev;
+      const kept = scopes.filter((s) => !matches(s));
+      if (kept.length === scopes.length) return prev;
+      const next = new Map(prev);
+      if (kept.length) next.set(mediaId, kept);
+      else next.delete(mediaId);
       return next;
     });
   }
 
   /**
-   * Mark a grab as under way for a scope, before any download exists: the header
-   * says "searching" from the click instead of from the download client's first
-   * tick, seconds later. Returns the release to call when the request settles —
-   * either way, since a failed search must not leave the badge up.
-   *
-   * Modelled as an ordinary leaf so scoping, folding and rendering need no
-   * special case: an episode grab is keyed to that episode and stays off its
-   * siblings' pages, exactly like the download that replaces it.
+   * Mark a grab as under way for a scope, before any download exists: the header says
+   * "searching" from the click instead of from the download client's first tick, seconds later.
+   * Returns the release to call when the request settles — either way, since a failed search
+   * must not leave the badge up.
    */
   markGrabbing(e: {
     mediaId: number;
@@ -266,100 +312,72 @@ export class DownloadProgressService {
     seasonNumber?: number;
     episodeNumber?: number;
   }): () => void {
-    const key = leafKey(e.episodeNumber);
-    // A download already reporting for this scope says strictly more than
-    // "searching" — leave it, and make the release a no-op.
-    if (this.leafState(e) !== undefined) return () => undefined;
+    const scope: GrabbingScope = {
+      mediaType: e.mediaType,
+      seasonNumber: e.seasonNumber,
+      episodeNumber: e.episodeNumber,
+    };
+    // A download already reporting for this scope says strictly more than "searching".
+    if (this.reportsScope(e.mediaId, scope)) return () => undefined;
 
-    this.applyPhase({ ...e, progress: 0, dlspeed: 0, eta: 0, state: 'searching' });
+    this.grabbing.update((prev) => {
+      const scopes = prev.get(e.mediaId) ?? [];
+      if (scopes.some((s) => sameScope(s, scope))) return prev;
+      return new Map(prev).set(e.mediaId, [...scopes, scope]);
+    });
 
     let released = false;
     return () => {
       if (released) return;
       released = true;
-      // Real progress landed while the request was in flight: it owns the leaf.
-      if (this.leafState(e) !== 'searching') return;
-      this.progress.update((prev) => {
-        const cur = prev.get(e.mediaId);
-        if (!cur) return prev;
-        const next = new Map(prev);
-        if (!cur.seasons || e.seasonNumber == null) {
-          next.delete(e.mediaId);
-          return next;
-        }
-        const seasons = new Map(cur.seasons);
-        const leaves = new Map(seasons.get(e.seasonNumber)?.leaves ?? []);
-        leaves.delete(key);
-        if (leaves.size === 0) seasons.delete(e.seasonNumber);
-        else seasons.set(e.seasonNumber, { leaves });
-        if (seasons.size === 0) {
-          next.delete(e.mediaId);
-          return next;
-        }
-        const rolled = rollupSeasons(seasons);
-        next.set(e.mediaId, { ...cur, seasons, ...rolled });
-        return next;
-      });
+      this.dropGrabbing(e.mediaId, (s) => sameScope(s, scope));
     };
   }
 
-  /** Phase of the leaf a grab scope maps to, or undefined when there is none. */
-  private leafState(e: {
-    mediaId: number;
-    seasonNumber?: number;
-    episodeNumber?: number;
-  }): ProgressPhase | undefined {
-    const cur = this.progress().get(e.mediaId);
-    if (!cur) return undefined;
-    if (!cur.seasons || e.seasonNumber == null) return cur.state;
-    // Matched on the leaf's own episode: the key identifies the download, so a
-    // live download is keyed by its ref and reconstructing a key from the
-    // episode number could only ever find the placeholder.
-    for (const leaf of cur.seasons.get(e.seasonNumber)?.leaves.values() ?? []) {
-      if (leaf.episodeNumber === e.episodeNumber) return leaf.state;
+  /** Whether the server already reports a download covering this scope. */
+  private reportsScope(mediaId: number, scope: GrabbingScope): boolean {
+    const cur = this.reported().get(mediaId);
+    if (!cur) return false;
+    if (!cur.seasons || scope.seasonNumber == null) return true;
+    for (const leaf of cur.seasons.get(scope.seasonNumber)?.leaves.values() ?? []) {
+      if (leaf.episodeNumber === scope.episodeNumber) return true;
     }
-    return undefined;
+    return false;
   }
 
-  /** Retire progress for a finished import. With an `episodeNumber` on a series
-   *  drop only that episode's leaf (sibling episodes keep advancing); with only
-   *  a `seasonNumber` drop the whole season (pack / multi-episode import);
-   *  otherwise drop the whole media entry. */
-  clearMedia(
-    mediaId: number,
-    seasonNumber?: number,
-    episodeNumber?: number,
-  ): void {
-    this.progress.update((prev) => {
+  /** Retire progress for a finished import, ahead of the publisher's next snapshot. With an
+   *  `episodeNumber` on a series drop only that episode's leaf (sibling episodes keep
+   *  advancing); with only a `seasonNumber` drop the whole season (pack / multi-episode
+   *  import); otherwise drop the whole media entry. */
+  clearMedia(mediaId: number, seasonNumber?: number, episodeNumber?: number): void {
+    this.dropGrabbing(
+      mediaId,
+      (s) => seasonNumber == null || (s.seasonNumber === seasonNumber && (episodeNumber == null || s.episodeNumber === episodeNumber)),
+    );
+    this.reported.update((prev) => {
       const cur = prev.get(mediaId);
       if (!cur) return prev;
       const next = new Map(prev);
 
-      if (seasonNumber != null && cur.seasons) {
-        const seasons = new Map(cur.seasons);
-        const sp = seasons.get(seasonNumber);
-        if (sp) {
-          if (episodeNumber != null) {
-            // By the leaf's own episode, for the same reason as `leafState`.
-            // Narrower than the scope filter used for rendering: a leaf naming
-            // no episode is a pack, which one episode's import doesn't finish.
-            const leaves = new Map(
-              [...sp.leaves].filter(([, l]) => l.episodeNumber !== episodeNumber),
-            );
-            if (leaves.size === 0) seasons.delete(seasonNumber);
-            else seasons.set(seasonNumber, { leaves });
-          } else {
-            seasons.delete(seasonNumber);
-          }
-        }
-        if (seasons.size === 0) {
-          next.delete(mediaId);
-        } else {
-          next.set(mediaId, { ...cur, seasons, ...rollupSeasons(seasons) });
-        }
-      } else {
+      if (seasonNumber == null || !cur.seasons) {
         next.delete(mediaId);
+        return next;
       }
+      const seasons = new Map(cur.seasons);
+      const sp = seasons.get(seasonNumber);
+      if (sp) {
+        if (episodeNumber != null) {
+          // Narrower than the scope filter used for rendering: a leaf naming no episode is a
+          // pack, which one episode's import does not finish.
+          const leaves = new Map([...sp.leaves].filter(([, l]) => l.episodeNumber !== episodeNumber));
+          if (leaves.size === 0) seasons.delete(seasonNumber);
+          else seasons.set(seasonNumber, { leaves });
+        } else {
+          seasons.delete(seasonNumber);
+        }
+      }
+      if (seasons.size === 0) next.delete(mediaId);
+      else next.set(mediaId, { ...cur, seasons, ...rollupSeasons(seasons) });
       return next;
     });
   }

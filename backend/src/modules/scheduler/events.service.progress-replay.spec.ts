@@ -9,15 +9,21 @@ function connect(events: EventsService, userId: number): unknown[] {
   return received;
 }
 
-const progressEvent = (overrides: Partial<Record<string, unknown>> = {}) => ({
-  type: 'download.progress' as const,
-  mediaId: 42,
-  mediaType: 'movie' as const,
+const dl = (over: Partial<Record<string, unknown>> = {}) => ({
+  ref: 'aaa',
   progress: 0.37,
   dlspeed: 1000,
   eta: 60,
   state: 'active' as const,
-  ...overrides,
+  ...over,
+});
+
+/** A push carries a media's whole set, so a test about one download states a set of one. */
+const progressEvent = (downloads: ReturnType<typeof dl>[] = [dl()], mediaId = 42) => ({
+  type: 'download.progress' as const,
+  mediaId,
+  mediaType: 'movie' as const,
+  downloads,
 });
 
 /**
@@ -39,7 +45,8 @@ describe('EventsService — download.progress replay on connect', () => {
     const received = connect(events, 1);
 
     expect(received[0]).toMatchObject({ type: 'sse.connected' });
-    expect(received[1]).toMatchObject({ type: 'download.progress', mediaId: 42, progress: 0.37 });
+    expect(received[1]).toMatchObject({ type: 'download.progress', mediaId: 42 });
+    expect((received[1] as { downloads: { progress: number }[] }).downloads[0]!.progress).toBe(0.37);
     expect(received).toHaveLength(2);
   });
 
@@ -72,36 +79,36 @@ describe('EventsService — download.progress replay on connect', () => {
     expect(received).toHaveLength(1); // handshake only, no stale progress
   });
 
-  it('retires only the finished season, keeping a sibling season\'s progress live', () => {
+  it("retires only the finished season, keeping a sibling season's downloads live", () => {
     const events = setup();
-    events.emitToUsers([1], progressEvent({ seasonNumber: 1 }));
-    events.emitToUsers([1], progressEvent({ seasonNumber: 2 }));
+    events.emitToUsers([1], progressEvent([dl({ ref: 'a', seasonNumber: 1 }), dl({ ref: 'b', seasonNumber: 2 })]));
     events.emitToUsers([1], { type: 'import.complete', mediaId: 42, seasonNumber: 1, title: 'x' });
 
     const received = connect(events, 1);
 
-    expect(received).toHaveLength(2); // handshake + season 2 only
-    expect(received[1]).toMatchObject({ seasonNumber: 2 });
+    expect(received).toHaveLength(2); // handshake + the trimmed snapshot
+    expect((received[1] as { downloads: { ref: string }[] }).downloads.map((d) => d.ref)).toEqual(['b']);
   });
 
-  it('drops a leaf outright if a push already reports it done (progress >= 1)', () => {
+  it('VERDICT: an empty snapshot drops the media, which is how a removal replays as gone', () => {
     const events = setup();
-    events.emitToUsers([1], progressEvent({ progress: 1 }));
+    events.emitToUsers([1], progressEvent());
+    events.emitToUsers([1], progressEvent([]));
 
     const received = connect(events, 1);
 
     expect(received).toHaveLength(1); // handshake only
   });
 
-  it('a live tick after connecting still arrives normally, on top of the replay', () => {
+  it('a live push after connecting still arrives normally, on top of the replay', () => {
     const events = setup();
     events.emitToUsers([1], progressEvent());
 
     const received = connect(events, 1);
-    events.emitToUsers([1], progressEvent({ progress: 0.5 }));
+    events.emitToUsers([1], progressEvent([dl({ progress: 0.5 })]));
 
     expect(received).toHaveLength(3);
-    expect(received[2]).toMatchObject({ progress: 0.5 });
+    expect((received[2] as { downloads: { progress: number }[] }).downloads[0]!.progress).toBe(0.5);
   });
 });
 

@@ -8,7 +8,7 @@ import {
   describeBadge,
   describeDownload,
 } from './download-format';
-import { DownloadLeaf, MediaDownloadProgress } from '../../core/services/download-progress.service';
+import { DownloadLeaf, LeafKey, MediaDownloadProgress } from '../../core/services/download-progress.service';
 import { DownloadProgressState } from '../../core/enums/download-progress-state.enum';
 
 const leaf = (state: DownloadProgressState, percent = 50): DownloadLeaf => ({ state, percent });
@@ -109,8 +109,8 @@ describe('download-format', () => {
         dlspeed: 0,
         eta: 0,
         seasons: new Map([
-          [1, { leaves: new Map([[1, leaf('stalled', 10)]]) }],
-          [2, { leaves: new Map([[1, leaf('active', 80)]]) }],
+          [1, { leaves: new Map([['ref:a', leaf('stalled', 10)]]) }],
+          [2, { leaves: new Map([['ref:b', leaf('active', 80)]]) }],
         ]),
       };
       const d = describeBadge(progress, {
@@ -129,7 +129,7 @@ describe('download-format', () => {
   describe('describeDownload — episode scope', () => {
     // The store keys a leaf by its download and records the episode on the leaf,
     // so a fixture has to carry the attribute the scope filter reads.
-    const season1 = (leaves: [number | 'PACK', DownloadLeaf][]): MediaDownloadProgress => ({
+    const season1 = (leaves: [LeafKey, DownloadLeaf][]): MediaDownloadProgress => ({
       mediaId: 2,
       mediaType: 'series',
       percent: 50,
@@ -140,16 +140,15 @@ describe('download-format', () => {
         [
           1,
           {
-            leaves: new Map(
-              leaves.map(([k, l]) => [k, typeof k === 'number' ? { ...l, episodeNumber: k } : l]),
-            ),
+            // The key is the reporter's own ref; the episode a leaf belongs to lives on the leaf.
+            leaves: new Map(leaves),
           },
         ],
       ]),
     });
 
     it('says nothing on episode 7 while only episode 8 downloads', () => {
-      const d = describeDownload(season1([[8, leaf('active', 52)]]), {
+      const d = describeDownload(season1([['ref:e8', { ...leaf('active', 52), episodeNumber: 8 }]]), {
         seasonFilter: [1],
         episodeFilter: 7,
       });
@@ -157,7 +156,7 @@ describe('download-format', () => {
     });
 
     it("reports the episode's own download", () => {
-      const d = describeDownload(season1([[7, leaf('active', 52)]]), {
+      const d = describeDownload(season1([['ref:e7', { ...leaf('active', 52), episodeNumber: 7 }]]), {
         seasonFilter: [1],
         episodeFilter: 7,
       });
@@ -165,7 +164,7 @@ describe('download-format', () => {
     });
 
     it('reports a season pack on every episode of the season', () => {
-      const progress = season1([['PACK', leaf('active', 30)]]);
+      const progress = season1([['ref:pack', leaf('active', 30)]]);
       expect(describeDownload(progress, { seasonFilter: [1], episodeFilter: 7 })?.percent).toBe(30);
       expect(describeDownload(progress, { seasonFilter: [1], episodeFilter: 8 })?.percent).toBe(30);
     });
