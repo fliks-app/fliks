@@ -176,12 +176,16 @@ export class SseService implements OnDestroy {
         }
         break;
       }
-      case 'download.progress':
+      case 'download.progress': {
+        // An empty `downloads` retires the media, so an event that carries no array at all must
+        // be ignored rather than read as one: "said nothing" and "said nothing is running" are
+        // opposite statements, and only the second may erase what is on screen.
+        const downloads = event['downloads'];
+        if (!Array.isArray(downloads)) break;
         this.downloadProgress.applyProgress({
           mediaId: Number(event['mediaId']),
           mediaType: event['mediaType'] as MediaType,
-          // The whole set for this media, so an absent download is a retired one.
-          downloads: (Array.isArray(event['downloads']) ? event['downloads'] : []).map(
+          downloads: downloads.map(
             (d: Record<string, unknown>) => ({
               ref: String(d['ref'] ?? ''),
               seasonNumber: d['seasonNumber'] as number | undefined,
@@ -194,6 +198,7 @@ export class SseService implements OnDestroy {
           ),
         });
         break;
+      }
       case 'import.complete':
         // The download finished → retire its live progress (just the imported
         // season for a series; the whole entry otherwise).
