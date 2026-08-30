@@ -6,6 +6,10 @@ import { firstValueFrom } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucideTriangleAlert } from '@lucide/angular';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
+import { evaluateWhen } from '../../core/plugin-ui/when-evaluator';
+import { AuthService } from '../../core/services/auth.service';
+import { TvService } from '../../core/services/tv.service';
+import { DeviceService } from '../../core/services/device.service';
 import { SettingsApiService } from '../../core/services/api/settings-api.service';
 import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -123,6 +127,9 @@ export class PluginViewComponent implements OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
+  private readonly auth = inject(AuthService);
+  private readonly tv = inject(TvService);
+  private readonly device = inject(DeviceService);
 
   // Angular reuses this component across param changes on the same route
   // config (same wildcard path, different pluginId/view) — read reactively.
@@ -338,9 +345,23 @@ export class PluginViewComponent implements OnDestroy {
       }));
   }
 
-  /** Only `kind: 'proxy'` carries a plugin-relative path — `route`/`action` resolve in-app. */
+  /**
+   * Only `kind: 'proxy'` carries a plugin-relative path — `route`/`action` resolve in-app.
+   *
+   * `when` is evaluated here rather than in `<app-data-table>`: it reads the viewer, and a
+   * generic table has no business knowing about permissions. The row-scoped `visibleWhen`
+   * rides through untouched — only the table holds a row.
+   */
   tableRowActions(view: TableView): RowAction[] {
-    return (view.rowActions ?? []).map((a) => (a.kind === 'proxy' ? { ...a, path: this.resourceUrl(a.path) } : a));
+    const ctx = {
+      isAdmin: this.auth.user()?.isAdmin ?? false,
+      hasPermission: (p: string) => this.auth.hasPermission(p),
+      isTv: this.tv.isTv(),
+      isTouch: this.device.isTouch(),
+    };
+    return (view.rowActions ?? [])
+      .filter((a) => evaluateWhen(a.when, ctx))
+      .map((a) => (a.kind === 'proxy' ? { ...a, path: this.resourceUrl(a.path) } : a));
   }
 
   tableListActions(view: TableView): ListAction[] {

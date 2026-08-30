@@ -2,6 +2,17 @@
   <div class="modal-box">
     <app-modal-header [title]="title()" />
     <p class="py-4 whitespace-pre-line">{{ message() }}</p>
+    @if (toggleLabel(); as tl) {
+      <label class="label cursor-pointer justify-start gap-3 pb-4">
+        <input
+          type="checkbox"
+          class="checkbox checkbox-sm"
+          [checked]="confirmService.toggle()"
+          (change)="confirmService.toggle.set($any($event.target).checked)"
+        />
+        <span class="label-text">{{ tl }}</span>
+      </label>
+    }
     <app-modal-footer>
       @if (dismissLabel(); as dl) {
         <button class="btn btn-ghost" (click)="confirmService.dismiss()">{{ dl }}</button>

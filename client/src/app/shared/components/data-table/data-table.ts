@@ -19,6 +19,7 @@ import { formatBytes, formatSpeed } from '../../utils/download-format';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SseService } from '../../../core/services/sse.service';
 import { PaginationComponent } from '../pagination/pagination';
+import { ProgressBadgeComponent } from '../progress-badge/progress-badge.component';
 import {
   BadgeTone,
   CellValue,
@@ -28,6 +29,7 @@ import {
   TableColumn,
   TableFilter,
   TableRow,
+  TableRowCondition,
   TableSubValue,
 } from './data-table.types';
 import { ModalHeaderComponent } from '../modal-header';
@@ -67,6 +69,7 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
     TranslateModule,
     LocaleDatePipe,
     PaginationComponent,
+    ProgressBadgeComponent,
   ],
   providers: [LocaleDatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -275,6 +278,14 @@ export class DataTableComponent implements OnInit {
     return BADGE_CLASSES[tone] ?? BADGE_CLASSES.ghost;
   }
 
+  /** The 0–100 fill for a badged cell that declares `progressField`, or null to render the
+   *  badge flat. A row reporting no number yet (an unreachable client) is not 0%. */
+  cellProgress(col: TableColumn, row: TableRow): number | null {
+    if (!col.progressField) return null;
+    const value = row[col.progressField];
+    return typeof value === 'number' ? Math.round(value) : null;
+  }
+
   /** The row's detail text for this column, or '' when there is none to open. A cell only
    *  becomes a button when it has something to show. */
   detailText(col: TableColumn, row: TableRow): string {
@@ -335,10 +346,24 @@ export class DataTableComponent implements OnInit {
     });
   }
 
+  /** A declared `visibleWhen` read off the row. Absent means "always"; a clause naming a field
+   *  the row does not carry hides the action, since an unreadable condition is not a met one. */
+  private rowAllows(condition: TableRowCondition | undefined, row: TableRow): boolean {
+    if (!condition) return true;
+    if (!(condition.key in row)) return false;
+    return condition.in.includes(row[condition.key] ?? null);
+  }
+
+  /** A `proxy` path may carry `:id` — the row's own, never the declared pattern. */
+  private rowPath(path: string, row: TableRow): string {
+    return path.replace(':id', encodeURIComponent(String(row.id)));
+  }
+
   /** Drops any `action`-kind entry whose actionId the host doesn't recognise. */
   visibleActions(row: TableRow): { action: RowAction; run: () => void | Promise<void> }[] {
     const result: { action: RowAction; run: () => void | Promise<void> }[] = [];
     for (const action of this.rowActions()) {
+      if (!this.rowAllows(action.visibleWhen, row)) continue;
       if (action.kind === 'action') {
         const handler = this.resolveAction()(action.actionId, row);
         if (handler) result.push({ action, run: handler });
@@ -358,12 +383,18 @@ export class DataTableComponent implements OnInit {
 
   private async runProxy(
     row: TableRow,
-    action: { kind: 'proxy'; method: 'POST' | 'DELETE'; path: string; confirmKey?: string },
+    action: Extract<RowAction, { kind: 'proxy' }>,
   ): Promise<void> {
+    // Keyed on the declared path, which is what the template's disabled check compares against.
     this.busy.set(`${row.id}:${action.path}`);
     try {
-      if (await this.runHttpAction(action.method, action.path, action.confirmKey))
-        await this.loadRows();
+      const ran = await this.runHttpAction(
+        action.method,
+        this.rowPath(action.path, row),
+        action.confirmKey,
+        action.confirmToggle,
+      );
+      if (ran) await this.loadRows();
     } catch {
       // handled by the global error interceptor
     } finally {
@@ -384,13 +415,27 @@ export class DataTableComponent implements OnInit {
     }
   }
 
-  /** Returns false without calling anything when the user declines the confirm — not an error. */
+  /** Returns false without calling anything when the user declines the confirm — not an error.
+   *  A `confirmToggle` rides along as a query param, so its answer reaches the route that acts
+   *  on it rather than being decided again server-side. Declared without a `confirmKey` it is
+   *  dropped: there is no dialog to render it in, and sending its default silently is worse. */
   private async runHttpAction(
     method: 'POST' | 'DELETE',
     path: string,
     confirmKey?: string,
+    toggle?: { labelKey: string; param: string },
   ): Promise<boolean> {
-    if (confirmKey) {
+    let url = path;
+    if (confirmKey && toggle) {
+      const { ok, toggle: checked } = await this.confirmation.confirmWithToggle({
+        title: this.translate.instant('common.confirm'),
+        message: this.translate.instant(confirmKey),
+        variant: 'danger',
+        toggleLabel: this.translate.instant(toggle.labelKey),
+      });
+      if (!ok) return false;
+      url = `${path}${path.includes('?') ? '&' : '?'}${toggle.param}=${checked}`;
+    } else if (confirmKey) {
       const ok = await this.confirmation.confirm({
         title: this.translate.instant('common.confirm'),
         message: this.translate.instant(confirmKey),
@@ -398,7 +443,7 @@ export class DataTableComponent implements OnInit {
       });
       if (!ok) return false;
     }
-    await firstValueFrom(method === 'POST' ? this.http.post(path, {}) : this.http.delete(path));
+    await firstValueFrom(method === 'POST' ? this.http.post(url, {}) : this.http.delete(url));
     return true;
   }
 }

@@ -12,8 +12,16 @@ export interface ConfirmOptions {
   variant?: ConfirmVariant;
 }
 
+/** A confirm carrying one checkbox — a decision the confirmation itself has to capture,
+ *  since it changes what the confirmed action does rather than whether it runs. */
+export interface ConfirmToggleOptions extends ConfirmOptions {
+  toggleLabel: string;
+  toggleDefault?: boolean;
+}
+
 interface InternalConfirmState extends ConfirmOptions {
   alertOnly: boolean;
+  toggleLabel?: string;
   resolve: (value: boolean | null) => void;
 }
 
@@ -27,6 +35,21 @@ export class ConfirmationService {
         ...options,
         alertOnly: false,
         resolve: (v) => resolve(v === true),
+      });
+    });
+  }
+
+  /** The checkbox's live state while a `confirmWithToggle` dialog is open. */
+  readonly toggle = signal(false);
+
+  /** Cancelling reports the toggle's state anyway; every caller ignores it when `ok` is false. */
+  confirmWithToggle(options: ConfirmToggleOptions): Promise<{ ok: boolean; toggle: boolean }> {
+    this.toggle.set(options.toggleDefault ?? false);
+    return new Promise((resolve) => {
+      this.state.set({
+        ...options,
+        alertOnly: false,
+        resolve: (v) => resolve({ ok: v === true, toggle: this.toggle() }),
       });
     });
   }

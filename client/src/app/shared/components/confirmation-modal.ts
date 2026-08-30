@@ -36,6 +36,7 @@ export class ConfirmationModalComponent {
   readonly variant = computed(() => this.confirmService.state()?.variant ?? 'default');
 
   readonly alertOnly = computed(() => this.confirmService.state()?.alertOnly ?? false);
+  readonly toggleLabel = computed(() => this.confirmService.state()?.toggleLabel ?? null);
   readonly dismissLabel = computed(() => this.confirmService.state()?.dismissLabel ?? null);
 
   readonly confirmBtnClass = computed(() => {
