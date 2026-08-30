@@ -27,6 +27,7 @@ import {
   PagedResult,
   RowAction,
   TableColumn,
+  TableDetailField,
   TableFilter,
   TableRow,
   TableRowCondition,
@@ -115,6 +116,12 @@ export class DataTableComponent implements OnInit {
 
   /** The open detail dialog's title key and text, or null when it is closed. */
   readonly detail = signal<{ titleKey: string; text: string } | null>(null);
+
+  /** The open `detail` row action's dialog: its title and the lines that had a value. */
+  readonly rowDetail = signal<{
+    titleKey: string;
+    lines: { labelKey: string; text: string; href?: string }[];
+  } | null>(null);
 
   readonly page = signal(1);
   readonly total = signal(0);
@@ -278,6 +285,43 @@ export class DataTableComponent implements OnInit {
     return BADGE_CLASSES[tone] ?? BADGE_CLASSES.ghost;
   }
 
+  /** A URL a row supplies is indexer data, not manifest data: anything but http(s) — a
+   *  `javascript:` payload above all — renders as plain text instead of an anchor. */
+  private safeHref(value: CellValue): string | undefined {
+    if (typeof value !== 'string' || !value) return undefined;
+    try {
+      const url = new URL(value);
+      return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** A cell's link handler, or undefined when the column declares none, the id is unknown, or
+   *  this row cannot resolve it — the cell is then plain text, never a dead link. */
+  cellLink(col: TableColumn, row: TableRow): (() => void) | undefined {
+    return col.linkActionId ? this.resolveAction()(col.linkActionId, row) : undefined;
+  }
+
+  private detailLines(fields: readonly TableDetailField[], row: TableRow) {
+    const lines: { labelKey: string; text: string; href?: string }[] = [];
+    for (const field of fields) {
+      const value = row[field.key];
+      if (value === null || value === undefined || value === '') continue;
+      if (field.kind === 'link') {
+        const href = this.safeHref(value);
+        if (href) lines.push({ labelKey: field.labelKey, text: this.translate.instant(field.textKey), href });
+        continue;
+      }
+      lines.push({ labelKey: field.labelKey, text: this.subValueText(field, value) });
+    }
+    return lines;
+  }
+
+  closeRowDetail(): void {
+    this.rowDetail.set(null);
+  }
+
   /** The 0–100 fill for a badged cell that declares `progressField`, or null to render the
    *  badge flat. A row reporting no number yet (an unreachable client) is not 0%. */
   cellProgress(col: TableColumn, row: TableRow): number | null {
@@ -367,6 +411,15 @@ export class DataTableComponent implements OnInit {
       if (action.kind === 'action') {
         const handler = this.resolveAction()(action.actionId, row);
         if (handler) result.push({ action, run: handler });
+      } else if (action.kind === 'detail') {
+        result.push({
+          action,
+          run: () =>
+            this.rowDetail.set({
+              titleKey: action.titleKey ?? action.labelKey,
+              lines: this.detailLines(action.fields, row),
+            }),
+        });
       } else if (action.kind === 'route') {
         result.push({
           action,

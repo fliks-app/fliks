@@ -426,6 +426,64 @@ describe('PluginViewComponent', () => {
     http.verify();
   });
 
+  it('VERDICT: a row naming an episode lands on that episode, not on the series root', async () => {
+    const { fixture, http, navigateByUrl } = createComponent(
+      { pluginId: 'fliks.a', view: 'queue' },
+      {
+        hasPlugin: () => true,
+        configPage: () => ({
+          kind: 'table',
+          id: 'x',
+          labelKey: 'x.title',
+          list: '/queue',
+          columns: [{ key: 'name', labelKey: 'x.col_name', linkActionId: 'table.open-media' }],
+          rowActions: [{ kind: 'action', labelKey: 'x.open', actionId: 'table.open-media' }],
+        }),
+      },
+    );
+    fixture.detectChanges();
+    http.expectOne({ url: '/api/plugins/fliks.a/queue', method: 'GET' }).flush([
+      { id: 1, name: 'Show A - S01E02', mediaId: 42, mediaType: 'series', episodeId: 7 },
+    ]);
+    await settle(fixture);
+
+    // The title cell is the link now, so clicking it is what a user actually does.
+    const link = (Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[]).find(
+      (b) => b.textContent?.includes('Show A - S01E02'),
+    );
+    expect(link).toBeDefined();
+    link!.click();
+    expect(navigateByUrl).toHaveBeenCalledWith('/series/42/episode/7');
+    http.verify();
+  });
+
+  it('a movie row ignores any episodeId and lands on the movie page', async () => {
+    const { fixture, http, navigateByUrl } = createComponent(
+      { pluginId: 'fliks.a', view: 'queue' },
+      {
+        hasPlugin: () => true,
+        configPage: () => ({
+          kind: 'table',
+          id: 'x',
+          labelKey: 'x.title',
+          list: '/queue',
+          columns: [{ key: 'name', labelKey: 'x.col_name' }],
+          rowActions: [{ kind: 'action', labelKey: 'x.open', actionId: 'table.open-media' }],
+        }),
+      },
+    );
+    fixture.detectChanges();
+    http.expectOne({ url: '/api/plugins/fliks.a/queue', method: 'GET' }).flush([
+      { id: 1, name: 'A Film', mediaId: 9, mediaType: 'movie', episodeId: null },
+    ]);
+    await settle(fixture);
+    (Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[])
+      .find((b) => b.textContent?.includes('x.open'))!
+      .click();
+    expect(navigateByUrl).toHaveBeenCalledWith('/movies/9');
+    http.verify();
+  });
+
   it('a table `proxy` row action hits the proxied route with its declared method; a `route` row action navigates in-app unprefixed', async () => {
     const { fixture, http, navigateByUrl } = createComponent(
       { pluginId: 'fliks.a', view: 'queue' },

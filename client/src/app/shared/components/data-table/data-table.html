@@ -110,7 +110,11 @@
                       {{ cellSpeed(row[col.key]) }}
                     }
                     @default {
-                      @if (col.truncate) {
+                      @if (cellLink(col, row); as open) {
+                        <button type="button" class="link link-hover text-start" (click)="open()">
+                          {{ cellLabel(col, row[col.key]) }}
+                        </button>
+                      } @else if (col.truncate) {
                         <!-- The width cap is what makes the ellipsis appear: a table cell sizes
                              to its content otherwise, however narrow the viewport. -->
                         <span
@@ -198,6 +202,38 @@
     }
   }
 </div>
+
+@if (rowDetail(); as open) {
+  <dialog class="modal modal-open">
+    <div class="modal-box max-w-lg">
+      <app-modal-header [title]="open.titleKey | translate" (closed)="closeRowDetail()" />
+      <dl class="flex flex-col gap-3 py-2">
+        @for (line of open.lines; track line.labelKey) {
+          <div class="flex flex-col gap-0.5">
+            <dt class="text-sm text-base-content/60">{{ line.labelKey | translate }}</dt>
+            <dd class="break-words">
+              @if (line.href) {
+                <a class="link" [href]="line.href" target="_blank" rel="noopener noreferrer">{{ line.text }}</a>
+              } @else {
+                {{ line.text }}
+              }
+            </dd>
+          </div>
+        }
+      </dl>
+      <app-modal-footer>
+        <button type="button" class="btn btn-ghost" (click)="closeRowDetail()">
+          {{ 'common.close' | translate }}
+        </button>
+      </app-modal-footer>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button type="button" (click)="closeRowDetail()" [attr.aria-label]="'common.close' | translate">
+        close
+      </button>
+    </form>
+  </dialog>
+}
 
 @if (detail(); as open) {
   <dialog class="modal modal-open">
