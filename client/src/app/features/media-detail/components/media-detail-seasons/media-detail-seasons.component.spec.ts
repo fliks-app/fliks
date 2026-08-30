@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { MediaDetailSeasonsComponent } from './media-detail-seasons.component';
-import { Media, Season } from '../../../../core/services/api/media.service';
+import { Episode, Media, Season } from '../../../../core/services/api/media.service';
 import { PlayableMediaService } from '../../../../core/services/playable-media.service';
 import { AddToPlaylistService } from '../../../../core/services/add-to-playlist.service';
 import { TvService } from '../../../../core/services/tv.service';
@@ -202,5 +202,24 @@ describe('MediaDetailSeasonsComponent — media.season.actions is plugin-only', 
       seasonGrabBestBusyIds: new Set([SEASON.id + 1]),
     });
     expect(seasonDropdownItems(other.nativeElement)[grabIdx].disabled).toBe(false);
+  });
+});
+
+describe('MediaDetailSeasonsComponent — episode dimming', () => {
+  const episode = (monitored: boolean) => ({ id: 1, monitored }) as Episode;
+
+  it('dims an unmonitored episode of a monitored series', async () => {
+    const fixture = await createFixture({ media: makeMedia({ monitored: true }) });
+    expect(fixture.componentInstance.episodeDimmed(episode(false))).toBe(true);
+  });
+
+  it('leaves a monitored episode alone', async () => {
+    const fixture = await createFixture({ media: makeMedia({ monitored: true }) });
+    expect(fixture.componentInstance.episodeDimmed(episode(true))).toBe(false);
+  });
+
+  it('VERDICT: dims nothing when the series itself is unmonitored, where every row would dim', async () => {
+    const fixture = await createFixture({ media: makeMedia({ monitored: false }) });
+    expect(fixture.componentInstance.episodeDimmed(episode(false))).toBe(false);
   });
 });
