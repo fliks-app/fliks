@@ -312,6 +312,12 @@ export class MediaDetailSeasonsComponent {
     );
   }
 
+  /** Dimming marks the exception. With the series unmonitored every episode is, so dimming all
+   *  of them says nothing and just makes the list harder to read. */
+  episodeDimmed(ep: Episode): boolean {
+    return this.media().monitored && !ep.monitored;
+  }
+
   episodeGrayscale(ep: Episode): boolean {
     return this.displaySettings.settings().grayUnreleased && episodeUnreleased(ep);
   }
