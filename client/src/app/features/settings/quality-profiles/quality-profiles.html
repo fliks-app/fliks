@@ -89,7 +89,7 @@
         <span class="label-text">{{ 'settings.quality_profiles.field_name' | translate }}</span>
         <input
           type="text"
-          class="input input-bordered input-sm w-full"
+          class="input input-bordered w-full"
           [ngModel]="formName()"
           (ngModelChange)="formName.set($event)"
         />
@@ -97,7 +97,7 @@
       <label class="form-control w-full">
         <span class="label-text">{{ 'settings.quality_profiles.field_cutoff' | translate }}</span>
         <select
-          class="select select-bordered select-sm w-full"
+          class="select select-bordered w-full"
           [ngModel]="formCutoff()"
           (ngModelChange)="formCutoff.set(+$event)"
         >
@@ -105,36 +105,30 @@
             <option [ngValue]="q.id">{{ q.name }} ({{ q.resolution }}p · {{ q.source }})</option>
           }
         </select>
+        <span class="text-sm text-base-content/60 mt-1">{{
+          'settings.quality_profiles.field_cutoff_hint' | translate
+        }}</span>
       </label>
-      <label class="label cursor-pointer justify-start items-center gap-3">
-        <input
-          type="checkbox"
-          class="toggle toggle-sm toggle-primary"
-          [ngModel]="formUpgrade()"
-          (ngModelChange)="formUpgrade.set($event)"
-        />
-        <span class="label-text">{{ 'settings.quality_profiles.field_upgrade' | translate }}</span>
-      </label>
+      <app-toggle-field
+        [value]="formUpgrade()"
+        (valueChange)="formUpgrade.set($event)"
+        [label]="'settings.quality_profiles.field_upgrade' | translate"
+      />
       @if (formUpgrade()) {
-        <label class="label cursor-pointer justify-start items-center gap-3">
-          <input
-            type="checkbox"
-            class="toggle toggle-sm toggle-primary"
-            [ngModel]="formResolutionUpgradeOnly()"
-            (ngModelChange)="formResolutionUpgradeOnly.set($event)"
-          />
-          <span class="label-text">{{
-            'settings.quality_profiles.field_resolution_upgrade_only' | translate
-          }}</span>
-        </label>
+        <app-toggle-field
+          [value]="formResolutionUpgradeOnly()"
+          (valueChange)="formResolutionUpgradeOnly.set($event)"
+          [label]="'settings.quality_profiles.field_resolution_upgrade_only' | translate"
+          [hint]="'settings.quality_profiles.field_resolution_upgrade_only_hint' | translate"
+        />
       }
       <div>
         <p class="text-sm font-medium mb-2">
           {{ 'settings.quality_profiles.qualities_group' | translate }}
         </p>
-        <div
-          class="rounded-lg border border-base-200 divide-y divide-base-200 max-h-[28rem] overflow-y-auto"
-        >
+        <!-- No scroller of its own: the modal body is already one, and the two nested
+             produced a scrollbar inside a scrollbar. -->
+        <div class="rounded-lg border border-base-200 divide-y divide-base-200">
           @for (q of definitions(); track q.id) {
             <div class="px-3 py-2 hover:bg-base-200/50">
               <div class="flex items-center gap-3">
