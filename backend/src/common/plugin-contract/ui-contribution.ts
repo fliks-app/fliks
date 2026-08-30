@@ -396,8 +396,10 @@ export interface TableConfigPage extends ConfigPageBase {
         confirmKey?: string;
         /** Renders a checkbox inside that confirmation and sends its state as the query
          *  parameter `param`. Needs `confirmKey`: a toggle with no dialog to sit in never
-         *  renders, and would silently send its default. */
-        confirmToggle?: { labelKey: string; param: string };
+         *  renders, and would silently send its default. `hintKey` is the line under it, for
+         *  what the choice does *not* do — the part a label long enough to say it stops being
+         *  a label. */
+        confirmToggle?: { labelKey: string; param: string; hintKey?: string };
         /** Danger styling on the button — a destructive row action must not look like the
          *  two beside it. */
         tone?: 'default' | 'danger';

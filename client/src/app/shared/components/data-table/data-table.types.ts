@@ -100,8 +100,9 @@ export type RowAction =
       method: 'POST' | 'DELETE';
       path: string;
       confirmKey?: string;
-      /** A checkbox inside the confirmation; its state rides along as the query param `param`. */
-      confirmToggle?: { labelKey: string; param: string };
+      /** A checkbox inside the confirmation; its state rides along as the query param `param`.
+       *  `hintKey` is the explanatory line under it. */
+      confirmToggle?: { labelKey: string; param: string; hintKey?: string };
       tone?: 'default' | 'danger';
       visibleWhen?: TableRowCondition;
     };

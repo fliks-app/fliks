@@ -489,7 +489,7 @@ export class DataTableComponent implements OnInit {
     method: 'POST' | 'DELETE',
     path: string,
     confirmKey?: string,
-    toggle?: { labelKey: string; param: string },
+    toggle?: { labelKey: string; param: string; hintKey?: string },
   ): Promise<boolean> {
     let url = path;
     if (confirmKey && toggle) {
@@ -498,6 +498,7 @@ export class DataTableComponent implements OnInit {
         message: this.translate.instant(confirmKey),
         variant: 'danger',
         toggleLabel: this.translate.instant(toggle.labelKey),
+        ...(toggle.hintKey ? { toggleHint: this.translate.instant(toggle.hintKey) } : {}),
       });
       if (!ok) return false;
       url = `${path}${path.includes('?') ? '&' : '?'}${toggle.param}=${checked}`;

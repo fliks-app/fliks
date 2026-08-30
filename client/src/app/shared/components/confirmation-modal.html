@@ -3,14 +3,19 @@
     <app-modal-header [title]="title()" />
     <p class="py-4 whitespace-pre-line">{{ message() }}</p>
     @if (toggleLabel(); as tl) {
-      <label class="label cursor-pointer justify-start gap-3 pb-4">
+      <label class="label cursor-pointer items-start justify-start gap-3 pb-4">
         <input
           type="checkbox"
-          class="checkbox checkbox-sm"
+          class="checkbox checkbox-sm mt-0.5 shrink-0"
           [checked]="confirmService.toggle()"
           (change)="confirmService.toggle.set($any($event.target).checked)"
         />
-        <span class="label-text">{{ tl }}</span>
+        <span class="flex flex-col gap-0.5">
+          <span class="label-text">{{ tl }}</span>
+          @if (toggleHint(); as th) {
+            <span class="text-sm text-base-content/60">{{ th }}</span>
+          }
+        </span>
       </label>
     }
     <app-modal-footer>
