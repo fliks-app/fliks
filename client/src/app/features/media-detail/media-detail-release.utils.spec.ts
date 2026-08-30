@@ -53,3 +53,14 @@ describe('isUnprofiledReleaseError', () => {
     expect(isUnprofiledReleaseError(undefined)).toBe(false);
   });
 });
+
+describe('releaseGrabBody — the tracker page', () => {
+  it('VERDICT: echoes the search hit back, since the grab route cannot derive it from downloadUrl', () => {
+    const body = releaseGrabBody(makeRelease({ infoUrl: 'https://tracker.example/details/42' }));
+    expect(body.infoUrl).toBe('https://tracker.example/details/42');
+  });
+
+  it('sends no key at all for a hit whose feed named no page', () => {
+    expect('infoUrl' in releaseGrabBody(makeRelease({}))).toBe(false);
+  });
+});
