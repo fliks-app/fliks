@@ -7,6 +7,9 @@ import type { ReleasePickerPair, ReleasePickerRoutes } from '@fliks/plugin-contr
 export interface MovieRelease {
   title: string;
   downloadUrl: string;
+  /** The tracker's own page for this release, when the feed named one. Distinct from
+   *  `downloadUrl`, which is the indexer's API endpoint and carries its key. */
+  infoUrl?: string;
   qualityId: number;
   qualityName: string;
   rank: number;
@@ -35,6 +38,8 @@ interface GrabBody {
   sourceId?: number;
   /** Manual override for a release the profile would otherwise reject — never sent for an allowed grab. */
   force?: boolean;
+  /** Echoed back from the search hit: the plugin cannot recover it from `downloadUrl`. */
+  infoUrl?: string;
 }
 
 interface RouteParams {

@@ -19,11 +19,16 @@ export function isUnprofiledReleaseError(err: unknown): boolean {
 
 /** A release outside the profile can still be grabbed by hand — `force` tells the
  *  plugin to skip the allowed-quality guard it enforces for an unattended grab. */
-export function releaseGrabBody(r: MovieRelease): { downloadUrl: string; sourceTitle: string; sourceId: number; force?: true } {
+export function releaseGrabBody(
+  r: MovieRelease,
+): { downloadUrl: string; sourceTitle: string; sourceId: number; infoUrl?: string; force?: true } {
   return {
     downloadUrl: r.downloadUrl,
     sourceTitle: r.title,
     sourceId: r.sourceId,
+    // The search hit carries the tracker's page; the grab route cannot derive it from
+    // `downloadUrl`, so a manual grab that dropped it recorded a row with no link.
+    ...(r.infoUrl ? { infoUrl: r.infoUrl } : {}),
     ...(r.allowed ? {} : { force: true }),
   };
 }
