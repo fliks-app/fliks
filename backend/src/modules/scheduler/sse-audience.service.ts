@@ -8,7 +8,7 @@ import { LibraryUserAccess } from '../libraries/entities/library-user-access.ent
 
 /**
  * Resolves which users should receive a media-scoped SSE toast (import done,
- * import failed, stalled torrent removed). The audience is the set of users who
+ * import failed, stalled download removed). The audience is the set of users who
  * requested that media. When a media has no linked requests (e.g. an admin
  * added it manually) the toast falls back to admins so library events are never
  * silently dropped.

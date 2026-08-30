@@ -75,7 +75,7 @@ export type SseEvent =
     }
   | { type: 'import.failed'; mediaId: number; title: string; error: string }
   | {
-      // Live torrent progress for an in-flight grab, delivered to the media's
+      // Live progress for an in-flight grab, delivered to the media's
       // request audience. `progress` is 0–1; `state` is core's closed
       // vocabulary (the client maps it to a label/colour). Season/episode set
       // for the matched scope of a series.
@@ -84,10 +84,11 @@ export type SseEvent =
       mediaType: 'movie' | 'series';
       seasonNumber?: number;
       episodeNumber?: number;
-      /** Torrent hash — disambiguates concurrent leaves of the same season when
-       *  the episode relation couldn't be resolved (loose episodes with no
-       *  episodeNumber would otherwise collide). */
-      hash?: string;
+      /** Opaque per-download identity, straight from `progress.set`'s `ref` — whatever the
+       *  plugin that reported it uses to tell its own downloads apart. Disambiguates concurrent
+       *  leaves of the same season when the episode relation couldn't be resolved (loose
+       *  episodes with no episodeNumber would otherwise collide). */
+      ref?: string;
       progress: number;
       dlspeed: number;
       eta: number;

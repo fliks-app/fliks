@@ -9,7 +9,7 @@ interface CachedLeaf {
   recordedAt: number;
 }
 
-// `CompletionService.processCompleted` re-emits every in-flight torrent once
+// `CompletionService.processCompleted` re-emits every in-flight download once
 // a minute — a leaf that has gone this many ticks without a refresh didn't
 // just miss one slow tick, it left the download client (stalled-removed,
 // user-deleted, media deleted, …) through a path that never reaches
@@ -24,7 +24,7 @@ const STALE_AFTER_MS = 3 * 60_000;
  * ticks sees nothing until the next one. Mirrors `PluginCountsCacheService`'s
  * shape — not persisted, a restart is a legitimate reset. `import.complete`
  * evicts a leaf immediately (the fast path); the age check in `snapshotFor`
- * is the backstop catch-all for every other way a torrent stops — it needs
+ * is the backstop catch-all for every other way a download stops — it needs
  * no list of end-events and self-heals on the next connect, no sweep timer.
  */
 @Injectable()
@@ -40,7 +40,7 @@ export class DownloadProgressCacheService {
   }
 
   private key(e: DownloadProgressEvent): string {
-    return `${e.mediaId}:${e.seasonNumber ?? ''}:${e.episodeNumber ?? ''}:${e.hash ?? ''}`;
+    return `${e.mediaId}:${e.seasonNumber ?? ''}:${e.episodeNumber ?? ''}:${e.ref ?? ''}`;
   }
 
   /** Record the latest push for its recipients. A leaf reporting done

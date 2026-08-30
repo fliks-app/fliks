@@ -182,7 +182,7 @@ export class SseService implements OnDestroy {
           mediaType: event['mediaType'] as MediaType,
           seasonNumber: event['seasonNumber'] as number | undefined,
           episodeNumber: event['episodeNumber'] as number | undefined,
-          hash: event['hash'] as string | undefined,
+          ref: event['ref'] as string | undefined,
           progress: Number(event['progress']),
           dlspeed: Number(event['dlspeed'] ?? 0),
           eta: Number(event['eta'] ?? 0),
@@ -197,11 +197,11 @@ export class SseService implements OnDestroy {
           event['seasonNumber'] as number | undefined,
           event['episodeNumber'] as number | undefined,
         );
-        // Import always finishes unattended (torrent completion is polled by
+        // Import always finishes unattended (completion is polled by
         // a scheduler) — no toast, just retire the live progress above.
         break;
       case 'stalled.removed':
-        // Unattended cleanup of a stalled torrent — no toast.
+        // Unattended cleanup of a stalled download — no toast.
         break;
       case 'social.followed':
         this.toast.info(

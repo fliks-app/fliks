@@ -23,7 +23,7 @@ interface LeafRow {
   key: string;
   labelKey: string;
   labelNumber: number | null;
-  /** Null while the release is still being searched for — there is no torrent
+  /** Null while the release is still being searched for — there is no download
    *  to be a percentage of yet. */
   percent: number | null;
   variant: ProgressVariant;
@@ -36,7 +36,7 @@ interface LeafRow {
 
 interface SeasonRow {
   seasonNumber: number;
-  /** One row per torrent. The season itself carries no folded status: with
+  /** One row per download. The season itself carries no folded status: with
    *  concurrent episodes it could only ever be a rollup that contradicts the
    *  rows under it. */
   leaves: LeafRow[];
@@ -44,10 +44,10 @@ interface SeasonRow {
 
 /**
  * Detail view behind the header / request download badge. The badge can only
- * fold several concurrent torrents into one chip; this modal is where they come
- * apart — one bar, speed and ETA per torrent, under the season it belongs to.
+ * fold several concurrent downloads into one chip; this modal is where they come
+ * apart — one bar, speed and ETA per download, under the season it belongs to.
  * No rollup above them: with concurrent episodes it could only ever be an
- * aggregate that contradicts the rows beneath it. A movie has a single torrent
+ * aggregate that contradicts the rows beneath it. A movie has a single download
  * and no season dimension, so it keeps a single headline instead.
  *
  * The parent passes its live `progress` so the modal keeps updating from SSE
@@ -65,8 +65,8 @@ export class DownloadDetailModalComponent {
 
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
-  /** A movie's single torrent: no season to group under, so it is its own row. */
-  readonly isSingleTorrent = computed(() => !this.progress()?.seasons);
+  /** A movie's single download: no season to group under, so it is its own row. */
+  readonly isSingleDownload = computed(() => !this.progress()?.seasons);
 
   readonly overallStateLabelKey = computed(() =>
     qbStateLabelKey(this.progress()?.state ?? ''),
@@ -112,7 +112,7 @@ export class DownloadDetailModalComponent {
     return { labelKey: 'media_detail.download_pack', labelNumber: null };
   }
 
-  /** Episode order, packs last. The key identifies the torrent now, so it says
+  /** Episode order, packs last. The key identifies the download now, so it says
    *  nothing about where the row belongs in the list. */
   private leafOrder(leaf: { episodeNumber?: number }): number {
     return leaf.episodeNumber ?? Number.MAX_SAFE_INTEGER;
