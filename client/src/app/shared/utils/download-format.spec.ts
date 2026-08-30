@@ -192,3 +192,26 @@ describe('download-format', () => {
     });
   });
 });
+
+describe('describeDownload — a search has no percentage to show', () => {
+  const searching = (): MediaDownloadProgress => ({
+    mediaId: 1,
+    mediaType: 'series' as MediaDownloadProgress['mediaType'],
+    percent: null,
+    state: 'searching',
+    dlspeed: 0,
+    eta: 0,
+    // `searching` is client-local, never a wire state, so it bypasses the `leaf` helper.
+    seasons: new Map([[1, { leaves: new Map([['ref:pending' as const, { state: 'searching' as const, percent: 0 }]]) }]]),
+  });
+
+  it('VERDICT: marks the badge busy, since nothing else says anything is happening', () => {
+    expect(describeDownload(searching(), { seasonFilter: [1] })?.busy).toBe(true);
+  });
+
+  it('a real download is not busy — its percentage already says so', () => {
+    const progress = { ...searching(), state: 'active' as const,
+      seasons: new Map([[1, { leaves: new Map([['ref:a' as const, leaf('active', 40)]]) }]]) };
+    expect(describeDownload(progress, { seasonFilter: [1] })?.busy).toBe(false);
+  });
+});

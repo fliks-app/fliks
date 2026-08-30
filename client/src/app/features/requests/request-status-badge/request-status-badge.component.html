@@ -10,6 +10,7 @@
         <app-progress-badge
           [label]="d.labelKey | translate"
           [percent]="d.percent"
+        [busy]="d.busy"
           [badgeClass]="d.badgeClass"
         />
       </button>
@@ -17,6 +18,7 @@
       <app-progress-badge
         [label]="d.labelKey | translate"
         [percent]="d.percent"
+        [busy]="d.busy"
         [badgeClass]="d.badgeClass"
       />
     }

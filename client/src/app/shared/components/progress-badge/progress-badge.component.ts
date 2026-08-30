@@ -12,6 +12,8 @@ export class ProgressBadgeComponent {
   readonly label = input('');
   /** 0–100, or null for a plain badge with no progress fill. */
   readonly percent = input<number | null>(null);
+  /** Shows a spinner before the label, for a state with no percentage of its own to show. */
+  readonly busy = input(false);
   /** daisyUI colour class, e.g. `badge-info`. */
   readonly badgeClass = input('');
   /** `xl` matches the play button — full width, same height and radius token —
