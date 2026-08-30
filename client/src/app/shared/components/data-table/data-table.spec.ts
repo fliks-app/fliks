@@ -2,7 +2,7 @@ import { WritableSignal, provideZonelessChangeDetection, signal } from '@angular
 import { TestBed } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
+import { TranslateLoader, TranslateService, provideTranslateService } from '@ngx-translate/core';
 import { Subject, of } from 'rxjs';
 import { vi } from 'vitest';
 import { DataTableComponent } from './data-table';
@@ -787,5 +787,38 @@ describe('DataTableComponent — a cell that links', () => {
   it('a column declaring no linkActionId never links', async () => {
     const fixture = await createComponent({ http: { get: () => of([]) }, resolveAction: () => vi.fn() });
     expect(fixture.componentInstance.cellLink({ key: 'name', labelKey: 'x' }, { id: 1 })).toBeUndefined();
+  });
+});
+
+describe('DataTableComponent — a plugin message that is an i18n key', () => {
+  // `detailField` and a `detail` field both carry whatever the plugin put on the row: sometimes
+  // one of its own keys, sometimes raw text from a filesystem or an HTTP client.
+  const TRANSLATED = 'plugin.msg.removed';
+  const COL: TableColumn = { key: 'status', labelKey: 'x.status', detailField: 'statusMessage' };
+
+  async function withTranslation(row: TableRow) {
+    const fixture = await createComponent({ http: { get: () => of([row]) }, columns: [COL] });
+    // `instant` echoes an unknown key back, which is what the fallback keys off.
+    const translate = TestBed.inject(TranslateService);
+    translate.setTranslation('en', { [TRANSLATED]: 'Removed by an operator' }, true);
+    return fixture;
+  }
+
+  it('VERDICT: renders the declared wording, not the raw key', async () => {
+    const row = { id: 1, status: 'failed', statusMessage: TRANSLATED };
+    const fixture = await withTranslation(row);
+    expect(fixture.componentInstance.detailText(COL, row)).toBe('Removed by an operator');
+  });
+
+  it('leaves raw text alone — a filesystem error is not a key', async () => {
+    const row = { id: 1, status: 'failed', statusMessage: 'ENOENT: no such file' };
+    const fixture = await withTranslation(row);
+    expect(fixture.componentInstance.detailText(COL, row)).toBe('ENOENT: no such file');
+  });
+
+  it('a row with no message opens nothing', async () => {
+    const row = { id: 1, status: 'failed', statusMessage: '' };
+    const fixture = await withTranslation(row);
+    expect(fixture.componentInstance.detailText(COL, row)).toBe('');
   });
 });
