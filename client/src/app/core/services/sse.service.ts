@@ -180,13 +180,18 @@ export class SseService implements OnDestroy {
         this.downloadProgress.applyProgress({
           mediaId: Number(event['mediaId']),
           mediaType: event['mediaType'] as MediaType,
-          seasonNumber: event['seasonNumber'] as number | undefined,
-          episodeNumber: event['episodeNumber'] as number | undefined,
-          ref: event['ref'] as string | undefined,
-          progress: Number(event['progress']),
-          dlspeed: Number(event['dlspeed'] ?? 0),
-          eta: Number(event['eta'] ?? 0),
-          state: (event['state'] as DownloadProgressState | undefined) ?? 'active',
+          // The whole set for this media, so an absent download is a retired one.
+          downloads: (Array.isArray(event['downloads']) ? event['downloads'] : []).map(
+            (d: Record<string, unknown>) => ({
+              ref: String(d['ref'] ?? ''),
+              seasonNumber: d['seasonNumber'] as number | undefined,
+              episodeNumber: d['episodeNumber'] as number | undefined,
+              progress: Number(d['progress']),
+              dlspeed: Number(d['dlspeed'] ?? 0),
+              eta: Number(d['eta'] ?? 0),
+              state: (d['state'] as DownloadProgressState | undefined) ?? 'active',
+            }),
+          ),
         });
         break;
       case 'import.complete':

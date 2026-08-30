@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { FliksHostImpl } from './fliks-host.service';
 import { PluginCountsCacheService } from './plugin-counts-cache.service';
+import { DownloadProgressCacheService } from '../../scheduler/download-progress-cache.service';
 import {
   MediaStatus,
   MediaType,
@@ -151,6 +152,7 @@ interface Harness {
   };
   sseAudience: { recipientsForMedia: jest.Mock; viewersForMedia: jest.Mock };
   countsCache: PluginCountsCacheService;
+  progressCache: DownloadProgressCacheService;
 }
 
 function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
@@ -196,6 +198,7 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
     viewersForMedia: jest.fn().mockResolvedValue([9]),
   };
   const countsCache = new PluginCountsCacheService();
+  const progressCache = new DownloadProgressCacheService();
 
   // Fakes stand in for 19 constructor params — a plain unit test of the class,
   // not a DI-resolved instance (the DI graph itself is proven by the boot check).
@@ -220,11 +223,13 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
     events,
     sseAudience,
     countsCache,
+    progressCache,
   ) as FliksHostImpl;
 
   return {
     host,
     countsCache,
+    progressCache,
     mediaRepo,
     seasonRepo,
     episodeRepo,
@@ -1611,33 +1616,18 @@ describe('FliksHostImpl', () => {
         expect.objectContaining({
           type: 'download.progress',
           mediaId: 1,
-          seasonNumber: 4,
-          episodeNumber: 8,
-          progress: 0,
-          state: 'queued',
+          downloads: [
+            expect.objectContaining({ seasonNumber: 4, episodeNumber: 8, progress: 0, state: 'queued' }),
+          ],
         }),
       );
     });
 
-    it('handles queue.changed and the batched acquisition.progress variant', async () => {
+    it('handles a batched queue.changed', async () => {
       const h = makeHarness();
       h.mediaRepo.findOne.mockResolvedValue(makeMedia());
-      await h.host['events.publish']([
-        { type: 'acquisition.queue.changed' },
-        {
-          type: 'acquisition.progress',
-          mediaId: 1,
-          ref: 'r1',
-          progress: 0.5,
-          etaSeconds: 30,
-          state: 'active',
-        },
-      ]);
+      await h.host['events.publish']([{ type: 'acquisition.queue.changed' }]);
       expect(h.events.emit).toHaveBeenCalledWith({ type: 'queue.updated' });
-      expect(h.events.emitToUsers).toHaveBeenCalledWith(
-        [9],
-        expect.objectContaining({ type: 'download.progress' }),
-      );
     });
   });
 
@@ -1749,51 +1739,48 @@ describe('FliksHostImpl', () => {
       );
       await h.host['progress.set']({
         mediaId: 1,
-        seasonNumber: 1,
-        episodeNumber: 2,
-        ref: 'torrent-hash',
-        progress: 0.42,
-        bytesPerSecond: 1000,
-        state: 'active',
+        downloads: [
+          { ref: 'torrent-hash', seasonNumber: 1, episodeNumber: 2, progress: 0.42, bytesPerSecond: 1000, state: 'active' },
+        ],
       });
       expect(h.events.emitToUsers).toHaveBeenCalledWith(
         [9],
         expect.objectContaining({
           type: 'download.progress',
           mediaType: 'series',
-          progress: 0.42,
-          dlspeed: 1000,
+          downloads: [
+            expect.objectContaining({ ref: 'torrent-hash', progress: 0.42, dlspeed: 1000 }),
+          ],
         }),
       );
     });
 
-    // The gate coalesces per torrent, not per media: every consumer keys a leaf
-    // by (media, season, episode, ref), so a sibling dropped inside the window
-    // is never seen at all — not late, missing, until the client sweeps it.
-    it('does not hold one download of a series behind another', async () => {
-      jest.useFakeTimers();
-      try {
-        const h = makeHarness();
-        h.mediaRepo.findOne.mockResolvedValue(makeMedia({ type: MediaType.SERIES }));
+    // Coalescing per media loses nothing now: a push already carries the media's whole set, so
+    // the last one in a window states every sibling the earlier ones did.
+    it('VERDICT: one emission carries every download of the media', async () => {
+      const h = makeHarness();
+      h.mediaRepo.findOne.mockResolvedValue(makeMedia({ type: MediaType.SERIES }));
 
-        await h.host['progress.set']({ mediaId: 7, seasonNumber: 1, episodeNumber: 6, ref: 'a', progress: 0.1, state: 'active' });
-        await h.host['progress.set']({ mediaId: 7, seasonNumber: 1, episodeNumber: 7, ref: 'b', progress: 0.2, state: 'active' });
-        await h.host['progress.set']({ mediaId: 7, seasonNumber: 1, episodeNumber: 8, ref: 'c', progress: 0.3, state: 'active' });
+      await h.host['progress.set']({
+        mediaId: 7,
+        downloads: [
+          { ref: 'a', seasonNumber: 1, episodeNumber: 6, progress: 0.1, state: 'active' },
+          { ref: 'b', seasonNumber: 1, episodeNumber: 7, progress: 0.2, state: 'active' },
+          { ref: 'c', seasonNumber: 1, episodeNumber: 8, progress: 0.3, state: 'active' },
+        ],
+      });
 
-        expect(h.events.emitToUsers).toHaveBeenCalledTimes(3);
-        expect(h.events.emitToUsers.mock.calls.map((c) => c[1].ref).sort()).toEqual(['a', 'b', 'c']);
-      } finally {
-        jest.useRealTimers();
-      }
+      expect(h.events.emitToUsers).toHaveBeenCalledTimes(1);
+      expect(h.events.emitToUsers.mock.calls[0][1].downloads.map((d: { ref: string }) => d.ref)).toEqual(['a', 'b', 'c']);
     });
 
-    it('coalesces to one emission per torrent per second, and the trailing one carries the latest', async () => {
+    it('coalesces to one emission per media per second, and the trailing one carries the latest', async () => {
       jest.useFakeTimers();
       try {
         const h = makeHarness();
         h.mediaRepo.findOne.mockResolvedValue(makeMedia({ type: MediaType.SERIES }));
         const push = (progress: number) =>
-          h.host['progress.set']({ mediaId: 7, ref: 'r', progress, state: 'active' });
+          h.host['progress.set']({ mediaId: 7, downloads: [{ ref: 'r', progress, state: 'active' }] });
 
         await push(0.1);
         await push(0.2);
@@ -1804,7 +1791,7 @@ describe('FliksHostImpl', () => {
         expect(h.events.emitToUsers).toHaveBeenCalledTimes(2);
         expect(h.events.emitToUsers).toHaveBeenLastCalledWith(
           [9],
-          expect.objectContaining({ progress: 0.3 }),
+          expect.objectContaining({ downloads: [expect.objectContaining({ progress: 0.3 })] }),
         );
       } finally {
         jest.useRealTimers();
@@ -1816,8 +1803,8 @@ describe('FliksHostImpl', () => {
       try {
         const h = makeHarness();
         h.mediaRepo.findOne.mockResolvedValue(makeMedia({ type: MediaType.SERIES }));
-        await h.host['progress.set']({ mediaId: 1, ref: 'r', progress: 0.1, state: 'active' });
-        await h.host['progress.set']({ mediaId: 2, ref: 'r', progress: 0.1, state: 'active' });
+        await h.host['progress.set']({ mediaId: 1, downloads: [{ ref: 'r', progress: 0.1, state: 'active' }] });
+        await h.host['progress.set']({ mediaId: 2, downloads: [{ ref: 'r', progress: 0.1, state: 'active' }] });
         expect(h.events.emitToUsers).toHaveBeenCalledTimes(2);
       } finally {
         jest.useRealTimers();
@@ -1829,9 +1816,7 @@ describe('FliksHostImpl', () => {
       h.sseAudience.viewersForMedia.mockResolvedValue([]);
       await h.host['progress.set']({
         mediaId: 1,
-        ref: 'r',
-        progress: 0.1,
-        state: 'active',
+        downloads: [{ ref: 'r', progress: 0.1, state: 'active' }],
       });
       expect(h.events.emitToUsers).not.toHaveBeenCalled();
     });

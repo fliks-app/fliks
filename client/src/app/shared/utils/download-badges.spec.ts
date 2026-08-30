@@ -1,7 +1,9 @@
 import { collectScopedLeaves } from './download-format';
-import { MediaDownloadProgress } from '../../core/services/download-progress.service';
+import { LeafKey, MediaDownloadProgress } from '../../core/services/download-progress.service';
 
-const series = (leaves: [number, [number | 'PACK', { state: 'active'; percent: number }][]][]): MediaDownloadProgress => ({
+const series = (
+  leaves: [number, [LeafKey, { state: 'active'; percent: number; episodeNumber?: number }][]][],
+): MediaDownloadProgress => ({
   mediaId: 1,
   mediaType: 'series',
   percent: 50,
@@ -29,34 +31,34 @@ const series = (leaves: [number, [number | 'PACK', { state: 'active'; percent: n
 describe('collectScopedLeaves — several downloads on one media', () => {
   it('keeps every download, with the season it was found under', () => {
     const found = collectScopedLeaves(
-      series([[1, [[6, { state: 'active', percent: 3 }], [8, { state: 'active', percent: 19 }]]]]),
+      series([[1, [['ref:e6', { state: 'active', percent: 3, episodeNumber: 6 }], ['ref:e8', { state: 'active', percent: 19, episodeNumber: 8 }]]]]),
     );
 
     expect(found.map((f) => [f.seasonNumber, f.key, f.leaf.percent])).toEqual([
-      [1, 6, 3],
-      [1, 8, 19],
+      [1, 'ref:e6', 3],
+      [1, 'ref:e8', 19],
     ]);
   });
 
   it('spans seasons, so a pack and a loose episode both surface', () => {
     const found = collectScopedLeaves(
       series([
-        [1, [[8, { state: 'active', percent: 19 }]]],
-        [2, [['PACK', { state: 'active', percent: 40 }]]],
+        [1, [['ref:e8', { state: 'active', percent: 19, episodeNumber: 8 }]]],
+        [2, [['ref:pack', { state: 'active', percent: 40 }]]],
       ]),
     );
 
-    expect(found.map((f) => f.key)).toEqual([8, 'PACK']);
+    expect(found.map((f) => f.key)).toEqual(['ref:e8', 'ref:pack']);
   });
 
   it('narrows to one episode plus anything that could carry it', () => {
     const found = collectScopedLeaves(
-      series([[1, [[6, { state: 'active', percent: 3 }], [8, { state: 'active', percent: 19 }], ['PACK', { state: 'active', percent: 40 }]]]]),
+      series([[1, [['ref:e6', { state: 'active', percent: 3, episodeNumber: 6 }], ['ref:e8', { state: 'active', percent: 19, episodeNumber: 8 }], ['ref:pack', { state: 'active', percent: 40 }]]]]),
       [1],
       8,
     );
 
-    expect(found.map((f) => f.key)).toEqual([8, 'PACK']);
+    expect(found.map((f) => f.key)).toEqual(['ref:e8', 'ref:pack']);
   });
 
   it('is empty for a movie, which has no season dimension to scope by', () => {

@@ -12,6 +12,6 @@ import { LibraryUserAccess } from '../libraries/entities/library-user-access.ent
 @Module({
   imports: [TypeOrmModule.forFeature([FliksRequest, User, Media, LibraryUserAccess])],
   providers: [EventsService, SseAudienceService, DownloadProgressCacheService],
-  exports: [EventsService, SseAudienceService],
+  exports: [EventsService, SseAudienceService, DownloadProgressCacheService],
 })
 export class EventsModule {}

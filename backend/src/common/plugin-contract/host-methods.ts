@@ -83,15 +83,6 @@ export type AcquisitionEvent =
       episodeNumber?: number;
     }
   | {
-      type: 'acquisition.progress';
-      mediaId: number;
-      ref: string;
-      progress: number;
-      etaSeconds: number | null;
-      /** Closed vocabulary — see `progress.set`'s `state` below. */
-      state: 'queued' | 'active' | 'stalled' | 'paused' | 'importing';
-    }
-  | {
       type: 'acquisition.imported';
       mediaId: number;
       seasonNumber?: number;
@@ -263,19 +254,32 @@ export interface PluginHostApi {
   }) => Promise<void>;
 
   /**
-   * Live acquisition progress. Plugin pushes; core emits the reserved
-   * `download.progress` SSE type, coalesced to one emission per media per second: pushing faster
-   * is allowed, and the last value of a window is the one that goes out.
+   * Live acquisition progress, as the complete set for one media. Plugin pushes; core emits the
+   * reserved `download.progress` SSE type, coalesced to one emission per media per second:
+   * pushing faster is allowed, and the last value of a window is the one that goes out.
+   *
+   * `downloads` is a replacement, never a delta: whatever is absent from it is retired, and an
+   * empty array retires the media outright. That is the whole point of the shape. A per-download
+   * push cannot express absence, so every consumer had to infer a removal from a compensating
+   * event or a timeout, and every new way to remove a download reopened the same gap.
+   *
+   * The caller must therefore only push a set it fully enumerated. A download client that could
+   * not be reached is not evidence that its torrents are gone: skip the push for that tick rather
+   * than assert a set that is missing them.
    */
   'progress.set': (p: {
     mediaId: number;
-    seasonNumber?: number;
-    episodeNumber?: number;
-    ref: string;
-    progress: number;
-    bytesPerSecond?: number;
-    etaSeconds?: number;
-    state: 'queued' | 'active' | 'stalled' | 'paused' | 'importing';
+    downloads: {
+      /** Stable identity for one download within the media, opaque to core. */
+      ref: string;
+      seasonNumber?: number;
+      episodeNumber?: number;
+      /** 0 to 1. */
+      progress: number;
+      bytesPerSecond?: number;
+      etaSeconds?: number;
+      state: 'queued' | 'active' | 'stalled' | 'paused' | 'importing';
+    }[];
   }) => Promise<void>;
 
   // Group E — config (2)

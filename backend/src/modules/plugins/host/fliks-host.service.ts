@@ -53,27 +53,19 @@ import {
 } from '../../../common/release-scoring';
 import { parseSeasonEpisode } from '../../../common/release-parsing';
 import { PluginCountsCacheService } from './plugin-counts-cache.service';
+import { DownloadProgressCacheService } from '../../scheduler/download-progress-cache.service';
 import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
 import { PluginHostContext } from './plugin-host-context';
 import { DownloadProgressState } from '../../../common/constants/download-progress-state';
 
-/** One gate per leaf, matching how every consumer identifies one — the replay
- *  cache's own key and the client's leaf key. */
-function progressGateKey(p: {
-  mediaId: number;
-  seasonNumber?: number;
-  episodeNumber?: number;
-  ref?: string;
-}): string {
-  return `${p.mediaId}:${p.seasonNumber ?? ''}:${p.episodeNumber ?? ''}:${p.ref ?? ''}`;
-}
-
-/** The rate `progress.set` promises: at most one SSE emission per torrent per second. */
+/** The rate `progress.set` promises: at most one SSE emission per media per second. */
 const PROGRESS_MIN_INTERVAL_MS = 1_000;
+
+type ProgressSet = Parameters<PluginHostApi['progress.set']>[0];
 
 interface ProgressGate {
   lastEmitMs: number;
-  pending: Parameters<PluginHostApi['progress.set']>[0] | null;
+  pending: ProgressSet | null;
   timer: NodeJS.Timeout | null;
 }
 
@@ -130,6 +122,7 @@ export class FliksHostImpl implements PluginHostApi {
     private readonly events: EventsService,
     private readonly sseAudience: SseAudienceService,
     private readonly countsCache: PluginCountsCacheService,
+    private readonly progressCache: DownloadProgressCacheService,
   ) {}
 
   private readonly logger = new Logger(FliksHostImpl.name);
@@ -918,16 +911,32 @@ export class FliksHostImpl implements PluginHostApi {
           // a pack shows on every episode page of the season.
           episodeNumber: event.episodeNumber,
         });
-        // Put the download badge up on the grab rather than on the client's
-        // next poll tick, which can be a minute out. Same push the ticks
-        // themselves use, so the media type and audience are resolved
-        // identically and the first real tick simply supersedes this.
+        // Put the download badge up on the grab rather than on the client's next poll tick,
+        // which can be a minute out. Added to the media's last known set rather than replacing
+        // it: a push states the whole set, so announcing this grab alone would retire whatever
+        // else the media already had in flight. The first real snapshot supersedes it.
         await this.pushProgress({
           mediaId: event.mediaId,
-          seasonNumber: event.seasonNumber,
-          episodeNumber: event.episodeNumber,
-          progress: 0,
-          state: 'queued',
+          downloads: [
+            ...(this.progressCache.current(event.mediaId)?.downloads ?? []).map((d) => ({
+              ref: d.ref,
+              seasonNumber: d.seasonNumber,
+              episodeNumber: d.episodeNumber,
+              progress: d.progress,
+              bytesPerSecond: d.dlspeed,
+              etaSeconds: d.eta,
+              state: d.state,
+            })),
+            {
+              // No download exists yet, so there is no identity to carry: the scope is the only
+              // thing that names this placeholder, and the first real snapshot drops it.
+              ref: `pending:${event.seasonNumber ?? ''}:${event.episodeNumber ?? ''}`,
+              seasonNumber: event.seasonNumber,
+              episodeNumber: event.episodeNumber,
+              progress: 0,
+              state: 'queued' as const,
+            },
+          ],
         });
         return;
       case 'acquisition.imported': {
@@ -985,15 +994,6 @@ export class FliksHostImpl implements PluginHostApi {
         this.events.emit({ type: 'queue.updated' });
         return;
       }
-      case 'acquisition.progress':
-        await this.pushProgress({
-          mediaId: event.mediaId,
-          ref: event.ref,
-          progress: event.progress,
-          etaSeconds: event.etaSeconds ?? undefined,
-          state: event.state,
-        });
-        return;
     }
   }
 
@@ -1046,23 +1046,14 @@ export class FliksHostImpl implements PluginHostApi {
   // D5 — progress.set
   // ===========================================================================
 
-  private async progressSet(p: {
-    mediaId: number;
-    seasonNumber?: number;
-    episodeNumber?: number;
-    ref: string;
-    progress: number;
-    bytesPerSecond?: number;
-    etaSeconds?: number;
-    state: DownloadProgressState;
-  }): Promise<void> {
-    const key = progressGateKey(p);
+  private async progressSet(p: ProgressSet): Promise<void> {
+    // One gate per media, because a media's set is now what a push carries: coalescing per
+    // download would let a window drop the very push that shrank the set.
+    const key = String(p.mediaId);
     const gate = this.progressGates.get(key);
     const now = Date.now();
     if (gate && now - gate.lastEmitMs < PROGRESS_MIN_INTERVAL_MS) {
-      // Newest wins — for this leaf. Coalescing per media would drop every
-      // sibling torrent of a season reported in the same window, and the
-      // consumers key per leaf, so a dropped one is never seen at all.
+      // Newest wins, and nothing is lost by it: each push already carries the media's whole set.
       gate.pending = p;
       if (!gate.timer) {
         gate.timer = setTimeout(
@@ -1088,7 +1079,7 @@ export class FliksHostImpl implements PluginHostApi {
     gate.pending = null;
     if (!pending) {
       // Idle for a whole window: drop the gate so the map cannot grow with
-      // every torrent ever seen.
+      // every media ever seen.
       this.progressGates.delete(key);
       return;
     }
@@ -1096,16 +1087,7 @@ export class FliksHostImpl implements PluginHostApi {
     void this.pushProgress(pending);
   }
 
-  private async pushProgress(p: {
-    mediaId: number;
-    seasonNumber?: number;
-    episodeNumber?: number;
-    ref?: string;
-    progress: number;
-    bytesPerSecond?: number;
-    etaSeconds?: number;
-    state: DownloadProgressState;
-  }): Promise<void> {
+  private async pushProgress(p: ProgressSet): Promise<void> {
     const media = await this.mediaRepo.findOne({ where: { id: p.mediaId } });
     // Progress is passive page state, not a notification: everyone who can open
     // the media's page sees it, not just whoever requested the title.
@@ -1115,13 +1097,15 @@ export class FliksHostImpl implements PluginHostApi {
       type: 'download.progress',
       mediaId: p.mediaId,
       mediaType: media?.type === MediaType.MOVIE ? 'movie' : 'series',
-      seasonNumber: p.seasonNumber,
-      episodeNumber: p.episodeNumber,
-      ref: p.ref,
-      progress: p.progress,
-      dlspeed: p.bytesPerSecond ?? 0,
-      eta: p.etaSeconds ?? 0,
-      state: p.state,
+      downloads: p.downloads.map((d) => ({
+        ref: d.ref,
+        seasonNumber: d.seasonNumber,
+        episodeNumber: d.episodeNumber,
+        progress: d.progress,
+        dlspeed: d.bytesPerSecond ?? 0,
+        eta: d.etaSeconds ?? 0,
+        state: d.state,
+      })),
     });
   }
 

@@ -263,7 +263,7 @@ describe('PluginHostBindingService', () => {
       'notifications.dispatch': { event: 'grab.started', payload: {} },
       'counts.set': { key: 'k', value: 1 },
       'events.emitOwn': { type: 't', payload: {}, audience: 'all' },
-      'progress.set': { mediaId: 1, ref: 'r', progress: 0, state: 'active' },
+      'progress.set': { mediaId: 1, downloads: [{ ref: 'r', progress: 0, state: 'active' }] },
       'config.get': {},
       'config.set': { key: 'k', value: 'v' },
     };
