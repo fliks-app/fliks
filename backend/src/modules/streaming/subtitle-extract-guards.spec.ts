@@ -3,9 +3,9 @@ import * as os from 'os';
 import * as path from 'path';
 import { SubtitleStreamService } from './subtitle-stream.service';
 
-type Svc = SubtitleStreamService & {
-  assertExtracted(tmpPath: string): Promise<void>;
-};
+/** `assertExtracted` is private, so intersecting it with the class collapses to `never`.
+ *  The spec only ever calls that one method — name it alone and cast through `unknown`. */
+type Svc = { assertExtracted(tmpPath: string): Promise<void> };
 
 const svc = new SubtitleStreamService(
   null as never,
@@ -13,7 +13,7 @@ const svc = new SubtitleStreamService(
   null as never,
   null as never,
   null as never,
-) as Svc;
+) as unknown as Svc;
 
 describe('subtitle extraction guards', () => {
   let dir: string;
