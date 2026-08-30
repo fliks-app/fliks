@@ -490,3 +490,41 @@ describe('computeRejections — resolution upgrade only', () => {
     expect(codes('Show.S01E01.1080p.BluRay.x264', undefined)).toEqual([]);
   });
 });
+
+describe('computeRejections — above the profile vs merely outside it', () => {
+  // 12 WEBDL-720p (45), 16 WEBDL-1080p (62), 18 Bluray-1080p (68), 19 Remux-1080p (72).
+  const codeFor = (qualityId: number, allowed: number[]) =>
+    computeRejections({
+      qualityId,
+      allowed: new Set(allowed),
+      languageId: 1,
+      allowedLangs: new Set<number>(),
+      isBlocklisted: false,
+      sizeBytes: 0,
+      runtimeMinutes: 112,
+      sizeByQuality: new Map(),
+      seeders: 10,
+      sourceId: 0,
+      sourceMinSeeders: new Map(),
+    }).map((r) => r.code);
+
+  it('VERDICT: a quality better than every allowed one is ABOVE, not merely NOT_ALLOWED', () => {
+    expect(codeFor(19, [16, 18])).toEqual(['QUALITY_ABOVE_PROFILE']);
+  });
+
+  it('VERDICT: a quality below the profile stays NOT_ALLOWED, so the picker keeps offering it', () => {
+    expect(codeFor(12, [16, 18])).toEqual(['QUALITY_NOT_ALLOWED']);
+  });
+
+  it('ranks, not ids: a lower id outranking the profile still reads as above it', () => {
+    expect(codeFor(18, [16])).toEqual(['QUALITY_ABOVE_PROFILE']);
+  });
+
+  it('an allowed quality is rejected by neither', () => {
+    expect(codeFor(16, [16, 18])).toEqual([]);
+  });
+
+  it('an empty profile rejects everything as outside it — nothing to be above', () => {
+    expect(codeFor(19, [])).toEqual(['QUALITY_NOT_ALLOWED']);
+  });
+});

@@ -1097,6 +1097,7 @@
     "confirm_delete_subtitle": "Supprimer ce sous-titre ?",
     "rejection": {
       "QUALITY_NOT_ALLOWED": "Qualité hors profil",
+      "QUALITY_ABOVE_PROFILE": "Qualité au-dessus du profil",
       "LANGUAGE_NOT_ALLOWED": "Langue hors profil",
       "BLOCKLISTED": "Release bloquée",
       "SIZE_TOO_LOW": "Taille trop faible\n({{actual}} MB < {{min}} MB)",
