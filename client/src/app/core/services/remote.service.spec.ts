@@ -102,6 +102,20 @@ describe('RemoteService stop handling', () => {
     expect(service.targetState()).toBeNull();
   });
 
+  it('shows a restart, not an empty card, while a quality change reloads', () => {
+    const { service, remoteState, sse } = setup();
+    remoteState.set(frame());
+    service.ingestState();
+
+    // A quality change retires the session and starts another; reading that
+    // stop as "nothing playing" flashed an empty card between the two.
+    service.pendingAction.set('quality');
+    sse.stopped.next('tv#1');
+
+    expect(service.targetState()).toBeNull();
+    expect(service.awaitingFirstReport()).toBe(true);
+  });
+
   it('takes the next session right away when the target switches episode', () => {
     const { service, remoteState } = setup();
     remoteState.set(frame({ sessionId: 'sid-1' }));

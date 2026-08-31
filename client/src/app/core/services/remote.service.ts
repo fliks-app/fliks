@@ -168,6 +168,15 @@ export class RemoteService {
    *  reading goes, and the farewell heartbeat behind it is ignored. */
   noteTargetStopped(targetId: string): void {
     if (!targetId || targetId !== this.selectedTargetId()) return;
+    const pending = this.pendingAction();
+    if (pending && SLOW_ACK_ACTIONS.has(pending)) {
+      // A command we sent is restarting the stream, so this stop is the old
+      // session retiring, not playback ending. Reading it as idle flashed
+      // "nothing playing" between the two sessions.
+      console.debug('[remote] target stopped to restart its stream', targetId, pending);
+      this.noteLoadSent(null);
+      return;
+    }
     console.debug('[remote] target reported it stopped playing', targetId);
     this.noteStopSent();
   }
