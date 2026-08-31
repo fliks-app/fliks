@@ -2895,7 +2895,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           }
           void this.castPlayerService.changeAudio(idx);
         } else {
-          void this.onSelectAudioTrack(cmd.trackId);
+          const idx = parseAudioIndex(cmd.trackId);
+          const local = Number.isFinite(idx)
+            ? this.availableAudioTracks()[idx]?.id
+            : undefined;
+          if (!local) {
+            console.warn('[remote] no local audio track at index', cmd.trackId);
+            return;
+          }
+          this.onSelectAudioTrack(local).catch((err: unknown) =>
+            console.warn('[remote] audio switch failed', cmd.trackId, err),
+          );
         }
         break;
       case 'subtitle':
@@ -4479,6 +4489,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  arrives in ~1s instead of waiting up to 10s. */
   private lastForcedSaveAt = 0;
 
+  /** Active audio as a streamInfo index: the one space the backend, the media
+   *  detail header and every client agree on. `availableAudioTracks()` is in
+   *  streamInfo order, so position is the index; a shaka-* id is engine-local
+   *  and means nothing to anyone else. */
+  private activeAudioIndex(): number | null {
+    const id = this.activeAudioTrackId();
+    const pos = this.availableAudioTracks().findIndex((t) => t.id === id);
+    if (pos >= 0) return pos;
+    return this.activeAudioStreamIndex ?? null;
+  }
+
   private async savePosition(force = false) {
     if (force) {
       const now = Date.now();
@@ -4526,6 +4547,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       volume?: number;
       muted?: boolean;
       lastCmdId?: string;
+      audioTrackIndex?: number | null;
     } = {
       positionSeconds: pos,
       durationSeconds: dur || 0,
@@ -4545,6 +4567,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const lastCmdId = this.remoteService.lastAppliedCmdId();
       if (lastCmdId) payload.lastCmdId = lastCmdId;
       payload.quality = this.activeQualityId() ?? null;
+      payload.audioTrackIndex = this.activeAudioIndex();
     }
 
     // Offline queue persists position only — the heartbeat-related

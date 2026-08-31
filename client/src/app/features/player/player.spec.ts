@@ -236,6 +236,7 @@ function createHarness(opts: {
         useValue: {
           loadSubtitles: vi.fn(async () => []),
           autoSelectSubtitle: vi.fn(async () => {}),
+          saveAudioSelection: vi.fn(),
           autoSelectAudioTrack: vi.fn(),
         },
       },
@@ -688,6 +689,33 @@ describe('PlayerComponent remote control', () => {
     h.component.reportTransportChange(true);
 
     expect(h.streamingApi.updatePlaybackState).not.toHaveBeenCalled();
+  });
+
+  it('resolves a controller-sent audio index against this engine own track ids', () => {
+    const h = createHarness();
+    // The web engine names tracks by Shaka audioId; a controller only ever
+    // knows the streamInfo order, so the index has to be translated.
+    h.component.availableAudioTracks.set([
+      { id: 'shaka-4', label: 'French', language: 'fr' },
+      { id: 'shaka-7', label: 'English', language: 'en' },
+    ]);
+
+    h.remoteService.validated.next(baseCmd({ action: 'audio', trackId: 'audio-1' }));
+
+    expect(h.component.activeAudioTrackId()).toBe('shaka-7');
+  });
+
+  it('ignores an audio index no local track answers to', () => {
+    const h = createHarness();
+    h.component.availableAudioTracks.set([
+      { id: 'shaka-4', label: 'French', language: 'fr' },
+    ]);
+    h.component.activeAudioTrackId.set('shaka-4');
+
+    h.remoteService.validated.next(baseCmd({ action: 'audio', trackId: 'audio-9' }));
+
+    expect(h.component.activeAudioTrackId()).toBe('shaka-4');
+    expect(h.remoteService.markApplied).not.toHaveBeenCalled();
   });
 
   it('applying a command acks it and forces an immediate heartbeat', () => {
