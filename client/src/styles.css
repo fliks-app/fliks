@@ -283,16 +283,22 @@ body.native.hero-page {
     animation: none;
     width: 0;
   }
+
+  .player-floating-cue {
+    transition: none;
+  }
 }
 
-/* Mobile landscape: the viewport is short, so the cue's portrait 8rem offset
-   strands it high on screen (most visible once the controls bar auto-hides).
-   Short + wide identifies a phone in landscape; drop the cue nearer the
-   bottom edge there. --cue-bottom feeds the button's inline bottom offset. */
-@media (orientation: landscape) and (max-height: 600px) {
-  .player-floating-cue {
-    --cue-bottom: 4.5rem;
-  }
+/* The cue sits low while the controls are hidden and lifts clear of the
+   controls bar when it comes up, mirroring the subtitle shift. */
+.player-floating-cue {
+  --cue-bottom: 5rem;
+  right: calc(max(var(--ctrl-px, 1rem), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px));
+  bottom: max(var(--cue-bottom), calc(var(--cue-bottom) + env(safe-area-inset-bottom)));
+  transition: bottom 200ms ease;
+}
+.player-floating-cue.controls-visible {
+  --cue-bottom: 10.5rem;
 }
 
 /* ============================================================================
@@ -418,7 +424,8 @@ body:not(.keyboard-modality):not(.tv) app-mosaic-card button:focus-visible .mosa
     0 0 0 2px var(--color-base-100, #1d232a),
     0 0 0 4px var(--color-primary, #7a3ff2);
   z-index: 1;
-  position: relative;
+  /* Never set `position` here: it would re-anchor an absolutely placed
+     focusable (a modal ✕, a floating cue) and make it jump on focus. */
 }
 /* Over the video, the ring's inner `--color-base-100` layer has nothing to
    blend into — it reads as a black circle around every control. On the player
@@ -437,21 +444,10 @@ app-player-controls :is(a, button, select, input, [role="button"], [tabindex]):f
     @apply rounded-lg;
   }
 }
-/* The floating player cues position themselves absolutely via inline right /
-   bottom offsets. The generic ring above forces `position: relative` (and a low
-   z-index), which would re-anchor those offsets to the cue's in-flow origin and
-   fling it off-screen — re-assert its own placement so the ring decorates it in
-   situ. Same specificity as the rule above, so source order settles it. */
+/* The cues sit above the controls bar, so the ring's low z-index would drop
+   them behind it while focused. */
 .player-floating-cue:focus-visible {
-  position: absolute;
   z-index: 50;
-}
-/* Same trap as `.player-floating-cue` above, made reusable: the focus ring
-   forces `position: relative` so its z-index applies, which re-anchors an
-   absolutely-placed control to its in-flow origin and makes it jump on focus.
-   Opt out here and keep the element's own placement. */
-.focus-keep-position:focus-visible {
-  position: absolute;
 }
 
 /* A scroll container clips at its padding box, and as soon as one axis
@@ -459,10 +455,12 @@ app-player-controls :is(a, button, select, input, [role="button"], [tabindex]):f
    off the left and right edges of any full-width focusable inside one.
    Reserve the ring's 4px and pull it straight back out of the layout, so the
    content keeps its original alignment. Put it on the scrolling element.
-   Horizontal only: a negative vertical margin would pull the container's own
-   first child (a menu title) up out of its padding. */
+   Vertical side is padding only: a negative block margin would let scrolled
+   content bleed over the element above (often a menu title). `scroll-py` makes
+   D-pad `scrollIntoView({block:'nearest'})` stop 4px short so it uncovers the
+   ring instead of aligning the item flush with the clipped edge. */
 .scroll-ring-safe {
-  @apply px-1 -mx-1;
+  @apply px-1 -mx-1 py-1 scroll-py-1;
 }
 
 /* Opt-out for focusables that paint their own focus affordance (e.g.
@@ -941,7 +939,7 @@ body.tablet [data-touch-only] {
   transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh)));
 }
 .player-video.controls-visible ~ .shaka-text-container {
-  transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh) - 10vh));
+  transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh) - 15vh));
 }
 /* Visual styling applies to the leaf text span (Shaka tags it with
    `translate="no"` and bakes a default background-color inline on it).

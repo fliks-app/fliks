@@ -117,6 +117,9 @@ interface AppearanceRow {
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player-controls.html',
+  // Bar insets live on the host so the floating cues inherit them and line up
+  // with the controls' right edge.
+  host: { class: '[--ctrl-px:1rem] [--ctrl-pb:0.5rem] sm:[--ctrl-pb:1rem] xl:[--ctrl-inset:1rem]' },
 })
 export class PlayerControlsComponent {
   private readonly device = inject(DeviceService);
@@ -147,10 +150,7 @@ export class PlayerControlsComponent {
     // panel before falling through to "leave the player".
     effect((onCleanup) => {
       if (!this.openDropdown()) return;
-      const close = () => {
-        this.closeDropdown();
-        this.dropdownTrigger?.focus({ preventScroll: true });
-      };
+      const close = () => this.dropdownBack();
       this.dismissStack.push(close);
       onCleanup(() => this.dismissStack.remove(close));
     });
@@ -440,14 +440,16 @@ export class PlayerControlsComponent {
   /** Navigate the subtitles menu. Focus is pulled into the new panel because
    *  the switch destroys the row the user was standing on (D-pad / keyboard). */
   openSubtitlesPanel(panel: SubtitlePanel) {
+    const from = this.subtitlesPanel();
     this.subtitlesPanel.set(panel);
-    if (this.openDropdown()) this.focusDropdownEntry();
+    if (this.openDropdown()) this.focusDropdownEntry(from);
   }
 
   /** Same as {@link openSubtitlesPanel} for the settings menu. */
   openSettingsPanel(panel: 'main' | 'quality' | 'queue') {
+    const from = this.settingsPanel();
     this.settingsPanel.set(panel);
-    if (this.openDropdown()) this.focusDropdownEntry();
+    if (this.openDropdown()) this.focusDropdownEntry(from);
   }
 
   /**
@@ -528,6 +530,20 @@ export class PlayerControlsComponent {
     if (!isBack) return;
     e.preventDefault();
     e.stopPropagation();
+    this.dropdownBack();
+  }
+
+  /** One step back inside the open dropdown: a sub-panel returns to its parent,
+   *  the root panel closes the menu and hands focus back to its trigger. */
+  private dropdownBack() {
+    if (this.openDropdown() === 'settings' && this.settingsPanel() !== 'main') {
+      this.openSettingsPanel('main');
+      return;
+    }
+    if (this.openDropdown() === 'subtitles' && this.subtitlesPanel() !== 'tracks') {
+      this.openSubtitlesPanel(this.activeAppearanceRow() ? 'appearance' : 'tracks');
+      return;
+    }
     this.closeDropdown();
     this.dropdownTrigger?.focus({ preventScroll: true });
   }
@@ -576,11 +592,17 @@ export class PlayerControlsComponent {
     this.subtitlesPanel.set('tracks');
   }
 
-  private focusDropdownEntry() {
+  /** `fromPanel` is the panel being left: when the new panel holds the row that
+   *  opens it (`data-panel-row`), focus returns there instead of the first
+   *  item. */
+  private focusDropdownEntry(fromPanel?: string) {
     afterNextRender(
       () => {
         const panel = this.hostEl.nativeElement.querySelector<HTMLElement>('.dropdown-open .dropdown-content');
-        initialOverlayFocus(panel)?.focus({ preventScroll: true });
+        const back = fromPanel
+          ? panel?.querySelector<HTMLElement>(`[data-panel-row="${fromPanel}"]`)
+          : null;
+        (back ?? initialOverlayFocus(panel))?.focus({ preventScroll: true });
       },
       { injector: this.injector },
     );
