@@ -45,18 +45,25 @@
             </button>
           </div>
         } @else {
+        <!-- Poster beside the controls when the viewport is wide and short, and
+             above them when it is tall. `lg:contents` keeps the desktop card as
+             a single column, where the poster lives in the header instead. -->
+        <div class="flex-1 min-h-0 flex flex-col landscape:flex-row landscape:items-stretch lg:contents">
+
         <!-- Large poster (mobile only) -->
-        <div class="flex-1 flex items-center justify-center px-6 py-4 landscape:py-1 min-h-0 lg:hidden">
+        <div class="flex-1 flex items-center justify-center px-6 py-4 min-h-0
+                    landscape:w-2/5 landscape:flex-none landscape:pr-2 lg:hidden">
           @if (t.fanartUrl()) {
             <img [cachedSrc]="t.fanartUrl()! | resolveUrl:'medium'" alt=""
-                 class="max-h-[60%] landscape:max-h-[45%] sm:max-h-[70%] md:max-h-[75%] w-auto object-contain rounded-xl shadow-xl" />
+                 class="max-h-full max-w-full object-contain rounded-xl shadow-xl" />
           } @else {
-            <svg lucideCast class="h-20 w-20 text-info"></svg>
+            <div class="skeleton h-full max-h-[75%] aspect-[2/3] rounded-xl"></div>
           }
         </div>
 
         <!-- Controls -->
-        <div class="shrink-0 lg:shrink px-4 pt-4 landscape:pt-2 lg:py-4 space-y-5 landscape:space-y-3 lg:space-y-4"
+        <div class="shrink-0 lg:shrink px-4 pt-4 landscape:pt-2 lg:py-4 space-y-5 landscape:space-y-3 lg:space-y-4
+                    landscape:flex-1 landscape:min-w-0 landscape:self-center landscape:overflow-y-auto"
              style="padding-bottom: max(2rem, env(safe-area-inset-bottom))"
         >
           <!-- Title + progress: one unit, so the parent rhythm does not wedge
@@ -187,6 +194,7 @@
               </button>
             }
           </div>
+        </div>
         </div>
         }
 
