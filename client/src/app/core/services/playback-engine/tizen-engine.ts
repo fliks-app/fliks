@@ -295,7 +295,11 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.emit('stateChanged', { state: 'buffering' });
   }
   private handleBufferingComplete(): void {
-    if (!this._paused) this.emit('stateChanged', { state: 'playing' });
+    // AVPlay fires this while PAUSED too (seekTo is valid from PAUSED, and the
+    // buffering callbacks are state-independent). Emitting nothing there left
+    // `buffering` latched with no other path to clear it, so a paused seek sat
+    // on the spinner until the user pressed play.
+    this.emit('stateChanged', { state: this._paused ? 'paused' : 'playing' });
   }
   private handleCurrentPlayTime(ms: number): void {
     this._currentTime = ms / 1000;

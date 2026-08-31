@@ -50,6 +50,7 @@
     playsinline
     [class.opacity-0]="!videoStarted()"
     [class.controls-visible]="controlsVisible()"
+    [class.controls-seek]="controlsVisible() && seekOsd()"
     [style.object-fit]="fillScreen() ? 'cover' : 'contain'"
   ></video>
 
@@ -117,6 +118,7 @@
   <app-player-controls
     (interacted)="onControlsInteraction()"
     [visible]="controlsVisible()"
+    [seekOsd]="seekOsd()"
     [paused]="paused()"
     [loading]="loading()"
     [buffering]="buffering()"

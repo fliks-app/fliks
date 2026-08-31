@@ -164,8 +164,8 @@ export class PlayerControlsComponent {
       this.lastVisible = visible;
       // Focus play/pause when the bar appears under keyboard / D-pad so the
       // next Enter/Space toggles playback. Skipped for pointer (mouse-revealed
-      // controls shouldn't steal focus). An arrow-seek re-focuses the seekbar
-      // afterwards (player.focusSeekbar), which wins the deferred race.
+      // controls shouldn't steal focus). The seek OSD renders no play/pause, so
+      // an arrow-seek keeps the focus scrubFromKey put on the seekbar.
       if (visible && !wasVisible && this.autoFocusModality()) {
         this.closeDropdown();
         this.playPauseBtn()?.nativeElement.focus({ preventScroll: true });
@@ -256,6 +256,9 @@ export class PlayerControlsComponent {
   readonly isMobileTouch = computed(() => this.playerLayout() === 'mobile');
 
   readonly visible = input(true);
+  /** Reduced bar: only the seekbar and the time row. Raised by an arrow-key
+   *  seek, the way TV players surface a scrub OSD instead of the toolbar. */
+  readonly seekOsd = input(false);
   readonly paused = input(true);
   readonly loading = input(false);
   readonly buffering = input(false);
@@ -299,8 +302,6 @@ export class PlayerControlsComponent {
   /** Desktop (Electron) — native engine but mouse-driven; keeps the fullscreen
    *  button which is otherwise hidden for native (mobile/TV) engines. */
   readonly isDesktop = input(false);
-  readonly subtitlePickerOpen = input(false);
-  readonly qualityPickerOpen = input(false);
   readonly availableSubtitles = input<{ id: string; label: string; menuHead?: string; menuSub?: string; burnIn?: boolean; isImage?: boolean }[]>([]);
   readonly availableQualities = input<{ id: string; label: string; lowBandwidth?: boolean }[]>([]);
   readonly activeSubtitleId = input<string | null>(null);
@@ -349,9 +350,7 @@ export class PlayerControlsComponent {
   readonly toggleFullscreen = output<void>();
   readonly togglePip = output<void>();
   readonly toggleOrientationLock = output<void>();
-  readonly toggleSubtitlePicker = output<void>();
   readonly toggleStats = output<void>();
-  readonly toggleQualityPicker = output<void>();
   readonly selectSubtitle = output<string | null>();
   readonly selectQuality = output<string>();
   /** Play the queue item at this index (picked from the queue list). */
@@ -467,9 +466,13 @@ export class PlayerControlsComponent {
 
   readonly seekbar = viewChild(SeekbarComponent);
 
-  /** Focus the seekbar track (used when an arrow press wakes hidden controls). */
-  focusSeekbar(): void {
-    this.seekbar()?.focus();
+  /** Wake-and-scrub: focus the seekbar and let it own the press, so the whole
+   *  arrow run accumulates into one deferred seek instead of one per key. */
+  scrubFromKey(e: KeyboardEvent): void {
+    const bar = this.seekbar();
+    if (!bar) return;
+    bar.focus();
+    bar.onKeydown(e);
   }
   /** Desktop/TV play-pause button — focused on TV every time the controls
    *  bar reappears, so the next D-pad center triggers play/pause. */

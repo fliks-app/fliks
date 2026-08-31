@@ -15,7 +15,7 @@
   (keyup)="onKeyup($event)"
 >
   <!-- Seek tooltip -->
-  @if (showTooltip() && (hovering() || dragging()) && duration()) {
+  @if (showTooltip() && previewVisible() && duration()) {
     <div
       class="absolute bottom-full mb-3 pointer-events-none z-50"
       [style.left]="tooltipLeft()"
@@ -35,14 +35,14 @@
               ></div>
               <div class="absolute bottom-0 inset-x-0 text-center pb-0.5 pt-2 bg-gradient-to-t from-black/70 to-transparent">
                 <span class="text-white text-xs tabular-nums font-medium drop-shadow">
-                  {{ formatTime(dragging() ? dragTime() : hoverTime()) }}
+                  {{ formatTime(previewTime()) }}
                 </span>
               </div>
             </div>
           } @else {
             <div class="px-3 py-1 text-center">
               <span class="text-white text-xs tabular-nums font-medium">
-                {{ formatTime(dragging() ? dragTime() : hoverTime()) }}
+                {{ formatTime(previewTime()) }}
               </span>
             </div>
           }

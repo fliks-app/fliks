@@ -4,79 +4,81 @@
 @if (openDropdown()) {
   <div class="fixed inset-0 z-30" (click)="closeDropdown($event)"></div>
 }
-<!-- ===== TOP BAR ===== -->
-<div
-  class="absolute top-0 left-0 right-0 z-40 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent transition-opacity duration-300 py-5
-         [--ctrl-px:1rem] portrait:[--ctrl-px:0.5rem] xl:[--ctrl-inset:1rem]"
-  style="padding-left: calc(max(var(--ctrl-px), env(safe-area-inset-left)) + var(--ctrl-inset, 0px)); padding-right: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + var(--ctrl-inset, 0px)); padding-top: calc(env(safe-area-inset-top, 0px) + var(--ctrl-py) + var(--ctrl-inset, 0px));"
-  [style.--ctrl-py]="isMobileTouch() ? '0.25rem' : '1.25rem'"
-  [class.opacity-0]="!visible()"
-  [class.pointer-events-none]="!visible()"
->
-  <!-- Left: back + title -->
-  <div class="flex items-center gap-1 min-w-0">
-    <button type="button" class="btn btn-ghost btn-circle btn-md text-white" [attr.aria-label]="'player.back' | translate" (click)="back.emit()">
-      <!-- lucide:chevron-left -->
-      <svg lucideChevronLeft [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
-    </button>
-    <!-- Clearlogo only — no title fallback. When the media has no logo (or its
-         image 404s) the slot stays empty rather than reverting to title text. -->
-    @if (showLogo()) {
-      <img [cachedSrc]="logoUrl()! | resolveUrl:'medium'" [alt]="mediaTitle()" (error)="onLogoError()"
-           class="h-7 w-auto max-w-[50vw] object-contain object-left [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.45))]" />
-    }
-  </div>
+@if (!seekOsd()) {
+  <!-- ===== TOP BAR ===== -->
+  <div
+    class="player-controls-reveal [--reveal-from:-0.5rem] absolute top-0 left-0 right-0 z-40 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent transition-opacity duration-300 py-5
+           [--ctrl-px:1rem] portrait:[--ctrl-px:0.5rem] xl:[--ctrl-inset:1rem]"
+    style="padding-left: calc(max(var(--ctrl-px), env(safe-area-inset-left)) + var(--ctrl-inset, 0px)); padding-right: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + var(--ctrl-inset, 0px)); padding-top: calc(env(safe-area-inset-top, 0px) + var(--ctrl-py) + var(--ctrl-inset, 0px));"
+    [style.--ctrl-py]="isMobileTouch() ? '0.25rem' : '1.25rem'"
+    [class.opacity-0]="!visible()"
+    [class.pointer-events-none]="!visible()"
+  >
+    <!-- Left: back + title -->
+    <div class="flex items-center gap-1 min-w-0">
+      <button type="button" class="btn btn-ghost btn-circle btn-md text-white" [attr.aria-label]="'player.back' | translate" (click)="back.emit()">
+        <!-- lucide:chevron-left -->
+        <svg lucideChevronLeft [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+      </button>
+      <!-- Clearlogo only — no title fallback. When the media has no logo (or its
+           image 404s) the slot stays empty rather than reverting to title text. -->
+      @if (showLogo()) {
+        <img [cachedSrc]="logoUrl()! | resolveUrl:'medium'" [alt]="mediaTitle()" (error)="onLogoError()"
+             class="h-7 w-auto max-w-[50vw] object-contain object-left [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.45))]" />
+      }
+    </div>
 
-  <!-- Right -->
-  <div class="flex items-center" [class]="isMobileTouch() ? 'gap-1' : 'gap-1.5'">
-    @if (!isMobileTouch() && !isTv()) {
-      <input
-        type="range"
-        class="range range-xs w-28 opacity-70 hover:opacity-100"
-        [attr.aria-label]="'player.volume' | translate"
-        [min]="0"
-        [max]="1"
-        [step]="0.05"
-        [value]="displayVolume()"
-        (input)="onVolumeChange($event)"
-      />
-      <button type="button" class="btn btn-ghost btn-md btn-circle text-white" [attr.aria-label]="'player.volume' | translate" (click)="toggleMute.emit()">
-        @if (muted() || volume() === 0) {
-          <!-- lucide:volume-x -->
-          <svg lucideVolumeX class="h-6 w-6"></svg>
-        } @else {
-          <!-- lucide:volume-2 -->
-          <svg lucideVolume2 class="h-6 w-6"></svg>
-        }
-      </button>
-    }
-    @if (canLockOrientation()) {
-      <button type="button" class="btn btn-ghost btn-circle text-white btn-md" [attr.aria-label]="(orientationLocked() ? 'player.orientation_unlock' : 'player.orientation_lock') | translate" [attr.aria-pressed]="orientationLocked()" (click)="toggleOrientationLock.emit()">
-        @if (orientationLocked()) {
-          <svg lucideLock [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
-        } @else {
-          <svg lucideLockOpen [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
-        }
-      </button>
-    }
-    <!-- lucide:picture-in-picture-2 — hidden on TV (no PiP on Android TV) and when permission is revoked -->
-    @if (!isTv() && pipAvailable()) {
-      <button type="button" class="btn btn-ghost btn-circle text-white btn-md" [attr.aria-label]="'player.pip' | translate" (click)="togglePip.emit()">
-        <svg lucidePictureInPicture2 [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
-      </button>
-    }
-    <!-- Cast -->
-    @if (castAvailable()) {
-      <button type="button" class="btn btn-ghost btn-circle btn-md" [class.text-info]="castConnected()" [class.text-white]="!castConnected() && !castConnecting()" [disabled]="castConnecting()" (click)="toggleCast.emit()">
-        @if (castConnecting()) {
-          <span class="loading loading-spinner loading-md"></span>
-        } @else {
-          <svg lucideCast [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
-        }
-      </button>
-    }
+    <!-- Right -->
+    <div class="flex items-center" [class]="isMobileTouch() ? 'gap-1' : 'gap-1.5'">
+      @if (!isMobileTouch() && !isTv()) {
+        <input
+          type="range"
+          class="range range-xs w-28 opacity-70 hover:opacity-100"
+          [attr.aria-label]="'player.volume' | translate"
+          [min]="0"
+          [max]="1"
+          [step]="0.05"
+          [value]="displayVolume()"
+          (input)="onVolumeChange($event)"
+        />
+        <button type="button" class="btn btn-ghost btn-md btn-circle text-white" [attr.aria-label]="'player.volume' | translate" (click)="toggleMute.emit()">
+          @if (muted() || volume() === 0) {
+            <!-- lucide:volume-x -->
+            <svg lucideVolumeX class="h-6 w-6"></svg>
+          } @else {
+            <!-- lucide:volume-2 -->
+            <svg lucideVolume2 class="h-6 w-6"></svg>
+          }
+        </button>
+      }
+      @if (canLockOrientation()) {
+        <button type="button" class="btn btn-ghost btn-circle text-white btn-md" [attr.aria-label]="(orientationLocked() ? 'player.orientation_unlock' : 'player.orientation_lock') | translate" [attr.aria-pressed]="orientationLocked()" (click)="toggleOrientationLock.emit()">
+          @if (orientationLocked()) {
+            <svg lucideLock [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+          } @else {
+            <svg lucideLockOpen [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+          }
+        </button>
+      }
+      <!-- lucide:picture-in-picture-2 — hidden on TV (no PiP on Android TV) and when permission is revoked -->
+      @if (!isTv() && pipAvailable()) {
+        <button type="button" class="btn btn-ghost btn-circle text-white btn-md" [attr.aria-label]="'player.pip' | translate" (click)="togglePip.emit()">
+          <svg lucidePictureInPicture2 [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+        </button>
+      }
+      <!-- Cast -->
+      @if (castAvailable()) {
+        <button type="button" class="btn btn-ghost btn-circle btn-md" [class.text-info]="castConnected()" [class.text-white]="!castConnected() && !castConnecting()" [disabled]="castConnecting()" (click)="toggleCast.emit()">
+          @if (castConnecting()) {
+            <span class="loading loading-spinner loading-md"></span>
+          } @else {
+            <svg lucideCast [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+          }
+        </button>
+      }
+    </div>
   </div>
-</div>
+}
 
 <!-- ===== CENTER OVERLAY (tap zone) =====
      z-30 so the bottom bar (z-40) stays clickable. Tall titles + seekbar
@@ -93,9 +95,9 @@
      The play/pause button is kept in the layout (only `invisible`) while
      loading/buffering so the seek arrows don't slide inward — the centered
      spinner overlay sits in its place. -->
-@if (isMobileTouch() && videoStarted()) {
+@if (isMobileTouch() && videoStarted() && !seekOsd()) {
   <div
-    class="absolute inset-0 z-50 flex items-center justify-center pointer-events-none transition-opacity duration-200"
+    class="player-controls-reveal [--reveal-from:0px] absolute inset-0 z-50 flex items-center justify-center pointer-events-none transition-opacity duration-200"
     [class.opacity-0]="!visible()"
   >
     <div class="flex items-center gap-6">
@@ -136,44 +138,46 @@
   [class.opacity-0]="!visible()"
   [class.pointer-events-none]="!visible()"
 >
-  <!-- Episode + Title + Mobile action buttons row. The row itself emits
-       tapOverlay so the empty gap between the title and the right-aligned
-       action buttons doubles as a "close controls" hit zone; the buttons
-       stop propagation so their own taps don't also dismiss. -->
-  <div class="flex items-end justify-between mb-0.5 gap-2" (click)="tapOverlay.emit()">
-    <div class="min-w-0 shrink">
-      @if (episodeTitle()) {
-        <div class="text-white/60 font-semibold truncate text-base sm:text-lg">{{ episodeTitle() }}</div>
-      }
-      <div class="text-white font-bold truncate text-2xl sm:text-3xl lg:text-4xl">{{ mediaTitle() }}</div>
-    </div>
-
-    <!-- Mobile: action buttons aligned right -->
-    @if (isMobileTouch()) {
-      <div class="flex items-center lg:gap-1 shrink-0" (click)="$event.stopPropagation()">
-        @if (hasNext()) {
-          <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="nextLabelKey() | translate" (click)="next.emit()">
-            <svg lucideSkipForward class="h-5 w-5"></svg>
-          </button>
+  @if (!seekOsd()) {
+    <!-- Episode + Title + Mobile action buttons row. The row itself emits
+         tapOverlay so the empty gap between the title and the right-aligned
+         action buttons doubles as a "close controls" hit zone; the buttons
+         stop propagation so their own taps don't also dismiss. -->
+    <div class="player-controls-reveal flex items-end justify-between mb-0.5 gap-2" (click)="tapOverlay.emit()">
+      <div class="min-w-0 shrink">
+        @if (episodeTitle()) {
+          <div class="text-white/60 font-semibold truncate text-base sm:text-lg">{{ episodeTitle() }}</div>
         }
-        @if (availableSubtitles().length > 0) {
-          <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.subtitles' | translate" (click)="openSheet('subtitles')">
-            <svg lucideCaptions class="h-5 w-5"></svg>
-          </button>
-        }
-        @if (availableAudioTracks().length > 1) {
-          <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.audio' | translate" (click)="openSheet('audio')">
-            <svg lucideHeadphones class="h-5 w-5"></svg>
-          </button>
-        }
-        <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.speed' | translate" (click)="openSheet('speed')">{{ playbackRate() }}x</button>
-        <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.settings' | translate" (click)="openSheet('settings')">
-          <svg lucideSettings class="h-5 w-5"></svg>
-        </button>
-        <ng-container *ngTemplateOutlet="fullscreenBtn; context: { $implicit: 'md' }"></ng-container>
+        <div class="text-white font-bold truncate text-2xl sm:text-3xl lg:text-4xl">{{ mediaTitle() }}</div>
       </div>
-    }
-  </div>
+
+      <!-- Mobile: action buttons aligned right -->
+      @if (isMobileTouch()) {
+        <div class="flex items-center lg:gap-1 shrink-0" (click)="$event.stopPropagation()">
+          @if (hasNext()) {
+            <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="nextLabelKey() | translate" (click)="next.emit()">
+              <svg lucideSkipForward class="h-5 w-5"></svg>
+            </button>
+          }
+          @if (availableSubtitles().length > 0) {
+            <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.subtitles' | translate" (click)="openSheet('subtitles')">
+              <svg lucideCaptions class="h-5 w-5"></svg>
+            </button>
+          }
+          @if (availableAudioTracks().length > 1) {
+            <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.audio' | translate" (click)="openSheet('audio')">
+              <svg lucideHeadphones class="h-5 w-5"></svg>
+            </button>
+          }
+          <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.speed' | translate" (click)="openSheet('speed')">{{ playbackRate() }}x</button>
+          <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.settings' | translate" (click)="openSheet('settings')">
+            <svg lucideSettings class="h-5 w-5"></svg>
+          </button>
+          <ng-container *ngTemplateOutlet="fullscreenBtn; context: { $implicit: 'md' }"></ng-container>
+        </div>
+      }
+    </div>
+  }
 
   <!-- Progress bar -->
   <app-seekbar
@@ -196,8 +200,8 @@
   </div>
 
   <!-- Desktop: buttons row BELOW duration -->
-  @if (!isMobileTouch()) {
-    <div class="flex items-center justify-between mt-2 mb-1">
+  @if (!isMobileTouch() && !seekOsd()) {
+    <div class="player-controls-reveal flex items-center justify-between mt-2 mb-1">
       <!-- Left: playback controls -->
       <div class="flex items-center gap-1.5">
         <!-- lucide:rotate-ccw -->
@@ -277,6 +281,7 @@
     type="button"
     class="btn btn-primary absolute z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
     [class.controls-visible]="visible()"
+    [class.controls-seek]="visible() && seekOsd()"
     (click)="skipIntro.emit()"
     (focus)="cueFocused.set(true)"
     (blur)="cueFocused.set(false)"
@@ -299,6 +304,7 @@
     type="button"
     class="btn btn-primary absolute z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
     [class.controls-visible]="visible()"
+    [class.controls-seek]="visible() && seekOsd()"
     (click)="skipPreRoll.emit()"
   >
     <span class="relative flex items-center gap-2">
@@ -315,6 +321,7 @@
     type="button"
     class="btn btn-primary absolute z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
     [class.controls-visible]="visible()"
+    [class.controls-seek]="visible() && seekOsd()"
     (click)="next.emit()"
     (focus)="cueFocused.set(true)"
     (blur)="cueFocused.set(false)"

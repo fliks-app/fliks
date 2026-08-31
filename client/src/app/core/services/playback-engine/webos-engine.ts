@@ -123,8 +123,10 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
       if (!v.ended) this.emit('stateChanged', { state: 'paused' });
     });
     add('waiting', () => this.emit('stateChanged', { state: 'buffering' }));
+    // Same as Tizen: a paused seek has no other path to clear `buffering`, and
+    // `play()` clears `v.paused` synchronously, so this can't race the intent.
     add('canplay', () => {
-      if (!v.paused) this.emit('stateChanged', { state: 'playing' });
+      this.emit('stateChanged', { state: v.paused ? 'paused' : 'playing' });
     });
     add('timeupdate', () => {
       // Drop the optimistic seek target once the real clock catches up to it.
