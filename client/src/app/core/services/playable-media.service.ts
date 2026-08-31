@@ -7,7 +7,7 @@ import { StreamingApiService } from './api/streaming-api.service';
 import { PlaybackQueueService, QueueItem } from './playback-queue.service';
 import { RemoteService } from './remote.service';
 import { resolvePlayableFile } from '../../shared/utils/media-play.util';
-import { remoteOverlayOpen } from '../../shared/remote-overlay/remote-overlay';
+import { remoteOverlayOpen } from './remote-playback-target';
 
 export interface PlayContext {
   fileId: number;

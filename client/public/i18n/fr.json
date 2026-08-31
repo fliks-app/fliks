@@ -2399,16 +2399,11 @@
     "searching": "Recherche d'appareils…",
     "chromecast_row": "Chromecast…",
     "owned_by": "Appareil de {{username}}",
-    "offline_message": "{{device}} est hors ligne.",
-    "play_here_instead": "Lire ici à la place",
-    "blocked_message": "Appuyez sur lecture sur {{device}}.",
-    "starting_message": "Démarrage sur {{device}}…",
     "error_cast_select_failed": "Impossible de se connecter à ce Chromecast.",
     "error_command_failed": "Impossible de joindre cet appareil.",
     "error_no_response": "Cet appareil ne répond pas.",
-    "idle_message": "Rien n'est en cours de lecture sur {{device}}.",
-    "idle_hint": "Choisissez un titre, il démarrera dessus.",
-    "stop_controlling": "Arrêter de contrôler"
+    "stop_controlling": "Arrêter de contrôler",
+    "stop_playback": "Arrêter la lecture"
   },
   "language": {
     "en": "Anglais",

@@ -2372,16 +2372,11 @@
     "searching": "Buscando dispositivos…",
     "chromecast_row": "Chromecast…",
     "owned_by": "Dispositivo de {{username}}",
-    "offline_message": "{{device}} está desconectado.",
-    "play_here_instead": "Reproducir aquí en su lugar",
-    "blocked_message": "Pulsa reproducir en {{device}}.",
-    "starting_message": "Iniciando en {{device}}…",
     "error_cast_select_failed": "No se pudo conectar a ese Chromecast.",
     "error_command_failed": "No se pudo contactar con ese dispositivo.",
     "error_no_response": "Ese dispositivo no responde.",
-    "idle_message": "No se está reproduciendo nada en {{device}}.",
-    "idle_hint": "Elige un título y empezará ahí.",
-    "stop_controlling": "Dejar de controlar"
+    "stop_controlling": "Dejar de controlar",
+    "stop_playback": "Detener la reproducción"
   },
   "language": {
     "en": "Inglés",

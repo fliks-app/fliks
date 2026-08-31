@@ -81,7 +81,7 @@ interface NativeCastPlugin {
   isConnected(): Promise<{ connected: boolean }>;
   requestSession(): Promise<void>;
   /** Native-only device enumeration + selection backing the unified picker
-   *  (`shared/remote-overlay`): the web Cast SDK has no equivalent. */
+   *  (`shared/remote-picker`): the web Cast SDK has no equivalent. */
   getCastDevices(): Promise<{ devices: { id: string; name: string; modelName?: string }[] }>;
   selectCastDevice(opts: { id: string }): Promise<void>;
   loadMedia(opts: NativeCastLoadOpts): Promise<void>;

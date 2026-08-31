@@ -22,12 +22,12 @@ import { PwaAutoUpdateService } from './core/services/pwa-auto-update.service';
 import { AppResumeService } from './core/services/app-resume.service';
 import { OfflinePlaybackSyncService } from './core/services/offline-playback-sync.service';
 import { RemoteService } from './core/services/remote.service';
-import { RemoteOverlayComponent } from './shared/remote-overlay/remote-overlay';
+import { CastOverlayComponent } from './shared/cast-overlay/cast-overlay';
 import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.service';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, ToastContainerComponent, ConfirmationModalComponent, FolderPickerModalComponent, SelectPickerComponent, RemoteOverlayComponent],
+  imports: [RouterOutlet, ToastContainerComponent, ConfirmationModalComponent, FolderPickerModalComponent, SelectPickerComponent, CastOverlayComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app.html',
 })
