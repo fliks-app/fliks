@@ -2380,7 +2380,8 @@
     "error_command_failed": "Não foi possível contactar esse dispositivo.",
     "error_no_response": "Esse dispositivo não está a responder.",
     "idle_message": "Nada está a ser reproduzido em {{device}}.",
-    "idle_hint": "Escolha um título e começará aí."
+    "idle_hint": "Escolha um título e começará aí.",
+    "stop_controlling": "Parar de controlar"
   },
   "language": {
     "en": "Inglês",

@@ -2,17 +2,24 @@
   <!-- One pane, two shells: a sheet is right under a thumb and wrong on a
        desktop, where a dialog is the house pattern. -->
   <ng-template #pane>
-      <div class="p-4 min-w-72">
+      <div class="flex flex-col min-w-72 max-h-[85vh]">
+        <app-modal-header flush (closed)="closeOverlay()">
+          <div class="flex items-center gap-2 min-w-0">
+            @if (showRemotePane()) {
+              <button type="button" class="btn btn-ghost btn-sm btn-circle shrink-0"
+                      (click)="backToPicker()" [attr.aria-label]="'player.back' | translate">
+                <svg lucideChevronLeft class="h-4 w-4"></svg>
+              </button>
+            }
+            <h3 class="text-lg font-bold truncate">
+              {{ showRemotePane() ? targetLabel() : ('remote.picker_title' | translate) }}
+            </h3>
+          </div>
+        </app-modal-header>
+
+        <div class="overflow-y-auto px-5 sm:px-6 py-4">
         @if (!showRemotePane()) {
           <!-- Pane A: unified picker -->
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="font-semibold text-lg">{{ 'remote.picker_title' | translate }}</h2>
-            <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="closeOverlay()"
-                    [attr.aria-label]="'player.close' | translate">
-              <svg lucideX class="h-4 w-4"></svg>
-            </button>
-          </div>
-
           @if (castSearching()) {
             <div class="flex items-center gap-2 text-sm opacity-70 mb-2">
               <span class="loading loading-spinner loading-xs"></span>
@@ -53,18 +60,6 @@
           </ul>
         } @else {
           <!-- Pane B: remote control -->
-          <div class="flex items-center gap-2 mb-3">
-            <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="backToPicker()"
-                    [attr.aria-label]="'player.back' | translate">
-              <svg lucideChevronLeft class="h-4 w-4"></svg>
-            </button>
-            <span class="font-semibold truncate flex-1">{{ targetLabel() }}</span>
-            <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="closeOverlay()"
-                    [attr.aria-label]="'player.close' | translate">
-              <svg lucideX class="h-4 w-4"></svg>
-            </button>
-          </div>
-
           @switch (remoteViewState()) {
             @case ('offline') {
               <div class="text-center py-4">
@@ -191,12 +186,24 @@
             }
           }
         }
+        </div>
+
+        <app-modal-footer flush>
+          @if (showRemotePane()) {
+            <button type="button" class="btn btn-ghost btn-sm" (click)="stopControlling()">
+              {{ 'remote.stop_controlling' | translate }}
+            </button>
+          }
+          <button type="button" class="btn btn-sm" (click)="closeOverlay()">
+            {{ 'common.close' | translate }}
+          </button>
+        </app-modal-footer>
       </div>
   </ng-template>
 
   @if (device.isDesktop()) {
     <dialog #dialog class="modal" (close)="onDialogClose()">
-      <div class="modal-box max-w-md">
+      <div class="modal-box max-w-md p-0">
         <ng-container [ngTemplateOutlet]="pane" />
       </div>
       <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>

@@ -2407,7 +2407,8 @@
     "error_command_failed": "Impossible de joindre cet appareil.",
     "error_no_response": "Cet appareil ne répond pas.",
     "idle_message": "Rien n'est en cours de lecture sur {{device}}.",
-    "idle_hint": "Choisissez un titre, il démarrera dessus."
+    "idle_hint": "Choisissez un titre, il démarrera dessus.",
+    "stop_controlling": "Arrêter de contrôler"
   },
   "language": {
     "en": "Anglais",

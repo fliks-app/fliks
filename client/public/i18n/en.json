@@ -2407,7 +2407,8 @@
     "error_command_failed": "Couldn't reach that device.",
     "error_no_response": "That device isn't responding.",
     "idle_message": "Nothing is playing on {{device}}.",
-    "idle_hint": "Pick a title and it will start there."
+    "idle_hint": "Pick a title and it will start there.",
+    "stop_controlling": "Stop controlling"
   },
   "language": {
     "en": "English",

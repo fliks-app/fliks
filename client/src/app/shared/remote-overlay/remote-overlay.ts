@@ -1,4 +1,6 @@
 import { NgTemplateOutlet } from '@angular/common';
+import { ModalHeaderComponent } from '../components/modal-header';
+import { ModalFooterComponent } from '../components/modal-footer';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -31,7 +33,6 @@ import {
   LucideTv,
   LucideVolume2,
   LucideVolumeX,
-  LucideX,
 } from '@lucide/angular';
 import { BottomSheetComponent } from '../components/bottom-sheet';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
@@ -78,12 +79,14 @@ interface SubtitleOption {
   selector: 'app-remote-overlay',
   imports: [
     NgTemplateOutlet,
+    ModalHeaderComponent,
+    ModalFooterComponent,
     TranslateModule,
     BottomSheetComponent,
     SeekbarComponent,
     DropdownMenuComponent,
     LucideTv, LucideTablet, LucideSmartphone, LucideMonitor, LucideCast,
-    LucideX, LucideChevronLeft, LucidePlay, LucidePause, LucideRotateCcw, LucideRotateCw,
+    LucideChevronLeft, LucidePlay, LucidePause, LucideRotateCcw, LucideRotateCw,
     LucideVolume2, LucideVolumeX, LucideSkipForward, LucideHeadphones, LucideCaptions, LucideCheck,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -182,6 +185,11 @@ export class RemoteOverlayComponent {
       else if (!open && el.open) el.close();
     });
   });
+
+  protected stopControlling(): void {
+    this.remote.selectTarget(null);
+    this.closeOverlay();
+  }
 
   protected onDialogClose(): void {
     if (this.open()) this.closeOverlay();

@@ -2380,7 +2380,8 @@
     "error_command_failed": "Gerät nicht erreichbar.",
     "error_no_response": "Dieses Gerät antwortet nicht.",
     "idle_message": "Auf {{device}} läuft gerade nichts.",
-    "idle_hint": "Wählen Sie einen Titel, er startet dort."
+    "idle_hint": "Wählen Sie einen Titel, er startet dort.",
+    "stop_controlling": "Steuerung beenden"
   },
   "language": {
     "en": "Englisch",
