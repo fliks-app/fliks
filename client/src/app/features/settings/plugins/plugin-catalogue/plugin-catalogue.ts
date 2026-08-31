@@ -8,6 +8,7 @@ import {
   PluginsApiService,
 } from '../../../../core/services/api/plugins-api.service';
 import { DropdownToggleDirective } from '../../../../shared/directives/dropdown-toggle.directive';
+import { SelectedOptionDirective } from '../../../../shared/directives/selected-option.directive';
 
 interface CatalogueRow {
   sourceId: number;
@@ -21,7 +22,7 @@ interface CatalogueRow {
 /** What every cached catalog offers, merged across sources. */
 @Component({
   selector: 'app-plugin-catalogue',
-  imports: [TranslateModule, DropdownToggleDirective, LucideChevronDown],
+  imports: [TranslateModule, DropdownToggleDirective, LucideChevronDown, SelectedOptionDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-catalogue.html',
 })

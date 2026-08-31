@@ -1,8 +1,10 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  ElementRef,
   signal,
   inject,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -42,6 +44,7 @@ export class SetupComponent {
   readonly switching = signal(false);
   /** URL of the entry whose ⋯ menu is open, or null. */
   readonly openMenuFor = signal<string | null>(null);
+  private readonly saveBtn = viewChild<ElementRef<HTMLButtonElement>>('saveBtn');
 
   async test() {
     const raw = this.url().trim().replace(/\/+$/, '');
@@ -54,6 +57,9 @@ export class SetupComponent {
         if (await this.reachable(base)) {
           this.url.set(base);
           this.testResult.set({ ok: true, message: 'setup.test_success' });
+          // Save is disabled until the test passes — hand it the focus once
+          // the render that enables it has happened, so the D-pad lands there.
+          setTimeout(() => this.saveBtn()?.nativeElement.focus());
           return;
         }
       }

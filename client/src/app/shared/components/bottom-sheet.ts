@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
 import { TvService } from '../../core/services/tv.service';
-import { TABBABLE_SELECTOR } from '../../core/services/focusable.constants';
+import { TABBABLE_SELECTOR, initialOverlayFocus } from '../../core/services/focusable.constants';
 
 @Component({
   selector: 'app-bottom-sheet',
@@ -161,21 +161,19 @@ export class BottomSheetComponent {
             this.prevFocused = document.activeElement as HTMLElement | null;
             document.addEventListener('focusin', this.onFocusIn);
             this.focusTrapActive = true;
-            // Move focus to the first item inside the sheet on open. Without
-            // this, the D-pad still operates on the trigger row (or the
-            // previously-focused tile in the route), so up/down moves to a
-            // background element and the focus-trap fires AFTER the user
-            // has already left the sheet visually — feels unresponsive.
+            // Move focus inside the sheet on open. Without this, the D-pad
+            // still operates on the trigger row (or the previously-focused
+            // tile in the route), so up/down moves to a background element and
+            // the focus-trap fires AFTER the user has already left the sheet
+            // visually — feels unresponsive.
             // queueMicrotask waits until @if has materialised the sheet
             // content; rAF would defer one extra frame and let the WebView
             // paint the focus halo on the wrong element first.
             queueMicrotask(() => {
               if (!this.open()) return;
-              const sheetEl = this.sheet()?.nativeElement;
-              const first = sheetEl?.querySelector<HTMLElement>(
-                TABBABLE_SELECTOR,
-              );
-              first?.focus({ preventScroll: true });
+              initialOverlayFocus(this.sheet()?.nativeElement)?.focus({
+                preventScroll: true,
+              });
             });
           }
         } else {

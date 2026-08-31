@@ -15,6 +15,7 @@ import { BottomSheetComponent } from './bottom-sheet';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
+import { initialOverlayFocus } from '../../core/services/focusable.constants';
 
 /**
  * Reusable menu chrome that picks its presentation per-platform:
@@ -171,15 +172,9 @@ export class PopoverMenuComponent {
               this.anchor();
           }
         }
-        // Prefer the active item (caller marks it with `[autofocus]` or
-        // `[aria-current]`) so the user lands on the current selection
-        // instead of having to scroll through the list. Falls back to the
-        // first focusable when nothing's marked active.
-        const root = this.host.nativeElement;
-        const target =
-          root.querySelector<HTMLElement>('[autofocus]:not([disabled])') ??
-          root.querySelector<HTMLElement>('[aria-current="true"]:not([disabled])') ??
-          root.querySelector<HTMLElement>('a[href], button:not([disabled]), [tabindex="0"]');
+        // Land on the current selection rather than making the user scroll to
+        // it; falls back to the first focusable when nothing is marked.
+        const target = initialOverlayFocus(this.host.nativeElement);
         target?.focus({ preventScroll: false });
         target?.scrollIntoView({ block: 'nearest', behavior: 'instant' as ScrollBehavior });
       });
