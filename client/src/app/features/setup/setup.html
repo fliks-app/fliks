@@ -85,6 +85,7 @@
           {{ 'setup.test' | translate }}
         </button>
         <button
+          #saveBtn
           type="button"
           class="btn btn-primary flex-1"
           [disabled]="!testResult()?.ok"

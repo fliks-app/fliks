@@ -24,6 +24,7 @@ import {
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { ToastService } from '../../core/services/toast.service';
+import { TvService } from '../../core/services/tv.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
 import {
@@ -62,6 +63,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   protected readonly navbar = inject(NavbarService);
+  protected readonly tv = inject(TvService);
   private readonly backgroundService = inject(BackgroundService);
   readonly auth = inject(AuthService);
 

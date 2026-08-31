@@ -96,7 +96,7 @@
                     <p class="px-3 py-2 text-xs text-base-content/50">{{ 'settings.plugins.catalogue.pick_version' | translate }}</p>
                     @for (entry of versionsFor(row); track entry.version) {
                       <button type="button" class="dropdown-item justify-between"
-                        [disabled]="entry.version === installedVersion(row)"
+                        [appSelectedOption]="entry.version === installedVersion(row)"
                         (click)="installVersion(row, entry.version)">
                         <span>{{ entry.version }}</span>
                         @if (entry.version === installedVersion(row)) {

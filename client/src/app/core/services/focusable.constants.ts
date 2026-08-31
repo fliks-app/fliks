@@ -15,6 +15,26 @@ export const TABBABLE_SELECTOR =
   'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
+ * Where focus lands when an overlay (bottom sheet, dropdown, popover) opens:
+ * the option marking the current selection when there is one, otherwise the
+ * first tabbable. The three markers below are the ones the app uses —
+ * `aria-disabled` is set by `SelectedOptionDirective` (and is preferred over
+ * `disabled` precisely so the current value stays in the focus order), while
+ * `autofocus` and `aria-current` are set by hand at a few call sites.
+ */
+export function initialOverlayFocus(root: ParentNode | null | undefined): HTMLElement | null {
+  if (!root) return null;
+  for (const marker of ['[autofocus]', '[aria-current="true"]', '[aria-disabled="true"]']) {
+    const el = root.querySelector<HTMLElement>(marker);
+    // Only the opt-out half of isFocusCandidate: this can run before layout, so
+    // a rendered-size check would always reject and fall through to the first
+    // item.
+    if (el && !isFocusOptedOut(el)) return el;
+  }
+  return root.querySelector<HTMLElement>(TABBABLE_SELECTOR);
+}
+
+/**
  * A horizontally scrolling rail. Arrow keys stay inside one while stepping,
  * and its off-screen cards remain valid targets.
  */
