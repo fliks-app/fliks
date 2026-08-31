@@ -161,8 +161,11 @@ export class RemotePlaybackTarget implements PlaybackTarget {
       console.warn('[remote] stop requested with no selected target');
       return;
     }
-    // Keep the target: stopping the media is not giving the device back.
+    // Keep the target selected: stopping the media is not giving the device
+    // back. The card closes because there is nothing left in it to act on, and
+    // the top-bar chip reopens it.
     void this.remote.send(targetId, { action: 'stop' });
+    remoteOverlayOpen.set(false);
   }
 
   disconnect(): void {

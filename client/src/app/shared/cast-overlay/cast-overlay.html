@@ -7,22 +7,18 @@
       <div class="bg-base-100 h-full lg:h-auto lg:rounded-xl lg:shadow-2xl lg:border lg:border-base-300 flex flex-col max-h-dvh lg:overflow-visible">
 
         <!-- Header -->
-        <div class="flex items-center lg:items-start gap-3 px-4 pt-4 lg:py-3 shrink-0 lg:border-b lg:border-base-200"
-             style="padding-top: calc(env(safe-area-inset-top) / 2 + 12px)"
+        <div class="flex items-center lg:items-start gap-3 px-4 pt-6 lg:py-3 shrink-0 lg:border-b lg:border-base-200"
+             style="padding-top: calc(env(safe-area-inset-top) / 2 + 24px)"
         >
           <!-- Poster thumbnail (desktop only) -->
           @if (t.fanartUrl()) {
             <img [cachedSrc]="t.fanartUrl()! | resolveUrl:'thumb'" alt=""
                  class="hidden lg:block w-12 h-16 object-cover rounded shrink-0" />
           }
-          <div class="min-w-0 flex-1 lg:py-1">
-            <p class="font-bold truncate">{{ t.mediaTitle() }}</p>
-            @if (t.episodeTitle()) {
-              <p class="text-xs text-base-content/50 truncate">{{ t.episodeTitle() }}</p>
-            }
-          </div>
-          <button class="btn btn-ghost btn-sm btn-circle shrink-0 ml-2" (click)="toggle()">
-            <svg lucideX class="h-4 w-4"></svg>
+          <div class="min-w-0 flex-1"></div>
+          <button class="btn btn-ghost btn-circle shrink-0" (click)="toggle()"
+                  [attr.aria-label]="'common.close' | translate">
+            <svg lucideX class="h-6 w-6"></svg>
           </button>
         </div>
 
@@ -59,6 +55,14 @@
         <div class="shrink-0 lg:shrink px-4 pt-4 lg:py-4 space-y-5 lg:space-y-4"
              style="padding-bottom: max(2rem, env(safe-area-inset-bottom))"
         >
+          <!-- Title -->
+          <div class="min-w-0">
+            <p class="font-bold truncate">{{ t.mediaTitle() }}</p>
+            @if (t.episodeTitle()) {
+              <p class="text-xs text-base-content/50 truncate">{{ t.episodeTitle() }}</p>
+            }
+          </div>
+
           <!-- Progress bar -->
           <div>
             <app-seekbar #seekbar
