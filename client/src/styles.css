@@ -556,13 +556,12 @@ app-player-controls :is(a, button, select, input, [role="button"], [tabindex]):f
   box-shadow: none !important;
 }
 
-/* TV ghost buttons keep their transparent bg even when focused. The
-   3px primary-color outline above is already a strong focus cue on a
-   10-foot UI, so layering daisyUI's fill (which kicks in via the
-   `.btn-ghost:not(…,:focus,…)` exclusion) is redundant and obscures
-   the underlying video for player controls. */
-body.tv .btn-ghost:focus,
-body.tv .btn-ghost:focus-visible {
+/* Ghost buttons in the player stay ghost while focused: they sit on video, where
+   daisyUI's focus fill only obscures the frame and the primary ring is already
+   the cue. Scoped to the player on purpose — elsewhere that fill IS the wanted
+   focus affordance, and suppressing it left the bar with no visible state. */
+body.tv app-player-controls .btn-ghost:focus,
+body.tv app-player-controls .btn-ghost:focus-visible {
   background-color: transparent !important;
   --btn-bg: rgba(0, 0, 0, 0) !important;
 }
