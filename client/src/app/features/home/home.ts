@@ -226,8 +226,12 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly skeletonFadingOut = signal(false);
   readonly showSkeleton = computed(() => this.loadingFirstPass() || this.skeletonFadingOut());
 
+  /** Recent requests are hidden on TV: the card is an admin surface (approve /
+   *  decline, profile names) that the 10-foot UI isn't designed for. */
   readonly visibleSections = computed(() =>
-    this.sections().filter((s) => s.visible),
+    this.sections().filter(
+      (s) => s.visible && !(this.tv.isTv() && s.type === 'requests-recent'),
+    ),
   );
 
   qualityProfileDisplay(id: number | null): string {

@@ -66,9 +66,8 @@
             @for (lib of displayLibraries(); track lib.id) {
               <a [routerLink]="libraryUrl(lib)"
                  [attr.data-home-focus]="'library:' + lib.id"
-                 class="shrink-0 w-36 h-20 sm:w-48 sm:h-28 rounded-xl border flex items-center gap-3 px-4 sm:px-5 hover:shadow-lg transition-shadow"
-                 [style.background]="'linear-gradient(135deg, color-mix(in oklch, ' + libraryColor(lib) + ' 20%, transparent), color-mix(in oklch, ' + libraryColor(lib) + ' 5%, transparent))'"
-                 [style.border-color]="'color-mix(in oklch, ' + libraryColor(lib) + ' 15%, transparent)'"
+                 class="library-card shrink-0 w-36 h-20 sm:w-48 sm:h-28 rounded-xl flex items-center gap-3 px-4 sm:px-5 hover:shadow-lg transition-shadow"
+                 [style.--lib-color]="libraryColor(lib)"
               >
                 <app-lucide-icon [name]="lib.icon || 'library'" class="h-6 w-6 sm:h-8 sm:w-8 shrink-0" [style.color]="libraryColor(lib)" />
                 <span class="text-sm sm:text-base font-semibold">{{ lib.name }}</span>

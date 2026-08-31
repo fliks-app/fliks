@@ -32,6 +32,7 @@ const require = createRequire(import.meta.url);
 const unwrapLayers = require(resolve(clientRoot, 'postcss/unwrap-layers.cjs'));
 const stripUnsupportedSelectors = require(resolve(clientRoot, 'postcss/strip-unsupported-selectors.cjs'));
 const tvFallbacks = require(resolve(clientRoot, 'postcss/tv-fallbacks.cjs'));
+const tvColorMixAlpha = require(resolve(clientRoot, 'postcss/tv-color-mix-alpha.cjs'));
 
 const processor = postcss([
   // preset-env handles the bulk: cascade-layer ordering via specificity
@@ -76,6 +77,9 @@ const processor = postcss([
   // Final pass: unwrap `:where()`, flatten `@container`, drop
   // `@starting-style`, `text-wrap`, and `cq*`-unit declarations.
   tvFallbacks(),
+  // Rebuild the alpha on Tailwind's `/NN` colour variants. Last, and after
+  // preset-env, which is what leaves the `rgb()` theme values it reads.
+  tvColorMixAlpha(),
 ]);
 
 export const downlevelCss = async (css, from) => {
