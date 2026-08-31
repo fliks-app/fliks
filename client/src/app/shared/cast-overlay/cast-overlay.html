@@ -56,10 +56,10 @@
              style="padding-bottom: max(2rem, env(safe-area-inset-bottom))"
         >
           <!-- Title -->
-          <div class="min-w-0">
-            <p class="font-bold truncate">{{ t.mediaTitle() }}</p>
+          <div class="min-w-0 pt-3 lg:pt-0">
+            <p class="text-xl lg:text-lg font-bold truncate">{{ t.mediaTitle() }}</p>
             @if (t.episodeTitle()) {
-              <p class="text-xs text-base-content/50 truncate">{{ t.episodeTitle() }}</p>
+              <p class="text-sm text-base-content/50 truncate">{{ t.episodeTitle() }}</p>
             }
           </div>
 
