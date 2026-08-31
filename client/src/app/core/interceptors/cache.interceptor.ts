@@ -170,6 +170,17 @@ async function getCached(url: string): Promise<CacheEntry | null> {
   } catch { return null; }
 }
 
+/** Defer the write past the render. `store.put` structured-clones the whole
+ *  body on the main thread — a 700-item library list stalls it long enough to
+ *  stutter the loading spinner — and nothing reads the entry back this frame. */
+function putCacheWhenIdle(url: string, body: any, generation: number): void {
+  const write = () => void putCache(url, body, generation);
+  const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void })
+    .requestIdleCallback;
+  if (ric) ric(write, { timeout: 2000 });
+  else setTimeout(write, 0);
+}
+
 async function putCache(url: string, body: any, generation: number): Promise<void> {
   if (generation !== cacheGeneration) return;
   try {
@@ -238,7 +249,7 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
     return next(cleanReq).pipe(
       tap((event) => {
         if (event instanceof HttpResponse && event.status === 200) {
-          void putCache(url, event.body, generation);
+          putCacheWhenIdle(url, event.body, generation);
         }
       }),
     );
@@ -260,7 +271,7 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
       next(req).pipe(
         tap((event) => {
           if (event instanceof HttpResponse && event.status === 200) {
-            void putCache(url, event.body, generation);
+            putCacheWhenIdle(url, event.body, generation);
           }
         }),
       ).subscribe({
