@@ -411,13 +411,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  auto-hide effect re-reads it to re-arm. */
   private readonly controlsActivity = signal(0);
   /** Reasons the controls stay pinned open (never auto-hide): playback paused
-   *  or buffering, an open picker / panel, or an active seekbar drag. Reactive
-   *  so the moment a transient pin clears the auto-hide countdown restarts. */
+   *  or buffering, an open picker / panel, an active seekbar drag, or a seek
+   *  still in flight — a seek slower than the hide delay would otherwise
+   *  retract the bar before the playhead landed. Reactive so the moment a
+   *  transient pin clears the auto-hide countdown restarts. */
   private readonly keepControlsUp = computed(
     () =>
       this.paused() ||
       this.buffering() ||
       this.seekDragging() ||
+      this.state.seekLocked() ||
       this.controlsPanelOpen(),
   );
   /** Single owner of the auto-hide countdown. Arms only while the bar is
@@ -4429,7 +4432,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (!res.ok) return;
       const meta: SpriteMetadata = await res.json();
       this.spriteMetadata.set(meta);
-      this.spriteUrl.set(this.streamingApi.getThumbnailSpriteUrl(this.mediaFileId));
+      const spriteUrl = this.streamingApi.getThumbnailSpriteUrl(this.mediaFileId);
+      this.spriteUrl.set(spriteUrl);
+      // Decode it now rather than on the first arrow press: the sheet is one
+      // large image, and fetching it lazily leaves the first scrub of a
+      // session previewing an empty tooltip.
+      new Image().src = spriteUrl;
     } catch {
       // Sprite not available or aborted on teardown — tooltip shows time only
     }
