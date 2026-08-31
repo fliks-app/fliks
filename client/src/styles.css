@@ -584,10 +584,12 @@ body.tv app-mosaic-card button:focus-visible .mosaic-art {
 }
 /* Slide the caption clear of the art the lift above scales over it. Global, not
    component `styles:` — those bypass the downlevel `:focus-visible` → `:focus`. */
-app-media-card figure + div {
+app-media-card figure + div,
+app-mosaic-card .mosaic-art + div {
   transition: transform 0.15s ease-out;
 }
-app-media-card figure:focus-visible + div {
+app-media-card figure:focus-visible + div,
+app-mosaic-card button:focus-visible .mosaic-art + div {
   transform: translateY(0.6rem);
 }
 
