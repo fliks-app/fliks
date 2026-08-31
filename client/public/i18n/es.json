@@ -2379,7 +2379,7 @@
     "error_no_response": "Ese dispositivo no responde.",
     "stop_controlling": "Dejar de controlar",
     "stop_playback": "Detener la reproducción",
-    "idle_message": "No se está reproduciendo nada en este dispositivo.",
+    "idle_message": "Ningún contenido en reproducción",
     "idle_hint": "Elige un título y empezará aquí.",
     "starting_message": "Cargando...",
     "offline_message": "Este dispositivo ya no está disponible.",

@@ -2406,7 +2406,7 @@
     "error_no_response": "Cet appareil ne répond pas.",
     "stop_controlling": "Arrêter de contrôler",
     "stop_playback": "Arrêter la lecture",
-    "idle_message": "Rien n'est en cours de lecture sur cet appareil.",
+    "idle_message": "Aucun média en cours de lecture",
     "idle_hint": "Choisissez un titre, il démarrera ici.",
     "starting_message": "Chargement...",
     "offline_message": "Cet appareil n'est plus joignable.",

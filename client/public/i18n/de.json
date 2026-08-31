@@ -2379,7 +2379,7 @@
     "error_no_response": "Dieses Gerät antwortet nicht.",
     "stop_controlling": "Steuerung beenden",
     "stop_playback": "Wiedergabe beenden",
-    "idle_message": "Auf diesem Gerät läuft gerade nichts.",
+    "idle_message": "Keine Wiedergabe",
     "idle_hint": "Wählen Sie einen Titel, er startet hier.",
     "starting_message": "Wird geladen...",
     "offline_message": "Dieses Gerät ist nicht mehr erreichbar.",
