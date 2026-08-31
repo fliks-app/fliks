@@ -55,29 +55,31 @@
         <div class="shrink-0 lg:shrink px-4 pt-4 lg:py-4 space-y-5 lg:space-y-4"
              style="padding-bottom: max(2rem, env(safe-area-inset-bottom))"
         >
-          <!-- Title -->
-          <div class="min-w-0 pt-3 lg:pt-0">
-            <p class="text-xl lg:text-lg font-bold truncate">{{ t.mediaTitle() }}</p>
-            @if (t.episodeTitle()) {
-              <p class="text-sm text-base-content/50 truncate">{{ t.episodeTitle() }}</p>
-            }
-          </div>
+          <!-- Title + progress: one unit, so the parent rhythm does not wedge
+               the heading away from the bar it labels. -->
+          <div class="space-y-2">
+            <div class="min-w-0">
+              <p class="text-xl lg:text-lg font-bold truncate">{{ t.mediaTitle() }}</p>
+              @if (t.episodeTitle()) {
+                <p class="text-sm text-base-content/50 truncate">{{ t.episodeTitle() }}</p>
+              }
+            </div>
 
-          <!-- Progress bar -->
-          <div>
-            <app-seekbar #seekbar
-              [currentTime]="t.currentTime()"
-              [duration]="t.duration()"
-              [loading]="t.buffering()"
-              [spriteUrl]="t.spriteUrl()"
-              [spriteMetadata]="t.spriteMetadata()"
-              variant="cast"
-              [showBuffered]="false"
-              (seek)="t.seek($event)"
-            />
-            <div class="flex justify-between text-xs text-base-content/50 mt-1">
-              <span>{{ formatTime(seekbar.displayTime()) }}</span>
-              <span>{{ formatTime(t.duration()) }}</span>
+            <div>
+              <app-seekbar #seekbar
+                [currentTime]="t.currentTime()"
+                [duration]="t.duration()"
+                [loading]="t.buffering()"
+                [spriteUrl]="t.spriteUrl()"
+                [spriteMetadata]="t.spriteMetadata()"
+                variant="cast"
+                [showBuffered]="false"
+                (seek)="t.seek($event)"
+              />
+              <div class="flex justify-between text-xs text-base-content/50 mt-1">
+                <span>{{ formatTime(seekbar.displayTime()) }}</span>
+                <span>{{ formatTime(t.duration()) }}</span>
+              </div>
             </div>
           </div>
 
