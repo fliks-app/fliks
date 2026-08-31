@@ -66,6 +66,16 @@
                     landscape:flex-1 landscape:min-w-0 landscape:self-center landscape:overflow-y-auto"
              style="padding-bottom: max(2rem, env(safe-area-inset-bottom))"
         >
+          <!-- Skip cue: the row keeps its height so an offer appearing
+               mid-playback does not shift the buttons under a thumb. -->
+          <div class="min-h-9">
+            @if (t.skipCue(); as cue) {
+              <button class="btn btn-sm btn-primary w-full" (click)="t.skip()">
+                {{ cue.labelKey | translate }}
+              </button>
+            }
+          </div>
+
           <!-- Title + progress: one unit, so the parent rhythm does not wedge
                the heading away from the bar it labels. -->
           <div class="space-y-1">
@@ -179,16 +189,6 @@
                   </button>
                 }
               </app-dropdown-menu>
-            }
-          </div>
-
-          <!-- Skip cue: the row keeps its height so an offer appearing
-               mid-playback does not shift the buttons under a thumb. -->
-          <div class="min-h-9">
-            @if (t.skipCue(); as cue) {
-              <button class="btn btn-sm btn-outline w-full" (click)="t.skip()">
-                {{ cue.labelKey | translate }}
-              </button>
             }
           </div>
 
