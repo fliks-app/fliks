@@ -82,6 +82,31 @@ describe('RemoteService stop handling', () => {
     expect(service.targetState()).toBeNull();
   });
 
+  it('advances the position between reports, and holds it when paused', () => {
+    vi.useFakeTimers();
+    try {
+      const { service, remoteState } = setup();
+      remoteState.set(frame({ positionSeconds: 30, state: 'playing' }));
+      service.ingestState();
+      expect(service.interpolatedPosition()).toBeCloseTo(30, 1);
+
+      vi.advanceTimersByTime(4_000);
+      expect(service.interpolatedPosition()).toBeCloseTo(34, 1);
+
+      // A report resynchronises rather than adding to the estimate.
+      remoteState.set(frame({ positionSeconds: 40, state: 'playing' }));
+      service.ingestState();
+      expect(service.interpolatedPosition()).toBeCloseTo(40, 1);
+
+      remoteState.set(frame({ positionSeconds: 40, state: 'paused' }));
+      service.ingestState();
+      vi.advanceTimersByTime(4_000);
+      expect(service.interpolatedPosition()).toBeCloseTo(40, 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('pins the volume the user set until the target agrees', () => {
     const { service, remoteState } = setup();
     remoteState.set(frame({ volume: 0.5 }));

@@ -152,6 +152,11 @@ export class RemoteService {
       untracked(() => this.ingestState());
     });
 
+    effect(() => {
+      this.reportedState();
+      untracked(() => this.syncTicker());
+    });
+
     // A reconnect remints the connection id, so a list built from live
     // connections is stale: refetch on our own reconnect too.
     effect(() => {
@@ -253,8 +258,7 @@ export class RemoteService {
       if (targetId) localStorage.setItem(SELECTED_TARGET_KEY, targetId);
       else localStorage.removeItem(SELECTED_TARGET_KEY);
     } catch { /* blocked storage: selection is per-session only */ }
-    if (targetId) this.startTicking();
-    else this.stopTicking();
+
   }
 
   /** Coalesce a dragged control so one gesture costs a handful of POSTs. */
@@ -357,13 +361,16 @@ export class RemoteService {
     }
   }
 
-  private startTicking(): void {
-    this.tickHandle ??= setInterval(() => this.wallClock.set(Date.now()), 500);
-  }
-
-  private stopTicking(): void {
-    if (this.tickHandle) clearInterval(this.tickHandle);
-    this.tickHandle = null;
+  /** Interpolate only while something is actually playing: a paused or absent
+   *  target has nothing to advance, and a spare timer would just wake the app. */
+  private syncTicker(): void {
+    const playing = this.reportedState()?.state === 'playing';
+    if (playing && this.tickHandle === null) {
+      this.tickHandle = setInterval(() => this.wallClock.set(Date.now()), 500);
+    } else if (!playing && this.tickHandle !== null) {
+      clearInterval(this.tickHandle);
+      this.tickHandle = null;
+    }
   }
 
   private readSelectedTarget(): string | null {
