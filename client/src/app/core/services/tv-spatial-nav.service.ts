@@ -331,6 +331,10 @@ export class TvSpatialNavService {
       const pos = typeof getComputedStyle !== 'undefined' ? getComputedStyle(next).position : 'static';
       if (pos !== 'absolute' && pos !== 'fixed' && pos !== 'sticky') {
         next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+        // Last, so it wins: on the TV WebView a smooth `scrollIntoView` leaves a
+        // horizontal scroller untouched (a smooth `scrollTo` on the same element
+        // works), which strands focus off the right edge of a card row.
+        this.scrollRowToFocus(next);
       }
       return;
     }
@@ -339,6 +343,22 @@ export class TvSpatialNavService {
     if (crossZones && !this.openModals().length && (dir === 'down' || dir === 'up')) {
       window.scrollBy({ top: dir === 'down' ? PAGE_SCROLL_AMOUNT_PX : -PAGE_SCROLL_AMOUNT_PX, behavior: 'smooth' });
     }
+  }
+
+  /** Bring `el` inside its card row's scrollport, honouring the row's
+   *  scroll-padding — the horizontal half of `inline: 'nearest'`. */
+  private scrollRowToFocus(el: HTMLElement): void {
+    const row = el.closest<HTMLElement>('[data-scroller]');
+    if (!row) return;
+    const style = getComputedStyle(row);
+    const padStart = parseFloat(style.scrollPaddingLeft) || 0;
+    const padEnd = parseFloat(style.scrollPaddingRight) || 0;
+    const rowLeft = row.getBoundingClientRect().left;
+    const rect = el.getBoundingClientRect();
+    const start = rect.left - rowLeft - padStart;
+    const end = rect.right - rowLeft - (row.clientWidth - padEnd);
+    const delta = start < 0 ? start : end > 0 ? end : 0;
+    if (delta) row.scrollTo({ left: row.scrollLeft + delta, behavior: 'smooth' });
   }
 
   /** True when moving to `next` would leave the [data-tv-zone] that currently
@@ -531,6 +551,8 @@ export class TvSpatialNavService {
    * page-wide rect-based scoring.
    */
   private findNeighborInTree(active: HTMLElement, dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
+    const activeRect = active.getBoundingClientRect();
+    const activeCx = activeRect.left + activeRect.width / 2;
     let cur = this.findParentContainer(active);
     let topMost: ContainerNode | null = null;
     while (cur) {
@@ -550,10 +572,11 @@ export class TvSpatialNavService {
             nextIdx = (nextIdx + children.length) % children.length;
           }
           if (nextIdx >= 0 && nextIdx < children.length) {
-            // A vertical step crosses into a different row: land on that row's
-            // first item, not wherever focus last sat there. A horizontal step
-            // walks to the literal sibling, so keep the leaf as-is.
-            return this.digDown(children[nextIdx], !horizontal);
+            // A vertical step crosses into a different row: land on the item
+            // sitting under the one being left, not wherever focus last sat
+            // there. A horizontal step walks to the literal sibling, so keep
+            // the leaf as-is.
+            return this.digDown(children[nextIdx], !horizontal, horizontal ? undefined : activeCx);
           }
         }
       }
@@ -567,8 +590,8 @@ export class TvSpatialNavService {
     if (topMost) {
       const peer = this.findPeerContainer(topMost, dir);
       // Peer bridging only ever fires for up/down (see findPeerContainer), so
-      // entering the peer region lands on its first item.
-      if (peer) return this.digDown(peer.el, true);
+      // entering the peer region keeps the column the user was on.
+      if (peer) return this.digDown(peer.el, true, activeCx);
     }
     return null;
   }
@@ -633,7 +656,7 @@ export class TvSpatialNavService {
    * When `preferFirst` is true (vertical entry into a new row/region),
    * skip memory and autofocus and land on the first navigable child.
    */
-  private digDown(el: HTMLElement, preferFirst = false): HTMLElement | null {
+  private digDown(el: HTMLElement, preferFirst = false, alignCx?: number): HTMLElement | null {
     const c = this.containers.get(el);
     if (!c) return el; // it's a leaf focusable
     if (!preferFirst && c.activeChild && c.el.contains(c.activeChild) && isFocusCandidate(c.activeChild)) {
@@ -643,9 +666,18 @@ export class TvSpatialNavService {
       const auto = c.el.querySelector<HTMLElement>('[autofocus]');
       if (auto && isFocusCandidate(auto)) return auto;
     }
-    const children = this.getNavigableChildren(c);
+    let children = this.getNavigableChildren(c);
+    // Entering a row from above or below: try the children nearest the column
+    // the user was on first, so focus lands under the card it came from.
+    if (alignCx !== undefined && c.orientation === 'horizontal') {
+      const distance = (child: HTMLElement) => {
+        const r = child.getBoundingClientRect();
+        return Math.abs(r.left + r.width / 2 - alignCx);
+      };
+      children = [...children].sort((a, b) => distance(a) - distance(b));
+    }
     for (const child of children) {
-      const dug = this.digDown(child, preferFirst);
+      const dug = this.digDown(child, preferFirst, alignCx);
       if (dug) return dug;
     }
     return null;
