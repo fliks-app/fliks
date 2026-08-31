@@ -1,12 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideRouter, Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { signal } from '@angular/core';
 import { describe, expect, it, vi } from 'vitest';
 import { TranslateService } from '@ngx-translate/core';
-import { RemoteService } from './remote.service';
+import { RemoteService, type RemoteTarget } from './remote.service';
 import { SseService, type RemoteCommand, type RemoteState } from './sse.service';
 import { ToastService } from './toast.service';
 
@@ -26,6 +26,7 @@ function frame(over: Partial<RemoteState> = {}): RemoteState {
     volume: 0.5,
     muted: false,
     supportsVolume: true,
+    subtitleId: null,
     quality: '1080p',
     audioTrackIndex: 0,
     subtitleTrackIndex: null,
@@ -128,6 +129,31 @@ describe('RemoteService stop handling', () => {
     expect(service.targetState()?.mediaTitle).toBe('Another');
   });
 
+  it('drops the reading when the target says it stopped playing', () => {
+    const { service, remoteState } = setup();
+    remoteState.set(frame());
+    service.ingestState();
+    expect(service.targetState()).not.toBeNull();
+
+    service.noteTargetStopped('tv#1');
+    expect(service.targetState()).toBeNull();
+
+    // The player flushes one last heartbeat on its way out.
+    remoteState.set(frame({ positionSeconds: 31 }));
+    service.ingestState();
+    expect(service.targetState()).toBeNull();
+  });
+
+  it('ignores a stop announced for another target', () => {
+    const { service, remoteState } = setup();
+    remoteState.set(frame());
+    service.ingestState();
+
+    service.noteTargetStopped('other#9');
+
+    expect(service.targetState()).not.toBeNull();
+  });
+
   it('pins the volume the user set until the target agrees', () => {
     const { service, remoteState } = setup();
     remoteState.set(frame({ volume: 0.5 }));
@@ -142,5 +168,96 @@ describe('RemoteService stop handling', () => {
     remoteState.set(frame({ volume: 0.9, positionSeconds: 61 }));
     service.ingestState();
     expect(service.targetState()?.volume).toBe(0.9);
+  });
+});
+
+describe('RemoteService applyLoad', () => {
+  it('puts t=0 on the load url when the position is exactly zero', async () => {
+    const { service } = setup();
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    const sse = TestBed.inject(SseService);
+
+    sse.commands.next({
+      type: 'remote.command',
+      cmdId: 'cmd-load',
+      expiresAt: Date.now() + 10_000,
+      byTargetId: null,
+      action: 'load',
+      mediaFileId: 42,
+      positionSeconds: 0,
+    });
+
+    await vi.waitFor(() => expect(navigateSpy).toHaveBeenCalled());
+    expect(navigateSpy).toHaveBeenCalledWith(['/watch', 42], { queryParams: { t: 0 } });
+  });
+});
+
+describe('RemoteService recovers from an unlanded load', () => {
+  it('accepts a later frame for another file once an unacked load times out', async () => {
+    vi.useFakeTimers();
+    try {
+      const { service, remoteState } = setup();
+      const httpMock = TestBed.inject(HttpTestingController);
+
+      const sendPromise = service.send('tv#1', { action: 'load', mediaFileId: 9 });
+      httpMock.expectOne('/api/remote/tv%231/command').flush({ cmdId: 'cmd-1' });
+      await sendPromise;
+
+      // Nothing has landed for file 9 yet, so a stale report is ignored.
+      remoteState.set(frame({ mediaFileId: 2, positionSeconds: 5 }));
+      service.ingestState();
+      expect(service.targetState()).toBeNull();
+
+      vi.advanceTimersByTime(20_000);
+
+      remoteState.set(frame({ mediaFileId: 2, mediaTitle: 'Something else' }));
+      service.ingestState();
+      expect(service.targetState()?.mediaTitle).toBe('Something else');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('accepts a later frame after selecting another target mid-load', () => {
+    const { service, remoteState } = setup();
+    service.noteLoadSent(9);
+    expect(service.targetState()).toBeNull();
+
+    service.selectTarget('tv#2');
+
+    remoteState.set(frame({ targetId: 'tv#2', mediaFileId: 2, mediaTitle: 'Elsewhere' }));
+    service.ingestState();
+    expect(service.targetState()?.mediaTitle).toBe('Elsewhere');
+  });
+});
+
+describe('RemoteService refreshTargets', () => {
+  const target: RemoteTarget = {
+    targetId: 'tv#1',
+    userAgent: null,
+    systemName: null,
+    formFactor: null,
+    tvPlatform: null,
+    nowPlaying: null,
+  };
+
+  it('keeps the previous target list when a refresh fails', async () => {
+    const { service } = setup();
+    const httpMock = TestBed.inject(HttpTestingController);
+
+    const first = service.refreshTargets();
+    httpMock.expectOne((req) => req.url === '/api/remote/targets').flush([target]);
+    await first;
+    expect(service.targets()).toEqual([target]);
+
+    const second = service.refreshTargets();
+    httpMock
+      .expectOne((req) => req.url === '/api/remote/targets')
+      .flush(null, { status: 500, statusText: 'Server Error' });
+    await second;
+
+    expect(service.targets()).toEqual([target]);
   });
 });

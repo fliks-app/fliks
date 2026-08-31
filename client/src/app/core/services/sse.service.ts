@@ -10,6 +10,7 @@ import { DownloadProgressState } from '../enums/download-progress-state.enum';
 import { invalidatePrefix } from '../interceptors/cache.interceptor';
 import { getOrCreateDeviceId } from '../utils/device-info';
 import { DeviceService } from './device.service';
+import { currentTargetId } from './remote-target-id';
 
 export interface SseEvent {
   type: string;
@@ -51,6 +52,7 @@ export interface RemoteState {
   volume: number | null;
   muted: boolean | null;
   supportsVolume: boolean;
+  subtitleId: string | null;
   quality: string | null;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;
@@ -151,6 +153,7 @@ export class SseService implements OnDestroy {
     // session that just ended.
     if (generation !== this.generation || this.eventSource) return;
     this.targetId.set(targetId);
+    currentTargetId.set(targetId);
 
     // One builder for both branches: the web path has no query string while
     // the native path carries `?token=`, so appending by hand yields

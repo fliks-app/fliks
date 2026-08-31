@@ -3,6 +3,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, catchError, firstValueFrom, map, of, tap } from 'rxjs';
 import { ServerConfigService } from './server-config.service';
+import { currentTargetId } from './remote-target-id';
 import { ServerCacheService } from './server-cache.service';
 import {
   ACTIVE_SESSION_STORAGE_KEY,
@@ -373,7 +374,9 @@ export class AuthService {
     if (this.cookieAuth) {
       // An empty body clears the cookie and revokes nothing: still resumable.
       try {
-        await firstValueFrom(this.http.post('/api/auth/logout', {}));
+        await firstValueFrom(
+          this.http.post('/api/auth/logout', { targetId: currentTargetId() }),
+        );
       } catch {
         /* best effort — the cookie expires on its own */
       }
@@ -648,7 +651,12 @@ export class AuthService {
     const refresh = this._refreshToken;
     try {
       await firstValueFrom(
-        this.http.post('/api/auth/logout', refresh ? { refreshToken: refresh } : {}),
+        this.http.post('/api/auth/logout', {
+          ...(refresh ? { refreshToken: refresh } : {}),
+          // Names the device signing out, so the server leaves this account's
+          // other devices registered as remote targets.
+          targetId: currentTargetId(),
+        }),
       );
     } finally {
       await this.dropActiveSession();

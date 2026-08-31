@@ -85,6 +85,7 @@ export class CastPlaybackTarget implements PlaybackTarget {
   readonly skipCue = computed<{ labelKey: string } | null>(() => null);
   readonly isStarting = computed(() => false);
   readonly isIdle = computed(() => false);
+  readonly targetOffline = computed(() => false);
   readonly canStopControlling = false;
 
   skip(): void {

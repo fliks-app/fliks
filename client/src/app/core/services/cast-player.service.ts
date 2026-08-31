@@ -10,7 +10,7 @@ import { AuthService } from './auth.service';
 import { DeviceProfile } from './browser-device-profile.service';
 import { ENGINE_TRAITS, EngineKind } from './engine-traits';
 import { ServerConfigService } from './server-config.service';
-import { formatAudioLabel, formatSubtitleLabel, parseAudioIndex, SpriteMetadata } from '../utils/player.utils';
+import { formatAudioParts, formatAudioLabel, formatSubtitleLabel, formatSubtitleParts, parseAudioIndex, SpriteMetadata } from '../utils/player.utils';
 import { PlayerSettingsService } from './player-settings.service';
 import { TrackManagerService } from './track-manager.service';
 import { MediaService } from './api/media.service';
@@ -19,6 +19,9 @@ import { ToastService } from './toast.service';
 export interface CastSubtitleOption {
   id: string;
   label: string;
+  /** Language on the first line, format and flags on the second. */
+  head?: string;
+  sub?: string;
   language: string;
   burnIn: boolean;
   forced?: boolean;
@@ -30,6 +33,9 @@ export interface CastAudioOption {
   id: string;
   label: string;
   language: string;
+  /** Language on the first line, codec and channels on the second. */
+  head: string;
+  sub: string;
   /** Source-side title — must mirror the NAME attribute the backend writes
    *  in master.m3u8 (transcoding/master-playlist.ts). The receiver-side
    *  audio switch matches on this, so any divergence breaks switching. */
@@ -46,9 +52,12 @@ export function buildCastAudioOptions(
   if (!audioStreams?.length) return [];
   return audioStreams.map((a, i) => {
     const lang = a.language ?? 'und';
+    const parts = formatAudioParts(a, translate, i + 1);
     return {
       id: `audio-${i}`,
       label: formatAudioLabel(a, translate, i + 1),
+      head: parts.head,
+      sub: parts.sub,
       language: lang,
       name: a.title || lang,
     };
@@ -754,6 +763,9 @@ export class CastPlayerService {
     ).map((t, i) => ({
       id: t.key,
       label: formatSubtitleLabel(t, this.translate, i + 1, {
+        showFormat: this.appSettings.showSubtitleFormat(),
+      }),
+      ...formatSubtitleParts(t, this.translate, i + 1, {
         showFormat: this.appSettings.showSubtitleFormat(),
       }),
       language: t.language,

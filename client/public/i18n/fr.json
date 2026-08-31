@@ -2406,7 +2406,9 @@
     "stop_playback": "Arrêter la lecture",
     "idle_message": "Rien n'est en cours de lecture sur cet appareil.",
     "idle_hint": "Choisissez un titre, il démarrera ici.",
-    "starting_message": "Chargement..."
+    "starting_message": "Chargement...",
+    "offline_message": "Cet appareil n'est plus joignable.",
+    "play_here_instead": "Lire ici à la place"
   },
   "language": {
     "en": "Anglais",

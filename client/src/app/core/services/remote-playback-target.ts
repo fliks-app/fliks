@@ -2,13 +2,14 @@ import { Injectable, computed, effect, inject, signal, untracked } from '@angula
 import { TranslateService } from '@ngx-translate/core';
 import { StreamingApiService } from './api/streaming-api.service';
 import { MarkersApiService } from './api/markers-api.service';
+import { TrackManagerService } from './track-manager.service';
 import { inIntroRange, inOutroRange, type TimeMarker } from '../utils/player.utils';
 import { RemoteService } from './remote.service';
 import { buildCastAudioOptions, CastAudioOption } from './cast-player.service';
 import { MediaService } from './api/media.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
-import { formatSubtitleLabel, SpriteMetadata } from '../utils/player.utils';
+import { formatSubtitleParts, formatSubtitleLabel, SpriteMetadata } from '../utils/player.utils';
 import { PlaybackOption, PlaybackTarget } from './playback-target';
 
 /** Whether `app-cast-overlay` is showing the remote-target control card.
@@ -26,6 +27,7 @@ export class RemotePlaybackTarget implements PlaybackTarget {
   private readonly remote = inject(RemoteService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly markersApi = inject(MarkersApiService);
+  private readonly trackManager = inject(TrackManagerService);
   private readonly mediaService = inject(MediaService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly translate = inject(TranslateService);
@@ -54,8 +56,7 @@ export class RemotePlaybackTarget implements PlaybackTarget {
     const idx = this.remote.targetState()?.audioTrackIndex;
     return idx != null ? `audio-${idx}` : null;
   });
-  // ponytail: wire has no active-subtitle report; never invent a value here.
-  readonly activeSubtitleId = signal<string | null>(null);
+  readonly activeSubtitleId = computed(() => this.remote.targetState()?.subtitleId ?? null);
   readonly spriteUrl = signal<string | null>(null);
   readonly spriteMetadata = signal<SpriteMetadata | null>(null);
   /** No quality control on a remote target: an empty list hides the picker. */
@@ -172,6 +173,7 @@ export class RemotePlaybackTarget implements PlaybackTarget {
   readonly isIdle = computed(
     () => this.remote.targetState() === null && !this.isStarting(),
   );
+  readonly targetOffline = this.remote.targetOffline.asReadonly();
   readonly canStopControlling = true;
 
   skip(): void {
@@ -211,23 +213,29 @@ export class RemotePlaybackTarget implements PlaybackTarget {
     remoteOverlayOpen.set(false);
   }
 
-  /** Fetch the file's tracks independent of which device plays it: the same
-   *  streamInfo/subtitle rows the Cast picker and the local player use. */
+  /** Reuse the very builder the target runs, rather than assembling a second
+   *  list here: a different set of options produced different rows, so the
+   *  controller's selection named a track the target did not have. */
   private async loadTracks(mediaId: number, mediaFileId: number): Promise<void> {
     try {
-      const [media, subs] = await Promise.all([
-        this.mediaService.getOne(mediaId).catch(() => null),
-        this.subtitlesApi.getForMedia(mediaId).catch(() => [] as any[]),
-      ]);
-      const file = (media?.files ?? []).find((f: any) => f.id === mediaFileId);
+      const media = await this.mediaService.getOne(mediaId).catch(() => null);
+      const file = (media?.files ?? []).find((f: { id: number }) => f.id === mediaFileId);
       this.audioOptions.set(buildCastAudioOptions(file?.streamInfo?.audio, this.translate));
       void this.loadSprites(mediaFileId);
       void this.loadMarkers(this.remote.targetState()?.episodeId ?? null);
-      const tracks = buildSubtitleTracks(subs, mediaFileId, { hideBurnIn: false });
+
+      const subs = await this.trackManager.loadSubtitles(
+        mediaId,
+        mediaFileId,
+        this.streamingApi,
+        media,
+      );
       this.subtitleOptions.set(
-        tracks.map((t, i) => ({
-          id: t.key,
-          label: formatSubtitleLabel(t, this.translate, i + 1),
+        subs.map((o) => ({
+          id: o.id,
+          label: o.label,
+          head: o.menuHead,
+          sub: o.menuSub,
         })),
       );
     } catch (err) {

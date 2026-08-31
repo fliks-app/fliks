@@ -2406,7 +2406,9 @@
     "stop_playback": "Stop playback",
     "idle_message": "Nothing is playing on this device.",
     "idle_hint": "Pick a title and it will start here.",
-    "starting_message": "Loading..."
+    "starting_message": "Loading...",
+    "offline_message": "This device isn't reachable anymore.",
+    "play_here_instead": "Play here instead"
   },
   "language": {
     "en": "English",

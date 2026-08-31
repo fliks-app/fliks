@@ -5,6 +5,10 @@ import { SpriteMetadata } from '../utils/player.utils';
 export interface PlaybackOption {
   id: string;
   label: string;
+  /** Two-line row: language above, codec and channels below. Falls back to
+   *  `label` on a source that cannot split it. */
+  head?: string;
+  sub?: string;
 }
 
 /**
@@ -55,6 +59,9 @@ export interface PlaybackTarget {
   /** Present but playing nothing. Always false on Cast, where a session only
    *  exists around a media. */
   readonly isIdle: Signal<boolean>;
+  /** The selected target dropped off the listing. Always false on Cast, whose
+   *  session disappearing already ends `isConnected`. */
+  readonly targetOffline: Signal<boolean>;
   /** Stop what the target is playing. On Cast the session IS the playback, so
    *  the two collapse; a network target keeps existing after it stops. */
   stopPlayback(): void;

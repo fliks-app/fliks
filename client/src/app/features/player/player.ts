@@ -576,13 +576,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // action) by RemoteService: no mediaFileId/sessionId filter needed, delivery
   // is per-connection. Distinct from the admin `player.command` effect above.
   private readonly remoteCommandSub: Subscription =
-    this.remoteService.validated.subscribe((cmd) => this.applyRemoteCommand(cmd));
-
-  /** Real frames flowing means autoplay wasn't actually blocked (or recovered
-   *  since): clear the controller-facing flag set on a refused play(). */
-  private readonly clearTargetBlockedEffect = effect(() => {
-    if (this.state.videoStarted()) untracked(() => this.remoteService.targetBlocked.set(false));
-  });
+    this.remoteService.validated.subscribe((cmd) => void this.applyRemoteCommand(cmd));
 
   // Immersive mode: landscape=always, portrait=only while playing with controls hidden
   private readonly immersiveEffect = effect(() => {
@@ -1460,10 +1454,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         await this.startCastFromPlayer(startPos);
       } else if (!this.isNativeEngine()) {
         this.engine!.play().catch(() => {
-          // No user gesture on a device started remotely: the browser
-          // refuses autoplay; tell the controller so its UI can explain it.
+          // No user gesture on a device started remotely: the browser refuses autoplay.
           console.warn('[player] autoplay blocked');
-          this.remoteService.targetBlocked.set(true);
         });
       }
 
@@ -2815,7 +2807,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  desync from what a local control just did (see RemoteService docs).
    *  A rejected/unresolvable command returns without acking so the
    *  controller's timeout, not a false ack, reports the truth. */
-  private applyRemoteCommand(cmd: RemoteCommand): void {
+  private async applyRemoteCommand(cmd: RemoteCommand): Promise<void> {
     const casting = this.castService.isConnected();
     switch (cmd.action) {
       case 'play':
@@ -2887,7 +2879,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             console.warn('[remote] cast cannot resolve audio track', cmd.trackId);
             return;
           }
-          void this.castPlayerService.changeAudio(idx);
+          await this.castPlayerService.changeAudio(idx);
         } else {
           const idx = parseAudioIndex(cmd.trackId);
           const local = Number.isFinite(idx)
@@ -2897,14 +2889,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             console.warn('[remote] no local audio track at index', cmd.trackId);
             return;
           }
-          this.onSelectAudioTrack(local).catch((err: unknown) =>
-            console.warn('[remote] audio switch failed', cmd.trackId, err),
-          );
+          try {
+            await this.onSelectAudioTrack(local);
+          } catch (err: unknown) {
+            console.warn('[remote] audio switch failed', cmd.trackId, err);
+          }
         }
         break;
       case 'subtitle':
         if (casting) this.applyCastSubtitle(cmd.subtitleId ?? null);
-        else this.onSelectSubtitleById(cmd.subtitleId ?? null);
+        else await this.onSelectSubtitleById(cmd.subtitleId ?? null);
         break;
       case 'stop':
         if (casting) this.castService.disconnect();
@@ -2917,7 +2911,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         return;
     }
     this.remoteService.markApplied(cmd.cmdId);
-    void this.savePosition(true);
+    await this.savePosition(true);
   }
 
   /** A local pause reaches a remote controller on the next heartbeat, so
@@ -2937,6 +2931,26 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.lastReportedPaused = paused;
     void this.savePosition(true);
   }
+
+  /** Which track is on is decided by the auto-selection during load as much as
+   *  by a click, so report the value rather than the gesture. */
+  private lastReportedTracks = '';
+  private readonly trackReportEffect = effect(() => {
+    const key = `${this.activeAudioTrackId()}|${this.activeSubtitleId()}`;
+    untracked(() => {
+      if (!this.state.videoStarted()) return;
+      if (this.lastReportedTracks === key) return;
+      this.lastReportedTracks = key;
+      void this.savePosition(true);
+    });
+  });
+
+  /** The first frame is when the resume position and the duration are finally
+   *  true; the load-time heartbeat ran before any of it was known. */
+  private readonly firstFrameReportEffect = effect(() => {
+    if (!this.state.videoStarted()) return;
+    untracked(() => void this.savePosition(true));
+  });
 
   /** Cast has no id scheme of its own for subtitles: resolve the app-level id
    *  against the receiver's track list, or warn when Cast can't honour it
@@ -3659,7 +3673,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   onSpeedChange(rate: number) {
     if (!this.engine) return;
     this.engine.playbackRate = rate;
-    this.playbackRate.set(rate);
+    // Read back rather than trust the request: an engine can silently keep
+    // the previous rate (e.g. Tizen AVPlay outside READY/PLAYING/PAUSED), and
+    // the UI must not claim a speed that isn't actually playing.
+    this.playbackRate.set(this.engine.playbackRate);
   }
 
   /** Whether the episode reached the completion threshold — mirrors the
@@ -4312,16 +4329,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.resetHideTimer();
   }
 
-  onSelectSubtitleById(id: string | null) {
+  async onSelectSubtitleById(id: string | null): Promise<void> {
     if (id === null) {
-      this.selectSubtitle(null);
-    } else {
-      const sub = this.availableSubtitles().find(s => s.id === id) ?? null;
-      if (!sub) {
-        console.warn('[player] onSelectSubtitleById: id not found, tracks may not be enumerated yet', id);
-      }
-      this.selectSubtitle(sub);
+      await this.selectSubtitle(null);
+      return;
     }
+    const sub = this.availableSubtitles().find(s => s.id === id) ?? null;
+    if (!sub) {
+      console.warn('[player] onSelectSubtitleById: id not found, tracks may not be enumerated yet', id);
+    }
+    await this.selectSubtitle(sub);
   }
 
   // ── Private helpers ──
@@ -4544,6 +4561,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       audioTrackIndex?: number | null;
       episodeLabel?: string | null;
       supportsVolume?: boolean;
+      subtitleId?: string | null;
     } = {
       positionSeconds: pos,
       durationSeconds: dur || 0,
@@ -4566,6 +4584,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       payload.audioTrackIndex = this.activeAudioIndex();
       payload.episodeLabel = this.episodeTitle() || null;
       payload.supportsVolume = this.engine?.supportsVolume ?? true;
+      payload.subtitleId = this.activeSubtitleId();
     }
 
     // Offline queue persists position only — the heartbeat-related

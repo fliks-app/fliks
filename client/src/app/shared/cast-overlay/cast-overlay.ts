@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject } from '@angular/core';
 import { formatTime } from '../../core/utils/player.utils';
 import { RemoteService } from '../../core/services/remote.service';
+import { DeviceService } from '../../core/services/device.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
 import { PlaybackOption } from '../../core/services/playback-target';
@@ -61,19 +62,22 @@ export class CastOverlayComponent {
   }
 
   private readonly translate = inject(TranslateService);
+  protected readonly device = inject(DeviceService);
 
   readonly formatTime = formatTime;
 
   /** The trigger shows the current choice, like the media-detail selectors. */
   protected activeAudioLabel(): string {
     const id = this.t.activeAudioTrackId();
-    return this.t.availableAudioTracks().find((o) => o.id === id)?.label ?? '';
+    const o = this.t.availableAudioTracks().find((x) => x.id === id);
+    return o?.head || o?.label || '';
   }
 
   protected activeSubtitleLabel(): string {
     const id = this.t.activeSubtitleId();
     if (!id) return this.translate.instant('player.off');
-    return this.t.availableSubtitles().find((o) => o.id === id)?.label ?? '';
+    const o = this.t.availableSubtitles().find((x) => x.id === id);
+    return o?.head || o?.label || '';
   }
 
   protected activeQualityLabel(): string {

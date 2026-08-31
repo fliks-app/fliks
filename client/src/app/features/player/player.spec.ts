@@ -172,7 +172,6 @@ function createHarness(opts: {
           validated: new Subject<RemoteCommand>(),
           markApplied: vi.fn(),
           lastAppliedCmdId: () => null,
-          targetBlocked: { set: vi.fn() },
         },
       },
       {
@@ -270,7 +269,6 @@ function createHarness(opts: {
     validated: Subject<RemoteCommand>;
     markApplied: (id: string) => void;
     lastAppliedCmdId: () => string | null;
-    targetBlocked: { set: (v: boolean) => void };
   };
 
   // Seed the state ngAfterViewInit would have produced for a main-item launch.

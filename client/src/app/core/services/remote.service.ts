@@ -22,6 +22,7 @@ export interface RemoteNowPlaying {
   volume: number | null;
   muted: boolean | null;
   supportsVolume: boolean;
+  subtitleId: string | null;
   quality: string | null;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;
@@ -89,14 +90,15 @@ export class RemoteService {
   readonly selectedTargetId = signal<string | null>(this.readSelectedTarget());
   readonly pendingAction = signal<RemoteAction | null>(null);
   readonly targetOffline = signal(false);
-  /** True when the target loaded a file but its browser refused to autoplay. */
-  readonly targetBlocked = signal(false);
 
   readonly selectedTarget = computed(() => {
     const id = this.selectedTargetId();
     return id ? (this.targets().find((t) => t.targetId === id) ?? null) : null;
   });
-  readonly isRemoting = computed(() => this.selectedTarget() !== null);
+  /** A selection, not its live listing: a target that drops off `targets()`
+   *  is still the one we're remoting to, just offline, so the overlay stays
+   *  mounted and shows that instead of unmounting mid-interaction. */
+  readonly isRemoting = computed(() => this.selectedTargetId() !== null);
 
   private stateAt = 0;
   private stopSentAt = 0;
@@ -136,6 +138,14 @@ export class RemoteService {
     this.observingSince = Date.now();
   }
 
+  /** The selected target left its player. Same treatment as a stop we sent: the
+   *  reading goes, and the farewell heartbeat behind it is ignored. */
+  noteTargetStopped(targetId: string): void {
+    if (!targetId || targetId !== this.selectedTargetId()) return;
+    console.debug('[remote] target reported it stopped playing', targetId);
+    this.noteStopSent();
+  }
+
   /** Stamp a stop so the target's farewell heartbeat is not mistaken for
    *  playback that is still running. */
   noteStopSent(): void {
@@ -166,8 +176,16 @@ export class RemoteService {
 
     effect(() => {
       const event = this.sse.lastEvent();
-      if (event?.type !== 'remote.targets_changed') return;
-      untracked(() => void this.refreshTargets());
+      if (!event) return;
+      if (event.type === 'remote.targets_changed') {
+        untracked(() => void this.refreshTargets());
+        return;
+      }
+      // The server says which target stopped, so there is nothing to infer from
+      // silence and nothing a trailing heartbeat can put back.
+      if (event.type === 'remote.stopped') {
+        untracked(() => this.noteTargetStopped(String(event['targetId'] ?? '')));
+      }
     });
 
     effect(() => {
@@ -234,7 +252,7 @@ export class RemoteService {
     const queryParams: Record<string, string | number> = {};
     if (cmd.mediaId) queryParams['mediaId'] = cmd.mediaId;
     if (cmd.episodeId) queryParams['episodeId'] = cmd.episodeId;
-    if (cmd.positionSeconds) queryParams['t'] = Math.floor(cmd.positionSeconds);
+    if (cmd.positionSeconds !== undefined) queryParams['t'] = Math.floor(cmd.positionSeconds);
     // Force a remount so the same file reloads too, which is what lets this
     // work identically whether or not a player is already on screen.
     await this.router.navigateByUrl('/', { skipLocationChange: true });
@@ -275,8 +293,10 @@ export class RemoteService {
           this.reportedState.set(null);
         }
       }
-    } catch {
-      this.targets.set([]);
+    } catch (err) {
+      // A transient fetch failure is not proof the list emptied: keep showing
+      // the last known targets rather than tearing the picker down.
+      console.warn('[remote] failed to refresh targets, keeping the current list', err);
     }
   }
 
@@ -284,7 +304,7 @@ export class RemoteService {
     this.selectedTargetId.set(targetId);
     this.reportedState.set(null);
     this.targetOffline.set(false);
-    this.targetBlocked.set(false);
+    this.expectedMediaFileId = null;
     try {
       if (targetId) localStorage.setItem(SELECTED_TARGET_KEY, targetId);
       else localStorage.removeItem(SELECTED_TARGET_KEY);
@@ -347,6 +367,9 @@ export class RemoteService {
       if (this.pendingCmdId !== cmdId) return;
       this.pendingCmdId = null;
       this.pendingAction.set(null);
+      // An unlanded load must not keep blocking every later frame, from this
+      // target or the next one selected, behind the wrong expectation.
+      if (action === 'load') this.expectedMediaFileId = null;
       console.warn('[remote] no ack for', cmdId, action);
       this.toast.error(this.translate.instant('remote.error_no_response'));
     }, action === 'load' ? LOAD_ACK_TIMEOUT_MS : ACK_TIMEOUT_MS);
@@ -366,7 +389,7 @@ export class RemoteService {
     // last heartbeat for the previous file as it navigates away.
     if (this.expectedMediaFileId !== null) {
       if (s.mediaFileId !== this.expectedMediaFileId) {
-        console.debug('[remote] ignoring a state frame for the previous file');
+        console.warn('[remote] dropping a state frame for the previous file', s.mediaFileId);
         return;
       }
       this.expectedMediaFileId = null;
@@ -387,6 +410,7 @@ export class RemoteService {
       volume: s.volume,
       muted: s.muted,
       supportsVolume: s.supportsVolume,
+      subtitleId: s.subtitleId,
       quality: s.quality,
       audioTrackIndex: s.audioTrackIndex,
       subtitleTrackIndex: s.subtitleTrackIndex,
@@ -406,11 +430,14 @@ export class RemoteService {
     }
   }
 
-  /** Interpolate only while something is actually playing: a paused or absent
-   *  target has nothing to advance, and a spare timer would just wake the app. */
+  /** Interpolate only while something is actually playing: a paused, idle or
+   *  offline target has nothing to advance, and a spare timer would just wake
+   *  the app. The second clause only covers the `awaitingFirstReport` window,
+   *  before the target's first report says whether it is even playing. */
   private syncTicker(): void {
     const playing =
-      this.selectedTargetId() !== null || this.reportedState()?.state === 'playing';
+      this.reportedState()?.state === 'playing' ||
+      (this.selectedTargetId() !== null && !this.reportedState());
     if (playing && this.tickHandle === null) {
       this.tickHandle = setInterval(() => this.wallClock.set(Date.now()), 500);
     } else if (!playing && this.tickHandle !== null) {

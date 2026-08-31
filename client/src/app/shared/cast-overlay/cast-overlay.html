@@ -6,27 +6,32 @@
     <div class="fixed inset-0 lg:inset-auto lg:top-14 lg:right-4 z-[60] lg:w-96 max-h-dvh max-w-dvw overflow-hidden lg:overflow-visible touch-none lg:touch-auto">
       <div class="bg-base-100 h-full lg:h-auto lg:rounded-xl lg:shadow-2xl lg:border lg:border-base-300 flex flex-col max-h-dvh lg:overflow-visible">
 
-        <!-- Header -->
-        <div class="flex items-center lg:items-start gap-3 px-4 pt-6 landscape:pt-3 lg:py-3 shrink-0 lg:border-b lg:border-base-200"
-             style="padding-top: calc(env(safe-area-inset-top) / 2 + 24px)"
+        <!-- Close only: the centred poster below says what is playing, so there
+             is no header rule and no second thumbnail beside it. -->
+        <!-- The notch inset is a phone concern, and an inline style cannot be
+             overridden by a class, so it is bound rather than hardcoded. -->
+        <div class="flex items-center justify-end px-4 pt-6 landscape:pt-3 lg:pt-3 shrink-0"
+             [style.padding-top]="device.isDesktop() ? null : 'calc(env(safe-area-inset-top) / 2 + 24px)'"
         >
-          <!-- Poster thumbnail (desktop only). The box is always there so the
-               header does not reflow when the URL arrives. -->
-          <div class="hidden lg:block w-12 h-16 rounded overflow-hidden shrink-0"
-               [class.skeleton]="!t.fanartUrl()">
-            @if (t.fanartUrl()) {
-              <img [cachedSrc]="t.fanartUrl()! | resolveUrl:'thumb'" alt=""
-                   class="w-full h-full object-cover" />
-            }
-          </div>
-          <div class="min-w-0 flex-1"></div>
           <button class="btn btn-ghost btn-circle shrink-0" (click)="toggle()"
                   [attr.aria-label]="'common.close' | translate">
             <svg lucideX class="h-6 w-6"></svg>
           </button>
         </div>
 
-        @if (t.isStarting()) {
+        @if (t.targetOffline()) {
+          <div class="flex-1 flex flex-col items-center justify-center gap-2 px-8 py-8 text-center">
+            <svg lucideCast class="h-12 w-12 opacity-30"></svg>
+            <p class="text-sm opacity-70">{{ 'remote.offline_message' | translate }}</p>
+          </div>
+
+          <div class="shrink-0 flex justify-center px-4 pt-3"
+               style="padding-bottom: max(1rem, env(safe-area-inset-bottom))">
+            <button class="btn btn-primary btn-sm" (click)="disconnect()">
+              {{ 'remote.play_here_instead' | translate }}
+            </button>
+          </div>
+        } @else if (t.isStarting()) {
           <div class="flex-1 flex flex-col items-center justify-center gap-3 px-8 py-8 text-center">
             <span class="loading loading-spinner loading-md"></span>
             <p class="text-sm opacity-70">{{ 'remote.starting_message' | translate }}</p>
@@ -50,20 +55,25 @@
              a single column, where the poster lives in the header instead. -->
         <div class="flex-1 min-h-0 flex flex-col landscape:flex-row landscape:items-stretch lg:contents">
 
-        <!-- Large poster (mobile only) -->
+        <!-- Poster, centred on every surface. The desktop card is content-sized,
+             so its height is capped rather than a share of the box. -->
         <div class="flex-1 flex items-center justify-center px-6 py-4 min-h-0
-                    landscape:w-2/5 landscape:flex-none landscape:pr-2 lg:hidden">
+                    landscape:w-2/5 landscape:flex-none landscape:pr-2
+                    lg:flex-none lg:w-full lg:pr-6 lg:py-3">
           @if (t.fanartUrl()) {
             <img [cachedSrc]="t.fanartUrl()! | resolveUrl:'medium'" alt=""
-                 class="max-h-full max-w-full object-contain rounded-xl shadow-xl" />
+                 class="max-h-full max-w-full lg:max-h-56 object-contain rounded-xl shadow-xl" />
           } @else {
-            <div class="skeleton h-full max-h-[75%] aspect-[2/3] rounded-xl"></div>
+            <div class="skeleton h-full max-h-[75%] lg:h-56 aspect-[2/3] rounded-xl"></div>
           }
         </div>
 
         <!-- Controls -->
+        <!-- A desktop viewport is always landscape, so every landscape rule here
+             has to be undone at lg: the scroll one clipped the track dropdowns. -->
         <div class="shrink-0 lg:shrink px-4 pt-4 landscape:pt-2 lg:py-4 space-y-4 landscape:space-y-3 lg:space-y-4
-                    landscape:flex-1 landscape:min-w-0 landscape:self-center landscape:overflow-y-auto"
+                    landscape:flex-1 landscape:min-w-0 landscape:self-center landscape:overflow-y-auto
+                    lg:flex-none lg:self-auto lg:overflow-visible"
              style="padding-bottom: max(2rem, env(safe-area-inset-bottom))"
         >
           <!-- Skip cue: the row keeps its height so an offer appearing
@@ -158,7 +168,8 @@
                   </button>
                   @for (track of t.availableAudioTracks(); track track.id) {
                     <app-dropdown-option
-                      [head]="track.label"
+                      [head]="track.head || track.label"
+                      [sub]="track.sub"
                       [selected]="t.activeAudioTrackId() === track.id"
                       (click)="selectAudio(track)"
                     />
@@ -181,7 +192,8 @@
                   />
                   @for (sub of t.availableSubtitles(); track sub.id) {
                     <app-dropdown-option
-                      [head]="sub.label"
+                      [head]="sub.head || sub.label"
+                      [sub]="sub.sub"
                       [selected]="t.activeSubtitleId() === sub.id"
                       (click)="selectSubtitle(sub)"
                     />
