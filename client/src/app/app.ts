@@ -21,6 +21,7 @@ import { NavbarService } from './core/services/navbar.service';
 import { PwaAutoUpdateService } from './core/services/pwa-auto-update.service';
 import { AppResumeService } from './core/services/app-resume.service';
 import { OfflinePlaybackSyncService } from './core/services/offline-playback-sync.service';
+import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.service';
 
 @Component({
   selector: 'app-root',
@@ -30,6 +31,7 @@ import { OfflinePlaybackSyncService } from './core/services/offline-playback-syn
 })
 export class App implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
+  private readonly tvKeyboard = inject(TvKeyboardDeferralService);
   private readonly castPlayer = inject(CastPlayerService);
   private readonly sse = inject(SseService);
   /** Injected to ensure DownloadManagerService singleton is created (authEffect, nativeEffect). */
@@ -56,6 +58,7 @@ export class App implements OnInit, OnDestroy {
   private escapeKeyListener?: (e: KeyboardEvent) => void;
 
   ngOnInit() {
+    this.tvKeyboard.init();
     this.auth.hydrateFromServer();
     // Pre-warm device profile cache (codec probing) so it's instant when the player needs it
     this.deviceProfile.getProfile();
