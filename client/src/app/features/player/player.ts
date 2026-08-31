@@ -1745,6 +1745,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine.on('firstFrame', () => {
       this.state.videoStarted.set(true);
     });
+    this.wireAudioTracks(engine);
     this.wireSessionExpiredRecovery(engine);
   }
 
@@ -1834,10 +1835,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** Shared wiring for the transparent-overlay native engines (Capacitor
-   *  ExoPlayer/AVPlayer and Electron mpv): bind state, surface the first
-   *  frame, arm session-expired recovery, and reconcile the audio-track list
-   *  against the backend streamInfo so labels match the media-detail header. */
+   *  ExoPlayer/AVPlayer and Electron mpv): bind state, surface the first frame
+   *  and arm session-expired recovery. */
   private wireNativePlayerEngine(engine: PlaybackEngine): void {
+    this.wireAudioTracks(engine);
     this.engine = engine;
     this.isNativeEngine.set(true);
     this.state.bindEngine(engine);
@@ -1855,6 +1856,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // engine-sourced tracks (audio-* / shaka-*) replace the streamInfo
     // fallback (si-*), even at equal length — their IDs enable client-side
     // PID switching instead of a full backend reload.
+  }
+
+  /** Reconcile the engine's audio-track list against the backend streamInfo so
+   *  the dropdown labels match the media-detail header. Every engine that can
+   *  enumerate tracks needs this: the streamInfo fallback in loadAudioTracks
+   *  only covers an engine reporting none. */
+  private wireAudioTracks(engine: PlaybackEngine): void {
     engine.on('audioTracksChanged', (e) => {
       // Cross-reference engine tracks with streamInfo.audio so the dropdown
       // label matches what the media-detail header shows. Engine emits tracks
@@ -1890,7 +1898,25 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // otherwise a transient partial emission would wipe the full si-* list.
       const upgradeFromFallback =
         newIsEngineSourced && existingIsFallback && tracks.length >= existing.length;
-      if (tracks.length <= existing.length && !upgradeFromFallback) return;
+      const incomingSelected =
+        tracks.find((t: { selected: boolean }) => t.selected)?.id ?? null;
+      if (tracks.length <= existing.length && !upgradeFromFallback) {
+        // The list is held back, but the active track still has to follow: the
+        // first emission names no active variant, and the one that does carries
+        // the same count, so gating both here left the tick on track 0.
+        if (incomingSelected && existing.some((t) => t.id === incomingSelected)) {
+          this.activeAudioTrackId.set(incomingSelected);
+          // Only the si-*/audio-* ids are streamInfo indices; a shaka-* id is
+          // Shaka's own audioId and would point at the wrong stream.
+          if (
+            incomingSelected.startsWith('si-') ||
+            incomingSelected.startsWith('audio-')
+          ) {
+            this.activeAudioStreamIndex = parseAudioIndex(incomingSelected);
+          }
+        }
+        return;
+      }
       this.availableAudioTracks.set(tracks);
       const selected = tracks.find((t: any) => t.selected) ?? tracks[0];
       this.activeAudioTrackId.set(selected.id);

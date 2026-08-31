@@ -145,7 +145,12 @@ export class PlayerStateService {
     engine.on('stateChanged', (e) => {
       const paused = pausedFlagForState(e.state);
       if (paused !== undefined) this.paused.set(paused);
-      const buffering = e.state === 'buffering' || (this.recovering && e.state === 'error');
+      // Never latch it while paused: the only clear path needs a playhead that
+      // advances, so a stall reported after a pause would spin forever and the
+      // play button hides behind it. The engine re-reports on resume.
+      const buffering =
+        (e.state === 'buffering' || (this.recovering && e.state === 'error')) &&
+        !this.paused();
       // Anchor the playhead reference as buffering begins so the timeUpdate clear
       // below fires on real forward progress, not the position jump a seek into
       // the stall produces — otherwise the spinner clears before playback resumes.
