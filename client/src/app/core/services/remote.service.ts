@@ -99,6 +99,7 @@ export class RemoteService {
 
   private stateAt = 0;
   private stopSentAt = 0;
+  private observingSince = 0;
   private readonly reportedState = signal<RemoteNowPlaying | null>(null);
   private readonly pinnedVolume = signal<number | null>(null);
   private volumePinAt = 0;
@@ -132,6 +133,15 @@ export class RemoteService {
     this.pendingAction.set(null);
   }
 
+  /** True while a selected target has yet to report anything and could still
+   *  be playing. A restored selection has no state until the next heartbeat, and
+   *  the server-side join to the live session can lag a target's reconnect, so
+   *  neither source can rule out playback for one cadence. */
+  readonly awaitingFirstReport = computed(() => {
+    if (!this.selectedTargetId() || this.reportedState()) return false;
+    return this.wallClock() - this.observingSince < 12_000;
+  });
+
   /** Hold the level the user just set until the target confirms it, so the
    *  slider stops fighting the reports it triggers. */
   pinVolume(level: number): void {
@@ -155,7 +165,15 @@ export class RemoteService {
 
     effect(() => {
       this.reportedState();
+      this.selectedTargetId();
       untracked(() => this.syncTicker());
+    });
+
+    effect(() => {
+      const id = this.selectedTargetId();
+      untracked(() => {
+        this.observingSince = id ? Date.now() : 0;
+      });
     });
 
     // A reconnect remints the connection id, so a list built from live
@@ -366,7 +384,8 @@ export class RemoteService {
   /** Interpolate only while something is actually playing: a paused or absent
    *  target has nothing to advance, and a spare timer would just wake the app. */
   private syncTicker(): void {
-    const playing = this.reportedState()?.state === 'playing';
+    const playing =
+      this.selectedTargetId() !== null || this.reportedState()?.state === 'playing';
     if (playing && this.tickHandle === null) {
       this.tickHandle = setInterval(() => this.wallClock.set(Date.now()), 500);
     } else if (!playing && this.tickHandle !== null) {

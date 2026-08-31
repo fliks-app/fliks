@@ -163,7 +163,9 @@ export class RemotePlaybackTarget implements PlaybackTarget {
   });
 
   readonly isStarting = computed(
-    () => this.remote.targetState() === null && this.remote.pendingAction() === 'load',
+    () =>
+      this.remote.targetState() === null &&
+      (this.remote.pendingAction() === 'load' || this.remote.awaitingFirstReport()),
   );
   readonly isIdle = computed(
     () => this.remote.targetState() === null && !this.isStarting(),
