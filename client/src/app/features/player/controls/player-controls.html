@@ -649,7 +649,7 @@
   <div class="text-center text-white/60 text-xs font-medium mb-3">{{ 'player.speed' | translate }}</div>
   <!-- Only the options scroll; the title above stays visible. -->
   <div class="max-h-[40vh] overflow-y-auto scroll-ring-safe">
-  @for (r of speedOptions; track r) {
+  @for (r of speedOptions(); track r) {
     <button
       type="button"
       class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10"

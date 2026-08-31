@@ -14,6 +14,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { DeviceService } from '../../../core/services/device.service';
+import { TvService } from '../../../core/services/tv.service';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
 import {
   PlayerSettings,
@@ -125,6 +126,7 @@ export class PlayerControlsComponent {
   private readonly device = inject(DeviceService);
   private readonly dismissStack = inject(DismissableStackService);
   private readonly playerSettings = inject(PlayerSettingsService);
+  private readonly tv = inject(TvService);
   /** True on Android TV — drives 10-foot UI choices in the template. */
   readonly isTv = this.device.isTv;
   /** Hide the "faible consommation" badge when eco is the forced default —
@@ -394,7 +396,11 @@ export class PlayerControlsComponent {
    */
   readonly panelOpenChange = output<boolean>();
 
-  readonly speedOptions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+  /** AVPlay's documented forward rates are 0.5/1/2 only; the fractional steps
+   *  (0.25/0.75/1.25/1.5/1.75) throw PLAYER_ERROR_INVALID_PARAMETER on Tizen. */
+  readonly speedOptions = computed(() =>
+    this.tv.isTizen() ? [0.5, 1, 2] : [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
+  );
 
   /** Settings dropdown panel navigation */
   readonly settingsPanel = signal<'main' | 'quality' | 'queue'>('main');
