@@ -41,6 +41,11 @@ export interface PlaybackTarget {
   selectSubtitle(sub: PlaybackOption | null): void;
   selectAudio(track: PlaybackOption | null): void;
   selectQuality(quality: PlaybackOption): void;
+  /** The skip offer that applies right now, or null. `labelKey` is an i18n key
+   *  so the surface stays translation-only. */
+  readonly skipCue: Signal<{ labelKey: string } | null>;
+  /** Take the current skip offer. No-op when there is none. */
+  skip(): void;
   /** A load has been sent and the target has not reported back yet. Always
    *  false on Cast, whose sender mirrors the media locally from the start. */
   readonly isStarting: Signal<boolean>;

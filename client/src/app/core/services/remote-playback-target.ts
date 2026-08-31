@@ -1,6 +1,8 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { StreamingApiService } from './api/streaming-api.service';
+import { MarkersApiService } from './api/markers-api.service';
+import { inIntroRange, inOutroRange, type TimeMarker } from '../utils/player.utils';
 import { RemoteService } from './remote.service';
 import { buildCastAudioOptions, CastAudioOption } from './cast-player.service';
 import { MediaService } from './api/media.service';
@@ -23,6 +25,7 @@ export const remoteOverlayOpen = signal(false);
 export class RemotePlaybackTarget implements PlaybackTarget {
   private readonly remote = inject(RemoteService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly markersApi = inject(MarkersApiService);
   private readonly mediaService = inject(MediaService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly translate = inject(TranslateService);
@@ -147,6 +150,18 @@ export class RemotePlaybackTarget implements PlaybackTarget {
     console.warn('[remote-playback-target] quality cannot be changed on a remote target');
   }
 
+  private readonly introMarker = signal<TimeMarker | null>(null);
+  private readonly outroMarker = signal<TimeMarker | null>(null);
+
+  /** Same range tests the local player applies, against the interpolated
+   *  position, so the offer appears and retracts at the same instants. */
+  readonly skipCue = computed<{ labelKey: string } | null>(() => {
+    const at = this.remote.interpolatedPosition();
+    if (inIntroRange(this.introMarker(), at)) return { labelKey: 'player.skip_intro' };
+    if (inOutroRange(this.outroMarker(), at)) return { labelKey: 'player.next_episode' };
+    return null;
+  });
+
   readonly isStarting = computed(
     () => this.remote.targetState() === null && this.remote.pendingAction() === 'load',
   );
@@ -154,6 +169,25 @@ export class RemotePlaybackTarget implements PlaybackTarget {
     () => this.remote.targetState() === null && !this.isStarting(),
   );
   readonly canStopControlling = true;
+
+  skip(): void {
+    const targetId = this.remote.selectedTargetId();
+    const at = this.remote.interpolatedPosition();
+    if (!targetId) {
+      console.warn('[remote-playback-target] skip with no selected target');
+      return;
+    }
+    const intro = this.introMarker();
+    if (inIntroRange(intro, at)) {
+      void this.remote.send(targetId, { action: 'seek', positionSeconds: intro!.endSeconds });
+      return;
+    }
+    if (inOutroRange(this.outroMarker(), at)) {
+      void this.remote.send(targetId, { action: 'next' });
+      return;
+    }
+    console.warn('[remote-playback-target] skip with no cue active');
+  }
 
   stopPlayback(): void {
     const targetId = this.remote.selectedTargetId();
@@ -184,6 +218,7 @@ export class RemotePlaybackTarget implements PlaybackTarget {
       const file = (media?.files ?? []).find((f: any) => f.id === mediaFileId);
       this.audioOptions.set(buildCastAudioOptions(file?.streamInfo?.audio, this.translate));
       void this.loadSprites(mediaFileId);
+      void this.loadMarkers(this.remote.targetState()?.episodeId ?? null);
       const tracks = buildSubtitleTracks(subs, mediaFileId, { hideBurnIn: false });
       this.subtitleOptions.set(
         tracks.map((t, i) => ({
@@ -193,6 +228,20 @@ export class RemotePlaybackTarget implements PlaybackTarget {
       );
     } catch (err) {
       console.warn('[remote-playback-target] failed to load tracks', mediaId, mediaFileId, err);
+    }
+  }
+
+  /** Markers are per-episode, so a film simply has no cue. */
+  private async loadMarkers(episodeId: number | null): Promise<void> {
+    this.introMarker.set(null);
+    this.outroMarker.set(null);
+    if (!episodeId) return;
+    try {
+      const markers = await this.markersApi.listForEpisode(episodeId);
+      this.introMarker.set(markers.find((m) => m.type === 'intro') ?? null);
+      this.outroMarker.set(markers.find((m) => m.type === 'outro') ?? null);
+    } catch (err) {
+      console.warn('[remote-playback-target] failed to load markers', episodeId, err);
     }
   }
 

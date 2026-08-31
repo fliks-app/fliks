@@ -43,7 +43,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService, QueueItem } from '../../core/services/playback-queue.service';
 import { resolvePlayableFile } from '../../shared/utils/media-play.util';
-import { audioChannelsLabel, formatAudioLabel, formatAudioParts, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
+import { audioChannelsLabel, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
 import { classifyPlaybackError, formatErrorDiagnostics, userMessageKeyFor } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import {
@@ -2203,13 +2203,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ── Skip-intro UX ──
 
   /** True when the cursor is inside the detected intro window. */
-  readonly inIntroRange = computed(() => {
-    if (this.preRollActive()) return false;
-    const m = this.introMarker();
-    if (!m) return false;
-    const t = this.currentTime();
-    return t >= m.startSeconds && t < m.endSeconds - 1;
-  });
+  readonly inIntroRange = computed(
+    () => !this.preRollActive() && inIntroRange(this.introMarker(), this.currentTime()),
+  );
 
   // ── Timed reveal of the floating intro / next-episode cues ──
   // A cue surfaces for a short window when the playhead enters its marker
@@ -2362,11 +2358,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly queueIndex = computed(() => this.queue.index());
 
   /** True when the cursor is inside the detected outro window. */
-  readonly inOutroRange = computed(() => {
-    const m = this.outroMarker();
-    if (!m) return false;
-    return this.currentTime() >= m.startSeconds;
-  });
+  readonly inOutroRange = computed(
+    () => inOutroRange(this.outroMarker(), this.currentTime()),
+  );
 
   /** True when the playhead is in the outro and something follows — gates the
    *  timed reveal of the floating skip cue. */

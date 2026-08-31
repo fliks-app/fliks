@@ -80,9 +80,15 @@ export class CastPlaybackTarget implements PlaybackTarget {
     this.cp.changeQuality(quality.id);
   }
 
+  // Marker-driven skipping is not wired into the Cast sender today.
+  readonly skipCue = computed<{ labelKey: string } | null>(() => null);
   readonly isStarting = computed(() => false);
   readonly isIdle = computed(() => false);
   readonly canStopControlling = false;
+
+  skip(): void {
+    console.warn('[cast-playback-target] no skip cue on a Cast session');
+  }
 
   stopPlayback(): void {
     this.disconnect();

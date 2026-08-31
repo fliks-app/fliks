@@ -284,3 +284,21 @@ export function subtitleOriginLabel(
     return translate.instant('player.subtitle_source.ocr');
   return null;
 }
+
+export interface TimeMarker {
+  startSeconds: number;
+  endSeconds: number;
+}
+
+/** Inside an intro, with a second of slack at the end so a cue never lingers
+ *  onto content the viewer is already watching. */
+export function inIntroRange(marker: TimeMarker | null, position: number): boolean {
+  if (!marker) return false;
+  return position >= marker.startSeconds && position < marker.endSeconds - 1;
+}
+
+/** An outro runs to the end of the file, so entering it is enough. */
+export function inOutroRange(marker: TimeMarker | null, position: number): boolean {
+  if (!marker) return false;
+  return position >= marker.startSeconds;
+}
