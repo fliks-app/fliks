@@ -2376,7 +2376,9 @@
     "error_command_failed": "Impossibile raggiungere quel dispositivo.",
     "error_no_response": "Quel dispositivo non risponde.",
     "stop_controlling": "Smetti di controllare",
-    "stop_playback": "Interrompi la riproduzione"
+    "stop_playback": "Interrompi la riproduzione",
+    "idle_message": "Non è in riproduzione nulla su questo dispositivo.",
+    "idle_hint": "Scegli un titolo e partirà qui."
   },
   "language": {
     "en": "Inglese",

@@ -2376,7 +2376,9 @@
     "error_command_failed": "Gerät nicht erreichbar.",
     "error_no_response": "Dieses Gerät antwortet nicht.",
     "stop_controlling": "Steuerung beenden",
-    "stop_playback": "Wiedergabe beenden"
+    "stop_playback": "Wiedergabe beenden",
+    "idle_message": "Auf diesem Gerät läuft gerade nichts.",
+    "idle_hint": "Wählen Sie einen Titel, er startet hier."
   },
   "language": {
     "en": "Englisch",

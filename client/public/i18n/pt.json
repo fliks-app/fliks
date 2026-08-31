@@ -2376,7 +2376,9 @@
     "error_command_failed": "Não foi possível contactar esse dispositivo.",
     "error_no_response": "Esse dispositivo não está a responder.",
     "stop_controlling": "Parar de controlar",
-    "stop_playback": "Parar a reprodução"
+    "stop_playback": "Parar a reprodução",
+    "idle_message": "Nada está a ser reproduzido neste dispositivo.",
+    "idle_hint": "Escolha um título e começará aqui."
   },
   "language": {
     "en": "Inglês",

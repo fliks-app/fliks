@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, computed, inject } from '@angular/core';
 import { CastService } from './cast.service';
 import { CastPlayerService, CastSubtitleOption } from './cast-player.service';
 import { parseAudioIndex } from '../utils/player.utils';
@@ -80,6 +80,7 @@ export class CastPlaybackTarget implements PlaybackTarget {
     this.cp.changeQuality(quality.id);
   }
 
+  readonly isIdle = computed(() => false);
   readonly canStopControlling = false;
 
   stopPlayback(): void {

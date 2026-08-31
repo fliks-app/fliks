@@ -98,6 +98,8 @@ export class RemoteService {
 
   private stateAt = 0;
   private readonly reportedState = signal<RemoteNowPlaying | null>(null);
+  private readonly pinnedVolume = signal<number | null>(null);
+  private volumePinAt = 0;
   private readonly wallClock = signal(0);
   private ackTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingCmdId: string | null = null;
@@ -113,7 +115,19 @@ export class RemoteService {
     const elapsed = (this.wallClock() - this.stateAt) / 1000;
     return Math.min(s.positionSeconds + Math.max(0, elapsed), s.durationSeconds || Infinity);
   });
-  readonly targetState = computed(() => this.reportedState());
+  readonly targetState = computed(() => {
+    const s = this.reportedState();
+    const pinned = this.pinnedVolume();
+    if (!s || pinned === null) return s;
+    return { ...s, volume: pinned };
+  });
+
+  /** Hold the level the user just set until the target confirms it, so the
+   *  slider stops fighting the reports it triggers. */
+  pinVolume(level: number): void {
+    this.pinnedVolume.set(level);
+    this.volumePinAt = Date.now();
+  }
 
   constructor() {
     this.sse.commands.subscribe((cmd) => this.onCommand(cmd));
@@ -246,7 +260,12 @@ export class RemoteService {
           byTargetId: this.sse.targetId(),
         }),
       );
-      this.armAck(res.cmdId, input.action);
+      if (input.action === 'stop') {
+        this.reportedState.set(null);
+        this.pendingAction.set(null);
+      } else {
+        this.armAck(res.cmdId, input.action);
+      }
     } catch (err) {
       if (retry && err instanceof HttpErrorResponse && err.status === 404) {
         // The target's SSE stream is reconnecting on its backoff, so its
@@ -300,6 +319,13 @@ export class RemoteService {
       subtitleTrackIndex: s.subtitleTrackIndex,
     });
     this.targetOffline.set(false);
+    const pinned = this.pinnedVolume();
+    if (pinned !== null) {
+      const converged = s.volume !== null && Math.abs(s.volume - pinned) < 0.02;
+      if (converged || Date.now() - this.volumePinAt > 2_500) {
+        this.pinnedVolume.set(null);
+      }
+    }
     if (s.lastCmdId && s.lastCmdId === this.pendingCmdId) {
       this.pendingCmdId = null;
       this.pendingAction.set(null);

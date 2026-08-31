@@ -30,7 +30,9 @@ export class RemotePlaybackTarget implements PlaybackTarget {
   readonly currentTime = this.remote.interpolatedPosition;
   readonly duration = computed(() => this.remote.targetState()?.durationSeconds ?? 0);
   readonly isConnected = this.remote.isRemoting;
-  readonly hasMedia = computed(() => this.remote.targetState() !== null);
+  /** A selected target is present even with nothing playing: releasing it is
+   *  an explicit action, not a side effect of stopping the media. */
+  readonly hasMedia = computed(() => this.remote.isRemoting());
   readonly isPaused = computed(() => this.remote.targetState()?.state !== 'playing');
   readonly buffering = computed(() => this.remote.targetState()?.state === 'buffering');
   readonly volume = computed(() => this.remote.targetState()?.volume ?? 1);
@@ -99,6 +101,7 @@ export class RemotePlaybackTarget implements PlaybackTarget {
       console.warn('[remote-playback-target] setVolume with no selected target');
       return;
     }
+    this.remote.pinVolume(level);
     this.remote.sendCoalesced(targetId, { action: 'volume', level });
   }
 
@@ -144,6 +147,7 @@ export class RemotePlaybackTarget implements PlaybackTarget {
     console.warn('[remote-playback-target] quality cannot be changed on a remote target');
   }
 
+  readonly isIdle = computed(() => this.remote.targetState() === null);
   readonly canStopControlling = true;
 
   stopPlayback(): void {
@@ -152,8 +156,8 @@ export class RemotePlaybackTarget implements PlaybackTarget {
       console.warn('[remote] stop requested with no selected target');
       return;
     }
+    // Keep the target: stopping the media is not giving the device back.
     void this.remote.send(targetId, { action: 'stop' });
-    this.disconnect();
   }
 
   disconnect(): void {

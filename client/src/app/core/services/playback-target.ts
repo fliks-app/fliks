@@ -41,6 +41,9 @@ export interface PlaybackTarget {
   selectSubtitle(sub: PlaybackOption | null): void;
   selectAudio(track: PlaybackOption | null): void;
   selectQuality(quality: PlaybackOption): void;
+  /** Present but playing nothing. Always false on Cast, where a session only
+   *  exists around a media. */
+  readonly isIdle: Signal<boolean>;
   /** Stop what the target is playing. On Cast the session IS the playback, so
    *  the two collapse; a network target keeps existing after it stops. */
   stopPlayback(): void;
