@@ -1316,7 +1316,8 @@
     "col_log_time": "Uhrzeit",
     "col_log_level": "Stufe",
     "col_log_context": "Kontext",
-    "col_log_message": "Meldung"
+    "col_log_message": "Meldung",
+    "device_mobile_app_named": "{{name}} (Mobile App)"
   },
   "markers": {
     "detect_intros": "Intros erkennen",
