@@ -48,6 +48,27 @@ export class SeekbarComponent {
   readonly seekPending = signal(false);
   private seekTarget = 0;
 
+  /** Keyboard / D-pad scrub holds the preview open: there is no cursor parked
+   *  on the bar to keep it alive the way a pointer drag has, so it would blink
+   *  away the instant the key lifts. */
+  readonly keyScrubbing = signal(false);
+  private keyPreviewTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly KEY_PREVIEW_LINGER_MS = 2200;
+
+  /** Tooltip (time + sprite frame) is up while the user points at the bar,
+   *  drags it, or has just scrubbed it with the keyboard. */
+  readonly previewVisible = computed(
+    () => this.hovering() || this.dragging() || this.keyScrubbing(),
+  );
+
+  /** The instant the preview describes: the drag target while scrubbing, the
+   *  committed target while the seek settles, the pointer otherwise. */
+  readonly previewTime = computed(() => {
+    if (this.dragging()) return this.dragTime();
+    if (this.keyScrubbing()) return this.displayTime();
+    return this.hoverTime();
+  });
+
   // Hover state
   readonly hovering = signal(false);
   readonly hoverTime = signal(0);
@@ -159,7 +180,7 @@ export class SeekbarComponent {
     const meta = this.spriteMetadata();
     if (!meta) return '0 0';
     const s = this.previewScale();
-    const time = this.dragging() ? this.dragTime() : this.hoverTime();
+    const time = this.previewTime();
     const index = Math.min(Math.floor(time / meta.interval), meta.count - 1);
     const col = index % meta.columns;
     const row = Math.floor(index / meta.columns);
@@ -175,7 +196,7 @@ export class SeekbarComponent {
   });
 
   readonly tooltipLeft = computed(() => {
-    const pct = this.dragging() ? this.displayPercent() : this.hoverPercent();
+    const pct = this.dragging() || this.keyScrubbing() ? this.displayPercent() : this.hoverPercent();
     // Centre the tooltip on the seek point (the element carries
     // `-translate-x-1/2`). Plain `%` only — a CSS min()/calc() cap is ignored
     // by Tizen's older Chromium in `left`, which left the preview stuck
@@ -190,6 +211,7 @@ export class SeekbarComponent {
 
     try { bar.setPointerCapture(event.pointerId); } catch {}
 
+    this.endKeyPreview();
     this.dragging.set(true);
     this.dragChange.emit(true);
     this.updateDragFromPointer(event, bar);
@@ -276,12 +298,14 @@ export class SeekbarComponent {
         e.preventDefault();
         e.stopPropagation();
         this.cancelScrubTimer();
+        this.holdKeyPreview();
         this.commitScrubTo(0);
         return;
       case 'End':
         e.preventDefault();
         e.stopPropagation();
         this.cancelScrubTimer();
+        this.holdKeyPreview();
         this.commitScrubTo(Math.max(0, dur - 1));
         return;
       default:
@@ -290,6 +314,7 @@ export class SeekbarComponent {
 
     e.preventDefault();
     e.stopPropagation();
+    this.holdKeyPreview();
 
     if (!this.dragging()) {
       this.scrubStartedAt = Date.now();
@@ -318,6 +343,22 @@ export class SeekbarComponent {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     this.cancelScrubTimer();
     this.commitScrub();
+  }
+
+  /** Restart the linger on every press, so a run of arrows keeps one preview up. */
+  private holdKeyPreview() {
+    this.keyScrubbing.set(true);
+    if (this.keyPreviewTimer) clearTimeout(this.keyPreviewTimer);
+    this.keyPreviewTimer = setTimeout(
+      () => this.endKeyPreview(),
+      SeekbarComponent.KEY_PREVIEW_LINGER_MS,
+    );
+  }
+
+  private endKeyPreview() {
+    if (this.keyPreviewTimer) clearTimeout(this.keyPreviewTimer);
+    this.keyPreviewTimer = null;
+    this.keyScrubbing.set(false);
   }
 
   private cancelScrubTimer() {

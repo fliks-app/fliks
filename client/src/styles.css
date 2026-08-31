@@ -287,6 +287,22 @@ body.native.hero-page {
   .player-floating-cue {
     transition: none;
   }
+
+  .player-controls-reveal {
+    animation: none;
+  }
+}
+
+/* Plays whenever a controls row mounts — i.e. when the seek OSD escalates to
+   the full bar. `--reveal-from` points the slide at the nearest screen edge. */
+@keyframes player-controls-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(var(--reveal-from, 0.5rem));
+  }
+}
+.player-controls-reveal {
+  animation: player-controls-reveal 200ms ease-out;
 }
 
 /* The cue sits low while the controls are hidden and lifts clear of the
@@ -299,6 +315,10 @@ body.native.hero-page {
 }
 .player-floating-cue.controls-visible {
   --cue-bottom: 10.5rem;
+}
+/* Middle rung: the seek OSD is a fraction of the full bar's height. */
+.player-floating-cue.controls-seek {
+  --cue-bottom: 7rem;
 }
 
 /* ============================================================================
@@ -940,6 +960,9 @@ body.tablet [data-touch-only] {
 }
 .player-video.controls-visible ~ .shaka-text-container {
   transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh) - 15vh));
+}
+.player-video.controls-seek ~ .shaka-text-container {
+  transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh) - 6vh));
 }
 /* Visual styling applies to the leaf text span (Shaka tags it with
    `translate="no"` and bakes a default background-color inline on it).

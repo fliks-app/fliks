@@ -392,6 +392,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  off the moment playback actually starts, and the auto-hide
    *  timer takes over from there during the rest of the session. */
   readonly controlsVisible = signal(true);
+  /** Controls reduced to the seekbar + times, raised by an arrow-key seek.
+   *  Any other input escalates back to the full bar via `showControls()`. */
+  readonly seekOsd = signal(false);
   readonly inPipMode = signal(false);
   readonly pipAvailable = signal(true);
   readonly canLockOrientation = Capacitor.getPlatform() === 'ios';
@@ -400,8 +403,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly statsVisible = signal(false);
   readonly fillScreen = signal(false);
   private readonly statsRefreshTick = signal(0);
-  readonly subtitlePickerOpen = signal(false);
-  readonly qualityPickerOpen = signal(false);
   /** True when any panel inside <app-player-controls> (desktop dropdown or
    *  mobile bottom sheet) is open — pins the controls open. */
   private readonly controlsPanelOpen = signal(false);
@@ -417,8 +418,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.paused() ||
       this.buffering() ||
       this.seekDragging() ||
-      this.subtitlePickerOpen() ||
-      this.qualityPickerOpen() ||
       this.controlsPanelOpen(),
   );
   /** Single owner of the auto-hide countdown. Arms only while the bar is
@@ -606,7 +605,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Re-apply native subtitle style on controls show/hide so the bottom-margin
       bump kicks in. Browser playback uses CSS instead — see styles below. */
   private readonly subtitleControlsMarginEffect = effect(() => {
-    this.controlsVisible();
+    this.nativeSubtitleBottomBump();
     // webOS drives the same DOM subtitle overlay as the native engines but
     // reports isNativeEngine=false (it keeps the Shaka UX), so it needs an
     // explicit branch — otherwise the margin stays pinned at its load-time
@@ -1892,7 +1891,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  showControls() {
+  showControls(seekOsd = false) {
+    this.seekOsd.set(seekOsd);
     this.controlsVisible.set(true);
     this.resetHideTimer();
   }
@@ -1906,11 +1906,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.device.isDpad() && !this.controlsVisible()) this.showControls();
   }
 
-  /** Move focus to the seekbar after the controls bar has rendered/become
-   *  visible. Deferred so it lands after the controls' own "focus play/pause on
-   *  reappear" effect, which would otherwise win the focus race on TV. */
-  private focusSeekbar() {
-    setTimeout(() => this.controls()?.focusSeekbar(), 0);
+  /** Extra bottom margin (vh) keeping native-renderer cues clear of the bar —
+   *  halved for the seek OSD, which is a fraction of the full bar's height. */
+  private nativeSubtitleBottomBump(): number {
+    if (!this.controlsVisible()) return 0;
+    return this.seekOsd() ? 5 : 10;
   }
 
   private hideControls() {
@@ -1953,8 +1953,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private isDropdownOpen(): boolean {
-    // Check via signals (reliable on mobile)
-    if (this.subtitlePickerOpen() || this.qualityPickerOpen()) return true;
     // Click-driven dropdowns / bottom sheets owned by <app-player-controls>.
     // Reported via (panelOpenChange) so we don't depend on DOM focus.
     if (this.controlsPanelOpen()) return true;
@@ -3604,12 +3602,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.availableSubtitles.set(subs);
   }
 
-  /**
-   * Apply user's subtitle style settings to native engine. When the player
-   * controls are visible, bumps the bottom margin by 10vh so cues don't sit
-   * under the controls bar — the WebKit `::cue` shift used in browser mode
-   * doesn't apply on ExoPlayer/AVPlayer.
-   */
+  /** Apply the user's subtitle style to a native engine, plus the bar-clearance
+   *  bump — the WebKit `::cue` shift used in browser mode doesn't apply on
+   *  ExoPlayer/AVPlayer. */
   private applyNativeSubtitleStyle() {
     // Subtitle styling on engines that own their own renderer:
     // NativeEngine (ExoPlayer/AVPlayer) and TizenEngine (DOM overlay
@@ -3620,7 +3615,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
     const s = this.playerSettings.get();
-    const extraMargin = this.controlsVisible() ? 10 : 0;
+    const extraMargin = this.nativeSubtitleBottomBump();
     (this.engine as NativeEngine).setSubtitleStyle({
       size: s.subtitleSize,
       color: s.subtitleColor,
@@ -3817,7 +3812,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!sub) {
       try { this.engine.setTextVisibility(false); } catch {}
       this.activeSubtitleId.set(null);
-      this.subtitlePickerOpen.set(false);
       this.trackManager.saveSubtitleSelection(this.mediaId, null);
       if (!this.isOfflinePlayback && this.activeBurnInId) {
         this.activeBurnInId = null;
@@ -3833,7 +3827,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (sub.burnIn && sub.subtitleDbId) {
       this.activeBurnInId = sub.subtitleDbId;
       this.activeSubtitleId.set(sub.id);
-      this.subtitlePickerOpen.set(false);
       // Persist like the soft/off branches do, so a burn-in pick is restored
       // on reload / next episode instead of silently reverting.
       this.trackManager.saveSubtitleSelection(
@@ -3875,8 +3868,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
 
     this.activeSubtitleId.set(sub.id);
-    this.subtitlePickerOpen.set(false);
-
     this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'), sub.isImage);
   }
 
@@ -3916,18 +3907,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const activeEl = document.activeElement as HTMLElement | null;
     const cueFocused = !!activeEl?.closest('.player-floating-cue');
 
-    // Controls hidden + Left/Right: wake the bar, seek, and land focus on the
-    // seekbar so the next presses scrub it — on every device (keyboard + TV
-    // remote), matching the seekbar-focused scrub when the bar is already up.
-    if (
-      !this.controlsVisible() &&
-      (e.key === 'ArrowLeft' || e.key === 'ArrowRight')
-    ) {
-      this.showControls();
-      this.onSeek(this.engine.currentTime + (e.key === 'ArrowLeft' ? -10 : 10));
-      this.focusSeekbar();
+    // Controls hidden + Left/Right: raise the seek-only OSD and hand the press
+    // to the seekbar, which owns the scrub from there (accelerating step, one
+    // deferred seek for the whole run) on keyboard and TV remote alike.
+    const isSeekArrow = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
+    if (!this.controlsVisible() && isSeekArrow) {
       e.preventDefault();
       e.stopPropagation();
+      this.showControls(true);
+      this.controls()?.scrubFromKey(e);
       return;
     }
 
@@ -3968,30 +3956,25 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         e.preventDefault();
         this.onTogglePlay();
         break;
-      // Each seek below goes through showControls(): the bar is already up, so
-      // this only restarts the countdown and marks it as deliberately revealed.
-      // Without that, a seek made while the stream is still loading restarts it,
-      // and the first-frame effect snaps the bar shut under the user.
+      // The trailing showControls() restarts the countdown for every seek
+      // below; without it a seek made while the stream is still loading lets
+      // the first-frame effect snap the bar shut under the user.
       case 'ArrowLeft':
         if (!arrowSeekAllowed) break;
         e.preventDefault();
-        this.showControls();
         this.onSeek(this.engine.currentTime - 10);
         break;
       case 'ArrowRight':
         if (!arrowSeekAllowed) break;
         e.preventDefault();
-        this.showControls();
         this.onSeek(this.engine.currentTime + 10);
         break;
       case 'j':
         e.preventDefault();
-        this.showControls();
         this.onSeek(this.engine.currentTime - 30);
         break;
       case 'l':
         e.preventDefault();
-        this.showControls();
         this.onSeek(this.engine.currentTime + 30);
         break;
       case 'f':
@@ -4036,7 +4019,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // `onPlayerBackEvent` then saw controls visible and only hid them
     // — so Return-on-TV looked stuck. A focused cue is likewise left
     // alone: acting on it shouldn't drag the whole bar onto the screen.
-    if (!isBackKey && !cueFocused) this.showControls();
+    if (!isBackKey && !cueFocused) this.showControls(isSeekArrow && this.seekOsd());
   };
 
   // ── Event handlers ──
@@ -4132,11 +4115,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const sub = this.availableSubtitles().find(s => s.id === id) ?? null;
       this.selectSubtitle(sub);
     }
-  }
-
-  onToggleQualityPicker() {
-    this.qualityPickerOpen.set(!this.qualityPickerOpen());
-    this.subtitlePickerOpen.set(false);
   }
 
   // ── Private helpers ──
