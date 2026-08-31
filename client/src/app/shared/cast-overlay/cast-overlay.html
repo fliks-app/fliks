@@ -145,50 +145,63 @@
           <!-- Pickers -->
           <div class="flex items-center justify-center gap-3 lg:gap-2 flex-wrap min-h-12 lg:min-h-8">
             @if (t.availableAudioTracks().length > 1) {
-              <app-dropdown-menu placement="top-start">
-                <div trigger tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
-                  <svg lucideHeadphones class="h-4 w-4"></svg>
-                  <span class="text-xs">{{ 'player.audio' | translate }}</span>
-                </div>
-                @for (track of t.availableAudioTracks(); track track.id) {
-                  <button class="dropdown-item text-white" (click)="selectAudio(track)">
-                    <span class="flex-1 text-left">{{ track.label }}</span>
-                    @if (t.activeAudioTrackId() === track.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-base-content/50">{{ 'player.audio' | translate }}</span>
+                <app-dropdown-menu placement="top-start">
+                  <button trigger type="button"
+                          class="select select-bordered select-sm w-fit text-left cursor-pointer transition-colors hover:bg-base-content/10">
+                    {{ activeAudioLabel() }}
                   </button>
-                }
-              </app-dropdown-menu>
+                  @for (track of t.availableAudioTracks(); track track.id) {
+                    <app-dropdown-option
+                      [head]="track.label"
+                      [selected]="t.activeAudioTrackId() === track.id"
+                      (click)="selectAudio(track)"
+                    />
+                  }
+                </app-dropdown-menu>
+              </div>
             }
             @if (t.availableSubtitles().length) {
-              <app-dropdown-menu placement="top-end">
-                <div trigger tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
-                  <svg lucideCaptions class="h-4 w-4"></svg>
-                  <span class="text-xs">{{ 'player.subtitles' | translate }}</span>
-                </div>
-                <button class="dropdown-item text-white" (click)="selectSubtitle(null)">
-                  <span class="flex-1 text-left">{{ 'player.off' | translate }}</span>
-                  @if (!t.activeSubtitleId()) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                </button>
-                @for (sub of t.availableSubtitles(); track sub.id) {
-                  <button class="dropdown-item text-white" (click)="selectSubtitle(sub)">
-                    <span class="flex-1 text-left">{{ sub.label }}</span>
-                    @if (t.activeSubtitleId() === sub.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-base-content/50">{{ 'player.subtitles' | translate }}</span>
+                <app-dropdown-menu placement="top-end">
+                  <button trigger type="button"
+                          class="select select-bordered select-sm w-fit text-left cursor-pointer transition-colors hover:bg-base-content/10">
+                    {{ activeSubtitleLabel() }}
                   </button>
-                }
-              </app-dropdown-menu>
+                  <app-dropdown-option
+                    [head]="'player.off' | translate"
+                    [selected]="!t.activeSubtitleId()"
+                    (click)="selectSubtitle(null)"
+                  />
+                  @for (sub of t.availableSubtitles(); track sub.id) {
+                    <app-dropdown-option
+                      [head]="sub.label"
+                      [selected]="t.activeSubtitleId() === sub.id"
+                      (click)="selectSubtitle(sub)"
+                    />
+                  }
+                </app-dropdown-menu>
+              </div>
             }
             @if (t.availableQualities().length > 1) {
-              <app-dropdown-menu placement="top-end">
-                <div trigger tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
-                  <svg lucideSettings class="h-4 w-4"></svg>
-                  <span class="text-xs">{{ 'player.quality' | translate }}</span>
-                </div>
-                @for (q of t.availableQualities(); track q.id) {
-                  <button class="dropdown-item text-white" (click)="selectQuality(q)">
-                    <span class="flex-1 text-left">{{ q.label }}</span>
-                    @if (t.activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-base-content/50">{{ 'player.quality' | translate }}</span>
+                <app-dropdown-menu placement="top-end">
+                  <button trigger type="button"
+                          class="select select-bordered select-sm w-fit text-left cursor-pointer transition-colors hover:bg-base-content/10">
+                    {{ activeQualityLabel() }}
                   </button>
-                }
-              </app-dropdown-menu>
+                  @for (q of t.availableQualities(); track q.id) {
+                    <app-dropdown-option
+                      [head]="q.label"
+                      [selected]="t.activeQualityId() === q.id"
+                      (click)="selectQuality(q)"
+                    />
+                  }
+                </app-dropdown-menu>
+              </div>
             }
           </div>
 

@@ -8,17 +8,14 @@ import { SeekbarComponent } from '../components/seekbar/seekbar';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
-import { TranslateModule } from '@ngx-translate/core';
+import { DropdownOptionComponent } from '../components/dropdown-option/dropdown-option';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
-  LucideCaptions,
   LucideCast,
-  LucideCheck,
-  LucideHeadphones,
   LucidePause,
   LucidePlay,
   LucideRotateCcw,
   LucideRotateCw,
-  LucideSettings,
   LucideSquare,
   LucideVolume2,
   LucideVolumeX,
@@ -32,13 +29,14 @@ import {
 @Component({
   selector: 'app-cast-overlay',
   imports: [
-    LucideCaptions, LucideCast, LucideCheck,
-    LucideHeadphones, LucidePause, LucidePlay, LucideRotateCcw, LucideRotateCw,
-    LucideSettings, LucideSquare, LucideVolume2, LucideVolumeX, LucideX,
+    LucideCast,
+    LucidePause, LucidePlay, LucideRotateCcw, LucideRotateCw,
+    LucideSquare, LucideVolume2, LucideVolumeX, LucideX,
     SeekbarComponent,
     CachedSrcDirective,
     ResolveUrlPipe,
     DropdownMenuComponent,
+    DropdownOptionComponent,
     TranslateModule,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -62,7 +60,26 @@ export class CastOverlayComponent {
     this.t.expanded.update(v => !v);
   }
 
+  private readonly translate = inject(TranslateService);
+
   readonly formatTime = formatTime;
+
+  /** The trigger shows the current choice, like the media-detail selectors. */
+  protected activeAudioLabel(): string {
+    const id = this.t.activeAudioTrackId();
+    return this.t.availableAudioTracks().find((o) => o.id === id)?.label ?? '';
+  }
+
+  protected activeSubtitleLabel(): string {
+    const id = this.t.activeSubtitleId();
+    if (!id) return this.translate.instant('player.off');
+    return this.t.availableSubtitles().find((o) => o.id === id)?.label ?? '';
+  }
+
+  protected activeQualityLabel(): string {
+    const id = this.t.activeQualityId();
+    return this.t.availableQualities().find((o) => o.id === id)?.label ?? id;
+  }
 
   selectSubtitle(sub: PlaybackOption | null) {
     this.t.selectSubtitle(sub);
