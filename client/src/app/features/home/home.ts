@@ -195,10 +195,18 @@ export class HomeComponent implements OnInit, OnDestroy {
       { requests: this.requestsAllowed },
     ),
   );
+  /** Cold-start affordance only: coming back to Home serves cached data, so a
+   *  placeholder would flash for nothing. */
+  private static skeletonShown = false;
+  /** Gates the skeleton and the staggered fade-in. Cleared once the cold-start
+   *  reveal has played: the route is `reuse: true`, so a back-navigation
+   *  re-attaches this same instance and re-inserting the subtree would replay
+   *  every CSS animation still declared on it. */
+  readonly coldStart = signal(!HomeComponent.skeletonShown);
   /** True until the first pass over every section resolves. Each section only
    *  renders once its own data lands, so a cold start would otherwise show an
    *  empty page; the skeleton stands in for the whole page during that pass. */
-  readonly loadingFirstPass = signal(true);
+  readonly loadingFirstPass = signal(this.coldStart());
 
   /** Shape of one skeleton row: how the zone's cards are laid out. */
   private static readonly SHAPES: Partial<Record<HomeSectionType, 'tile' | 'landscape' | 'portrait'>> = {
@@ -366,12 +374,19 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (this.requestsAllowed) void this.loadRequestProfiles();
     // Each section guards itself with `@if (().length)` so sections paint
     // independently as their data arrives. No global loading gate.
-    this.skeletonLayout.set(this.readLayout());
+    const cold = this.coldStart();
+    HomeComponent.skeletonShown = true;
+    if (cold) this.skeletonLayout.set(this.readLayout());
     await this.loadAllSections();
-    this.skeletonFadingOut.set(true);
-    this.loadingFirstPass.set(false);
-    // Long enough for the last zone's staggered fade to have started.
-    setTimeout(() => this.skeletonFadingOut.set(false), 900);
+    if (cold) {
+      this.skeletonFadingOut.set(true);
+      this.loadingFirstPass.set(false);
+      // Long enough for the last zone's staggered fade to have finished.
+      setTimeout(() => {
+        this.skeletonFadingOut.set(false);
+        this.coldStart.set(false);
+      }, 1200);
+    }
     this.captureLayout();
     // App-open SWR: the cache served Pass 1 above (instant render even on
     // a cold network). Now force a network round-trip so the user sees
