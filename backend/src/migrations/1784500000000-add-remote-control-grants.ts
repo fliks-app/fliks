@@ -17,9 +17,22 @@ export class AddRemoteControlGrants1784500000000 implements MigrationInterface {
         "codeExpiresAt" timestamptz NOT NULL
       )
     `);
-    for (const column of ['code', 'deviceId', 'ownerUserId', 'granteeUserId']) {
+    // TypeORM's own hashed names, not readable ones: the drift check regenerates
+    // from the entities and reports any index this migration named differently.
+    const indexes: [string, string][] = [
+      ['IDX_735e31a7f8cf53db91cc04339d', 'code'],
+      ['IDX_34d4b3c63c41ebc088ba3cfcdb', 'deviceId'],
+      ['IDX_a5a52f3d116c44c2944f0b1088', 'ownerUserId'],
+      ['IDX_28efb3a0402a49dca862fb62e6', 'granteeUserId'],
+    ];
+    for (const [name, column] of indexes) {
+      // Drop the readable name this migration used before, for a database that
+      // already ran it.
       await queryRunner.query(
-        `CREATE INDEX IF NOT EXISTS "IDX_remote_control_grants_${column}" ON "remote_control_grants" ("${column}")`,
+        `DROP INDEX IF EXISTS "IDX_remote_control_grants_${column}"`,
+      );
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS "${name}" ON "remote_control_grants" ("${column}")`,
       );
     }
     // A per-device grant replaces the mutual-follow gating, so the two account
