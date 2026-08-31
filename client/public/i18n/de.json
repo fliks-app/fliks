@@ -2378,7 +2378,9 @@
     "starting_message": "Wird gestartet auf {{device}}…",
     "error_cast_select_failed": "Verbindung zu diesem Chromecast fehlgeschlagen.",
     "error_command_failed": "Gerät nicht erreichbar.",
-    "error_no_response": "Dieses Gerät antwortet nicht."
+    "error_no_response": "Dieses Gerät antwortet nicht.",
+    "idle_message": "Auf {{device}} läuft gerade nichts.",
+    "idle_hint": "Wählen Sie einen Titel, er startet dort."
   },
   "language": {
     "en": "Englisch",

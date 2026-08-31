@@ -2378,7 +2378,9 @@
     "starting_message": "Avvio su {{device}}…",
     "error_cast_select_failed": "Impossibile connettersi a quel Chromecast.",
     "error_command_failed": "Impossibile raggiungere quel dispositivo.",
-    "error_no_response": "Quel dispositivo non risponde."
+    "error_no_response": "Quel dispositivo non risponde.",
+    "idle_message": "Non è in riproduzione nulla su {{device}}.",
+    "idle_hint": "Scegli un titolo e partirà lì."
   },
   "language": {
     "en": "Inglese",

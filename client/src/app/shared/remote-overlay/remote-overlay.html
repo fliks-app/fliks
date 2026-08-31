@@ -85,6 +85,14 @@
               {{ 'remote.starting_message' | translate: { device: targetLabel() } }}
             </div>
           }
+          @case ('idle') {
+            <div class="text-center py-4">
+              <p class="text-sm opacity-80">
+                {{ 'remote.idle_message' | translate: { device: targetLabel() } }}
+              </p>
+              <p class="text-xs opacity-60 mt-1">{{ 'remote.idle_hint' | translate }}</p>
+            </div>
+          }
           @case ('live') {
             <p class="font-medium truncate">{{ remote.targetState()?.mediaTitle }}</p>
 

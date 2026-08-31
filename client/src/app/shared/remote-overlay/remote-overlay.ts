@@ -147,14 +147,18 @@ export class RemoteOverlayComponent {
     return rows;
   });
 
-  protected readonly remoteViewState = computed<'offline' | 'blocked' | 'starting' | 'live'>(() => {
+  protected readonly remoteViewState = computed<
+    'offline' | 'blocked' | 'starting' | 'idle' | 'live'
+  >(() => {
     if (this.remote.targetOffline()) return 'offline';
     // An in-flight `load` still rides the previous title's report, so wait for
     // the ack instead of flashing it.
     if (this.remote.pendingAction() === 'load') return 'starting';
     if (this.remote.targetBlocked()) return 'blocked';
-    if (!this.remote.targetState()) return 'starting';
-    return 'live';
+    if (this.remote.targetState()) return 'live';
+    // A reachable target that plays nothing is the normal case right after
+    // picking one, and no report will ever arrive to end a spinner.
+    return this.remote.selectedTarget()?.nowPlaying ? 'starting' : 'idle';
   });
 
   protected readonly audioOptions = signal<CastAudioOption[]>([]);
