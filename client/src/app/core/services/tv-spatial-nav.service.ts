@@ -277,6 +277,10 @@ export class TvSpatialNavService {
     // to recover.
     if (active?.matches('[role="slider"], [data-tv-skip-spatial], [data-tv-skip-spatial] *')) {
       if (dir === 'left' || dir === 'right') return;
+      // Unless the slider binds vertical itself — the seekbar does while the
+      // seek OSD is up and the file has chapters, where there is nothing else
+      // on screen to escape to anyway.
+      if (active.matches('[data-tv-own-vertical]')) return;
     }
     e.preventDefault();
     // crossZones = !e.repeat: a deliberate (non-repeat) press may leave the

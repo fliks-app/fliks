@@ -317,6 +317,8 @@ export class PlayerControlsComponent {
   readonly spriteUrl = input<string | null>(null);
   readonly spriteMetadata = input<SpriteMetadata | null>(null);
   readonly chapters = input<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
+  readonly introMarker = input<{ startSeconds: number; endSeconds: number } | null>(null);
+  readonly outroMarker = input<{ startSeconds: number; endSeconds: number } | null>(null);
   readonly fillScreen = input(false);
   readonly statsVisible = input(false);
   readonly showSkipIntro = input(false);

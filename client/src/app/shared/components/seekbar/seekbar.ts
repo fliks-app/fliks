@@ -3,12 +3,14 @@ import {
   Component,
   ElementRef,
   computed,
+  inject,
   input,
   output,
   signal,
   viewChild,
 } from '@angular/core';
 import { formatTime, calcDragTime, calcHoverPercent, SpriteMetadata } from '../../../core/utils/player.utils';
+import { TvService } from '../../../core/services/tv.service';
 
 @Component({
   selector: 'app-seekbar',
@@ -16,6 +18,8 @@ import { formatTime, calcDragTime, calcHoverPercent, SpriteMetadata } from '../.
   templateUrl: './seekbar.html',
 })
 export class SeekbarComponent {
+  private readonly tv = inject(TvService);
+
   readonly currentTime = input(0);
   readonly duration = input(0);
   readonly bufferedEnd = input(0);
@@ -29,6 +33,19 @@ export class SeekbarComponent {
    *  playhead isn't advancing. */
   readonly loading = input(false);
   readonly chapters = input<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
+  /** Drawn as tinted bands on the unplayed track so the user can see what they
+   *  are scrubbing into, ahead of the skip cue that covers the same range. */
+  readonly introMarker = input<{ startSeconds: number; endSeconds: number } | null>(null);
+  readonly outroMarker = input<{ startSeconds: number; endSeconds: number } | null>(null);
+  /** Let Up/Down step chapters instead of escaping the bar vertically. Only
+   *  safe where there is nothing else to reach — the seek OSD raises it. */
+  readonly chapterSkip = input(false);
+
+  /** Vertical is only bound when it has chapters to move between; the escape
+   *  hatch out of the slider has to survive on a file without any. */
+  readonly ownsVertical = computed(
+    () => this.chapterSkip() && this.chapters().length > 0,
+  );
 
   /** Chapter start times as % of duration for seekbar tick rendering. */
   readonly chapterTicks = computed(() => {
@@ -69,6 +86,45 @@ export class SeekbarComponent {
     return this.hoverTime();
   });
 
+  /** Title of the chapter the preview sits in. The single biggest readability
+   *  win on a long file — a timecode alone says nothing about where you are. */
+  readonly previewChapter = computed(() => {
+    const t = this.previewTime();
+    return (
+      this.chapters().find((c) => t >= c.startSeconds && t < c.endSeconds)
+        ?.title ?? null
+    );
+  });
+
+  /** Signed offset from the playhead while a scrub accumulates, which is what
+   *  makes the accelerating step legible instead of surprising. The player
+   *  freezes `currentTime` for the duration of the scrub, so this reads the
+   *  whole run rather than the last press. */
+  readonly previewDelta = computed(() => {
+    if (!this.dragging() && !this.keyScrubbing()) return 0;
+    return Math.round(this.previewTime() - this.currentTime());
+  });
+
+  /** Intro / outro ranges as track percentages. */
+  readonly markerBands = computed(() => {
+    const dur = this.duration() || 0;
+    if (dur <= 0) return [];
+    const marks = [
+      { kind: 'intro', m: this.introMarker() },
+      { kind: 'outro', m: this.outroMarker() },
+    ];
+    return marks.flatMap(({ kind, m }) => {
+      if (!m || m.endSeconds <= m.startSeconds) return [];
+      return [
+        {
+          kind,
+          left: (m.startSeconds / dur) * 100,
+          width: ((m.endSeconds - m.startSeconds) / dur) * 100,
+        },
+      ];
+    });
+  });
+
   // Hover state
   readonly hovering = signal(false);
   readonly hoverTime = signal(0);
@@ -84,6 +140,11 @@ export class SeekbarComponent {
   }
 
   readonly formatTime = formatTime;
+
+  /** `+1:30` / `-0:20` — the offset, not a timestamp. */
+  formatDelta(seconds: number): string {
+    return `${seconds < 0 ? '-' : '+'}${formatTime(Math.abs(seconds))}`;
+  }
 
   /** The displayed position: dragTime during drag/seekPending, currentTime otherwise */
   readonly displayTime = computed(() => {
@@ -153,6 +214,14 @@ export class SeekbarComponent {
   private readonly previewScale = computed(() => {
     const meta = this.spriteMetadata();
     if (!meta) return 1.5;
+    // The 10-foot UI needs a far bigger frame, and capping width alone leaves a
+    // wide film short: sprites are a fixed 240 px wide with the height taken
+    // from the source aspect, so 2.40:1 is 240x100 against 16:9's 240x135.
+    // Bounding the height as well lands every aspect on the same height and
+    // lets the width grow instead.
+    if (this.tv.isTv()) {
+      return Math.min(2.5, 420 / meta.thumbWidth, 170 / meta.thumbHeight);
+    }
     // Tighter cap on phones: the tooltip lives directly above the
     // seekbar, which sits directly above the mobile big buttons (rewind
     // / play / forward), and a wide thumbnail visually crowds that
@@ -279,12 +348,20 @@ export class SeekbarComponent {
    *
    * Tap ←/→: seek ±10s. Hold: enters scrub mode and accelerates the step
    * based on how long the key has been held (10s → 30s → 60s → 5min). The
-   * preview tooltip follows dragTime, the actual player seek is deferred
-   * until keyup (or a 250ms backstop if keyup never fires, e.g. on some
-   * TV remote drivers).
+   * preview tooltip follows dragTime; the player seek is deferred until the
+   * user stops pressing, so a whole run is one seek and one transcode respawn.
    */
   private scrubStartedAt = 0;
   private scrubCommitTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Idle gap that ends a scrub run. Long enough to tap again and keep adding
+   *  to the same offset — a release used to commit at once, which reset the
+   *  readout to +10 on every press and left no way to build a bigger jump.
+   *  A held key repeats far faster than this, so holding is unaffected. */
+  private static readonly SCRUB_IDLE_MS = 700;
+  /** A scrub that lands this close to a chapter edge takes the edge instead.
+   *  Only applied to the accumulated key scrub — snapping a pointer drag would
+   *  fight a deliberate, precise one. */
+  private static readonly CHAPTER_SNAP_S = 5;
 
   onKeydown(e: KeyboardEvent) {
     const dur = this.duration();
@@ -294,6 +371,15 @@ export class SeekbarComponent {
     switch (e.key) {
       case 'ArrowLeft':  direction = -1; break;
       case 'ArrowRight': direction = 1; break;
+      case 'ArrowUp':
+      case 'ArrowDown':
+        if (!this.ownsVertical()) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this.cancelScrubTimer();
+        this.holdKeyPreview();
+        this.stepChapter(e.key === 'ArrowDown' ? 1 : -1);
+        return;
       case 'Home':
         e.preventDefault();
         e.stopPropagation();
@@ -332,17 +418,21 @@ export class SeekbarComponent {
     const next = Math.max(0, Math.min(dur, this.dragTime() + direction * step));
     this.dragTime.set(next);
 
-    this.cancelScrubTimer();
-    this.scrubCommitTimer = setTimeout(() => {
-      this.scrubCommitTimer = null;
-      this.commitScrub();
-    }, 250);
+    this.scheduleScrubCommit();
   }
 
   onKeyup(e: KeyboardEvent) {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    // Restart the window rather than commit: the user may still be tapping.
+    this.scheduleScrubCommit();
+  }
+
+  private scheduleScrubCommit() {
     this.cancelScrubTimer();
-    this.commitScrub();
+    this.scrubCommitTimer = setTimeout(() => {
+      this.scrubCommitTimer = null;
+      this.commitScrub();
+    }, SeekbarComponent.SCRUB_IDLE_MS);
   }
 
   /** Restart the linger on every press, so a run of arrows keeps one preview up. */
@@ -368,9 +458,43 @@ export class SeekbarComponent {
     }
   }
 
+  /** Jump to the next / previous chapter start. Measured from `displayTime`,
+   *  not the preview: with no scrub in flight the preview reports the pointer
+   *  (0 on a remote), which would step from the head of the file. */
+  private stepChapter(direction: 1 | -1) {
+    const from = this.displayTime();
+    const starts = this.chapters()
+      .map((c) => c.startSeconds)
+      .sort((a, b) => a - b);
+    // 1s of slack so stepping back off a boundary doesn't land on it again.
+    const next =
+      direction === 1
+        ? starts.find((t) => t > from + 1)
+        : [...starts].reverse().find((t) => t < from - 1);
+    if (next === undefined) return;
+    this.dragTime.set(next);
+    this.commitScrubTo(next);
+  }
+
+  private snapToChapter(target: number): number {
+    let best = target;
+    let bestDist = SeekbarComponent.CHAPTER_SNAP_S;
+    for (const c of this.chapters()) {
+      for (const edge of [c.startSeconds, c.endSeconds]) {
+        const dist = Math.abs(edge - target);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = edge;
+        }
+      }
+    }
+    return Math.max(0, Math.min(this.duration() || 0, best));
+  }
+
   private commitScrub() {
     if (!this.dragging()) return;
-    const target = this.dragTime();
+    const target = this.snapToChapter(this.dragTime());
+    this.dragTime.set(target);
     this.dragging.set(false);
     this.dragChange.emit(false);
     this.seekTarget = target;

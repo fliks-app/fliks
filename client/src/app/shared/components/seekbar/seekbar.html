@@ -5,6 +5,7 @@
   [class]="variant() === 'player' ? 'h-6' : 'h-5'"
   tabindex="0"
   role="slider"
+  [attr.data-tv-own-vertical]="ownsVertical() ? '' : null"
   [attr.aria-valuemin]="0"
   [attr.aria-valuemax]="duration() || 0"
   [attr.aria-valuenow]="currentTime()"
@@ -33,18 +34,37 @@
                 [style.background-position]="thumbnailBgPositionScaled()"
                 [style.background-size]="spriteBgSizeScaled()"
               ></div>
-              <div class="absolute bottom-0 inset-x-0 text-center pb-0.5 pt-2 bg-gradient-to-t from-black/70 to-transparent">
-                <span class="text-white text-xs tabular-nums font-medium drop-shadow">
+              <!-- Time and chapter both ride the image's own gradient. Given a
+                   row of their own they would expose the panel's background
+                   below the thumbnail as a grey band. -->
+              <div class="absolute bottom-0 inset-x-0 text-center px-2 pb-0.5 pt-3 bg-gradient-to-t from-black/85 to-transparent">
+                <span class="text-white text-base tabular-nums font-medium drop-shadow">
                   {{ formatTime(previewTime()) }}
+                  @if (previewDelta()) {
+                    <span class="text-white/50">{{ formatDelta(previewDelta()) }}</span>
+                  }
                 </span>
+                @if (previewChapter()) {
+                  <div class="text-white/50 text-sm leading-tight truncate drop-shadow">
+                    {{ previewChapter() }}
+                  </div>
+                }
               </div>
             </div>
           } @else {
-            <div class="px-3 py-1 text-center">
-              <span class="text-white text-xs tabular-nums font-medium">
+            <div class="px-3 pt-1 text-center" [class.pb-1]="!previewChapter()">
+              <span class="text-white text-base tabular-nums font-medium">
                 {{ formatTime(previewTime()) }}
+                @if (previewDelta()) {
+                  <span class="text-white/50">{{ formatDelta(previewDelta()) }}</span>
+                }
               </span>
             </div>
+            @if (previewChapter()) {
+              <div class="px-3 pb-1 text-center text-white/50 text-sm leading-tight truncate max-w-[14rem]">
+                {{ previewChapter() }}
+              </div>
+            }
           }
         </div>
         <!-- Downward-pointing arrow: CSS triangle, sibling of the
@@ -70,6 +90,16 @@
       <div
         class="absolute inset-y-0 left-0 bg-white/30 rounded-l-full"
         [style.width.%]="duration() ? (bufferedEnd() / duration()) * 100 : 0"
+      ></div>
+    }
+    <!-- Intro / outro bands. Under the progress fill on purpose: they mark what
+         is still ahead, and the played side needs no annotation. -->
+    @for (b of markerBands(); track b.kind) {
+      <div
+        class="absolute inset-y-0 pointer-events-none"
+        [class]="b.kind === 'intro' ? 'bg-primary/45' : 'bg-warning/45'"
+        [style.left.%]="b.left"
+        [style.width.%]="b.width"
       ></div>
     }
     <!-- Progress. `rounded-l-full` matches the track's left cap; right side
