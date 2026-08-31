@@ -10,11 +10,15 @@
         <div class="flex items-center lg:items-start gap-3 px-4 pt-6 lg:py-3 shrink-0 lg:border-b lg:border-base-200"
              style="padding-top: calc(env(safe-area-inset-top) / 2 + 24px)"
         >
-          <!-- Poster thumbnail (desktop only) -->
-          @if (t.fanartUrl()) {
-            <img [cachedSrc]="t.fanartUrl()! | resolveUrl:'thumb'" alt=""
-                 class="hidden lg:block w-12 h-16 object-cover rounded shrink-0" />
-          }
+          <!-- Poster thumbnail (desktop only). The box is always there so the
+               header does not reflow when the URL arrives. -->
+          <div class="hidden lg:block w-12 h-16 rounded overflow-hidden shrink-0"
+               [class.skeleton]="!t.fanartUrl()">
+            @if (t.fanartUrl()) {
+              <img [cachedSrc]="t.fanartUrl()! | resolveUrl:'thumb'" alt=""
+                   class="w-full h-full object-cover" />
+            }
+          </div>
           <div class="min-w-0 flex-1"></div>
           <button class="btn btn-ghost btn-circle shrink-0" (click)="toggle()"
                   [attr.aria-label]="'common.close' | translate">
@@ -122,7 +126,7 @@
           </div>
 
           <!-- Pickers -->
-          <div class="flex items-center justify-center gap-3 lg:gap-2 flex-wrap">
+          <div class="flex items-center justify-center gap-3 lg:gap-2 flex-wrap min-h-12 lg:min-h-8">
             @if (t.availableSubtitles().length) {
               <app-dropdown-menu placement="top-start">
                 <div trigger tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
