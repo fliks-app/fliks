@@ -14,6 +14,7 @@ import { FollowStatus } from '../../common/enums';
 import {
   EventsService,
   RemoteTargetConnection,
+  SseEvent,
 } from '../scheduler/events.service';
 import {
   LiveSessionRegistry,
@@ -35,6 +36,10 @@ interface ResolvedTarget {
   ownerUsername: string | null;
 }
 
+/** Long enough to collapse a playing session's ten-second cadence, short
+ *  enough that revoking consent is felt promptly. */
+const HOUSEHOLD_CACHE_MS = 30_000;
+
 @Injectable()
 export class RemoteService {
   private readonly logger = new Logger(RemoteService.name);
@@ -48,7 +53,36 @@ export class RemoteService {
     private readonly liveSessions: LiveSessionRegistry,
     private readonly casl: CaslAbilityFactory,
     private readonly social: SocialService,
-  ) {}
+  ) {
+    // StreamingModule can't import RemoteModule (RemoteModule already imports
+    // StreamingModule, and Nest module imports must not cycle), so instead of
+    // PlaybackController calling in here, EventsService calls out through this
+    // hook whenever it emits a household-scoped event.
+    this.events.registerHouseholdFanOut((event, ownerId) => {
+      void this.fanOutToHousehold(ownerId, event);
+    });
+  }
+
+  /** State frames arrive every ten seconds per playing session, so resolving the
+   *  household from the database on each one is pure waste. A consent change
+   *  takes effect within the window instead of instantly, which is fine for a
+   *  fan-out audience. */
+  private readonly viewerCache = new Map<number, { ids: number[]; at: number }>();
+
+  /** Extend a household-scoped event past its owner to every mutual follower
+   *  currently authorized to control the owner's devices. */
+  private async fanOutToHousehold(ownerId: number, event: SseEvent): Promise<void> {
+    const cached = this.viewerCache.get(ownerId);
+    let viewerIds: number[];
+    if (cached && Date.now() - cached.at < HOUSEHOLD_CACHE_MS) {
+      viewerIds = cached.ids;
+    } else {
+      viewerIds = await this.authorizedViewerIds(ownerId);
+      this.viewerCache.set(ownerId, { ids: viewerIds, at: Date.now() });
+    }
+    const extra = viewerIds.filter((id) => id !== ownerId);
+    if (extra.length > 0) this.events.emitToUsers(extra, event);
+  }
 
   /** The caller's own devices, plus any household member's devices the caller
    *  is authorized to control. `selfTargetId` is a UX filter (the caller's own
@@ -242,6 +276,23 @@ export class RemoteService {
     }
 
     return null;
+  }
+
+  /** Owner plus every mutual follower currently authorized to control the
+   *  owner's devices: the same gates `canControl` applies, resolved in bulk
+   *  from `mutualFollowerIds` instead of a second query. Exposed so
+   *  `EventsService`'s household fan-out hook doesn't reimplement consent. */
+  async authorizedViewerIds(ownerId: number): Promise<number[]> {
+    const owner = await this.userRepo.findOne({ where: { id: ownerId } });
+    if (!owner?.enabled || owner.shareDisabled || !owner.allowRemoteControlOfMyDevices) {
+      return [ownerId];
+    }
+    const mutualIds = await this.mutualFollowerIds(ownerId);
+    if (mutualIds.length === 0) return [ownerId];
+    const viewers = await this.userRepo.find({
+      where: { id: In(mutualIds), shareDisabled: false, allowRemoteControlOfOthers: true },
+    });
+    return [ownerId, ...viewers.map((v) => v.id)];
   }
 
   /** Mutual (both ACCEPTED) follow edges: the structural "household" scope

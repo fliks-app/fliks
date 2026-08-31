@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
+import { SessionTokenGuard } from '../auth/guards/session-token.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PlaybackService } from './playback.service';
 import { RecommendationService } from './recommendation.service';
@@ -192,6 +193,7 @@ export class PlaybackController {
    *  re-issuing `playback-info` and reloading the stream URL with
    *  the fresh sid. */
   @Put('media/:mediaId/state')
+  @UseGuards(SessionTokenGuard)
   async updateState(
     @Req() req: Request,
     @Param('mediaId', ParseIntPipe) mediaId: number,
@@ -208,9 +210,14 @@ export class PlaybackController {
       quality?: string | null;
       episodeLabel?: string | null;
       supportsVolume?: boolean;
+      subtitleId?: string | null;
       audioTrackIndex?: number | null;
       subtitleTrackIndex?: number | null;
       sseConnectionId?: string;
+      // Set by a client with no SSE primitive (the native TV app): lets its
+      // heartbeat resolve to a remote-control target the same way an SSE
+      // connection id does. See EventsService.targetIdFor.
+      targetId?: string;
       volume?: number;
       muted?: boolean;
       lastCmdId?: string;
@@ -218,7 +225,9 @@ export class PlaybackController {
   ): Promise<{ sessionLost?: true; state?: unknown } | null> {
     const user = req.user as User;
     const sseConnectionId =
-      body.sseConnectionId ?? req.get('x-fliks-sse-connection') ?? undefined;
+      body.sseConnectionId ??
+      req.get('x-fliks-sse-connection') ??
+      (body.targetId ? `polled:${body.targetId}` : undefined);
 
     let stateChanged = false;
     let sessionLost = false;
@@ -231,6 +240,7 @@ export class PlaybackController {
         quality: body.quality,
         episodeLabel: body.episodeLabel,
         supportsVolume: body.supportsVolume,
+        subtitleId: body.subtitleId,
         audioTrackIndex: body.audioTrackIndex,
         subtitleTrackIndex: body.subtitleTrackIndex,
         sseConnectionId,
@@ -265,6 +275,7 @@ export class PlaybackController {
             volume: updated.volume,
             muted: updated.muted,
             supportsVolume: updated.supportsVolume,
+            subtitleId: updated.subtitleId,
             quality: updated.quality,
             audioTrackIndex: updated.audioTrackIndex,
             subtitleTrackIndex: updated.subtitleTrackIndex,

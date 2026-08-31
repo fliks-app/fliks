@@ -204,11 +204,14 @@ export type SseEvent =
       trackId?: string;
       subtitleId?: string | null;
     }
-  // Remote control: the target's live state, fanned out to every connection
-  // of the owning user so any of them can act as a controller.
+  // Remote control: the target's live state, fanned out to every connection of
+  // the owning user plus any household member authorized to control it.
   | ({ type: 'remote.state'; targetId: string } & RemoteStatePayload)
   // Remote control: "refetch the target list". Carries no data on purpose.
   | { type: 'remote.targets_changed' }
+  // Remote control - that target stopped playing. Definitive, so a controller
+  // never has to tell a closed player apart from a lagging report.
+  | { type: 'remote.stopped'; targetId: string }
   // Social — delivered to the target user (see SocialService).
   | {
       type: 'social.followed' | 'social.follow_request' | 'social.follow_accepted';
@@ -284,6 +287,7 @@ export interface RemoteStatePayload {
   volume: number | null;
   muted: boolean | null;
   supportsVolume: boolean;
+  subtitleId: string | null;
   quality: string | null;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;
@@ -350,7 +354,16 @@ export class EventsService {
   private readonly subject = new Subject<SseEnvelope>();
   private readonly domainSubject = new Subject<DomainEvent>();
   private readonly connections = new Map<string, ConnectionIdentity>();
+  /** One completer per live connection, keyed the same as `connections`. Kept
+   *  separate so `RemoteTargetConnection` (built by spreading an identity)
+   *  never leaks a function into the client-facing DTO. */
+  private readonly connectionCompleters = new Map<string, () => void>();
   private readonly polled = new Map<string, PolledTarget>();
+  /** Set by `RemoteService` so a household-scoped event reaches mutual
+   *  followers too, without this generic pub/sub knowing about follows or
+   *  consent flags. Never invoked for `emitToUsers`, so the household
+   *  fan-out itself can't re-trigger and loop. */
+  private householdFanOut: ((event: SseEvent, ownerId: number) => void) | null = null;
 
   // Defaulted so every existing `new EventsService()` in other services'
   // tests keeps compiling — Nest's own DI always supplies the real instance.
@@ -366,6 +379,16 @@ export class EventsService {
   /** Deliver only to the given user's SSE connections. */
   emitToUser(userId: number, event: SseEvent): void {
     this.dispatch({ audience: [userId], connectionIds: null, event });
+    if (event.type === 'remote.state' || event.type === 'remote.targets_changed') {
+      this.householdFanOut?.(event, userId);
+    }
+  }
+
+  /** Registered once by `RemoteService`: extends a household-scoped event's
+   *  audience past its owner. Keeps consent/mutual-follow logic out of this
+   *  generic pub/sub while letting every `emitToUser` call site benefit. */
+  registerHouseholdFanOut(fn: (event: SseEvent, ownerId: number) => void): void {
+    this.householdFanOut = fn;
   }
 
   /** Deliver only to the given users' SSE connections. Empty list = nobody. */
@@ -516,24 +539,72 @@ export class EventsService {
     return matches[0]?.connectionId ?? null;
   }
 
+  /** A polled target's connection id is its `polled:<targetId>` map key, so
+   *  the same id resolves through either map with no branch at the caller. */
   targetIdFor(connectionId: string | null | undefined): string | null {
     if (!connectionId) return null;
-    return this.connections.get(connectionId)?.targetId ?? null;
+    return (
+      this.connections.get(connectionId)?.targetId ??
+      this.polled.get(connectionId)?.targetId ??
+      null
+    );
   }
 
-  /** Drop every stream a user holds. Called when an account is disabled, its
-   *  role changes or it logs out: an SSE request is authorized once at connect
-   *  and then lives for hours, so without this a revoked client stays a listed,
-   *  commandable target. */
+  /** Drop every stream a user holds, SSE and polled alike. Called when an
+   *  account is disabled or its role changes: an SSE request is authorized
+   *  once at connect and then lives for hours, and a polled target survives
+   *  until its next `register` call, so without this a revoked client stays
+   *  a listed, commandable target. */
   dropConnectionsForUser(userId: number): void {
     let dropped = 0;
     for (const [connectionId, identity] of this.connections) {
       if (identity.userId !== userId) continue;
-      this.connections.delete(connectionId);
+      // Complete the subscriber, not just delete the entry: the HTTP response
+      // has to actually close, or the client never sees it needs to reconnect.
+      this.connectionCompleters.get(connectionId)?.();
       dropped++;
     }
-    if (dropped > 0) {
-      this.log.log(`Dropped ${dropped} SSE connection(s) for user ${userId}`);
+    let polledDropped = 0;
+    for (const [key, target] of this.polled) {
+      if (target.userId !== userId) continue;
+      this.polled.delete(key);
+      polledDropped++;
+    }
+    if (dropped > 0 || polledDropped > 0) {
+      this.log.log(
+        `Dropped ${dropped} SSE connection(s) and ${polledDropped} polled target(s) for user ${userId}`,
+      );
+    }
+    // Completing an SSE connection above already re-announces via its own
+    // teardown; a polled-only drop needs its own announce.
+    if (polledDropped > 0) {
+      this.emitToUser(userId, { type: 'remote.targets_changed' });
+    }
+  }
+
+  /** Drop only the caller's own device: the scope for a plain logout, as
+   *  opposed to the account-wide {@link dropConnectionsForUser}. `targetId`
+   *  is caller-supplied, so a miss is logged rather than silently no-op'd. */
+  dropConnectionsForTarget(userId: number, targetId: string): void {
+    let droppedSse = 0;
+    for (const [connectionId, identity] of this.connections) {
+      if (identity.userId !== userId || identity.targetId !== targetId) continue;
+      this.connectionCompleters.get(connectionId)?.();
+      droppedSse++;
+    }
+    let droppedPolled = 0;
+    const polledKey = `polled:${targetId}`;
+    const polled = this.polled.get(polledKey);
+    if (polled && polled.userId === userId) {
+      this.polled.delete(polledKey);
+      droppedPolled++;
+    }
+    if (droppedSse === 0 && droppedPolled === 0) {
+      this.log.warn(`Logout target scope: no connection for user ${userId} target ${targetId}`);
+      return;
+    }
+    this.log.log(`Dropped ${droppedSse + droppedPolled} connection(s) for user ${userId} target ${targetId}`);
+    if (droppedPolled > 0) {
       this.emitToUser(userId, { type: 'remote.targets_changed' });
     }
   }
@@ -555,6 +626,7 @@ export class EventsService {
         userAgent: identity?.userAgent ?? null,
         since: Date.now(),
       });
+      this.connectionCompleters.set(connectionId, () => subscriber.complete());
       if (identity?.targetId) {
         this.emitToUser(userId, { type: 'remote.targets_changed' });
       }
@@ -587,6 +659,7 @@ export class EventsService {
       return () => {
         clearInterval(ping);
         sub.unsubscribe();
+        this.connectionCompleters.delete(connectionId);
         const had = this.connections.get(connectionId)?.targetId;
         this.connections.delete(connectionId);
         if (had) {

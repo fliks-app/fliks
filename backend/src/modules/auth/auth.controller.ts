@@ -8,6 +8,7 @@ import {
   Req,
   Headers,
   HttpCode,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
@@ -27,6 +28,8 @@ import { EventsService } from '../scheduler/events.service';
 
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly authService: AuthService,
     private readonly settingsService: SettingsService,
@@ -88,6 +91,9 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
     @Body('refreshToken') refreshToken?: string,
+    // Same target id the client announces on the SSE URL (`?device=`):
+    // scopes the drop below to this one device instead of the whole account.
+    @Body('targetId') targetId?: string,
   ) {
     res.clearCookie(ACCESS_TOKEN_COOKIE, clearOpts(req));
     // Revoke the refresh token server-side. Best-effort: a malformed
@@ -100,7 +106,7 @@ export class AuthController {
         // ignore
       }
     }
-    // Drop this user's SSE connections now, not at token expiry: otherwise a
+    // Drop this device's SSE connection now, not at token expiry: otherwise a
     // logged-out device stays a listed, commandable remote-control target for
     // up to the access token's remaining lifetime.
     const accessToken =
@@ -111,7 +117,13 @@ export class AuthController {
     if (accessToken) {
       try {
         const payload = this.jwtService.verify<JwtPayload>(accessToken);
-        this.events.dropConnectionsForUser(payload.sub);
+        if (targetId) {
+          this.events.dropConnectionsForTarget(payload.sub, targetId);
+        } else {
+          this.logger.warn(
+            `Logout for user ${payload.sub} carried no targetId: leaving other devices' streams untouched`,
+          );
+        }
       } catch {
         // expired/invalid access token: no live connection to attribute this to
       }

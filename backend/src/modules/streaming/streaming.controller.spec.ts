@@ -5,7 +5,7 @@ import {
   buildVariableVodPlaylist,
   resolvePreRoll,
 } from './streaming.controller';
-import type { LiveSession } from './live-session.service';
+import { buildLiveSession, type LiveSession } from './live-session.service';
 import type { PreRollItem } from '../../common/plugin-contract';
 import type { User } from '../users/entities/user.entity';
 import { ForbiddenException } from '@nestjs/common';
@@ -95,6 +95,7 @@ describe('StreamingController.stopLiveSession', () => {
     };
     const events = {
       emitToUser: jest.fn(),
+      targetIdFor: jest.fn().mockReturnValue('tv#1'),
     };
     const caslAbilityFactory = {
       createForUser: jest.fn().mockReturnValue({
@@ -137,51 +138,11 @@ describe('StreamingController.stopLiveSession', () => {
 
   function makeLive(overrides: Partial<LiveSession>): LiveSession {
     return {
-      sessionId: 'sid-1',
-      userId: 7,
-      username: 'alice',
-      mediaFileId: 42,
-      mediaTitle: null,
-      mediaType: null,
-      posterUrl: null,
-      profileHash: null,
-      profileBase: null,
-      instanceId: null,
-      quality: null,
-      kind: 'directplay',
-      deviceLabel: null,
-      systemName: null,
-      appVersion: null,
-      sseConnectionId: null,
-      startedAt: Date.now(),
-      lastBeat: Date.now(),
-      position: 0,
-      state: 'playing',
-      episodeLabel: null,
-    supportsVolume: true,
-      audioTrackIndex: null,
-      subtitleTrackIndex: null,
-      volume: null,
-      muted: null,
-      useTs: false,
-      audioPlan: null,
-      audioTrackPlans: null,
-      audioStreamIndex: null,
-      audioStreamCount: 0,
-      useExtXMedia: false,
-      deviceType: 'desktop',
-      hdrLadder: false,
-      supportsHlsSubtitles: false,
-      probesSegZero: true,
-      supportsAbr: true,
-      videoVariant: null,
-      tonemapping: false,
-      transcodeReasons: [],
-      burnIn: null,
-      encoderPreset: 'faster',
-      canCopyVideo: false,
-      canCopyAudio: false,
-      pinned: false,
+      ...buildLiveSession(
+        { userId: 7, username: 'alice', mediaFileId: 42, kind: 'transcode' },
+        'sid-1',
+        0,
+      ),
       ...overrides,
     };
   }

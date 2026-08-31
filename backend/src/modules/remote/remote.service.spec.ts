@@ -38,7 +38,23 @@ function userRepoStub(users: User[]): Repository<User> {
     findOne: jest.fn(async ({ where }: { where: { id: number } }) =>
       users.find((u) => u.id === where.id) ?? null,
     ),
-    find: jest.fn(async () => []),
+    // `where.id` is whatever `In(ids)` produces: a `FindOperator` exposing `.value`.
+    find: jest.fn(
+      async ({
+        where,
+      }: {
+        where: { id?: { value: number[] }; shareDisabled?: boolean; allowRemoteControlOfOthers?: boolean };
+      }) => {
+        const ids = where.id?.value ?? [];
+        return users.filter(
+          (u) =>
+            ids.includes(u.id) &&
+            (where.shareDisabled === undefined || u.shareDisabled === where.shareDisabled) &&
+            (where.allowRemoteControlOfOthers === undefined ||
+              u.allowRemoteControlOfOthers === where.allowRemoteControlOfOthers),
+        );
+      },
+    ),
   } as unknown as Repository<User>;
 }
 
@@ -200,5 +216,75 @@ describe('RemoteService.canControl: household predicate', () => {
     const result = await service.canControl(alice, 2);
 
     expect(result.allowed).toBe(true);
+  });
+});
+
+/**
+ * `PlaybackController` publishes `remote.state`/`remote.targets_changed` with a
+ * plain `events.emitToUser(ownerId, ...)`, same as any other user-scoped event.
+ * `RemoteService` registers a fan-out hook on construction (see its constructor)
+ * so a mutual, consenting follower gets the frame too, without the streaming
+ * module ever depending on the remote module.
+ */
+describe('RemoteService: household fan-out for remote.state / remote.targets_changed', () => {
+  const flushHook = () => new Promise((resolve) => setImmediate(resolve));
+
+  it('delivers to the owner and an authorized mutual follower, but not an unrelated user', async () => {
+    const edges: Edge[] = [
+      { followerId: 1, followingId: 2, status: FollowStatus.ACCEPTED },
+      { followerId: 2, followingId: 1, status: FollowStatus.ACCEPTED },
+    ];
+    const alice = fakeUser({ id: 1, allowRemoteControlOfMyDevices: true });
+    const bob = fakeUser({ id: 2, allowRemoteControlOfOthers: true });
+    const carol = fakeUser({ id: 3 });
+    const { events } = makeService(edges, [alice, bob, carol]);
+
+    const aliceTv = connect(events, 1, 'alice-tv');
+    const bobPhone = connect(events, 2, 'bob-phone');
+    const carolPhone = connect(events, 3, 'carol-phone');
+
+    events.emitToUser(1, {
+      type: 'remote.state',
+      targetId: 'alice-tv',
+      sessionId: 'sid-1',
+      mediaId: 1,
+      mediaFileId: 1,
+      mediaTitle: 'Title',
+      episodeLabel: null,
+      posterUrl: null,
+      positionSeconds: 10,
+      durationSeconds: 100,
+      state: 'playing',
+      volume: null,
+      muted: null,
+      supportsVolume: false,
+      subtitleId: null,
+      quality: null,
+      audioTrackIndex: null,
+      subtitleTrackIndex: null,
+      lastCmdId: null,
+    });
+    await flushHook();
+
+    expect(aliceTv.frames.some((f) => f.type === 'remote.state')).toBe(true);
+    expect(bobPhone.frames.some((f) => f.type === 'remote.state')).toBe(true);
+    expect(carolPhone.frames.some((f) => f.type === 'remote.state')).toBe(false);
+  });
+
+  it('withholds the fan-out when the owner has not opted in to remote control', async () => {
+    const edges: Edge[] = [
+      { followerId: 1, followingId: 2, status: FollowStatus.ACCEPTED },
+      { followerId: 2, followingId: 1, status: FollowStatus.ACCEPTED },
+    ];
+    // Owner never set `allowRemoteControlOfMyDevices`: the opt-out `canControl` enforces.
+    const alice = fakeUser({ id: 1 });
+    const bob = fakeUser({ id: 2, allowRemoteControlOfOthers: true });
+    const { events } = makeService(edges, [alice, bob]);
+
+    const bobPhone = connect(events, 2, 'bob-phone');
+    events.emitToUser(1, { type: 'remote.targets_changed' });
+    await flushHook();
+
+    expect(bobPhone.frames.some((f) => f.type === 'remote.targets_changed')).toBe(false);
   });
 });

@@ -22,6 +22,7 @@ import * as path from 'path';
 import { Library } from '../libraries/entities/library.entity';
 import { PluginPackage } from '../plugins/entities/plugin-package.entity';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
+import { SessionTokenGuard } from '../auth/guards/session-token.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
@@ -226,6 +227,7 @@ export class SystemController {
   // connect-then-announce race and re-announces free on every reconnect.
   // A client that sends no `device` simply never becomes a remote target.
   @Sse('events')
+  @UseGuards(SessionTokenGuard)
   @CheckPolicies(() => true)
   events(
     @CurrentUser() user: User,

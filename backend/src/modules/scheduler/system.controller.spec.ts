@@ -6,7 +6,7 @@ jest.mock('fs', () => ({
   ...jest.requireActual<typeof import('fs')>('fs'),
   existsSync: jest.fn(),
 }));
-import type { LiveSessionSnapshot } from '../streaming/live-session.service';
+import { buildLiveSession, type LiveSessionSnapshot } from '../streaming/live-session.service';
 
 /**
  * Recency-filter coverage for the streams dashboard. `activeStreams()`
@@ -29,51 +29,16 @@ describe('SystemController.activeStreams recency filter', () => {
   function snapshot(
     overrides: Partial<LiveSessionSnapshot> & { lastBeat: Date },
   ): LiveSessionSnapshot {
+    const base = buildLiveSession(
+      { userId: 1, username: 'alice', mediaFileId: 42, kind: 'transcode' },
+      'sid',
+      0,
+    );
     return {
-      sessionId: 'sid',
-      userId: 1,
-      username: 'alice',
-      mediaFileId: 42,
+      ...base,
       mediaTitle: 'title',
       mediaType: 'movie',
-      posterUrl: null,
-      profileHash: null,
-      profileBase: null,
-      instanceId: null,
-      quality: null,
-      kind: 'directplay',
-      deviceLabel: null,
-      systemName: null,
-      appVersion: null,
-      sseConnectionId: null,
-      startedAt: new Date(overrides.lastBeat),
-      position: 0,
-      state: 'playing',
-      episodeLabel: null,
-    supportsVolume: true,
-      audioTrackIndex: null,
-      subtitleTrackIndex: null,
-      volume: null,
-      muted: null,
-      useTs: false,
-      audioPlan: null,
-      audioTrackPlans: null,
-      audioStreamIndex: null,
-      audioStreamCount: 0,
-      useExtXMedia: false,
-      deviceType: 'desktop',
-      hdrLadder: false,
-      supportsHlsSubtitles: false,
-      probesSegZero: true,
-      supportsAbr: true,
-      videoVariant: null,
-      tonemapping: false,
-      transcodeReasons: [],
-      burnIn: null,
-      encoderPreset: 'faster',
-      canCopyVideo: false,
-      canCopyAudio: false,
-      pinned: false,
+      startedAt: new Date(0),
       ...overrides,
     };
   }

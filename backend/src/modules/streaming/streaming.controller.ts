@@ -1053,6 +1053,13 @@ export class StreamingController {
     }
 
     if (live?.userId != null) {
+      const stoppedTargetId = this.events.targetIdFor(live.sseConnectionId);
+      if (stoppedTargetId) {
+        this.events.emitToUser(live.userId, {
+          type: 'remote.stopped',
+          targetId: stoppedTargetId,
+        });
+      }
       this.events.emitToUser(live.userId, { type: 'remote.targets_changed' });
     } else {
       this.log.debug(

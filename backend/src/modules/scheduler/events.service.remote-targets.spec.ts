@@ -143,4 +143,44 @@ describe('EventsService: remote target registry', () => {
     expect(events.listForUser(1)).toHaveLength(0);
     expect(events.listForUser(2)).toHaveLength(1);
   });
+
+  it('actually closes the stream on a revocation, not just the registry entry', () => {
+    // A dropped `ConnectionIdentity` with a live SSE response behind it would
+    // leave that response open forever: the client never learns to reconnect.
+    const events = setup();
+    let completed = false;
+    const sub = events
+      .getStream(1, { targetId: 'tv#t1', formFactor: null, tvPlatform: null, userAgent: null })
+      .subscribe({ complete: () => { completed = true; } });
+    open.push(() => sub.unsubscribe());
+
+    events.dropConnectionsForUser(1);
+
+    expect(completed).toBe(true);
+    expect(sub.closed).toBe(true);
+  });
+
+  it('scopes a logout drop to the named device, leaving sibling devices live', () => {
+    const events = setup();
+    const phone = connect(events, 1, { targetId: 'phone#t1' });
+    const tv = connect(events, 1, { targetId: 'tv#t1' });
+
+    events.dropConnectionsForTarget(1, 'phone#t1');
+
+    expect(events.listForUser(1).map((r) => r.targetId)).toEqual(['tv#t1']);
+    expect(phone.received.some((e) => e.type === 'sse.connected')).toBe(true);
+  });
+
+  it('resolves a polled target through targetIdFor the same as a live SSE one', () => {
+    const events = setup();
+    events.registerPolledTarget(1, {
+      targetId: 'appletv#t1',
+      formFactor: 'tv',
+      tvPlatform: 'tvos',
+      userAgent: null,
+    });
+
+    expect(events.targetIdFor('polled:appletv#t1')).toBe('appletv#t1');
+    expect(events.targetIdFor('nonexistent')).toBeNull();
+  });
 });
