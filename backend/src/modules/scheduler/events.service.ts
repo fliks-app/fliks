@@ -450,6 +450,17 @@ export class EventsService {
     return rows.sort((a, b) => b.since - a.since);
   }
 
+  /** One device cannot hold two live streams under one target id, so an older
+   *  entry is a corpse the socket never reported: a killed webview or a dropped
+   *  mobile network sends no FIN, and the ping write does not reliably fail. */
+  private evictSupersededConnections(userId: number, targetId: string): void {
+    for (const [connectionId, identity] of this.connections) {
+      if (identity.userId !== userId || identity.targetId !== targetId) continue;
+      this.connections.delete(connectionId);
+      this.log.log(`Evicted superseded connection for target ${targetId}`);
+    }
+  }
+
   /** Announce a client that cannot hold an SSE stream. The key doubles as its
    *  connection id so command delivery needs no branch at the call site. */
   registerPolledTarget(
@@ -531,6 +542,9 @@ export class EventsService {
   ): Observable<MessageEvent> {
     return new Observable((subscriber) => {
       const connectionId = randomUUID();
+      if (identity?.targetId) {
+        this.evictSupersededConnections(userId, identity.targetId);
+      }
       this.connections.set(connectionId, {
         userId,
         targetId: identity?.targetId ?? null,

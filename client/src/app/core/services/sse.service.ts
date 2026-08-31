@@ -228,11 +228,18 @@ export class SseService implements OnDestroy {
     };
   }
 
-  /** `deviceId#tabNonce`, cached: the device id is a persisted async read, so
-   *  only the very first connect pays for it. */
+  /** Cached: the device id is a persisted async read, so only the very first
+   *  connect pays for it.
+   *
+   *  A standalone shell (Capacitor, TV, desktop) has exactly one webview, so it
+   *  gets a bare device id. That makes its target id survive a relaunch, which
+   *  is what lets the server evict the previous, already-dead connection: a
+   *  killed webview sends no FIN, so the socket alone never reveals it. Only a
+   *  browser needs the per-tab suffix, because only a browser has tabs. */
   private async resolveTargetId(): Promise<string> {
     this.deviceIdPromise ??= getOrCreateDeviceId();
     const deviceId = await this.deviceIdPromise;
+    if (this.serverConfig.isNative) return deviceId;
     let nonce: string | null = null;
     try {
       nonce = sessionStorage.getItem(TAB_NONCE_KEY);

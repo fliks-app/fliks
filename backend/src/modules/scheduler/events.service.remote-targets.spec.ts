@@ -113,6 +113,25 @@ describe('EventsService: remote target registry', () => {
     ).toBe(changesBefore + 2);
   });
 
+  it('evicts a superseded connection so a relaunched device is listed once', () => {
+    const events = setup();
+    // A killed webview sends no FIN, so its entry outlives it; the relaunch
+    // reuses the same target id and is what reveals the corpse.
+    connect(events, 1, { targetId: 'phone-device' });
+    connect(events, 1, { targetId: 'phone-device' });
+
+    const rows = events.listForUser(1).filter((r) => r.targetId === 'phone-device');
+    expect(rows).toHaveLength(1);
+  });
+
+  it('keeps two browser tabs of one device as separate targets', () => {
+    const events = setup();
+    connect(events, 1, { targetId: 'browser-device#tab1' });
+    connect(events, 1, { targetId: 'browser-device#tab2' });
+
+    expect(events.listForUser(1)).toHaveLength(2);
+  });
+
   it('drops every connection of a revoked user', () => {
     const events = setup();
     connect(events, 1, { targetId: 'a#t1' });
