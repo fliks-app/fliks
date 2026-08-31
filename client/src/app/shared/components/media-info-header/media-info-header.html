@@ -177,8 +177,8 @@
 <div class="hidden md:block tv:block relative">
 
   <div
-    class="flex gap-6 lg:gap-10 relative z-20 tv:pt-24!"
-    [style.padding-top]="!navbar.isHeroPage() || navbar.effectiveSidebarPinned() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 3rem)' : null"
+    class="flex gap-6 lg:gap-10 relative z-20"
+    [style.padding-top]="!navbar.isHeroPage() || navbar.effectiveSidebarPinned() || tv.isTv() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 3rem)' : null"
   >
     <!-- Poster / Still (desktop only). Compact on the md-to-lg range (landscape
          phones / small windows) so the title keeps room in a short viewport;

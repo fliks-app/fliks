@@ -9,6 +9,8 @@
 
 /* Rounder corners for all DaisyUI components */
 :root, [data-theme] {
+  /* Page padding — <main>, the topbars, and anything that bleeds out of them. */
+  --page-p: 1rem;
   --radius-selector: 1rem;
   --radius-field: 1rem;
   --radius-box: 0.5rem;
@@ -161,8 +163,8 @@ body.native.hero-page {
 /* Landscape: fanart edge-to-edge into side safe areas (browser + native); body/main padding keeps content safe */
 @media (orientation: landscape) {
   body.hero-page .hero-fanart-bleed {
-    margin-left: calc(-1rem - env(safe-area-inset-left, 0px));
-    margin-right: calc(-1rem - env(safe-area-inset-right, 0px));
+    margin-left: calc(-1 * var(--page-p) - env(safe-area-inset-left, 0px));
+    margin-right: calc(-1 * var(--page-p) - env(safe-area-inset-right, 0px));
   }
 }
 
@@ -299,6 +301,9 @@ body.native.hero-page {
 body.tv {
   /* Slight scale-up of base text for legibility from the couch */
   font-size: 18px;
+  /* Viewport-relative so it holds across the logical widths the different
+     TV WebViews report. */
+  --page-p: 4vw;
 }
 /* Horizontal overscan compensation — shrink the body 4% horizontally
    so content stays inside the TV's displayable area. `scaleX` only
@@ -318,14 +323,22 @@ body.tv:not(.tv-tizen):not(.tv-webos) {
 body.tv.immersive {
   transform: none;
 }
-/* webOS lays the app out at a 1920×1080 logical viewport, whereas the
-   Tizen WebView reports ~1280×720. At 1920 every element is ~⅔ the
-   physical size of its Tizen counterpart, so the 10-foot UI reads as
-   tiny from the couch. Zoom 1.5 (1920÷1280) brings the effective density
-   back in line with Tizen. Excluded while immersive so the fullscreen
-   player isn't scaled past the panel edges. */
-body.tv-webos:not(.immersive) {
-  zoom: 1.5;
+/* The 10-foot UI is sized for the 1280-wide logical viewport older TV
+   WebViews report. webOS and Tizen 9 lay it out at 1920 instead, so every
+   element renders at ⅔ the intended physical size and reads as tiny from
+   the couch. Scaling the root font restores the density: Tailwind sizes
+   spacing, text and box dimensions in rem, so they all follow. `zoom: 1.5`
+   would be the obvious lever and is the wrong one — it does not divide
+   viewport units, so every `min-h-screen` box rendered 1.5 screens tall and
+   scrolled. Keyed on the viewport rather than the OS: a 1280-wide TV must
+   not be scaled. */
+@media (min-width: 1900px) {
+  html.tv-host {
+    font-size: 24px;
+  }
+  body.tv {
+    font-size: 1.125rem;
+  }
 }
 /* Backfill html so the WebView doesn't show its default white during route
    transitions, before bootstrap, or in the 4% bottom band the scale leaves.
@@ -407,6 +420,13 @@ body:not(.keyboard-modality):not(.tv) app-mosaic-card button:focus-visible .mosa
   z-index: 1;
   position: relative;
 }
+/* Over the video, the ring's inner `--color-base-100` layer has nothing to
+   blend into — it reads as a black circle around every control. On the player
+   only, drop it and keep the primary ring alone. */
+app-player-controls :is(a, button, select, input, [role="button"], [tabindex]):focus-visible {
+  box-shadow: 0 0 0 3px var(--color-primary, #7a3ff2);
+}
+
 /* Default radius for the ring above, so a bare focusable (a section heading,
    a plain link) doesn't get a rectangle around it and no component has to
    remember its own. On an element with no background or border a radius paints
@@ -426,11 +446,21 @@ body:not(.keyboard-modality):not(.tv) app-mosaic-card button:focus-visible .mosa
   position: absolute;
   z-index: 50;
 }
+/* Same trap as `.player-floating-cue` above, made reusable: the focus ring
+   forces `position: relative` so its z-index applies, which re-anchors an
+   absolutely-placed control to its in-flow origin and makes it jump on focus.
+   Opt out here and keep the element's own placement. */
+.focus-keep-position:focus-visible {
+  position: absolute;
+}
+
 /* A scroll container clips at its padding box, and as soon as one axis
    scrolls CSS forces the other out of `visible` — so the ring above is cut
    off the left and right edges of any full-width focusable inside one.
    Reserve the ring's 4px and pull it straight back out of the layout, so the
-   content keeps its original alignment. Put it on the scrolling element. */
+   content keeps its original alignment. Put it on the scrolling element.
+   Horizontal only: a negative vertical margin would pull the container's own
+   first child (a menu title) up out of its padding. */
 .scroll-ring-safe {
   @apply px-1 -mx-1;
 }
@@ -469,6 +499,92 @@ body.tv [data-home-focus]:focus-visible,
 body.tv [data-tv-focusable]:focus-visible,
 body.tv app-mosaic-card button:focus-visible .mosaic-art {
   transform: scale(1.06);
+}
+
+/* Fade each row of a list in after the one above it. Applied to the CHILDREN
+   rather than through a wrapper per row: a section that renders nothing must
+   leave no element behind, or the parent's `gap` would open a hole for it.
+   `backwards` holds the row invisible through its delay. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.stagger-children > * {
+  animation: fade-in 320ms ease-out backwards;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 80ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 160ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 320ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 400ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 480ms; }
+.stagger-children > *:nth-child(n + 8) { animation-delay: 560ms; }
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+.skeleton-out {
+  animation: fade-out 600ms ease-out forwards;
+}
+
+/* View transitions are off on TV (see app.config), so a navigation would be an
+   abrupt swap — fade the routed content in instead. */
+/* Opacity only, never `transform`: an element with a running transform becomes
+   the containing block for its `position: fixed` descendants, so the library's
+   alphabet index centred itself on <main> for the length of this animation and
+   then jumped into place when it ended. */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+  }
+}
+body.tv main.page-enter {
+  animation: page-enter 220ms ease-out;
+}
+
+/* CDK gives its content wrapper `contain: content`, whose paint containment
+   clips anything drawn outside a row — which is exactly where the focus ring
+   and the card's scale-up land. The wrapper is absolutely positioned and sized
+   by the viewport, so dropping containment costs no layout correctness. */
+.library-viewport .cdk-virtual-scroll-content-wrapper {
+  contain: none;
+}
+
+/* An option that is only marked unavailable because it IS the current selection
+   must stay focusable — a D-pad has to be able to land on it — so it carries
+   `aria-disabled` instead of `disabled`, which removes an element from the
+   focus order entirely. It still reads and behaves as unavailable. */
+[aria-disabled='true'] {
+  opacity: 0.6;
+  cursor: default;
+}
+[aria-disabled='true']:hover {
+  background-color: transparent !important;
+}
+
+/* Promote the card rails to their own composited scroll layer. Without it the
+   TV WebView re-rasterizes the whole rail on every frame of a smooth
+   horizontal scroll — measured on a Tizen 9 panel, 7.7 s of raster and 3.1 s of
+   commit over 20 D-pad steps, against 3.4 s / 0.7 s once composited. TV only:
+   the promotion costs layer memory and no other form factor scrolls these rails
+   one animated step at a time. */
+body.tv [data-scroller] {
+  will-change: scroll-position;
+}
+
+/* Run the focus lift on the compositor. The scale itself is cheap; animating it
+   on an unpromoted element is not — the TV WebView repaints the card and
+   everything overlapping it on every frame of the transition. Measured over 20
+   D-pad steps in the library: 7.8 s of raster unpromoted, 2.2 s promoted, 1.3 s
+   with no transition at all. Windowing keeps the rendered card count low enough
+   that a layer each is affordable. */
+body.tv app-media-card figure,
+body.tv app-media-card figure + div {
+  will-change: transform;
 }
 
 /* Card labels are sized in rem (text-sm / text-xs), so the body.tv 18px font

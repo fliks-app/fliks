@@ -20,6 +20,90 @@ const TABLET_MIN_WIDTH = 768;
 const OVERRIDE_KEY = 'fliks.deviceOverride';
 const TV_PLATFORM_OVERRIDE_KEY = 'fliks.tvPlatformOverride';
 
+function readOverride(): DetectResult | null {
+  if (typeof window === 'undefined') return null;
+  let value: string | null = null;
+  let tvPlatformOverride: TvPlatform = null;
+  try {
+    value = window.localStorage.getItem(OVERRIDE_KEY);
+    const tvp = window.localStorage.getItem(TV_PLATFORM_OVERRIDE_KEY);
+    if (tvp === 'androidtv' || tvp === 'tizen' || tvp === 'webos') {
+      tvPlatformOverride = tvp;
+    }
+  } catch {
+    return null;
+  }
+  switch (value) {
+    case 'tv':
+      return { input: 'dpad', formFactor: 'tv', tvPlatform: tvPlatformOverride };
+    case 'tablet':
+      return { input: 'touch', formFactor: 'tablet', tvPlatform: null };
+    case 'phone':
+      return { input: 'touch', formFactor: 'phone', tvPlatform: null };
+    case 'desktop':
+      return { input: 'mouse', formFactor: 'desktop', tvPlatform: null };
+    default:
+      return null;
+  }
+  }
+
+/** Form factor, input modality and TV OS for the current environment.
+ *  Module-scope so bootstrap-time providers can branch on it before the
+ *  injector exists (see app.config: view transitions are off on TV). */
+export function detectDevice(): DetectResult {
+  if (typeof window === 'undefined') {
+    return { input: 'mouse', formFactor: 'desktop', tvPlatform: null };
+  }
+
+  const override = readOverride();
+  if (override) return override;
+
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const mm = typeof window.matchMedia === 'function' ? window.matchMedia : null;
+
+  // 1. AndroidTV marker (Capacitor MainActivity injects it)
+  if (/AndroidTV\/\d/.test(ua)) {
+    return { input: 'dpad', formFactor: 'tv', tvPlatform: 'androidtv' };
+  }
+
+  // 2. Samsung Tizen
+  if (/\bTizen\b|SMART-TV/i.test(ua)) {
+    return { input: 'dpad', formFactor: 'tv', tvPlatform: 'tizen' };
+  }
+
+  // 3. LG webOS (UA writes either `Web0S` with a zero or `webOS`)
+  if (/Web0S|webOS/.test(ua)) {
+    return { input: 'dpad', formFactor: 'tv', tvPlatform: 'webos' };
+  }
+
+  // 4. No pointer at all → TV with no detectable OS
+  if (mm && mm('(pointer: none)').matches) {
+    return { input: 'dpad', formFactor: 'tv', tvPlatform: null };
+  }
+
+  // 5. TV-only UA sniff (best effort, only on native Android)
+  if (
+    Capacitor.getPlatform() === 'android' &&
+    /Android.*TV|BRAVIA|SHIELD|AFT[A-Z0-9]+|GoogleTV/i.test(ua)
+  ) {
+    return { input: 'dpad', formFactor: 'tv', tvPlatform: 'androidtv' };
+  }
+
+  // 7. Coarse pointer → touch device, split by viewport
+  const coarse = mm && mm('(pointer: coarse)').matches;
+  if (coarse) {
+    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    return {
+      input: 'touch',
+      formFactor: vw < TABLET_MIN_WIDTH ? 'phone' : 'tablet',
+      tvPlatform: null,
+    };
+  }
+
+  // 8. Default
+  return { input: 'mouse', formFactor: 'desktop', tvPlatform: null };
+  }
+
 interface DetectResult {
   input: InputMode;
   formFactor: FormFactor;
@@ -76,7 +160,7 @@ export class DeviceService {
 
   constructor() {
     this.applyOverrideFromUrl();
-    const detected = this.detect();
+    const detected = detectDevice();
     this.input.set(detected.input);
     this.formFactor.set(detected.formFactor);
     this.tvPlatform.set(detected.tvPlatform);
@@ -94,59 +178,7 @@ export class DeviceService {
     );
   }
 
-  private detect(): DetectResult {
-    if (typeof window === 'undefined') {
-      return { input: 'mouse', formFactor: 'desktop', tvPlatform: null };
-    }
 
-    const override = this.readOverride();
-    if (override) return override;
-
-    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-    const mm = typeof window.matchMedia === 'function' ? window.matchMedia : null;
-
-    // 1. AndroidTV marker (Capacitor MainActivity injects it)
-    if (/AndroidTV\/\d/.test(ua)) {
-      return { input: 'dpad', formFactor: 'tv', tvPlatform: 'androidtv' };
-    }
-
-    // 2. Samsung Tizen
-    if (/\bTizen\b|SMART-TV/i.test(ua)) {
-      return { input: 'dpad', formFactor: 'tv', tvPlatform: 'tizen' };
-    }
-
-    // 3. LG webOS (UA writes either `Web0S` with a zero or `webOS`)
-    if (/Web0S|webOS/.test(ua)) {
-      return { input: 'dpad', formFactor: 'tv', tvPlatform: 'webos' };
-    }
-
-    // 4. No pointer at all → TV with no detectable OS
-    if (mm && mm('(pointer: none)').matches) {
-      return { input: 'dpad', formFactor: 'tv', tvPlatform: null };
-    }
-
-    // 5. TV-only UA sniff (best effort, only on native Android)
-    if (
-      Capacitor.getPlatform() === 'android' &&
-      /Android.*TV|BRAVIA|SHIELD|AFT[A-Z0-9]+|GoogleTV/i.test(ua)
-    ) {
-      return { input: 'dpad', formFactor: 'tv', tvPlatform: 'androidtv' };
-    }
-
-    // 7. Coarse pointer → touch device, split by viewport
-    const coarse = mm && mm('(pointer: coarse)').matches;
-    if (coarse) {
-      const vw = window.innerWidth || document.documentElement.clientWidth || 0;
-      return {
-        input: 'touch',
-        formFactor: vw < TABLET_MIN_WIDTH ? 'phone' : 'tablet',
-        tvPlatform: null,
-      };
-    }
-
-    // 8. Default
-    return { input: 'mouse', formFactor: 'desktop', tvPlatform: null };
-  }
 
   /** Electron desktop shell: the preload bridge is authoritative; the UA tag
    *  is a fallback for the brief window before it attaches. */
@@ -164,7 +196,7 @@ export class DeviceService {
     if (typeof window === 'undefined') return;
     const onResize = () => {
       // Only the form-factor side changes with viewport — input mode + tv platform stay put.
-      const next = this.detect();
+      const next = detectDevice();
       if (next.formFactor !== this.formFactor()) {
         this.formFactor.set(next.formFactor);
         this.syncBodyClasses();
@@ -229,30 +261,5 @@ export class DeviceService {
     }
   }
 
-  private readOverride(): DetectResult | null {
-    if (typeof window === 'undefined') return null;
-    let value: string | null = null;
-    let tvPlatformOverride: TvPlatform = null;
-    try {
-      value = window.localStorage.getItem(OVERRIDE_KEY);
-      const tvp = window.localStorage.getItem(TV_PLATFORM_OVERRIDE_KEY);
-      if (tvp === 'androidtv' || tvp === 'tizen' || tvp === 'webos') {
-        tvPlatformOverride = tvp;
-      }
-    } catch {
-      return null;
-    }
-    switch (value) {
-      case 'tv':
-        return { input: 'dpad', formFactor: 'tv', tvPlatform: tvPlatformOverride };
-      case 'tablet':
-        return { input: 'touch', formFactor: 'tablet', tvPlatform: null };
-      case 'phone':
-        return { input: 'touch', formFactor: 'phone', tvPlatform: null };
-      case 'desktop':
-        return { input: 'mouse', formFactor: 'desktop', tvPlatform: null };
-      default:
-        return null;
-    }
-  }
+
 }
