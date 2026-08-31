@@ -276,6 +276,7 @@ export interface RemoteStatePayload {
   mediaFileId: number;
   episodeId?: number | null;
   mediaTitle: string | null;
+  episodeLabel: string | null;
   posterUrl: string | null;
   positionSeconds: number;
   durationSeconds: number;

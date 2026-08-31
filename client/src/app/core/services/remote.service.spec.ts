@@ -17,7 +17,8 @@ function frame(over: Partial<RemoteState> = {}): RemoteState {
     sessionId: 'sid-1',
     mediaId: 1,
     mediaFileId: 2,
-    mediaTitle: 'A film',
+    mediaTitle: 'A series',
+    episodeLabel: 'S1:E2 - An episode',
     posterUrl: null,
     positionSeconds: 30,
     durationSeconds: 100,
@@ -67,7 +68,7 @@ describe('RemoteService stop handling', () => {
     const { service, remoteState } = setup();
     remoteState.set(frame());
     service.ingestState();
-    expect(service.targetState()?.mediaTitle).toBe('A film');
+    expect(service.targetState()?.mediaTitle).toBe('A series');
   });
 
   it('ignores a frame that trails a stop', () => {

@@ -22,6 +22,7 @@ import { PwaAutoUpdateService } from './core/services/pwa-auto-update.service';
 import { AppResumeService } from './core/services/app-resume.service';
 import { OfflinePlaybackSyncService } from './core/services/offline-playback-sync.service';
 import { RemoteService } from './core/services/remote.service';
+import { remoteOverlayOpen } from './core/services/remote-playback-target';
 import { CastOverlayComponent } from './shared/cast-overlay/cast-overlay';
 import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.service';
 
@@ -245,9 +246,14 @@ export class App implements OnInit, OnDestroy {
       active.blur();
       return;
     }
-    // Close Cast overlay first if open
+    // The playback overlay is one component driven by whichever target is
+    // active, so back has to close either one.
     if (this.castPlayer.expanded()) {
       this.castPlayer.expanded.set(false);
+      return;
+    }
+    if (remoteOverlayOpen()) {
+      remoteOverlayOpen.set(false);
       return;
     }
     // Close any open bottom sheet / dismissable layer before navigating.

@@ -157,6 +157,7 @@ describe('StreamingController.stopLiveSession', () => {
       lastBeat: Date.now(),
       position: 0,
       state: 'playing',
+      episodeLabel: null,
       audioTrackIndex: null,
       subtitleTrackIndex: null,
       volume: null,

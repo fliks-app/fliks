@@ -49,6 +49,7 @@ describe('SystemController.activeStreams recency filter', () => {
       startedAt: new Date(overrides.lastBeat),
       position: 0,
       state: 'playing',
+      episodeLabel: null,
       audioTrackIndex: null,
       subtitleTrackIndex: null,
       volume: null,

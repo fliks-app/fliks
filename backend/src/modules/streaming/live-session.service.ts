@@ -66,6 +66,9 @@ export interface LiveSession {
   lastBeat: number;
   position: number;
   state: PlaybackState;
+  /** Client-composed "S1:E2 - Title" for a series, null for a film. Carried so
+   *  a controller can label what a target plays without a second lookup. */
+  episodeLabel: string | null;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;
   /** Reported by the client heartbeat: lets a remote-control controller show
@@ -271,6 +274,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       lastBeat: now,
       position: input.position ?? 0,
       state: 'playing',
+      episodeLabel: null,
       audioTrackIndex: null,
       subtitleTrackIndex: null,
       volume: null,
@@ -356,6 +360,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       position?: number;
       state?: PlaybackState;
       quality?: string | null;
+      episodeLabel?: string | null;
       audioTrackIndex?: number | null;
       subtitleTrackIndex?: number | null;
       sseConnectionId?: string | null;
@@ -369,6 +374,9 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
     if (payload.position !== undefined) session.position = payload.position;
     if (payload.state) session.state = payload.state;
     if (payload.quality !== undefined) session.quality = payload.quality;
+    if (payload.episodeLabel !== undefined) {
+      session.episodeLabel = payload.episodeLabel;
+    }
     if (payload.audioTrackIndex !== undefined) {
       session.audioTrackIndex = payload.audioTrackIndex;
     }

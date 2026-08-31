@@ -206,6 +206,7 @@ export class PlaybackController {
       sessionId?: string;
       state?: LivePlaybackState;
       quality?: string | null;
+      episodeLabel?: string | null;
       audioTrackIndex?: number | null;
       subtitleTrackIndex?: number | null;
       sseConnectionId?: string;
@@ -227,6 +228,7 @@ export class PlaybackController {
         position: body.positionSeconds,
         state: body.state,
         quality: body.quality,
+        episodeLabel: body.episodeLabel,
         audioTrackIndex: body.audioTrackIndex,
         subtitleTrackIndex: body.subtitleTrackIndex,
         sseConnectionId,
@@ -253,6 +255,7 @@ export class PlaybackController {
             mediaFileId: body.mediaFileId,
             episodeId: body.episodeId ?? null,
             mediaTitle: updated.mediaTitle,
+            episodeLabel: updated.episodeLabel,
             posterUrl: updated.posterUrl,
             positionSeconds: updated.position,
             durationSeconds: body.durationSeconds,

@@ -45,7 +45,7 @@ export class RemotePlaybackTarget implements PlaybackTarget {
       null,
   );
   /** RemoteNowPlaying carries no episode label. */
-  readonly episodeTitle = signal('');
+  readonly episodeTitle = computed(() => this.remote.targetState()?.episodeLabel ?? '');
   readonly activeQualityId = computed(() => this.remote.targetState()?.quality ?? 'auto');
   readonly activeAudioTrackId = computed(() => {
     const idx = this.remote.targetState()?.audioTrackIndex;

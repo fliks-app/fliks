@@ -14,6 +14,7 @@ export interface RemoteNowPlaying {
   mediaFileId: number;
   episodeId?: number | null;
   mediaTitle: string | null;
+  episodeLabel: string | null;
   posterUrl: string | null;
   positionSeconds: number;
   durationSeconds: number;
@@ -336,6 +337,7 @@ export class RemoteService {
       mediaFileId: s.mediaFileId,
       episodeId: s.episodeId,
       mediaTitle: s.mediaTitle,
+      episodeLabel: s.episodeLabel,
       posterUrl: s.posterUrl,
       positionSeconds: s.positionSeconds,
       durationSeconds: s.durationSeconds,
