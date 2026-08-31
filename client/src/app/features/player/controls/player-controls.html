@@ -168,7 +168,7 @@
             <svg lucideHeadphones class="h-5 w-5"></svg>
           </button>
         }
-        <button type="button" class="btn btn-ghost text-white/80" [attr.aria-label]="'player.speed' | translate" (click)="openSheet('speed')">{{ playbackRate() }}x</button>
+        <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.speed' | translate" (click)="openSheet('speed')">{{ playbackRate() }}x</button>
         <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.settings' | translate" (click)="openSheet('settings')">
           <svg lucideSettings class="h-5 w-5"></svg>
         </button>
@@ -234,7 +234,7 @@
           <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.subtitles' | translate" (click)="toggleDropdown('subtitles', $event)">
             <svg lucideCaptions class="h-6 w-6"></svg>
           </button>
-          <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[50vh] overflow-y-auto mb-2">
+          <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 mb-2">
             <ng-container [ngTemplateOutlet]="subtitlesMenu"></ng-container>
           </div>
         </div>
@@ -245,15 +245,15 @@
             <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.audio' | translate" (click)="toggleDropdown('audio', $event)">
               <svg lucideHeadphones class="h-6 w-6"></svg>
             </button>
-            <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 max-h-[50vh] overflow-y-auto mb-2">
+            <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-64 mb-2">
               <ng-container [ngTemplateOutlet]="audioMenu"></ng-container>
             </div>
           </div>
         }
         <!-- Speed dropdown -->
         <div class="dropdown dropdown-top dropdown-end" [class.dropdown-open]="openDropdown() === 'speed'">
-          <button type="button" class="btn btn-ghost btn-md text-white/80" (click)="toggleDropdown('speed', $event)">{{ playbackRate() }}x</button>
-          <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-48 max-h-[50vh] overflow-y-auto mb-2">
+          <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.speed' | translate" (click)="toggleDropdown('speed', $event)">{{ playbackRate() }}x</button>
+          <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-48 mb-2">
             <ng-container [ngTemplateOutlet]="speedMenu"></ng-container>
           </div>
         </div>
@@ -273,7 +273,7 @@
 </div>
 
 <!-- ===== Skip intro floating button ===== -->
-@if (showSkipIntro()) {
+@if (skipIntroCue()) {
   <button
     #skipIntroBtn
     type="button"
@@ -290,7 +290,7 @@
     ></span>
     <span class="relative flex items-center gap-2">
       <svg lucideSkipForward class="h-4 w-4"></svg>
-      {{ 'player.skip_intro' | translate }} ({{ skipIntroCountdown() }})
+      {{ 'player.skip_intro' | translate }} ({{ cueCountdown() }})
     </span>
   </button>
 }
@@ -311,7 +311,7 @@
 }
 
 <!-- ===== Next item floating button (during outro) ===== -->
-@if (showNextCue()) {
+@if (nextItemCue()) {
   <button
     #nextEpisodeBtn
     type="button"
@@ -328,7 +328,7 @@
     ></span>
     <span class="relative flex items-center gap-2">
       <svg lucideSkipForward class="h-4 w-4"></svg>
-      {{ nextLabelKey() | translate }}
+      {{ nextLabelKey() | translate }} ({{ cueCountdown() }})
     </span>
   </button>
 }
@@ -478,18 +478,21 @@
         </button>
         <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
         @for (q of availableQualities(); track q.id) {
+          <!-- Same row shape as the audio / subtitle menus. -->
           <button
-            class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
-            [disabled]="activeQualityId() === q.id"
+            type="button"
+            class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10"
+            [appSelectedOption]="activeQualityId() === q.id"
             (click)="selectQuality.emit(q.id)"
           >
+            <svg lucideSettings class="h-5 w-5 text-white/50 shrink-0"></svg>
             <span class="flex-1 text-left">
               {{ q.label }}
               @if (q.lowBandwidth && showEcoBadge()) {
                 <span class="text-white/50 ml-1 text-xs">({{ 'player.low_bandwidth' | translate }})</span>
               }
             </span>
-            @if (activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+            @if (activeQualityId() === q.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
           </button>
         }
       </div>
@@ -504,8 +507,8 @@
         <div class="max-h-[38vh] overflow-y-auto scroll-ring-safe">
           @for (q of queueItems(); track $index; let i = $index) {
             <button
-              class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
-              [disabled]="queueIndex() === i"
+              class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10"
+              [appSelectedOption]="queueIndex() === i"
               [attr.data-queue-active]="queueIndex() === i ? 'true' : null"
               (click)="selectQueueItem.emit(i); closeDropdown($event)"
             >
@@ -544,7 +547,7 @@
       @if (!castConnected()) {
         <button
           type="button"
-          class="absolute -top-1.5 right-1 btn btn-ghost btn-xs btn-circle text-white/60 hover:text-white"
+          class="absolute -top-1.5 right-1 focus-keep-position btn btn-ghost btn-xs btn-circle text-white/60 hover:text-white"
           [attr.aria-label]="'player.appearance' | translate"
           (click)="openSubtitlesPanel('appearance')"
         >
@@ -552,10 +555,12 @@
         </button>
       }
     </div>
+    <!-- Only the options scroll; the title above stays visible. -->
+    <div class="max-h-[40vh] overflow-y-auto scroll-ring-safe">
     <button
       type="button"
-      class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
-      [disabled]="!activeSubtitleId()"
+      class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10"
+      [appSelectedOption]="!activeSubtitleId()"
       (click)="selectSubtitle.emit(null); closeSheet()"
     >
       <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
@@ -565,8 +570,8 @@
     @for (sub of availableSubtitles(); track sub.id) {
       <button
         type="button"
-        class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
-        [disabled]="activeSubtitleId() === sub.id"
+        class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10"
+        [appSelectedOption]="activeSubtitleId() === sub.id"
         (click)="selectSubtitle.emit(sub.id); closeSheet()"
       >
         <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
@@ -577,6 +582,7 @@
         @if (activeSubtitleId() === sub.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
       </button>
     }
+    </div>
   } @else if (subtitlesPanel() === 'appearance') {
     <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 mb-1" (click)="openSubtitlesPanel('tracks')">
       <svg lucideArrowLeft class="h-4 w-4 text-white/60 shrink-0"></svg>
@@ -610,11 +616,13 @@
 
 <ng-template #audioMenu>
   <div class="text-center text-white/60 text-xs font-medium mb-3">{{ 'player.audio_track' | translate }}</div>
+  <!-- Only the options scroll; the title above stays visible. -->
+  <div class="max-h-[40vh] overflow-y-auto scroll-ring-safe">
   @for (track of availableAudioTracks(); track track.id) {
     <button
       type="button"
-      class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 disabled:opacity-60 disabled:cursor-default disabled:hover:bg-transparent"
-      [disabled]="activeAudioTrackId() === track.id"
+      class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10"
+      [appSelectedOption]="activeAudioTrackId() === track.id"
       (click)="selectAudioTrack.emit(track.id); closeSheet()"
     >
       <svg lucideHeadphones class="h-5 w-5 text-white/50 shrink-0"></svg>
@@ -625,20 +633,25 @@
       @if (activeAudioTrackId() === track.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
     </button>
   }
+  </div>
 </ng-template>
 
 <ng-template #speedMenu>
   <div class="text-center text-white/60 text-xs font-medium mb-3">{{ 'player.speed' | translate }}</div>
+  <!-- Only the options scroll; the title above stays visible. -->
+  <div class="max-h-[40vh] overflow-y-auto scroll-ring-safe">
   @for (r of speedOptions; track r) {
     <button
       type="button"
       class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10"
+      [appSelectedOption]="playbackRate() === r"
       (click)="speedChange.emit(r); closeSheet()"
     >
       <span class="flex-1 text-left">{{ r }}x</span>
       @if (playbackRate() === r) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
     </button>
   }
+  </div>
 </ng-template>
 
 <!-- Fullscreen toggle — shared between the mobile action row (sm size) and

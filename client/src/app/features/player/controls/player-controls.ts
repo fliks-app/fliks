@@ -32,9 +32,11 @@ import { NgTemplateOutlet } from '@angular/common';
 import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
 import { TranslateModule } from '@ngx-translate/core';
 import { formatTime, SpriteMetadata } from '../../../core/utils/player.utils';
+import { initialOverlayFocus } from '../../../core/services/focusable.constants';
 import { SeekbarComponent } from '../../../shared/components/seekbar/seekbar';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
+import { SelectedOptionDirective } from '../../../shared/directives/selected-option.directive';
 import {
   LucideCaptions,
   LucideCheck,
@@ -87,6 +89,7 @@ interface AppearanceRow {
   selector: 'app-player-controls',
   imports: [
     CachedSrcDirective,
+    SelectedOptionDirective,
     TranslateModule,
     LucideCaptions,
     LucideCheck,
@@ -176,11 +179,12 @@ export class PlayerControlsComponent {
       this.lastPanelOpen = open;
       this.panelOpenChange.emit(open);
     });
-    // Skip-intro cue countdown — mirrors the progress sweep numerically.
-    // Reset to the full window each time the cue (re)appears.
+    // Floating-cue countdown — mirrors the progress sweep numerically, for the
+    // intro and next-item cues alike. Reset to the full window each time a cue
+    // (re)appears.
     effect(() => {
-      if (this.showSkipIntro()) {
-        this.skipIntroCountdown.set(Math.ceil(this.cueDurationMs() / 1000));
+      if (this.showSkipIntro() || this.showNextCue()) {
+        this.cueCountdown.set(Math.ceil(this.cueDurationMs() / 1000));
       }
     });
     // Tick down to 1, but hold while the cue is "engaged" — the controls bar is
@@ -188,12 +192,23 @@ export class PlayerControlsComponent {
     // the same conditions, so the number stays in lockstep. The cleanup stops
     // the tick on pause and on retract alike.
     effect((onCleanup) => {
-      if (!this.showSkipIntro() || this.visible() || this.cueFocused()) return;
+      if ((!this.showSkipIntro() && !this.showNextCue()) || this.visible() || this.cueFocused()) return;
       const id = setInterval(
-        () => this.skipIntroCountdown.update((n) => (n > 1 ? n - 1 : 1)),
+        () => this.cueCountdown.update((n) => (n > 1 ? n - 1 : 1)),
         1000,
       );
       onCleanup(() => clearInterval(id));
+    });
+    // A cue that disappears under the focus leaves it on <body>: the remote then
+    // acts on nothing at all. Hand it back to play/pause, which is where the bar
+    // puts focus whenever it appears.
+    effect(() => {
+      const gone = !this.skipIntroBtn() && !this.nextEpisodeBtn();
+      if (!gone || !this.cueFocused()) return;
+      this.cueFocused.set(false);
+      const active = document.activeElement;
+      if (active && active !== document.body) return;
+      this.playPauseBtn()?.nativeElement.focus({ preventScroll: true });
     });
     // A cue removed while focused can swallow its blur, leaving the flag stuck;
     // clear it whenever no cue is shown so the next one isn't born frozen.
@@ -305,6 +320,13 @@ export class PlayerControlsComponent {
   readonly statsVisible = input(false);
   readonly showSkipIntro = input(false);
   readonly showNextCue = input(false);
+  /** Gating these on `!visible()` was tried twice and reverted twice: unmounting
+   *  a cue while its `showSkipIntro` is still true strands the `cueFocused`
+   *  flag (its blur never fires), and the retract/countdown state then no
+   *  longer matches what is on screen. Hide them at the player level, by
+   *  retracting them, not by unmounting them here. */
+  protected readonly skipIntroCue = computed(() => this.showSkipIntro());
+  protected readonly nextItemCue = computed(() => this.showNextCue());
   /** Shown for the whole pre-roll item, not a timed cue — no sweep, no countdown. */
   readonly showPreRollSkip = input(false);
   /** How long a floating cue stays up, in ms — drives the in-button progress
@@ -312,7 +334,7 @@ export class PlayerControlsComponent {
   readonly cueDurationMs = input(6000);
   /** Seconds left before the skip-intro cue retracts, shown in the button as a
    *  live countdown next to its progress sweep. */
-  readonly skipIntroCountdown = signal(0);
+  readonly cueCountdown = signal(0);
   /** True while a floating cue holds focus. The player reads it to freeze the
    *  retract timer, and the sweep / countdown freeze on it here — a cue the
    *  user has navigated to (keyboard / D-pad) must not vanish from under them. */
@@ -339,6 +361,21 @@ export class PlayerControlsComponent {
   readonly next = output<void>();
   readonly back = output<void>();
   readonly selectAudioTrack = output<string>();
+  /** Any focus move inside the bar — the parent restarts its auto-hide
+   *  countdown, so walking the controls with the D-pad never lets them retract
+   *  under the user. */
+  readonly interacted = output<void>();
+
+  @HostListener('focusin', ['$event'])
+  protected onBarFocusIn(e: FocusEvent): void {
+    // The floating cues live in this component but are not the bar. They focus
+    // themselves the moment they appear, and counting that as activity restarts
+    // the retract countdown — the bar then never goes away, which in turn keeps
+    // the cues hidden. Only the bar's own controls are activity.
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('.player-floating-cue')) return;
+    this.interacted.emit();
+  }
   readonly toggleCast = output<void>();
   readonly toggleFillScreen = output<void>();
   readonly openMedia = output<void>();
@@ -404,13 +441,13 @@ export class PlayerControlsComponent {
    *  the switch destroys the row the user was standing on (D-pad / keyboard). */
   openSubtitlesPanel(panel: SubtitlePanel) {
     this.subtitlesPanel.set(panel);
-    if (this.openDropdown()) this.focusFirstDropdownItem();
+    if (this.openDropdown()) this.focusDropdownEntry();
   }
 
   /** Same as {@link openSubtitlesPanel} for the settings menu. */
   openSettingsPanel(panel: 'main' | 'quality' | 'queue') {
     this.settingsPanel.set(panel);
-    if (this.openDropdown()) this.focusFirstDropdownItem();
+    if (this.openDropdown()) this.focusDropdownEntry();
   }
 
   /**
@@ -455,9 +492,14 @@ export class PlayerControlsComponent {
    *  and keyboard navigation, where there's no pointer to reach it. A
    *  mouse-revealed cue shouldn't steal focus. */
   private autoFocusCue(btn: ElementRef<HTMLButtonElement> | undefined): void {
-    if (btn && this.autoFocusModality()) {
-      btn.nativeElement.focus({ preventScroll: true });
-    }
+    if (!btn || !this.autoFocusModality()) return;
+    // Never yank focus off something the user is holding: seeking into an intro
+    // makes the cue appear mid-scrub, and stealing focus there drops the
+    // seekbar under their thumb. The cue is only worth auto-focusing when the
+    // user has nothing else in hand.
+    const active = document.activeElement as HTMLElement | null;
+    if (active && active !== document.body && this.hostEl.nativeElement.contains(active)) return;
+    btn.nativeElement.focus({ preventScroll: true });
   }
   readonly hostEl: ElementRef<HTMLElement> = inject(ElementRef);
   private readonly injector = inject(Injector);
@@ -519,7 +561,7 @@ export class PlayerControlsComponent {
       // Push focus into the panel so the first item is reachable without
       // having to traverse out of the trigger via spatial nav (D-pad on TV,
       // arrow keys on desktop keyboard). Harmless for mouse users.
-      this.focusFirstDropdownItem();
+      this.focusDropdownEntry();
     }
   }
 
@@ -534,12 +576,11 @@ export class PlayerControlsComponent {
     this.subtitlesPanel.set('tracks');
   }
 
-  private focusFirstDropdownItem() {
+  private focusDropdownEntry() {
     afterNextRender(
       () => {
         const panel = this.hostEl.nativeElement.querySelector<HTMLElement>('.dropdown-open .dropdown-content');
-        const first = panel?.querySelector<HTMLElement>('button, a, [tabindex]:not([tabindex="-1"])');
-        first?.focus({ preventScroll: true });
+        initialOverlayFocus(panel)?.focus({ preventScroll: true });
       },
       { injector: this.injector },
     );

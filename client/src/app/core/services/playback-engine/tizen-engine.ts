@@ -48,6 +48,7 @@ declare const webapis: {
     }): void;
     getTotalTrackInfo(): Array<{ type: 'AUDIO' | 'TEXT' | 'VIDEO'; index: number; extra_info: string }>;
     setSelectTrack(type: 'AUDIO' | 'TEXT' | 'VIDEO', index: number): void;
+    setSpeed(rate: number): void;
     setStreamingProperty(name: string, value: string): void;
     setExternalSubtitlePath(path: string): void;
     setSilentSubtitle(silent: boolean): void;
@@ -463,8 +464,23 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   get paused(): boolean { return this._paused; }
   get buffered(): number { return this._buffered; }
   get playbackRate(): number { return this._playbackRate; }
-  set playbackRate(_rate: number) {
-    /* `setSpeed(rate)` exists on AVPlay but the controls UI doesn't expose rate on TV. */
+  set playbackRate(rate: number) {
+    // Valid from READY, PLAYING and PAUSED; out-of-range values raise
+    // PLAYER_ERROR_INVALID_PARAMETER, and the fractional rates the UI offers
+    // are not in AVPlay's documented set — so keep the previous rate when the
+    // device rejects one instead of showing a speed that isn't applied.
+    const state = webapis.avplay.getState();
+    if (state !== 'READY' && state !== 'PLAYING' && state !== 'PAUSED') return;
+    try {
+      webapis.avplay.setSpeed(rate);
+      this._playbackRate = rate;
+    } catch (e) {
+      this.emit('error', {
+        code: -1,
+        message: 'AVPlay setSpeed rejected ' + rate + 'x: ' + String(e),
+        errorKey: 'player.playback_error',
+      });
+    }
   }
   get volume(): number { return this._volume; }
   set volume(v: number) {
@@ -518,7 +534,16 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     if (!m) return;
     const index = Number(m[1]);
     try {
+      // `setSelectTrack` accepts AUDIO only in READY (Smooth Streaming) or
+      // PLAYING — PAUSED is documented for TEXT tracks alone. Calling it from
+      // PAUSED left the stream running while getState() kept reporting PAUSED,
+      // so the UI showed a paused player that was still playing. Enter the
+      // documented state, switch, then restore the user's intent; play() is
+      // valid from PAUSED and pause() from PLAYING.
+      const wasPaused = webapis.avplay.getState() === 'PAUSED';
+      if (wasPaused) webapis.avplay.play();
       webapis.avplay.setSelectTrack('AUDIO', index);
+      if (wasPaused) webapis.avplay.pause();
       this._currentAudioIndex = index;
       this.emitAudioTracks();
     } catch (e) {

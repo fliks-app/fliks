@@ -115,6 +115,7 @@
 
   @if (!inPipMode()) {
   <app-player-controls
+    (interacted)="onControlsInteraction()"
     [visible]="controlsVisible()"
     [paused]="paused()"
     [loading]="loading()"

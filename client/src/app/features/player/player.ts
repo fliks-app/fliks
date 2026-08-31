@@ -602,23 +602,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  cursor / bar impossible to keep visible. Subsequent pause /
    *  resume cycles fall through to the existing auto-hide timer +
    *  user-interaction reveal. */
-  private readonly autoHideOnPlayEffect = effect(() => {
-    if (this.videoStarted() && untracked(() => this.controlsVisible())) {
-      // After an in-place item switch we deliberately kept the controls up to
-      // show the new title; when its first frame plays, don't snap them away —
-      // start the normal auto-hide countdown instead so they linger briefly.
-      if (untracked(() => this.revealAcrossSwitch)) {
-        this.revealAcrossSwitch = false;
-        this.resetHideTimer();
-        return;
-      }
-      this.controlsVisible.set(false);
-    }
-  });
-  /** One-shot: keep the controls visible across the next play-start (set on an
-   *  item switch), letting the auto-hide timer retract them rather than the
-   *  first-frame effect snapping them off. */
-  private revealAcrossSwitch = false;
 
   /** Re-apply native subtitle style on controls show/hide so the bottom-margin
       bump kicks in. Browser playback uses CSS instead — see styles below. */
@@ -1877,7 +1860,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const existing = this.availableAudioTracks();
       const newIsEngineSourced =
         tracks.length > 0 &&
-        (tracks[0].id.startsWith('audio-') || tracks[0].id.startsWith('shaka-'));
+        (tracks[0].id.startsWith('audio-') ||
+          tracks[0].id.startsWith('avplay-audio-') ||
+          tracks[0].id.startsWith('shaka-'));
       const existingIsFallback =
         existing.length > 0 && existing[0].id.startsWith('si-');
       // Upgrade ONLY when incoming has at least as many tracks as existing —
@@ -1888,6 +1873,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.availableAudioTracks.set(tracks);
       const selected = tracks.find((t: any) => t.selected) ?? tracks[0];
       this.activeAudioTrackId.set(selected.id);
+      this.reconcileActiveAudioTrack(tracks, selected.id);
       this.trackManager.autoSelectAudioTrack(
         tracks, this.mediaId, this.mediaFileId,
         this.activeAudioTrackId(),
@@ -1952,6 +1938,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Restart the auto-hide countdown by registering activity. The reactive
    *  `autoHideEffect` owns the actual timer and re-arms off this bump and off
    *  the live pin state ({@link keepControlsUp}). */
+  /** Focus moved inside the controls bar: restart the countdown so navigating
+   *  it with the D-pad can never let it retract mid-move. */
+  onControlsInteraction(): void {
+    // A focus move while the bar is down isn't the user navigating it — the
+    // hide itself blurs, and whatever picks the focus up next would otherwise
+    // re-arm the countdown forever.
+    if (!this.controlsVisible()) return;
+    this.resetHideTimer();
+  }
+
   private resetHideTimer() {
     this.controlsActivity.update(n => n + 1);
   }
@@ -2172,7 +2168,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Lifetime of a floating cue, in ms — also the duration of its progress
    *  sweep, forwarded to the controls so the timer and the animation stay in
    *  lockstep. */
-  readonly cueRevealMs = 6000;
+  readonly cueRevealMs = 10000;
   readonly skipIntroVisible = signal(false);
   readonly nextEpisodeVisible = signal(false);
   private skipIntroCueArmed = false;
@@ -2552,10 +2548,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       if (!this.isNativeEngine()) this.engine.play().catch(() => {});
       // Reveal the controls across the switch so the new title/episode shows;
-      // the flag lets them stay through the first frame and then auto-hide on
-      // the usual timer (see autoHideOnPlayEffect).
-      this.revealAcrossSwitch = true;
-      this.controlsVisible.set(true);
+      // the auto-hide countdown retracts them on the usual delay.
+      this.showControls();
     } catch (e: any) {
       // Map to a translated line (Shaka-shaped errors keep their category
       // message, a failed playback-info request its transport status) and
@@ -3672,6 +3666,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           // Set active to the track the backend is already using (preselected at startup)
           const activeIdx = this.activeAudioStreamIndex ?? 0;
           this.activeAudioTrackId.set(tracks[activeIdx]?.id ?? tracks[0].id);
+          this.reconcileActiveAudioTrack(tracks, tracks[activeIdx]?.id);
           this.trackManager.autoSelectAudioTrack(
             tracks, this.mediaId, this.mediaFileId,
             this.activeAudioTrackId(),
@@ -3703,12 +3698,33 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (active?.audioId != null) {
         this.activeAudioTrackId.set(`shaka-${active.audioId}`);
       }
+      this.reconcileActiveAudioTrack(
+        tracks,
+        active?.audioId != null ? `shaka-${active.audioId}` : null,
+      );
       this.trackManager.autoSelectAudioTrack(
         tracks, this.mediaId, this.mediaFileId,
         this.activeAudioTrackId(),
         (trackId) => this.onSelectAudioTrack(trackId),
       );
     }, 2000);
+  }
+
+  /** Keep `activeAudioTrackId` pointing at a track that is actually in the
+   *  list. Every path that replaces the list can otherwise leave it dangling —
+   *  the selector then shows no language as selected at all. `preferred` is the
+   *  engine's own idea of the active track, used when the current id is gone. */
+  private reconcileActiveAudioTrack(
+    tracks: { id: string }[],
+    preferred?: string | null,
+  ): void {
+    if (!tracks.length) return;
+    const current = this.activeAudioTrackId();
+    if (current && tracks.some((t) => t.id === current)) return;
+    this.activeAudioTrackId.set(
+      (preferred && tracks.some((t) => t.id === preferred) ? preferred : null) ??
+        tracks[0].id,
+    );
   }
 
   async onSelectAudioTrack(trackId: string) {
@@ -3740,6 +3756,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     // Engine-level audio switch (Shaka native or NativeEngine)
     if (isEngineTrack) {
+      // Capture the play/pause intent first: a native engine reloads the stream
+      // to switch track, which comes back playing — switching language must not
+      // resume a player the user paused. `reloadStream` does the same below.
+      const wasPaused = this.paused();
       // Show spinner during audio switch (native player reloads the stream)
       if (this.isNativeEngine()) {
         this.state.buffering.set(true);
@@ -3748,6 +3768,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (this.isNativeEngine()) {
         this.state.buffering.set(false);
       }
+      this.restorePlayState(wasPaused);
       return;
     }
 
@@ -3947,22 +3968,30 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         e.preventDefault();
         this.onTogglePlay();
         break;
+      // Each seek below goes through showControls(): the bar is already up, so
+      // this only restarts the countdown and marks it as deliberately revealed.
+      // Without that, a seek made while the stream is still loading restarts it,
+      // and the first-frame effect snaps the bar shut under the user.
       case 'ArrowLeft':
         if (!arrowSeekAllowed) break;
         e.preventDefault();
+        this.showControls();
         this.onSeek(this.engine.currentTime - 10);
         break;
       case 'ArrowRight':
         if (!arrowSeekAllowed) break;
         e.preventDefault();
+        this.showControls();
         this.onSeek(this.engine.currentTime + 10);
         break;
       case 'j':
         e.preventDefault();
+        this.showControls();
         this.onSeek(this.engine.currentTime - 30);
         break;
       case 'l':
         e.preventDefault();
+        this.showControls();
         this.onSeek(this.engine.currentTime + 30);
         break;
       case 'f':
