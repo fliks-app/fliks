@@ -1,4 +1,4 @@
-@if (visibleItems().length > 0 || (showAll() && items().length > 0)) {
+@if (!isTv() && (visibleItems().length > 0 || (showAll() && items().length > 0))) {
   <div [class.pb-4]="padding()">
   <section class="card bg-base-200/60 backdrop-blur-sm shadow-sm" >
     <div class="card-body p-4 sm:p-5 gap-3">

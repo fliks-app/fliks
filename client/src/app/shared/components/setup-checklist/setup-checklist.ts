@@ -7,6 +7,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { TvService } from '../../../core/services/tv.service';
 import { TranslateModule } from '@ngx-translate/core';
 import {
   LucideCheck,
@@ -37,6 +38,9 @@ import {
 })
 export class SetupChecklistComponent implements OnInit {
   private readonly api = inject(SetupChecklistApiService);
+  /** Off on TV entirely: a server-setup surface whose every step links into the
+   *  admin pages, which the 10-foot UI was never designed for. */
+  protected readonly isTv = inject(TvService).isTv;
 
   /** When `true`, also surface completed and dismissed items (with a
    *  reactivate button on the latter). Off by default — the home
