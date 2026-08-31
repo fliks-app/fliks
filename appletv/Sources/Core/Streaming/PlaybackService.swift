@@ -158,12 +158,15 @@ import Foundation
             let audioTrackIndex: Int?
             let subtitleTrackIndex: Int?
             let lastCmdId: String?
+            // Links a polled remote target to this live session; nil until registered.
+            let targetId: String?
         }
         struct Response: Decodable { let sessionLost: Bool? }
         let body = Body(
             positionSeconds: position, durationSeconds: duration, mediaFileId: mediaFileId,
             episodeId: episodeId, sessionId: sid, state: paused ? "paused" : "playing",
-            audioTrackIndex: audioTrackIndex, subtitleTrackIndex: subtitleTrackIndex, lastCmdId: lastCmdId
+            audioTrackIndex: audioTrackIndex, subtitleTrackIndex: subtitleTrackIndex, lastCmdId: lastCmdId,
+            targetId: RemoteControlService.shared.targetId
         )
         Task {
             guard let res: Response = try? await api.put("/api/playback/media/\(mediaId)/state", body: body) else { return }

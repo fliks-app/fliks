@@ -559,13 +559,34 @@ private struct SkipCueStyle: ButtonStyle {
         )
     }
 
-    /// Matches by language tag first (this file's identity for a track
-    /// everywhere else); falls back to a numeric option index for a
-    /// controller that only knows the position within the track list.
+    /// Matches the controller's own id space first (see `houseIndex`); falls
+    /// back to a language tag, then a bare numeric option index.
     private func matchOption(_ id: String?, in group: AVMediaSelectionGroup) -> AVMediaSelectionOption? {
         guard let id else { return nil }
+        if let index = houseIndex(for: id), group.options.indices.contains(index) {
+            return group.options[index]
+        }
         if let byTag = group.options.first(where: { $0.extendedLanguageTag == id }) { return byTag }
         if let index = Int(id), group.options.indices.contains(index) { return group.options[index] }
         return nil
+    }
+
+    /// `audio-<i>` is the index into `streamInfo.audio`, the backend's AUDIO
+    /// rendition order; `emb-<i>` positions the same way among non-image subtitles.
+    private func houseIndex(for id: String) -> Int? {
+        if id.hasPrefix("audio-") { return Int(id.dropFirst("audio-".count)) }
+        guard id.hasPrefix("emb-"), let streamIndex = Int(id.dropFirst("emb-".count)) else { return nil }
+        let sourceSubtitles = media?.files?.first { $0.id == mediaFileId }?.streamInfo?.subtitles ?? []
+        let textSubtitles = sourceSubtitles.filter { !Self.isImageBasedSubtitleCodec($0.codec) }
+        return textSubtitles.firstIndex { $0.streamIndex == streamIndex }
+    }
+
+    /// Bitmap codecs the backend never puts in the HLS `subs` group, only
+    /// burns in: mirrors the backend/web `IMAGE_BASED_SUBTITLE_CODECS` set.
+    private static let imageBasedSubtitleCodecs: Set<String> = [
+        "hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub",
+    ]
+    private static func isImageBasedSubtitleCodec(_ codec: String) -> Bool {
+        imageBasedSubtitleCodecs.contains(codec)
     }
 }

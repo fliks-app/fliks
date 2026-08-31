@@ -10,7 +10,9 @@ import UIKit
     static let shared = RemoteControlService()
 
     private let api = APIClient.shared
-    private var targetId: String?
+    /// Read by `PlaybackService` to stamp the heartbeat so a polled target can
+    /// be linked to its live session.
+    private(set) var targetId: String?
     private var pollTask: Task<Void, Never>?
 
     /// Wired by `RootView` to push a fresh player route: the app's existing
@@ -62,8 +64,17 @@ import UIKit
 
     private func fetchAndApply(targetId: String) async {
         let path = "/api/remote/commands?targetId=\(targetId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? targetId)"
-        guard let commands: [RemoteCommand] = try? await api.get(path) else { return }
-        for cmd in commands { await apply(cmd) }
+        do {
+            let commands: [RemoteCommand] = try await api.get(path)
+            for cmd in commands { await apply(cmd) }
+        } catch APIError.badStatus(404) {
+            // The registry has forgotten this target (backend restart) - only a
+            // fresh register() can make us controllable again.
+            print("remote: target \(targetId) unknown to server (404), re-registering")
+            self.targetId = nil
+        } catch {
+            print("remote: command poll failed, will retry: \(error)")
+        }
     }
 
     /// `PlayerCoordinator` is `@MainActor`-isolated (it drives `AVPlayer` and
