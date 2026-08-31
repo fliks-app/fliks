@@ -46,10 +46,10 @@
           </div>
         } @else {
         <!-- Large poster (mobile only) -->
-        <div class="flex-1 flex items-center justify-center px-12 py-4 min-h-0 lg:hidden">
+        <div class="flex-1 flex items-center justify-center px-6 py-4 min-h-0 lg:hidden">
           @if (t.fanartUrl()) {
             <img [cachedSrc]="t.fanartUrl()! | resolveUrl:'medium'" alt=""
-                 class="max-h-[60%] w-auto object-contain rounded-xl shadow-xl" />
+                 class="max-h-full w-auto object-contain rounded-xl shadow-xl" />
           } @else {
             <svg lucideCast class="h-20 w-20 text-info"></svg>
           }
@@ -61,7 +61,7 @@
         >
           <!-- Title + progress: one unit, so the parent rhythm does not wedge
                the heading away from the bar it labels. -->
-          <div class="space-y-2">
+          <div class="space-y-1">
             <div class="min-w-0">
               <p class="text-xl lg:text-lg font-bold truncate">{{ t.mediaTitle() }}</p>
               @if (t.episodeTitle()) {
