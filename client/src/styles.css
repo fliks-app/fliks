@@ -511,6 +511,15 @@ body:not(.keyboard-modality):not(.tv) app-mosaic-card button:focus-visible .mosa
   /* Never set `position` here: it would re-anchor an absolutely placed
      focusable (a modal ✕, a floating cue) and make it jump on focus. */
 }
+/* `z-index` applies to a flex item even at `position: static`, so on a button row
+   the rule above creates and destroys a stacking context on every focus move.
+   This WebView repaints that badly: a neighbour ghosts, re-drawn at its previous
+   offset (half a button's label duplicated on the media-detail action row). The
+   ring is 4px and these rows carry a gap, so nothing overlaps without it. */
+body.tv :is(a, button, select, input, [role="button"], [tabindex]):focus-visible {
+  z-index: auto;
+}
+
 /* Over the video, the ring's inner `--color-base-100` layer has nothing to
    blend into — it reads as a black circle around every control. On the player
    only, drop it and keep the primary ring alone. */
