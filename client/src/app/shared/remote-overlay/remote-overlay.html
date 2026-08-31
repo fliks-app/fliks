@@ -1,194 +1,209 @@
 @if (!device.isTv()) {
-  <app-bottom-sheet [open]="open()" (closed)="closeOverlay()">
-    <div class="p-4 min-w-72">
-      @if (!showRemotePane()) {
-        <!-- Pane A: unified picker -->
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="font-semibold text-lg">{{ 'remote.picker_title' | translate }}</h2>
-          <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="closeOverlay()"
-                  [attr.aria-label]="'player.close' | translate">
-            <svg lucideX class="h-4 w-4"></svg>
-          </button>
-        </div>
-
-        @if (castSearching()) {
-          <div class="flex items-center gap-2 text-sm opacity-70 mb-2">
-            <span class="loading loading-spinner loading-xs"></span>
-            {{ 'remote.searching' | translate }}
+  <!-- One pane, two shells: a sheet is right under a thumb and wrong on a
+       desktop, where a dialog is the house pattern. -->
+  <ng-template #pane>
+      <div class="p-4 min-w-72">
+        @if (!showRemotePane()) {
+          <!-- Pane A: unified picker -->
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-semibold text-lg">{{ 'remote.picker_title' | translate }}</h2>
+            <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="closeOverlay()"
+                    [attr.aria-label]="'player.close' | translate">
+              <svg lucideX class="h-4 w-4"></svg>
+            </button>
           </div>
-        }
 
-        @if (pickerRows().length === 0 && !castSearching()) {
-          <p class="text-sm opacity-70 py-4 text-center">{{ 'remote.empty_state' | translate }}</p>
-        }
-
-        <ul class="flex flex-col gap-0.5">
-          @for (row of pickerRows(); track row.kind + row.id) {
-            <li>
-              <button type="button"
-                      class="btn btn-ghost w-full justify-start gap-3 h-auto py-2"
-                      (click)="selectRow(row)">
-                @if (row.icon === 'cast') {
-                  <svg lucideCast class="h-5 w-5 shrink-0 text-info"></svg>
-                } @else if (row.icon === 'tv') {
-                  <svg lucideTv class="h-5 w-5 shrink-0"></svg>
-                } @else if (row.icon === 'tablet') {
-                  <svg lucideTablet class="h-5 w-5 shrink-0"></svg>
-                } @else if (row.icon === 'phone') {
-                  <svg lucideSmartphone class="h-5 w-5 shrink-0"></svg>
-                } @else {
-                  <svg lucideMonitor class="h-5 w-5 shrink-0"></svg>
-                }
-                <span class="flex flex-col items-start min-w-0 flex-1">
-                  <span class="truncate w-full text-left">{{ row.label }}</span>
-                  @if (row.subtitle) {
-                    <span class="text-xs opacity-60 truncate w-full text-left">{{ row.subtitle }}</span>
-                  }
-                </span>
-              </button>
-            </li>
-          }
-        </ul>
-      } @else {
-        <!-- Pane B: remote control -->
-        <div class="flex items-center gap-2 mb-3">
-          <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="backToPicker()"
-                  [attr.aria-label]="'player.back' | translate">
-            <svg lucideChevronLeft class="h-4 w-4"></svg>
-          </button>
-          <span class="font-semibold truncate flex-1">{{ targetLabel() }}</span>
-          <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="closeOverlay()"
-                  [attr.aria-label]="'player.close' | translate">
-            <svg lucideX class="h-4 w-4"></svg>
-          </button>
-        </div>
-
-        @switch (remoteViewState()) {
-          @case ('offline') {
-            <div class="text-center py-4">
-              <p class="text-sm opacity-80 mb-3">
-                {{ 'remote.offline_message' | translate: { device: targetLabel() } }}
-              </p>
-              <button type="button" class="btn btn-primary btn-sm" (click)="playHereInstead()">
-                {{ 'remote.play_here_instead' | translate }}
-              </button>
+          @if (castSearching()) {
+            <div class="flex items-center gap-2 text-sm opacity-70 mb-2">
+              <span class="loading loading-spinner loading-xs"></span>
+              {{ 'remote.searching' | translate }}
             </div>
           }
-          @case ('blocked') {
-            <p class="text-sm opacity-80 text-center py-4">
-              {{ 'remote.blocked_message' | translate: { device: targetLabel() } }}
-            </p>
-          }
-          @case ('starting') {
-            <div class="flex items-center justify-center gap-2 text-sm opacity-80 py-4">
-              <span class="loading loading-spinner loading-sm"></span>
-              {{ 'remote.starting_message' | translate: { device: targetLabel() } }}
-            </div>
-          }
-          @case ('idle') {
-            <div class="text-center py-4">
-              <p class="text-sm opacity-80">
-                {{ 'remote.idle_message' | translate: { device: targetLabel() } }}
-              </p>
-              <p class="text-xs opacity-60 mt-1">{{ 'remote.idle_hint' | translate }}</p>
-            </div>
-          }
-          @case ('live') {
-            <p class="font-medium truncate">{{ remote.targetState()?.mediaTitle }}</p>
 
-            <app-seekbar
-              [currentTime]="remote.interpolatedPosition()"
-              [duration]="remote.targetState()?.durationSeconds ?? 0"
-              variant="cast"
-              [showBuffered]="false"
-              (seek)="onSeek($event)"
-            />
-            <div class="flex items-center justify-between mt-1 text-xs opacity-70 tabular-nums">
-              <span>{{ formatTime(remote.interpolatedPosition()) }}</span>
-              <span>{{ formatTime(remote.targetState()?.durationSeconds ?? 0) }}</span>
-            </div>
+          @if (pickerRows().length === 0 && !castSearching()) {
+            <p class="text-sm opacity-70 py-4 text-center">{{ 'remote.empty_state' | translate }}</p>
+          }
 
-            <div class="flex items-center justify-center gap-6 mt-3">
-              <button type="button" class="btn btn-ghost btn-circle" (click)="skip(-10)"
-                      [attr.aria-label]="'player.seek_back' | translate">
-                <svg lucideRotateCcw class="h-6 w-6"></svg>
-              </button>
-              <button type="button" class="btn btn-ghost btn-circle btn-lg" (click)="togglePlay()"
-                      [attr.aria-label]="(remote.targetState()?.state === 'playing' ? 'player.pause' : 'player.play') | translate">
-                @if (remote.targetState()?.state === 'playing') {
-                  <svg lucidePause class="h-8 w-8"></svg>
-                } @else {
-                  <svg lucidePlay class="h-8 w-8"></svg>
-                }
-              </button>
-              <button type="button" class="btn btn-ghost btn-circle" (click)="skip(10)"
-                      [attr.aria-label]="'player.seek_forward' | translate">
-                <svg lucideRotateCw class="h-6 w-6"></svg>
-              </button>
-            </div>
-
-            @if (remote.selectedTarget()?.tvPlatform !== 'tizen') {
-              <div class="flex items-center gap-2 mt-3">
-                <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="toggleMute()"
-                        [attr.aria-label]="'player.volume' | translate">
-                  @if (remote.targetState()?.muted || remote.targetState()?.volume === 0) {
-                    <svg lucideVolumeX class="h-5 w-5"></svg>
+          <ul class="flex flex-col gap-0.5">
+            @for (row of pickerRows(); track row.kind + row.id) {
+              <li>
+                <button type="button"
+                        class="btn btn-ghost w-full justify-start gap-3 h-auto py-2"
+                        (click)="selectRow(row)">
+                  @if (row.icon === 'cast') {
+                    <svg lucideCast class="h-5 w-5 shrink-0 text-info"></svg>
+                  } @else if (row.icon === 'tv') {
+                    <svg lucideTv class="h-5 w-5 shrink-0"></svg>
+                  } @else if (row.icon === 'tablet') {
+                    <svg lucideTablet class="h-5 w-5 shrink-0"></svg>
+                  } @else if (row.icon === 'phone') {
+                    <svg lucideSmartphone class="h-5 w-5 shrink-0"></svg>
                   } @else {
-                    <svg lucideVolume2 class="h-5 w-5"></svg>
+                    <svg lucideMonitor class="h-5 w-5 shrink-0"></svg>
                   }
+                  <span class="flex flex-col items-start min-w-0 flex-1">
+                    <span class="truncate w-full text-left">{{ row.label }}</span>
+                    @if (row.subtitle) {
+                      <span class="text-xs opacity-60 truncate w-full text-left">{{ row.subtitle }}</span>
+                    }
+                  </span>
                 </button>
-                <input
-                  type="range"
-                  class="range range-xs flex-1"
-                  [attr.aria-label]="'player.volume' | translate"
-                  min="0" max="1" step="0.05"
-                  [value]="remote.targetState()?.muted ? 0 : (remote.targetState()?.volume ?? 1)"
-                  (input)="onVolume($event)"
-                />
+              </li>
+            }
+          </ul>
+        } @else {
+          <!-- Pane B: remote control -->
+          <div class="flex items-center gap-2 mb-3">
+            <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="backToPicker()"
+                    [attr.aria-label]="'player.back' | translate">
+              <svg lucideChevronLeft class="h-4 w-4"></svg>
+            </button>
+            <span class="font-semibold truncate flex-1">{{ targetLabel() }}</span>
+            <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="closeOverlay()"
+                    [attr.aria-label]="'player.close' | translate">
+              <svg lucideX class="h-4 w-4"></svg>
+            </button>
+          </div>
+
+          @switch (remoteViewState()) {
+            @case ('offline') {
+              <div class="text-center py-4">
+                <p class="text-sm opacity-80 mb-3">
+                  {{ 'remote.offline_message' | translate: { device: targetLabel() } }}
+                </p>
+                <button type="button" class="btn btn-primary btn-sm" (click)="playHereInstead()">
+                  {{ 'remote.play_here_instead' | translate }}
+                </button>
               </div>
             }
+            @case ('blocked') {
+              <p class="text-sm opacity-80 text-center py-4">
+                {{ 'remote.blocked_message' | translate: { device: targetLabel() } }}
+              </p>
+            }
+            @case ('starting') {
+              <div class="flex items-center justify-center gap-2 text-sm opacity-80 py-4">
+                <span class="loading loading-spinner loading-sm"></span>
+                {{ 'remote.starting_message' | translate: { device: targetLabel() } }}
+              </div>
+            }
+            @case ('idle') {
+              <div class="text-center py-4">
+                <p class="text-sm opacity-80">
+                  {{ 'remote.idle_message' | translate: { device: targetLabel() } }}
+                </p>
+                <p class="text-xs opacity-60 mt-1">{{ 'remote.idle_hint' | translate }}</p>
+              </div>
+            }
+            @case ('live') {
+              <p class="font-medium truncate">{{ remote.targetState()?.mediaTitle }}</p>
 
-            <div class="flex items-center justify-center gap-3 mt-3">
-              <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="next()"
-                      [attr.aria-label]="'player.next_episode' | translate">
-                <svg lucideSkipForward class="h-5 w-5"></svg>
-              </button>
-              @if (audioOptions().length > 1) {
-                <app-dropdown-menu placement="top-end">
-                  <button trigger type="button" class="btn btn-ghost btn-sm gap-1">
-                    <svg lucideHeadphones class="h-4 w-4"></svg>
-                    {{ 'player.audio' | translate }}
-                  </button>
-                  @for (o of audioOptions(); track o.id) {
-                    <button class="dropdown-item" (click)="selectAudio(o.id)">
-                      <span class="flex-1 text-left">{{ o.label }}</span>
-                      @if (isActiveAudio(o)) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                    </button>
+              <app-seekbar
+                [currentTime]="remote.interpolatedPosition()"
+                [duration]="remote.targetState()?.durationSeconds ?? 0"
+                variant="cast"
+                [showBuffered]="false"
+                (seek)="onSeek($event)"
+              />
+              <div class="flex items-center justify-between mt-1 text-xs opacity-70 tabular-nums">
+                <span>{{ formatTime(remote.interpolatedPosition()) }}</span>
+                <span>{{ formatTime(remote.targetState()?.durationSeconds ?? 0) }}</span>
+              </div>
+
+              <div class="flex items-center justify-center gap-6 mt-3">
+                <button type="button" class="btn btn-ghost btn-circle" (click)="skip(-10)"
+                        [attr.aria-label]="'player.seek_back' | translate">
+                  <svg lucideRotateCcw class="h-6 w-6"></svg>
+                </button>
+                <button type="button" class="btn btn-ghost btn-circle btn-lg" (click)="togglePlay()"
+                        [attr.aria-label]="(remote.targetState()?.state === 'playing' ? 'player.pause' : 'player.play') | translate">
+                  @if (remote.targetState()?.state === 'playing') {
+                    <svg lucidePause class="h-8 w-8"></svg>
+                  } @else {
+                    <svg lucidePlay class="h-8 w-8"></svg>
                   }
-                </app-dropdown-menu>
+                </button>
+                <button type="button" class="btn btn-ghost btn-circle" (click)="skip(10)"
+                        [attr.aria-label]="'player.seek_forward' | translate">
+                  <svg lucideRotateCw class="h-6 w-6"></svg>
+                </button>
+              </div>
+
+              @if (remote.selectedTarget()?.tvPlatform !== 'tizen') {
+                <div class="flex items-center gap-2 mt-3">
+                  <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="toggleMute()"
+                          [attr.aria-label]="'player.volume' | translate">
+                    @if (remote.targetState()?.muted || remote.targetState()?.volume === 0) {
+                      <svg lucideVolumeX class="h-5 w-5"></svg>
+                    } @else {
+                      <svg lucideVolume2 class="h-5 w-5"></svg>
+                    }
+                  </button>
+                  <input
+                    type="range"
+                    class="range range-xs flex-1"
+                    [attr.aria-label]="'player.volume' | translate"
+                    min="0" max="1" step="0.05"
+                    [value]="remote.targetState()?.muted ? 0 : (remote.targetState()?.volume ?? 1)"
+                    (input)="onVolume($event)"
+                  />
+                </div>
               }
-              @if (subtitleOptions().length) {
-                <app-dropdown-menu placement="top-end">
-                  <button trigger type="button" class="btn btn-ghost btn-sm gap-1">
-                    <svg lucideCaptions class="h-4 w-4"></svg>
-                    {{ 'player.subtitles' | translate }}
-                  </button>
-                  <button class="dropdown-item" (click)="selectSubtitle(null)">
-                    <span class="flex-1 text-left">{{ 'player.off' | translate }}</span>
-                    @if (isSubtitlesOff()) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                  </button>
-                  @for (o of subtitleOptions(); track o.id) {
-                    <button class="dropdown-item" (click)="selectSubtitle(o.id)">
-                      <span class="flex-1 text-left">{{ o.label }}</span>
-                      @if (isActiveSubtitle(o)) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+
+              <div class="flex items-center justify-center gap-3 mt-3">
+                <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="next()"
+                        [attr.aria-label]="'player.next_episode' | translate">
+                  <svg lucideSkipForward class="h-5 w-5"></svg>
+                </button>
+                @if (audioOptions().length > 1) {
+                  <app-dropdown-menu placement="top-end">
+                    <button trigger type="button" class="btn btn-ghost btn-sm gap-1">
+                      <svg lucideHeadphones class="h-4 w-4"></svg>
+                      {{ 'player.audio' | translate }}
                     </button>
-                  }
-                </app-dropdown-menu>
-              }
-            </div>
+                    @for (o of audioOptions(); track o.id) {
+                      <button class="dropdown-item" (click)="selectAudio(o.id)">
+                        <span class="flex-1 text-left">{{ o.label }}</span>
+                        @if (isActiveAudio(o)) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+                      </button>
+                    }
+                  </app-dropdown-menu>
+                }
+                @if (subtitleOptions().length) {
+                  <app-dropdown-menu placement="top-end">
+                    <button trigger type="button" class="btn btn-ghost btn-sm gap-1">
+                      <svg lucideCaptions class="h-4 w-4"></svg>
+                      {{ 'player.subtitles' | translate }}
+                    </button>
+                    <button class="dropdown-item" (click)="selectSubtitle(null)">
+                      <span class="flex-1 text-left">{{ 'player.off' | translate }}</span>
+                      @if (isSubtitlesOff()) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+                    </button>
+                    @for (o of subtitleOptions(); track o.id) {
+                      <button class="dropdown-item" (click)="selectSubtitle(o.id)">
+                        <span class="flex-1 text-left">{{ o.label }}</span>
+                        @if (isActiveSubtitle(o)) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+                      </button>
+                    }
+                  </app-dropdown-menu>
+                }
+              </div>
+            }
           }
         }
-      }
-    </div>
-  </app-bottom-sheet>
+      </div>
+  </ng-template>
+
+  @if (device.isDesktop()) {
+    <dialog #dialog class="modal" (close)="onDialogClose()">
+      <div class="modal-box max-w-md">
+        <ng-container [ngTemplateOutlet]="pane" />
+      </div>
+      <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+    </dialog>
+  } @else {
+    <app-bottom-sheet [open]="open()" (closed)="closeOverlay()">
+      <ng-container [ngTemplateOutlet]="pane" />
+    </app-bottom-sheet>
+  }
 }

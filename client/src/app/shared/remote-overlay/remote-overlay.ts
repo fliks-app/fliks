@@ -1,12 +1,15 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   Signal,
   computed,
   effect,
   inject,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import { Router } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
@@ -74,6 +77,7 @@ interface SubtitleOption {
 @Component({
   selector: 'app-remote-overlay',
   imports: [
+    NgTemplateOutlet,
     TranslateModule,
     BottomSheetComponent,
     SeekbarComponent,
@@ -164,6 +168,24 @@ export class RemoteOverlayComponent {
   protected readonly audioOptions = signal<CastAudioOption[]>([]);
   protected readonly subtitleOptions = signal<SubtitleOption[]>([]);
   private tracksLoadedForKey: string | null = null;
+
+  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+
+  /** daisyUI animates the native open/close transition, so the element is
+   *  always rendered and driven through showModal/close, never a class. */
+  private readonly dialogSyncEffect = effect(() => {
+    const open = this.open();
+    const el = this.dialog()?.nativeElement;
+    untracked(() => {
+      if (!el) return;
+      if (open && !el.open) el.showModal();
+      else if (!open && el.open) el.close();
+    });
+  });
+
+  protected onDialogClose(): void {
+    if (this.open()) this.closeOverlay();
+  }
 
   constructor() {
     if (this.device.isTv()) {
