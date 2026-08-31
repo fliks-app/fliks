@@ -20,7 +20,7 @@
         </div>
 
         @if (t.targetOffline()) {
-          <div class="flex-1 flex flex-col items-center justify-center gap-2 px-8 py-8 text-center">
+          <div class="flex-1 flex flex-col items-center justify-center gap-5 px-8 py-8 text-center">
             <svg lucideCast class="h-12 w-12 opacity-30"></svg>
             <p class="text-base opacity-70">{{ 'remote.offline_message' | translate }}</p>
           </div>
@@ -32,15 +32,18 @@
             </button>
           </div>
         } @else if (t.isStarting()) {
-          <div class="flex-1 flex flex-col items-center justify-center gap-3 px-8 py-8 text-center">
+          <div class="flex-1 flex flex-col items-center justify-center gap-5 px-8 py-8 text-center">
             <span class="loading loading-spinner loading-md"></span>
             <p class="text-base opacity-70">{{ 'remote.starting_message' | translate }}</p>
           </div>
         } @else if (t.isIdle()) {
-          <div class="flex-1 flex flex-col items-center justify-center gap-2 px-8 py-8 text-center">
+          <!-- The icon stands apart; the two lines belong together. -->
+          <div class="flex-1 flex flex-col items-center justify-center gap-5 px-8 py-8 text-center">
             <svg lucideCast class="h-12 w-12 opacity-30"></svg>
-            <p class="text-base opacity-70">{{ 'remote.idle_message' | translate }}</p>
-            <p class="text-sm opacity-50">{{ 'remote.idle_hint' | translate }}</p>
+            <div class="space-y-1">
+              <p class="text-base opacity-70">{{ 'remote.idle_message' | translate }}</p>
+              <p class="text-sm opacity-50">{{ 'remote.idle_hint' | translate }}</p>
+            </div>
           </div>
 
           <div class="shrink-0 flex justify-center px-4 pt-3"
