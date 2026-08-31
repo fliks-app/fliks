@@ -51,6 +51,16 @@ export type CardStatus = 'watched' | 'missing' | null;
     CardActionsDirective, SpoilerDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-card.html',
+  // The art scales up on focus and would ride over the caption — slide the text
+  // clear. Component-scoped so every form factor gets it, not just the 10-foot UI.
+  styles: `
+    figure + div {
+      transition: transform 0.15s ease-out;
+    }
+    figure:focus-visible + div {
+      transform: translateY(0.6rem);
+    }
+  `,
 })
 export class MediaCardComponent {
   private readonly translate = inject(TranslateService);
