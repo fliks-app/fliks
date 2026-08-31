@@ -3,16 +3,17 @@
     <div class="fixed inset-0 z-[60] bg-black/50 lg:hidden" (click)="toggle()"></div>
 
     <!-- Container: fullscreen on mobile, floating card on desktop -->
-    <div class="fixed inset-0 lg:inset-auto lg:top-14 lg:right-4 z-[60] lg:w-96 max-h-dvh max-w-dvw overflow-hidden lg:overflow-visible touch-none lg:touch-auto">
+    <div class="fixed inset-0 lg:inset-auto lg:top-14 lg:right-4 z-[60] lg:w-[27rem] max-h-dvh max-w-dvw overflow-hidden lg:overflow-visible touch-none lg:touch-auto">
       <div class="bg-base-100 h-full lg:h-auto lg:rounded-xl lg:shadow-2xl lg:border lg:border-base-300 flex flex-col max-h-dvh lg:overflow-visible">
 
         <!-- Close only: the centred poster below says what is playing, so there
              is no header rule and no second thumbnail beside it. -->
-        <!-- The notch inset is a phone concern, and an inline style cannot be
-             overridden by a class, so it is bound rather than hardcoded. -->
-        <div class="flex items-center justify-end px-4 pt-6 landscape:pt-3 lg:pt-3 shrink-0"
-             [style.padding-top]="device.isDesktop() ? null : 'calc(env(safe-area-inset-top) / 2 + 24px)'"
-        >
+        <!-- The notch inset belongs to the fullscreen form, which is a
+             breakpoint and not a device: a tablet wide enough for the floating
+             card was still paying for a notch it does not have there. -->
+        <div class="flex items-center justify-end px-4 shrink-0
+                    pt-[calc(env(safe-area-inset-top)/2+24px)]
+                    max-lg:landscape:pt-3 lg:pt-3">
           <button class="btn btn-ghost btn-circle shrink-0" (click)="toggle()"
                   [attr.aria-label]="'common.close' | translate">
             <svg lucideX class="h-6 w-6"></svg>
@@ -53,16 +54,17 @@
             </button>
           </div>
         } @else {
-        <!-- Poster beside the controls when the viewport is wide and short, and
-             above them when it is tall. `lg:contents` keeps the desktop card as
-             a single column, where the poster lives in the header instead. -->
-        <div class="flex-1 min-h-0 flex flex-col landscape:flex-row landscape:items-stretch lg:contents">
+        <!-- Poster beside the controls on a short, wide phone, above them when
+             the viewport is tall, and in the header of the desktop card, which
+             `lg:contents` keeps as a single column. Every two-column rule is
+             scoped `max-lg:` because a desktop viewport is landscape too. -->
+        <div class="flex-1 min-h-0 flex flex-col max-lg:landscape:flex-row max-lg:landscape:items-stretch lg:contents">
 
         <!-- Poster, centred on every surface. The desktop card is content-sized,
              so its height is capped rather than a share of the box. -->
         <div class="flex-1 flex items-center justify-center px-6 py-4 min-h-0
-                    landscape:w-2/5 landscape:flex-none landscape:pr-2
-                    lg:flex-none lg:w-full lg:pr-6 lg:py-3">
+                    max-lg:landscape:w-2/5 max-lg:landscape:flex-none max-lg:landscape:pr-2
+                    lg:flex-none lg:py-3">
           @if (t.fanartUrl()) {
             <img [cachedSrc]="t.fanartUrl()! | resolveUrl:'medium'" alt=""
                  class="max-h-full max-w-full lg:max-h-56 object-contain rounded-xl shadow-xl" />
@@ -71,14 +73,21 @@
           }
         </div>
 
-        <!-- Controls -->
-        <!-- A desktop viewport is always landscape, so every landscape rule here
-             has to be undone at lg: the scroll one clipped the track dropdowns. -->
-        <div class="shrink-0 lg:shrink px-4 pt-4 landscape:pt-2 lg:py-4 space-y-4 landscape:space-y-3 lg:space-y-4
-                    landscape:flex-1 landscape:min-w-0 landscape:self-center landscape:overflow-y-auto
-                    lg:flex-none lg:self-auto lg:overflow-visible"
+        <!-- Controls. The scroll box belongs to the phone two-column layout
+             only: on desktop it clipped the upward track dropdowns. -->
+        <div class="shrink-0 lg:shrink px-4 pt-4 max-lg:landscape:pt-2 lg:py-4 space-y-4 max-lg:landscape:space-y-3
+                    max-lg:landscape:flex-1 max-lg:landscape:min-w-0 max-lg:landscape:self-center
+                    max-lg:landscape:overflow-y-auto"
              style="padding-bottom: max(2rem, env(safe-area-inset-bottom))"
         >
+          <!-- The device refused to start by itself. Said plainly, because the
+               play button below is refused for the same reason. -->
+          @if (t.autoplayBlocked()) {
+            <div class="alert alert-warning py-2">
+              <span class="text-sm">{{ 'remote.autoplay_blocked' | translate }}</span>
+            </div>
+          }
+
           <!-- Skip cue: the row keeps its height so an offer appearing
                mid-playback does not shift the buttons under a thumb. -->
           <div class="min-h-9">
@@ -159,64 +168,30 @@
             </div>
           }
 
-          <!-- Pickers -->
-          <div class="flex items-center justify-center gap-3 lg:gap-2 flex-wrap min-h-12 lg:min-h-8">
-            @if (t.availableAudioTracks().length > 1) {
-              <div class="flex items-center gap-2">
-                <span class="text-sm text-base-content/50">{{ 'player.audio' | translate }}</span>
-                <app-dropdown-menu placement="top-start">
+          <!-- Pickers, one centred row. Driven by `pickers()` so a file with
+               a single audio track leaves no gap and the rest stay centred. -->
+          <div class="flex flex-wrap justify-evenly gap-x-4 gap-y-3 min-h-16">
+            @for (p of pickers(); track p.kind; let i = $index) {
+              <div class="min-w-0 space-y-1">
+                <span class="block text-sm text-base-content/50">{{ 'common.label_colon' | translate: { label: (p.labelKey | translate) } }}</span>
+                <app-dropdown-menu [placement]="placementFor(i)" maxHeight="max-h-[45vh]">
                   <button trigger type="button"
-                          class="select select-bordered select-sm w-fit text-left cursor-pointer transition-colors hover:bg-base-content/10">
-                    {{ activeAudioLabel() }}
+                          class="select select-bordered select-sm w-fit min-w-28 max-w-full text-left truncate cursor-pointer transition-colors hover:bg-base-content/10">
+                    {{ p.active }}
                   </button>
-                  @for (track of t.availableAudioTracks(); track track.id) {
+                  @if (p.offRow) {
                     <app-dropdown-option
-                      [head]="track.head || track.label"
-                      [sub]="track.sub"
-                      [selected]="t.activeAudioTrackId() === track.id"
-                      (click)="selectAudio(track)"
+                      [head]="'player.off' | translate"
+                      [selected]="!p.activeId"
+                      (click)="pick(p, null)"
                     />
                   }
-                </app-dropdown-menu>
-              </div>
-            }
-            @if (t.availableSubtitles().length) {
-              <div class="flex items-center gap-2">
-                <span class="text-sm text-base-content/50">{{ 'player.subtitles' | translate }}</span>
-                <app-dropdown-menu placement="top-end">
-                  <button trigger type="button"
-                          class="select select-bordered select-sm w-fit text-left cursor-pointer transition-colors hover:bg-base-content/10">
-                    {{ activeSubtitleLabel() }}
-                  </button>
-                  <app-dropdown-option
-                    [head]="'player.off' | translate"
-                    [selected]="!t.activeSubtitleId()"
-                    (click)="selectSubtitle(null)"
-                  />
-                  @for (sub of t.availableSubtitles(); track sub.id) {
+                  @for (o of p.options; track o.id) {
                     <app-dropdown-option
-                      [head]="sub.head || sub.label"
-                      [sub]="sub.sub"
-                      [selected]="t.activeSubtitleId() === sub.id"
-                      (click)="selectSubtitle(sub)"
-                    />
-                  }
-                </app-dropdown-menu>
-              </div>
-            }
-            @if (t.availableQualities().length > 1) {
-              <div class="flex items-center gap-2">
-                <span class="text-sm text-base-content/50">{{ 'player.quality' | translate }}</span>
-                <app-dropdown-menu placement="top-end">
-                  <button trigger type="button"
-                          class="select select-bordered select-sm w-fit text-left cursor-pointer transition-colors hover:bg-base-content/10">
-                    {{ activeQualityLabel() }}
-                  </button>
-                  @for (q of t.availableQualities(); track q.id) {
-                    <app-dropdown-option
-                      [head]="q.label"
-                      [selected]="t.activeQualityId() === q.id"
-                      (click)="selectQuality(q)"
+                      [head]="o.head || o.label"
+                      [sub]="o.sub"
+                      [selected]="p.activeId === o.id"
+                      (click)="pick(p, o)"
                     />
                   }
                 </app-dropdown-menu>

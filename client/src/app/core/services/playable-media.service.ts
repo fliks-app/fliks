@@ -20,6 +20,9 @@ export interface PlayContext {
    *  series fanart when playing an episode. Optional. */
   stillUrl?: string | null;
   streamInfo?: any;
+  /** Where the caller knows playback stopped. Only a caller that read it from a
+   *  list has it; a detail page leaves the player to resolve its own. */
+  positionSeconds?: number;
 }
 
 /**
@@ -52,7 +55,10 @@ export class PlayableMediaService {
         mediaId: ctx.mediaId,
         mediaFileId: ctx.fileId,
         episodeId: ctx.episodeId,
-        positionSeconds: fromStart ? 0 : undefined,
+        // The launcher's own position, not the target's: a remote launch counts
+        // for whoever started it, so the target's account may have none at all
+        // and would restart the title from the beginning.
+        positionSeconds: fromStart ? 0 : ctx.positionSeconds,
       });
       return;
     }

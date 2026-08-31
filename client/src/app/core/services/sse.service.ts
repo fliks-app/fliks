@@ -18,6 +18,14 @@ export interface SseEvent {
   [key: string]: unknown;
 }
 
+/** One rung of a target's quality ladder. `lowBandwidth` marks an eco rung, of
+ *  which there is one per height, so a list without it shows the label twice. */
+export interface RemoteQualityRung {
+  id: string;
+  label: string;
+  lowBandwidth?: boolean;
+}
+
 /** Absolute, state-setting playback command aimed at this device. */
 export interface RemoteCommand {
   type: 'remote.command';
@@ -26,7 +34,7 @@ export interface RemoteCommand {
   byTargetId: string | null;
   action:
     | 'load' | 'play' | 'pause' | 'playpause' | 'stop'
-    | 'seek' | 'volume' | 'mute' | 'next' | 'audio' | 'subtitle';
+    | 'seek' | 'volume' | 'mute' | 'next' | 'audio' | 'subtitle' | 'quality';
   mediaId?: number;
   mediaFileId?: number;
   episodeId?: number;
@@ -35,6 +43,7 @@ export interface RemoteCommand {
   muted?: boolean;
   trackId?: string;
   subtitleId?: string | null;
+  qualityId?: string;
 }
 
 export interface RemoteState {
@@ -55,6 +64,9 @@ export interface RemoteState {
   supportsVolume: boolean;
   subtitleId: string | null;
   quality: string | null;
+  qualities: RemoteQualityRung[] | null;
+  /** The target's browser refused to start without a gesture on that device. */
+  autoplayBlocked: boolean;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;
   lastCmdId: string | null;
@@ -96,6 +108,10 @@ export class SseService implements OnDestroy {
   /** Commands are transient intent: a last-value signal would let a state
    *  frame overwrite one before its consumer ran, losing it with no trace. */
   readonly commands = new Subject<RemoteCommand>();
+  /** A target leaving its player. A transient fact, so it cannot ride on
+   *  `lastEvent`: the same handler emits `remote.targets_changed` right after
+   *  it, which replaced the value before any effect had run. */
+  readonly stopped = new Subject<string>();
   /** Own signal rather than `lastEvent`: this fires every 10s per playing
    *  session for every device of the account, and `lastEvent` is read inside
    *  effects by a dozen unrelated components. */
@@ -197,6 +213,10 @@ export class SseService implements OnDestroy {
         }
         if (data.type === 'remote.command') {
           this.commands.next(data as unknown as RemoteCommand);
+          return;
+        }
+        if (data.type === 'remote.stopped') {
+          this.stopped.next(String(data['targetId'] ?? ''));
           return;
         }
         if (data.type === 'remote.state') {

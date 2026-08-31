@@ -2,7 +2,7 @@ import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { SettingsDrawerComponent } from '../../shared/components/settings-drawer/settings-drawer';
-import { LucideSettings, LucidePlay, LucideCaptions, LucideCast, LucideHardDrive, LucideMonitor, LucideHouse, LucideDownload } from '@lucide/angular';
+import { LucideSettings, LucidePlay, LucideCaptions, LucideCast, LucideHardDrive, LucideMonitor, LucideMonitorSmartphone, LucideHouse, LucideDownload } from '@lucide/angular';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
 
@@ -11,7 +11,8 @@ import { DeviceService } from '../../core/services/device.service';
   imports: [
     RouterLink, RouterLinkActive, TranslateModule,
     SettingsDrawerComponent,
-    LucideSettings, LucidePlay, LucideCaptions, LucideCast, LucideHardDrive, LucideMonitor, LucideHouse, LucideDownload,
+    LucideSettings, LucidePlay, LucideCaptions, LucideCast, LucideHardDrive, LucideMonitor,
+    LucideMonitorSmartphone, LucideHouse, LucideDownload,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app-settings-shell.html',

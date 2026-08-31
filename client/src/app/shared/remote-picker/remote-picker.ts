@@ -1,11 +1,13 @@
 import { ChangeDetectionStrategy, Component, Signal, computed, inject, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { RouterLink } from '@angular/router';
 import {
   LucideCast,
   LucideMonitor,
   LucideSmartphone,
   LucideTablet,
+  LucidePlus,
   LucideTv,
 } from '@lucide/angular';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
@@ -36,7 +38,8 @@ interface PickerRow {
   imports: [
     TranslateModule,
     DropdownMenuComponent,
-    LucideTv, LucideTablet, LucideSmartphone, LucideMonitor, LucideCast,
+    LucideTv, LucideTablet, LucideSmartphone, LucideMonitor, LucideCast, LucidePlus,
+    RouterLink,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './remote-picker.html',

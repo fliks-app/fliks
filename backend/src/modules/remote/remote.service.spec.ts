@@ -2,35 +2,41 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { Repository } from 'typeorm';
 import { RemoteService } from './remote.service';
 import { RemoteCommandDto } from './dto/remote-command.dto';
-import { EventsService } from '../scheduler/events.service';
+import { EventsService, type SseEvent } from '../scheduler/events.service';
 import { LiveSessionRegistry } from '../streaming/live-session.service';
 import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
-import { SocialService } from '../social/social.service';
+import { RemoteGrantService } from './remote-grant.service';
 import { User } from '../users/entities/user.entity';
-import { UserFollow } from '../social/entities/user-follow.entity';
-import { FollowStatus } from '../../common/enums';
 
-interface Edge {
-  followerId: number;
-  followingId: number;
-  status: FollowStatus;
+/** One standing per-device permission, as the service sees it. */
+interface Grant {
+  deviceId: string;
+  ownerUserId: number;
+  granteeUserId: number;
 }
 
-/** In-memory stand-in for the `UserFollow` repo: enough for the `where`
- *  shapes `RemoteService.mutualFollowerIds` actually sends. */
-function followRepoStub(edges: Edge[]): Repository<UserFollow> {
+/** In-memory stand-in for `RemoteGrantService`, covering exactly the reads
+ *  `RemoteService` performs. */
+function grantStub(grants: Grant[]): RemoteGrantService {
   return {
-    find: jest.fn(async ({ where }: { where: { follower?: { id: number }; following?: { id: number }; status: FollowStatus } }) => {
-      if (where.follower) {
-        return edges
-          .filter((e) => e.followerId === where.follower!.id && e.status === where.status)
-          .map((e) => ({ followingId: e.followingId }));
-      }
-      return edges
-        .filter((e) => e.followingId === where.following!.id && e.status === where.status)
-        .map((e) => ({ followerId: e.followerId }));
-    }),
-  } as unknown as Repository<UserFollow>;
+    grantedDevices: jest.fn(async (granteeUserId: number) =>
+      grants
+        .filter((g) => g.granteeUserId === granteeUserId)
+        .map((g) => ({ deviceId: g.deviceId, ownerUserId: g.ownerUserId })),
+    ),
+    isGranted: jest.fn(
+      async (granteeUserId: number, deviceId: string) =>
+        grants.some(
+          (g) => g.granteeUserId === granteeUserId && g.deviceId === deviceId,
+        ),
+    ),
+    granteesForDevice: jest.fn(async (deviceId: string) =>
+      grants.filter((g) => g.deviceId === deviceId).map((g) => g.granteeUserId),
+    ),
+    granteesForOwner: jest.fn(async (ownerUserId: number) =>
+      grants.filter((g) => g.ownerUserId === ownerUserId).map((g) => g.granteeUserId),
+    ),
+  } as unknown as RemoteGrantService;
 }
 
 function userRepoStub(users: User[]): Repository<User> {
@@ -40,33 +46,18 @@ function userRepoStub(users: User[]): Repository<User> {
     ),
     // `where.id` is whatever `In(ids)` produces: a `FindOperator` exposing `.value`.
     find: jest.fn(
-      async ({
-        where,
-      }: {
-        where: { id?: { value: number[] }; shareDisabled?: boolean; allowRemoteControlOfOthers?: boolean };
-      }) => {
-        const ids = where.id?.value ?? [];
+      async ({ where }: { where: { id?: { value: number[] }; enabled?: boolean } }) => {
+        // No `id` clause means "every user matching the rest", which is how the
+        // admin lookup asks; filtering on an absent list returned nobody.
+        const ids = where.id?.value;
         return users.filter(
           (u) =>
-            ids.includes(u.id) &&
-            (where.shareDisabled === undefined || u.shareDisabled === where.shareDisabled) &&
-            (where.allowRemoteControlOfOthers === undefined ||
-              u.allowRemoteControlOfOthers === where.allowRemoteControlOfOthers),
+            (ids === undefined || ids.includes(u.id)) &&
+            (where.enabled === undefined || u.enabled === where.enabled),
         );
       },
     ),
   } as unknown as Repository<User>;
-}
-
-/** Real bidirectional-ACCEPTED check against the same edge list: the exact
- *  contract `RemoteService.canControl` relies on from `SocialService`. */
-function socialStub(edges: Edge[]): SocialService {
-  const mutual = (a: number, b: number) =>
-    edges.some((e) => e.followerId === a && e.followingId === b && e.status === FollowStatus.ACCEPTED) &&
-    edges.some((e) => e.followerId === b && e.followingId === a && e.status === FollowStatus.ACCEPTED);
-  return {
-    areMutualFollowers: jest.fn(async (a: number, b: number) => mutual(a, b)),
-  } as unknown as SocialService;
 }
 
 function fakeUser(overrides: Partial<User>): User {
@@ -76,22 +67,19 @@ function fakeUser(overrides: Partial<User>): User {
     isAdmin: false,
     enabled: true,
     shareDisabled: false,
-    allowRemoteControlOfOthers: false,
-    allowRemoteControlOfMyDevices: false,
     ...overrides,
   } as unknown as User;
 }
 
-function makeService(edges: Edge[] = [], users: User[] = []) {
+function makeService(grants: Grant[] = [], users: User[] = []) {
   const events = new EventsService();
   const liveSessions = { list: () => [] } as unknown as LiveSessionRegistry;
   const service = new RemoteService(
     userRepoStub(users),
-    followRepoStub(edges),
     events,
     liveSessions,
     new CaslAbilityFactory(),
-    socialStub(edges),
+    grantStub(grants),
   );
   return { service, events };
 }
@@ -152,6 +140,27 @@ describe('RemoteService.sendCommand', () => {
     expect(aliceLaptop.frames.filter((f) => f.type === 'remote.command')).toHaveLength(0);
   });
 
+  it('lists another account\'s devices for an admin, with no follow or opt-in', async () => {
+    const admin = fakeUser({ id: 1, isAdmin: true, permissions: ['manage:all'] });
+    const bob = fakeUser({ id: 2 });
+    const { service, events } = makeService([], [admin, bob]);
+
+    const adminPhone = connect(events, 1, 'admin-phone');
+    const bobTv = connect(events, 2, 'bob-tv');
+
+    // No mutual follow, neither flag set: the command path already authorizes an
+    // admin here, so the listing has to agree.
+    const rows = await service.listTargets(admin, 'admin-phone');
+
+    const bobRow = rows.find((r) => r.targetId === 'bob-tv');
+    expect(bobRow?.ownerUsername).toBe('user2');
+    // Its own issuing target stays out of its own list.
+    expect(rows.some((r) => r.targetId === 'admin-phone')).toBe(false);
+
+    adminPhone.close();
+    bobTv.close();
+  });
+
   it('rejects a command aimed at the caller\'s own issuing target with 400', async () => {
     const { service, events } = makeService();
     const alice = fakeUser({ id: 1 });
@@ -162,6 +171,24 @@ describe('RemoteService.sendCommand', () => {
     ).rejects.toThrow(BadRequestException);
 
     alicePhone.close();
+  });
+
+  it('forwards every declared command field to the target', async () => {
+    const { service, events } = makeService();
+    const alice = fakeUser({ id: 1 });
+    const aliceTv = connect(events, 1, 'alice-tv');
+
+    await service.sendCommand(alice, 'alice-tv', {
+      action: 'quality',
+      qualityId: '720p',
+    } as RemoteCommandDto);
+
+    const cmd = aliceTv.frames.find((f) => f.type === 'remote.command');
+    // A hand-written field copy here dropped each field added to the protocol
+    // later, so the target saw the action with nothing to act on.
+    expect(cmd).toMatchObject({ action: 'quality', qualityId: '720p' });
+
+    aliceTv.close();
   });
 
   it('treats a dead connection as offline rather than reporting success', async () => {
@@ -176,13 +203,12 @@ describe('RemoteService.sendCommand', () => {
   });
 
   it('denies a disabled target user even though its connection is live', async () => {
-    const edges: Edge[] = [
-      { followerId: 1, followingId: 2, status: FollowStatus.ACCEPTED },
-      { followerId: 2, followingId: 1, status: FollowStatus.ACCEPTED },
+    const grants: Grant[] = [
+      { deviceId: 'bob-tv', ownerUserId: 2, granteeUserId: 1 },
     ];
-    const bob = fakeUser({ id: 2, allowRemoteControlOfMyDevices: true, enabled: false });
-    const { service, events } = makeService(edges, [bob]);
-    const alice = fakeUser({ id: 1, allowRemoteControlOfOthers: true });
+    const bob = fakeUser({ id: 2, enabled: false });
+    const { service, events } = makeService(grants, [bob]);
+    const alice = fakeUser({ id: 1 });
     const bobTv = connect(events, 2, 'bob-tv');
 
     await expect(service.sendCommand(alice, 'bob-tv', pauseCmd)).rejects.toThrow(ForbiddenException);
@@ -191,32 +217,27 @@ describe('RemoteService.sendCommand', () => {
   });
 });
 
-describe('RemoteService.canControl: household predicate', () => {
-  function bobTarget(overrides: Partial<User> = {}): User {
-    return fakeUser({ id: 2, allowRemoteControlOfMyDevices: true, ...overrides });
-  }
+describe('RemoteService.canControl: per-device grant', () => {
+  it('denies a device that granted nothing', async () => {
+    const { service } = makeService([], [fakeUser({ id: 2 })]);
+    const alice = fakeUser({ id: 1 });
 
-  it('denies a one-way follow', async () => {
-    const edges: Edge[] = [{ followerId: 1, followingId: 2, status: FollowStatus.ACCEPTED }];
-    const { service } = makeService(edges, [bobTarget()]);
-    const alice = fakeUser({ id: 1, allowRemoteControlOfOthers: true });
-
-    const result = await service.canControl(alice, 2);
+    const result = await service.canControl(alice, 2, 'bob-tv');
 
     expect(result.allowed).toBe(false);
+    expect(result.reason).toBe('device_not_granted');
   });
 
-  it('allows a mutual accepted follow with both consent flags set', async () => {
-    const edges: Edge[] = [
-      { followerId: 1, followingId: 2, status: FollowStatus.ACCEPTED },
-      { followerId: 2, followingId: 1, status: FollowStatus.ACCEPTED },
+  it('allows the device that granted this account, and only that device', async () => {
+    const grants: Grant[] = [
+      { deviceId: 'bob-tv', ownerUserId: 2, granteeUserId: 1 },
     ];
-    const { service } = makeService(edges, [bobTarget()]);
-    const alice = fakeUser({ id: 1, allowRemoteControlOfOthers: true });
+    const { service } = makeService(grants, [fakeUser({ id: 2 })]);
+    const alice = fakeUser({ id: 1 });
 
-    const result = await service.canControl(alice, 2);
-
-    expect(result.allowed).toBe(true);
+    expect((await service.canControl(alice, 2, 'bob-tv')).allowed).toBe(true);
+    // A grant covers one device, never everything its owner signs into.
+    expect((await service.canControl(alice, 2, 'bob-laptop')).allowed).toBe(false);
   });
 });
 
@@ -227,65 +248,122 @@ describe('RemoteService.canControl: household predicate', () => {
  * so a mutual, consenting follower gets the frame too, without the streaming
  * module ever depending on the remote module.
  */
-describe('RemoteService: household fan-out for remote.state / remote.targets_changed', () => {
-  const flushHook = () => new Promise((resolve) => setImmediate(resolve));
+/** A minimal valid `remote.state` frame: this suite asserts routing, not
+ *  payload contents, so the fields live in one place. */
+function stateFrame(targetId: string): SseEvent {
+  return {
+    type: 'remote.state',
+    targetId,
+    sessionId: 'sid-1',
+    mediaId: 1,
+    mediaFileId: 1,
+    mediaTitle: 'Title',
+    episodeLabel: null,
+    posterUrl: null,
+    positionSeconds: 10,
+    durationSeconds: 100,
+    state: 'playing',
+    volume: null,
+    muted: null,
+    supportsVolume: false,
+    subtitleId: null,
+    quality: null,
+    qualities: null,
+    autoplayBlocked: false,
+    audioTrackIndex: null,
+    subtitleTrackIndex: null,
+    lastCmdId: null,
+  };
+}
 
-  it('delivers to the owner and an authorized mutual follower, but not an unrelated user', async () => {
-    const edges: Edge[] = [
-      { followerId: 1, followingId: 2, status: FollowStatus.ACCEPTED },
-      { followerId: 2, followingId: 1, status: FollowStatus.ACCEPTED },
+describe('RemoteService: fan-out for remote.state / remote.targets_changed', () => {
+  /** The fan-out awaits its audience lookups, so let more than one turn run. */
+  const flushHook = async () => {
+    for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+  };
+
+  it('delivers to the owner and the granted account, but not an unrelated user', async () => {
+    const grants: Grant[] = [
+      { deviceId: 'alice-tv', ownerUserId: 1, granteeUserId: 2 },
     ];
-    const alice = fakeUser({ id: 1, allowRemoteControlOfMyDevices: true });
-    const bob = fakeUser({ id: 2, allowRemoteControlOfOthers: true });
+    const alice = fakeUser({ id: 1 });
+    const bob = fakeUser({ id: 2 });
     const carol = fakeUser({ id: 3 });
-    const { events } = makeService(edges, [alice, bob, carol]);
+    const { events } = makeService(grants, [alice, bob, carol]);
 
     const aliceTv = connect(events, 1, 'alice-tv');
     const bobPhone = connect(events, 2, 'bob-phone');
     const carolPhone = connect(events, 3, 'carol-phone');
 
-    events.emitToUser(1, {
-      type: 'remote.state',
-      targetId: 'alice-tv',
-      sessionId: 'sid-1',
-      mediaId: 1,
-      mediaFileId: 1,
-      mediaTitle: 'Title',
-      episodeLabel: null,
-      posterUrl: null,
-      positionSeconds: 10,
-      durationSeconds: 100,
-      state: 'playing',
-      volume: null,
-      muted: null,
-      supportsVolume: false,
-      subtitleId: null,
-      quality: null,
-      audioTrackIndex: null,
-      subtitleTrackIndex: null,
-      lastCmdId: null,
-    });
+    events.emitToUser(1, stateFrame('alice-tv'));
     await flushHook();
 
     expect(aliceTv.frames.some((f) => f.type === 'remote.state')).toBe(true);
     expect(bobPhone.frames.some((f) => f.type === 'remote.state')).toBe(true);
     expect(carolPhone.frames.some((f) => f.type === 'remote.state')).toBe(false);
+
+    aliceTv.close();
+    bobPhone.close();
+    carolPhone.close();
   });
 
-  it('withholds the fan-out when the owner has not opted in to remote control', async () => {
-    const edges: Edge[] = [
-      { followerId: 1, followingId: 2, status: FollowStatus.ACCEPTED },
-      { followerId: 2, followingId: 1, status: FollowStatus.ACCEPTED },
+  it('keeps a state frame within the device it names', async () => {
+    // Bob may control the television, so what the bedroom screen plays is none
+    // of his business even though the same account owns both.
+    const grants: Grant[] = [
+      { deviceId: 'alice-tv', ownerUserId: 1, granteeUserId: 2 },
     ];
-    // Owner never set `allowRemoteControlOfMyDevices`: the opt-out `canControl` enforces.
-    const alice = fakeUser({ id: 1 });
-    const bob = fakeUser({ id: 2, allowRemoteControlOfOthers: true });
-    const { events } = makeService(edges, [alice, bob]);
+    const { events } = makeService(grants, [fakeUser({ id: 1 }), fakeUser({ id: 2 })]);
+
+    const bobPhone = connect(events, 2, 'bob-phone');
+    events.emitToUser(1, stateFrame('alice-bedroom'));
+    await flushHook();
+
+    expect(bobPhone.frames.some((f) => f.type === 'remote.state')).toBe(false);
+
+    bobPhone.close();
+  });
+
+  it('reaches an admin without any grant', async () => {
+    const admin = fakeUser({ id: 3, isAdmin: true, permissions: ['manage:all'] });
+    const { events } = makeService([], [fakeUser({ id: 1 }), admin]);
+
+    const adminPhone = connect(events, 3, 'admin-phone');
+    events.emitToUser(1, stateFrame('alice-tv'));
+    await flushHook();
+
+    // It commands every target and lists them all, so a card it opens has to
+    // receive their state or it never leaves the loading pane.
+    expect(adminPhone.frames.some((f) => f.type === 'remote.state')).toBe(true);
+
+    adminPhone.close();
+  });
+
+  it('tells a granted account that the device stopped', async () => {
+    const grants: Grant[] = [
+      { deviceId: 'alice-tv', ownerUserId: 1, granteeUserId: 2 },
+    ];
+    const { events } = makeService(grants, [fakeUser({ id: 1 }), fakeUser({ id: 2 })]);
+
+    const bobPhone = connect(events, 2, 'bob-phone');
+    events.emitToUser(1, { type: 'remote.stopped', targetId: 'alice-tv' });
+    await flushHook();
+
+    // Without this a second remote kept showing playback that had ended.
+    expect(bobPhone.frames.some((f) => f.type === 'remote.stopped')).toBe(true);
+
+    bobPhone.close();
+  });
+
+  it('withholds the fan-out when nothing was granted', async () => {
+    const { events } = makeService([], [fakeUser({ id: 1 }), fakeUser({ id: 2 })]);
 
     const bobPhone = connect(events, 2, 'bob-phone');
     events.emitToUser(1, { type: 'remote.targets_changed' });
     await flushHook();
 
     expect(bobPhone.frames.some((f) => f.type === 'remote.targets_changed')).toBe(false);
+
+    bobPhone.close();
   });
 });

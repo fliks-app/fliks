@@ -9,8 +9,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { User } from '../users/entities/user.entity';
-import { UserFollow } from '../social/entities/user-follow.entity';
-import { FollowStatus } from '../../common/enums';
 import {
   EventsService,
   RemoteTargetConnection,
@@ -23,8 +21,8 @@ import {
 import { StreamLifetime } from '../streaming/lifetime-constants';
 import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
 import { Action } from '../auth/casl/actions.enum';
-import { SocialService } from '../social/social.service';
 import { RemoteCommandDto, REMOTE_COMMAND_ACTIONS } from './dto/remote-command.dto';
+import { RemoteGrantService } from './remote-grant.service';
 import { RemoteNowPlayingDto, RemoteTargetDto } from './dto/remote-target.dto';
 
 /** Absolute deadline before a command is stale: see `RemoteCommandAction`. */
@@ -37,8 +35,14 @@ interface ResolvedTarget {
 }
 
 /** Long enough to collapse a playing session's ten-second cadence, short
- *  enough that revoking consent is felt promptly. */
-const HOUSEHOLD_CACHE_MS = 30_000;
+ *  enough that a revocation is felt promptly. */
+const GRANT_CACHE_MS = 30_000;
+
+/** A target id is `deviceId#tabNonce`: a grant covers the device, so every tab
+ *  and every reconnection of it are covered by the same permission. */
+function deviceIdOf(targetId: string): string {
+  return targetId.split('#')[0];
+}
 
 @Injectable()
 export class RemoteService {
@@ -47,41 +51,66 @@ export class RemoteService {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
-    @InjectRepository(UserFollow)
-    private readonly followRepo: Repository<UserFollow>,
     private readonly events: EventsService,
     private readonly liveSessions: LiveSessionRegistry,
     private readonly casl: CaslAbilityFactory,
-    private readonly social: SocialService,
+    private readonly grants: RemoteGrantService,
   ) {
     // StreamingModule can't import RemoteModule (RemoteModule already imports
     // StreamingModule, and Nest module imports must not cycle), so instead of
     // PlaybackController calling in here, EventsService calls out through this
     // hook whenever it emits a household-scoped event.
     this.events.registerHouseholdFanOut((event, ownerId) => {
-      void this.fanOutToHousehold(ownerId, event);
+      void this.fanOutToGrantees(ownerId, event);
     });
   }
 
   /** State frames arrive every ten seconds per playing session, so resolving the
-   *  household from the database on each one is pure waste. A consent change
-   *  takes effect within the window instead of instantly, which is fine for a
-   *  fan-out audience. */
-  private readonly viewerCache = new Map<number, { ids: number[]; at: number }>();
+   *  audience from the database on each one is pure waste. A revocation takes
+   *  effect within the window rather than instantly, which is fine for a
+   *  fan-out audience: the command path re-checks on every command. */
+  private readonly viewerCache = new Map<string, { ids: number[]; at: number }>();
 
-  /** Extend a household-scoped event past its owner to every mutual follower
-   *  currently authorized to control the owner's devices. */
-  private async fanOutToHousehold(ownerId: number, event: SseEvent): Promise<void> {
-    const cached = this.viewerCache.get(ownerId);
+  /** Extend an event past the device's owner to the accounts that device has
+   *  authorized. Scoped to the one device when the frame names it, so a grant on
+   *  the living-room screen does not leak what the bedroom one is playing. */
+  private async fanOutToGrantees(ownerId: number, event: SseEvent): Promise<void> {
+    const deviceId =
+      event.type === 'remote.state' || event.type === 'remote.stopped'
+        ? deviceIdOf(event.targetId)
+        : null;
+    const key = deviceId ? `device:${deviceId}` : `owner:${ownerId}`;
+    const cached = this.viewerCache.get(key);
     let viewerIds: number[];
-    if (cached && Date.now() - cached.at < HOUSEHOLD_CACHE_MS) {
+    if (cached && Date.now() - cached.at < GRANT_CACHE_MS) {
       viewerIds = cached.ids;
     } else {
-      viewerIds = await this.authorizedViewerIds(ownerId);
-      this.viewerCache.set(ownerId, { ids: viewerIds, at: Date.now() });
+      viewerIds = deviceId
+        ? await this.grants.granteesForDevice(deviceId)
+        : await this.grants.granteesForOwner(ownerId);
+      this.viewerCache.set(key, { ids: viewerIds, at: Date.now() });
     }
-    const extra = viewerIds.filter((id) => id !== ownerId);
+    // An admin is authorized on every target by `canControl` and sees them all
+    // in the listing, so it has to receive their frames too. Without this its
+    // card opened on a device it could command but never hear from, and its
+    // target list only refreshed when something else happened to refetch.
+    const audience = [...viewerIds, ...(await this.adminIds())];
+    const extra = [...new Set(audience)].filter((id) => id !== ownerId);
     if (extra.length > 0) this.events.emitToUsers(extra, event);
+  }
+
+  private adminCache: { ids: number[]; at: number } | null = null;
+
+  /** Cached on the same window as the audience: an admin is rare and changing
+   *  one is rarer, while these frames arrive every ten seconds per session. */
+  private async adminIds(): Promise<number[]> {
+    if (this.adminCache && Date.now() - this.adminCache.at < GRANT_CACHE_MS) {
+      return this.adminCache.ids;
+    }
+    const users = await this.userRepo.find({ where: { enabled: true } });
+    const ids = users.filter((u) => this.isAdmin(u)).map((u) => u.id);
+    this.adminCache = { ids, at: Date.now() };
+    return ids;
   }
 
   /** The caller's own devices, plus any household member's devices the caller
@@ -96,22 +125,41 @@ export class RemoteService {
       rows.push(this.toDto(connection, liveSessions, null));
     }
 
-    if (me.shareDisabled || !me.allowRemoteControlOfOthers) return rows;
+    // An admin is authorized on every target by `canControl`, so the listing has
+    // to show them too: gating only the list left the capability reachable only
+    // by knowing a target id. Household consent does not apply here, and the
+    // admin streams dashboard already exposes who is playing what.
+    if (this.isAdmin(me)) {
+      const others = this.events
+        .listAll()
+        .filter((c) => c.userId !== me.id && c.targetId !== selfTargetId);
+      const ownerIds = [...new Set(others.map((c) => c.userId))];
+      const owners = ownerIds.length
+        ? await this.userRepo.find({ where: { id: In(ownerIds) } })
+        : [];
+      const nameById = new Map(owners.map((u) => [u.id, u.username]));
+      for (const connection of others) {
+        rows.push(
+          this.toDto(connection, liveSessions, nameById.get(connection.userId) ?? null),
+        );
+      }
+      return rows;
+    }
 
-    const mutualIds = await this.mutualFollowerIds(me.id);
-    if (mutualIds.length === 0) return rows;
+    const granted = await this.grants.grantedDevices(me.id);
+    if (granted.length === 0) return rows;
 
     const owners = await this.userRepo.find({
-      where: {
-        id: In(mutualIds),
-        enabled: true,
-        shareDisabled: false,
-        allowRemoteControlOfMyDevices: true,
-      },
+      where: { id: In([...new Set(granted.map((g) => g.ownerUserId))]), enabled: true },
     });
+    const grantedDeviceIds = new Set(granted.map((g) => g.deviceId));
+
     for (const owner of owners) {
       for (const connection of this.events.listForUser(owner.id)) {
         if (connection.targetId === selfTargetId) continue;
+        // The grant is per device, so a second device of the same owner stays
+        // invisible until it is granted in its own right.
+        if (!grantedDeviceIds.has(deviceIdOf(connection.targetId ?? ''))) continue;
         rows.push(this.toDto(connection, liveSessions, owner.username));
       }
     }
@@ -130,31 +178,26 @@ export class RemoteService {
       this.logger.warn(
         `User ${me.id} sent a command from target ${targetId} to itself`,
       );
-      throw new BadRequestException('self_target');
+      throw new BadRequestException('remote.error_self_target');
     }
     // Belt and braces: `@IsIn` on the DTO already rejects this at the pipe.
     if (!REMOTE_COMMAND_ACTIONS.includes(dto.action)) {
       this.logger.warn(
         `User ${me.id} sent unknown remote action "${dto.action}" to ${targetId}`,
       );
-      throw new BadRequestException('unknown_action');
+      throw new BadRequestException('remote.error_unknown_action');
     }
 
     const cmdId = randomUUID();
+    // Spread the validated DTO rather than re-listing its fields: the global
+    // pipe whitelists it to declared properties, and a hand-written copy
+    // silently dropped every field added to the protocol later.
     const delivered = this.events.emitToConnection(connectionId, {
+      ...dto,
       type: 'remote.command',
       cmdId,
       expiresAt: Date.now() + COMMAND_TTL_MS,
       byTargetId: dto.byTargetId ?? null,
-      action: dto.action,
-      mediaId: dto.mediaId,
-      mediaFileId: dto.mediaFileId,
-      episodeId: dto.episodeId,
-      positionSeconds: dto.positionSeconds,
-      level: dto.level,
-      muted: dto.muted,
-      trackId: dto.trackId,
-      subtitleId: dto.subtitleId,
     });
     // Never `emitToUser` here: a fallback broadcast would let one phone pause
     // every device the target account owns.
@@ -162,9 +205,20 @@ export class RemoteService {
       this.logger.warn(
         `Target ${targetId} resolved to a dead connection ${connectionId}: treating as offline`,
       );
-      throw new NotFoundException('device_offline');
+      throw new NotFoundException('remote.error_device_offline');
     }
 
+    // What this launch plays counts for the account that started it, not the one
+    // the target is signed into. The device keeps its own session: only the
+    // playback is attributed.
+    if (dto.action === 'load' && dto.mediaFileId) {
+      this.events.claimAttribution(targetId, me.id, dto.mediaFileId);
+    }
+    this.logger.debug(
+      `Delivered ${dto.action} to ${targetId} (cmd ${cmdId})` +
+        `${dto.qualityId ? ` quality=${dto.qualityId}` : ''}` +
+        `${dto.trackId ? ` track=${dto.trackId}` : ''}`,
+    );
     return { cmdId };
   }
 
@@ -174,6 +228,7 @@ export class RemoteService {
   async canControl(
     me: User,
     targetUserId: number | null,
+    deviceId: string | null,
   ): Promise<{ allowed: boolean; reason: string }> {
     if (targetUserId == null) {
       // The admin-only "shared device" case: a target with no owning profile.
@@ -187,24 +242,17 @@ export class RemoteService {
     const targetUser = await this.userRepo.findOne({ where: { id: targetUserId } });
     if (!targetUser) return { allowed: false, reason: 'target_user_missing' };
 
-    if (!targetUser.allowRemoteControlOfMyDevices) {
-      return { allowed: false, reason: 'target_opted_out' };
+    if (!deviceId) return { allowed: false, reason: 'no_device_id' };
+    // The device itself granted this, by displaying a code someone standing in
+    // front of it read. No social relationship is involved.
+    if (!(await this.grants.isGranted(me.id, deviceId))) {
+      return { allowed: false, reason: 'device_not_granted' };
     }
-    if (!me.allowRemoteControlOfOthers) {
-      return { allowed: false, reason: 'caller_lacks_control_grant' };
-    }
-    // Both directions ACCEPTED: a public-profile follow is auto-accepted with no
-    // consent from the target, so a one-way follow must never grant control.
-    if (!(await this.social.areMutualFollowers(me.id, targetUserId))) {
-      return { allowed: false, reason: 'not_mutual_followers' };
-    }
-    if (me.shareDisabled) return { allowed: false, reason: 'caller_share_disabled' };
-    if (targetUser.shareDisabled) return { allowed: false, reason: 'target_share_disabled' };
     // Re-read now, not the SSE connection's connect-time snapshot: the target
     // may have been disabled hours into an already-authorized connection.
     if (!targetUser.enabled) return { allowed: false, reason: 'target_disabled' };
 
-    return { allowed: true, reason: 'household' };
+    return { allowed: true, reason: 'granted' };
   }
 
   private isAdmin(user: User): boolean {
@@ -236,7 +284,7 @@ export class RemoteService {
     const pending = this.events.drainCommands(me.id, targetId);
     if (pending === null) {
       this.logger.warn(`User ${me.id} polled unknown target ${targetId}`);
-      throw new NotFoundException('device_offline');
+      throw new NotFoundException('remote.error_device_offline');
     }
     return pending;
   }
@@ -249,66 +297,61 @@ export class RemoteService {
     const found = await this.findTargetOwner(me, targetId);
     if (!found) {
       this.logger.warn(`User ${me.id} reached for unknown/invisible target ${targetId}`);
-      throw new NotFoundException('device_offline');
+      throw new NotFoundException('remote.error_device_offline');
     }
-    const { allowed, reason } = await this.canControl(me, found.ownerId);
+    const { allowed, reason } = await this.canControl(
+      me,
+      found.ownerId,
+      deviceIdOf(targetId),
+    );
     if (!allowed) {
       this.logger.warn(
         `User ${me.id} denied control of target ${targetId} (owner ${found.ownerId}): ${reason}`,
       );
-      throw new ForbiddenException(reason);
+      // The API answers a translation key: user-facing copy stays out of an
+      // English-only backend, and the interceptor renders it.
+      throw new ForbiddenException(`remote.error_${reason}`);
     }
     return found;
   }
 
   /** Visibility only: an id resolves within the caller's own connections or a
-   *  mutual follower's, never as a global key. Consent is `canControl`'s job. */
+   *  device it has been granted, never as a global key. Consent is
+   *  `canControl`'s job. */
   private async findTargetOwner(me: User, targetId: string): Promise<ResolvedTarget | null> {
     const ownConnectionId = this.events.resolveTarget(me.id, targetId);
     if (ownConnectionId) {
       return { ownerId: me.id, connectionId: ownConnectionId, ownerUsername: null };
     }
 
-    for (const ownerId of await this.mutualFollowerIds(me.id)) {
-      const connectionId = this.events.resolveTarget(ownerId, targetId);
+    const deviceId = deviceIdOf(targetId);
+    for (const grant of await this.grants.grantedDevices(me.id)) {
+      if (grant.deviceId !== deviceId) continue;
+      const connectionId = this.events.resolveTarget(grant.ownerUserId, targetId);
       if (!connectionId) continue;
-      const owner = await this.userRepo.findOne({ where: { id: ownerId } });
-      return { ownerId, connectionId, ownerUsername: owner?.username ?? null };
+      const owner = await this.userRepo.findOne({ where: { id: grant.ownerUserId } });
+      return {
+        ownerId: grant.ownerUserId,
+        connectionId,
+        ownerUsername: owner?.username ?? null,
+      };
+    }
+
+    // An admin is authorized on every target, so it must also be able to resolve
+    // one. Kept last: a granted device answers through the clause above.
+    if (this.isAdmin(me)) {
+      for (const connection of this.events.listAll()) {
+        if (connection.targetId !== targetId) continue;
+        const owner = await this.userRepo.findOne({ where: { id: connection.userId } });
+        return {
+          ownerId: connection.userId,
+          connectionId: connection.connectionId,
+          ownerUsername: owner?.username ?? null,
+        };
+      }
     }
 
     return null;
-  }
-
-  /** Owner plus every mutual follower currently authorized to control the
-   *  owner's devices: the same gates `canControl` applies, resolved in bulk
-   *  from `mutualFollowerIds` instead of a second query. Exposed so
-   *  `EventsService`'s household fan-out hook doesn't reimplement consent. */
-  async authorizedViewerIds(ownerId: number): Promise<number[]> {
-    const owner = await this.userRepo.findOne({ where: { id: ownerId } });
-    if (!owner?.enabled || owner.shareDisabled || !owner.allowRemoteControlOfMyDevices) {
-      return [ownerId];
-    }
-    const mutualIds = await this.mutualFollowerIds(ownerId);
-    if (mutualIds.length === 0) return [ownerId];
-    const viewers = await this.userRepo.find({
-      where: { id: In(mutualIds), shareDisabled: false, allowRemoteControlOfOthers: true },
-    });
-    return [ownerId, ...viewers.map((v) => v.id)];
-  }
-
-  /** Mutual (both ACCEPTED) follow edges: the structural "household" scope
-   *  that bounds target discovery, independent of either side's opt-in flags. */
-  private async mutualFollowerIds(userId: number): Promise<number[]> {
-    const [following, followers] = await Promise.all([
-      this.followRepo.find({
-        where: { follower: { id: userId }, status: FollowStatus.ACCEPTED },
-      }),
-      this.followRepo.find({
-        where: { following: { id: userId }, status: FollowStatus.ACCEPTED },
-      }),
-    ]);
-    const followingIds = new Set(following.map((f) => f.followingId));
-    return followers.map((f) => f.followerId).filter((id) => followingIds.has(id));
   }
 
   private toDto(

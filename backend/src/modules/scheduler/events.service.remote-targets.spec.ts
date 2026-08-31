@@ -63,6 +63,21 @@ describe('EventsService: remote target registry', () => {
     expect(mine.find((r) => r.targetId === 'dev-a#t1')?.formFactor).toBe('tv');
   });
 
+  it('gives a launch claim to the matching playback, once', () => {
+    const events = setup();
+    events.claimAttribution('tv#t1', 7, 42);
+
+    // The file is part of the match: a target that starts something else in the
+    // meantime must not inherit the launcher.
+    expect(events.takeAttribution('tv#t1', 42)).toBe(7);
+    // Consumed: the next playback on that target is the device's own again.
+    expect(events.takeAttribution('tv#t1', 42)).toBeNull();
+
+    events.claimAttribution('tv#t1', 7, 42);
+    expect(events.takeAttribution('tv#t1', 99)).toBeNull();
+    expect(events.takeAttribution(null, 42)).toBeNull();
+  });
+
   it('refuses to resolve another user\'s target', () => {
     const events = setup();
     connect(events, 1, { targetId: 'mine#t1' });

@@ -2,6 +2,7 @@ import { Injectable, computed, inject } from '@angular/core';
 import { CastService } from './cast.service';
 import { CastPlayerService, CastSubtitleOption } from './cast-player.service';
 import { parseAudioIndex } from '../utils/player.utils';
+import { TranslateService } from '@ngx-translate/core';
 import { PlaybackOption, PlaybackTarget } from './playback-target';
 
 /**
@@ -12,6 +13,7 @@ import { PlaybackOption, PlaybackTarget } from './playback-target';
 export class CastPlaybackTarget implements PlaybackTarget {
   private readonly cast = inject(CastService);
   private readonly cp = inject(CastPlayerService);
+  private readonly translate = inject(TranslateService);
 
   readonly buffering = this.cast.buffering;
   readonly currentTime = this.cast.currentTime;
@@ -28,7 +30,15 @@ export class CastPlaybackTarget implements PlaybackTarget {
   readonly spriteMetadata = this.cp.spriteMetadata;
   readonly availableSubtitles = this.cp.availableSubtitles;
   readonly availableAudioTracks = this.cp.availableAudioTracks;
-  readonly availableQualities = this.cp.availableQualities;
+  /** Same second line as a remote target: one eco rung per height would
+   *  otherwise show the same label twice. */
+  readonly availableQualities = computed<PlaybackOption[]>(() =>
+    this.cp.availableQualities().map((q) => ({
+      id: q.id,
+      label: q.label,
+      sub: q.lowBandwidth ? this.translate.instant('player.low_bandwidth') : undefined,
+    })),
+  );
   readonly activeSubtitleId = this.cp.activeSubtitleId;
   readonly activeAudioTrackId = this.cp.activeAudioTrackId;
   readonly activeQualityId = this.cp.activeQualityId;
@@ -86,6 +96,8 @@ export class CastPlaybackTarget implements PlaybackTarget {
   readonly isStarting = computed(() => false);
   readonly isIdle = computed(() => false);
   readonly targetOffline = computed(() => false);
+  /** A receiver is started by the sender's own gesture, so this cannot arise. */
+  readonly autoplayBlocked = computed(() => false);
   readonly canStopControlling = false;
 
   skip(): void {

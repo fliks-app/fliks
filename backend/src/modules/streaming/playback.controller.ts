@@ -25,7 +25,7 @@ import {
   LiveSessionRegistry,
   type PlaybackState as LivePlaybackState,
 } from './live-session.service';
-import { EventsService } from '../scheduler/events.service';
+import { EventsService, type RemoteQualityRung } from '../scheduler/events.service';
 
 /** Debounce window for DB writes — heartbeat fires every 10 s but we
  *  flush playback state on a coarser cadence to avoid hammering
@@ -208,6 +208,8 @@ export class PlaybackController {
       sessionId?: string;
       state?: LivePlaybackState;
       quality?: string | null;
+      qualities?: RemoteQualityRung[] | null;
+      autoplayBlocked?: boolean;
       episodeLabel?: string | null;
       supportsVolume?: boolean;
       subtitleId?: string | null;
@@ -231,6 +233,9 @@ export class PlaybackController {
 
     let stateChanged = false;
     let sessionLost = false;
+    // Declared out here on purpose: `updated` is scoped to the block below, and
+    // the history write happens after it.
+    let attributedUserId: number | null = null;
     if (body.sessionId) {
       const before = this.liveSessions.get(body.sessionId);
       const previousState = before?.state;
@@ -238,6 +243,8 @@ export class PlaybackController {
         position: body.positionSeconds,
         state: body.state,
         quality: body.quality,
+        qualities: body.qualities,
+        autoplayBlocked: body.autoplayBlocked,
         episodeLabel: body.episodeLabel,
         supportsVolume: body.supportsVolume,
         subtitleId: body.subtitleId,
@@ -247,6 +254,7 @@ export class PlaybackController {
         volume: body.volume,
         muted: body.muted,
       });
+      attributedUserId = updated?.attributedUserId ?? null;
       stateChanged = !!updated && !!body.state && previousState !== body.state;
       // The client believes the session is alive but the registry
       // doesn't know it — surface that so the client can recover.
@@ -277,6 +285,8 @@ export class PlaybackController {
             supportsVolume: updated.supportsVolume,
             subtitleId: updated.subtitleId,
             quality: updated.quality,
+            qualities: updated.qualities,
+            autoplayBlocked: updated.autoplayBlocked,
             audioTrackIndex: updated.audioTrackIndex,
             subtitleTrackIndex: updated.subtitleTrackIndex,
             lastCmdId: body.lastCmdId ?? null,
@@ -289,7 +299,11 @@ export class PlaybackController {
       }
     }
 
-    const dbKey = `${user.id}:${mediaId}:${body.episodeId ?? 0}`;
+    // A playback launched here by remote control counts for whoever launched it,
+    // the way a cast session counts for the phone that started it. The device
+    // keeps its own login: only the history moves.
+    const historyUserId = attributedUserId ?? user.id;
+    const dbKey = `${historyUserId}:${mediaId}:${body.episodeId ?? 0}`;
     const now = Date.now();
     const last = this.lastDbWriteAt.get(dbKey);
     const dur = body.durationSeconds ?? 0;
@@ -316,7 +330,7 @@ export class PlaybackController {
     for (const [key, entry] of this.lastDbWriteAt) {
       if (entry.at < staleBefore) this.lastDbWriteAt.delete(key);
     }
-    const state = await this.playbackService.updateState(user.id, mediaId, {
+    const state = await this.playbackService.updateState(historyUserId, mediaId, {
       positionSeconds: body.positionSeconds,
       durationSeconds: body.durationSeconds,
       mediaFileId: body.mediaFileId,

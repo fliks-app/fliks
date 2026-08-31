@@ -38,7 +38,10 @@ export class RemotePlaybackTarget implements PlaybackTarget {
   /** A selected target is present even with nothing playing: releasing it is
    *  an explicit action, not a side effect of stopping the media. */
   readonly hasMedia = computed(() => this.remote.isRemoting());
-  readonly isPaused = computed(() => this.remote.targetState()?.state !== 'playing');
+  /** Only a real pause, never buffering: a target filling its buffer is on its
+   *  way to playing, and showing a play icon there invites a press that would
+   *  stop it. */
+  readonly isPaused = computed(() => this.remote.targetState()?.state === 'paused');
   readonly buffering = computed(() => this.remote.targetState()?.state === 'buffering');
   readonly volume = computed(() => this.remote.targetState()?.volume ?? 1);
   readonly muted = computed(() => this.remote.targetState()?.muted ?? false);
@@ -59,8 +62,15 @@ export class RemotePlaybackTarget implements PlaybackTarget {
   readonly activeSubtitleId = computed(() => this.remote.targetState()?.subtitleId ?? null);
   readonly spriteUrl = signal<string | null>(null);
   readonly spriteMetadata = signal<SpriteMetadata | null>(null);
-  /** No quality control on a remote target: an empty list hides the picker. */
-  readonly availableQualities = signal<PlaybackOption[]>([]);
+  /** The target's own rungs, so a pick names an id it accepts. There is one eco
+   *  rung per height, so without the second line the list repeats a label. */
+  readonly availableQualities = computed<PlaybackOption[]>(() =>
+    (this.remote.targetState()?.qualities ?? []).map((q) => ({
+      id: q.id,
+      label: q.label,
+      sub: q.lowBandwidth ? this.translate.instant('player.low_bandwidth') : undefined,
+    })),
+  );
   readonly expanded = remoteOverlayOpen;
 
   private readonly audioOptions = signal<CastAudioOption[]>([]);
@@ -147,8 +157,13 @@ export class RemotePlaybackTarget implements PlaybackTarget {
     void this.remote.send(targetId, { action: 'subtitle', subtitleId: sub?.id ?? null });
   }
 
-  selectQuality(_quality: PlaybackOption): void {
-    console.warn('[remote-playback-target] quality cannot be changed on a remote target');
+  selectQuality(quality: PlaybackOption): void {
+    const targetId = this.remote.selectedTargetId();
+    if (!targetId) {
+      console.warn('[remote-playback-target] selectQuality with no selected target');
+      return;
+    }
+    void this.remote.send(targetId, { action: 'quality', qualityId: quality.id });
   }
 
   private readonly introMarker = signal<TimeMarker | null>(null);
@@ -174,6 +189,11 @@ export class RemotePlaybackTarget implements PlaybackTarget {
     () => this.remote.targetState() === null && !this.isStarting(),
   );
   readonly targetOffline = this.remote.targetOffline.asReadonly();
+  /** Its own play button is refused for the same reason, so the card has to say
+   *  where the gesture must happen instead of implying it can act. */
+  readonly autoplayBlocked = computed(
+    () => this.remote.targetState()?.autoplayBlocked ?? false,
+  );
   readonly canStopControlling = true;
 
   skip(): void {

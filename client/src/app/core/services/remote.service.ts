@@ -3,8 +3,9 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Subject, firstValueFrom } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
-import { RemoteCommand, SseService } from './sse.service';
+import { RemoteCommand, RemoteQualityRung, SseService } from './sse.service';
 import { ToastService } from './toast.service';
+import { CastSettingsService } from './cast-settings.service';
 
 export type RemoteAction = RemoteCommand['action'];
 
@@ -24,6 +25,9 @@ export interface RemoteNowPlaying {
   supportsVolume: boolean;
   subtitleId: string | null;
   quality: string | null;
+  /** The target's own ladder: the only id space it accepts for a quality change. */
+  qualities: RemoteQualityRung[] | null;
+  autoplayBlocked: boolean;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;
 }
@@ -51,11 +55,20 @@ export type RemoteCommandInput = {
   muted?: boolean;
   trackId?: string;
   subtitleId?: string | null;
+  qualityId?: string;
 };
 
 /** Semantic-ack budget. A cold transcode start is the only slow case. */
 const ACK_TIMEOUT_MS = 3_000;
 const LOAD_ACK_TIMEOUT_MS = 20_000;
+/** Answered by restarting the stream, so the first report is a cold transcode
+ *  start away rather than a frame: `next` remounts the player on another file
+ *  and `quality` reloads the current one. */
+const SLOW_ACK_ACTIONS: ReadonlySet<RemoteAction> = new Set<RemoteAction>([
+  'load',
+  'next',
+  'quality',
+]);
 /** Matches the Cast sender's window so a drag emits a handful of POSTs, not one per input event. */
 const DISPATCH_COALESCE_MS = 220;
 const SELECTED_TARGET_KEY = 'fliks.remote.target';
@@ -76,6 +89,7 @@ export class RemoteService {
   private readonly sse = inject(SseService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
+  private readonly castSettings = inject(CastSettingsService);
   private readonly translate = inject(TranslateService);
 
   // ── Controllee ──
@@ -102,12 +116,18 @@ export class RemoteService {
   readonly isRemoting = computed(() => this.selectedTargetId() !== null);
 
   private stateAt = 0;
-  private stopSentAt = 0;
+  /** The session a stop retired, so only its own farewell heartbeat is ignored. */
+  private stoppedSessionId: string | null = null;
   private observingSince = 0;
   private expectedMediaFileId: number | null = null;
   private readonly reportedState = signal<RemoteNowPlaying | null>(null);
   private readonly pinnedVolume = signal<number | null>(null);
   private volumePinAt = 0;
+  /** Same optimistic hold for a seek: the target reads its position back only
+   *  once the seek lands, so without this the cue that triggered the seek stayed
+   *  on screen until a later heartbeat. */
+  private readonly pinnedPosition = signal<number | null>(null);
+  private positionPinAt = 0;
   private readonly wallClock = signal(0);
   private ackTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingCmdId: string | null = null;
@@ -118,10 +138,13 @@ export class RemoteService {
    *  extrapolated from its ARRIVAL time, so there is no clock to synchronise. */
   readonly interpolatedPosition = computed(() => {
     const s = this.reportedState();
-    if (!s) return 0;
-    if (s.state !== 'playing') return s.positionSeconds;
-    const elapsed = (this.wallClock() - this.stateAt) / 1000;
-    return Math.min(s.positionSeconds + Math.max(0, elapsed), s.durationSeconds || Infinity);
+    const pinned = this.pinnedPosition();
+    const from = pinned ?? s?.positionSeconds ?? 0;
+    const since = pinned !== null ? this.positionPinAt : this.stateAt;
+    if (!s) return from;
+    if (s.state !== 'playing') return from;
+    const elapsed = (this.wallClock() - since) / 1000;
+    return Math.min(from + Math.max(0, elapsed), s.durationSeconds || Infinity);
   });
   readonly targetState = computed(() => {
     const s = this.reportedState();
@@ -135,6 +158,8 @@ export class RemoteService {
    *  for the one that is starting. */
   noteLoadSent(mediaFileId: number | null): void {
     this.expectedMediaFileId = mediaFileId;
+    this.stoppedSessionId = null;
+    this.pinnedPosition.set(null);
     this.reportedState.set(null);
     this.observingSince = Date.now();
   }
@@ -147,11 +172,15 @@ export class RemoteService {
     this.noteStopSent();
   }
 
-  /** Stamp a stop so the target's farewell heartbeat is not mistaken for
-   *  playback that is still running. */
+  /** Name the stopped session so its farewell heartbeat is not mistaken for
+   *  playback that is still running. The exact session rather than a time
+   *  window: switching episode on the target retires one session and starts
+   *  another within the same second, and a window swallowed the new one's
+   *  first report. Read before the state is cleared. */
   noteStopSent(): void {
-    this.stopSentAt = Date.now();
+    this.stoppedSessionId = this.reportedState()?.sessionId ?? null;
     this.expectedMediaFileId = null;
+    this.pinnedPosition.set(null);
     this.reportedState.set(null);
     this.pendingAction.set(null);
   }
@@ -167,6 +196,20 @@ export class RemoteService {
 
   /** Hold the level the user just set until the target confirms it, so the
    *  slider stops fighting the reports it triggers. */
+  /** Hold a requested position until the target reports one that matches it. */
+  private pinPosition(seconds: number): void {
+    this.pinnedPosition.set(seconds);
+    this.positionPinAt = Date.now();
+  }
+
+  /** Every seek path funnels through here, so one call covers the cue button,
+   *  the skip offers and a seekbar drag. */
+  private notePositionIntent(input: RemoteCommandInput): void {
+    if (input.action === 'seek' && input.positionSeconds !== undefined) {
+      this.pinPosition(input.positionSeconds);
+    }
+  }
+
   pinVolume(level: number): void {
     this.pinnedVolume.set(level);
     this.volumePinAt = Date.now();
@@ -182,12 +225,11 @@ export class RemoteService {
         untracked(() => void this.refreshTargets());
         return;
       }
-      // The server says which target stopped, so there is nothing to infer from
-      // silence and nothing a trailing heartbeat can put back.
-      if (event.type === 'remote.stopped') {
-        untracked(() => this.noteTargetStopped(String(event['targetId'] ?? '')));
-      }
     });
+
+    // The server says which target stopped, so there is nothing to infer from
+    // silence and nothing a trailing heartbeat can put back.
+    this.sse.stopped.subscribe((targetId) => this.noteTargetStopped(targetId));
 
     effect(() => {
       this.sse.remoteState();
@@ -238,7 +280,7 @@ export class RemoteService {
   private isKnownAction(action: string): action is RemoteAction {
     return [
       'load', 'play', 'pause', 'playpause', 'stop',
-      'seek', 'volume', 'mute', 'next', 'audio', 'subtitle',
+      'seek', 'volume', 'mute', 'next', 'audio', 'subtitle', 'quality',
     ].includes(action);
   }
 
@@ -275,8 +317,15 @@ export class RemoteService {
           params: self ? { self } : {},
         }),
       );
-      this.targets.set(rows);
+      // A household row is the only one carrying an owner name, so that is the
+      // exact discriminator. The selected target survives the filter: hiding it
+      // would read as the device going offline.
       const selected = this.selectedTargetId();
+      this.targets.set(
+        this.castSettings.settings().showHouseholdTargets
+          ? rows
+          : rows.filter((r) => !r.ownerUsername || r.targetId === selected),
+      );
       if (selected && !rows.some((r) => r.targetId === selected)) {
         // Never fall back to local playback on its own: offer it, don't do it.
         this.targetOffline.set(true);
@@ -315,6 +364,9 @@ export class RemoteService {
 
   /** Coalesce a dragged control so one gesture costs a handful of POSTs. */
   sendCoalesced(targetId: string, input: RemoteCommandInput): void {
+    // Hold the position at the gesture, not when the coalesced POST finally
+    // goes out, so a drag tracks the thumb instead of trailing it.
+    this.notePositionIntent(input);
     const existing = this.coalesceTimers.get(input.action);
     if (existing) clearTimeout(existing);
     this.coalesceTimers.set(
@@ -328,6 +380,7 @@ export class RemoteService {
 
   async send(targetId: string, input: RemoteCommandInput, retry = true): Promise<void> {
     this.pendingAction.set(input.action);
+    this.notePositionIntent(input);
     try {
       const res = await firstValueFrom(
         this.http.post<{ cmdId: string }>(`/api/remote/${encodeURIComponent(targetId)}/command`, {
@@ -337,10 +390,13 @@ export class RemoteService {
       );
       if (input.action === 'stop') {
         this.noteStopSent();
-      } else if (input.action === 'load') {
-        this.noteLoadSent(input.mediaFileId ?? null);
-        this.armAck(res.cmdId, input.action);
       } else {
+        // `next` moves the target to another file, so the reading on screen is
+        // the previous episode's until the new session reports. A quality
+        // change keeps its file and position, so its reading stays valid.
+        if (input.action === 'load' || input.action === 'next') {
+          this.noteLoadSent(input.action === 'load' ? input.mediaFileId ?? null : null);
+        }
         this.armAck(res.cmdId, input.action);
       }
     } catch (err) {
@@ -355,7 +411,13 @@ export class RemoteService {
       this.pendingAction.set(null);
       this.targetOffline.set(true);
       console.warn('[remote] command failed', input.action, targetId, err);
-      this.toast.error(this.translate.instant('remote.error_command_failed'));
+      // The interceptor already toasts an HTTP failure, with the server's own
+      // reason rather than one generic line, so toasting here too showed the
+      // same failure twice. It stays silent on statuses the interceptor skips.
+      const status = err instanceof HttpErrorResponse ? err.status : 0;
+      if (status === 0 || status === 401) {
+        this.toast.error(this.translate.instant('remote.error_command_failed'));
+      }
     }
   }
 
@@ -373,7 +435,7 @@ export class RemoteService {
       if (action === 'load') this.expectedMediaFileId = null;
       console.warn('[remote] no ack for', cmdId, action);
       this.toast.error(this.translate.instant('remote.error_no_response'));
-    }, action === 'load' ? LOAD_ACK_TIMEOUT_MS : ACK_TIMEOUT_MS);
+    }, SLOW_ACK_ACTIONS.has(action) ? LOAD_ACK_TIMEOUT_MS : ACK_TIMEOUT_MS);
   }
 
   /** Fold one state report from the selected target into the controller UI. */
@@ -382,10 +444,11 @@ export class RemoteService {
     if (!s || s.targetId !== this.selectedTargetId()) return;
     // The target flushes one last heartbeat on its way out of the player; taking
     // it would put the stopped playback straight back on screen.
-    if (Date.now() - this.stopSentAt < 3_000) {
-      console.debug('[remote] ignoring a state frame that trails a stop');
+    if (this.stoppedSessionId && s.sessionId === this.stoppedSessionId) {
+      console.debug('[remote] ignoring the farewell heartbeat of', s.sessionId);
       return;
     }
+    this.stoppedSessionId = null;
     // An exact test rather than a time window: the outgoing session flushes one
     // last heartbeat for the previous file as it navigates away.
     if (this.expectedMediaFileId !== null) {
@@ -413,6 +476,8 @@ export class RemoteService {
       supportsVolume: s.supportsVolume,
       subtitleId: s.subtitleId,
       quality: s.quality,
+      qualities: s.qualities,
+      autoplayBlocked: s.autoplayBlocked,
       audioTrackIndex: s.audioTrackIndex,
       subtitleTrackIndex: s.subtitleTrackIndex,
     });
@@ -422,6 +487,13 @@ export class RemoteService {
       const converged = s.volume !== null && Math.abs(s.volume - pinned) < 0.02;
       if (converged || Date.now() - this.volumePinAt > 2_500) {
         this.pinnedVolume.set(null);
+      }
+    }
+    const pinnedPos = this.pinnedPosition();
+    if (pinnedPos !== null) {
+      const converged = Math.abs(s.positionSeconds - pinnedPos) < 3;
+      if (converged || Date.now() - this.positionPinAt > 3_000) {
+        this.pinnedPosition.set(null);
       }
     }
     if (s.lastCmdId && s.lastCmdId === this.pendingCmdId) {

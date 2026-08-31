@@ -28,6 +28,8 @@ function frame(over: Partial<RemoteState> = {}): RemoteState {
     supportsVolume: true,
     subtitleId: null,
     quality: '1080p',
+    qualities: null,
+    autoplayBlocked: false,
     audioTrackIndex: 0,
     subtitleTrackIndex: null,
     lastCmdId: null,
@@ -39,6 +41,7 @@ function setup() {
   const remoteState = signal<RemoteState | null>(null);
   const sse = {
     commands: new Subject<RemoteCommand>(),
+    stopped: new Subject<string>(),
     remoteState,
     lastEvent: signal(null),
     connectionId: signal<string | null>(null),
@@ -57,7 +60,7 @@ function setup() {
   });
   const service = TestBed.inject(RemoteService);
   service.selectedTargetId.set('tv#1');
-  return { service, remoteState };
+  return { service, remoteState, sse };
 }
 
 /**
@@ -83,6 +86,49 @@ describe('RemoteService stop handling', () => {
     service.ingestState();
 
     expect(service.targetState()).toBeNull();
+  });
+
+  it('clears on a stop the server announced', () => {
+    const { service, remoteState, sse } = setup();
+    remoteState.set(frame());
+    service.ingestState();
+    expect(service.targetState()).not.toBeNull();
+
+    // Read from a subject, not the shared last-value signal: the server emits
+    // `remote.targets_changed` immediately after, which replaced the stop
+    // before any effect had run.
+    sse.stopped.next('tv#1');
+
+    expect(service.targetState()).toBeNull();
+  });
+
+  it('takes the next session right away when the target switches episode', () => {
+    const { service, remoteState } = setup();
+    remoteState.set(frame({ sessionId: 'sid-1' }));
+    service.ingestState();
+
+    // The target retires one session and starts another within the same second,
+    // so only the dead session's own farewell may be ignored.
+    service.noteStopSent();
+    remoteState.set(frame({ sessionId: 'sid-2', mediaFileId: 3, positionSeconds: 0 }));
+    service.ingestState();
+
+    expect(service.targetState()?.sessionId).toBe('sid-2');
+  });
+
+  it('holds a requested seek position until the target reports it', () => {
+    const { service, remoteState } = setup();
+    remoteState.set(frame({ positionSeconds: 30 }));
+    service.ingestState();
+
+    // The cue that triggers a skip is computed from this position, so it has to
+    // move on the gesture rather than when the coalesced POST goes out.
+    service.sendCoalesced('tv#1', { action: 'seek', positionSeconds: 90 });
+    expect(service.interpolatedPosition()).toBeGreaterThanOrEqual(90);
+
+    remoteState.set(frame({ positionSeconds: 91 }));
+    service.ingestState();
+    expect(service.interpolatedPosition()).toBeGreaterThanOrEqual(91);
   });
 
   it('advances the position between reports, and holds it when paused', () => {

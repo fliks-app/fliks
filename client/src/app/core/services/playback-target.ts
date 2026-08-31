@@ -62,6 +62,8 @@ export interface PlaybackTarget {
   /** The selected target dropped off the listing. Always false on Cast, whose
    *  session disappearing already ends `isConnected`. */
   readonly targetOffline: Signal<boolean>;
+  /** The target cannot start on its own: only a gesture on that device will. */
+  readonly autoplayBlocked: Signal<boolean>;
   /** Stop what the target is playing. On Cast the session IS the playback, so
    *  the two collapse; a network target keeps existing after it stops. */
   stopPlayback(): void;

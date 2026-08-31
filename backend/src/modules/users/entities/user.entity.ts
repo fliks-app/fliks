@@ -142,16 +142,6 @@ export class User extends BaseEntity {
   @Column({ default: true })
   spoilerHideTitles: boolean;
 
-  /** Manager-only: lets this account send remote-control commands to a
-   *  household member's devices (still gated by that member's own opt-in). */
-  @Column({ default: false })
-  allowRemoteControlOfOthers: boolean;
-
-  /** Self-editable consent: lets a mutual, accepted-both-ways follower control
-   *  this account's own devices via remote control. */
-  @Column({ default: false })
-  allowRemoteControlOfMyDevices: boolean;
-
   /** Computed permissions from the linked role (isAdmin overrides with all). */
   get permissions(): string[] {
     if (this.isAdmin) {

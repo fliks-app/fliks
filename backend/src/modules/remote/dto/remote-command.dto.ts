@@ -24,6 +24,7 @@ export const REMOTE_COMMAND_ACTIONS: RemoteCommandAction[] = [
   'next',
   'audio',
   'subtitle',
+  'quality',
 ];
 
 /** Every field is absolute / state-setting, never a delta: see `RemoteCommandAction`. */
@@ -66,6 +67,10 @@ export class RemoteCommandDto {
   @ValidateIf((_, v) => v !== null)
   @IsString()
   subtitleId?: string | null;
+
+  @IsString()
+  @IsOptional()
+  qualityId?: string;
 
   /** The issuing controller's own target id: attribution and the self-target guard. */
   @IsString()

@@ -28,6 +28,10 @@ export interface CastSettings {
   maxQuality: string; // 'original' | '2160p' | '1080p' | '720p' | '480p'
   audioChannels: number; // 2 = stereo, 6 = 5.1, 8 = 7.1
   subtitleStyle: CastSubtitleStyle;
+  /** List household members' devices among the remote targets. Holding the
+   *  permission is not the same as wanting the longer list every day, so this
+   *  is a per-device display choice rather than a second capability. */
+  showHouseholdTargets: boolean;
   /** Capabilities cache, keyed by Cast device friendly name. Populated on
    *  first session via the `urn:x-cast:app.fliks.caps` namespace probe so
    *  subsequent sessions to the same device skip the round-trip. */
@@ -52,6 +56,7 @@ const DEFAULTS: CastSettings = {
   maxQuality: '1080p',
   audioChannels: 2,
   subtitleStyle: { ...DEFAULT_CAST_SUBTITLE_STYLE },
+  showHouseholdTargets: true,
 };
 
 @Injectable({ providedIn: 'root' })

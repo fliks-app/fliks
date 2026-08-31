@@ -253,15 +253,11 @@ export class UsersService implements OnModuleInit {
       if (dto.requirePasswordChange !== undefined) {
         target.requirePasswordChange = dto.requirePasswordChange;
       }
-      if (dto.allowRemoteControlOfOthers !== undefined) {
-        target.allowRemoteControlOfOthers = dto.allowRemoteControlOfOthers;
-      }
     } else if (
       dto.roleId !== undefined ||
       dto.enabled !== undefined ||
       dto.isAdmin !== undefined ||
-      dto.requirePasswordChange !== undefined ||
-      dto.allowRemoteControlOfOthers !== undefined
+      dto.requirePasswordChange !== undefined
     ) {
       throw new ForbiddenException(
         'Only users with users.manage permission can change role or enabled status',
@@ -298,9 +294,6 @@ export class UsersService implements OnModuleInit {
       target.spoilerHideOverviews = dto.spoilerHideOverviews;
     if (dto.spoilerHideTitles !== undefined)
       target.spoilerHideTitles = dto.spoilerHideTitles;
-    if (dto.allowRemoteControlOfMyDevices !== undefined) {
-      target.allowRemoteControlOfMyDevices = dto.allowRemoteControlOfMyDevices;
-    }
 
     // Opting out of the social layer: run the teardown once, on the
     // false → true transition (after the row is saved so the flag is set).

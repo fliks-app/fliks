@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import type { RemoteQualityRung } from '../scheduler/events.service';
 import { StreamLifetime } from './lifetime-constants';
 import type { TranscodeReason } from './dto/playback-info.dto';
 import type { BurnInSubtitle } from './transcoding';
@@ -50,6 +51,16 @@ export interface LiveSession {
   /** Instance suffix when split off a concurrent sibling, else null (#638). */
   instanceId: string | null;
   quality: string | null;
+  /** The target's own quality ladder. Reported by the target rather than
+   *  rebuilt here: the rungs depend on its transcode decision, so a list
+   *  assembled elsewhere would offer ids it does not accept. */
+  qualities: RemoteQualityRung[] | null;
+  /** Set when this playback was launched from another device by remote control:
+   *  the account it counts for, which is the launcher rather than the account
+   *  the target is signed into. */
+  attributedUserId: number | null;
+  /** The target's browser refused to start playback without a user gesture. */
+  autoplayBlocked: boolean;
   kind: SessionKind;
   deviceLabel: string | null;
   /** Real host OS name+version ("macOS 26") from the client DeviceProfile;
@@ -144,6 +155,7 @@ export interface CreateLiveSessionInput {
   posterUrl?: string | null;
   profileHash?: string | null;
   quality?: string | null;
+  attributedUserId?: number | null;
   kind: SessionKind;
   deviceLabel?: string | null;
   systemName?: string | null;
@@ -242,6 +254,9 @@ export function buildLiveSession(
       profileBase: input.profileHash ?? null,
       instanceId: null,
       quality: input.quality ?? null,
+      qualities: null,
+      attributedUserId: input.attributedUserId ?? null,
+      autoplayBlocked: false,
       kind: input.kind,
       deviceLabel: input.deviceLabel ?? null,
       systemName: input.systemName ?? null,
@@ -381,6 +396,8 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       position?: number;
       state?: PlaybackState;
       quality?: string | null;
+      qualities?: RemoteQualityRung[] | null;
+      autoplayBlocked?: boolean;
       episodeLabel?: string | null;
       supportsVolume?: boolean;
       subtitleId?: string | null;
@@ -397,6 +414,10 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
     if (payload.position !== undefined) session.position = payload.position;
     if (payload.state) session.state = payload.state;
     if (payload.quality !== undefined) session.quality = payload.quality;
+    if (payload.qualities !== undefined) session.qualities = payload.qualities;
+    if (payload.autoplayBlocked !== undefined) {
+      session.autoplayBlocked = payload.autoplayBlocked;
+    }
     if (payload.subtitleId !== undefined) {
       session.subtitleId = payload.subtitleId;
     }

@@ -21,7 +21,7 @@ import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/a
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { BrowserDeviceProfileService, DeviceProfile } from '../../core/services/browser-device-profile.service';
 import type { PreRollItem } from '@fliks/plugin-contract/ui';
-import { SseService, RemoteCommand } from '../../core/services/sse.service';
+import { SseService, RemoteCommand, RemoteQualityRung } from '../../core/services/sse.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
@@ -69,6 +69,10 @@ interface ImmersivePlugin {
   exit(): Promise<void>;
   setLightStatusBar(options: { light: boolean }): Promise<void>;
 }
+/** Long enough to fold a start-up burst into one report, short enough that a
+ *  controller still sees the change in about a frame's time. */
+const FORCED_SAVE_COALESCE_MS = 300;
+
 const Immersive = registerPlugin<ImmersivePlugin>('Immersive');
 
 interface PipPlugin {
@@ -1454,8 +1458,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         await this.startCastFromPlayer(startPos);
       } else if (!this.isNativeEngine()) {
         this.engine!.play().catch(() => {
-          // No user gesture on a device started remotely: the browser refuses autoplay.
+          // No user gesture on a device started remotely: the browser refuses
+          // autoplay. Reported, not just logged: a controller otherwise shows a
+          // paused device with no way to tell why, and its own play button is
+          // refused for the same reason.
           console.warn('[player] autoplay blocked');
+          this.autoplayBlocked.set(true);
+          void this.savePosition(true);
         });
       }
 
@@ -1579,6 +1588,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyed = true;
+    if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
     this.remoteCommandSub.unsubscribe();
     this.savePosition();
     if (!this.castService.isConnected()) {
@@ -2081,6 +2091,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (this.desktopFarSeekNeedsReload(t)) void this.seekByReload(t);
       else void this.awaitSeekUnlock(t);
     }
+    // Every engine funnels through here, unlike the DOM `seeked` event, which
+    // only exists where there is a <video>: without this a desktop or native
+    // seek reached a controller only on the next heartbeat.
+    void this.savePosition(true);
+
     // Suppress auto-skip for 2s after a manual seek so the user can step back
     // into the intro on purpose without being kicked forward again.
     this.autoSkipSuppressedUntil = Date.now() + 2000;
@@ -2900,6 +2915,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (casting) this.applyCastSubtitle(cmd.subtitleId ?? null);
         else await this.onSelectSubtitleById(cmd.subtitleId ?? null);
         break;
+      case 'quality':
+        if (!cmd.qualityId) {
+          console.warn('[remote] quality without a qualityId', cmd.cmdId);
+          break;
+        }
+        if (casting) await this.castPlayerService.changeQuality(cmd.qualityId);
+        else await this.onSelectQualityById(cmd.qualityId);
+        break;
       case 'stop':
         if (casting) this.castService.disconnect();
         this.remoteService.markApplied(cmd.cmdId);
@@ -2914,10 +2937,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     await this.savePosition(true);
   }
 
+  /** Set when the browser refused to start playback without a user gesture, and
+   *  cleared as soon as anything actually plays. */
+  readonly autoplayBlocked = signal(false);
+  private readonly autoplayClearEffect = effect(() => {
+    if (!this.state.videoStarted()) return;
+    untracked(() => {
+      if (!this.autoplayBlocked()) return;
+      this.autoplayBlocked.set(false);
+      void this.savePosition(true);
+    });
+  });
+
   /** A local pause reaches a remote controller on the next heartbeat, so
    *  without this it lags up to the 10s save interval. Every transport source
    *  funnels through the engine's state, so one effect covers them all. */
-  private lastReportedPaused: boolean | null = null;
+  private lastReportedPaused: { fileId: number; paused: boolean } | null = null;
   private readonly transportReportEffect = effect(() => {
     const paused = this.paused();
     untracked(() => this.reportTransportChange(paused));
@@ -2927,8 +2962,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  path moves this flag around while there is nothing worth reporting. */
   private reportTransportChange(paused: boolean): void {
     if (!this.state.videoStarted()) return;
-    if (this.lastReportedPaused === paused) return;
-    this.lastReportedPaused = paused;
+    // Keyed by file: an episode switch dips through paused while `videoStarted`
+    // is false, so the dip is never reported, and a memory carried over from
+    // the previous episode then suppressed the report that playback resumed.
+    const last = this.lastReportedPaused;
+    if (last && last.fileId === this.mediaFileId && last.paused === paused) return;
+    this.lastReportedPaused = { fileId: this.mediaFileId, paused };
     void this.savePosition(true);
   }
 
@@ -2936,7 +2975,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  by a click, so report the value rather than the gesture. */
   private lastReportedTracks = '';
   private readonly trackReportEffect = effect(() => {
-    const key = `${this.activeAudioTrackId()}|${this.activeSubtitleId()}`;
+    const key = `${this.mediaFileId}|${this.activeAudioTrackId()}|${this.activeSubtitleId()}`;
     untracked(() => {
       if (!this.state.videoStarted()) return;
       if (this.lastReportedTracks === key) return;
@@ -4096,7 +4135,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // them — inline closures would pin this route-scoped component per session.
   private onSeeked = () => {
     this.resetStallWatchdog();
-    this.savePosition();
+    // Forced: a jump is exactly what a controller cannot interpolate, so
+    // leaving it to the ten-second cadence left every other remote showing a
+    // position the target had already left. No loop: a controller reports
+    // nothing back, it only sends on a gesture.
+    void this.savePosition(true);
   };
   private spriteAbort?: AbortController;
 
@@ -4336,7 +4379,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     const sub = this.availableSubtitles().find(s => s.id === id) ?? null;
     if (!sub) {
+      // Falling through to selectSubtitle(null) persisted "off" for this media,
+      // so an id arriving before the tracks are enumerated both missed and
+      // overwrote the remembered choice.
       console.warn('[player] onSelectSubtitleById: id not found, tracks may not be enumerated yet', id);
+      return;
     }
     await this.selectSubtitle(sub);
   }
@@ -4499,6 +4546,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  remote command so its semantic ack (lastCmdId on the next heartbeat)
    *  arrives in ~1s instead of waiting up to 10s. */
   private lastForcedSaveAt = 0;
+  private forcedSaveTrailing: ReturnType<typeof setTimeout> | null = null;
 
   /** Active audio as a streamInfo index: the one space the backend, the media
    *  detail header and every client agree on. `availableAudioTracks()` is in
@@ -4514,7 +4562,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async savePosition(force = false) {
     if (force) {
       const now = Date.now();
-      if (now - this.lastForcedSaveAt < 300) return;
+      if (now - this.lastForcedSaveAt < FORCED_SAVE_COALESCE_MS) {
+        // Coalesce, never drop: a start fires the first frame, the transport
+        // flip and the track auto-selection within a few dozen ms, and dropping
+        // the later ones reported the state before playback began.
+        if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
+        this.forcedSaveTrailing = setTimeout(() => {
+          this.forcedSaveTrailing = null;
+          void this.savePosition(true);
+        }, FORCED_SAVE_COALESCE_MS);
+        return;
+      }
       this.lastForcedSaveAt = now;
     }
     // mediaFileId is the pre-roll's while mediaId still names the film — an
@@ -4530,6 +4588,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.castService.isConnected()) {
       pos = this.castService.currentTime();
       dur = this.castService.duration() || this.duration();
+    } else if (this.state.seekLocked()) {
+      // The engine still answers the pre-seek position until it settles, and
+      // reporting that would send a controller back where it just left.
+      pos = this.state.currentTime();
+      dur = this.duration();
     } else if (this.engine) {
       pos = this.engine.currentTime;
       dur = this.engine.duration || this.duration();
@@ -4562,6 +4625,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       episodeLabel?: string | null;
       supportsVolume?: boolean;
       subtitleId?: string | null;
+      qualities?: RemoteQualityRung[] | null;
+      autoplayBlocked?: boolean;
     } = {
       positionSeconds: pos,
       durationSeconds: dur || 0,
@@ -4581,10 +4646,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const lastCmdId = this.remoteService.lastAppliedCmdId();
       if (lastCmdId) payload.lastCmdId = lastCmdId;
       payload.quality = this.activeQualityId() ?? null;
+      // A controller cannot rebuild these: the rungs follow this session's
+      // transcode decision.
+      payload.qualities = this.availableQualities().map((q) => ({
+        id: q.id,
+        label: q.label,
+        lowBandwidth: q.lowBandwidth,
+      }));
       payload.audioTrackIndex = this.activeAudioIndex();
       payload.episodeLabel = this.episodeTitle() || null;
       payload.supportsVolume = this.engine?.supportsVolume ?? true;
       payload.subtitleId = this.activeSubtitleId();
+      payload.autoplayBlocked = this.autoplayBlocked();
     }
 
     // Offline queue persists position only — the heartbeat-related

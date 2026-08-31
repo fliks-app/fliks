@@ -336,6 +336,13 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'remote',
+        loadComponent: () =>
+          import('./features/app-settings/remote-settings/remote-settings').then(
+            (m) => m.RemoteSettingsPageComponent,
+          ),
+      },
+      {
         path: 'storage',
         canActivate: [noTvGuard],
         loadComponent: () =>

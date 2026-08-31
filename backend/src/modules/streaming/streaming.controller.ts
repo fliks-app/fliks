@@ -930,11 +930,24 @@ export class StreamingController {
       }
     }
 
+    // A launch from another device counts for whoever started it. Resolved here
+    // because this is where the playback that claims it actually begins.
+    const attributionTargetId = this.events.targetIdFor(sseConnectionId);
+    const attributedUserId = this.events.takeAttribution(
+      attributionTargetId,
+      mediaFileId,
+    );
+    this.log.debug(
+      `Session for file ${mediaFileId} on target ${attributionTargetId ?? 'none'}` +
+        ` (sse ${sseConnectionId ?? 'none'}) attributed to ${attributedUserId ?? 'its own account'}`,
+    );
+
     // The LiveSession owns every per-playback setting: future HLS
     // requests resolve it via `?sid=...` and read settings straight off
     // this entry — no shared per-file mutable state to clobber.
     const liveSession = this.liveSessions.create({
       userId: userId ?? null,
+      attributedUserId,
       username: user.username ?? null,
       mediaFileId,
       mediaTitle: resolved.media?.title ?? null,

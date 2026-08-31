@@ -270,7 +270,17 @@ export type RemoteCommandAction =
   | 'mute'
   | 'next'
   | 'audio'
-  | 'subtitle';
+  | 'subtitle'
+  | 'quality';
+
+/** One rung of a target's quality ladder. `lowBandwidth` marks an eco rung, of
+ *  which there is one per height, so a controller listing both without it shows
+ *  the same label twice. */
+export interface RemoteQualityRung {
+  id: string;
+  label: string;
+  lowBandwidth?: boolean;
+}
 
 /** Playback state of one target, as last reported by the target itself. */
 export interface RemoteStatePayload {
@@ -289,6 +299,10 @@ export interface RemoteStatePayload {
   supportsVolume: boolean;
   subtitleId: string | null;
   quality: string | null;
+  qualities: RemoteQualityRung[] | null;
+  /** The target could not start on its own: a controller must say so rather than
+   *  show a paused device whose play button is refused for the same reason. */
+  autoplayBlocked: boolean;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;
   /** Echo of the last command the target applied: the semantic ack. */
@@ -331,6 +345,9 @@ interface PolledTarget extends ConnectionIdentity {
 /** A polled target is present only as long as it keeps polling: the same rule
  *  as an open socket, expressed on the cadence the client actually uses. */
 const POLLED_TARGET_TTL_MS = 30_000;
+/** A remote launch is claimed here and consumed by the playback the target
+ *  starts a moment later; anything older never belonged to that launch. */
+const ATTRIBUTION_TTL_MS = 60_000;
 /** Bounded so a device that registers and never polls cannot grow unchecked. */
 const POLLED_QUEUE_MAX = 20;
 
@@ -362,6 +379,13 @@ export class EventsService {
    *  never leaks a function into the client-facing DTO. */
   private readonly connectionCompleters = new Map<string, () => void>();
   private readonly polled = new Map<string, PolledTarget>();
+  /** Who launched what on which target, pending the playback that claims it.
+   *  Lives here rather than in the remote module so the streaming module can
+   *  read it without depending on that module. */
+  private readonly attributions = new Map<
+    string,
+    { userId: number; mediaFileId: number; at: number }
+  >();
   /** Set by `RemoteService` so a household-scoped event reaches mutual
    *  followers too, without this generic pub/sub knowing about follows or
    *  consent flags. Never invoked for `emitToUsers`, so the household
@@ -382,7 +406,11 @@ export class EventsService {
   /** Deliver only to the given user's SSE connections. */
   emitToUser(userId: number, event: SseEvent): void {
     this.dispatch({ audience: [userId], connectionIds: null, event });
-    if (event.type === 'remote.state' || event.type === 'remote.targets_changed') {
+    if (
+      event.type === 'remote.state' ||
+      event.type === 'remote.targets_changed' ||
+      event.type === 'remote.stopped'
+    ) {
       this.householdFanOut?.(event, userId);
     }
   }
@@ -458,10 +486,50 @@ export class EventsService {
   }
 
   /** Live targets owned by `userId`, newest connection first. */
+  /** Record that `userId` started this file on `targetId` from elsewhere, so the
+   *  playback about to begin there counts as theirs. */
+  claimAttribution(targetId: string, userId: number, mediaFileId: number): void {
+    this.log.debug(
+      `User ${userId} claims file ${mediaFileId} on ${targetId}`,
+    );
+    this.attributions.set(targetId, { userId, mediaFileId, at: Date.now() });
+  }
+
+  /** Consume the claim for a playback starting on `targetId`. Matched on the
+   *  file as well as the target: a target that starts something else in the
+   *  meantime must not inherit the launcher. */
+  takeAttribution(targetId: string | null, mediaFileId: number): number | null {
+    if (!targetId) return null;
+    const claim = this.attributions.get(targetId);
+    if (!claim) return null;
+    this.attributions.delete(targetId);
+    if (Date.now() - claim.at > ATTRIBUTION_TTL_MS) {
+      this.log.debug(`Attribution claim for ${targetId} expired unused`);
+      return null;
+    }
+    if (claim.mediaFileId !== mediaFileId) {
+      this.log.debug(
+        `Attribution claim for ${targetId} was for file ${claim.mediaFileId}, not ${mediaFileId}`,
+      );
+      return null;
+    }
+    return claim.userId;
+  }
+
   listForUser(userId: number): RemoteTargetConnection[] {
+    return this.collect((ownerId) => ownerId === userId);
+  }
+
+  /** Every live target, whichever account owns it. For the admin listing, which
+   *  has to match what the command path already authorizes. */
+  listAll(): RemoteTargetConnection[] {
+    return this.collect(() => true);
+  }
+
+  private collect(owns: (userId: number) => boolean): RemoteTargetConnection[] {
     const rows: RemoteTargetConnection[] = [];
     for (const [connectionId, identity] of this.connections) {
-      if (identity.userId !== userId) continue;
+      if (!owns(identity.userId)) continue;
       if (!identity.targetId) continue;
       rows.push({ connectionId, ...identity });
     }
@@ -472,7 +540,7 @@ export class EventsService {
         this.emitToUser(target.userId, { type: 'remote.targets_changed' });
         continue;
       }
-      if (target.userId !== userId || !target.targetId) continue;
+      if (!owns(target.userId) || !target.targetId) continue;
       rows.push({ connectionId: key, ...target });
     }
     return rows.sort((a, b) => b.since - a.since);
