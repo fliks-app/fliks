@@ -283,6 +283,7 @@ export interface RemoteStatePayload {
   state: 'playing' | 'paused' | 'buffering';
   volume: number | null;
   muted: boolean | null;
+  supportsVolume: boolean;
   quality: string | null;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;

@@ -382,6 +382,8 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   get playbackRate(): number { return this.video?.playbackRate ?? 1; }
   set playbackRate(rate: number) { if (this.video) this.video.playbackRate = rate; }
   get volume(): number { return this.video?.volume ?? 1; }
+  readonly supportsVolume = true;
+
   set volume(v: number) { if (this.video) this.video.volume = v; }
   get muted(): boolean { return this.video?.muted ?? false; }
   set muted(m: boolean) { if (this.video) this.video.muted = m; }

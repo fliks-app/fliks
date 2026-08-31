@@ -207,6 +207,7 @@ export class PlaybackController {
       state?: LivePlaybackState;
       quality?: string | null;
       episodeLabel?: string | null;
+      supportsVolume?: boolean;
       audioTrackIndex?: number | null;
       subtitleTrackIndex?: number | null;
       sseConnectionId?: string;
@@ -229,6 +230,7 @@ export class PlaybackController {
         state: body.state,
         quality: body.quality,
         episodeLabel: body.episodeLabel,
+        supportsVolume: body.supportsVolume,
         audioTrackIndex: body.audioTrackIndex,
         subtitleTrackIndex: body.subtitleTrackIndex,
         sseConnectionId,
@@ -262,6 +264,7 @@ export class PlaybackController {
             state: updated.state,
             volume: updated.volume,
             muted: updated.muted,
+            supportsVolume: updated.supportsVolume,
             quality: updated.quality,
             audioTrackIndex: updated.audioTrackIndex,
             subtitleTrackIndex: updated.subtitleTrackIndex,

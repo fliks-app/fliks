@@ -81,6 +81,7 @@ export class CastPlaybackTarget implements PlaybackTarget {
   }
 
   // Marker-driven skipping is not wired into the Cast sender today.
+  readonly canSetVolume = computed(() => true);
   readonly skipCue = computed<{ labelKey: string } | null>(() => null);
   readonly isStarting = computed(() => false);
   readonly isIdle = computed(() => false);

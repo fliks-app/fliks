@@ -487,6 +487,8 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     }
   }
   get volume(): number { return this._volume; }
+  readonly supportsVolume = false;
+
   set volume(v: number) {
     this._volume = v;
     /* AVPlay uses system volume; no per-stream knob. */

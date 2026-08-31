@@ -155,6 +155,8 @@ export class RemotePlaybackTarget implements PlaybackTarget {
 
   /** Same range tests the local player applies, against the interpolated
    *  position, so the offer appears and retracts at the same instants. */
+  readonly canSetVolume = computed(() => this.remote.targetState()?.supportsVolume ?? true);
+
   readonly skipCue = computed<{ labelKey: string } | null>(() => {
     const at = this.remote.interpolatedPosition();
     if (inIntroRange(this.introMarker(), at)) return { labelKey: 'player.skip_intro' };

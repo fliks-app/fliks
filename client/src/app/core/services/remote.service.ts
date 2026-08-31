@@ -21,6 +21,7 @@ export interface RemoteNowPlaying {
   state: 'playing' | 'paused' | 'buffering';
   volume: number | null;
   muted: boolean | null;
+  supportsVolume: boolean;
   quality: string | null;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;
@@ -385,6 +386,7 @@ export class RemoteService {
       state: s.state,
       volume: s.volume,
       muted: s.muted,
+      supportsVolume: s.supportsVolume,
       quality: s.quality,
       audioTrackIndex: s.audioTrackIndex,
       subtitleTrackIndex: s.subtitleTrackIndex,

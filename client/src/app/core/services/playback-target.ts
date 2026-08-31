@@ -41,6 +41,9 @@ export interface PlaybackTarget {
   selectSubtitle(sub: PlaybackOption | null): void;
   selectAudio(track: PlaybackOption | null): void;
   selectQuality(quality: PlaybackOption): void;
+  /** False when the target's engine cannot change a per-stream level, so the
+   *  slider is hidden instead of doing nothing. */
+  readonly canSetVolume: Signal<boolean>;
   /** The skip offer that applies right now, or null. `labelKey` is an i18n key
    *  so the surface stays translation-only. */
   readonly skipCue: Signal<{ labelKey: string } | null>;

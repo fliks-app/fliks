@@ -25,6 +25,7 @@ function frame(over: Partial<RemoteState> = {}): RemoteState {
     state: 'playing',
     volume: 0.5,
     muted: false,
+    supportsVolume: true,
     quality: '1080p',
     audioTrackIndex: 0,
     subtitleTrackIndex: null,

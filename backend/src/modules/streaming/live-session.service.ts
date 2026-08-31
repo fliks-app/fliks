@@ -69,6 +69,9 @@ export interface LiveSession {
   /** Client-composed "S1:E2 - Title" for a series, null for a film. Carried so
    *  a controller can label what a target plays without a second lookup. */
   episodeLabel: string | null;
+  /** The target's engine owns a per-stream level. False where the platform owns
+   *  it, so a controller hides its slider rather than offering a no-op. */
+  supportsVolume: boolean;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;
   /** Reported by the client heartbeat: lets a remote-control controller show
@@ -275,6 +278,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       position: input.position ?? 0,
       state: 'playing',
       episodeLabel: null,
+      supportsVolume: true,
       audioTrackIndex: null,
       subtitleTrackIndex: null,
       volume: null,
@@ -361,6 +365,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       state?: PlaybackState;
       quality?: string | null;
       episodeLabel?: string | null;
+      supportsVolume?: boolean;
       audioTrackIndex?: number | null;
       subtitleTrackIndex?: number | null;
       sseConnectionId?: string | null;
@@ -374,6 +379,9 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
     if (payload.position !== undefined) session.position = payload.position;
     if (payload.state) session.state = payload.state;
     if (payload.quality !== undefined) session.quality = payload.quality;
+    if (payload.supportsVolume !== undefined) {
+      session.supportsVolume = payload.supportsVolume;
+    }
     if (payload.episodeLabel !== undefined) {
       session.episodeLabel = payload.episodeLabel;
     }

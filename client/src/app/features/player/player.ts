@@ -4543,6 +4543,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       lastCmdId?: string;
       audioTrackIndex?: number | null;
       episodeLabel?: string | null;
+      supportsVolume?: boolean;
     } = {
       positionSeconds: pos,
       durationSeconds: dur || 0,
@@ -4564,6 +4565,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       payload.quality = this.activeQualityId() ?? null;
       payload.audioTrackIndex = this.activeAudioIndex();
       payload.episodeLabel = this.episodeTitle() || null;
+      payload.supportsVolume = this.engine?.supportsVolume ?? true;
     }
 
     // Offline queue persists position only — the heartbeat-related

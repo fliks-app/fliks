@@ -50,6 +50,7 @@ describe('SystemController.activeStreams recency filter', () => {
       position: 0,
       state: 'playing',
       episodeLabel: null,
+    supportsVolume: true,
       audioTrackIndex: null,
       subtitleTrackIndex: null,
       volume: null,

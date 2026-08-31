@@ -121,26 +121,30 @@
             </button>
           </div>
 
-          <!-- Volume -->
-          <div class="flex items-center justify-center gap-2">
-            <button class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'player.volume' | translate" (click)="t.toggleMute()">
-              @if (t.muted() || t.volume() === 0) {
-                <svg lucideVolumeX class="h-5 w-5"></svg>
-              } @else {
-                <svg lucideVolume2 class="h-5 w-5"></svg>
-              }
-            </button>
-            <input
-              type="range"
-              class="range range-xs flex-1 max-w-56"
-              [attr.aria-label]="'player.volume' | translate"
-              [min]="0"
-              [max]="1"
-              [step]="0.05"
-              [value]="t.muted() ? 0 : t.volume()"
-              (input)="t.setVolume(+$any($event.target).value)"
-            />
-          </div>
+          <!-- Volume. Hidden where the target's platform owns the level: its
+               engine can only pretend to set one, and a dead slider is worse
+               than none. -->
+          @if (t.canSetVolume()) {
+            <div class="flex items-center justify-center gap-2">
+              <button class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'player.volume' | translate" (click)="t.toggleMute()">
+                @if (t.muted() || t.volume() === 0) {
+                  <svg lucideVolumeX class="h-5 w-5"></svg>
+                } @else {
+                  <svg lucideVolume2 class="h-5 w-5"></svg>
+                }
+              </button>
+              <input
+                type="range"
+                class="range range-xs flex-1 max-w-56"
+                [attr.aria-label]="'player.volume' | translate"
+                [min]="0"
+                [max]="1"
+                [step]="0.05"
+                [value]="t.muted() ? 0 : t.volume()"
+                (input)="t.setVolume(+$any($event.target).value)"
+              />
+            </div>
+          }
 
           <!-- Pickers -->
           <div class="flex items-center justify-center gap-3 lg:gap-2 flex-wrap min-h-12 lg:min-h-8">
