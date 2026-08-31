@@ -173,10 +173,19 @@ describe('PluginCatalogueComponent — the version picker', () => {
   });
 
   it('leaves the installed version unpickable', async () => {
-    const { fixture } = await createComponent([['fliks.acme', '1.1.0']], true);
+    const { fixture, http } = await createComponent([['fliks.acme', '1.1.0']], true);
     const installed = Array.from(
       (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.dropdown-content button'),
     ).find((b) => b.textContent?.includes('1.1.0'));
-    expect(installed!.disabled).toBe(true);
+
+    // `aria-disabled`, not `disabled`: the option stays in the focus order so a
+    // D-pad can land on the version that is actually running.
+    expect(installed!.getAttribute('aria-disabled')).toBe('true');
+    expect(installed!.disabled).toBe(false);
+
+    // Unpickable is enforced by swallowing the click, not by the attribute.
+    installed!.click();
+    await settle(fixture);
+    http.expectNone({ url: '/api/plugins/sources/1/inspect', method: 'POST' });
   });
 });
