@@ -100,6 +100,7 @@ export class RemoteService {
   private stateAt = 0;
   private stopSentAt = 0;
   private observingSince = 0;
+  private expectedMediaFileId: number | null = null;
   private readonly reportedState = signal<RemoteNowPlaying | null>(null);
   private readonly pinnedVolume = signal<number | null>(null);
   private volumePinAt = 0;
@@ -125,10 +126,20 @@ export class RemoteService {
     return { ...s, volume: pinned };
   });
 
+  /** Drop what the target was playing and name what we asked for, so neither
+   *  the previous title nor the old session's farewell heartbeat can stand in
+   *  for the one that is starting. */
+  noteLoadSent(mediaFileId: number | null): void {
+    this.expectedMediaFileId = mediaFileId;
+    this.reportedState.set(null);
+    this.observingSince = Date.now();
+  }
+
   /** Stamp a stop so the target's farewell heartbeat is not mistaken for
    *  playback that is still running. */
   noteStopSent(): void {
     this.stopSentAt = Date.now();
+    this.expectedMediaFileId = null;
     this.reportedState.set(null);
     this.pendingAction.set(null);
   }
@@ -304,6 +315,9 @@ export class RemoteService {
       );
       if (input.action === 'stop') {
         this.noteStopSent();
+      } else if (input.action === 'load') {
+        this.noteLoadSent(input.mediaFileId ?? null);
+        this.armAck(res.cmdId, input.action);
       } else {
         this.armAck(res.cmdId, input.action);
       }
@@ -346,6 +360,15 @@ export class RemoteService {
     if (Date.now() - this.stopSentAt < 3_000) {
       console.debug('[remote] ignoring a state frame that trails a stop');
       return;
+    }
+    // An exact test rather than a time window: the outgoing session flushes one
+    // last heartbeat for the previous file as it navigates away.
+    if (this.expectedMediaFileId !== null) {
+      if (s.mediaFileId !== this.expectedMediaFileId) {
+        console.debug('[remote] ignoring a state frame for the previous file');
+        return;
+      }
+      this.expectedMediaFileId = null;
     }
     this.stateAt = Date.now();
     this.wallClock.set(this.stateAt);

@@ -108,6 +108,25 @@ describe('RemoteService stop handling', () => {
     }
   });
 
+  it('drops the previous title when a new load is sent', () => {
+    const { service, remoteState } = setup();
+    remoteState.set(frame({ mediaFileId: 2 }));
+    service.ingestState();
+    expect(service.targetState()).not.toBeNull();
+
+    service.noteLoadSent(9);
+    expect(service.targetState()).toBeNull();
+
+    // The outgoing session flushes one last heartbeat for the old file.
+    remoteState.set(frame({ mediaFileId: 2, positionSeconds: 31 }));
+    service.ingestState();
+    expect(service.targetState()).toBeNull();
+
+    remoteState.set(frame({ mediaFileId: 9, mediaTitle: 'Another', positionSeconds: 0 }));
+    service.ingestState();
+    expect(service.targetState()?.mediaTitle).toBe('Another');
+  });
+
   it('pins the volume the user set until the target agrees', () => {
     const { service, remoteState } = setup();
     remoteState.set(frame({ volume: 0.5 }));
