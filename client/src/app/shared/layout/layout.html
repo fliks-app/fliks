@@ -4,19 +4,22 @@
      [class.md:drawer-open]="device.isTablet() && navbar.effectiveSidebarPinned()">
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative">
+    <!-- Watched by an IntersectionObserver to derive `scrollAtTop` without ever
+         reading the scroll position. Absolute, so it adds no layout height. -->
+    <div #topSentinel aria-hidden="true" class="absolute top-0 left-0 h-5 w-px pointer-events-none"></div>
     <nav
       appTvRow
-      class="navbar fixed left-0 right-0 z-30 transition-all duration-300"
-      [style.padding-top]="tv.isTizen() ? '0.5rem' : 'calc(env(safe-area-inset-top, 0px) + 4px)'"
+      class="navbar fixed left-0 right-0 z-30 transition-all duration-300 tv:px-[var(--page-p)] tv:static"
+      [style.padding-top]="tv.isTv() ? 'calc(env(safe-area-inset-top, 0px) + var(--page-p) / 2)' : 'calc(env(safe-area-inset-top, 0px) + 4px)'"
       [class.top-0]="!tv.isTv() || tv.isTizen()"
       [class.top-4]="tv.isAndroidTv()"
       [class.lg:hidden]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
       [class.md:hidden]="device.isTablet() && navbar.effectiveSidebarPinned()"
       [class.-translate-y-full]="navbarHidden()"
-      [class.bg-base-100]="!navbarTransparent() && !background.url()"
+      [class.bg-base-100]="!navbarTransparent() && !background.url() && !tv.isTv()"
       [class.app-navbar-veil]="!navbarTransparent() && !!background.url()"
-      [class.backdrop-blur-sm]="!navbarTransparent() && !!background.url()"
-      [class.shadow-sm]="!navbarTransparent() && !background.url()"
+      [class.backdrop-blur-sm]="!navbarTransparent() && !!background.url() && !tv.isTv()"
+      [class.shadow-sm]="!navbarTransparent() && !background.url() && !tv.isTv()"
       [class.bg-transparent]="navbarTransparent()"
       [class.text-white]="navbarTransparent()"
       [class.nav-hero-icons]="navbarTransparent()"
@@ -52,11 +55,8 @@
           <!-- Hero page without a clearlogo: render nothing. The empty branch
                keeps it from falling through to the mobile-title / app-name
                fallbacks below — no title in the clearlogo slot. -->
-        } @else if (isNative && isHomeRoute() && navbar.mobileNavTitle()) {
-          <span class="flex items-center gap-2 pl-2 text-lg font-bold min-w-0">
-            <img src="fliks-icon.svg" alt="" class="h-7 w-7 shrink-0" />
-            <span class="truncate" [attr.title]="navbar.mobileNavTitle()">{{ navbar.mobileNavTitle() }}</span>
-          </span>
+        } @else if (isHomeRoute()) {
+          <img src="fliks-logo-ondark.svg" [alt]="'app.name' | translate" class="h-7 w-auto pl-2 object-contain object-left" />
         } @else if (navbar.mobileNavTitle()) {
           <span class="block min-w-0 pl-2 text-lg font-bold truncate" [attr.title]="navbar.mobileNavTitle()">{{
             navbar.mobileNavTitle()
@@ -95,21 +95,19 @@
         <app-user-menu />
       </div>
     </nav>
-    <!-- Spacer for fixed navbar on mobile (navbar height + safe area; reduced on hero pages so fanart extends under status bar).
-         TV has no safe-area-inset-top (no notch / status bar), so the 3rem
-         falls flush against the navbar; bump to 4rem there so content has
-         the same visual breathing room as phones/tablets. -->
+    <!-- Spacer for the fixed navbar (navbar height + safe area); collapsed on
+         hero pages so the fanart extends under the status bar, and on TV where
+         the navbar sits in the flow. -->
     <div
       [class.lg:hidden]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
       [class.md:hidden]="device.isTablet() && navbar.effectiveSidebarPinned()"
-      [class.h-20]="!navbar.isHeroPage() && tv.isTv()"
-      [style.height]="navbar.isHeroPage() ? '0px' : tv.isTv() ? null : 'calc(3rem + env(safe-area-inset-top, 0px))'"
+      [style.height]="navbar.isHeroPage() || tv.isTv() ? '0px' : 'calc(3rem + env(safe-area-inset-top, 0px))'"
     ></div>
     <!-- Desktop top-right: Cast + User -->
     <div appTvRow
          [appTvRowSnap]="true"
-         class="hidden items-center justify-between gap-1 px-4 relative z-30"
-         [style.padding-top]="tv.isTv() ? 'calc(4rem + env(safe-area-inset-top, 0px))' : isNative ? 'calc(0.3rem + env(safe-area-inset-top, 1.5rem))' : '1rem'"
+         class="hidden items-center justify-between gap-1 px-[var(--page-p)] relative z-30"
+         [style.padding-top]="tv.isTv() ? 'calc(env(safe-area-inset-top, 0px) + var(--page-p) / 2)' : isNative ? 'calc(0.3rem + env(safe-area-inset-top, 1.5rem))' : '1rem'"
          [class.lg:flex]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
          [class.md:flex]="device.isTablet() && navbar.effectiveSidebarPinned()">
       <!-- Hero back + clearlogo (left) -->
@@ -162,7 +160,7 @@
          `position: sticky` on descendants (sticky would anchor to <main>
          and never engage because the actual scroll happens on the page). -->
     <main
-      class="min-w-0 flex-1 p-4"
+      class="min-w-0 flex-1 py-4 px-[var(--page-p)]"
       [class.overflow-x-clip]="!navbar.isHeroPage()"
       [class.pt-8]="!navbar.isHeroPage() && !isNative && navbar.mobileNavbarVisible()"
     >

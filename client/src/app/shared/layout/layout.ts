@@ -9,6 +9,7 @@ import {
   OnDestroy,
   DestroyRef,
   viewChild,
+  ElementRef,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
@@ -151,6 +152,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly canGoBack = this.navbar.canGoBack;
 
   readonly isNative = Capacitor.isNativePlatform();
+  private readonly topSentinel = viewChild<ElementRef<HTMLElement>>('topSentinel');
   readonly bottomMenuOpen = signal(false);
   readonly keyboardOpen = signal(false);
   readonly navbarHidden = signal(false);
@@ -187,13 +189,40 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.title.setTitle(`${main} · ${this.translate.instant('app.name')}`);
   });
   private lastScrollY = 0;
+  private scrollRaf: number | null = null;
+  private topSentinelObserver?: IntersectionObserver;
+  /** TV never hides the navbar, so the scroll handler would exist only to
+   *  recompute `scrollAtTop` — and reading `scrollY` flushes whatever layout
+   *  the frame has dirtied, which on a windowed library grid is a relayout of
+   *  a 60 000 px document. The sentinel below reports the same thing with no
+   *  layout read at all, so the handler is skipped there entirely. */
   private readonly onScroll = () => {
+    if (this.device.isTv() || this.scrollRaf !== null) return;
+    this.scrollRaf = requestAnimationFrame(() => {
+      this.scrollRaf = null;
+      this.readScroll();
+    });
+  };
+  private readScroll(): void {
     const y = window.scrollY;
     this.navbar.scrollAtTop.set(y < 20);
     if (Math.abs(y - this.lastScrollY) < 10) return;
+    // TV keeps the topbar anchored — it is a D-pad target, and sliding it out
+    // from under the focus ring strands the cursor.
     this.navbarHidden.set(y > this.lastScrollY && y > 56);
     this.lastScrollY = y;
-  };
+  }
+
+  /** `scrollAtTop` without touching the scroll position: a zero-width strip
+   *  pinned to the top of the page, watched by an IntersectionObserver. */
+  private watchTopSentinel(): void {
+    const el = this.topSentinel()?.nativeElement;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    this.topSentinelObserver = new IntersectionObserver(
+      ([entry]) => this.navbar.scrollAtTop.set(entry.isIntersecting),
+    );
+    this.topSentinelObserver.observe(el);
+  }
 
   /** Accessible libraries for the sidebar (raw, as fetched). */
   readonly libraries = signal<LibrarySummary[]>([]);
@@ -272,6 +301,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     }
     // DownloadManagerService is activated by injection (effect in constructor)
     window.addEventListener('scroll', this.onScroll, { passive: true });
+    this.watchTopSentinel();
     if (this.isNative) {
       Keyboard.addListener('keyboardWillShow', () => this.keyboardOpen.set(true));
       Keyboard.addListener('keyboardWillHide', () => this.keyboardOpen.set(false));
@@ -284,12 +314,25 @@ export class LayoutComponent implements OnInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(e => {
         if (e instanceof NavigationEnd) {
+          this.replayPageEnter();
           this.bottomMenuOpen.set(false);
           this.isHomeRoute.set(e.urlAfterRedirects === '/' || e.urlAfterRedirects.startsWith('/?'));
           this.syncNavbarTitleFromRoute();
         }
       });
     this.syncNavbarTitleFromRoute();
+  }
+
+  /** Restart the page-enter animation. Re-adding the class a frame later is
+   *  what lets the same animation run again — reading a layout property to
+   *  force the reflow synchronously costs a full-document relayout, which on
+   *  a long library page lands right where the spinner should stay smooth. */
+  private replayPageEnter(): void {
+    if (!this.device.isTv()) return;
+    const main = document.querySelector('main');
+    if (!main) return;
+    main.classList.remove('page-enter');
+    requestAnimationFrame(() => main.classList.add('page-enter'));
   }
 
   /**
@@ -311,6 +354,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     window.removeEventListener('scroll', this.onScroll);
+    if (this.scrollRaf !== null) cancelAnimationFrame(this.scrollRaf);
+    this.topSentinelObserver?.disconnect();
     if (this.isNative) {
       Keyboard.removeAllListeners();
     }

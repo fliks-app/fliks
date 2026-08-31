@@ -17,6 +17,7 @@ import localePt from '@angular/common/locales/pt';
 import { Capacitor } from '@capacitor/core';
 import { provideServiceWorker } from '@angular/service-worker';
 import { provideRouter, RouteReuseStrategy, withInMemoryScrolling, withViewTransitions } from '@angular/router';
+import { detectDevice } from './core/services/device.service';
 import { HttpBackend, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 
@@ -74,7 +75,11 @@ export const appConfig: ApplicationConfig = {
       withInMemoryScrolling({ scrollPositionRestoration: 'top' }),
       // Poster→hero morph. Off on Capacitor: its WebView never completes a snapshot
       // capture for a launch-created document, so every navigation waits Chrome's 4s timeout.
-      ...(Capacitor.isNativePlatform()
+      // Off on TV for the same reason in miniature: measured on a Tizen 9 panel, the
+      // 1920x1080 snapshot holds the first paint back ~400 ms and buys nothing, since the
+      // root cross-fade is already suppressed (see `::view-transition-old(root)` in
+      // styles.css). `main.page-enter` animates the swap there instead.
+      ...(Capacitor.isNativePlatform() || detectDevice().formFactor === 'tv'
         ? []
         : [
             withViewTransitions({
