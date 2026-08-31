@@ -2,21 +2,6 @@ import { signal, ElementRef } from '@angular/core';
 
 const DEFAULT_BATCH_SIZE = 60;
 
-/** Live measurements of the rendered grid, supplied by the owning component
- *  when windowing is enabled. Every value lives in one coordinate space — CSS
- *  px in the document scroller — so they stay consistent even under a webOS
- *  `zoom` (read rect.top and scroller.scrollTop together). */
-export interface GridMetrics {
-  /** Grid top edge in document coords: rect.top + scroller.scrollTop. */
-  gridTopDoc: number;
-  /** One row's height: a cell's measured height plus the row gap. */
-  rowHeight: number;
-  /** Row gap in px (subtracted once when reserving off-window padding). */
-  rowGap: number;
-  /** Columns currently laid out. */
-  cols: number;
-}
-
 export class InfiniteScrollList<T extends { id: number }> {
   private allItems: T[] = [];
   private visibleCount = 0;
@@ -29,17 +14,8 @@ export class InfiniteScrollList<T extends { id: number }> {
   private unlockOnScroll: (() => void) | null = null;
   private scrollLock = false;
   private scrollLockTimeout: ReturnType<typeof setTimeout> | null = null;
+  private scrollRaf: number | null = null;
   private readonly idIndex = new Map<number, number>();
-
-  // Windowing — opt-in via enableWindowing(). Renders only a row-aligned slice
-  // of allItems around the viewport so large lists don't pile hundreds of DOM
-  // nodes onto the page. Inert (zero behavior change) unless enabled.
-  private windowing = false;
-  private metricsFn: (() => GridMetrics | null) | null = null;
-  private bufferRows = 4;
-  private windowRaf: number | null = null;
-  private windowedOnce = false;
-  private warnedWindowFail = false;
 
   /** All items (reactive — use in computed for counts/stats). */
   readonly all = signal<T[]>([]);
@@ -50,10 +26,6 @@ export class InfiniteScrollList<T extends { id: number }> {
   readonly availableLetters = signal<Set<string>>(new Set());
   /** Currently visible letter based on scroll position. */
   readonly activeLetter = signal('');
-  /** Off-window spacer heights (px). Bound to the grid's padding so the
-   *  scrollbar and absolute item positions match the un-windowed layout. */
-  readonly padTop = signal(0);
-  readonly padBottom = signal(0);
 
   constructor(batchSize = DEFAULT_BATCH_SIZE) {
     this.batchSize = batchSize;
@@ -85,6 +57,18 @@ export class InfiniteScrollList<T extends { id: number }> {
     return this.allItems;
   }
 
+  /** The letter section item `index` falls in — the alphabet index reads this
+   *  from the rendered row rather than from the DOM, which under virtual
+   *  scrolling only holds a handful of rows. */
+  letterAt(index: number): string {
+    let current = this.letterBoundaries[0]?.letter ?? '';
+    for (const b of this.letterBoundaries) {
+      if (b.index <= index) current = b.letter;
+      else break;
+    }
+    return current;
+  }
+
   /** Index of an item id in allItems, or -1. */
   indexOf(id: number): number {
     return this.idIndex.get(id) ?? -1;
@@ -92,7 +76,6 @@ export class InfiniteScrollList<T extends { id: number }> {
 
   /** Load next batch. */
   showMore() {
-    if (this.windowing) return;
     if (this.visibleCount >= this.allItems.length) return;
     this.visibleCount = Math.min(
       this.visibleCount + this.batchSize,
@@ -101,99 +84,15 @@ export class InfiniteScrollList<T extends { id: number }> {
     this.updateVisible();
   }
 
-  // ---------------------------------------------------------------------------
-  // Windowing (opt-in)
-  // ---------------------------------------------------------------------------
-
-  /** Opt in to DOM windowing: only a row-aligned slice around the viewport
-   *  renders, with `bufferRows` of overscan each side so D-pad focus targets
-   *  stay rendered. `metricsFn` reads the live grid. Pages that never call this
-   *  keep the plain slice-0..visibleCount behavior. */
-  enableWindowing(metricsFn: () => GridMetrics | null, bufferRows = 4) {
-    this.windowing = true;
-    this.metricsFn = metricsFn;
-    this.bufferRows = bufferRows;
-    this.hasMore.set(false);
-    this.updateVisible();
-  }
-
-  /** Recompute the window from the current scroll position (rAF-throttled). */
-  onWindowScroll() {
-    if (!this.windowing || this.windowRaf !== null) return;
-    this.windowRaf = requestAnimationFrame(() => {
-      this.windowRaf = null;
-      this.recomputeWindow();
+  /** Coalesce scroll-driven work into one frame: the active-letter tracker
+   *  reads geometry, and doing that per scroll event forces a layout flush on
+   *  every one of them. */
+  private scheduleScrollWork() {
+    if (this.scrollRaf !== null) return;
+    this.scrollRaf = requestAnimationFrame(() => {
+      this.scrollRaf = null;
+      this.onScroll();
     });
-  }
-
-  /** Synchronously ensure the row containing `index` (± buffer) is rendered. */
-  ensureRendered(index: number) {
-    if (!this.windowing) return;
-    const m = this.metricsFn?.();
-    if (!m || m.cols < 1) return;
-    const row = Math.floor(index / m.cols);
-    this.applyWindow(m, row - this.bufferRows, row + this.bufferRows + 1);
-  }
-
-  private recomputeWindow() {
-    const m = this.metricsFn?.();
-    if (!m || m.rowHeight <= 0 || m.cols < 1) {
-      // Metrics not ready yet (grid not laid out) — render everything, which
-      // is exactly the non-windowed behavior, so never worse than before.
-      // Warn once if windowing previously succeeded then broke: that's a grid
-      // CSS / measurement regression silently disabling the DOM cap, not the
-      // benign first-render case.
-      if (this.windowedOnce && this.allItems.length && !this.warnedWindowFail) {
-        this.warnedWindowFail = true;
-        console.warn(
-          '[InfiniteScrollList] grid metrics unavailable after windowing succeeded — ' +
-            'rendering all items. A grid layout change likely broke readGridMetrics().',
-        );
-      }
-      this.visible.set(this.allItems.slice());
-      this.padTop.set(0);
-      this.padBottom.set(0);
-      return;
-    }
-    const scrollTop = (document.scrollingElement ?? document.documentElement).scrollTop;
-    const vh = window.innerHeight;
-    const firstRow = Math.floor((scrollTop - m.gridTopDoc) / m.rowHeight);
-    const lastRow = Math.floor((scrollTop + vh - m.gridTopDoc) / m.rowHeight);
-    this.applyWindow(m, firstRow - this.bufferRows, lastRow + this.bufferRows + 1);
-  }
-
-  private applyWindow(m: GridMetrics, startRowRaw: number, endRowRaw: number) {
-    this.windowedOnce = true;
-    this.warnedWindowFail = false;
-    const total = this.allItems.length;
-    const cols = m.cols;
-    const totalRows = Math.ceil(total / cols);
-    let startRow = Math.max(0, Math.min(startRowRaw, totalRows));
-    let endRow = Math.min(totalRows, Math.max(startRow + 1, endRowRaw));
-    // Never window out the focused card's row — detaching it drops focus to
-    // <body>, and the next arrow press then jumps back to the first card.
-    const focusRow = this.focusedRow(cols);
-    if (focusRow >= 0) {
-      startRow = Math.min(startRow, focusRow);
-      endRow = Math.max(endRow, focusRow + 1);
-    }
-    const windowStart = startRow * cols;
-    const windowEnd = Math.min(total, endRow * cols);
-    // Row gap sits only BETWEEN tracks, never between padding and the first/last
-    // track — drop one gap from each spacer so total height matches exactly.
-    this.padTop.set(startRow > 0 ? startRow * m.rowHeight - m.rowGap : 0);
-    this.padBottom.set(endRow < totalRows ? (totalRows - endRow) * m.rowHeight - m.rowGap : 0);
-    this.visible.set(this.allItems.slice(windowStart, windowEnd));
-  }
-
-  private focusedRow(cols: number): number {
-    if (typeof document === 'undefined') return -1;
-    const active = document.activeElement as HTMLElement | null;
-    const el = active?.closest<HTMLElement>('[data-library-focus^="media:"]');
-    const sel = el?.getAttribute('data-library-focus');
-    if (!sel) return -1;
-    const idx = this.idIndex.get(Number(sel.slice('media:'.length)));
-    return idx == null ? -1 : Math.floor(idx / cols);
   }
 
   /**
@@ -213,27 +112,10 @@ export class InfiniteScrollList<T extends { id: number }> {
       return firstChar === letter;
     });
     if (index < 0) return;
+
     this.activeLetter.set(letter);
     this.scrollLock = true;
     if (this.scrollLockTimeout) clearTimeout(this.scrollLockTimeout);
-
-    if (this.windowing) {
-      const m = this.metricsFn?.();
-      if (m && m.rowHeight > 0 && m.cols >= 1) {
-        // The target card may be windowed out — render it first, then scroll
-        // to its computed Y (scrollIntoView would need the element to exist).
-        this.ensureRendered(index);
-        const targetY = Math.max(
-          0,
-          m.gridTopDoc + Math.floor(index / m.cols) * m.rowHeight - 96,
-        );
-        requestAnimationFrame(() => {
-          window.scrollTo({ top: targetY, left: 0, behavior: 'smooth' });
-          this.armScrollUnlock();
-        });
-        return;
-      }
-    }
 
     if (index >= this.visibleCount) {
       this.visibleCount = Math.min(
@@ -255,8 +137,7 @@ export class InfiniteScrollList<T extends { id: number }> {
     });
   }
 
-  /** Release the scroll lock once the smooth scroll settles (shared by the
-   *  windowed and non-windowed scrollToLetter paths). */
+  /** Release the scroll lock once the smooth scroll settles. */
   private armScrollUnlock() {
     // Re-arming clears the pending timer, so the previous closure has to be
     // dropped here or it stays bound to window with nothing left to remove it.
@@ -294,10 +175,7 @@ export class InfiniteScrollList<T extends { id: number }> {
   trackScroll(idPrefix: string) {
     this.idPrefix = idPrefix;
     if (this.scrollHandler) window.removeEventListener('scroll', this.scrollHandler);
-    this.scrollHandler = () => {
-      this.onWindowScroll();
-      this.onScroll();
-    };
+    this.scrollHandler = () => this.scheduleScrollWork();
     window.addEventListener('scroll', this.scrollHandler, { passive: true });
   }
 
@@ -311,17 +189,13 @@ export class InfiniteScrollList<T extends { id: number }> {
       window.removeEventListener('scroll', this.unlockOnScroll);
       this.unlockOnScroll = null;
     }
-    if (this.windowRaf !== null) {
-      cancelAnimationFrame(this.windowRaf);
-      this.windowRaf = null;
+    if (this.scrollRaf !== null) {
+      cancelAnimationFrame(this.scrollRaf);
+      this.scrollRaf = null;
     }
   }
 
   private updateVisible() {
-    if (this.windowing) {
-      this.recomputeWindow();
-      return;
-    }
     this.visible.set(this.allItems.slice(0, this.visibleCount));
     this.hasMore.set(this.visibleCount < this.allItems.length);
   }
@@ -351,22 +225,6 @@ export class InfiniteScrollList<T extends { id: number }> {
 
   private onScroll() {
     if (this.scrollLock || !this.letterBoundaries.length || !this.idPrefix) return;
-    if (this.windowing) {
-      // Position math — no getElementById, which would miss windowed-out
-      // boundary cards (and skips the per-scroll forced layout entirely).
-      const m = this.metricsFn?.();
-      if (!m || m.rowHeight <= 0 || m.cols < 1) return;
-      const scrollTop = (document.scrollingElement ?? document.documentElement).scrollTop;
-      const topRow = Math.max(0, Math.floor((scrollTop + 96 - m.gridTopDoc) / m.rowHeight));
-      const topIndex = topRow * m.cols;
-      let current = this.letterBoundaries[0].letter;
-      for (const b of this.letterBoundaries) {
-        if (b.index <= topIndex) current = b.letter;
-        else break;
-      }
-      this.activeLetter.set(current);
-      return;
-    }
     let current = this.letterBoundaries[0].letter;
     for (const { letter, itemId } of this.letterBoundaries) {
       const el = document.getElementById(`${this.idPrefix}-${itemId}`);

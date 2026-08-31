@@ -39,9 +39,16 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { AppResumeService } from '../../core/services/app-resume.service';
-import { InfiniteScrollList, type GridMetrics } from '../../shared/utils/infinite-scroll-list';
+import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideX, LucideFilm } from '@lucide/angular';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
+import { NgTemplateOutlet } from '@angular/common';
+import {
+  CdkVirtualScrollViewport,
+  CdkFixedSizeVirtualScroll,
+  CdkVirtualForOf,
+  CdkVirtualScrollableWindow,
+} from '@angular/cdk/scrolling';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
@@ -81,6 +88,11 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     LucideFilm,
     LucideX,
     MosaicCardComponent,
+    NgTemplateOutlet,
+    CdkVirtualScrollViewport,
+    CdkFixedSizeVirtualScroll,
+    CdkVirtualForOf,
+    CdkVirtualScrollableWindow,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library.html',
@@ -195,14 +207,80 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   /** The `all`-view card grid — measured for DOM windowing on TV. */
-  private cardGridEl?: HTMLElement;
-  @ViewChild('cardGrid') set cardGridRef(ref: ElementRef<HTMLElement> | undefined) {
-    this.cardGridEl = ref?.nativeElement;
-    // Grid just (re)mounted — e.g. initial load or a tab switch back to `all`.
-    // Recompute the window now that it's measurable.
-    if (ref && this.tv.isTv()) this.list.onWindowScroll();
-  }
   private onResize?: () => void;
+
+  /** One screenful of placeholders for the alphabet-jump skeleton. */
+  protected readonly jumpSkeletons = Array.from({ length: 24 }, (_, i) => i);
+
+  // ── CDK virtual scroll ───────────────────────────────────────────────────
+  // The grid renders through `cdk-virtual-scroll-viewport` on every platform:
+  // only the rows on screen exist, and the views scrolled past are recycled.
+  /** Columns and row pitch, measured from the first laid-out row. The initial
+   *  values only have to be plausible — the viewport re-lays out as soon as the
+   *  real ones land. The row carries the vertical gap as bottom padding, so its
+   *  measured height IS the pitch; deriving it from height + row-gap instead
+   *  drifted and collapsed the space between rows. */
+  readonly gridCols = signal(6);
+  readonly rowHeight = signal(520);
+  /** All items chunked into rows — the viewport scrolls rows, not cards. */
+  readonly gridRows = computed(() => {
+    const cols = this.gridCols();
+    const items = this.list.all();
+    const rows: { index: number; items: Media[] }[] = [];
+    for (let i = 0; i < items.length; i += cols) {
+      rows.push({ index: rows.length, items: items.slice(i, i + cols) });
+    }
+    return rows;
+  });
+  protected trackRow(_: number, row: { index: number }): number {
+    return row.index;
+  }
+  /** Alphabet highlight. Derived from the scroll offset, not from the DOM
+   *  (only a handful of rows exist) and not from `scrolledIndexChange`, which
+   *  stays at 0 when the viewport scrolls the window rather than itself. */
+  private letterRaf: number | null = null;
+  /** A click on the alphabet stays authoritative for a moment: the row it lands
+   *  on usually opens with the tail of the previous letter, and the
+   *  scroll-driven recompute below would immediately highlight that one. */
+  private letterClickUntil = 0;
+  private readonly onLetterScroll = () => {
+    if (this.letterRaf !== null) return;
+    this.letterRaf = requestAnimationFrame(() => {
+      this.letterRaf = null;
+      if (performance.now() < this.letterClickUntil) return;
+      const el = this.viewport?.elementRef.nativeElement;
+      if (!el) return;
+      const scroller = document.scrollingElement ?? document.documentElement;
+      const top = el.getBoundingClientRect().top + scroller.scrollTop;
+      const row = Math.max(0, Math.round((scroller.scrollTop - top) / this.rowHeight()));
+      this.list.activeLetter.set(this.list.letterAt(row * this.gridCols()));
+    });
+  };
+  @ViewChild(CdkVirtualScrollViewport) private viewport?: CdkVirtualScrollViewport;
+  private cardRowEl?: HTMLElement;
+  /** Measured once per layout. The strategy is fixed-size: it places every row
+   *  at `index * itemSize`, so re-measuring a row whose natural height moved by
+   *  a pixel makes the pitch disagree with the placement, and the error
+   *  accumulates — a jump thousands of rows down lands a whole section early. */
+  private rowMeasured = false;
+  @ViewChild('cardRow') set cardRowRef(ref: ElementRef<HTMLElement> | undefined) {
+    this.cardRowEl = ref?.nativeElement;
+    this.measureRow();
+  }
+  private measureRow(force = false): void {
+    const row = this.cardRowEl;
+    if (!row || (this.rowMeasured && !force)) return;
+    const cs = getComputedStyle(row);
+    const cols = cs.gridTemplateColumns.split(' ').filter((t) => t && t !== '0px').length;
+    const gap = parseFloat(cs.rowGap) || 0;
+    // Height of the cards themselves: the row is pinned to `rowHeight` below,
+    // so measure a child, not the row.
+    const cell = row.firstElementChild?.getBoundingClientRect().height ?? 0;
+    if (cols < 1 || cell <= 0) return;
+    this.rowMeasured = true;
+    this.gridCols.set(cols);
+    this.rowHeight.set(cell + gap);
+  }
 
   // Bulk editing
   readonly selectedIds = signal<Set<number>>(new Set());
@@ -218,14 +296,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private loadGen = 0;
 
   ngOnInit() {
-    if (this.tv.isTv()) {
-      // DOM windowing for the `all` grid: only render a row-aligned slice
-      // around the viewport so a large library doesn't pile hundreds of cards
-      // into the DOM and stutter the TV's scroll. Inert on every other surface.
-      this.list.enableWindowing(() => this.readGridMetrics(), 4);
-      this.onResize = () => this.list.onWindowScroll();
-      window.addEventListener('resize', this.onResize, { passive: true });
-    }
+    // A resize can change the column count, which re-chunks the rows.
+    this.onResize = () => {
+      this.rowMeasured = false;
+      this.measureRow(true);
+    };
+    window.addEventListener('resize', this.onResize, { passive: true });
+    window.addEventListener('scroll', this.onLetterScroll, { passive: true });
     // Subscribe to route param changes (handles initial load + sidebar nav).
     this.paramSub = this.route.params.subscribe(async (params) => {
       const rawName = params['libraryName'] as string;
@@ -282,7 +359,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.selectedCollectionId.set(collId ? Number(collId) : null);
 
       this.scrollMemory.activate(scrollKey);
-      this.list.trackScroll('media');
       this.syncQueryParams();
       await this.load(lib.id);
       if (this.viewMode() === 'suggestions') {
@@ -372,6 +448,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.scrollMemory.deactivate();
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
+    window.removeEventListener('scroll', this.onLetterScroll);
+    if (this.letterRaf !== null) cancelAnimationFrame(this.letterRaf);
     this.navbar.clearPageTitle();
     this.paramSub?.unsubscribe();
     this.attachedSub?.unsubscribe();
@@ -381,27 +459,39 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   scrollToLetter(letter: string) {
+    if (this.viewport) {
+      const index = this.list.getAll().findIndex((item) => {
+        const first = (item.title || '').charAt(0).toUpperCase();
+        return letter === '#' ? !/[A-Z]/.test(first) : first === letter;
+      });
+      if (index < 0) return;
+      this.list.activeLetter.set(letter);
+      this.letterClickUntil = performance.now() + 600;
+      // Scroll the window directly rather than through `scrollToIndex`: in
+      // `scrollWindow` mode that lands short, since the row offset it computes
+      // does not account for where the viewport itself sits in the document.
+      // Instant, because the rows in between are not rendered — an animated
+      // jump would spend its whole duration crossing blank space.
+      const el = this.viewport.elementRef.nativeElement;
+      const scroller = document.scrollingElement ?? document.documentElement;
+      const viewportTop = el.getBoundingClientRect().top + scroller.scrollTop;
+      const row = Math.floor(index / this.gridCols());
+      // Stop just short of the row's top edge so it doesn't sit flush against
+      // the screen — everything above has scrolled away by then.
+      const headroom = 32;
+      window.scrollTo({
+        top: Math.max(0, viewportTop + row * this.rowHeight() - headroom),
+        left: 0,
+        behavior: 'instant',
+      });
+      return;
+    }
     this.list.scrollToLetter(letter, (m) => m.title, 'media');
   }
 
   /** Live measurements of the `all` grid for windowing. Read together (rect +
    *  scroller.scrollTop) so a webOS `zoom` scales them consistently. Returns
    *  null until the grid is laid out, where windowing falls back to full render. */
-  private readGridMetrics(): GridMetrics | null {
-    const grid = this.cardGridEl;
-    if (!grid) return null;
-    const cs = getComputedStyle(grid);
-    const cols = cs.gridTemplateColumns.split(' ').filter((t) => t && t !== '0px').length;
-    if (cols < 1) return null;
-    const firstCell = grid.firstElementChild as HTMLElement | null;
-    const cellH = firstCell?.getBoundingClientRect().height ?? 0;
-    if (cellH <= 0) return null;
-    const rowGap = parseFloat(cs.rowGap) || 0;
-    const scroller = document.scrollingElement ?? document.documentElement;
-    const gridTopDoc = grid.getBoundingClientRect().top + scroller.scrollTop;
-    return { gridTopDoc, rowHeight: cellH + rowGap, rowGap, cols };
-  }
-
   onSearch(query: string) {
     this.searchQuery.set(query);
     this.syncQueryParams();
@@ -661,6 +751,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   private async load(libraryId?: number, silent = false) {
+    // Filters, search and sort all reflow the header above the grid.
     if (!libraryId) return;
     if (!silent) this.loading.set(true);
     const monitored = this.filterMonitored();
