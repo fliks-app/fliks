@@ -110,7 +110,8 @@ function connect(events: EventsService, userId: number, targetId: string) {
   const frames: { type: string; [key: string]: unknown }[] = [];
   let connectionId = '';
   const sub = events
-    .getStream(userId, { targetId, formFactor: 'phone', tvPlatform: null, userAgent: 'ua' })
+    .getStream(userId, { targetId, formFactor: 'phone', tvPlatform: null,
+      deviceName: null, userAgent: 'ua' })
     .subscribe((msg) => {
       const raw = msg as unknown as { data: string; type?: string };
       if (raw.type === 'ping' || !raw.data) return;

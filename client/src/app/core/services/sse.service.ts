@@ -10,6 +10,7 @@ import { DownloadProgressState } from '../enums/download-progress-state.enum';
 import { invalidatePrefix } from '../interceptors/cache.interceptor';
 import { getOrCreateDeviceId } from '../utils/device-info';
 import { DeviceService } from './device.service';
+import { SystemInfoService } from './system-info.service';
 import { currentTargetId } from './remote-target-id';
 
 export interface SseEvent {
@@ -78,6 +79,7 @@ export class SseService implements OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly downloadProgress = inject(DownloadProgressService);
   private readonly device = inject(DeviceService);
+  private readonly systemInfo = inject(SystemInfoService);
 
   readonly activeProgress = signal<Map<string, TaskProgress>>(new Map());
   readonly lastEvent = signal<SseEvent | null>(null);
@@ -163,6 +165,11 @@ export class SseService implements OnDestroy {
     params.set('ff', this.device.formFactor());
     const tvPlatform = this.device.tvPlatform();
     if (tvPlatform) params.set('tvPlatform', tvPlatform);
+    // A name its owner chose beats anything derivable from the User-Agent, and
+    // it is a proper noun, so it travels verbatim like the browser and OS do.
+    await this.systemInfo.ready();
+    const deviceName = this.systemInfo.deviceName();
+    if (deviceName) params.set('name', deviceName);
 
     let base = '/api/system/events';
     if (this.serverConfig.isNative) {

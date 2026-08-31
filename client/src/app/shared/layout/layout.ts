@@ -456,8 +456,12 @@ export class LayoutComponent implements OnInit, OnDestroy {
     remoteOverlayOpen.update(v => !v);
   }
 
-  formatDevice(ua: string | null | undefined, systemName?: string | null): string {
-    const label = parseDeviceLabel(ua ?? null, systemName);
+  formatDevice(
+    ua: string | null | undefined,
+    systemName?: string | null,
+    deviceName?: string | null,
+  ): string {
+    const label = parseDeviceLabel(ua ?? null, systemName, deviceName);
     return label ? this.translate.instant(label.key, label.params) : '';
   }
 }

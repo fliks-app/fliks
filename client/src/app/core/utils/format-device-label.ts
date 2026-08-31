@@ -22,7 +22,11 @@ export interface DeviceLabelKey {
 export function parseDeviceLabel(
   ua: string | null | undefined,
   systemName?: string | null,
+  deviceName?: string | null,
 ): DeviceLabelKey | null {
+  // A name its owner chose outranks anything derivable, and needs no
+  // translating: it goes through as a param like the browser and OS names do.
+  if (deviceName) return { key: 'system.device_named', params: { name: deviceName } };
   if (!ua) {
     // No UA (e.g. a pairing request with only a native systemName): still show
     // the system if we have one.

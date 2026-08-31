@@ -237,6 +237,7 @@ describe('RemoteService refreshTargets', () => {
   const target: RemoteTarget = {
     targetId: 'tv#1',
     userAgent: null,
+    deviceName: null,
     systemName: null,
     formFactor: null,
     tvPlatform: null,

@@ -12,7 +12,7 @@ afterEach(() => {
 function connect(
   events: EventsService,
   userId: number,
-  identity?: { targetId?: string; formFactor?: string; tvPlatform?: string },
+  identity?: { targetId?: string; formFactor?: string; tvPlatform?: string; deviceName?: string },
 ) {
   const received: SseEvent[] = [];
   const sub = events
@@ -20,6 +20,7 @@ function connect(
       targetId: identity?.targetId ?? null,
       formFactor: identity?.formFactor ?? null,
       tvPlatform: identity?.tvPlatform ?? null,
+      deviceName: identity?.deviceName ?? null,
       userAgent: null,
     })
     .subscribe((m) => {
@@ -150,7 +151,7 @@ describe('EventsService: remote target registry', () => {
     const events = setup();
     let completed = false;
     const sub = events
-      .getStream(1, { targetId: 'tv#t1', formFactor: null, tvPlatform: null, userAgent: null })
+      .getStream(1, { targetId: 'tv#t1', formFactor: null, tvPlatform: null, deviceName: null, userAgent: null })
       .subscribe({ complete: () => { completed = true; } });
     open.push(() => sub.unsubscribe());
 
@@ -177,6 +178,7 @@ describe('EventsService: remote target registry', () => {
       targetId: 'appletv#t1',
       formFactor: 'tv',
       tvPlatform: 'tvos',
+      deviceName: null,
       userAgent: null,
     });
 

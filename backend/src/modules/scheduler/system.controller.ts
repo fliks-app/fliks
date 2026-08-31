@@ -235,11 +235,13 @@ export class SystemController {
     @Query('device') device?: string,
     @Query('ff') ff?: string,
     @Query('tvPlatform') tvPlatform?: string,
+    @Query('name') name?: string,
   ): Observable<MessageEvent> {
     return this.eventsService.getStream(user.id, {
       targetId: device ?? null,
       formFactor: ff ?? null,
       tvPlatform: tvPlatform ?? null,
+      deviceName: name ?? null,
       userAgent: req.get('user-agent') ?? null,
     });
   }

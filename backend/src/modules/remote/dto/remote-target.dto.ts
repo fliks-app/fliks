@@ -12,6 +12,8 @@ export interface RemoteNowPlayingDto {
 export interface RemoteTargetDto {
   targetId: string;
   userAgent: string | null;
+  /** The name its owner gave the device, when the platform will state it. */
+  deviceName: string | null;
   systemName: string | null;
   formFactor: string | null;
   tvPlatform: string | null;

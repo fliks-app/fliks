@@ -124,7 +124,7 @@ export class RemotePickerComponent {
   }
 
   deviceLabel(t: RemoteTarget): string {
-    const label = parseDeviceLabel(t.userAgent, t.systemName);
+    const label = parseDeviceLabel(t.userAgent, t.systemName, t.deviceName);
     return label ? this.translate.instant(label.key, label.params) : t.targetId;
   }
 

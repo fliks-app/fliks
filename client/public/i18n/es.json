@@ -1317,7 +1317,8 @@
     "col_log_level": "Nivel",
     "col_log_context": "Contexto",
     "col_log_message": "Mensaje",
-    "device_mobile_app_named": "{{name}} (Aplicación móvil)"
+    "device_mobile_app_named": "{{name}} (Aplicación móvil)",
+    "device_named": "{{name}}"
   },
   "markers": {
     "detect_intros": "Detectar las intros",

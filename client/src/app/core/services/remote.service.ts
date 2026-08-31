@@ -31,6 +31,7 @@ export interface RemoteNowPlaying {
 export interface RemoteTarget {
   targetId: string;
   userAgent: string | null;
+  deviceName: string | null;
   systemName: string | null;
   formFactor: string | null;
   tvPlatform: string | null;

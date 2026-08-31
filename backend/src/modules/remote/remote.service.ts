@@ -223,7 +223,8 @@ export class RemoteService {
       targetId,
       formFactor: body.formFactor ?? 'tv',
       tvPlatform: null,
-      userAgent: body.name ?? null,
+      deviceName: body.name ?? null,
+      userAgent: null,
     });
     return { targetId };
   }
@@ -339,6 +340,7 @@ export class RemoteService {
       // `listForUser` already filters out entries with no target id.
       targetId: connection.targetId as string,
       userAgent: connection.userAgent,
+      deviceName: connection.deviceName,
       systemName: live?.systemName ?? null,
       formFactor: connection.formFactor,
       tvPlatform: connection.tvPlatform,

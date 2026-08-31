@@ -310,6 +310,9 @@ export interface ConnectionIdentity {
   targetId: string | null;
   formFactor: string | null;
   tvPlatform: string | null;
+  /** The name its owner gave the device, which no User-Agent can state. A
+   *  proper noun, so it travels verbatim rather than through a translation. */
+  deviceName: string | null;
   userAgent: string | null;
   since: number;
 }
@@ -503,6 +506,7 @@ export class EventsService {
       targetId: identity.targetId,
       formFactor: identity.formFactor ?? null,
       tvPlatform: identity.tvPlatform ?? null,
+      deviceName: identity.deviceName ?? null,
       userAgent: identity.userAgent ?? null,
       since: existing?.since ?? Date.now(),
       queue: existing?.queue ?? [],
@@ -623,6 +627,7 @@ export class EventsService {
         targetId: identity?.targetId ?? null,
         formFactor: identity?.formFactor ?? null,
         tvPlatform: identity?.tvPlatform ?? null,
+        deviceName: identity?.deviceName ?? null,
         userAgent: identity?.userAgent ?? null,
         since: Date.now(),
       });
