@@ -80,6 +80,7 @@ export class CastPlaybackTarget implements PlaybackTarget {
     this.cp.changeQuality(quality.id);
   }
 
+  readonly isStarting = computed(() => false);
   readonly isIdle = computed(() => false);
   readonly canStopControlling = false;
 

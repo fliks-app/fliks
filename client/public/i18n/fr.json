@@ -2405,7 +2405,8 @@
     "stop_controlling": "Arrêter de contrôler",
     "stop_playback": "Arrêter la lecture",
     "idle_message": "Rien n'est en cours de lecture sur cet appareil.",
-    "idle_hint": "Choisissez un titre, il démarrera ici."
+    "idle_hint": "Choisissez un titre, il démarrera ici.",
+    "starting_message": "Démarrage de la lecture..."
   },
   "language": {
     "en": "Anglais",

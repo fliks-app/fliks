@@ -41,6 +41,9 @@ export interface PlaybackTarget {
   selectSubtitle(sub: PlaybackOption | null): void;
   selectAudio(track: PlaybackOption | null): void;
   selectQuality(quality: PlaybackOption): void;
+  /** A load has been sent and the target has not reported back yet. Always
+   *  false on Cast, whose sender mirrors the media locally from the start. */
+  readonly isStarting: Signal<boolean>;
   /** Present but playing nothing. Always false on Cast, where a session only
    *  exists around a media. */
   readonly isIdle: Signal<boolean>;

@@ -2405,7 +2405,8 @@
     "stop_controlling": "Stop controlling",
     "stop_playback": "Stop playback",
     "idle_message": "Nothing is playing on this device.",
-    "idle_hint": "Pick a title and it will start here."
+    "idle_hint": "Pick a title and it will start here.",
+    "starting_message": "Starting playback..."
   },
   "language": {
     "en": "English",

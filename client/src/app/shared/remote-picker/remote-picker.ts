@@ -107,9 +107,10 @@ export class RemotePickerComponent {
       this.castService.requestSession();
     } else {
       this.remote.selectTarget(row.id);
-      // Mirrors quickStart's `castPlayer.expanded.set(true)`: hand off to
-      // app-cast-overlay so the control card appears as soon as it has media.
-      remoteOverlayOpen.set(true);
+      // Only hand off to the control card when there is already something to
+      // control; picking an idle device would otherwise land on a dead end.
+      const playing = this.remote.targets().find((t) => t.targetId === row.id)?.nowPlaying;
+      if (playing) remoteOverlayOpen.set(true);
     }
   }
 

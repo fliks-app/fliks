@@ -2378,7 +2378,8 @@
     "stop_controlling": "Steuerung beenden",
     "stop_playback": "Wiedergabe beenden",
     "idle_message": "Auf diesem Gerät läuft gerade nichts.",
-    "idle_hint": "Wählen Sie einen Titel, er startet hier."
+    "idle_hint": "Wählen Sie einen Titel, er startet hier.",
+    "starting_message": "Wiedergabe wird gestartet..."
   },
   "language": {
     "en": "Englisch",

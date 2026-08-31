@@ -147,7 +147,12 @@ export class RemotePlaybackTarget implements PlaybackTarget {
     console.warn('[remote-playback-target] quality cannot be changed on a remote target');
   }
 
-  readonly isIdle = computed(() => this.remote.targetState() === null);
+  readonly isStarting = computed(
+    () => this.remote.targetState() === null && this.remote.pendingAction() === 'load',
+  );
+  readonly isIdle = computed(
+    () => this.remote.targetState() === null && !this.isStarting(),
+  );
   readonly canStopControlling = true;
 
   stopPlayback(): void {

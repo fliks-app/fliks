@@ -2378,7 +2378,8 @@
     "stop_controlling": "Dejar de controlar",
     "stop_playback": "Detener la reproducción",
     "idle_message": "No se está reproduciendo nada en este dispositivo.",
-    "idle_hint": "Elige un título y empezará aquí."
+    "idle_hint": "Elige un título y empezará aquí.",
+    "starting_message": "Iniciando la reproducción..."
   },
   "language": {
     "en": "Inglés",

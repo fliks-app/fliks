@@ -2378,7 +2378,8 @@
     "stop_controlling": "Smetti di controllare",
     "stop_playback": "Interrompi la riproduzione",
     "idle_message": "Non è in riproduzione nulla su questo dispositivo.",
-    "idle_hint": "Scegli un titolo e partirà qui."
+    "idle_hint": "Scegli un titolo e partirà qui.",
+    "starting_message": "Avvio della riproduzione..."
   },
   "language": {
     "en": "Inglese",
