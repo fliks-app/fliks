@@ -26,7 +26,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { AppResumeService } from '../../core/services/app-resume.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
-import { HomeSettingsService } from '../../core/services/home-settings.service';
+import { HomeSettingsService, HomeSectionType, ResolvedHomeSection } from '../../core/services/home-settings.service';
 import { LibraryPrefsService } from '../../core/services/library-prefs.service';
 import { TvService } from '../../core/services/tv.service';
 import { CardAction } from '../../core/services/card-actions.service';
@@ -42,6 +42,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { RequestCardComponent } from '../requests/request-card/request-card';
 import { RequestDeclineModalComponent } from '../requests/request-decline-modal/request-decline-modal.component';
 import { libraryColorVar } from '../../core/constants/library-appearance';
+import { StorageScopeService } from '../../core/services/storage-scope.service';
 
 /**
  * # Home page
@@ -104,6 +105,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly playableMedia = inject(PlayableMediaService);
   private readonly librariesApi = inject(LibrariesApiService);
+  private readonly storageScope = inject(StorageScopeService);
   private readonly playlistsApi = inject(PlaylistsApiService);
   private readonly likesApi = inject(LikesApiService);
   private readonly requestsService = inject(RequestsService);
@@ -193,6 +195,29 @@ export class HomeComponent implements OnInit, OnDestroy {
       { requests: this.requestsAllowed },
     ),
   );
+  /** True until the first pass over every section resolves. Each section only
+   *  renders once its own data lands, so a cold start would otherwise show an
+   *  empty page; the skeleton stands in for the whole page during that pass. */
+  readonly loadingFirstPass = signal(true);
+
+  /** Shape of one skeleton row: how the zone's cards are laid out. */
+  private static readonly SHAPES: Partial<Record<HomeSectionType, 'tile' | 'landscape' | 'portrait'>> = {
+    libraries: 'tile',
+    'continue-watching': 'landscape',
+    likes: 'landscape',
+  };
+  private static readonly LAYOUT_KEY = 'fliks.home.layout';
+  /** Last rendered layout, replayed as the skeleton on the next cold start so
+   *  the placeholders sit where the real zones will land — same order, same
+   *  card shape, same count — instead of three generic rows the content then
+   *  shoves around. */
+  readonly skeletonLayout = signal<{ shape: string; cards: number[] }[]>([]);
+  /** Kept up past the swap so it can fade out over the zones staggering in
+   *  beneath it — removing it on the swap leaves each row blank until its own
+   *  delay elapses. */
+  private readonly skeletonFadingOut = signal(false);
+  readonly showSkeleton = computed(() => this.loadingFirstPass() || this.skeletonFadingOut());
+
   readonly visibleSections = computed(() =>
     this.sections().filter((s) => s.visible),
   );
@@ -286,6 +311,54 @@ export class HomeComponent implements OnInit, OnDestroy {
     return ['/' + (item.mediaType === 'series' ? 'series' : 'movies'), String(item.mediaId)];
   }
 
+  /** Cards actually rendered by each zone, for the layout snapshot. */
+  private sectionCount(s: ResolvedHomeSection): number {
+    switch (s.type) {
+      case 'libraries': return this.displayLibraries().length;
+      case 'continue-watching': return this.continueWatching().length;
+      case 'recommendations': return this.recommendations().length;
+      case 'likes': return this.likes().length;
+      case 'recently-added': return this.recentMedia().length;
+      case 'playlists': return this.playlists().length;
+      case 'coming-soon': return this.comingSoon().length;
+      case 'requests-recent': return this.recentRequests().length;
+      case 'library-recent': return this.libraryRecent().get(s.libraryId ?? -1)?.length ?? 0;
+      default: return 0; // received-recommendations is a card, not a rail
+    }
+  }
+
+  private captureLayout(): void {
+    const rows = this.visibleSections()
+      .map((s) => ({
+        shape: HomeComponent.SHAPES[s.type] ?? 'portrait',
+        cards: Math.min(this.sectionCount(s), 8),
+      }))
+      .filter((r) => r.cards > 0);
+    if (!rows.length) return;
+    try {
+      localStorage.setItem(
+        `${HomeComponent.LAYOUT_KEY}::${this.storageScope.suffix()}`,
+        JSON.stringify(rows),
+      );
+    } catch { /* quota or private mode — the generic skeleton still works */ }
+  }
+
+  private readLayout(): { shape: string; cards: number[] }[] {
+    let rows: { shape: string; cards: number }[] = [];
+    try {
+      rows = JSON.parse(
+        localStorage.getItem(`${HomeComponent.LAYOUT_KEY}::${this.storageScope.suffix()}`) ?? '[]',
+      );
+    } catch { /* corrupt — fall through to the default below */ }
+    if (!Array.isArray(rows) || !rows.length) {
+      rows = [{ shape: 'portrait', cards: 7 }, { shape: 'portrait', cards: 7 }, { shape: 'portrait', cards: 7 }];
+    }
+    return rows.map((r) => ({
+      shape: r.shape ?? 'portrait',
+      cards: Array.from({ length: Math.max(1, Math.min(r.cards ?? 7, 8)) }, (_, i) => i),
+    }));
+  }
+
   async ngOnInit() {
     this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
     // Profile names for the request cards are resolved client-side (same as
@@ -293,7 +366,13 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (this.requestsAllowed) void this.loadRequestProfiles();
     // Each section guards itself with `@if (().length)` so sections paint
     // independently as their data arrives. No global loading gate.
+    this.skeletonLayout.set(this.readLayout());
     await this.loadAllSections();
+    this.skeletonFadingOut.set(true);
+    this.loadingFirstPass.set(false);
+    // Long enough for the last zone's staggered fade to have started.
+    setTimeout(() => this.skeletonFadingOut.set(false), 900);
+    this.captureLayout();
     // App-open SWR: the cache served Pass 1 above (instant render even on
     // a cold network). Now force a network round-trip so the user sees
     // the freshest data — additions, watched-status flips made on
