@@ -5,6 +5,8 @@ import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
 import { PlaybackOption } from '../../core/services/playback-target';
 import { SeekbarComponent } from '../components/seekbar/seekbar';
+import { CachedSrcDirective } from '../directives/cached-src.directive';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
 import { TranslateModule } from '@ngx-translate/core';
 import {
@@ -34,6 +36,8 @@ import {
     LucideHeadphones, LucidePause, LucidePlay, LucideRotateCcw, LucideRotateCw,
     LucideSettings, LucideSquare, LucideVolume2, LucideVolumeX, LucideX,
     SeekbarComponent,
+    CachedSrcDirective,
+    ResolveUrlPipe,
     DropdownMenuComponent,
     TranslateModule,
   ],

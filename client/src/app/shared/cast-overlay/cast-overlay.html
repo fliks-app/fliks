@@ -12,7 +12,8 @@
         >
           <!-- Poster thumbnail (desktop only) -->
           @if (t.fanartUrl()) {
-            <img [src]="t.fanartUrl()" alt="" class="hidden lg:block w-12 h-16 object-cover rounded shrink-0" />
+            <img [cachedSrc]="t.fanartUrl()! | resolveUrl:'thumb'" alt=""
+                 class="hidden lg:block w-12 h-16 object-cover rounded shrink-0" />
           }
           <div class="min-w-0 flex-1 lg:py-1">
             <p class="font-bold truncate">{{ t.mediaTitle() }}</p>
@@ -28,7 +29,8 @@
         <!-- Large poster (mobile only) -->
         <div class="flex-1 flex items-center justify-center px-12 py-4 min-h-0 lg:hidden">
           @if (t.fanartUrl()) {
-            <img [src]="t.fanartUrl()" alt="" class="max-h-[60%] w-auto object-contain rounded-xl shadow-xl" />
+            <img [cachedSrc]="t.fanartUrl()! | resolveUrl:'medium'" alt=""
+                 class="max-h-[60%] w-auto object-contain rounded-xl shadow-xl" />
           } @else {
             <svg lucideCast class="h-20 w-20 text-info"></svg>
           }
