@@ -61,6 +61,24 @@ describe('SeekbarComponent keyboard preview', () => {
     expect(seeks).toEqual([130]);
   });
 
+  it('keeps the small step across taps at a human cadence, not the wall-clock age of the run', () => {
+    const seeks: number[] = [];
+    bar.seek.subscribe((t) => seeks.push(t));
+
+    // Each gap sits just inside the idle window, so the run never breaks -
+    // but the cumulative age of the run alone would cross the 1.5s/4s/8s
+    // acceleration thresholds well before the last of these five taps.
+    for (const expected of [110, 120, 130, 140, 150]) {
+      bar.onKeydown(arrow('ArrowRight'));
+      bar.onKeyup(arrow('ArrowRight'));
+      vi.advanceTimersByTime(600);
+      expect(bar.previewTime()).toBe(expected);
+    }
+
+    vi.advanceTimersByTime(800);
+    expect(seeks).toEqual([150]);
+  });
+
   it('a run of presses coalesces into one seek and keeps one preview alive', () => {
     const seeks: number[] = [];
     bar.seek.subscribe((t) => seeks.push(t));
@@ -79,6 +97,67 @@ describe('SeekbarComponent keyboard preview', () => {
     expect(bar.previewVisible()).toBe(true);
     vi.advanceTimersByTime(1600);
     expect(bar.previewVisible()).toBe(false);
+  });
+});
+
+/** A pointer drag started while a key-scrub commit is still pending must take
+ *  over that commit, not have it fire mid-drag on the wrong position. */
+describe('SeekbarComponent pointer drag vs pending key scrub', () => {
+  let bar: SeekbarComponent;
+
+  const arrow = (key: 'ArrowLeft' | 'ArrowRight') =>
+    ({ key, preventDefault: vi.fn(), stopPropagation: vi.fn() }) as unknown as KeyboardEvent;
+
+  const rectOf = (width: number) =>
+    ({ left: 0, right: width, width, top: 0, bottom: 10, height: 10, x: 0, y: 0, toJSON() {} }) as DOMRect;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const fixture = TestBed.createComponent(SeekbarComponent);
+    bar = fixture.componentInstance;
+    fixture.componentRef.setInput('duration', 600);
+    fixture.componentRef.setInput('currentTime', 100);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('a drag grabbed inside the scrub window owns the commit and lands on release, not the stale timer', () => {
+    const seeks: number[] = [];
+    bar.seek.subscribe((t) => seeks.push(t));
+
+    // Arm a pending commit due at t=700.
+    bar.onKeydown(arrow('ArrowRight'));
+
+    const barEl = document.createElement('div');
+    barEl.getBoundingClientRect = () => rectOf(1000);
+
+    // Grab the bar within the 700ms window, at an interim position.
+    vi.advanceTimersByTime(200);
+    bar.onProgressDown({
+      currentTarget: barEl,
+      pointerId: 1,
+      clientX: 300,
+      preventDefault: vi.fn(),
+    } as unknown as PointerEvent);
+
+    // Past the original 700ms deadline: if the stale timer had survived it
+    // would have committed here, at the interim position, ending the drag.
+    vi.advanceTimersByTime(700);
+    expect(seeks).toEqual([]);
+    expect(bar.dragging()).toBe(true);
+
+    // Move on to the real release position and let go.
+    const move = new Event('pointermove') as unknown as PointerEvent;
+    (move as { clientX: number }).clientX = 800;
+    document.dispatchEvent(move);
+    document.dispatchEvent(new Event('pointerup'));
+
+    expect(bar.dragging()).toBe(false);
+    expect(seeks).toEqual([480]); // 800/1000 of the 600s duration
   });
 });
 

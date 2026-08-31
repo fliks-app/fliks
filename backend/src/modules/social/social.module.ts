@@ -40,6 +40,6 @@ import { UsersModule } from '../users/users.module';
   ],
   controllers: [SocialController, LikesController],
   providers: [SocialService, LikesService],
-  exports: [LikesService],
+  exports: [LikesService, SocialService],
 })
 export class SocialModule {}

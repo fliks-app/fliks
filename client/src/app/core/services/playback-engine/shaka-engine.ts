@@ -217,6 +217,8 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
   get volume(): number {
     return this.video?.volume ?? 1;
   }
+  readonly supportsVolume = true;
+
   set volume(v: number) {
     if (this.video) this.video.volume = v;
   }

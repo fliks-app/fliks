@@ -5,8 +5,10 @@ import {
   buildVariableVodPlaylist,
   resolvePreRoll,
 } from './streaming.controller';
-import type { LiveSession } from './live-session.service';
+import { buildLiveSession, type LiveSession } from './live-session.service';
 import type { PreRollItem } from '../../common/plugin-contract';
+import type { User } from '../users/entities/user.entity';
+import { ForbiddenException } from '@nestjs/common';
 
 describe('buildVodPlaylist', () => {
   const url = (i: string): string => `seg-${i}.m4s`;
@@ -78,7 +80,7 @@ describe('withTimestampMap', () => {
  * irrelevant here.
  */
 describe('StreamingController.stopLiveSession', () => {
-  function makeController(live: LiveSession | null) {
+  function makeController(live: LiveSession | null, canManageSettings = false) {
     const liveSessions = {
       get: jest.fn().mockReturnValue(live),
       stop: jest.fn(),
@@ -90,6 +92,15 @@ describe('StreamingController.stopLiveSession', () => {
     };
     const transcodingService = {
       killSessionsForJob: jest.fn(),
+    };
+    const events = {
+      emitToUser: jest.fn(),
+      targetIdFor: jest.fn().mockReturnValue('tv#1'),
+    };
+    const caslAbilityFactory = {
+      createForUser: jest.fn().mockReturnValue({
+        can: jest.fn().mockReturnValue(canManageSettings),
+      }),
     };
 
     const controller = new StreamingController(
@@ -108,54 +119,30 @@ describe('StreamingController.stopLiveSession', () => {
       {} as never, // sessionRouter
       {} as never, // sessionContextBuilder
       {} as never, // pluginPreRoll
+      events as never,
+      caslAbilityFactory as never,
     );
 
-    return { controller, liveSessions, activeStreamTracker, transcodingService };
+    return {
+      controller,
+      liveSessions,
+      activeStreamTracker,
+      transcodingService,
+      events,
+      caslAbilityFactory,
+    };
   }
+
+  const owner = { id: 7 } as User;
+  const stranger = { id: 99 } as User;
 
   function makeLive(overrides: Partial<LiveSession>): LiveSession {
     return {
-      sessionId: 'sid-1',
-      userId: 7,
-      username: 'alice',
-      mediaFileId: 42,
-      mediaTitle: null,
-      mediaType: null,
-      posterUrl: null,
-      profileHash: null,
-      profileBase: null,
-      instanceId: null,
-      quality: null,
-      kind: 'directplay',
-      deviceLabel: null,
-      systemName: null,
-      appVersion: null,
-      sseConnectionId: null,
-      startedAt: Date.now(),
-      lastBeat: Date.now(),
-      position: 0,
-      state: 'playing',
-      audioTrackIndex: null,
-      subtitleTrackIndex: null,
-      useTs: false,
-      audioPlan: null,
-      audioTrackPlans: null,
-      audioStreamIndex: null,
-      audioStreamCount: 0,
-      useExtXMedia: false,
-      deviceType: 'desktop',
-      hdrLadder: false,
-      supportsHlsSubtitles: false,
-      probesSegZero: true,
-      supportsAbr: true,
-      videoVariant: null,
-      tonemapping: false,
-      transcodeReasons: [],
-      burnIn: null,
-      encoderPreset: 'faster',
-      canCopyVideo: false,
-      canCopyAudio: false,
-      pinned: false,
+      ...buildLiveSession(
+        { userId: 7, username: 'alice', mediaFileId: 42, kind: 'transcode' },
+        'sid-1',
+        0,
+      ),
       ...overrides,
     };
   }
@@ -165,7 +152,7 @@ describe('StreamingController.stopLiveSession', () => {
     const { controller, liveSessions, activeStreamTracker, transcodingService } =
       makeController(live);
 
-    controller.stopLiveSession('sid-1');
+    controller.stopLiveSession('sid-1', owner);
 
     expect(liveSessions.stop).toHaveBeenCalledWith('sid-1');
     // DirectPlay has no profileHash, so the ffmpeg-kill path is skipped —
@@ -179,7 +166,7 @@ describe('StreamingController.stopLiveSession', () => {
     const { controller, activeStreamTracker, liveSessions, transcodingService } =
       makeController(live);
 
-    controller.stopLiveSession('sid-1');
+    controller.stopLiveSession('sid-1', owner);
 
     expect(activeStreamTracker.unregister).toHaveBeenCalledWith(7, 42);
     expect(liveSessions.listForJob).toHaveBeenCalledWith(7, 42, 'abc123');
@@ -192,13 +179,15 @@ describe('StreamingController.stopLiveSession', () => {
   });
 
   it('is a no-op on an unknown sid', () => {
-    const { controller, activeStreamTracker, liveSessions } =
+    const { controller, activeStreamTracker, liveSessions, events } =
       makeController(null);
 
-    controller.stopLiveSession('missing');
+    controller.stopLiveSession('missing', owner);
 
     expect(liveSessions.stop).toHaveBeenCalledWith('missing');
     expect(activeStreamTracker.unregister).not.toHaveBeenCalled();
+    // Nobody to notify: there's no live entry to read a userId off.
+    expect(events.emitToUser).not.toHaveBeenCalled();
   });
 
   it('skips unregister when another live session remains on the same file', () => {
@@ -208,7 +197,7 @@ describe('StreamingController.stopLiveSession', () => {
       { sessionId: 'sid-2', userId: 7, mediaFileId: 42 },
     ]);
 
-    controller.stopLiveSession('sid-1');
+    controller.stopLiveSession('sid-1', owner);
 
     expect(activeStreamTracker.unregister).not.toHaveBeenCalled();
   });
@@ -217,9 +206,53 @@ describe('StreamingController.stopLiveSession', () => {
     const live = makeLive({ profileHash: null, userId: null, mediaFileId: 42 });
     const { controller, activeStreamTracker } = makeController(live);
 
-    controller.stopLiveSession('sid-1');
+    controller.stopLiveSession('sid-1', owner);
 
     expect(activeStreamTracker.unregister).not.toHaveBeenCalled();
+  });
+
+  it('lets the owner stop their own session and notifies their other devices', () => {
+    const live = makeLive({ profileHash: null, userId: 7, mediaFileId: 42 });
+    const { controller, liveSessions, events } = makeController(live);
+
+    controller.stopLiveSession('sid-1', owner);
+
+    expect(liveSessions.stop).toHaveBeenCalledWith('sid-1');
+    expect(events.emitToUser).toHaveBeenCalledWith(7, {
+      type: 'remote.targets_changed',
+    });
+  });
+
+  it('refuses a non-owner without Manage:Settings: the ownership hole', () => {
+    const live = makeLive({ profileHash: null, userId: 7, mediaFileId: 42 });
+    const { controller, liveSessions, events } = makeController(live, false);
+
+    expect(() => controller.stopLiveSession('sid-1', stranger)).toThrow(
+      ForbiddenException,
+    );
+    expect(liveSessions.stop).not.toHaveBeenCalled();
+    expect(events.emitToUser).not.toHaveBeenCalled();
+  });
+
+  it('lets a user with Manage:Settings stop someone else\'s session', () => {
+    const live = makeLive({ profileHash: null, userId: 7, mediaFileId: 42 });
+    const { controller, liveSessions, events } = makeController(live, true);
+
+    controller.stopLiveSession('sid-1', stranger);
+
+    expect(liveSessions.stop).toHaveBeenCalledWith('sid-1');
+    expect(events.emitToUser).toHaveBeenCalledWith(7, {
+      type: 'remote.targets_changed',
+    });
+  });
+
+  it('does not notify a shared-device session (no owning userId)', () => {
+    const live = makeLive({ profileHash: null, userId: null, mediaFileId: 42 });
+    const { controller, events } = makeController(live);
+
+    controller.stopLiveSession('sid-1', owner);
+
+    expect(events.emitToUser).not.toHaveBeenCalled();
   });
 });
 

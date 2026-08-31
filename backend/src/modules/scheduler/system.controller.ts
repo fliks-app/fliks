@@ -8,12 +8,13 @@ import {
   Param,
   ParseIntPipe,
   Query,
+  Req,
   Res,
   Sse,
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import * as fs from 'fs';
@@ -21,6 +22,7 @@ import * as path from 'path';
 import { Library } from '../libraries/entities/library.entity';
 import { PluginPackage } from '../plugins/entities/plugin-package.entity';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
+import { SessionTokenGuard } from '../auth/guards/session-token.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
@@ -219,10 +221,29 @@ export class SystemController {
 
   // Authentication is the whole gate: the stream only ever emits what this user id is
   // already a recipient of, and `PoliciesGuard` denies a handler that declares nothing.
+  //
+  // The device identity rides the query string because `EventSource` cannot set
+  // headers, and because arriving with the connection removes any
+  // connect-then-announce race and re-announces free on every reconnect.
+  // A client that sends no `device` simply never becomes a remote target.
   @Sse('events')
+  @UseGuards(SessionTokenGuard)
   @CheckPolicies(() => true)
-  events(@CurrentUser() user: User): Observable<MessageEvent> {
-    return this.eventsService.getStream(user.id);
+  events(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Query('device') device?: string,
+    @Query('ff') ff?: string,
+    @Query('tvPlatform') tvPlatform?: string,
+    @Query('name') name?: string,
+  ): Observable<MessageEvent> {
+    return this.eventsService.getStream(user.id, {
+      targetId: device ?? null,
+      formFactor: ff ?? null,
+      tvPlatform: tvPlatform ?? null,
+      deviceName: name ?? null,
+      userAgent: req.get('user-agent') ?? null,
+    });
   }
 
   @Get('health')

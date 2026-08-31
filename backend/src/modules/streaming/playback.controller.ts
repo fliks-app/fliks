@@ -11,9 +11,11 @@ import {
   UseGuards,
   ParseIntPipe,
   HttpCode,
+  Logger,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
+import { SessionTokenGuard } from '../auth/guards/session-token.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PlaybackService } from './playback.service';
 import { RecommendationService } from './recommendation.service';
@@ -23,6 +25,7 @@ import {
   LiveSessionRegistry,
   type PlaybackState as LivePlaybackState,
 } from './live-session.service';
+import { EventsService, type RemoteQualityRung } from '../scheduler/events.service';
 
 /** Debounce window for DB writes — heartbeat fires every 10 s but we
  *  flush playback state on a coarser cadence to avoid hammering
@@ -33,6 +36,8 @@ const STATE_DB_WRITE_INTERVAL_MS = 30_000;
 @Controller('playback')
 @UseGuards(JwtOrApiKeyGuard)
 export class PlaybackController {
+  private readonly log = new Logger(PlaybackController.name);
+
   /** When the last DB write happened, and at which position, per
    *  `(userId, mediaId, episodeId)` tuple. Drives the debounce above.
    *  In-memory map — moves to a shared store the day Fliks runs across
@@ -44,6 +49,7 @@ export class PlaybackController {
     private readonly recommendationService: RecommendationService,
     private readonly libraries: LibrariesService,
     private readonly liveSessions: LiveSessionRegistry,
+    private readonly events: EventsService,
   ) {}
 
   @Get('recommendations')
@@ -187,6 +193,7 @@ export class PlaybackController {
    *  re-issuing `playback-info` and reloading the stream URL with
    *  the fresh sid. */
   @Put('media/:mediaId/state')
+  @UseGuards(SessionTokenGuard)
   async updateState(
     @Req() req: Request,
     @Param('mediaId', ParseIntPipe) mediaId: number,
@@ -201,17 +208,34 @@ export class PlaybackController {
       sessionId?: string;
       state?: LivePlaybackState;
       quality?: string | null;
+      qualities?: RemoteQualityRung[] | null;
+      autoplayBlocked?: boolean;
+      episodeLabel?: string | null;
+      supportsVolume?: boolean;
+      subtitleId?: string | null;
       audioTrackIndex?: number | null;
       subtitleTrackIndex?: number | null;
       sseConnectionId?: string;
+      // Set by a client with no SSE primitive (the native TV app): lets its
+      // heartbeat resolve to a remote-control target the same way an SSE
+      // connection id does. See EventsService.targetIdFor.
+      targetId?: string;
+      volume?: number;
+      muted?: boolean;
+      lastCmdId?: string;
     },
   ): Promise<{ sessionLost?: true; state?: unknown } | null> {
     const user = req.user as User;
     const sseConnectionId =
-      body.sseConnectionId ?? req.get('x-fliks-sse-connection') ?? undefined;
+      body.sseConnectionId ??
+      req.get('x-fliks-sse-connection') ??
+      (body.targetId ? `polled:${body.targetId}` : undefined);
 
     let stateChanged = false;
     let sessionLost = false;
+    // Declared out here on purpose: `updated` is scoped to the block below, and
+    // the history write happens after it.
+    let attributedUserId: number | null = null;
     if (body.sessionId) {
       const before = this.liveSessions.get(body.sessionId);
       const previousState = before?.state;
@@ -219,17 +243,67 @@ export class PlaybackController {
         position: body.positionSeconds,
         state: body.state,
         quality: body.quality,
+        qualities: body.qualities,
+        autoplayBlocked: body.autoplayBlocked,
+        episodeLabel: body.episodeLabel,
+        supportsVolume: body.supportsVolume,
+        subtitleId: body.subtitleId,
         audioTrackIndex: body.audioTrackIndex,
         subtitleTrackIndex: body.subtitleTrackIndex,
         sseConnectionId,
+        volume: body.volume,
+        muted: body.muted,
       });
+      attributedUserId = updated?.attributedUserId ?? null;
       stateChanged = !!updated && !!body.state && previousState !== body.state;
       // The client believes the session is alive but the registry
       // doesn't know it — surface that so the client can recover.
       sessionLost = !updated;
+
+      // Remote-control fan-out: must fire on every heartbeat, not just a DB
+      // flush, so it stays inside this block rather than after it.
+      if (updated) {
+        // Stored connection id, not the request header: the client drops
+        // that header for the whole SSE reconnect backoff window.
+        const targetId = this.events.targetIdFor(updated.sseConnectionId);
+        if (targetId) {
+          this.events.emitToUser(user.id, {
+            type: 'remote.state',
+            targetId,
+            sessionId: body.sessionId,
+            mediaId,
+            mediaFileId: body.mediaFileId,
+            episodeId: body.episodeId ?? null,
+            mediaTitle: updated.mediaTitle,
+            episodeLabel: updated.episodeLabel,
+            posterUrl: updated.posterUrl,
+            positionSeconds: updated.position,
+            durationSeconds: body.durationSeconds,
+            state: updated.state,
+            volume: updated.volume,
+            muted: updated.muted,
+            supportsVolume: updated.supportsVolume,
+            subtitleId: updated.subtitleId,
+            quality: updated.quality,
+            qualities: updated.qualities,
+            autoplayBlocked: updated.autoplayBlocked,
+            audioTrackIndex: updated.audioTrackIndex,
+            subtitleTrackIndex: updated.subtitleTrackIndex,
+            lastCmdId: body.lastCmdId ?? null,
+          });
+        } else {
+          this.log.debug(
+            `Skipping remote.state for session ${body.sessionId}: no live target for connection ${updated.sseConnectionId ?? 'null'}`,
+          );
+        }
+      }
     }
 
-    const dbKey = `${user.id}:${mediaId}:${body.episodeId ?? 0}`;
+    // A playback launched here by remote control counts for whoever launched it,
+    // the way a cast session counts for the phone that started it. The device
+    // keeps its own login: only the history moves.
+    const historyUserId = attributedUserId ?? user.id;
+    const dbKey = `${historyUserId}:${mediaId}:${body.episodeId ?? 0}`;
     const now = Date.now();
     const last = this.lastDbWriteAt.get(dbKey);
     const dur = body.durationSeconds ?? 0;
@@ -256,7 +330,7 @@ export class PlaybackController {
     for (const [key, entry] of this.lastDbWriteAt) {
       if (entry.at < staleBefore) this.lastDbWriteAt.delete(key);
     }
-    const state = await this.playbackService.updateState(user.id, mediaId, {
+    const state = await this.playbackService.updateState(historyUserId, mediaId, {
       positionSeconds: body.positionSeconds,
       durationSeconds: body.durationSeconds,
       mediaFileId: body.mediaFileId,

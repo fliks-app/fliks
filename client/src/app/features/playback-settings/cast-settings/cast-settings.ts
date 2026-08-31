@@ -1,4 +1,10 @@
-import { Component, ChangeDetectionStrategy, inject, signal, OnInit } from '@angular/core';
+import {
+  Component,
+  ChangeDetectionStrategy,
+  inject,
+  signal,
+  OnInit,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { CastSettingsService, CastSettings, DEFAULT_CAST_SUBTITLE_STYLE } from '../../../core/services/cast-settings.service';
@@ -17,7 +23,6 @@ export class CastSettingsPageComponent implements OnInit {
   private readonly castSettings = inject(CastSettingsService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
-
   readonly qualityOptions = QUALITY_OPTIONS;
   readonly audioOptions = AUDIO_CHANNEL_OPTIONS;
 
@@ -43,6 +48,9 @@ export class CastSettingsPageComponent implements OnInit {
 
   save() {
     const settings: CastSettings = {
+      // Spread first: another page owns fields of this store, and rebuilding the
+      // object from this form's controls alone would silently reset them.
+      ...this.castSettings.get(),
       hdr: this.hdr(),
       maxQuality: this.maxQuality(),
       audioChannels: this.audioChannels(),

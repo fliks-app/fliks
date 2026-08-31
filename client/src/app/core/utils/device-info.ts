@@ -1,6 +1,6 @@
 import { Preferences } from '@capacitor/preferences';
 import { Capacitor } from '@capacitor/core';
-import { detectBrowser, detectOs } from './ua-parser';
+import { detectBrowser, detectDeviceModel, detectOs } from './ua-parser';
 
 const DEVICE_ID_KEY = 'fliks_device_id';
 
@@ -29,7 +29,7 @@ export function getDeviceName(): string {
 
   // Android TV — try to extract the model from the UA, fall back to platform.
   if (/AndroidTV\/\d/.test(ua)) {
-    return parseAndroidModel(ua) ?? 'Android TV';
+    return detectDeviceModel(ua) ?? 'Android TV';
   }
   if (/BRAVIA/i.test(ua)) return 'Sony Bravia';
   if (/SHIELD/i.test(ua)) return 'NVIDIA Shield';
@@ -41,23 +41,14 @@ export function getDeviceName(): string {
   if (/Web0S|webOS/.test(ua)) return 'LG TV';
 
   // Phone / tablet — Android model parse, iPhone/iPad recognised as such.
-  if (/iPhone/.test(ua)) return 'iPhone';
-  if (/iPad/.test(ua)) return 'iPad';
-  if (/Android/.test(ua)) return parseAndroidModel(ua) ?? 'Android';
+  const model = detectDeviceModel(ua);
+  if (model) return model;
+  if (/Android/.test(ua)) return 'Android';
 
   // Desktop — best-effort browser + OS (shared UA parser).
   const browser = detectBrowser(ua);
   const os = detectOs(ua) ?? '';
   return os ? `${browser} — ${os}` : browser;
-}
-
-function parseAndroidModel(ua: string): string | null {
-  // "Mozilla/5.0 (Linux; Android 13; Pixel 8 Build/...) ..." → "Pixel 8"
-  const m = /Android\s+\d+(?:\.\d+)*;\s*([^)]+?)(?:\s+Build|;|\))/.exec(ua);
-  if (!m) return null;
-  const model = m[1].trim();
-  // Drop variant suffixes like "wv" added on some WebViews.
-  return model.replace(/\s+wv$/i, '').trim() || null;
 }
 
 function generateUuid(): string {

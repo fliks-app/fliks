@@ -262,6 +262,19 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (pool.length) this.backgroundService.setBackgrounds(pool);
   });
 
+  /** A playback that ended leaves this row stale, whether it ran here or on a
+   *  device this one is driving. The server announces every session stop to all
+   *  of the account's connections, so one subscription covers both. */
+  private readonly playbackStopped = this.sse.stopped.subscribe(() => {
+    if (!this.visibleSections().some((s) => s.type === 'continue-watching')) return;
+    this.streamingApi
+      .getContinueWatching(undefined, { force: true })
+      .then((list) => this.continueWatchingRaw.set(list))
+      .catch(() => {
+        // The row keeps its previous contents rather than emptying on a blip.
+      });
+  });
+
   /** When a download finishes, refresh the recent-requests row so a monitored
    *  request flips to its downloaded badge without a manual reload. */
   private readonly importEffect = effect(() => {
@@ -440,6 +453,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.scrollMemory.deactivate();
+    this.playbackStopped.unsubscribe();
     this.attachedSub?.unsubscribe();
     this.detachedSub?.unsubscribe();
     this.resumeSub?.unsubscribe();
@@ -707,6 +721,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     await this.playableMedia.play({
       fileId: item.mediaFileId,
       mediaId: item.mediaId,
+      positionSeconds: item.positionSeconds,
       episodeId: item.episodeId ?? undefined,
       title: item.mediaTitle,
       episodeTitle: item.episodeLabel ?? undefined,

@@ -27,6 +27,7 @@ import { CountsApiService } from '../../core/services/api/counts-api.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService, type SseEvent } from '../../core/services/sse.service';
 import { CastService } from '../../core/services/cast.service';
+import { RemoteService } from '../../core/services/remote.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
@@ -122,6 +123,10 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
       {
         provide: CastService,
         useValue: { isAvailable: () => false, connecting: () => false, isConnected: () => false, disconnect: () => {}, requestSession: () => {} },
+      },
+      {
+        provide: RemoteService,
+        useValue: { selectedTarget: () => null, targets: () => [] },
       },
       {
         provide: NavbarService,

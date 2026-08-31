@@ -133,4 +133,6 @@ export class UpdateUserDto {
   @IsBoolean()
   @IsOptional()
   spoilerHideTitles?: boolean;
+
+
 }

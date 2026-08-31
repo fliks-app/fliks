@@ -281,6 +281,9 @@ export class SeekbarComponent {
     try { bar.setPointerCapture(event.pointerId); } catch {}
 
     this.endKeyPreview();
+    // A pending key-scrub commit must not fire mid-drag and snap the thumb to
+    // wherever the pointer happened to be when its 700ms window elapsed.
+    this.cancelScrubTimer();
     this.dragging.set(true);
     this.dragChange.emit(true);
     this.updateDragFromPointer(event, bar);
@@ -425,6 +428,10 @@ export class SeekbarComponent {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     // Restart the window rather than commit: the user may still be tapping.
     this.scheduleScrubCommit();
+    // A real hold auto-repeats keydown with no keyup in between, so this only
+    // fires between separate taps: reset the acceleration clock here so the
+    // idle gap between taps doesn't count as held time (the run/offset survive).
+    this.scrubStartedAt = Date.now();
   }
 
   private scheduleScrubCommit() {

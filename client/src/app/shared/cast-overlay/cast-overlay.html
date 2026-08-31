@@ -1,157 +1,223 @@
-@if (cast.isConnected() && cp.hasMedia() && cp.expanded()) {
+@if (t.isConnected() && t.hasMedia() && t.expanded()) {
     <!-- Backdrop (mobile only) -->
-    <div class="fixed inset-0 z-50 bg-black/50 lg:hidden" (click)="toggle()"></div>
+    <div class="fixed inset-0 z-[60] bg-black/50 lg:hidden" (click)="toggle()"></div>
 
     <!-- Container: fullscreen on mobile, floating card on desktop -->
-    <div class="fixed inset-0 lg:inset-auto lg:top-14 lg:right-4 z-50 lg:w-96 max-h-dvh max-w-dvw overflow-hidden lg:overflow-visible touch-none lg:touch-auto">
+    <div class="fixed inset-0 lg:inset-auto lg:top-14 lg:right-4 z-[60] lg:w-[27rem] max-h-dvh max-w-dvw overflow-hidden lg:overflow-visible touch-none lg:touch-auto">
       <div class="bg-base-100 h-full lg:h-auto lg:rounded-xl lg:shadow-2xl lg:border lg:border-base-300 flex flex-col max-h-dvh lg:overflow-visible">
 
-        <!-- Header -->
-        <div class="flex items-center lg:items-start gap-3 px-4 pt-4 lg:py-3 shrink-0 lg:border-b lg:border-base-200"
-             style="padding-top: calc(env(safe-area-inset-top) / 2 + 12px)"
-        >
-          <!-- Poster thumbnail (desktop only) -->
-          @if (cp.fanartUrl()) {
-            <img [src]="cp.fanartUrl()" alt="" class="hidden lg:block w-12 h-16 object-cover rounded shrink-0" />
-          }
-          <div class="min-w-0 flex-1 lg:py-1">
-            <p class="font-bold truncate">{{ cp.mediaTitle() }}</p>
-            @if (cp.episodeTitle()) {
-              <p class="text-xs text-base-content/50 truncate">{{ cp.episodeTitle() }}</p>
-            }
-          </div>
-          <button class="btn btn-ghost btn-sm btn-circle shrink-0 ml-2" (click)="toggle()">
-            <svg lucideX class="h-4 w-4"></svg>
+        <!-- Close only: the centred poster below says what is playing, so there
+             is no header rule and no second thumbnail beside it. -->
+        <!-- The notch inset belongs to the fullscreen form, which is a
+             breakpoint and not a device: a tablet wide enough for the floating
+             card was still paying for a notch it does not have there. -->
+        <div class="flex items-center justify-end px-4 shrink-0
+                    pt-[calc(env(safe-area-inset-top)/2+24px)]
+                    max-lg:landscape:pt-3 lg:pt-3">
+          <button class="btn btn-ghost btn-circle shrink-0" (click)="toggle()"
+                  [attr.aria-label]="'common.close' | translate">
+            <svg lucideX class="h-6 w-6"></svg>
           </button>
         </div>
 
-        <!-- Large poster (mobile only) -->
-        <div class="flex-1 flex items-center justify-center px-12 py-4 min-h-0 lg:hidden">
-          @if (cp.fanartUrl()) {
-            <img [src]="cp.fanartUrl()" alt="" class="max-h-[60%] w-auto object-contain rounded-xl shadow-xl" />
+        @if (t.targetOffline()) {
+          <div class="flex-1 flex flex-col items-center justify-center gap-5 px-8 py-8 text-center">
+            <svg lucideCast class="h-12 w-12 opacity-30"></svg>
+            <p class="text-base opacity-70">{{ 'remote.offline_message' | translate }}</p>
+          </div>
+
+          <div class="shrink-0 flex justify-center px-4 pt-3"
+               style="padding-bottom: max(1rem, env(safe-area-inset-bottom))">
+            <button class="btn btn-primary btn-sm" (click)="disconnect()">
+              {{ 'remote.play_here_instead' | translate }}
+            </button>
+          </div>
+        } @else if (t.isStarting()) {
+          <div class="flex-1 flex flex-col items-center justify-center gap-5 px-8 py-8 text-center">
+            <span class="loading loading-spinner loading-md"></span>
+            <p class="text-base opacity-70">{{ 'remote.starting_message' | translate }}</p>
+          </div>
+        } @else if (t.isIdle()) {
+          <!-- The icon stands apart; the two lines belong together. -->
+          <div class="flex-1 flex flex-col items-center justify-center gap-5 px-8 py-8 text-center">
+            <svg lucideCast class="h-12 w-12 opacity-30"></svg>
+            <div class="space-y-1">
+              <p class="text-base opacity-70">{{ 'remote.idle_message' | translate }}</p>
+              <p class="text-sm opacity-50">{{ 'remote.idle_hint' | translate }}</p>
+            </div>
+          </div>
+
+          <div class="shrink-0 flex justify-center px-4 pt-3"
+               style="padding-bottom: max(1rem, env(safe-area-inset-bottom))">
+            <button class="btn btn-ghost btn-sm text-base-content/50" (click)="disconnect()">
+              {{ 'remote.stop_controlling' | translate }}
+            </button>
+          </div>
+        } @else {
+        <!-- Poster beside the controls on a short, wide phone, above them when
+             the viewport is tall, and in the header of the desktop card, which
+             `lg:contents` keeps as a single column. Every two-column rule is
+             scoped `max-lg:` because a desktop viewport is landscape too. -->
+        <div class="flex-1 min-h-0 flex flex-col max-lg:landscape:flex-row max-lg:landscape:items-stretch lg:contents">
+
+        <!-- Poster, centred on every surface. The desktop card is content-sized,
+             so its height is capped rather than a share of the box. -->
+        <div class="flex-1 flex items-center justify-center px-6 py-4 min-h-0
+                    max-lg:landscape:w-2/5 max-lg:landscape:flex-none max-lg:landscape:pr-2
+                    lg:flex-none lg:py-3">
+          @if (t.fanartUrl()) {
+            <img [cachedSrc]="t.fanartUrl()! | resolveUrl:'medium'" alt=""
+                 class="max-h-full max-w-full lg:max-h-56 object-contain rounded-xl shadow-xl" />
           } @else {
-            <svg lucideCast class="h-20 w-20 text-info"></svg>
+            <div class="skeleton h-full max-h-[75%] lg:h-56 aspect-[2/3] rounded-xl"></div>
           }
         </div>
 
-        <!-- Controls -->
-        <div class="shrink-0 lg:shrink px-4 pt-4 lg:py-4 space-y-5 lg:space-y-4"
+        <!-- Controls. The scroll box belongs to the phone two-column layout
+             only: on desktop it clipped the upward track dropdowns. -->
+        <div class="shrink-0 lg:shrink px-4 pt-4 max-lg:landscape:pt-2 lg:py-4 space-y-4 max-lg:landscape:space-y-3
+                    max-lg:landscape:flex-1 max-lg:landscape:min-w-0 max-lg:landscape:self-center
+                    max-lg:landscape:overflow-y-auto"
              style="padding-bottom: max(2rem, env(safe-area-inset-bottom))"
         >
-          <!-- Progress bar -->
-          <div>
-            <app-seekbar #seekbar
-              [currentTime]="cast.currentTime()"
-              [duration]="cast.duration()"
-              [loading]="cast.buffering()"
-              [spriteUrl]="cp.spriteUrl()"
-              [spriteMetadata]="cp.spriteMetadata()"
-              variant="cast"
-              [showBuffered]="false"
-              (seek)="cast.seek($event)"
-            />
-            <div class="flex justify-between text-xs text-base-content/50 mt-1">
-              <span>{{ formatTime(seekbar.displayTime()) }}</span>
-              <span>{{ formatTime(cast.duration()) }}</span>
+          <!-- The device refused to start by itself. Said plainly, because the
+               play button below is refused for the same reason. -->
+          @if (t.autoplayBlocked()) {
+            <div class="alert alert-warning py-2">
+              <span class="text-sm">{{ 'remote.autoplay_blocked' | translate }}</span>
+            </div>
+          }
+
+          <!-- Skip cue: the row keeps its height so an offer appearing
+               mid-playback does not shift the buttons under a thumb. -->
+          <div class="min-h-9">
+            @if (t.skipCue(); as cue) {
+              <button class="btn btn-sm btn-primary w-full" (click)="t.skip()">
+                {{ cue.labelKey | translate }}
+              </button>
+            }
+          </div>
+
+          <!-- Title + progress: one unit, so the parent rhythm does not wedge
+               the heading away from the bar it labels. -->
+          <div class="space-y-1">
+            <div class="min-w-0">
+              <p class="text-xl lg:text-lg font-bold truncate">{{ t.mediaTitle() }}</p>
+              @if (t.episodeTitle()) {
+                <p class="text-sm text-base-content/50 truncate">{{ t.episodeTitle() }}</p>
+              }
+            </div>
+
+            <div>
+              <app-seekbar #seekbar
+                [currentTime]="t.currentTime()"
+                [duration]="t.duration()"
+                [loading]="t.buffering()"
+                [spriteUrl]="t.spriteUrl()"
+                [spriteMetadata]="t.spriteMetadata()"
+                variant="cast"
+                [showBuffered]="false"
+                (seek)="t.seek($event)"
+              />
+              <div class="flex justify-between text-sm text-base-content/50 mt-1">
+                <span>{{ formatTime(seekbar.displayTime()) }}</span>
+                <span>{{ formatTime(t.duration()) }}</span>
+              </div>
             </div>
           </div>
 
           <!-- Playback buttons -->
           <div class="flex items-center justify-center gap-6 lg:gap-4">
-            <button class="btn btn-ghost btn-circle lg:btn-sm" (click)="cast.seek(cast.currentTime() - 10)">
+            <button class="btn btn-ghost btn-circle lg:btn-sm" (click)="t.seek(t.currentTime() - 10)">
               <svg lucideRotateCcw class="h-7 w-7 lg:h-5 lg:w-5"></svg>
             </button>
-            <button class="btn btn-primary btn-circle btn-lg lg:btn-md" (click)="cast.togglePlayPause()">
-              @if (cast.isPaused()) {
+            <button class="btn btn-primary btn-circle btn-lg lg:btn-md" (click)="t.togglePlayPause()">
+              @if (t.buffering()) {
+                <!-- Same reading as the player: the transport stays where it is
+                     and the button says the stream is not ready yet. -->
+                <span class="loading loading-spinner loading-md lg:loading-sm"></span>
+              } @else if (t.isPaused()) {
                 <svg lucidePlay class="h-8 w-8 lg:h-6 lg:w-6"></svg>
               } @else {
                 <svg lucidePause class="h-8 w-8 lg:h-6 lg:w-6"></svg>
               }
             </button>
-            <button class="btn btn-ghost btn-circle lg:btn-sm" (click)="cast.seek(cast.currentTime() + 10)">
+            <button class="btn btn-ghost btn-circle lg:btn-sm" (click)="t.seek(t.currentTime() + 10)">
               <svg lucideRotateCw class="h-7 w-7 lg:h-5 lg:w-5"></svg>
             </button>
           </div>
 
-          <!-- Volume -->
-          <div class="flex items-center justify-center gap-2">
-            <button class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'player.volume' | translate" (click)="cast.toggleMute()">
-              @if (cast.muted() || cast.volume() === 0) {
-                <svg lucideVolumeX class="h-5 w-5"></svg>
-              } @else {
-                <svg lucideVolume2 class="h-5 w-5"></svg>
-              }
-            </button>
-            <input
-              type="range"
-              class="range range-xs flex-1 max-w-56"
-              [attr.aria-label]="'player.volume' | translate"
-              [min]="0"
-              [max]="1"
-              [step]="0.05"
-              [value]="cast.muted() ? 0 : cast.volume()"
-              (input)="cast.setVolume(+$any($event.target).value)"
-            />
-          </div>
+          <!-- Volume. Hidden where the target's platform owns the level: its
+               engine can only pretend to set one, and a dead slider is worse
+               than none. -->
+          @if (t.canSetVolume()) {
+            <div class="flex items-center justify-center gap-2">
+              <button class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'player.volume' | translate" (click)="t.toggleMute()">
+                @if (t.muted() || t.volume() === 0) {
+                  <svg lucideVolumeX class="h-5 w-5"></svg>
+                } @else {
+                  <svg lucideVolume2 class="h-5 w-5"></svg>
+                }
+              </button>
+              <input
+                type="range"
+                class="range range-xs flex-1 max-w-56"
+                [attr.aria-label]="'player.volume' | translate"
+                [min]="0"
+                [max]="1"
+                [step]="0.05"
+                [value]="t.muted() ? 0 : t.volume()"
+                (input)="t.setVolume(+$any($event.target).value)"
+              />
+            </div>
+          }
 
-          <!-- Pickers -->
-          <div class="flex items-center justify-center gap-3 lg:gap-2 flex-wrap">
-            @if (cp.availableSubtitles().length) {
-              <app-dropdown-menu placement="top-start">
-                <div trigger tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
-                  <svg lucideCaptions class="h-4 w-4"></svg>
-                  <span class="text-xs">Sous-titres</span>
-                </div>
-                <button class="dropdown-item text-white" (click)="selectSubtitle(null)">
-                  <span class="flex-1 text-left">Désactivé</span>
-                  @if (!cp.activeSubtitleId()) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                </button>
-                @for (sub of cp.availableSubtitles(); track sub.id) {
-                  <button class="dropdown-item text-white" (click)="selectSubtitle(sub)">
-                    <span class="flex-1 text-left">{{ sub.label }}</span>
-                    @if (cp.activeSubtitleId() === sub.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
+          <!-- Pickers, one centred row. Driven by `pickers()` so a file with
+               a single audio track leaves no gap and the rest stay centred. -->
+          <div class="flex flex-wrap justify-evenly gap-x-4 gap-y-3 min-h-16">
+            @for (p of pickers(); track p.kind; let i = $index) {
+              <div class="min-w-0 space-y-1">
+                <span class="block text-sm text-base-content/50">{{ 'common.label_colon' | translate: { label: (p.labelKey | translate) } }}</span>
+                <app-dropdown-menu [placement]="placementFor(i)" maxHeight="max-h-[45vh]">
+                  <button trigger type="button"
+                          class="select select-bordered select-sm w-fit min-w-28 max-w-full text-left truncate cursor-pointer transition-colors hover:bg-base-content/10">
+                    {{ p.active }}
                   </button>
-                }
-              </app-dropdown-menu>
-            }
-            @if (cp.availableAudioTracks().length > 1) {
-              <app-dropdown-menu placement="top-end">
-                <div trigger tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
-                  <svg lucideHeadphones class="h-4 w-4"></svg>
-                  <span class="text-xs">Audio</span>
-                </div>
-                @for (track of cp.availableAudioTracks(); track track.id) {
-                  <button class="dropdown-item text-white" (click)="selectAudio(track)">
-                    <span class="flex-1 text-left">{{ track.label }}</span>
-                    @if (cp.activeAudioTrackId() === track.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                  </button>
-                }
-              </app-dropdown-menu>
-            }
-            @if (cp.availableQualities().length > 1) {
-              <app-dropdown-menu placement="top-end">
-                <div trigger tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1">
-                  <svg lucideSettings class="h-4 w-4"></svg>
-                  <span class="text-xs">Qualité</span>
-                </div>
-                @for (q of cp.availableQualities(); track q.id) {
-                  <button class="dropdown-item text-white" (click)="selectQuality(q)">
-                    <span class="flex-1 text-left">{{ q.label }}</span>
-                    @if (cp.activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 shrink-0"></svg> }
-                  </button>
-                }
-              </app-dropdown-menu>
+                  @if (p.offRow) {
+                    <app-dropdown-option
+                      [head]="'player.off' | translate"
+                      [selected]="!p.activeId"
+                      (click)="pick(p, null)"
+                    />
+                  }
+                  @for (o of p.options; track o.id) {
+                    <app-dropdown-option
+                      [head]="o.head || o.label"
+                      [sub]="o.sub"
+                      [selected]="p.activeId === o.id"
+                      (click)="pick(p, o)"
+                    />
+                  }
+                </app-dropdown-menu>
+              </div>
             }
           </div>
 
           <!-- Stop -->
-          <div class="flex justify-center">
-            <button class="btn btn-ghost btn-sm text-base-content/50 gap-2" (click)="disconnect()">
+          <div class="flex justify-center gap-1">
+            <button class="btn btn-ghost btn-sm text-base-content/50 gap-2" (click)="stopPlayback()">
               <svg lucideSquare class="h-4 w-4"></svg>
-              Arrêter la diffusion
+              {{ 'remote.stop_playback' | translate }}
             </button>
+            @if (t.canStopControlling) {
+              <button class="btn btn-ghost btn-sm text-base-content/50" (click)="disconnect()">
+                {{ 'remote.stop_controlling' | translate }}
+              </button>
+            }
           </div>
         </div>
+        </div>
+        }
 
       </div>
     </div>

@@ -495,3 +495,30 @@ struct PlaybackInfoResponse: Codable {
     let sessionId: String
     let profileHash: String?
 }
+
+// MARK: - Remote control
+
+/// POST /api/remote/register response.
+struct RemoteRegisterResponse: Codable {
+    let targetId: String
+}
+
+/// A pending command polled from the server. Absolute/state-setting, never a
+/// delta: see `RemoteControlService`. Field set mirrors the `remote.command`
+/// SSE payload other clients receive over the wire.
+struct RemoteCommand: Codable {
+    let cmdId: String
+    /// Unix epoch milliseconds: matches the rest of this codebase's JS-origin timestamps.
+    let expiresAt: Double
+    /// "load" | "play" | "pause" | "playpause" | "stop" | "seek" | "volume" |
+    /// "mute" | "next" | "audio" | "subtitle"
+    let action: String
+    let positionSeconds: Double?
+    let level: Double?
+    let muted: Bool?
+    let trackId: String?
+    let subtitleId: String?
+    let mediaFileId: Int?
+    let mediaId: Int?
+    let episodeId: Int?
+}

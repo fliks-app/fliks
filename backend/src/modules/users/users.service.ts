@@ -19,6 +19,7 @@ import { Action } from '../auth/casl/actions.enum';
 import { LibraryUserAccess } from '../libraries/entities/library-user-access.entity';
 import { Library } from '../libraries/entities/library.entity';
 import { ImageService } from '../images/image.service';
+import { EventsService } from '../scheduler/events.service';
 
 /** API shape: user without password hash, with role name instead of relation. */
 export type PublicUser = Omit<User, 'passwordHash' | 'userRole'> & {
@@ -41,6 +42,7 @@ export class UsersService implements OnModuleInit {
     private readonly libraryAccessRepo: Repository<LibraryUserAccess>,
     private readonly caslAbilityFactory: CaslAbilityFactory,
     private readonly imageService: ImageService,
+    private readonly events: EventsService,
   ) {}
 
   async onModuleInit() {
@@ -231,6 +233,12 @@ export class UsersService implements OnModuleInit {
       if (isSelf) target.requirePasswordChange = false;
     }
 
+    // A revoked/demoted account may still hold an hours-old SSE connection
+    // (authorized once at connect time), which would otherwise stay a listed,
+    // commandable remote-control target until it happens to drop on its own.
+    const roleChanging = dto.roleId !== undefined && dto.roleId !== target.roleId;
+    const enabledChanging = dto.enabled !== undefined && dto.enabled !== target.enabled;
+
     // Manager-only fields
     if (isManager) {
       if (dto.roleId !== undefined) {
@@ -297,6 +305,7 @@ export class UsersService implements OnModuleInit {
     await this.userRepo.save(target);
 
     if (leavingSocial) await this.leaveSocial(targetId);
+    if (roleChanging || enabledChanging) this.events.dropConnectionsForUser(targetId);
 
     // Library access replace (manager-only). Done after the user row save so
     // FK is valid even for newly-promoted users.

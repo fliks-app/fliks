@@ -75,6 +75,9 @@ export class SetupChecklistComponent implements OnInit {
   padding = input(false);
 
   ngOnInit() {
+    // The template renders nothing on a TV, so the request could only ever be
+    // discarded, on the slowest network path in the product.
+    if (this.isTv()) return;
     // Reuse already-cached items on second mount; otherwise fetch.
     if (this.items().length === 0) void this.api.refresh();
   }

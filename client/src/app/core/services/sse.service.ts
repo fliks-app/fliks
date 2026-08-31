@@ -1,4 +1,5 @@
 import { Injectable, signal, inject, effect, untracked, OnDestroy } from '@angular/core';
+import { Subject } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from './toast.service';
 import { ServerConfigService } from './server-config.service';
@@ -7,11 +8,72 @@ import { DownloadProgressService } from './download-progress.service';
 import { MediaType } from '../enums/media-type.enum';
 import { DownloadProgressState } from '../enums/download-progress-state.enum';
 import { invalidatePrefix } from '../interceptors/cache.interceptor';
+import { getOrCreateDeviceId } from '../utils/device-info';
+import { DeviceService } from './device.service';
+import { SystemInfoService } from './system-info.service';
+import { currentTargetId } from './remote-target-id';
 
 export interface SseEvent {
   type: string;
   [key: string]: unknown;
 }
+
+/** One rung of a target's quality ladder. `lowBandwidth` marks an eco rung, of
+ *  which there is one per height, so a list without it shows the label twice. */
+export interface RemoteQualityRung {
+  id: string;
+  label: string;
+  lowBandwidth?: boolean;
+}
+
+/** Absolute, state-setting playback command aimed at this device. */
+export interface RemoteCommand {
+  type: 'remote.command';
+  cmdId: string;
+  expiresAt: number;
+  byTargetId: string | null;
+  action:
+    | 'load' | 'play' | 'pause' | 'playpause' | 'stop'
+    | 'seek' | 'volume' | 'mute' | 'next' | 'audio' | 'subtitle' | 'quality';
+  mediaId?: number;
+  mediaFileId?: number;
+  episodeId?: number;
+  positionSeconds?: number;
+  level?: number;
+  muted?: boolean;
+  trackId?: string;
+  subtitleId?: string | null;
+  qualityId?: string;
+}
+
+export interface RemoteState {
+  type: 'remote.state';
+  targetId: string;
+  sessionId: string;
+  mediaId: number | null;
+  mediaFileId: number;
+  episodeId?: number | null;
+  mediaTitle: string | null;
+  episodeLabel: string | null;
+  posterUrl: string | null;
+  positionSeconds: number;
+  durationSeconds: number;
+  state: 'playing' | 'paused' | 'buffering';
+  volume: number | null;
+  muted: boolean | null;
+  supportsVolume: boolean;
+  subtitleId: string | null;
+  quality: string | null;
+  qualities: RemoteQualityRung[] | null;
+  /** The target's browser refused to start without a gesture on that device. */
+  autoplayBlocked: boolean;
+  audioTrackIndex: number | null;
+  subtitleTrackIndex: number | null;
+  lastCmdId: string | null;
+}
+
+/** `sessionStorage` key for the per-tab half of this device's target id. */
+const TAB_NONCE_KEY = 'fliks.remote.tabNonce';
 
 export interface TaskProgress {
   type: 'task.progress';
@@ -28,6 +90,8 @@ export class SseService implements OnDestroy {
   private readonly serverConfig = inject(ServerConfigService);
   private readonly auth = inject(AuthService);
   private readonly downloadProgress = inject(DownloadProgressService);
+  private readonly device = inject(DeviceService);
+  private readonly systemInfo = inject(SystemInfoService);
 
   readonly activeProgress = signal<Map<string, TaskProgress>>(new Map());
   readonly lastEvent = signal<SseEvent | null>(null);
@@ -37,10 +101,29 @@ export class SseService implements OnDestroy {
   /** Issued by the backend on SSE connect — bound to live sessions so admin
    *  remote-control reaches only this device/tab. */
   readonly connectionId = signal<string | null>(null);
+  /** `deviceId#tabNonce`. Stable across this tab's SSE reconnects: unlike
+   *  `connectionId`, reminted server-side every time: and unique per screen,
+   *  unlike the device id, which two tabs of one browser share. */
+  readonly targetId = signal<string | null>(null);
+  /** Commands are transient intent: a last-value signal would let a state
+   *  frame overwrite one before its consumer ran, losing it with no trace. */
+  readonly commands = new Subject<RemoteCommand>();
+  /** A target leaving its player. A transient fact, so it cannot ride on
+   *  `lastEvent`: the same handler emits `remote.targets_changed` right after
+   *  it, which replaced the value before any effect had run. */
+  readonly stopped = new Subject<string>();
+  /** Own signal rather than `lastEvent`: this fires every 10s per playing
+   *  session for every device of the account, and `lastEvent` is read inside
+   *  effects by a dozen unrelated components. */
+  readonly remoteState = signal<RemoteState | null>(null);
   private eventSource: EventSource | null = null;
+  private deviceIdPromise: Promise<string> | null = null;
+  /** Bumped by `close()`. `connect()` awaits the device id, so a logout during
+   *  that await would otherwise open a stream for the previous session. */
+  private generation = 0;
   private retryDelay = 5000;
   private retryHandle: ReturnType<typeof setTimeout> | null = null;
-  private readonly onOnline = () => this.connect();
+  private readonly onOnline = () => void this.connect();
 
   constructor() {
     // The stream is authenticated as one account: detach on a session change
@@ -60,7 +143,7 @@ export class SseService implements OnDestroy {
   /** Force reconnect (e.g. after app resume from background) */
   reconnect() {
     this.close();
-    this.connect();
+    void this.connect();
   }
 
   /** Detach: the source, its pending retry and the offline one-shot would all
@@ -71,24 +154,46 @@ export class SseService implements OnDestroy {
       this.retryHandle = null;
     }
     window.removeEventListener('online', this.onOnline);
+    this.generation++;
     this.eventSource?.close();
     this.eventSource = null;
     this.connectionId.set(null);
     this.retryDelay = 5000;
   }
 
-  connect() {
+  async connect() {
     if (this.eventSource) return;
 
-    let url = '/api/system/events';
+    const generation = this.generation;
+    const targetId = await this.resolveTargetId();
+    // A logout or account switch during the await would otherwise leave this
+    // continuation opening a stream: and registering a target: for the
+    // session that just ended.
+    if (generation !== this.generation || this.eventSource) return;
+    this.targetId.set(targetId);
+    currentTargetId.set(targetId);
 
+    // One builder for both branches: the web path has no query string while
+    // the native path carries `?token=`, so appending by hand yields
+    // `?token=...?device=...` and breaks exactly the TV and mobile targets.
+    const params = new URLSearchParams();
+    params.set('device', targetId);
+    params.set('ff', this.device.formFactor());
+    const tvPlatform = this.device.tvPlatform();
+    if (tvPlatform) params.set('tvPlatform', tvPlatform);
+    // A name its owner chose beats anything derivable from the User-Agent, and
+    // it is a proper noun, so it travels verbatim like the browser and OS do.
+    await this.systemInfo.ready();
+    const deviceName = this.systemInfo.deviceName();
+    if (deviceName) params.set('name', deviceName);
+
+    let base = '/api/system/events';
     if (this.serverConfig.isNative) {
-      url = this.serverConfig.resolveUrl(url);
+      base = this.serverConfig.resolveUrl(base);
       const token = this.auth.accessToken;
-      if (token) {
-        url += `?token=${encodeURIComponent(token)}`;
-      }
+      if (token) params.set('token', token);
     }
+    const url = `${base}?${params.toString()}`;
 
     this.eventSource = new EventSource(url);
     this.eventSource.onmessage = (event) => {
@@ -104,6 +209,18 @@ export class SseService implements OnDestroy {
           // while we were disconnected: nothing announces that, and a leaf kept
           // here shows a download badge that never goes away.
           this.downloadProgress.reset();
+          return;
+        }
+        if (data.type === 'remote.command') {
+          this.commands.next(data as unknown as RemoteCommand);
+          return;
+        }
+        if (data.type === 'remote.stopped') {
+          this.stopped.next(String(data['targetId'] ?? ''));
+          return;
+        }
+        if (data.type === 'remote.state') {
+          this.remoteState.set(data as unknown as RemoteState);
           return;
         }
         this.handleEvent(data);
@@ -134,13 +251,40 @@ export class SseService implements OnDestroy {
       // retry replaying the same expired one.
       this.retryHandle = setTimeout(() => {
         if (this.serverConfig.isNative && this.auth.refreshToken) {
-          void this.auth.refreshAccessToken().finally(() => this.connect());
+          void this.auth.refreshAccessToken().finally(() => void this.connect());
         } else {
-          this.connect();
+          void this.connect();
         }
       }, this.retryDelay);
       this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
     };
+  }
+
+  /** Cached: the device id is a persisted async read, so only the very first
+   *  connect pays for it.
+   *
+   *  A standalone shell (Capacitor, TV, desktop) has exactly one webview, so it
+   *  gets a bare device id. That makes its target id survive a relaunch, which
+   *  is what lets the server evict the previous, already-dead connection: a
+   *  killed webview sends no FIN, so the socket alone never reveals it. Only a
+   *  browser needs the per-tab suffix, because only a browser has tabs. */
+  private async resolveTargetId(): Promise<string> {
+    this.deviceIdPromise ??= getOrCreateDeviceId();
+    const deviceId = await this.deviceIdPromise;
+    if (this.serverConfig.isNative) return deviceId;
+    let nonce: string | null = null;
+    try {
+      nonce = sessionStorage.getItem(TAB_NONCE_KEY);
+      if (!nonce) {
+        nonce = crypto.randomUUID().slice(0, 8);
+        sessionStorage.setItem(TAB_NONCE_KEY, nonce);
+      }
+    } catch {
+      // Private mode / blocked storage: a per-load nonce still separates two
+      // tabs, it just doesn't survive a reload.
+      nonce ??= crypto.randomUUID().slice(0, 8);
+    }
+    return `${deviceId}#${nonce}`;
   }
 
   private handleEvent(event: SseEvent) {

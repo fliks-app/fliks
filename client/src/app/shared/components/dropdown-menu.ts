@@ -60,7 +60,8 @@ type Placement = 'bottom-end' | 'bottom-start' | 'top-end' | 'top-start';
         </div>
         <div
           tabindex="0"
-          class="dropdown-content bg-base-200 rounded-box shadow-xl min-w-60 max-h-[70vh] p-1 z-[101] overflow-y-auto overflow-x-hidden whitespace-nowrap"
+          class="dropdown-content bg-base-200 rounded-box shadow-xl min-w-60 p-1 z-[101] overflow-y-auto overflow-x-hidden whitespace-nowrap"
+          [class]="maxHeight()"
         >
           <ng-container *ngTemplateOutlet="itemsTpl"></ng-container>
         </div>
@@ -79,6 +80,10 @@ type Placement = 'bottom-end' | 'bottom-start' | 'top-end' | 'top-start';
 })
 export class DropdownMenuComponent {
   readonly placement = input<Placement>('bottom-end');
+  /** Height cap on the panel. A caller whose trigger sits low and opens upward
+   *  needs a tighter one: the panel is anchored above the trigger, so a cap
+   *  taller than the space there puts the first options off screen. */
+  readonly maxHeight = input('max-h-[70vh]');
 
   private readonly tv = inject(TvService);
   private readonly device = inject(DeviceService);

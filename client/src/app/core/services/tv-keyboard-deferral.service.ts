@@ -29,7 +29,13 @@ export class TvKeyboardDeferralService {
     const defer = (e: FocusEvent) => this.hold(e.target as HTMLElement | null);
     const release = (e: Event) => this.release(e.target as HTMLElement | null);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') this.release(e.target as HTMLElement | null);
+      if (e.key !== 'Enter') return;
+      // That press meant "let me type", so it must not also reach the form and
+      // submit it: the field only just became writable.
+      if (this.release(e.target as HTMLElement | null)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
     };
 
     document.addEventListener('focusin', defer, true);
@@ -50,12 +56,15 @@ export class TvKeyboardDeferralService {
     field.setAttribute(DEFERRED, '');
   }
 
-  private release(el: HTMLElement | null): void {
+  /** True when a held field was actually released, so the caller knows the
+   *  press was spent on raising the keyboard. */
+  private release(el: HTMLElement | null): boolean {
     const field = el?.closest?.<HTMLInputElement>(`[${DEFERRED}]`);
-    if (!field) return;
+    if (!field) return false;
     field.removeAttribute(DEFERRED);
     field.readOnly = false;
     // Re-focus so the WebView re-evaluates the field and raises the keyboard.
     field.focus();
+    return true;
   }
 }

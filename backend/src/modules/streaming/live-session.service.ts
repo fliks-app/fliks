@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import type { RemoteQualityRung } from '../scheduler/events.service';
 import { StreamLifetime } from './lifetime-constants';
 import type { TranscodeReason } from './dto/playback-info.dto';
 import type { BurnInSubtitle } from './transcoding';
@@ -50,6 +51,16 @@ export interface LiveSession {
   /** Instance suffix when split off a concurrent sibling, else null (#638). */
   instanceId: string | null;
   quality: string | null;
+  /** The target's own quality ladder. Reported by the target rather than
+   *  rebuilt here: the rungs depend on its transcode decision, so a list
+   *  assembled elsewhere would offer ids it does not accept. */
+  qualities: RemoteQualityRung[] | null;
+  /** Set when this playback was launched from another device by remote control:
+   *  the account it counts for, which is the launcher rather than the account
+   *  the target is signed into. */
+  attributedUserId: number | null;
+  /** The target's browser refused to start playback without a user gesture. */
+  autoplayBlocked: boolean;
   kind: SessionKind;
   deviceLabel: string | null;
   /** Real host OS name+version ("macOS 26") from the client DeviceProfile;
@@ -66,8 +77,21 @@ export interface LiveSession {
   lastBeat: number;
   position: number;
   state: PlaybackState;
+  /** Client-composed "S1:E2 - Title" for a series, null for a film. Carried so
+   *  a controller can label what a target plays without a second lookup. */
+  episodeLabel: string | null;
+  /** The target's engine owns a per-stream level. False where the platform owns
+   *  it, so a controller hides its slider rather than offering a no-op. */
+  supportsVolume: boolean;
+  /** App-level id of the subtitle the target is showing, null for none. Both
+   *  sides key it off the same buildSubtitleTracks entry, so it travels as is. */
+  subtitleId: string | null;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;
+  /** Reported by the client heartbeat: lets a remote-control controller show
+   *  the target's real volume instead of a guess. */
+  volume: number | null;
+  muted: boolean | null;
   // ── Per-session settings owned by this entry ──
   useTs: boolean;
   audioPlan: AudioPlan | null;
@@ -131,6 +155,7 @@ export interface CreateLiveSessionInput {
   posterUrl?: string | null;
   profileHash?: string | null;
   quality?: string | null;
+  attributedUserId?: number | null;
   kind: SessionKind;
   deviceLabel?: string | null;
   systemName?: string | null;
@@ -207,12 +232,81 @@ export type LiveSessionPatch = Partial<
  * window — `listForJob` reports whether a given encoder still has any
  * live consumer.
  */
+/**
+ * Every field of a live session, defaulted from its creation input. The single
+ * definition of the shape: a test that needs one derives from this instead of
+ * restating it, so adding a field never touches a spec.
+ */
+export function buildLiveSession(
+  input: CreateLiveSessionInput,
+  sessionId: string,
+  now: number,
+): LiveSession {
+  return {
+      sessionId: randomUUID(),
+      userId: input.userId,
+      username: input.username,
+      mediaFileId: input.mediaFileId,
+      mediaTitle: input.mediaTitle ?? null,
+      mediaType: input.mediaType ?? null,
+      posterUrl: input.posterUrl ?? null,
+      profileHash: input.profileHash ?? null,
+      profileBase: input.profileHash ?? null,
+      instanceId: null,
+      quality: input.quality ?? null,
+      qualities: null,
+      attributedUserId: input.attributedUserId ?? null,
+      autoplayBlocked: false,
+      kind: input.kind,
+      deviceLabel: input.deviceLabel ?? null,
+      systemName: input.systemName ?? null,
+      appVersion: input.appVersion ?? null,
+      sseConnectionId: input.sseConnectionId ?? null,
+      startedAt: now,
+      lastBeat: now,
+      position: input.position ?? 0,
+      state: 'playing',
+      episodeLabel: null,
+      supportsVolume: true,
+      subtitleId: null,
+      audioTrackIndex: null,
+      subtitleTrackIndex: null,
+      volume: null,
+      muted: null,
+      useTs: input.useTs ?? false,
+      audioPlan: input.audioPlan ?? null,
+      audioTrackPlans: input.audioTrackPlans ?? null,
+      audioStreamIndex: input.audioStreamIndex ?? null,
+      audioStreamCount: input.audioStreamCount ?? 0,
+      useExtXMedia: input.useExtXMedia ?? false,
+      deviceType: input.deviceType ?? 'desktop',
+      hdrLadder: input.hdrLadder ?? false,
+      supportsHlsSubtitles: input.supportsHlsSubtitles ?? false,
+      // Default true: only a client that explicitly declares it seeks straight
+      // to the resume segment opts out of the seg-0 companion. Pre-flag clients
+      // keep the companion (a wasted seg-0 probe is harmless; a missing one
+      // makes a seg-0-probing engine restart from scratch).
+      probesSegZero: input.probesSegZero ?? true,
+      // Default true: an older client that doesn't send the field keeps
+      // today's full-ladder behaviour, same as a fresh capability flag.
+      supportsAbr: input.supportsAbr ?? true,
+      videoVariant: input.videoVariant ?? null,
+      tonemapping: input.tonemapping ?? false,
+      transcodeReasons: input.transcodeReasons ?? [],
+      burnIn: input.burnIn ?? null,
+      encoderPreset: input.encoderPreset ?? 'faster',
+      canCopyVideo: input.canCopyVideo ?? false,
+      canCopyAudio: input.canCopyAudio ?? false,
+      pinned: input.pinned ?? false,
+  };
+}
+
 @Injectable()
 export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(LiveSessionRegistry.name);
   private readonly sessions = new Map<string, LiveSession>();
   /** GC'd sessions still inside the revive window, keyed by sid. Consulted
-   *  only by {@link resolve} — they are invisible to the dashboard, the
+   *  only by {@link resolve}: they are invisible to the dashboard, the
    *  per-user cap and the ffmpeg keep-alive, so a tombstone never holds an
    *  encoder alive. */
   private readonly tombstones = new Map<string, LiveSession>();
@@ -246,55 +340,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
    */
   create(input: CreateLiveSessionInput): LiveSession {
     const now = Date.now();
-    const session: LiveSession = {
-      sessionId: randomUUID(),
-      userId: input.userId,
-      username: input.username,
-      mediaFileId: input.mediaFileId,
-      mediaTitle: input.mediaTitle ?? null,
-      mediaType: input.mediaType ?? null,
-      posterUrl: input.posterUrl ?? null,
-      profileHash: input.profileHash ?? null,
-      profileBase: input.profileHash ?? null,
-      instanceId: null,
-      quality: input.quality ?? null,
-      kind: input.kind,
-      deviceLabel: input.deviceLabel ?? null,
-      systemName: input.systemName ?? null,
-      appVersion: input.appVersion ?? null,
-      sseConnectionId: input.sseConnectionId ?? null,
-      startedAt: now,
-      lastBeat: now,
-      position: input.position ?? 0,
-      state: 'playing',
-      audioTrackIndex: null,
-      subtitleTrackIndex: null,
-      useTs: input.useTs ?? false,
-      audioPlan: input.audioPlan ?? null,
-      audioTrackPlans: input.audioTrackPlans ?? null,
-      audioStreamIndex: input.audioStreamIndex ?? null,
-      audioStreamCount: input.audioStreamCount ?? 0,
-      useExtXMedia: input.useExtXMedia ?? false,
-      deviceType: input.deviceType ?? 'desktop',
-      hdrLadder: input.hdrLadder ?? false,
-      supportsHlsSubtitles: input.supportsHlsSubtitles ?? false,
-      // Default true: only a client that explicitly declares it seeks straight
-      // to the resume segment opts out of the seg-0 companion. Pre-flag clients
-      // keep the companion (a wasted seg-0 probe is harmless; a missing one
-      // makes a seg-0-probing engine restart from scratch).
-      probesSegZero: input.probesSegZero ?? true,
-      // Default true: an older client that doesn't send the field keeps
-      // today's full-ladder behaviour, same as a fresh capability flag.
-      supportsAbr: input.supportsAbr ?? true,
-      videoVariant: input.videoVariant ?? null,
-      tonemapping: input.tonemapping ?? false,
-      transcodeReasons: input.transcodeReasons ?? [],
-      burnIn: input.burnIn ?? null,
-      encoderPreset: input.encoderPreset ?? 'faster',
-      canCopyVideo: input.canCopyVideo ?? false,
-      canCopyAudio: input.canCopyAudio ?? false,
-      pinned: input.pinned ?? false,
-    };
+    const session: LiveSession = buildLiveSession(input, randomUUID(), now);
     // #638: split a concurrent playback of the same content onto its own job so
     // two live viewers never share (and mutually kill) one ffmpeg. Race-free:
     // no await between this scan and sessions.set. A same-tab reload shares the
@@ -350,9 +396,16 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       position?: number;
       state?: PlaybackState;
       quality?: string | null;
+      qualities?: RemoteQualityRung[] | null;
+      autoplayBlocked?: boolean;
+      episodeLabel?: string | null;
+      supportsVolume?: boolean;
+      subtitleId?: string | null;
       audioTrackIndex?: number | null;
       subtitleTrackIndex?: number | null;
       sseConnectionId?: string | null;
+      volume?: number | null;
+      muted?: boolean | null;
     },
   ): LiveSession | null {
     const session = this.resolve(sessionId);
@@ -361,6 +414,19 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
     if (payload.position !== undefined) session.position = payload.position;
     if (payload.state) session.state = payload.state;
     if (payload.quality !== undefined) session.quality = payload.quality;
+    if (payload.qualities !== undefined) session.qualities = payload.qualities;
+    if (payload.autoplayBlocked !== undefined) {
+      session.autoplayBlocked = payload.autoplayBlocked;
+    }
+    if (payload.subtitleId !== undefined) {
+      session.subtitleId = payload.subtitleId;
+    }
+    if (payload.supportsVolume !== undefined) {
+      session.supportsVolume = payload.supportsVolume;
+    }
+    if (payload.episodeLabel !== undefined) {
+      session.episodeLabel = payload.episodeLabel;
+    }
     if (payload.audioTrackIndex !== undefined) {
       session.audioTrackIndex = payload.audioTrackIndex;
     }
@@ -370,6 +436,8 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
     if (payload.sseConnectionId) {
       session.sseConnectionId = payload.sseConnectionId;
     }
+    if (payload.volume !== undefined) session.volume = payload.volume;
+    if (payload.muted !== undefined) session.muted = payload.muted;
     return session;
   }
 

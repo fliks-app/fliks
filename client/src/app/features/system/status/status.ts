@@ -103,7 +103,6 @@ export class SystemStatusComponent implements OnInit {
   }
 
   ngOnInit() {
-    this.sse.connect();
     this.loadHealth();
     this.loadCommands();
     this.loadSchedulers();

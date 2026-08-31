@@ -1,0 +1,64 @@
+<app-dropdown-menu placement="bottom-end">
+  <button
+    trigger
+    type="button"
+    class="btn btn-ghost btn-circle"
+    [disabled]="castService.connecting()"
+    [attr.aria-label]="'remote.picker_title' | translate"
+    (click)="onTriggerPress()"
+  >
+    @if (castService.connecting()) {
+      <span class="loading loading-spinner loading-sm"></span>
+    } @else {
+      <svg lucideCast class="h-5 w-5 md:h-6 md:w-6" [class.text-info]="castService.isConnected()"></svg>
+    }
+  </button>
+
+  <div class="border-b border-white/10 px-3 pt-2 pb-2 mb-1 flex items-center justify-between gap-6">
+    <p class="font-semibold text-white">{{ 'remote.picker_title' | translate }}</p>
+    <!-- Adding a device means reading a code off its own screen, so this only
+         points at the page that shows and claims one. -->
+    <a
+      class="btn btn-ghost btn-xs btn-circle text-white shrink-0"
+      routerLink="/app-settings/remote"
+      [attr.aria-label]="'remote.grant_add_device' | translate"
+      [title]="'remote.grant_add_device' | translate"
+    >
+      <svg lucidePlus class="h-4 w-4"></svg>
+    </a>
+  </div>
+
+  @if (castSearching()) {
+    <div class="flex items-center gap-3 text-sm opacity-70 px-3 py-2">
+      <span class="loading loading-spinner loading-xs"></span>
+      {{ 'remote.searching' | translate }}
+    </div>
+  }
+
+  @if (pickerRows().length === 0 && !castSearching()) {
+    <p class="text-sm opacity-70 px-3 py-4 text-center">{{ 'remote.empty_state' | translate }}</p>
+  }
+
+  @for (row of pickerRows(); track row.kind + row.id) {
+    <button type="button" class="dropdown-item text-white" (click)="selectRow(row)">
+      @if (row.icon === 'cast') {
+        <svg lucideCast class="h-5 w-5 shrink-0 text-info"></svg>
+      } @else if (row.icon === 'tv') {
+        <svg lucideTv class="h-5 w-5 shrink-0"></svg>
+      } @else if (row.icon === 'tablet') {
+        <svg lucideTablet class="h-5 w-5 shrink-0"></svg>
+      } @else if (row.icon === 'phone') {
+        <svg lucideSmartphone class="h-5 w-5 shrink-0"></svg>
+      } @else {
+        <svg lucideMonitor class="h-5 w-5 shrink-0"></svg>
+      }
+      <span class="flex flex-col items-start min-w-0 flex-1">
+        <span class="truncate w-full text-left">{{ row.label }}</span>
+        @if (row.subtitle) {
+          <span class="text-sm opacity-60 truncate w-full text-left">{{ row.subtitle }}</span>
+        }
+      </span>
+    </button>
+  }
+
+</app-dropdown-menu>

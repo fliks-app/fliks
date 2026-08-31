@@ -224,6 +224,10 @@ export interface PlaybackEngine {
   playbackRate: number;
   volume: number;
   muted: boolean;
+  /** False where the platform owns the level and the setter can only pretend
+   *  (AVPlay, and the Capacitor players until they expose one). A UI must hide
+   *  its slider instead of offering a control that silently does nothing. */
+  readonly supportsVolume: boolean;
 
   // ── Audio tracks ──
   getAudioTracks(): AudioTrack[];

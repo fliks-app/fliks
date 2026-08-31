@@ -184,6 +184,34 @@ export type SseEvent =
       deviceName: string;
       deviceId: string;
     }
+  // Aimed at exactly one connection, never broadcast: a fallback to every
+  // device of the user would let one phone pause them all.
+  | {
+      type: 'remote.command';
+      cmdId: string;
+      /** Absolute deadline. A frozen tab keeps its EventSource open, so a thaw
+       *  can deliver a queued command minutes late; the controllee drops it. */
+      expiresAt: number;
+      /** The issuing controller's own target id: attribution only. */
+      byTargetId: string | null;
+      action: RemoteCommandAction;
+      mediaId?: number;
+      mediaFileId?: number;
+      episodeId?: number;
+      positionSeconds?: number;
+      level?: number;
+      muted?: boolean;
+      trackId?: string;
+      subtitleId?: string | null;
+    }
+  // Remote control: the target's live state, fanned out to every connection of
+  // the owning user plus any household member authorized to control it.
+  | ({ type: 'remote.state'; targetId: string } & RemoteStatePayload)
+  // Remote control: "refetch the target list". Carries no data on purpose.
+  | { type: 'remote.targets_changed' }
+  // Remote control - that target stopped playing. Definitive, so a controller
+  // never has to tell a closed player apart from a lagging report.
+  | { type: 'remote.stopped'; targetId: string }
   // Social — delivered to the target user (see SocialService).
   | {
       type: 'social.followed' | 'social.follow_request' | 'social.follow_accepted';
@@ -226,6 +254,104 @@ export type DomainEvent =
   | { type: 'settings.changed'; key: string };
 
 /**
+ * Every command is absolute / state-setting: never a delta. `seek` carries the
+ * target position, `volume` the target level, `mute` the target flag. That is
+ * what makes a retry and a double-tap idempotent without a dedupe cache.
+ * `playpause` is the one intentional toggle, bound to a single button.
+ */
+export type RemoteCommandAction =
+  | 'load'
+  | 'play'
+  | 'pause'
+  | 'playpause'
+  | 'stop'
+  | 'seek'
+  | 'volume'
+  | 'mute'
+  | 'next'
+  | 'audio'
+  | 'subtitle'
+  | 'quality';
+
+/** One rung of a target's quality ladder. `lowBandwidth` marks an eco rung, of
+ *  which there is one per height, so a controller listing both without it shows
+ *  the same label twice. */
+export interface RemoteQualityRung {
+  id: string;
+  label: string;
+  lowBandwidth?: boolean;
+}
+
+/** Playback state of one target, as last reported by the target itself. */
+export interface RemoteStatePayload {
+  sessionId: string;
+  mediaId: number | null;
+  mediaFileId: number;
+  episodeId?: number | null;
+  mediaTitle: string | null;
+  episodeLabel: string | null;
+  posterUrl: string | null;
+  positionSeconds: number;
+  durationSeconds: number;
+  state: 'playing' | 'paused' | 'buffering';
+  volume: number | null;
+  muted: boolean | null;
+  supportsVolume: boolean;
+  subtitleId: string | null;
+  quality: string | null;
+  qualities: RemoteQualityRung[] | null;
+  /** The target could not start on its own: a controller must say so rather than
+   *  show a paused device whose play button is refused for the same reason. */
+  autoplayBlocked: boolean;
+  audioTrackIndex: number | null;
+  subtitleTrackIndex: number | null;
+  /** Echo of the last command the target applied: the semantic ack. */
+  lastCmdId: string | null;
+}
+
+/**
+ * What one live SSE connection knows about itself. The open socket IS the
+ * presence signal, so there is deliberately no `lastSeen` and no sweeper: a
+ * second liveness source would need its own GC and would be wrong the moment
+ * a device is unplugged.
+ */
+export interface ConnectionIdentity {
+  userId: number;
+  /** `deviceId#tabNonce`: stable across this connection's reconnects (unlike
+   *  the connection id, reminted every time) and unique per screen (unlike the
+   *  device id alone, shared by two tabs). Null for a client that predates the
+   *  announce: it simply never becomes a target. */
+  targetId: string | null;
+  formFactor: string | null;
+  tvPlatform: string | null;
+  /** The name its owner gave the device, which no User-Agent can state. A
+   *  proper noun, so it travels verbatim rather than through a translation. */
+  deviceName: string | null;
+  userAgent: string | null;
+  since: number;
+}
+
+export interface RemoteTargetConnection extends ConnectionIdentity {
+  connectionId: string;
+}
+
+/** A client with no SSE primitive (the native TV app) polls instead, so its
+ *  commands wait in a queue rather than being written to a socket. */
+interface PolledTarget extends ConnectionIdentity {
+  queue: SseEvent[];
+  lastPoll: number;
+}
+
+/** A polled target is present only as long as it keeps polling: the same rule
+ *  as an open socket, expressed on the cadence the client actually uses. */
+const POLLED_TARGET_TTL_MS = 30_000;
+/** A remote launch is claimed here and consumed by the playback the target
+ *  starts a moment later; anything older never belonged to that launch. */
+const ATTRIBUTION_TTL_MS = 60_000;
+/** Bounded so a device that registers and never polls cannot grow unchecked. */
+const POLLED_QUEUE_MAX = 20;
+
+/**
  * Wraps an `SseEvent` with its delivery audience.
  *   - `audience: null` + `connectionIds: null` → every SSE connection.
  *   - `audience: [userId, …]` → every connection owned by those users.
@@ -247,7 +373,24 @@ export class EventsService {
   private readonly log = new Logger(EventsService.name);
   private readonly subject = new Subject<SseEnvelope>();
   private readonly domainSubject = new Subject<DomainEvent>();
-  private readonly connections = new Map<string, { userId: number }>();
+  private readonly connections = new Map<string, ConnectionIdentity>();
+  /** One completer per live connection, keyed the same as `connections`. Kept
+   *  separate so `RemoteTargetConnection` (built by spreading an identity)
+   *  never leaks a function into the client-facing DTO. */
+  private readonly connectionCompleters = new Map<string, () => void>();
+  private readonly polled = new Map<string, PolledTarget>();
+  /** Who launched what on which target, pending the playback that claims it.
+   *  Lives here rather than in the remote module so the streaming module can
+   *  read it without depending on that module. */
+  private readonly attributions = new Map<
+    string,
+    { userId: number; mediaFileId: number; at: number }
+  >();
+  /** Set by `RemoteService` so a household-scoped event reaches mutual
+   *  followers too, without this generic pub/sub knowing about follows or
+   *  consent flags. Never invoked for `emitToUsers`, so the household
+   *  fan-out itself can't re-trigger and loop. */
+  private householdFanOut: ((event: SseEvent, ownerId: number) => void) | null = null;
 
   // Defaulted so every existing `new EventsService()` in other services'
   // tests keeps compiling — Nest's own DI always supplies the real instance.
@@ -263,6 +406,20 @@ export class EventsService {
   /** Deliver only to the given user's SSE connections. */
   emitToUser(userId: number, event: SseEvent): void {
     this.dispatch({ audience: [userId], connectionIds: null, event });
+    if (
+      event.type === 'remote.state' ||
+      event.type === 'remote.targets_changed' ||
+      event.type === 'remote.stopped'
+    ) {
+      this.householdFanOut?.(event, userId);
+    }
+  }
+
+  /** Registered once by `RemoteService`: extends a household-scoped event's
+   *  audience past its owner. Keeps consent/mutual-follow logic out of this
+   *  generic pub/sub while letting every `emitToUser` call site benefit. */
+  registerHouseholdFanOut(fn: (event: SseEvent, ownerId: number) => void): void {
+    this.householdFanOut = fn;
   }
 
   /** Deliver only to the given users' SSE connections. Empty list = nobody. */
@@ -277,14 +434,33 @@ export class EventsService {
     this.dispatch({ audience, connectionIds: null, event });
   }
 
-  /** Deliver only to one SSE connection (multi-device remote control). */
-  emitToConnection(connectionId: string, event: SseEvent): void {
-    if (!this.connections.has(connectionId)) return;
+  /** Deliver only to one SSE connection (multi-device remote control).
+   *  Returns false when the socket is already gone: a caller that reported
+   *  success on a dropped command would be lying, so the miss is logged. */
+  emitToConnection(connectionId: string, event: SseEvent): boolean {
+    const polledTarget = this.polled.get(connectionId);
+    if (polledTarget) {
+      if (polledTarget.queue.length >= POLLED_QUEUE_MAX) {
+        this.log.warn(
+          `Dropped ${event.type}: queue full for polled target ${polledTarget.targetId}`,
+        );
+        return false;
+      }
+      polledTarget.queue.push(event);
+      return true;
+    }
+    if (!this.connections.has(connectionId)) {
+      this.log.warn(
+        `Dropped ${event.type}: SSE connection ${connectionId} is gone`,
+      );
+      return false;
+    }
     this.dispatch({
       audience: null,
       connectionIds: [connectionId],
       event,
     });
+    return true;
   }
 
   /** Every user-scoped emit funnels through here, so `download.progress`'s
@@ -309,10 +485,224 @@ export class EventsService {
     return this.connections.has(connectionId);
   }
 
-  getStream(userId: number): Observable<MessageEvent> {
+  /** Live targets owned by `userId`, newest connection first. */
+  /** Record that `userId` started this file on `targetId` from elsewhere, so the
+   *  playback about to begin there counts as theirs. */
+  claimAttribution(targetId: string, userId: number, mediaFileId: number): void {
+    this.log.debug(
+      `User ${userId} claims file ${mediaFileId} on ${targetId}`,
+    );
+    this.attributions.set(targetId, { userId, mediaFileId, at: Date.now() });
+  }
+
+  /** Consume the claim for a playback starting on `targetId`. Matched on the
+   *  file as well as the target: a target that starts something else in the
+   *  meantime must not inherit the launcher. */
+  takeAttribution(targetId: string | null, mediaFileId: number): number | null {
+    if (!targetId) return null;
+    const claim = this.attributions.get(targetId);
+    if (!claim) return null;
+    this.attributions.delete(targetId);
+    if (Date.now() - claim.at > ATTRIBUTION_TTL_MS) {
+      this.log.debug(`Attribution claim for ${targetId} expired unused`);
+      return null;
+    }
+    if (claim.mediaFileId !== mediaFileId) {
+      this.log.debug(
+        `Attribution claim for ${targetId} was for file ${claim.mediaFileId}, not ${mediaFileId}`,
+      );
+      return null;
+    }
+    return claim.userId;
+  }
+
+  listForUser(userId: number): RemoteTargetConnection[] {
+    return this.collect((ownerId) => ownerId === userId);
+  }
+
+  /** Every live target, whichever account owns it. For the admin listing, which
+   *  has to match what the command path already authorizes. */
+  listAll(): RemoteTargetConnection[] {
+    return this.collect(() => true);
+  }
+
+  private collect(owns: (userId: number) => boolean): RemoteTargetConnection[] {
+    const rows: RemoteTargetConnection[] = [];
+    for (const [connectionId, identity] of this.connections) {
+      if (!owns(identity.userId)) continue;
+      if (!identity.targetId) continue;
+      rows.push({ connectionId, ...identity });
+    }
+    for (const [key, target] of this.polled) {
+      if (Date.now() - target.lastPoll > POLLED_TARGET_TTL_MS) {
+        this.polled.delete(key);
+        this.log.log(`Polled target ${target.targetId} stopped polling`);
+        this.emitToUser(target.userId, { type: 'remote.targets_changed' });
+        continue;
+      }
+      if (!owns(target.userId) || !target.targetId) continue;
+      rows.push({ connectionId: key, ...target });
+    }
+    return rows.sort((a, b) => b.since - a.since);
+  }
+
+  /** One device cannot hold two live streams under one target id, so an older
+   *  entry is a corpse the socket never reported: a killed webview or a dropped
+   *  mobile network sends no FIN, and the ping write does not reliably fail. */
+  private evictSupersededConnections(userId: number, targetId: string): void {
+    for (const [connectionId, identity] of this.connections) {
+      if (identity.userId !== userId || identity.targetId !== targetId) continue;
+      this.connections.delete(connectionId);
+      this.log.log(`Evicted superseded connection for target ${targetId}`);
+    }
+  }
+
+  /** Announce a client that cannot hold an SSE stream. The key doubles as its
+   *  connection id so command delivery needs no branch at the call site. */
+  registerPolledTarget(
+    userId: number,
+    identity: Omit<ConnectionIdentity, 'userId' | 'since'>,
+  ): void {
+    if (!identity.targetId) {
+      this.log.warn(`Refused a polled-target registration with no target id (user ${userId})`);
+      return;
+    }
+    const key = `polled:${identity.targetId}`;
+    const existing = this.polled.get(key);
+    this.polled.set(key, {
+      userId,
+      targetId: identity.targetId,
+      formFactor: identity.formFactor ?? null,
+      tvPlatform: identity.tvPlatform ?? null,
+      deviceName: identity.deviceName ?? null,
+      userAgent: identity.userAgent ?? null,
+      since: existing?.since ?? Date.now(),
+      queue: existing?.queue ?? [],
+      lastPoll: Date.now(),
+    });
+    if (!existing) {
+      this.emitToUser(userId, { type: 'remote.targets_changed' });
+    }
+  }
+
+  /** Hand a polled target its pending commands, at most once each. `null`
+   *  distinguishes an unknown target from one with nothing waiting. */
+  drainCommands(userId: number, targetId: string): SseEvent[] | null {
+    const target = this.polled.get(`polled:${targetId}`);
+    if (!target || target.userId !== userId) return null;
+    target.lastPoll = Date.now();
+    const pending = target.queue;
+    target.queue = [];
+    return pending;
+  }
+
+  /** Resolve a caller-scoped target id to the connection that currently owns
+   *  it. Scoping to `userId` IS the authorization: a target id names nothing
+   *  outside its owner's connections. */
+  resolveTarget(userId: number, targetId: string): string | null {
+    const matches = this.listForUser(userId).filter(
+      (row) => row.targetId === targetId,
+    );
+    if (matches.length > 1) {
+      this.log.warn(
+        `Target ${targetId} maps to ${matches.length} live connections for user ${userId}: using the newest`,
+      );
+    }
+    return matches[0]?.connectionId ?? null;
+  }
+
+  /** A polled target's connection id is its `polled:<targetId>` map key, so
+   *  the same id resolves through either map with no branch at the caller. */
+  targetIdFor(connectionId: string | null | undefined): string | null {
+    if (!connectionId) return null;
+    return (
+      this.connections.get(connectionId)?.targetId ??
+      this.polled.get(connectionId)?.targetId ??
+      null
+    );
+  }
+
+  /** Drop every stream a user holds, SSE and polled alike. Called when an
+   *  account is disabled or its role changes: an SSE request is authorized
+   *  once at connect and then lives for hours, and a polled target survives
+   *  until its next `register` call, so without this a revoked client stays
+   *  a listed, commandable target. */
+  dropConnectionsForUser(userId: number): void {
+    let dropped = 0;
+    for (const [connectionId, identity] of this.connections) {
+      if (identity.userId !== userId) continue;
+      // Complete the subscriber, not just delete the entry: the HTTP response
+      // has to actually close, or the client never sees it needs to reconnect.
+      this.connectionCompleters.get(connectionId)?.();
+      dropped++;
+    }
+    let polledDropped = 0;
+    for (const [key, target] of this.polled) {
+      if (target.userId !== userId) continue;
+      this.polled.delete(key);
+      polledDropped++;
+    }
+    if (dropped > 0 || polledDropped > 0) {
+      this.log.log(
+        `Dropped ${dropped} SSE connection(s) and ${polledDropped} polled target(s) for user ${userId}`,
+      );
+    }
+    // Completing an SSE connection above already re-announces via its own
+    // teardown; a polled-only drop needs its own announce.
+    if (polledDropped > 0) {
+      this.emitToUser(userId, { type: 'remote.targets_changed' });
+    }
+  }
+
+  /** Drop only the caller's own device: the scope for a plain logout, as
+   *  opposed to the account-wide {@link dropConnectionsForUser}. `targetId`
+   *  is caller-supplied, so a miss is logged rather than silently no-op'd. */
+  dropConnectionsForTarget(userId: number, targetId: string): void {
+    let droppedSse = 0;
+    for (const [connectionId, identity] of this.connections) {
+      if (identity.userId !== userId || identity.targetId !== targetId) continue;
+      this.connectionCompleters.get(connectionId)?.();
+      droppedSse++;
+    }
+    let droppedPolled = 0;
+    const polledKey = `polled:${targetId}`;
+    const polled = this.polled.get(polledKey);
+    if (polled && polled.userId === userId) {
+      this.polled.delete(polledKey);
+      droppedPolled++;
+    }
+    if (droppedSse === 0 && droppedPolled === 0) {
+      this.log.warn(`Logout target scope: no connection for user ${userId} target ${targetId}`);
+      return;
+    }
+    this.log.log(`Dropped ${droppedSse + droppedPolled} connection(s) for user ${userId} target ${targetId}`);
+    if (droppedPolled > 0) {
+      this.emitToUser(userId, { type: 'remote.targets_changed' });
+    }
+  }
+
+  getStream(
+    userId: number,
+    identity?: Omit<ConnectionIdentity, 'userId' | 'since'>,
+  ): Observable<MessageEvent> {
     return new Observable((subscriber) => {
       const connectionId = randomUUID();
-      this.connections.set(connectionId, { userId });
+      if (identity?.targetId) {
+        this.evictSupersededConnections(userId, identity.targetId);
+      }
+      this.connections.set(connectionId, {
+        userId,
+        targetId: identity?.targetId ?? null,
+        formFactor: identity?.formFactor ?? null,
+        tvPlatform: identity?.tvPlatform ?? null,
+        deviceName: identity?.deviceName ?? null,
+        userAgent: identity?.userAgent ?? null,
+        since: Date.now(),
+      });
+      this.connectionCompleters.set(connectionId, () => subscriber.complete());
+      if (identity?.targetId) {
+        this.emitToUser(userId, { type: 'remote.targets_changed' });
+      }
 
       subscriber.next({
         data: JSON.stringify({
@@ -342,7 +732,12 @@ export class EventsService {
       return () => {
         clearInterval(ping);
         sub.unsubscribe();
+        this.connectionCompleters.delete(connectionId);
+        const had = this.connections.get(connectionId)?.targetId;
         this.connections.delete(connectionId);
+        if (had) {
+          this.emitToUser(userId, { type: 'remote.targets_changed' });
+        }
       };
     });
   }

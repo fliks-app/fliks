@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, OnInit, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, effect, inject, untracked, OnInit, OnDestroy } from '@angular/core';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, take } from 'rxjs';
 import { Capacitor, registerPlugin } from '@capacitor/core';
@@ -21,11 +21,14 @@ import { NavbarService } from './core/services/navbar.service';
 import { PwaAutoUpdateService } from './core/services/pwa-auto-update.service';
 import { AppResumeService } from './core/services/app-resume.service';
 import { OfflinePlaybackSyncService } from './core/services/offline-playback-sync.service';
+import { RemoteService } from './core/services/remote.service';
+import { remoteOverlayOpen } from './core/services/remote-playback-target';
+import { CastOverlayComponent } from './shared/cast-overlay/cast-overlay';
 import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.service';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, ToastContainerComponent, ConfirmationModalComponent, FolderPickerModalComponent, SelectPickerComponent],
+  imports: [RouterOutlet, ToastContainerComponent, ConfirmationModalComponent, FolderPickerModalComponent, SelectPickerComponent, CastOverlayComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app.html',
 })
@@ -51,7 +54,24 @@ export class App implements OnInit, OnDestroy {
   /** Injected so the offline playback queue is flushed on start, not only when
    *  some page happens to instantiate the service. */
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
+  /** Injected so a command aimed at this device is honoured wherever the user
+   *  is in the app: including the player route, which sits outside the layout. */
+  private readonly remote = inject(RemoteService);
   private backButtonListener?: { remove: () => Promise<void> };
+  private visibilityListener?: () => void;
+
+  /** The stream belongs to the app root, not to a page: `watch/:mediaFileId`
+   *  is a sibling of the layout route, so a cold deep-link into the player
+   *  previously had no stream at all: invisible as a target and deaf to any
+   *  command. An effect, not a one-shot: the service closes the stream on a
+   *  session change and needs re-opening for the next account. */
+  private readonly sseBootstrap = effect(() => {
+    const authenticated = this.auth.isAuthenticated();
+    untracked(() => {
+      if (authenticated) void this.sse.connect();
+      else this.sse.close();
+    });
+  });
   private resumeListener?: { remove: () => Promise<void> };
   private pauseListener?: { remove: () => Promise<void> };
   private tvBackKeyListener?: (e: KeyboardEvent) => void;
@@ -67,6 +87,13 @@ export class App implements OnInit, OnDestroy {
     this.pwaAutoUpdate.init();
 
     this.initInputModalityTracking();
+
+    // Un-gated on purpose: the Capacitor resume hook below covers mobile, but a
+    // TV app is frozen while backgrounded and has no equivalent.
+    this.visibilityListener = () => {
+      if (document.visibilityState === 'visible') this.sse.reconnect();
+    };
+    document.addEventListener('visibilitychange', this.visibilityListener);
 
     if (Capacitor.isNativePlatform()) {
       document.body.classList.add('native');
@@ -219,9 +246,14 @@ export class App implements OnInit, OnDestroy {
       active.blur();
       return;
     }
-    // Close Cast overlay first if open
+    // The playback overlay is one component driven by whichever target is
+    // active, so back has to close either one.
     if (this.castPlayer.expanded()) {
       this.castPlayer.expanded.set(false);
+      return;
+    }
+    if (remoteOverlayOpen()) {
+      remoteOverlayOpen.set(false);
       return;
     }
     // Close any open bottom sheet / dismissable layer before navigating.
@@ -276,6 +308,9 @@ export class App implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    if (this.visibilityListener) {
+      document.removeEventListener('visibilitychange', this.visibilityListener);
+    }
     this.backButtonListener?.remove();
     this.resumeListener?.remove();
     this.pauseListener?.remove();

@@ -1,4 +1,4 @@
-import { detectBrowser, detectOs, isElectronUa } from './ua-parser';
+import { detectBrowser, detectDeviceModel, detectOs, isElectronUa } from './ua-parser';
 
 /**
  * Boil the raw User-Agent header into a translation key + interpolation
@@ -22,7 +22,11 @@ export interface DeviceLabelKey {
 export function parseDeviceLabel(
   ua: string | null | undefined,
   systemName?: string | null,
+  deviceName?: string | null,
 ): DeviceLabelKey | null {
+  // A name its owner chose outranks anything derivable, and needs no
+  // translating: it goes through as a param like the browser and OS names do.
+  if (deviceName) return { key: 'system.device_named', params: { name: deviceName } };
   if (!ua) {
     // No UA (e.g. a pairing request with only a native systemName): still show
     // the system if we have one.
@@ -43,6 +47,10 @@ export function parseDeviceLabel(
     (/Android/.test(ua) && /\bwv\b/.test(ua)) ||
     (/iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua));
   if (isMobileApp) {
+    // The device's own model identifies it far better than its OS does, so it
+    // leads when the UA states one. Falls back to naming the platform.
+    const model = detectDeviceModel(ua);
+    if (model) return { key: 'system.device_mobile_app_named', params: { name: model } };
     if (systemName) return { key: 'system.device_mobile_app_on_os', params: { os: systemName } };
     return /Android/.test(ua)
       ? { key: 'system.device_mobile_app_android' }

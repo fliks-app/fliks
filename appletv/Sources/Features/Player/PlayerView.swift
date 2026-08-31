@@ -57,6 +57,7 @@ struct PlayerView: View {
             }
         }
         .task {
+            coordinator.onStopRequested = onExit
             do {
                 try await coordinator.load(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: startAt)
             } catch {
@@ -143,6 +144,8 @@ private struct SkipCueStyle: ButtonStyle {
     var recoveringHint = false
     var fatalError = false
     weak var playerViewController: AVPlayerViewController?
+    /// Called for a remote `stop` command: mirrors the user backing out of the player.
+    var onStopRequested: (() -> Void)?
 
     private var mediaFileId = 0
     private var mediaId = 0
@@ -154,6 +157,11 @@ private struct SkipCueStyle: ButtonStyle {
     private var endObserver: NSObjectProtocol?
     private var statusObservation: NSKeyValueObservation?
     private var rateObservation: NSKeyValueObservation?
+    /// Cached once per item so remote audio/subtitle commands and the
+    /// heartbeat's track-index fields can read the current selection
+    /// synchronously instead of re-awaiting AVFoundation's group load.
+    private var audibleGroup: AVMediaSelectionGroup?
+    private var legibleGroup: AVMediaSelectionGroup?
 
     private var autoSkippedIntro = false
     private var autoAdvancedNext = false
@@ -202,6 +210,7 @@ private struct SkipCueStyle: ButtonStyle {
         attachObservers(to: p, item: item, initialSeek: startAt)
         applyPreferredSubtitle(to: item, player: p)
         p.play()
+        RemoteControlService.shared.activeCoordinator = self
     }
 
     private func reload(url: URL, position: Double) {
@@ -225,6 +234,7 @@ private struct SkipCueStyle: ButtonStyle {
         rateObservation = nil
         player?.pause()
         player = nil
+        if RemoteControlService.shared.activeCoordinator === self { RemoteControlService.shared.activeCoordinator = nil }
     }
 
     // MARK: - Next-episode resolution
@@ -291,10 +301,13 @@ private struct SkipCueStyle: ButtonStyle {
             let position = player.currentTime().seconds
             let duration = player.currentItem?.duration.seconds ?? 0
             Task { @MainActor in
-                self?.playback.notifyStateChange(
+                guard let self else { return }
+                self.playback.notifyStateChange(
                     position: position.isFinite ? position : 0,
                     duration: duration.isFinite ? duration : 0,
-                    paused: paused
+                    paused: paused,
+                    audioTrackIndex: self.currentAudioTrackIndex(),
+                    subtitleTrackIndex: self.currentSubtitleTrackIndex()
                 )
             }
         }
@@ -302,6 +315,9 @@ private struct SkipCueStyle: ButtonStyle {
     }
 
     private func attachItemObservers(_ item: AVPlayerItem) {
+        audibleGroup = nil
+        legibleGroup = nil
+        Task { audibleGroup = try? await item.asset.loadMediaSelectionGroup(for: .audible) }
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
@@ -322,7 +338,8 @@ private struct SkipCueStyle: ButtonStyle {
         let durationRaw = player?.currentItem?.duration.seconds ?? 0
         let duration = durationRaw.isFinite ? durationRaw : 0
         let paused = player?.timeControlStatus != .playing
-        playback.tick(position: time, duration: duration, paused: paused)
+        playback.tick(position: time, duration: duration, paused: paused,
+                      audioTrackIndex: currentAudioTrackIndex(), subtitleTrackIndex: currentSubtitleTrackIndex())
         recoveringHint = playback.recovering
 
         // A jump larger than normal playback advance is a seek — re-arm cues.
@@ -412,6 +429,7 @@ private struct SkipCueStyle: ButtonStyle {
 
         Task {
             guard let group = try? await item.asset.loadMediaSelectionGroup(for: .legible) else { return }
+            legibleGroup = group
             if mode == "off" {
                 item.select(nil, in: group)
                 return
@@ -448,5 +466,127 @@ private struct SkipCueStyle: ButtonStyle {
     private static func languageCode(_ tag: String?) -> String? {
         guard let tag, !tag.isEmpty, tag != "und" else { return nil }
         return Locale.LanguageCode(tag).identifier(.alpha2) ?? tag
+    }
+
+    // MARK: - Remote control
+
+    private func currentAudioTrackIndex() -> Int? {
+        guard let group = audibleGroup, let item = player?.currentItem,
+              let selected = item.currentMediaSelection.selectedMediaOption(in: group)
+        else { return nil }
+        return group.options.firstIndex(of: selected)
+    }
+
+    private func currentSubtitleTrackIndex() -> Int? {
+        guard let group = legibleGroup, let item = player?.currentItem,
+              let selected = item.currentMediaSelection.selectedMediaOption(in: group)
+        else { return nil }
+        return group.options.firstIndex(of: selected)
+    }
+
+    /// Applies one polled `remote.command`. Absolute semantics only: no
+    /// toggles except `playpause`: then forces an ack heartbeat so the
+    /// controller sees `lastCmdId` in about one round trip.
+    func applyRemoteCommand(_ cmd: RemoteCommand) {
+        guard let player, let item = player.currentItem else {
+            print("remote: no player loaded yet, dropping \(cmd.action) (\(cmd.cmdId))")
+            return
+        }
+        switch cmd.action {
+        case "play": player.play()
+        case "pause": player.pause()
+        case "playpause":
+            if player.timeControlStatus == .playing { player.pause() } else { player.play() }
+        case "seek":
+            guard let seconds = cmd.positionSeconds else {
+                print("remote: seek without positionSeconds (\(cmd.cmdId)), ignoring")
+                return
+            }
+            player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
+        case "volume":
+            guard let level = cmd.level else {
+                print("remote: volume without level (\(cmd.cmdId)), ignoring")
+                return
+            }
+            player.volume = Float(level)
+        case "mute":
+            guard let muted = cmd.muted else {
+                print("remote: mute without a muted flag (\(cmd.cmdId)), ignoring")
+                return
+            }
+            player.isMuted = muted
+        case "stop":
+            onStopRequested?()
+        case "next":
+            guard let next = nextEpisode else {
+                print("remote: next with no next episode available, ignoring")
+                return
+            }
+            Task { await advance(to: next) }
+        case "audio":
+            guard let group = audibleGroup, let option = matchOption(cmd.trackId, in: group) else {
+                print("remote: audio track \(cmd.trackId ?? "nil") not found (\(cmd.cmdId)), ignoring")
+                return
+            }
+            item.select(option, in: group)
+        case "subtitle":
+            guard let group = legibleGroup else {
+                print("remote: no subtitle group loaded yet, dropping \(cmd.cmdId)")
+                return
+            }
+            if let subtitleId = cmd.subtitleId {
+                guard let option = matchOption(subtitleId, in: group) else {
+                    print("remote: subtitle track \(subtitleId) not found (\(cmd.cmdId)), ignoring")
+                    return
+                }
+                item.select(option, in: group)
+            } else {
+                item.select(nil, in: group) // nil/absent subtitleId means off
+            }
+        default:
+            print("remote: unknown action \(cmd.action) (\(cmd.cmdId)), ignoring")
+            return
+        }
+        let position = player.currentTime().seconds
+        let duration = item.duration.seconds
+        playback.notifyStateChange(
+            position: position.isFinite ? position : 0,
+            duration: duration.isFinite ? duration : 0,
+            paused: player.timeControlStatus != .playing,
+            audioTrackIndex: currentAudioTrackIndex(),
+            subtitleTrackIndex: currentSubtitleTrackIndex(),
+            lastCmdId: cmd.cmdId
+        )
+    }
+
+    /// Matches the controller's own id space first (see `houseIndex`); falls
+    /// back to a language tag, then a bare numeric option index.
+    private func matchOption(_ id: String?, in group: AVMediaSelectionGroup) -> AVMediaSelectionOption? {
+        guard let id else { return nil }
+        if let index = houseIndex(for: id), group.options.indices.contains(index) {
+            return group.options[index]
+        }
+        if let byTag = group.options.first(where: { $0.extendedLanguageTag == id }) { return byTag }
+        if let index = Int(id), group.options.indices.contains(index) { return group.options[index] }
+        return nil
+    }
+
+    /// `audio-<i>` is the index into `streamInfo.audio`, the backend's AUDIO
+    /// rendition order; `emb-<i>` positions the same way among non-image subtitles.
+    private func houseIndex(for id: String) -> Int? {
+        if id.hasPrefix("audio-") { return Int(id.dropFirst("audio-".count)) }
+        guard id.hasPrefix("emb-"), let streamIndex = Int(id.dropFirst("emb-".count)) else { return nil }
+        let sourceSubtitles = media?.files?.first { $0.id == mediaFileId }?.streamInfo?.subtitles ?? []
+        let textSubtitles = sourceSubtitles.filter { !Self.isImageBasedSubtitleCodec($0.codec) }
+        return textSubtitles.firstIndex { $0.streamIndex == streamIndex }
+    }
+
+    /// Bitmap codecs the backend never puts in the HLS `subs` group, only
+    /// burns in: mirrors the backend/web `IMAGE_BASED_SUBTITLE_CODECS` set.
+    private static let imageBasedSubtitleCodecs: Set<String> = [
+        "hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub",
+    ]
+    private static func isImageBasedSubtitleCodec(_ codec: String) -> Bool {
+        imageBasedSubtitleCodecs.contains(codec)
     }
 }

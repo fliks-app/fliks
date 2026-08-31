@@ -83,14 +83,13 @@
             <svg lucideCast class="h-5 w-5 text-info"></svg>
             <span class="text-xs font-medium truncate max-w-24">{{ castPlayer.mediaTitle() }}</span>
           </button>
-        } @else if (castService.isAvailable()) {
-          <button class="btn btn-ghost btn-circle" (click)="onToggleCastConnection()" [disabled]="castService.connecting()">
-            @if (castService.connecting()) {
-              <span class="loading loading-spinner loading-sm"></span>
-            } @else {
-              <svg lucideCast class="h-5 w-5 md:h-6 md:w-6" [class.text-info]="castService.isConnected()"></svg>
-            }
+        } @else if (remote.selectedTarget(); as target) {
+          <button class="btn btn-ghost btn-sm gap-1" (click)="toggleRemoteControlOverlay()">
+            <svg lucideCast class="h-5 w-5 text-info"></svg>
+            <span class="text-xs font-medium truncate max-w-24">{{ formatDevice(target.userAgent, target.systemName, target.deviceName) }}</span>
           </button>
+        } @else if (!device.isTv() && (castService.isAvailable() || remote.targets().length > 0)) {
+          <app-remote-picker />
         }
         <app-user-menu />
       </div>
@@ -141,14 +140,13 @@
             <svg lucideCast class="h-5 w-5 text-info"></svg>
             <span class="text-xs font-medium truncate max-w-32">{{ castPlayer.mediaTitle() }}</span>
           </button>
-        } @else if (castService.isAvailable()) {
-          <button class="btn btn-ghost btn-circle" (click)="onToggleCastConnection()" [disabled]="castService.connecting()">
-            @if (castService.connecting()) {
-              <span class="loading loading-spinner loading-sm"></span>
-            } @else {
-              <svg lucideCast class="h-5 w-5 md:h-6 md:w-6" [class.text-info]="castService.isConnected()"></svg>
-            }
+        } @else if (remote.selectedTarget(); as target) {
+          <button class="btn btn-ghost btn-sm gap-2" (click)="toggleRemoteControlOverlay()">
+            <svg lucideCast class="h-5 w-5 text-info"></svg>
+            <span class="text-xs font-medium truncate max-w-32">{{ formatDevice(target.userAgent, target.systemName, target.deviceName) }}</span>
           </button>
+        } @else if (!device.isTv() && (castService.isAvailable() || remote.targets().length > 0)) {
+          <app-remote-picker />
         }
         <app-user-menu />
       </div>
@@ -281,9 +279,6 @@
 
   <!-- App-update changelog + install dialog (opened from the topbar button) -->
   <app-update-modal />
-
-  <!-- Cast overlay (chip + card) — global, persists across navigation -->
-  <app-cast-overlay />
 
   <!-- Card actions panel (TV menu button / mobile long-press) — single instance -->
   <app-card-actions-panel />

@@ -137,6 +137,22 @@ public class CastPlugin extends Plugin {
         }
     };
 
+    /** Passive route discovery: the picker's own list doesn't warrant an active scan on top. */
+    private final MediaRouter.Callback routeCallback = new MediaRouter.Callback() {
+        @Override
+        public void onRouteAdded(MediaRouter router, MediaRouter.RouteInfo route) {
+            notifyCastDevicesChanged();
+        }
+        @Override
+        public void onRouteChanged(MediaRouter router, MediaRouter.RouteInfo route) {
+            notifyCastDevicesChanged();
+        }
+        @Override
+        public void onRouteRemoved(MediaRouter router, MediaRouter.RouteInfo route) {
+            notifyCastDevicesChanged();
+        }
+    };
+
     private void acquireWifiLock() {
         if (wifiLock == null) {
             WifiManager wm = (WifiManager) getContext().getApplicationContext()
@@ -159,6 +175,13 @@ public class CastPlugin extends Plugin {
 
     private void notifyPickerDismissed() {
         String js = "window.dispatchEvent(new CustomEvent('castPickerDismissed'));";
+        getBridge().getWebView().post(() ->
+            getBridge().getWebView().evaluateJavascript(js, null)
+        );
+    }
+
+    private void notifyCastDevicesChanged() {
+        String js = "window.dispatchEvent(new CustomEvent('castDevicesChanged'));";
         getBridge().getWebView().post(() ->
             getBridge().getWebView().evaluateJavascript(js, null)
         );
@@ -192,6 +215,7 @@ public class CastPlugin extends Plugin {
                 castContext = CastContext.getSharedInstance(getContext());
                 sessionManager = castContext.getSessionManager();
                 sessionManager.addSessionManagerListener(sessionListener, CastSession.class);
+                MediaRouter.getInstance(getContext()).addCallback(buildCastSelector(), routeCallback);
 
                 // Check if already connected
                 castSession = sessionManager.getCurrentCastSession();
@@ -217,14 +241,19 @@ public class CastPlugin extends Plugin {
         });
     }
 
+    /** Shared by requestSession (native dialog) and getCastDevices/selectCastDevice (custom list). */
+    private MediaRouteSelector buildCastSelector() {
+        return new MediaRouteSelector.Builder()
+            .addControlCategory(CastMediaControlIntent.categoryForCast(
+                CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID))
+            .build();
+    }
+
     @PluginMethod()
     public void requestSession(PluginCall call) {
         runOnMainThread(() -> {
             try {
-                MediaRouteSelector selector = new MediaRouteSelector.Builder()
-                    .addControlCategory(CastMediaControlIntent.categoryForCast(
-                        CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID))
-                    .build();
+                MediaRouteSelector selector = buildCastSelector();
 
                 MediaRouteChooserDialogFragment dialog = new MediaRouteChooserDialogFragment();
                 dialog.setRouteSelector(selector);
@@ -253,6 +282,49 @@ public class CastPlugin extends Plugin {
                 Log.e(TAG, "Failed to show Cast picker", e);
                 call.reject("Failed to show Cast picker", e);
             }
+        });
+    }
+
+    /** Lets the web layer render its own device list instead of the native chooser dialog. */
+    @PluginMethod()
+    public void getCastDevices(PluginCall call) {
+        runOnMainThread(() -> {
+            MediaRouteSelector selector = buildCastSelector();
+            MediaRouter router = MediaRouter.getInstance(getContext());
+            JSArray devices = new JSArray();
+            for (MediaRouter.RouteInfo route : router.getRoutes()) {
+                if (route.isDefaultOrBluetooth() || !route.matchesSelector(selector)) continue;
+                JSObject device = new JSObject();
+                device.put("id", route.getId());
+                device.put("name", route.getName());
+                String modelName = route.getDescription();
+                if (modelName != null) device.put("modelName", modelName);
+                devices.put(device);
+            }
+            call.resolve(new JSObject().put("devices", devices));
+        });
+    }
+
+    @PluginMethod()
+    public void selectCastDevice(PluginCall call) {
+        runOnMainThread(() -> {
+            String id = call.getString("id");
+            MediaRouter router = MediaRouter.getInstance(getContext());
+            MediaRouter.RouteInfo target = null;
+            for (MediaRouter.RouteInfo route : router.getRoutes()) {
+                if (route.getId().equals(id)) {
+                    target = route;
+                    break;
+                }
+            }
+            if (target == null) {
+                Log.w(TAG, "selectCastDevice: no route matches id " + id);
+                call.reject("No matching Cast device");
+                return;
+            }
+            // Result surfaces via the existing SessionManagerListener (onSessionStarted / onSessionStartFailed).
+            router.selectRoute(target);
+            call.resolve();
         });
     }
 
@@ -698,5 +770,10 @@ public class CastPlugin extends Plugin {
         if (pollHandler != null && pollRunnable != null) {
             pollHandler.removeCallbacks(pollRunnable);
         }
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        MediaRouter.getInstance(getContext()).removeCallback(routeCallback);
     }
 }

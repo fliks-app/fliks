@@ -179,6 +179,8 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   get volume(): number {
     return this._volume;
   }
+  readonly supportsVolume = true;
+
   set volume(v: number) {
     this._volume = v;
     this.bridge.setVolume(Math.round(v * 100)).catch(() => {});

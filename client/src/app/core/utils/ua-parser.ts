@@ -40,3 +40,19 @@ export function detectBrowser(ua: string): string {
 export function isElectronUa(ua: string): boolean {
   return /\bElectron\//.test(ua);
 }
+
+/**
+ * The device's own model as the User-Agent states it: an Android model code
+ * ("Pixel 8", "SM-S931B") or the iOS device family. Null when the UA names
+ * neither, which is every desktop browser.
+ */
+export function detectDeviceModel(ua: string): string | null {
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/iPod/.test(ua)) return 'iPod';
+  // "Mozilla/5.0 (Linux; Android 13; Pixel 8 Build/...)" gives "Pixel 8".
+  const m = /Android\s+\d+(?:\.\d+)*;\s*([^)]+?)(?:\s+Build|;|\))/.exec(ua);
+  if (!m) return null;
+  // Some WebViews append a "wv" variant suffix to the model.
+  return m[1].trim().replace(/\s+wv$/i, '').trim() || null;
+}

@@ -1,0 +1,143 @@
+<h1 class="text-2xl font-bold mb-4">{{ 'app_settings.nav.remote' | translate }}</h1>
+
+<div class="space-y-4">
+  <!-- Two directions, two cards: who may drive this screen, and what this
+       account may drive. Interleaving them made the codes ambiguous. -->
+  <div class="card bg-base-100 border border-base-200">
+    <div class="card-body gap-4">
+      <div>
+        <h2 class="text-lg font-semibold">{{ 'remote.grants_incoming_title' | translate }}</h2>
+        <p class="text-base-content/60 mt-1">{{ 'remote.grants_incoming_hint' | translate }}</p>
+      </div>
+
+      @if (offeredCode(); as code) {
+        <div class="alert items-start gap-4">
+          <div class="flex-1 min-w-0">
+            <p>{{ 'remote.grant_code_shown' | translate }}</p>
+            <p class="text-3xl font-mono tracking-[0.3em] mt-1" [class.opacity-40]="secondsLeft() === 0">{{ code }}</p>
+            @if (secondsLeft() > 0) {
+              <p class="text-base-content/60 mt-1">
+                {{ 'remote.grant_code_expires_in' | translate: { time: formatTime(secondsLeft()) } }}
+              </p>
+            } @else {
+              <p class="text-warning mt-1">{{ 'remote.grant_code_expired' | translate }}</p>
+            }
+          </div>
+          @if (secondsLeft() > 0) {
+            <button class="btn btn-ghost btn-sm shrink-0" (click)="cancelCode()">
+              {{ 'remote.grant_code_cancel' | translate }}
+            </button>
+          } @else {
+            <button class="btn btn-primary btn-sm shrink-0" [disabled]="busy()" (click)="offerControl()">
+              {{ 'remote.grant_offer_again' | translate }}
+            </button>
+          }
+        </div>
+      } @else {
+        <div>
+          <button class="btn btn-sm btn-primary" [disabled]="busy()" (click)="offerControl()">
+            {{ 'remote.grant_offer' | translate }}
+          </button>
+        </div>
+      }
+
+      <div class="space-y-2 mt-3">
+        <p class="text-base font-medium">{{ 'common.label_colon' | translate: { label: ('remote.grants_issued' | translate) } }}</p>
+        @if (issuedGrants().length) {
+          <div class="overflow-x-auto">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>{{ 'remote.grants_col_account' | translate }}</th>
+                  <th>{{ 'remote.grants_col_added' | translate }}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (g of issuedGrants(); track g.id) {
+                  <tr>
+                    <td class="truncate">{{ g.granteeUsername }}</td>
+                    <td class="whitespace-nowrap text-base-content/60">{{ g.createdAt | date: 'short' }}</td>
+                    <td class="text-right">
+                      <button class="btn btn-ghost btn-sm" (click)="revoke(g)">{{ 'remote.grant_revoke' | translate }}</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="text-base-content/50">{{ 'remote.grants_issued_empty' | translate }}</p>
+        }
+      </div>
+    </div>
+  </div>
+
+  @if (!isTv()) {
+  <div class="card bg-base-100 border border-base-200">
+    <div class="card-body gap-4">
+      <div>
+        <h2 class="text-lg font-semibold">{{ 'remote.grants_outgoing_title' | translate }}</h2>
+        <p class="text-base-content/60 mt-1">{{ 'remote.grants_outgoing_hint' | translate }}</p>
+      </div>
+
+      <label class="form-control w-full max-w-xs">
+        <div class="flex gap-2">
+          <input
+            class="input input-bordered input-sm flex-1 min-w-0 font-mono uppercase"
+            [ngModel]="claimCode()"
+            (ngModelChange)="claimCode.set($event)"
+            [attr.aria-label]="'remote.grant_enter_code' | translate"
+            [placeholder]="'remote.grant_code_placeholder' | translate"
+          />
+          <button class="btn btn-sm btn-primary" [disabled]="busy() || !claimCode()" (click)="submitClaim()">
+            {{ 'remote.grant_claim' | translate }}
+          </button>
+        </div>
+      </label>
+
+      <div class="space-y-2 mt-3">
+        <p class="text-base font-medium">{{ 'common.label_colon' | translate: { label: ('remote.grants_held' | translate) } }}</p>
+        @if (heldGrants().length) {
+          <div class="overflow-x-auto">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>{{ 'remote.grants_col_device' | translate }}</th>
+                  <th>{{ 'remote.grants_col_owner' | translate }}</th>
+                  <th>{{ 'remote.grants_col_added' | translate }}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (g of heldGrants(); track g.id) {
+                  <tr>
+                    <td class="truncate">{{ g.deviceName }}</td>
+                    <td class="truncate text-base-content/60">{{ g.ownerUsername }}</td>
+                    <td class="whitespace-nowrap text-base-content/60">{{ g.createdAt | date: 'short' }}</td>
+                    <td class="text-right">
+                      <button class="btn btn-ghost btn-sm" (click)="revoke(g)">{{ 'remote.grant_forget' | translate }}</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="text-base-content/50">{{ 'remote.grants_held_empty' | translate }}</p>
+        }
+      </div>
+
+      @if (canControlOthers()) {
+        <div class="divider my-0"></div>
+        <app-toggle-field
+          [value]="showHouseholdTargets()"
+          (valueChange)="onShowHouseholdChange($event)"
+          [label]="'playback_settings.remote_show_household' | translate"
+          [hint]="'playback_settings.remote_show_household_hint' | translate"
+        />
+      }
+    </div>
+  </div>
+  }
+</div>

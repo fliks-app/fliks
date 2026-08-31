@@ -532,6 +532,10 @@ export class StreamingApiService {
       quality?: string | null;
       audioTrackIndex?: number | null;
       subtitleTrackIndex?: number | null;
+      // Remote-control fields: the caller stamps its own truth, never this service.
+      volume?: number;
+      muted?: boolean;
+      lastCmdId?: string;
     },
   ) {
     return firstValueFrom(

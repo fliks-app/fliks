@@ -24,6 +24,7 @@ import { CountsApiService } from '../../core/services/api/counts-api.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService } from '../../core/services/sse.service';
 import { CastService } from '../../core/services/cast.service';
+import { RemoteService } from '../../core/services/remote.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
@@ -31,7 +32,6 @@ import { CastPlayerService } from '../../core/services/cast-player.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { NetworkService } from '../../core/services/network.service';
-import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
 import { AddToPlaylistModalComponent } from '../components/add-to-playlist-modal/add-to-playlist-modal.component';
 import { RecommendModalComponent } from '../components/recommend-modal/recommend-modal.component';
@@ -51,6 +51,9 @@ import { SearchStateService } from '../../core/services/search-state.service';
 import { NavContributionsService, DOCK_PINNED_IDS, MOBILE_HIDDEN_IDS, type ResolvedNavItem } from '../../core/plugin-ui/nav-contributions.service';
 import { NavIconComponent } from './nav-icon';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
+import { remoteOverlayOpen } from '../../core/services/remote-playback-target';
+import { RemotePickerComponent } from '../remote-picker/remote-picker';
+import { parseDeviceLabel } from '../../core/utils/format-device-label';
 import {
   LucideMenu,
   LucideChevronLeft,
@@ -71,7 +74,7 @@ const SIDEBAR_COUNTS_DEBOUNCE_MS = 400;
     CachedSrcDirective,
     RouterOutlet, RouterLink, RouterLinkActive, TranslateModule,
     LucideMenu, LucideChevronLeft, LucideSearch, LucideCast, LucideEllipsisVertical, LucidePin, LucideRocket,
-    CastOverlayComponent,
+    RemotePickerComponent,
     CardActionsPanelComponent,
     AddToPlaylistModalComponent,
     RecommendModalComponent,
@@ -132,6 +135,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   });
   readonly networkService = inject(NetworkService);
   readonly castService = inject(CastService);
+  readonly remote = inject(RemoteService);
   readonly navbar = inject(NavbarService);
   readonly background = inject(BackgroundService);
   private readonly searchState = inject(SearchStateService);
@@ -292,12 +296,13 @@ export class LayoutComponent implements OnInit, OnDestroy {
   ngOnInit() {
     if (navigator.onLine) {
       this.refreshCounts();
-      this.sse.connect();
     } else {
       window.addEventListener('online', () => {
         this.refreshCounts();
-        this.sse.connect();
       }, { once: true });
+    }
+    if (this.device.isTv()) {
+      console.debug('[layout] remote-control entry point suppressed on tv: no controller UI on the 10-foot surface');
     }
     // DownloadManagerService is activated by injection (effect in constructor)
     window.addEventListener('scroll', this.onScroll, { passive: true });
@@ -445,11 +450,18 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.castPlayer.expanded.update(v => !v);
   }
 
-  onToggleCastConnection() {
-    if (this.castService.isConnected()) {
-      this.castService.disconnect();
-    } else {
-      this.castService.requestSession();
-    }
+  /** Mirrors `toggleCastOverlay`: the chip shown once a remote target is
+   *  already selected opens its control card, not the device picker. */
+  toggleRemoteControlOverlay(): void {
+    remoteOverlayOpen.update(v => !v);
+  }
+
+  formatDevice(
+    ua: string | null | undefined,
+    systemName?: string | null,
+    deviceName?: string | null,
+  ): string {
+    const label = parseDeviceLabel(ua ?? null, systemName, deviceName);
+    return label ? this.translate.instant(label.key, label.params) : '';
   }
 }

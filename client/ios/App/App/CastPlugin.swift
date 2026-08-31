@@ -11,6 +11,8 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         CAPPluginMethod(name: "initialize", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "isConnected", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestSession", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getCastDevices", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "selectCastDevice", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "loadMedia", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "play", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pause", returnType: CAPPluginReturnPromise),
@@ -118,6 +120,58 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
                     self.emitPickerDismissed()
                 }
             }
+        }
+    }
+
+    /// Lets the web layer render its own device list instead of the native chooser dialog.
+    @objc func getCastDevices(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            let dm = GCKCastContext.sharedInstance().discoveryManager
+            var devices: [[String: Any]] = []
+            for i in 0..<dm.deviceCount {
+                let device = dm.device(at: i)
+                var entry: [String: Any] = [
+                    "id": device.deviceID,
+                    "name": device.friendlyName ?? device.deviceID
+                ]
+                if let modelName = device.modelName {
+                    entry["modelName"] = modelName
+                }
+                devices.append(entry)
+            }
+            call.resolve(["devices": devices])
+        }
+    }
+
+    @objc func selectCastDevice(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            guard let id = call.getString("id") else {
+                print("[CastPlugin] selectCastDevice: missing id")
+                call.reject("Missing device id")
+                return
+            }
+            let dm = GCKCastContext.sharedInstance().discoveryManager
+            var target: GCKDevice?
+            for i in 0..<dm.deviceCount {
+                let device = dm.device(at: i)
+                if device.deviceID == id {
+                    target = device
+                    break
+                }
+            }
+            guard let device = target else {
+                print("[CastPlugin] selectCastDevice: no device matches id \(id)")
+                call.reject("No matching Cast device")
+                return
+            }
+            // The listener reports the outcome (didStart / didFailToStart); this
+            // return only says whether the attempt was even accepted.
+            guard self?.sessionManager?.startSession(with: device) == true else {
+                print("[CastPlugin] selectCastDevice: startSession refused for \(id)")
+                call.reject("Could not start a Cast session")
+                return
+            }
+            call.resolve()
         }
     }
 
@@ -309,8 +363,11 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         emitAvailability(dm.deviceCount > 0)
     }
 
+    /// Also fires castDevicesChanged: every caller of this reflects a device-list update,
+    /// and didUpdateDeviceList is the only discovery hook we want wired.
     private func emitAvailability(_ available: Bool) {
         let js = "window.dispatchEvent(new CustomEvent('castAvailabilityChanged', { detail: { available: \(available) } }));"
+            + "window.dispatchEvent(new CustomEvent('castDevicesChanged'));"
         DispatchQueue.main.async { [weak self] in
             self?.bridge?.webView?.evaluateJavaScript(js)
         }
