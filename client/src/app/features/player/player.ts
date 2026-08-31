@@ -2890,6 +2890,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     void this.savePosition(true);
   }
 
+  /** A local pause reaches a remote controller on the next heartbeat, so
+   *  without this it lags up to the 10s save interval. Every transport source
+   *  funnels through the engine's state, so one effect covers them all. */
+  private lastReportedPaused: boolean | null = null;
+  private readonly transportReportEffect = effect(() => {
+    const paused = this.paused();
+    untracked(() => this.reportTransportChange(paused));
+  });
+
+  /** Flush only on a real transition, and not before the first frame: the load
+   *  path moves this flag around while there is nothing worth reporting. */
+  private reportTransportChange(paused: boolean): void {
+    if (!this.state.videoStarted()) return;
+    if (this.lastReportedPaused === paused) return;
+    this.lastReportedPaused = paused;
+    void this.savePosition(true);
+  }
+
   /** Cast has no id scheme of its own for subtitles: resolve the app-level id
    *  against the receiver's track list, or warn when Cast can't honour it
    *  (e.g. a burn-in rendition, which needs a stream reload we don't wire here). */
@@ -4433,7 +4451,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** `force` bypasses only the 2s throttle: used right after applying a
    *  remote command so its semantic ack (lastCmdId on the next heartbeat)
    *  arrives in ~1s instead of waiting up to 10s. */
+  private lastForcedSaveAt = 0;
+
   private async savePosition(force = false) {
+    if (force) {
+      const now = Date.now();
+      if (now - this.lastForcedSaveAt < 300) return;
+      this.lastForcedSaveAt = now;
+    }
     // mediaFileId is the pre-roll's while mediaId still names the film — an
     // escaped write here would stamp the film's row with the trailer's position.
     if (!this.mediaId || this.preRollActive()) {

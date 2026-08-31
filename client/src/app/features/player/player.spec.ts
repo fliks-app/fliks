@@ -659,6 +659,37 @@ describe('PlayerComponent remote control', () => {
     expect(h.remoteService.markApplied).not.toHaveBeenCalled();
   });
 
+  it('reports a locally-driven pause at once instead of at the next save tick', () => {
+    const h = createHarness();
+    h.state.videoStarted.set(true);
+    // The source does not matter (spacebar, click, media key, mpv, TV remote):
+    // every one of them lands on the transport flag this reads.
+    h.component.reportTransportChange(true);
+
+    expect(h.streamingApi.updatePlaybackState).toHaveBeenCalled();
+  });
+
+  it('does not re-report a transport value that has not changed', () => {
+    const h = createHarness();
+    h.state.videoStarted.set(true);
+    h.component.reportTransportChange(true);
+    h.streamingApi.updatePlaybackState.mockClear();
+
+    h.component.reportTransportChange(true);
+
+    expect(h.streamingApi.updatePlaybackState).not.toHaveBeenCalled();
+  });
+
+  it('stays quiet before the first frame, when the load path moves the flag', () => {
+    const h = createHarness();
+    h.state.videoStarted.set(false);
+    h.streamingApi.updatePlaybackState.mockClear();
+
+    h.component.reportTransportChange(true);
+
+    expect(h.streamingApi.updatePlaybackState).not.toHaveBeenCalled();
+  });
+
   it('applying a command acks it and forces an immediate heartbeat', () => {
     const h = createHarness();
     h.state.paused.set(true);
