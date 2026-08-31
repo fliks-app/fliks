@@ -130,9 +130,7 @@
      they're not relevant while the user is dragging the seek thumb and
      the preview is far more useful in that moment. -->
 <div
-  class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300 pt-12
-         [--ctrl-px:1rem] [--ctrl-pb:0.5rem]
-         sm:[--ctrl-pb:1rem] xl:[--ctrl-inset:1rem]"
+  class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300 pt-12"
   [class]="seekDragging() ? 'z-[55]' : 'z-40'"
   style="padding-left: calc(max(var(--ctrl-px), env(safe-area-inset-left)) + 0.25rem + var(--ctrl-inset, 0px)); padding-right: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px)); padding-bottom: calc(max(var(--ctrl-pb), env(safe-area-inset-bottom)) + var(--ctrl-inset, 0px));"
   [class.opacity-0]="!visible()"
@@ -277,8 +275,8 @@
   <button
     #skipIntroBtn
     type="button"
-    class="btn btn-primary absolute right-6 z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
-    style="right: 1.5rem; bottom: 8rem; right: max(1.5rem, env(safe-area-inset-right)); bottom: max(var(--cue-bottom, 8rem), calc(var(--cue-bottom, 8rem) + env(safe-area-inset-bottom)));"
+    class="btn btn-primary absolute z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
+    [class.controls-visible]="visible()"
     (click)="skipIntro.emit()"
     (focus)="cueFocused.set(true)"
     (blur)="cueFocused.set(false)"
@@ -299,8 +297,8 @@
 @if (showPreRollSkip()) {
   <button
     type="button"
-    class="btn btn-primary absolute right-6 z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
-    style="right: 1.5rem; bottom: 8rem; right: max(1.5rem, env(safe-area-inset-right)); bottom: max(var(--cue-bottom, 8rem), calc(var(--cue-bottom, 8rem) + env(safe-area-inset-bottom)));"
+    class="btn btn-primary absolute z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
+    [class.controls-visible]="visible()"
     (click)="skipPreRoll.emit()"
   >
     <span class="relative flex items-center gap-2">
@@ -315,8 +313,8 @@
   <button
     #nextEpisodeBtn
     type="button"
-    class="btn btn-primary absolute right-6 z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
-    style="right: 1.5rem; bottom: 8rem; right: max(1.5rem, env(safe-area-inset-right)); bottom: max(var(--cue-bottom, 8rem), calc(var(--cue-bottom, 8rem) + env(safe-area-inset-bottom)));"
+    class="btn btn-primary absolute z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
+    [class.controls-visible]="visible()"
     (click)="next.emit()"
     (focus)="cueFocused.set(true)"
     (blur)="cueFocused.set(false)"
@@ -435,7 +433,7 @@
       <div class="py-2 px-1">
         <!-- Quality row → opens sub-panel -->
         @if (availableQualities().length > 1) {
-          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="openSettingsPanel('quality')">
+          <button data-panel-row="quality" class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="openSettingsPanel('quality')">
             <span class="flex-1 text-left">{{ 'player.quality' | translate }}</span>
             <span class="flex items-center gap-1 text-white/50 text-xs">
               {{ activeQualityLabel() }}
@@ -446,7 +444,7 @@
         }
         <!-- Queue row → opens sub-panel -->
         @if (queueItems().length > 1) {
-          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="openSettingsPanel('queue')">
+          <button data-panel-row="queue" class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="openSettingsPanel('queue')">
             <span class="flex-1 text-left">{{ 'player.queue' | translate }}</span>
             <span class="text-white/50 text-xs">{{ queueIndex() + 1 }} / {{ queueItems().length }}</span>
             <svg lucideChevronRight class="h-4 w-4 text-white/40 shrink-0"></svg>
@@ -547,7 +545,8 @@
       @if (!castConnected()) {
         <button
           type="button"
-          class="absolute -top-1.5 right-1 focus-keep-position btn btn-ghost btn-xs btn-circle text-white/60 hover:text-white"
+          data-panel-row="appearance"
+          class="absolute -top-1.5 right-1 btn btn-ghost btn-xs btn-circle text-white/60 hover:text-white"
           [attr.aria-label]="'player.appearance' | translate"
           (click)="openSubtitlesPanel('appearance')"
         >
@@ -590,7 +589,7 @@
     </button>
     <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
     @for (row of appearanceRows; track row.panel) {
-      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10" (click)="openSubtitlesPanel(row.panel)">
+      <button [attr.data-panel-row]="row.panel" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10" (click)="openSubtitlesPanel(row.panel)">
         <span class="flex-1 text-left">{{ row.labelKey | translate }}</span>
         @if (currentOption(row); as current) {
           <span class="text-white/50 text-xs">{{ current.labelKey ? (current.labelKey | translate) : current.label }}</span>

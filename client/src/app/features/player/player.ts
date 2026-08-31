@@ -201,7 +201,7 @@ class PausableTimeout {
     }
     /* Lift native subtitles by the user's configured bottom margin
        (--cue-bottom-margin, set per-video by applySubtitleStyle), and bump
-       another 5vh when the controls bar is visible so cues clear it. We
+       further when the controls bar is visible so cues clear it. We
        toggle the class directly on the <video> — toggling on an ancestor
        isn't always enough to trigger a style recalc on UA-shadow
        pseudo-elements in Chromium. WebKit pseudo covers Chromium + Safari
@@ -211,7 +211,7 @@ class PausableTimeout {
       transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh)));
     }
     .player-video.controls-visible::-webkit-media-text-track-display {
-      transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh) - 15vh));
+      transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh) - 20vh));
     }
   `],
 })

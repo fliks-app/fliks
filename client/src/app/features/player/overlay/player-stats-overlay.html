@@ -1,11 +1,11 @@
 @if (visible()) {
   <div class="absolute z-50 bg-black/85 text-white select-none backdrop-blur-sm shadow-2xl overflow-y-auto
-              bottom-20 left-4 text-sm p-5 rounded-xl min-w-[320px] max-w-md max-h-[60vh]
-              max-sm:bottom-0 max-sm:left-0 max-sm:right-0 max-sm:text-xs max-sm:p-3 max-sm:rounded-none max-sm:min-w-0 max-sm:max-w-none max-sm:max-h-[50vh]">
+              top-28 left-4 text-sm p-5 rounded-xl min-w-[320px] max-w-md max-h-[60vh]
+              max-sm:top-16 max-sm:left-0 max-sm:right-0 max-sm:text-xs max-sm:p-3 max-sm:rounded-none max-sm:min-w-0 max-sm:max-w-none max-sm:max-h-[50vh]">
 
     <button
       type="button"
-      class="absolute top-2 right-2 text-white/60 hover:text-white text-lg leading-none cursor-pointer sm:top-3 sm:right-3"
+      class="btn btn-ghost btn-xs btn-circle absolute top-2 right-2 text-white/60 hover:text-white text-lg leading-none sm:top-3 sm:right-3"
       [attr.aria-label]="'player.close' | translate"
       (click)="close.emit()"
     >&times;</button>
