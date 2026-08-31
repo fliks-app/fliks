@@ -42,6 +42,7 @@ import { AppResumeService } from '../../core/services/app-resume.service';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideX, LucideFilm } from '@lucide/angular';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
+import { CardSkeletonComponent } from '../../shared/components/card-skeleton';
 import { NgTemplateOutlet } from '@angular/common';
 import {
   CdkVirtualScrollViewport,
@@ -93,6 +94,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     CdkFixedSizeVirtualScroll,
     CdkVirtualForOf,
     CdkVirtualScrollableWindow,
+    CardSkeletonComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library.html',
@@ -133,7 +135,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   readonly list = new InfiniteScrollList<Media>();
   readonly watchedIds = signal<Set<number>>(new Set());
-  readonly loading = signal(false);
+  readonly loading = signal(true);
   readonly searchQuery = signal('');
   readonly sortBy = signal('title');
   readonly sortOrder = signal<SortOrder>('ASC');
@@ -156,25 +158,25 @@ export class LibraryComponent implements OnInit, OnDestroy {
   readonly suggestionsFromFollowing = signal<RecommendationItem[]>([]);
   /** Content other members have recommended to the viewer. */
   readonly recommendedForYou = signal<ReceivedRecommendation[]>([]);
-  readonly suggestionsLoading = signal(false);
+  readonly suggestionsLoading = signal(true);
 
   // ── Genres view ─────────────────────────────────────────────────────
   /** Distinct genres in the library + sample posters for the mosaic. */
   readonly genresList = signal<GenreSummary[]>([]);
-  readonly genresLoading = signal(false);
+  readonly genresLoading = signal(true);
   /** When set, the `all` grid is filtered to this genre via the API's
    *  `genre=` param. Cleared with the chip's × button. */
   readonly selectedGenre = signal<string>('');
 
   // ── Collections view ────────────────────────────────────────────────
   readonly collectionsList = signal<CollectionSummary[]>([]);
-  readonly collectionsLoading = signal(false);
+  readonly collectionsLoading = signal(true);
   readonly selectedCollectionId = signal<number | null>(null);
 
   // ── Likes view ──────────────────────────────────────────────────────
   /** The viewer's liked content scoped to the active library. */
   readonly likesList = signal<LikedItem[]>([]);
-  readonly likesLoading = signal(false);
+  readonly likesLoading = signal(true);
 
   readonly monitoredCount = computed(() => this.list.all().filter((m) => m.monitored).length);
   readonly movieFileCount = computed(() =>
@@ -209,8 +211,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** The `all`-view card grid — measured for DOM windowing on TV. */
   private onResize?: () => void;
 
-  /** One screenful of placeholders for the alphabet-jump skeleton. */
-  protected readonly jumpSkeletons = Array.from({ length: 24 }, (_, i) => i);
+  /** Placeholder counts for the tab skeletons: a screenful for a grid, a row
+   *  for a horizontal scroller. */
+  protected readonly skeletonCards = Array.from({ length: 24 }, (_, i) => i);
+  protected readonly skeletonRow = Array.from({ length: 6 }, (_, i) => i);
 
   // ── CDK virtual scroll ───────────────────────────────────────────────────
   // The grid renders through `cdk-virtual-scroll-viewport` on every platform:
@@ -330,7 +334,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
       const lib = this.allLibraries.find((l) => l.name === name);
       this.library.set(lib ?? null);
-      if (!lib) return;
+      if (!lib) {
+        this.stopLoading();
+        return;
+      }
 
       this.navbar.setPageTitle(lib.name);
 
@@ -750,9 +757,22 @@ export class LibraryComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Drop every tab out of its initial loading state — for the dead ends where
+   *  no fetch will follow, which would otherwise leave a skeleton up for good. */
+  private stopLoading() {
+    this.loading.set(false);
+    this.suggestionsLoading.set(false);
+    this.genresLoading.set(false);
+    this.collectionsLoading.set(false);
+    this.likesLoading.set(false);
+  }
+
   private async load(libraryId?: number, silent = false) {
     // Filters, search and sort all reflow the header above the grid.
-    if (!libraryId) return;
+    if (!libraryId) {
+      if (!silent) this.loading.set(false);
+      return;
+    }
     if (!silent) this.loading.set(true);
     const monitored = this.filterMonitored();
     const fs = this.filterStatus();

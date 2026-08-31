@@ -48,9 +48,13 @@ for (const f of stylesFiles) {
 // Guard: a Chromium-85-unsafe token surviving the downlevel pass means a
 // pipeline gap (e.g. a new Tailwind feature) would ship a silently-broken WGT —
 // fail the build here instead. Each token below is one the pipeline is supposed
-// to have folded/flattened/dropped. (color-mix is intentionally NOT listed: its
-// @supports fallback path is kept on purpose.)
+// to have folded/flattened/dropped. (A bare color-mix is intentionally NOT
+// listed: its @supports fallback path is kept on purpose.)
 const UNSAFE_TOKENS = [
+  [
+    /color-mix\(\s*(?:in\s+[\w-]+\s*,\s*)?var\(\s*--color-[\w-]+\s*\)\s+[\d.]+%\s*,\s*(?:transparent|#0000|rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\))\s*\)/,
+    'alpha variant left on color-mix — `tv-color-mix-alpha` should have made it rgba()',
+  ],
   [/[;{](?:translate|rotate|scale):/, 'individual transform property — should fold into `transform`'],
   // Negative lookbehind excludes Tailwind's escaped container-query CLASSES
   // (`.\@container`, `.\@md\:…`) — only the real at-rules are unsafe.

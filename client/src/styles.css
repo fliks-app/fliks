@@ -73,6 +73,26 @@
   background-color: rgba(29, 35, 42, 0.95);
 }
 
+/* Home library pill. The tint and border are an overlay dimmed by `opacity`
+   rather than a `color-mix()` alpha, which the TV WebView can't parse. */
+.library-card {
+  position: relative;
+}
+.library-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--lib-color);
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--lib-color), transparent);
+  opacity: 0.2;
+}
+/* Lift the icon and label over that overlay — it is a positioned child, so
+   static content would otherwise paint under it. */
+.library-card > * {
+  position: relative;
+}
+
 /* Router scroll-to-top on navigation goes through window.scrollTo, so smooth
    here animates the jump instead of teleporting. Scroll restores that must land
    instantly pass behavior:'instant'. */
@@ -191,17 +211,61 @@ body.native.hero-page {
 /* Browsers without `aspect-ratio` (the TV WebView's Chromium 85) ignore the
    poster figure's aspect-2/3, so it reserves no height and the lazy <img>
    only claims space once it decodes — every decode mid-scroll reflows the
-   whole non-virtualized library grid. Reserve the 2:3 box with the padding
-   ratio there and float the image into it, so a decode never resizes a cell.
-   Modern browsers keep the native aspect-ratio path (this block is skipped). */
+   whole non-virtualized library grid. A ratio `::before` reserves the box
+   instead, and the content is lifted out of the flow over it.
+   Modern browsers keep the native aspect-ratio path (this block is skipped).
+
+   The ratio goes on the pseudo-element rather than the box itself
+   (`height: 0` + `padding-bottom`): a zero-height content box breaks the
+   `overflow: hidden` + `border-radius` clip on this WebView, which square off
+   the corners of every card that rounds its art. */
 @supports not (aspect-ratio: 1 / 1) {
-  app-media-card figure.aspect-2\/3 {
-    height: 0;
+  app-media-card figure.aspect-2\/3::before,
+  .animate-pulse .aspect-2\/3::before {
+    content: '';
+    display: block;
     padding-bottom: 150%;
   }
-  app-media-card figure.aspect-2\/3 > img {
+  app-media-card figure.aspect-video::before,
+  .animate-pulse .aspect-video::before {
+    content: '';
+    display: block;
+    padding-bottom: 56.25%;
+  }
+  /* Mosaic art: playlists, genres, collections. */
+  .animate-pulse .aspect-square::before,
+  .mosaic-art::before {
+    content: '';
+    display: block;
+    padding-bottom: 100%;
+  }
+  /* `h-full` resolves to zero against the auto height the ::before produces, so
+     every layer that filled the box has to be positioned instead. */
+  app-media-card figure.aspect-2\/3 > img,
+  app-media-card figure.aspect-video > img,
+  .mosaic-art > * {
     position: absolute;
     inset: 0;
+  }
+  /* daisyUI's `.loading` takes its height from `aspect-ratio` alone, so without
+     it the spinner is zero-height. Mirror the width ladder it does set. */
+  .loading {
+    height: calc(var(--size-selector, 0.25rem) * 6);
+  }
+  .loading-xs {
+    height: calc(var(--size-selector, 0.25rem) * 4);
+  }
+  .loading-sm {
+    height: calc(var(--size-selector, 0.25rem) * 5);
+  }
+  .loading-md {
+    height: calc(var(--size-selector, 0.25rem) * 6);
+  }
+  .loading-lg {
+    height: calc(var(--size-selector, 0.25rem) * 7);
+  }
+  .loading-xl {
+    height: calc(var(--size-selector, 0.25rem) * 8);
   }
 }
 
@@ -518,6 +582,14 @@ body.tv [data-tv-focusable]:focus-visible,
 body.tv app-mosaic-card button:focus-visible .mosaic-art {
   transform: scale(1.06);
 }
+/* Slide the caption clear of the art the lift above scales over it. Global, not
+   component `styles:` — those bypass the downlevel `:focus-visible` → `:focus`. */
+app-media-card figure + div {
+  transition: transform 0.15s ease-out;
+}
+app-media-card figure:focus-visible + div {
+  transform: translateY(0.6rem);
+}
 
 /* Fade each row of a list in after the one above it. Applied to the CHILDREN
    rather than through a wrapper per row: a section that renders nothing must
@@ -658,6 +730,37 @@ body.tv app-mosaic-card button:focus-visible .mosaic-art {
     0 0 0 2px var(--color-base-100, #1d232a),
     0 0 0 6px var(--color-primary, #7a3ff2) !important;
 }
+/* Rounded corners without an ancestor clip. This WebView drops a `border-radius`
+   + `overflow: hidden` clip once the box is composited — the mosaic art is, both
+   from its own focus scale and from a child's fade — so the art squared off while
+   loading and while focus moved. Every layer rounds itself instead, which the
+   compositor always honours. The nth-child arms mirror mosaic-card's 2x2 grid:
+   each quadrant only rounds the corner of the card it actually sits in. */
+body.tv .mosaic-art > * {
+  border-radius: inherit;
+}
+body.tv .mosaic-art > * > img {
+  border-radius: 0;
+}
+body.tv .mosaic-art > * > img:nth-child(1) {
+  border-top-left-radius: inherit;
+}
+body.tv .mosaic-art > * > img:nth-child(2) {
+  border-top-right-radius: inherit;
+}
+body.tv .mosaic-art > * > img:nth-child(3) {
+  border-bottom-left-radius: inherit;
+}
+body.tv .mosaic-art > * > img:nth-child(4) {
+  border-bottom-right-radius: inherit;
+}
+/* One promotion source fewer, and the reveal stays (the art is still hidden
+   until it has decoded — only the 200 ms tween goes). */
+body.tv app-media-card figure img,
+body.tv .mosaic-art img {
+  transition: none !important;
+}
+
 /* Resting cards carry shadow-md (a blurred shadow) re-rasterised for every
    visible card on each scroll frame — drop it on TV; the focus ring is the
    only affordance the 10-foot UI needs. */
