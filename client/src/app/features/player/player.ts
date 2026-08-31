@@ -15,12 +15,14 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
+import { Subscription } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { BrowserDeviceProfileService, DeviceProfile } from '../../core/services/browser-device-profile.service';
 import type { PreRollItem } from '@fliks/plugin-contract/ui';
-import { SseService } from '../../core/services/sse.service';
+import { SseService, RemoteCommand } from '../../core/services/sse.service';
+import { RemoteService } from '../../core/services/remote.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
 import { OfflineStorageService } from '../../core/services/offline-storage.service';
@@ -227,6 +229,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly deviceProfileService = inject(BrowserDeviceProfileService);
   private readonly sseService = inject(SseService);
+  private readonly remoteService = inject(RemoteService);
   private readonly authService = inject(AuthService);
   readonly castService = inject(CastService);
   private readonly castPlayerService = inject(CastPlayerService);
@@ -567,6 +570,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       else if (cmd.action === 'play') this.engine.play().catch(() => {});
       else if (cmd.action === 'stop') this.onBack();
     }
+  });
+
+  // Remote control: user-facing commands, already validated (expiry/unknown
+  // action) by RemoteService: no mediaFileId/sessionId filter needed, delivery
+  // is per-connection. Distinct from the admin `player.command` effect above.
+  private readonly remoteCommandSub: Subscription =
+    this.remoteService.validated.subscribe((cmd) => this.applyRemoteCommand(cmd));
+
+  /** Real frames flowing means autoplay wasn't actually blocked (or recovered
+   *  since): clear the controller-facing flag set on a refused play(). */
+  private readonly clearTargetBlockedEffect = effect(() => {
+    if (this.state.videoStarted()) untracked(() => this.remoteService.targetBlocked.set(false));
   });
 
   // Immersive mode: landscape=always, portrait=only while playing with controls hidden
@@ -1445,7 +1460,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         await this.startCastFromPlayer(startPos);
       } else if (!this.isNativeEngine()) {
         this.engine!.play().catch(() => {
-          // Autoplay may be blocked
+          // No user gesture on a device started remotely: the browser
+          // refuses autoplay; tell the controller so its UI can explain it.
+          console.warn('[player] autoplay blocked');
+          this.remoteService.targetBlocked.set(true);
         });
       }
 
@@ -1569,6 +1587,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyed = true;
+    this.remoteCommandSub.unsubscribe();
     this.savePosition();
     if (!this.castService.isConnected()) {
       // keepalive fetch (not HttpClient) so the stop survives if this destroy
@@ -2024,7 +2043,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onSeek(time: number) {
-    const t = Math.max(0, Math.min(time, this.duration() || 0));
+    const dur = this.duration();
+    if (!dur) {
+      // Clamping to Math.min(time, 0) would jump to the start and report
+      // position 0 back as truth instead of dropping a too-early seek.
+      console.warn('[player] onSeek: rejecting seek before duration is known', time);
+      return;
+    }
+    const t = Math.max(0, Math.min(time, dur));
     if (this.engine) {
       // Lock the mirror BEFORE issuing the seek so transient
       // `timeUpdate` events fired while the engine still reports the
@@ -2632,7 +2658,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // cursor while the current item is still (re)loading. The manual control
     // stays usable once the reload settles.
     if (this.advancing || this.reloadingStream) return;
-    if (!this.upNext()) return;
+    if (!this.upNext()) {
+      console.warn('[player] advance: no next item in the queue');
+      return;
+    }
     this.advancing = true;
     try {
       await this.markCurrentComplete();
@@ -2759,6 +2788,124 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } else {
       this.engine.muted = true;
     }
+  }
+
+  /** Apply one validated remote command. Every branch is absolute /
+   *  state-setting: never a toggle: so a retry or a double-tap can't
+   *  desync from what a local control just did (see RemoteService docs).
+   *  A rejected/unresolvable command returns without acking so the
+   *  controller's timeout, not a false ack, reports the truth. */
+  private applyRemoteCommand(cmd: RemoteCommand): void {
+    const casting = this.castService.isConnected();
+    switch (cmd.action) {
+      case 'play':
+        if (casting) {
+          this.castService.play();
+        } else if (this.engine) {
+          this.state.paused.set(false);
+          this.engine.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
+        }
+        break;
+      case 'pause':
+        if (casting) {
+          this.castService.pause();
+        } else if (this.engine) {
+          this.state.paused.set(true);
+          this.engine.pause().catch(() => this.state.paused.set(this.engine?.paused ?? true));
+        }
+        break;
+      case 'playpause':
+        if (casting) this.castService.togglePlayPause();
+        else this.onTogglePlay();
+        break;
+      case 'seek':
+        if (cmd.positionSeconds === undefined) {
+          console.warn('[remote] seek command missing positionSeconds', cmd.cmdId);
+          return;
+        }
+        if (casting) {
+          this.castService.seek(cmd.positionSeconds);
+        } else {
+          if (!this.duration()) {
+            console.warn('[remote] dropping seek received before duration is known', cmd.cmdId);
+            return;
+          }
+          this.onSeek(cmd.positionSeconds);
+        }
+        break;
+      case 'volume':
+        if (cmd.level === undefined) {
+          console.warn('[remote] volume command missing level', cmd.cmdId);
+          return;
+        }
+        if (casting) this.castService.setVolume(cmd.level);
+        else if (this.engine) this.engine.volume = cmd.level;
+        break;
+      case 'mute':
+        if (cmd.muted === undefined) {
+          console.warn('[remote] mute command missing muted flag', cmd.cmdId);
+          return;
+        }
+        if (casting) this.castService.setMuted(cmd.muted);
+        else if (this.engine) this.engine.muted = cmd.muted;
+        break;
+      case 'next':
+        if (!this.upNext()) {
+          console.warn('[remote] next: no item to advance to', cmd.cmdId);
+          return;
+        }
+        void this.advance();
+        break;
+      case 'audio':
+        if (!cmd.trackId) {
+          console.warn('[remote] audio command missing trackId', cmd.cmdId);
+          return;
+        }
+        if (casting) {
+          const idx = parseAudioIndex(cmd.trackId);
+          if (Number.isNaN(idx)) {
+            console.warn('[remote] cast cannot resolve audio track', cmd.trackId);
+            return;
+          }
+          void this.castPlayerService.changeAudio(idx);
+        } else {
+          void this.onSelectAudioTrack(cmd.trackId);
+        }
+        break;
+      case 'subtitle':
+        if (casting) this.applyCastSubtitle(cmd.subtitleId ?? null);
+        else this.onSelectSubtitleById(cmd.subtitleId ?? null);
+        break;
+      case 'stop':
+        if (casting) this.castService.disconnect();
+        this.remoteService.markApplied(cmd.cmdId);
+        void this.savePosition(true);
+        this.onBack();
+        return;
+      case 'load':
+        // RemoteService owns 'load' end-to-end; never republished to this Subject.
+        return;
+    }
+    this.remoteService.markApplied(cmd.cmdId);
+    void this.savePosition(true);
+  }
+
+  /** Cast has no id scheme of its own for subtitles: resolve the app-level id
+   *  against the receiver's track list, or warn when Cast can't honour it
+   *  (e.g. a burn-in rendition, which needs a stream reload we don't wire here). */
+  private applyCastSubtitle(id: string | null): void {
+    if (id === null) {
+      this.castService.setActiveSubtitle(0);
+      this.castPlayerService.activeSubtitleId.set(null);
+      return;
+    }
+    const opt = this.castPlayerService.availableSubtitles().find((s) => s.id === id);
+    if (!opt || opt.burnIn) {
+      console.warn('[remote] cast cannot honour subtitle switch', id);
+      return;
+    }
+    this.castService.setActiveSubtitle(opt.castTrackId ?? 0);
+    this.castPlayerService.activeSubtitleId.set(opt.id);
   }
 
   onToggleFullscreen() {
@@ -3778,8 +3925,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // remux or transcode alike — is a backend reload that marks the new
     // audioStreamIndex DEFAULT (set above from the si-* index). Offline: no
     // backend, nothing to reload.
-    if (this.isOfflinePlayback) return;
-    if (!trackId.startsWith('si-')) return;
+    if (this.isOfflinePlayback) {
+      console.warn('[player] onSelectAudioTrack: no backend to reload for offline playback', trackId);
+      return;
+    }
+    if (!trackId.startsWith('si-')) {
+      console.warn('[player] onSelectAudioTrack: unrecognized track id, tracks may not be enumerated yet', trackId);
+      return;
+    }
     await this.reloadStream();
   }
 
@@ -4116,6 +4269,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.selectSubtitle(null);
     } else {
       const sub = this.availableSubtitles().find(s => s.id === id) ?? null;
+      if (!sub) {
+        console.warn('[player] onSelectSubtitleById: id not found, tracks may not be enumerated yet', id);
+      }
       this.selectSubtitle(sub);
     }
   }
@@ -4274,10 +4430,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  {@link LiveSessionRegistry} relies on it to keep the session warm. */
   private lastSaveAt = 0;
 
-  private async savePosition() {
+  /** `force` bypasses only the 2s throttle: used right after applying a
+   *  remote command so its semantic ack (lastCmdId on the next heartbeat)
+   *  arrives in ~1s instead of waiting up to 10s. */
+  private async savePosition(force = false) {
     // mediaFileId is the pre-roll's while mediaId still names the film — an
     // escaped write here would stamp the film's row with the trailer's position.
-    if (!this.mediaId || this.preRollActive()) return;
+    if (!this.mediaId || this.preRollActive()) {
+      console.warn('[player] savePosition: no active media or pre-roll in progress, skipping');
+      return;
+    }
 
     let pos: number;
     let dur: number;
@@ -4289,6 +4451,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       pos = this.engine.currentTime;
       dur = this.engine.duration || this.duration();
     } else {
+      console.warn('[player] savePosition: neither cast nor engine is live, skipping');
       return;
     }
 
@@ -4298,7 +4461,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!Number.isFinite(pos)) return;
 
     const now = Date.now();
-    if (now - this.lastSaveAt < 2_000) return;
+    if (!force && now - this.lastSaveAt < 2_000) return;
     this.lastSaveAt = now;
 
     const payload: {
@@ -4309,6 +4472,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       sessionId?: string;
       state?: 'playing' | 'paused' | 'buffering';
       quality?: string | null;
+      volume?: number;
+      muted?: boolean;
+      lastCmdId?: string;
     } = {
       positionSeconds: pos,
       durationSeconds: dur || 0,
@@ -4320,6 +4486,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (sessionId) {
       payload.sessionId = sessionId;
       payload.state = this.paused() ? 'paused' : 'playing';
+      // This device's own truth: while casting, the local engine is
+      // deliberately muted (castSyncEffect) and must not be reported as the
+      // target's volume.
+      payload.volume = this.castService.isConnected() ? this.castService.volume() : this.volume();
+      payload.muted = this.castService.isConnected() ? this.castService.muted() : this.muted();
+      const lastCmdId = this.remoteService.lastAppliedCmdId();
+      if (lastCmdId) payload.lastCmdId = lastCmdId;
       payload.quality = this.activeQualityId() ?? null;
     }
 

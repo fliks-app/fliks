@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   Param,
@@ -20,6 +21,9 @@ import * as fs from 'fs';
 const execFileAsync = promisify(execFile);
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
+import { Action } from '../auth/casl/actions.enum';
+import { EventsService } from '../scheduler/events.service';
 import { parseByteRange } from './byte-range.util';
 import { User } from '../users/entities/user.entity';
 import { StreamingService, ResolvedFile } from './streaming.service';
@@ -318,6 +322,8 @@ export class StreamingController {
     private readonly sessionRouter: SessionRouter,
     private readonly sessionContextBuilder: SessionContextBuilder,
     private readonly pluginPreRoll: PluginPreRollService,
+    private readonly events: EventsService,
+    private readonly caslAbilityFactory: CaslAbilityFactory,
   ) {}
 
   private getStreamingSettings() {
@@ -1024,8 +1030,36 @@ export class StreamingController {
    */
   @Delete('sessions/:sessionId')
   @HttpCode(204)
-  stopLiveSession(@Param('sessionId') sessionId: string) {
+  stopLiveSession(
+    @Param('sessionId') sessionId: string,
+    @CurrentUser() user: User | undefined,
+  ) {
     const live = this.liveSessions.get(sessionId);
+
+    // Sids travel in HLS URLs, so a bare ownership-blind stop would let any
+    // authenticated user end anyone else's playback.
+    if (live?.userId != null && live.userId !== user?.id) {
+      const allowed =
+        !!user &&
+        this.caslAbilityFactory
+          .createForUser(user)
+          .can(Action.Manage, 'Settings');
+      if (!allowed) {
+        this.log.warn(
+          `Refused: user ${user?.id ?? 'unknown'} tried to stop session ${sessionId} owned by user ${live.userId}`,
+        );
+        throw new ForbiddenException('Not your session');
+      }
+    }
+
+    if (live?.userId != null) {
+      this.events.emitToUser(live.userId, { type: 'remote.targets_changed' });
+    } else {
+      this.log.debug(
+        `stopLiveSession(${sessionId}): no owning user to notify (${live ? 'shared device session' : 'already gone'})`,
+      );
+    }
+
     this.liveSessions.stop(sessionId);
     // Release this (user, file)'s cached device name only when no sibling
     // session remains — multi-device viewers share the same user+file pair.

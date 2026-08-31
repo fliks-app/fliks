@@ -11,6 +11,7 @@ import {
   UseGuards,
   ParseIntPipe,
   HttpCode,
+  Logger,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
@@ -23,6 +24,7 @@ import {
   LiveSessionRegistry,
   type PlaybackState as LivePlaybackState,
 } from './live-session.service';
+import { EventsService } from '../scheduler/events.service';
 
 /** Debounce window for DB writes — heartbeat fires every 10 s but we
  *  flush playback state on a coarser cadence to avoid hammering
@@ -33,6 +35,8 @@ const STATE_DB_WRITE_INTERVAL_MS = 30_000;
 @Controller('playback')
 @UseGuards(JwtOrApiKeyGuard)
 export class PlaybackController {
+  private readonly log = new Logger(PlaybackController.name);
+
   /** When the last DB write happened, and at which position, per
    *  `(userId, mediaId, episodeId)` tuple. Drives the debounce above.
    *  In-memory map — moves to a shared store the day Fliks runs across
@@ -44,6 +48,7 @@ export class PlaybackController {
     private readonly recommendationService: RecommendationService,
     private readonly libraries: LibrariesService,
     private readonly liveSessions: LiveSessionRegistry,
+    private readonly events: EventsService,
   ) {}
 
   @Get('recommendations')
@@ -204,6 +209,9 @@ export class PlaybackController {
       audioTrackIndex?: number | null;
       subtitleTrackIndex?: number | null;
       sseConnectionId?: string;
+      volume?: number;
+      muted?: boolean;
+      lastCmdId?: string;
     },
   ): Promise<{ sessionLost?: true; state?: unknown } | null> {
     const user = req.user as User;
@@ -222,11 +230,46 @@ export class PlaybackController {
         audioTrackIndex: body.audioTrackIndex,
         subtitleTrackIndex: body.subtitleTrackIndex,
         sseConnectionId,
+        volume: body.volume,
+        muted: body.muted,
       });
       stateChanged = !!updated && !!body.state && previousState !== body.state;
       // The client believes the session is alive but the registry
       // doesn't know it — surface that so the client can recover.
       sessionLost = !updated;
+
+      // Remote-control fan-out: must fire on every heartbeat, not just a DB
+      // flush, so it stays inside this block rather than after it.
+      if (updated) {
+        // Stored connection id, not the request header: the client drops
+        // that header for the whole SSE reconnect backoff window.
+        const targetId = this.events.targetIdFor(updated.sseConnectionId);
+        if (targetId) {
+          this.events.emitToUser(user.id, {
+            type: 'remote.state',
+            targetId,
+            sessionId: body.sessionId,
+            mediaId,
+            mediaFileId: body.mediaFileId,
+            episodeId: body.episodeId ?? null,
+            mediaTitle: updated.mediaTitle,
+            posterUrl: updated.posterUrl,
+            positionSeconds: updated.position,
+            durationSeconds: body.durationSeconds,
+            state: updated.state,
+            volume: updated.volume,
+            muted: updated.muted,
+            quality: updated.quality,
+            audioTrackIndex: updated.audioTrackIndex,
+            subtitleTrackIndex: updated.subtitleTrackIndex,
+            lastCmdId: body.lastCmdId ?? null,
+          });
+        } else {
+          this.log.debug(
+            `Skipping remote.state for session ${body.sessionId}: no live target for connection ${updated.sseConnectionId ?? 'null'}`,
+          );
+        }
+      }
     }
 
     const dbKey = `${user.id}:${mediaId}:${body.episodeId ?? 0}`;

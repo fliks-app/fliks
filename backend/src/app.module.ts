@@ -12,6 +12,7 @@ import { EventsModule } from './modules/scheduler/events.module';
 import { LibrariesModule } from './modules/libraries/libraries.module';
 import { PlaylistsModule } from './modules/playlists/playlists.module';
 import { SocialModule } from './modules/social/social.module';
+import { RemoteModule } from './modules/remote/remote.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { SubtitlesModule } from './modules/subtitles/subtitles.module';
@@ -87,6 +88,7 @@ import { join } from 'path';
     LibrariesModule,
     PlaylistsModule,
     SocialModule,
+    RemoteModule,
     NotificationsModule,
     SettingsModule,
     SubtitlesModule,

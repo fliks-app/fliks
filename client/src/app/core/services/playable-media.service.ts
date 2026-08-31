@@ -5,7 +5,9 @@ import { CastPlayerService } from './cast-player.service';
 import { MediaService } from './api/media.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { PlaybackQueueService, QueueItem } from './playback-queue.service';
+import { RemoteService } from './remote.service';
 import { resolvePlayableFile } from '../../shared/utils/media-play.util';
+import { remoteOverlayOpen } from '../../shared/remote-overlay/remote-overlay';
 
 export interface PlayContext {
   fileId: number;
@@ -32,12 +34,28 @@ export class PlayableMediaService {
   private readonly streamingApi = inject(StreamingApiService);
   private readonly mediaService = inject(MediaService);
   private readonly queue = inject(PlaybackQueueService);
+  private readonly remote = inject(RemoteService);
 
-  /** Play a media file — Cast if connected, otherwise navigate to player. */
+  /** Play a media file: on a selected remote target, else Cast if connected,
+   *  else navigate to the local player. */
   async play(ctx: PlayContext, fromStart: boolean) {
     // A standalone play is never part of a queue — drop any playlist queue so
     // the player doesn't inherit stale "up next" context from a prior session.
     this.queue.clear();
+    const targetId = this.remote.selectedTargetId();
+    if (targetId) {
+      // `send` itself handles an offline target (toast + no local fallback) -
+      // never silently demote to Cast/local here.
+      remoteOverlayOpen.set(true);
+      void this.remote.send(targetId, {
+        action: 'load',
+        mediaId: ctx.mediaId,
+        mediaFileId: ctx.fileId,
+        episodeId: ctx.episodeId,
+        positionSeconds: fromStart ? 0 : undefined,
+      });
+      return;
+    }
     if (this.castService.isConnected()) {
       await this.castPlayer.quickStart({
         mediaFileId: ctx.fileId,
@@ -108,6 +126,21 @@ export class PlayableMediaService {
     const resolved = items.map((it, i) =>
       i === index ? { ...it, mediaFileId: file!.id } : it,
     );
+
+    const targetId = this.remote.selectedTargetId();
+    if (targetId) {
+      // The queue drives only the local player: a remote target won't
+      // consume it, so don't leave one behind for a later local play to inherit.
+      this.queue.clear();
+      remoteOverlayOpen.set(true);
+      void this.remote.send(targetId, {
+        action: 'load',
+        mediaId: start.mediaId,
+        mediaFileId: file.id,
+        episodeId: start.episodeId,
+      });
+      return true;
+    }
 
     if (this.castService.isConnected()) {
       // Cast plays the single launched item; the queue drives only the local

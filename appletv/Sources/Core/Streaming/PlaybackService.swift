@@ -109,20 +109,31 @@ import Foundation
 
     // MARK: - Heartbeat (~10s, driven by the coordinator's periodic time observer)
 
+    /// Set by `PlayerCoordinator.applyRemoteCommand`: reported on the next
+    /// heartbeat as `lastCmdId`, the semantic ack a remote controller waits on.
+    private var lastCmdId: String?
+
     /// Called ~1x/sec with the live AVPlayer state. Drives the 10s heartbeat
     /// cadence and the stall watchdog off a single tick.
-    func tick(position: Double, duration: Double, paused: Bool) {
+    func tick(position: Double, duration: Double, paused: Bool,
+              audioTrackIndex: Int? = nil, subtitleTrackIndex: Int? = nil) {
         guard !destroyed, !recoveringGuard else { return }
         checkStall(position: position, paused: paused)
         guard Date().timeIntervalSince(lastHeartbeatAt) >= 10 else { return }
-        sendHeartbeat(position: position, duration: duration, paused: paused)
+        sendHeartbeat(position: position, duration: duration, paused: paused,
+                      audioTrackIndex: audioTrackIndex, subtitleTrackIndex: subtitleTrackIndex)
     }
 
-    /// Force an immediate heartbeat on a play/pause transition so the
-    /// backend's LiveSession state doesn't wait for the next 10s tick.
-    func notifyStateChange(position: Double, duration: Double, paused: Bool) {
+    /// Force an immediate heartbeat on a play/pause transition (or an applied
+    /// remote command, via `lastCmdId`) so the backend's LiveSession state
+    /// doesn't wait for the next 10s tick.
+    func notifyStateChange(position: Double, duration: Double, paused: Bool,
+                           audioTrackIndex: Int? = nil, subtitleTrackIndex: Int? = nil,
+                           lastCmdId: String? = nil) {
         guard !destroyed else { return }
-        sendHeartbeat(position: position, duration: duration, paused: paused)
+        if let lastCmdId { self.lastCmdId = lastCmdId }
+        sendHeartbeat(position: position, duration: duration, paused: paused,
+                      audioTrackIndex: audioTrackIndex, subtitleTrackIndex: subtitleTrackIndex)
     }
 
     /// Explicit completion heartbeat before a manual "next episode" skip — the
@@ -133,7 +144,8 @@ import Foundation
         sendHeartbeat(position: duration, duration: duration, paused: true)
     }
 
-    private func sendHeartbeat(position: Double, duration: Double, paused: Bool) {
+    private func sendHeartbeat(position: Double, duration: Double, paused: Bool,
+                               audioTrackIndex: Int? = nil, subtitleTrackIndex: Int? = nil) {
         guard let sid = sessionId else { return }
         lastHeartbeatAt = Date()
         struct Body: Encodable {
@@ -143,11 +155,15 @@ import Foundation
             let episodeId: Int?
             let sessionId: String
             let state: String
+            let audioTrackIndex: Int?
+            let subtitleTrackIndex: Int?
+            let lastCmdId: String?
         }
         struct Response: Decodable { let sessionLost: Bool? }
         let body = Body(
             positionSeconds: position, durationSeconds: duration, mediaFileId: mediaFileId,
-            episodeId: episodeId, sessionId: sid, state: paused ? "paused" : "playing"
+            episodeId: episodeId, sessionId: sid, state: paused ? "paused" : "playing",
+            audioTrackIndex: audioTrackIndex, subtitleTrackIndex: subtitleTrackIndex, lastCmdId: lastCmdId
         )
         Task {
             guard let res: Response = try? await api.put("/api/playback/media/\(mediaId)/state", body: body) else { return }

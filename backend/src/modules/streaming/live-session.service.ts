@@ -68,6 +68,10 @@ export interface LiveSession {
   state: PlaybackState;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;
+  /** Reported by the client heartbeat: lets a remote-control controller show
+   *  the target's real volume instead of a guess. */
+  volume: number | null;
+  muted: boolean | null;
   // ── Per-session settings owned by this entry ──
   useTs: boolean;
   audioPlan: AudioPlan | null;
@@ -269,6 +273,8 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       state: 'playing',
       audioTrackIndex: null,
       subtitleTrackIndex: null,
+      volume: null,
+      muted: null,
       useTs: input.useTs ?? false,
       audioPlan: input.audioPlan ?? null,
       audioTrackPlans: input.audioTrackPlans ?? null,
@@ -353,6 +359,8 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       audioTrackIndex?: number | null;
       subtitleTrackIndex?: number | null;
       sseConnectionId?: string | null;
+      volume?: number | null;
+      muted?: boolean | null;
     },
   ): LiveSession | null {
     const session = this.resolve(sessionId);
@@ -370,6 +378,8 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
     if (payload.sseConnectionId) {
       session.sseConnectionId = payload.sseConnectionId;
     }
+    if (payload.volume !== undefined) session.volume = payload.volume;
+    if (payload.muted !== undefined) session.muted = payload.muted;
     return session;
   }
 

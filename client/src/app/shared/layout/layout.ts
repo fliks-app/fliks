@@ -24,6 +24,7 @@ import { CountsApiService } from '../../core/services/api/counts-api.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService } from '../../core/services/sse.service';
 import { CastService } from '../../core/services/cast.service';
+import { RemoteService } from '../../core/services/remote.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
@@ -51,6 +52,8 @@ import { SearchStateService } from '../../core/services/search-state.service';
 import { NavContributionsService, DOCK_PINNED_IDS, MOBILE_HIDDEN_IDS, type ResolvedNavItem } from '../../core/plugin-ui/nav-contributions.service';
 import { NavIconComponent } from './nav-icon';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
+import { remoteOverlayOpen } from '../remote-overlay/remote-overlay';
+import { parseDeviceLabel } from '../../core/utils/format-device-label';
 import {
   LucideMenu,
   LucideChevronLeft,
@@ -132,6 +135,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   });
   readonly networkService = inject(NetworkService);
   readonly castService = inject(CastService);
+  readonly remote = inject(RemoteService);
   readonly navbar = inject(NavbarService);
   readonly background = inject(BackgroundService);
   private readonly searchState = inject(SearchStateService);
@@ -292,12 +296,13 @@ export class LayoutComponent implements OnInit, OnDestroy {
   ngOnInit() {
     if (navigator.onLine) {
       this.refreshCounts();
-      this.sse.connect();
     } else {
       window.addEventListener('online', () => {
         this.refreshCounts();
-        this.sse.connect();
       }, { once: true });
+    }
+    if (this.device.isTv()) {
+      console.debug('[layout] remote-control entry point suppressed on tv: no controller UI on the 10-foot surface');
     }
     // DownloadManagerService is activated by injection (effect in constructor)
     window.addEventListener('scroll', this.onScroll, { passive: true });
@@ -445,11 +450,14 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.castPlayer.expanded.update(v => !v);
   }
 
-  onToggleCastConnection() {
-    if (this.castService.isConnected()) {
-      this.castService.disconnect();
-    } else {
-      this.castService.requestSession();
-    }
+  /** Single entry point for both device families: opens the unified picker
+   *  instead of the platform's own Cast dialog (see shared/remote-overlay). */
+  openRemoteOverlay(): void {
+    remoteOverlayOpen.set(true);
+  }
+
+  formatDevice(ua: string | null | undefined, systemName?: string | null): string {
+    const label = parseDeviceLabel(ua ?? null, systemName);
+    return label ? this.translate.instant(label.key, label.params) : '';
   }
 }

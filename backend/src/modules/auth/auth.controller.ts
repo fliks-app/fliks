@@ -11,6 +11,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './dto/login.dto';
 import { JwtOrApiKeyGuard } from './guards/jwt-or-api-key.guard';
@@ -20,12 +21,17 @@ import { ACCESS_TOKEN_COOKIE } from './auth.constants';
 import { resolveStreamPublicBaseUrl } from '../../common/stream-public-base-url.util';
 import { SettingsService } from '../settings/settings.service';
 import { cookieOpts, clearOpts } from './cookie-opts.util';
+import { getRequestCookieHeader, parseCookieValue } from './request-cookie.util';
+import type { JwtPayload } from './strategies/jwt.strategy';
+import { EventsService } from '../scheduler/events.service';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly settingsService: SettingsService,
+    private readonly jwtService: JwtService,
+    private readonly events: EventsService,
   ) {}
 
   @Post('login')
@@ -92,6 +98,22 @@ export class AuthController {
         await this.authService.revokeRefreshToken(refreshToken);
       } catch {
         // ignore
+      }
+    }
+    // Drop this user's SSE connections now, not at token expiry: otherwise a
+    // logged-out device stays a listed, commandable remote-control target for
+    // up to the access token's remaining lifetime.
+    const accessToken =
+      parseCookieValue(getRequestCookieHeader(req), ACCESS_TOKEN_COOKIE) ??
+      (req.headers.authorization?.startsWith('Bearer ')
+        ? req.headers.authorization.slice(7)
+        : null);
+    if (accessToken) {
+      try {
+        const payload = this.jwtService.verify<JwtPayload>(accessToken);
+        this.events.dropConnectionsForUser(payload.sub);
+      } catch {
+        // expired/invalid access token: no live connection to attribute this to
       }
     }
   }

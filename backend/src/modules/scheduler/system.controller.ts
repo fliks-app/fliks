@@ -8,12 +8,13 @@ import {
   Param,
   ParseIntPipe,
   Query,
+  Req,
   Res,
   Sse,
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import * as fs from 'fs';
@@ -219,10 +220,26 @@ export class SystemController {
 
   // Authentication is the whole gate: the stream only ever emits what this user id is
   // already a recipient of, and `PoliciesGuard` denies a handler that declares nothing.
+  //
+  // The device identity rides the query string because `EventSource` cannot set
+  // headers, and because arriving with the connection removes any
+  // connect-then-announce race and re-announces free on every reconnect.
+  // A client that sends no `device` simply never becomes a remote target.
   @Sse('events')
   @CheckPolicies(() => true)
-  events(@CurrentUser() user: User): Observable<MessageEvent> {
-    return this.eventsService.getStream(user.id);
+  events(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Query('device') device?: string,
+    @Query('ff') ff?: string,
+    @Query('tvPlatform') tvPlatform?: string,
+  ): Observable<MessageEvent> {
+    return this.eventsService.getStream(user.id, {
+      targetId: device ?? null,
+      formFactor: ff ?? null,
+      tvPlatform: tvPlatform ?? null,
+      userAgent: req.get('user-agent') ?? null,
+    });
   }
 
   @Get('health')

@@ -2,14 +2,15 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { vi, afterEach, describe, it, expect } from 'vitest';
 import { PlayerComponent } from './player';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { BrowserDeviceProfileService, DeviceProfile } from '../../core/services/browser-device-profile.service';
-import { SseService } from '../../core/services/sse.service';
+import { SseService, RemoteCommand } from '../../core/services/sse.service';
+import { RemoteService } from '../../core/services/remote.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
@@ -74,6 +75,8 @@ function fakeEngine() {
     loadCalls,
     currentTime: 0,
     duration: 100,
+    muted: false,
+    volume: 1,
     resetRecoveryGuard: vi.fn(),
     load: vi.fn(async (url: string, startTime?: number, mimeType?: string) => {
       loadCalls.push({ url, startTime, mimeType });
@@ -164,6 +167,15 @@ function createHarness(opts: {
       { provide: BrowserDeviceProfileService, useValue: { getProfile: () => DEVICE_PROFILE } },
       { provide: SseService, useValue: { connectionId: () => null, lastEvent: () => null } },
       {
+        provide: RemoteService,
+        useValue: {
+          validated: new Subject<RemoteCommand>(),
+          markApplied: vi.fn(),
+          lastAppliedCmdId: () => null,
+          targetBlocked: { set: vi.fn() },
+        },
+      },
+      {
         provide: AuthService,
         useValue: {
           ensureStreamToken: vi.fn(async () => {}),
@@ -253,6 +265,12 @@ function createHarness(opts: {
   const fixture = TestBed.createComponent(PlayerComponent);
   const component = fixture.componentInstance as any;
   const state = TestBed.inject(PlayerStateService);
+  const remoteService = TestBed.inject(RemoteService) as unknown as {
+    validated: Subject<RemoteCommand>;
+    markApplied: (id: string) => void;
+    lastAppliedCmdId: () => string | null;
+    targetBlocked: { set: (v: boolean) => void };
+  };
 
   // Seed the state ngAfterViewInit would have produced for a main-item launch.
   component.mediaFileId = MAIN_FILE_ID;
@@ -271,6 +289,7 @@ function createHarness(opts: {
     streamingApi,
     engine,
     router,
+    remoteService,
     get navigated(): boolean {
       return router.navigate.mock.calls.length > 0;
     },
@@ -586,5 +605,68 @@ describe('PlayerComponent seek OSD', () => {
 
     h.component.showControls();
     expect(h.component.nativeSubtitleBottomBump()).toBe(10);
+  });
+});
+
+describe('PlayerComponent remote control', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  function baseCmd(overrides: Partial<RemoteCommand> = {}): RemoteCommand {
+    return {
+      type: 'remote.command',
+      cmdId: 'cmd-1',
+      expiresAt: Date.now() + 10_000,
+      byTargetId: 'controller-1',
+      action: 'pause',
+      ...overrides,
+    };
+  }
+
+  it('a remote pause always pauses, even mid-toggle-coalesce window (absolute, not a toggle)', () => {
+    const h = createHarness();
+    h.state.paused.set(false);
+    // Simulate a local spacebar toggle having just fired, still inside its
+    // coalesce window: onTogglePlay() would drop a second call here.
+    h.component.lastTogglePlayAt = Date.now();
+
+    h.remoteService.validated.next(baseCmd({ action: 'pause' }));
+
+    expect(h.engine.pause).toHaveBeenCalled();
+    expect(h.state.paused()).toBe(true);
+  });
+
+  it('a remote mute sets the flag absolutely instead of toggling audible/silent', () => {
+    const h = createHarness();
+    h.engine.muted = false;
+    h.engine.volume = 1;
+
+    h.remoteService.validated.next(baseCmd({ action: 'mute', muted: true }));
+
+    expect(h.engine.muted).toBe(true);
+  });
+
+  it('rejects a seek received before duration is known instead of clamping to 0', () => {
+    const h = createHarness();
+    h.state.duration.set(0);
+    h.engine.currentTime = 42;
+
+    h.remoteService.validated.next(baseCmd({ action: 'seek', positionSeconds: 30 }));
+
+    // No clamp-to-0 jump, and no false ack for a command that didn't apply.
+    expect(h.engine.currentTime).toBe(42);
+    expect(h.remoteService.markApplied).not.toHaveBeenCalled();
+  });
+
+  it('applying a command acks it and forces an immediate heartbeat', () => {
+    const h = createHarness();
+    h.state.paused.set(true);
+
+    h.remoteService.validated.next(baseCmd({ action: 'play' }));
+
+    expect(h.engine.play).toHaveBeenCalled();
+    expect(h.remoteService.markApplied).toHaveBeenCalledWith('cmd-1');
+    expect(h.streamingApi.updatePlaybackState).toHaveBeenCalled();
   });
 });

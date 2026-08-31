@@ -83,8 +83,14 @@
             <svg lucideCast class="h-5 w-5 text-info"></svg>
             <span class="text-xs font-medium truncate max-w-24">{{ castPlayer.mediaTitle() }}</span>
           </button>
-        } @else if (castService.isAvailable()) {
-          <button class="btn btn-ghost btn-circle" (click)="onToggleCastConnection()" [disabled]="castService.connecting()">
+        } @else if (remote.selectedTarget(); as target) {
+          <button class="btn btn-ghost btn-sm gap-1" (click)="openRemoteOverlay()">
+            <svg lucideCast class="h-5 w-5 text-info"></svg>
+            <span class="text-xs font-medium truncate max-w-24">{{ formatDevice(target.userAgent, target.systemName) }}</span>
+          </button>
+        } @else if (!device.isTv() && (castService.isAvailable() || remote.targets().length > 0)) {
+          <button class="btn btn-ghost btn-circle" (click)="openRemoteOverlay()" [disabled]="castService.connecting()"
+                  [attr.aria-label]="'remote.picker_title' | translate">
             @if (castService.connecting()) {
               <span class="loading loading-spinner loading-sm"></span>
             } @else {
@@ -141,8 +147,14 @@
             <svg lucideCast class="h-5 w-5 text-info"></svg>
             <span class="text-xs font-medium truncate max-w-32">{{ castPlayer.mediaTitle() }}</span>
           </button>
-        } @else if (castService.isAvailable()) {
-          <button class="btn btn-ghost btn-circle" (click)="onToggleCastConnection()" [disabled]="castService.connecting()">
+        } @else if (remote.selectedTarget(); as target) {
+          <button class="btn btn-ghost btn-sm gap-2" (click)="openRemoteOverlay()">
+            <svg lucideCast class="h-5 w-5 text-info"></svg>
+            <span class="text-xs font-medium truncate max-w-32">{{ formatDevice(target.userAgent, target.systemName) }}</span>
+          </button>
+        } @else if (!device.isTv() && (castService.isAvailable() || remote.targets().length > 0)) {
+          <button class="btn btn-ghost btn-circle" (click)="openRemoteOverlay()" [disabled]="castService.connecting()"
+                  [attr.aria-label]="'remote.picker_title' | translate">
             @if (castService.connecting()) {
               <span class="loading loading-spinner loading-sm"></span>
             } @else {

@@ -220,7 +220,11 @@ export class AuthService {
 
   /** Generate a JWT for Chromecast (4h — long enough for extended cuts) */
   generateCastToken(user: User): string {
-    const payload: JwtPayload = { sub: user.id, username: user.username };
+    const payload: JwtPayload = {
+      sub: user.id,
+      username: user.username,
+      scope: 'stream',
+    };
     return this.jwtService.sign(payload, { expiresIn: '4h' });
   }
 
@@ -248,14 +252,20 @@ export class AuthService {
    *   3. the manifest / segment routes are sid-gated (`assertFreshSession`
    *      410s a stopped/GC'd session), so URLs die with their LiveSession;
    *   4. disabling/deleting the user invalidates the token on its next use
-   *      (the strategy re-checks `enabled`).
+   *      (the strategy re-checks `enabled`);
+   *   5. `scope: 'stream'` bars it from write routes that opt into
+   *      `SessionTokenGuard`: a leaked segment URL can read, never act.
    * Tightening further (jti=sid binding, shorter TTL) is tracked but not done:
    * it reworks the client's token-reuse flow and risks mid-playback reloads for
    * a marginal gain over the above.
    */
   generateStreamToken(user: User): string {
     const ttl = this.config.get<string>('STREAM_TOKEN_TTL', '12h');
-    const payload: JwtPayload = { sub: user.id, username: user.username };
+    const payload: JwtPayload = {
+      sub: user.id,
+      username: user.username,
+      scope: 'stream',
+    };
     // \`expiresIn\` is typed as the \`ms\` library's \`StringValue\`, a
     // template literal type that won't accept a bare \`string\` from
     // env. The runtime accepts anything \`ms()\` parses ("12h", "7d",

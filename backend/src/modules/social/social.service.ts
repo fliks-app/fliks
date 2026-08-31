@@ -131,6 +131,16 @@ export class SocialService {
     });
   }
 
+  /** Both directions ACCEPTED. A public-profile follow is auto-accepted with no
+   *  consent from the target, so a one-way edge must never count as mutual. */
+  async areMutualFollowers(a: number, b: number): Promise<boolean> {
+    const [aFollowsB, bFollowsA] = await Promise.all([
+      this.isAcceptedFollower(a, b),
+      this.isAcceptedFollower(b, a),
+    ]);
+    return aFollowsB && bFollowsA;
+  }
+
   /** Decorate a set of users with the caller-relative follow flags (2 batch queries). */
   private async decorate(caller: User, users: User[]): Promise<SocialUser[]> {
     if (!users.length) return [];

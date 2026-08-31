@@ -14,6 +14,7 @@ struct RootView: View {
     @State private var watched = WatchedStore.shared
     @State private var playlistPicker = PlaylistPicker.shared
     @State private var path = NavigationPath()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         content
@@ -32,9 +33,20 @@ struct RootView: View {
             }
             .task(id: auth.state) {
                 if auth.state == .signedIn { await watched.loadOverview() }
+                updateRemotePolling()
             }
             .task(id: homeRefresh.tick) {
                 if auth.state == .signedIn { await watched.loadOverview() }
+            }
+            .onChange(of: scenePhase) { _, _ in updateRemotePolling() }
+            .onAppear {
+                RemoteControlService.shared.onLoadRequested = { mediaFileId, mediaId, episodeId, startAt in
+                    // Same "reset then push" the auth-state transition above uses -
+                    // a remote `load` always replaces whatever is on screen.
+                    path = NavigationPath()
+                    path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId,
+                                              episodeId: episodeId, startAt: startAt))
+                }
             }
             .sheet(item: Binding(get: { playlistPicker.target },
                                  set: { playlistPicker.target = $0 })) { target in
@@ -53,6 +65,16 @@ struct RootView: View {
                 // anything that changed behind a pushed screen (e.g. playback).
                 if count == 0 { homeRefresh.bump() }
             }
+    }
+
+    /// Poll only while signed in and foregrounded: no point keeping a target
+    /// controllable, or hitting the network, once the app is backgrounded.
+    private func updateRemotePolling() {
+        if scenePhase == .active, auth.state == .signedIn {
+            RemoteControlService.shared.startPolling()
+        } else {
+            RemoteControlService.shared.stopPolling()
+        }
     }
 
     @ViewBuilder private var content: some View {

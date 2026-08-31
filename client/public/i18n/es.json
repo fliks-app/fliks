@@ -2366,6 +2366,20 @@
       "shaka_6001": "El Chromecast no admite este códec de audio/vídeo (código 6001)."
     }
   },
+  "remote": {
+    "picker_title": "Reproducir en otro dispositivo",
+    "empty_state": "No se encontraron dispositivos en tu red.",
+    "searching": "Buscando dispositivos…",
+    "chromecast_row": "Chromecast…",
+    "owned_by": "Dispositivo de {{username}}",
+    "offline_message": "{{device}} está desconectado.",
+    "play_here_instead": "Reproducir aquí en su lugar",
+    "blocked_message": "Pulsa reproducir en {{device}}.",
+    "starting_message": "Iniciando en {{device}}…",
+    "error_cast_select_failed": "No se pudo conectar a ese Chromecast.",
+    "error_command_failed": "No se pudo contactar con ese dispositivo.",
+    "error_no_response": "Ese dispositivo no responde."
+  },
   "language": {
     "en": "Inglés",
     "fr": "Francés",

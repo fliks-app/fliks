@@ -2393,6 +2393,20 @@
       "shaka_6001": "The Chromecast does not support this audio/video codec (code 6001)."
     }
   },
+  "remote": {
+    "picker_title": "Play on another device",
+    "empty_state": "No devices found on your network.",
+    "searching": "Searching for devices…",
+    "chromecast_row": "Chromecast…",
+    "owned_by": "{{username}}'s device",
+    "offline_message": "{{device}} is offline.",
+    "play_here_instead": "Play here instead",
+    "blocked_message": "Press play on {{device}}.",
+    "starting_message": "Starting on {{device}}…",
+    "error_cast_select_failed": "Couldn't connect to that Chromecast device.",
+    "error_command_failed": "Couldn't reach that device.",
+    "error_no_response": "That device isn't responding."
+  },
   "language": {
     "en": "English",
     "fr": "French",

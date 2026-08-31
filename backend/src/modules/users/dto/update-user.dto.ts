@@ -133,4 +133,14 @@ export class UpdateUserDto {
   @IsBoolean()
   @IsOptional()
   spoilerHideTitles?: boolean;
+
+  /** Manager-only: grants this account remote-control of household devices. */
+  @IsBoolean()
+  @IsOptional()
+  allowRemoteControlOfOthers?: boolean;
+
+  /** Self-editable: consents to a mutual follower controlling this account's devices. */
+  @IsBoolean()
+  @IsOptional()
+  allowRemoteControlOfMyDevices?: boolean;
 }
