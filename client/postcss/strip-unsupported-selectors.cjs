@@ -35,6 +35,14 @@ const UNSUPPORTED_TOKENS = [
   ':modal',                 // Chrome 105
   ':popover-open',          // Chrome 114
   ':state(',                // Chrome 125
+  // Tailwind declares its whole theme in `:root, :host`. This WebView rejects
+  // `:host` in a document stylesheet, which invalidated the entire rule and left
+  // every token in it undefined — `--color-white`, `--color-black`, the palette.
+  // That degrades invisibly for plain colours (the text inherits base-content,
+  // which is near-white) but strips the alpha off `text-white/80` and friends.
+  // A `:host` branch can never match outside a shadow tree, so keeping only
+  // `:root` loses nothing.
+  ':host',
 ];
 
 // Tokens that we definitively strip. Excluded:
@@ -47,6 +55,10 @@ const UNSUPPORTED_TOKENS = [
 const STRIP_TOKENS = UNSUPPORTED_TOKENS.filter(
   (t) => t !== '::backdrop' && t !== ':focus-visible',
 );
+
+// Component styles keep their own `:host` rules, but those are bundled into the
+// JS chunks and never reach this pass — only the global sheet does.
+
 
 const splitTopLevelCommas = (selector) => {
   const parts = [];
