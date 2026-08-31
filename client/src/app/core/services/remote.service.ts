@@ -104,6 +104,10 @@ export class RemoteService {
   readonly targets = signal<RemoteTarget[]>([]);
   readonly selectedTargetId = signal<string | null>(this.readSelectedTarget());
   readonly pendingAction = signal<RemoteAction | null>(null);
+  /** The target is rebuilding its stream for the same title at the same place.
+   *  Derived from the command in flight, so it opens and closes with the ack
+   *  rather than needing its own bookkeeping. */
+  readonly restarting = computed(() => this.pendingAction() === 'quality');
   readonly targetOffline = signal(false);
 
   readonly selectedTarget = computed(() => {
@@ -169,11 +173,17 @@ export class RemoteService {
   noteTargetStopped(targetId: string): void {
     if (!targetId || targetId !== this.selectedTargetId()) return;
     const pending = this.pendingAction();
+    if (pending === 'quality') {
+      // Same title, same position: the stream is being rebuilt underneath. The
+      // reading on screen stays true, so keep it and just show it loading
+      // rather than emptying the card between the two sessions.
+      console.debug('[remote] target stopped to rebuild its stream', targetId);
+      return;
+    }
     if (pending && SLOW_ACK_ACTIONS.has(pending)) {
-      // A command we sent is restarting the stream, so this stop is the old
-      // session retiring, not playback ending. Reading it as idle flashed
-      // "nothing playing" between the two sessions.
-      console.debug('[remote] target stopped to restart its stream', targetId, pending);
+      // A load or a next moves to another file, so what is on screen no longer
+      // describes anything: name what is coming instead.
+      console.debug('[remote] target stopped to start another file', targetId, pending);
       this.noteLoadSent(null);
       return;
     }

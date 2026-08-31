@@ -42,7 +42,11 @@ export class RemotePlaybackTarget implements PlaybackTarget {
    *  way to playing, and showing a play icon there invites a press that would
    *  stop it. */
   readonly isPaused = computed(() => this.remote.targetState()?.state === 'paused');
-  readonly buffering = computed(() => this.remote.targetState()?.state === 'buffering');
+  /** Also while the target rebuilds its stream for a quality change: the card
+   *  keeps its poster and position and simply reads as loading. */
+  readonly buffering = computed(
+    () => this.remote.targetState()?.state === 'buffering' || this.remote.restarting(),
+  );
   readonly volume = computed(() => this.remote.targetState()?.volume ?? 1);
   readonly muted = computed(() => this.remote.targetState()?.muted ?? false);
   readonly mediaTitle = computed(() => this.remote.targetState()?.mediaTitle ?? '');

@@ -132,7 +132,11 @@
               <svg lucideRotateCcw class="h-7 w-7 lg:h-5 lg:w-5"></svg>
             </button>
             <button class="btn btn-primary btn-circle btn-lg lg:btn-md" (click)="t.togglePlayPause()">
-              @if (t.isPaused()) {
+              @if (t.buffering()) {
+                <!-- Same reading as the player: the transport stays where it is
+                     and the button says the stream is not ready yet. -->
+                <span class="loading loading-spinner loading-md lg:loading-sm"></span>
+              } @else if (t.isPaused()) {
                 <svg lucidePlay class="h-8 w-8 lg:h-6 lg:w-6"></svg>
               } @else {
                 <svg lucidePause class="h-8 w-8 lg:h-6 lg:w-6"></svg>
