@@ -97,6 +97,7 @@ export class RemoteService {
   readonly isRemoting = computed(() => this.selectedTarget() !== null);
 
   private stateAt = 0;
+  private stopSentAt = 0;
   private readonly reportedState = signal<RemoteNowPlaying | null>(null);
   private readonly pinnedVolume = signal<number | null>(null);
   private volumePinAt = 0;
@@ -121,6 +122,14 @@ export class RemoteService {
     if (!s || pinned === null) return s;
     return { ...s, volume: pinned };
   });
+
+  /** Stamp a stop so the target's farewell heartbeat is not mistaken for
+   *  playback that is still running. */
+  noteStopSent(): void {
+    this.stopSentAt = Date.now();
+    this.reportedState.set(null);
+    this.pendingAction.set(null);
+  }
 
   /** Hold the level the user just set until the target confirms it, so the
    *  slider stops fighting the reports it triggers. */
@@ -219,6 +228,16 @@ export class RemoteService {
         console.warn('[remote] selected target went offline', selected);
       } else if (selected) {
         this.targetOffline.set(false);
+        // The target sends a farewell heartbeat as it leaves the player, which
+        // lands after any local clear and would then sit there forever. Let the
+        // server settle it: a live playback reports every 10s, so a silent
+        // target the listing shows as empty really has stopped.
+        const listed = rows.find((r) => r.targetId === selected);
+        const silentFor = Date.now() - this.stateAt;
+        if (listed && !listed.nowPlaying && this.reportedState() && silentFor > 15_000) {
+          console.debug('[remote] target reports nothing playing, clearing its state');
+          this.reportedState.set(null);
+        }
       }
     } catch {
       this.targets.set([]);
@@ -261,8 +280,7 @@ export class RemoteService {
         }),
       );
       if (input.action === 'stop') {
-        this.reportedState.set(null);
-        this.pendingAction.set(null);
+        this.noteStopSent();
       } else {
         this.armAck(res.cmdId, input.action);
       }
@@ -300,6 +318,12 @@ export class RemoteService {
   ingestState(): void {
     const s = this.sse.remoteState();
     if (!s || s.targetId !== this.selectedTargetId()) return;
+    // The target flushes one last heartbeat on its way out of the player; taking
+    // it would put the stopped playback straight back on screen.
+    if (Date.now() - this.stopSentAt < 3_000) {
+      console.debug('[remote] ignoring a state frame that trails a stop');
+      return;
+    }
     this.stateAt = Date.now();
     this.wallClock.set(this.stateAt);
     this.reportedState.set({
