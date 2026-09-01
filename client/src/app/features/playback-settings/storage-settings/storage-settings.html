@@ -25,6 +25,7 @@
           <p class="text-sm text-base-content/60">{{ 'storage_settings.max_concurrent_hint' | translate }}</p>
         </div>
         <select
+    appTvSelect
           class="select select-sm select-bordered w-20"
           [ngModel]="maxConcurrent()"
           (ngModelChange)="onMaxConcurrentChange($event)"

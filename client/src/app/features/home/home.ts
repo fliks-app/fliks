@@ -28,7 +28,6 @@ import { BackgroundService } from '../../core/services/background.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { HomeSettingsService, HomeSectionType, ResolvedHomeSection } from '../../core/services/home-settings.service';
 import { LibraryPrefsService } from '../../core/services/library-prefs.service';
-import { TvService } from '../../core/services/tv.service';
 import { CardAction } from '../../core/services/card-actions.service';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
@@ -121,7 +120,6 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly home = inject(HomeSettingsService);
   private readonly libraryPrefs = inject(LibraryPrefsService);
   readonly auth = inject(AuthService);
-  private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
   private readonly route = inject(ActivatedRoute);
   private readonly reuseStrategy = inject(CachingReuseStrategy);
@@ -226,12 +224,10 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly skeletonFadingOut = signal(false);
   readonly showSkeleton = computed(() => this.loadingFirstPass() || this.skeletonFadingOut());
 
-  /** Recent requests are hidden on TV: the card is an admin surface (approve /
-   *  decline, profile names) that the 10-foot UI isn't designed for. */
+  /** Form-factor exclusions belong to `HomeSettingsService.resolve`, which is
+   *  what produced `sections()`: a zone hidden on TV is not in it at all. */
   readonly visibleSections = computed(() =>
-    this.sections().filter(
-      (s) => s.visible && !(this.tv.isTv() && s.type === 'requests-recent'),
-    ),
+    this.sections().filter((s) => s.visible),
   );
 
   qualityProfileDisplay(id: number | null): string {

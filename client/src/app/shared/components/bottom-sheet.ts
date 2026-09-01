@@ -13,7 +13,11 @@ import {
 } from '@angular/core';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
 import { TvService } from '../../core/services/tv.service';
-import { TABBABLE_SELECTOR, initialOverlayFocus } from '../../core/services/focusable.constants';
+import {
+  TABBABLE_SELECTOR,
+  initialOverlayFocus,
+  restoreOpenerFocus,
+} from '../../core/services/focusable.constants';
 
 @Component({
   selector: 'app-bottom-sheet',
@@ -28,13 +32,17 @@ import { TABBABLE_SELECTOR, initialOverlayFocus } from '../../core/services/focu
     @if (visible()) {
       <!-- Backdrop — CSS @starting-style handles the fade-in declaratively
            (browser interpolates from opacity 0 on element creation), so the
-           component does not need a JS-side toggling pattern. -->
+           component does not need a JS-side toggling pattern.
+           Preventing the pointerdown default keeps the tap from blurring
+           whatever opened the sheet: focus used to leave and be restored a tick
+           later, which flickered the opener's ring off and back on. -->
       <div
         [class]="
           'bottom-sheet-backdrop fixed inset-0 z-[100] transition-opacity duration-150 ' +
           (showBackdrop() ? 'bg-black/60' : '')
         "
         [class.opacity-0]="dismissing()"
+        (pointerdown)="$event.preventDefault()"
         (click)="dismiss()"
       ></div>
       <!-- Sheet -->
@@ -291,9 +299,7 @@ export class BottomSheetComponent {
     if (this.focusTrapActive && typeof document !== 'undefined') {
       document.removeEventListener('focusin', this.onFocusIn);
       this.focusTrapActive = false;
-      if (this.prevFocused && document.contains(this.prevFocused)) {
-        this.prevFocused.focus({ preventScroll: true });
-      }
+      restoreOpenerFocus(this.prevFocused);
       this.prevFocused = null;
     }
   }

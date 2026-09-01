@@ -7,6 +7,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { TranslateModule } from '@ngx-translate/core';
 import { FliksRequestRow } from '../../../core/services/api/requests.service';
 import { LibrarySummary } from '../../../core/services/api/libraries-api.service';
@@ -15,7 +16,7 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-request-edit-modal',
-  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
+  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './request-edit-modal.component.html',
 })

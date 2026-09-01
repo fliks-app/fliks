@@ -1,18 +1,14 @@
-<!-- Drawer: `lg:drawer-open` is gated on NON-tv so desktop keeps the
-     pinned-sidebar look while TV behaves like mobile (checkbox-driven,
-     transient). `tv-drawer-closed` is NOT used — the checkbox alone
-     controls visibility, no class toggle, no `display:none` override,
-     no DaisyUI animation quirks to dance around. -->
-<div class="drawer min-h-screen" [class.lg:drawer-open]="!tv.isTv()">
+<!-- The sidebar is pinned from `lg` up, which covers desktop and TV alike: an
+     admin surface wants its sections in view, not behind a hamburger. Below
+     `lg` the checkbox drives a transient drawer. -->
+<div class="drawer min-h-screen lg:drawer-open">
   <input [id]="drawerId()" #drawerToggle type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative min-w-0">
-    <!-- Top bar — `lg:hidden` on desktop only. On TV the navbar is
-         permanent (drawer is transient there, the hamburger is the
-         entry point back). -->
+    <!-- Top bar and its hamburger belong to the transient drawer only: with the
+         sidebar pinned they would duplicate its own title and back link. -->
     <nav
       appTvRow
-      class="navbar bg-base-100 shadow-sm fixed top-0 left-0 right-0 z-30 transition-all duration-300"
-      [class.lg:hidden]="!tv.isTv()"
+      class="navbar bg-base-100 shadow-sm fixed top-0 left-0 right-0 z-30 transition-all duration-300 lg:hidden"
       style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px)"
       [class.top-4]="tv.isAndroidTv()"
       [class.-translate-y-full]="navbarHidden()"
@@ -32,7 +28,7 @@
     <!-- Spacer pushes content below the fixed navbar (visible on TV too
          where the navbar is permanent). -->
     <div
-      [class.lg:hidden]="!tv.isTv()"
+      class="lg:hidden"
       style="height: calc(env(safe-area-inset-top, 0px) + 4rem)"
     ></div>
     <main
@@ -62,7 +58,7 @@
         </h2>
       </div>
 
-      <ul class="menu p-4 flex-1 gap-0.5 min-w-64 overflow-y-auto" (click)="onMenuClick($event)">
+      <ul class="menu p-4 flex-1 gap-0.5 min-w-64 overflow-y-auto">
         <ng-content select="[drawerMenu]"></ng-content>
       </ul>
     </aside>

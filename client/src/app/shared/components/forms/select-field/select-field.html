@@ -1,6 +1,7 @@
 <label class="form-control w-full">
   <div class="label"><span class="label-text font-medium">{{ label() }}</span></div>
   <select
+    appTvSelect
     class="select select-bordered w-full"
     [class.select-sm]="size() === 'sm'"
     [ngModel]="value()"

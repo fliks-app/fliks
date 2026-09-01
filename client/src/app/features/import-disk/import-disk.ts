@@ -7,6 +7,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
+import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -56,7 +57,7 @@ export type ImportMethod = 'copy' | 'move';
 
 @Component({
   selector: 'app-import-disk',
-  imports: [DecimalPipe, FormsModule, TranslateModule, SearchableSelectComponent],
+  imports: [TvSelectDirective, DecimalPipe, FormsModule, TranslateModule, SearchableSelectComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './import-disk.html',
 })

@@ -5,6 +5,7 @@ import {
   model,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TvSelectDirective } from '../../../directives/tv-select.directive';
 
 /**
  * DaisyUI select with label + optional hint. Options are projected via
@@ -18,7 +19,7 @@ import { FormsModule } from '@angular/forms';
  */
 @Component({
   selector: 'app-select-field',
-  imports: [FormsModule],
+  imports: [TvSelectDirective, FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './select-field.html',
 })

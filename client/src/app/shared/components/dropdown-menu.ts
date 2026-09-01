@@ -11,6 +11,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
+import { restoreOpenerFocus } from '../../core/services/focusable.constants';
 import { BottomSheetComponent } from './bottom-sheet';
 import { DropdownToggleDirective } from '../directives/dropdown-toggle.directive';
 import { DeviceService } from '../../core/services/device.service';
@@ -129,9 +130,9 @@ export class DropdownMenuComponent {
       this.wasOpen = open;
       if (!justClosed || this.useDropdown()) return;
       queueMicrotask(() => {
-        this.host.nativeElement
-          .querySelector<HTMLElement>('[trigger]')
-          ?.focus({ preventScroll: true });
+        restoreOpenerFocus(
+          this.host.nativeElement.querySelector<HTMLElement>('[trigger]'),
+        );
       });
     });
   }

@@ -1,4 +1,5 @@
 import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
+import { TvSelectDirective } from '../../../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
@@ -16,7 +17,7 @@ import { LibraryDetailState } from '../library-detail.state';
 
 @Component({
   selector: 'app-library-form-fields',
-  imports: [FormsModule, TranslateModule, LucideIconComponent],
+  imports: [TvSelectDirective, FormsModule, TranslateModule, LucideIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library-form-fields.html',
   host: { class: 'flex flex-col gap-5' },

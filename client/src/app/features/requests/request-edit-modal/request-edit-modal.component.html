@@ -15,6 +15,7 @@
           <label class="form-control w-full">
             <span class="label-text">{{ 'settings.libraries.title' | translate }}</span>
             <select
+    appTvSelect
               class="select select-bordered select-sm w-full"
               [ngModel]="libraryId()"
               (ngModelChange)="libraryIdChange.emit($event ? +$event : null)"
@@ -30,6 +31,7 @@
           <label class="form-control w-full">
             <span class="label-text">{{ 'discover.quality_profile' | translate }}</span>
             <select
+    appTvSelect
               class="select select-bordered select-sm w-full"
               [ngModel]="qualityProfileId()"
               (ngModelChange)="qualityProfileIdChange.emit($event)"
@@ -45,6 +47,7 @@
           <label class="form-control w-full">
             <span class="label-text">{{ 'discover.language_profile' | translate }}</span>
             <select
+    appTvSelect
               class="select select-bordered select-sm w-full"
               [ngModel]="languageProfileId()"
               (ngModelChange)="languageProfileIdChange.emit($event)"

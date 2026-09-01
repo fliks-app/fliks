@@ -146,6 +146,7 @@
                   </td>
                   <td>
                     <select
+    appTvSelect
                       class="select select-bordered select-sm w-full"
                       [ngModel]="row.targetLibraryId"
                       (ngModelChange)="setRowLibrary(i, $event ? +$event : null)"

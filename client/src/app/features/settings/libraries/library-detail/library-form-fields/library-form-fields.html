@@ -80,7 +80,8 @@
   <div class="label">
     <span class="label-text text-base">{{ 'settings.libraries.preferred_provider' | translate }}</span>
   </div>
-  <select class="select select-bordered w-full"
+  <select
+    appTvSelect class="select select-bordered w-full"
     [ngModel]="state.formProvider()" (ngModelChange)="state.formProvider.set($event || null)">
     @for (opt of providerOptions; track opt.value) {
       <option [ngValue]="opt.value">{{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}</option>
@@ -92,7 +93,8 @@
   <div class="label">
     <span class="label-text text-base">{{ 'settings.libraries.metadata_language' | translate }}</span>
   </div>
-  <select class="select select-bordered w-full"
+  <select
+    appTvSelect class="select select-bordered w-full"
     [ngModel]="state.formMetadataLanguage() ?? ''" (ngModelChange)="state.formMetadataLanguage.set($event || null)">
     <option value="">{{ 'settings.libraries.metadata_inherit' | translate }}</option>
     @for (opt of metadataLanguageOptions; track opt.code) {
@@ -105,7 +107,8 @@
   <div class="label">
     <span class="label-text text-base">{{ 'settings.libraries.metadata_region' | translate }}</span>
   </div>
-  <select class="select select-bordered w-full"
+  <select
+    appTvSelect class="select select-bordered w-full"
     [ngModel]="state.formMetadataRegion() ?? ''" (ngModelChange)="state.formMetadataRegion.set($event || null)">
     <option value="">{{ 'settings.libraries.metadata_inherit' | translate }}</option>
     @for (opt of metadataRegionOptions; track opt.code) {
@@ -118,7 +121,8 @@
   <div class="label">
     <span class="label-text text-base">{{ 'settings.libraries.default_quality_profile' | translate }}</span>
   </div>
-  <select class="select select-bordered w-full"
+  <select
+    appTvSelect class="select select-bordered w-full"
     [ngModel]="state.formQualityProfileId()" (ngModelChange)="state.formQualityProfileId.set($event)">
     <option [ngValue]="null">—</option>
     @for (qp of state.qualityProfiles(); track qp.id) {
@@ -131,7 +135,8 @@
   <div class="label">
     <span class="label-text text-base">{{ 'settings.libraries.default_language_profile' | translate }}</span>
   </div>
-  <select class="select select-bordered w-full"
+  <select
+    appTvSelect class="select select-bordered w-full"
     [ngModel]="state.formLanguageProfileId()" (ngModelChange)="state.formLanguageProfileId.set($event)">
     <option [ngValue]="null">—</option>
     @for (lp of state.languageProfiles(); track lp.id) {

@@ -1,4 +1,12 @@
-<button type="button" class="dropdown-item" [class.text-primary]="selected()">
+<!-- `aria-current` is what the shared initial-focus rule looks for, so a menu
+     opens on the current choice instead of at the top, and a screen reader
+     announces it. The colour and the dot alone said it only visually. -->
+<button
+  type="button"
+  class="dropdown-item"
+  [class.text-primary]="selected()"
+  [attr.aria-current]="selected() ? 'true' : null"
+>
   @if (imageUrl()) {
     <img
       [cachedSrc]="imageUrl()! | resolveUrl:'thumb'"

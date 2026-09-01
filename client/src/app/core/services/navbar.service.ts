@@ -27,21 +27,33 @@ export class NavbarService {
   /**
    * User preference: whether the sidebar should stay pinned at lg breakpoint
    * even on form-factors that default to a drawer (tablet). Persisted in
-   * localStorage. Desktop and TV are always pinned regardless of this flag;
-   * phones never have a sidebar.
+   * localStorage, and on by default: wherever the pin is offered there is room
+   * for the column, and the drawer made every navigation a two-step. Desktop is
+   * always pinned regardless of this flag; phones never have a sidebar.
    */
-  readonly sidebarPinned = signal(localStorage.getItem('fliks.sidebarPinned') === 'true');
+  readonly sidebarPinned = signal(
+    localStorage.getItem('fliks.sidebarPinned') !== 'false',
+  );
   /** Effective pin state for layout decisions — auto-disabled on narrow
    *  screens (e.g. tablet portrait < lg) where a pinned drawer would eat too
    *  much horizontal space and leave the user without the standard mobile
-   *  navbar (= no back button, no title). The user's stored preference is
-   *  preserved; once the screen is wide enough again the pin is honoured. */
+   *  navbar (= no back button, no title). Never on a TV: the main layout there
+   *  is a 10-foot browse surface and a permanent column steals from it, and
+   *  focus would have one more region to escape on every screen. The user's
+   *  stored preference is preserved for the form factors that can use it. */
   readonly effectiveSidebarPinned = computed(
-    () => this.sidebarPinned() && this.isLargeScreen(),
+    () => this.sidebarPinned() && this.isLargeScreen() && !this.device.isTv(),
   );
 
-  private readonly router = inject(Router);
+  /** Whether the layout shows the sidebar as a permanent column. Desktop always
+   *  does; a tablet does when the pin is in effect. Stated here rather than in
+   *  the template so the form-factor list lives in one place. */
+  readonly sidebarDocked = computed(
+    () => this.device.isDesktop() || this.effectiveSidebarPinned(),
+  );
+
   private readonly device = inject(DeviceService);
+  private readonly router = inject(Router);
   /** Stack of in-app URLs we've visited (most recent last, current excluded). */
   private readonly history: string[] = [];
   /** Set while goBack() is navigating, so the NavigationEnd it triggers is
@@ -195,16 +207,12 @@ export class NavbarService {
   readonly mobileNavbarVisible = computed(() => {
     // Mirror the layout's actual navbar visibility, not just the form-factor:
     // - desktop is always pinned → navbar hidden at lg+
-    // - tablet & TV are user-pinnable → navbar hidden only when the user
-    //   pinned the sidebar (effectiveSidebarPinned, gated on lg+)
+    // - a tablet is user-pinnable → navbar hidden only when the user pinned
+    //   the sidebar (effectiveSidebarPinned, which never holds on a TV)
     if (this.isLargeScreen() && this.device.isDesktop()) return false;
-    if (
-      (this.device.isTablet() || this.device.isTv()) &&
-      this.effectiveSidebarPinned()
-    ) {
-      return false;
-    }
-    return true;
+    // One test now that the pin itself rules out a TV: naming the form factors
+    // twice let the two drift apart.
+    return !this.effectiveSidebarPinned();
   });
 
   /** Mobile navbar center: hero title on fanart pages, otherwise static/dynamic page title. */

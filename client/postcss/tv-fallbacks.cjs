@@ -139,6 +139,9 @@ function scaleToFn(value) {
 
 const CQ_UNIT = /\d(cqi|cqw|cqh|cqb)\b/;
 const DROP_PROPS = new Set(['text-wrap', 'field-sizing']);
+/** Tailwind v4's `rounded-full`: `calc(infinity * 1px)`, unknown to Chromium 85. */
+const INFINITY_CALC = /calc\(\s*infinity\s*\*\s*1px\s*\)/g;
+
 const SCROLL_INLINE_MAP = {
   'scroll-padding-inline': ['scroll-padding-left', 'scroll-padding-right'],
   'scroll-margin-inline': ['scroll-margin-left', 'scroll-margin-right'],
@@ -240,6 +243,13 @@ module.exports = () => ({
     // fine for UI backdrops.
     if (/ in (oklab|oklch|lab|lch|srgb-linear)\b/.test(decl.value)) {
       decl.value = decl.value.replace(/\s+in (oklab|oklch|lab|lch|srgb-linear)\b\s*,?/g, '');
+    }
+    // `calc(infinity * 1px)` is what Tailwind v4 emits for `rounded-full`.
+    // Chromium 85 has no `infinity` keyword, so the declaration is discarded
+    // and every pill, avatar and dot renders square. A large finite length is
+    // indistinguishable at any size we ship.
+    if (INFINITY_CALC.test(decl.value)) {
+      decl.value = decl.value.replace(INFINITY_CALC, '9999px');
     }
     if (CQ_UNIT.test(decl.value)) decl.remove();
   },

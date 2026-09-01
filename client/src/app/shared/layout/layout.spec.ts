@@ -141,6 +141,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
           mobileNavbarVisible: () => true,
           effectiveSidebarPinned: () => false,
           sidebarPinned: () => false,
+          sidebarDocked: () => false,
           toggleSidebarPinned: () => {},
           scrollAtTop: { set: () => {} },
           setPageTitle: () => {},
@@ -302,6 +303,7 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
   afterEach(() => {
     nativeState.value = false;
   });
+
 
   it('sidebar: admin with libraries', async () => {
     const fixture = await createFixture(ADMIN_WITH_LIBRARIES);

@@ -1,4 +1,5 @@
 import { Injectable, signal } from '@angular/core';
+import { restoreOpenerFocus } from './focusable.constants';
 
 export interface SelectPickerOption {
   label: string;
@@ -49,17 +50,9 @@ export class SelectPickerService {
     const sel = this.currentSelect;
     this.open.set(false);
     this.currentSelect = null;
-    // Restore focus to the trigger so a subsequent Enter / Space re-opens
-    // the picker — without this the browser drops focus to <body> when the
-    // popover unmounts and the user has to Tab back to the select. Only
-    // worth doing in keyboard / D-pad modality though: on iOS touch,
-    // calling `focus()` on a `<select>` pops the native picker right
-    // after we just dismissed our custom one. The `keyboard-modality`
-    // body class (toggled by app.ts) plus `body.tv` cover every modality
-    // where focus restoration is actually wanted.
-    const wantsFocusRestore =
-      document.body.classList.contains('keyboard-modality') ||
-      document.body.classList.contains('tv');
-    if (wantsFocusRestore) sel?.focus({ preventScroll: true });
+    // Restore focus to the trigger so a subsequent Enter / Space re-opens the
+    // picker: the browser drops focus to <body> when the popover unmounts. The
+    // modality test lives in `restoreOpenerFocus`, which every overlay shares.
+    restoreOpenerFocus(sel);
   }
 }

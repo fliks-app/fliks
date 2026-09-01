@@ -1,6 +1,6 @@
 import { Directive, ElementRef, inject, OnDestroy } from '@angular/core';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
-import { TABBABLE_SELECTOR, initialOverlayFocus } from '../../core/services/focusable.constants';
+import { TABBABLE_SELECTOR, initialOverlayFocus, restoreOpenerFocus } from '../../core/services/focusable.constants';
 
 /**
  * Click-driven `.dropdown-open` toggle for any DaisyUI dropdown trigger.
@@ -84,7 +84,7 @@ export class DropdownToggleDirective implements OnDestroy {
     });
     const close = () => {
       dropdown.classList.remove('dropdown-open');
-      this.triggerEl?.focus({ preventScroll: true });
+      restoreOpenerFocus(this.triggerEl);
       this.cleanup();
     };
     this.currentClose = close;

@@ -95,6 +95,7 @@
       <label class="form-control w-full">
         <span class="label-text">{{ 'settings.notifications.field_type' | translate }}</span>
         <select
+    appTvSelect
           class="select select-bordered select-sm w-full"
           [ngModel]="formType()"
           (ngModelChange)="formType.set($event)"

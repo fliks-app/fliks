@@ -268,7 +268,7 @@
 
     <div class="flex flex-col gap-1">
       <span class="text-sm text-base-content/60">{{ 'search.sort_label' | translate }}</span>
-      <select
+      <select appTvSelect
         class="select select-bordered select-sm w-full"
         [ngModel]="state.discoverSort()"
         (ngModelChange)="state.discoverSort.set($event)"

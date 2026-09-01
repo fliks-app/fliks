@@ -10,7 +10,11 @@
     <li><a routerLink="/app-settings/display" routerLinkActive="active"><svg lucideMonitor class="h-4 w-4"></svg>{{ 'app_settings.nav.display' | translate }}</a></li>
     <li><a routerLink="/app-settings/player" routerLinkActive="active"><svg lucidePlay class="h-4 w-4"></svg>{{ 'app_settings.nav.player' | translate }}</a></li>
     <li><a routerLink="/app-settings/subtitles" routerLinkActive="active"><svg lucideCaptions class="h-4 w-4"></svg>{{ 'app_settings.nav.subtitles' | translate }}</a></li>
-    <li><a routerLink="/app-settings/cast" routerLinkActive="active"><svg lucideCast class="h-4 w-4"></svg>{{ 'app_settings.nav.cast' | translate }}</a></li>
+    <!-- No Chromecast sender on a TV: it is a target, and the section would
+         only offer settings for a session it cannot start. -->
+    @if (!tv.isTv()) {
+      <li><a routerLink="/app-settings/cast" routerLinkActive="active"><svg lucideCast class="h-4 w-4"></svg>{{ 'app_settings.nav.cast' | translate }}</a></li>
+    }
     <li><a routerLink="/app-settings/remote" routerLinkActive="active"><svg lucideMonitorSmartphone class="h-4 w-4"></svg>{{ 'app_settings.nav.remote' | translate }}</a></li>
     @if (!tv.isTv()) {
       <li><a routerLink="/app-settings/storage" routerLinkActive="active"><svg lucideHardDrive class="h-4 w-4"></svg>{{ 'app_settings.nav.storage' | translate }}</a></li>

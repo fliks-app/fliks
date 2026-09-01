@@ -1,4 +1,5 @@
 import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/core';
+import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ToastService } from '../../../core/services/toast.service';
@@ -14,7 +15,7 @@ import { DeviceService } from '../../../core/services/device.service';
 
 @Component({
   selector: 'app-storage-settings',
-  imports: [FormsModule, TranslateModule],
+  imports: [TvSelectDirective, FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './storage-settings.html',
 })

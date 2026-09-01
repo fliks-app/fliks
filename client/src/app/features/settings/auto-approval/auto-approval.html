@@ -165,6 +165,7 @@
               'settings.auto_approval.field_media_type' | translate
             }}</span>
             <select
+    appTvSelect
               class="select select-bordered select-sm w-full"
               [ngModel]="formMediaType()"
               (ngModelChange)="setMediaType($event)"

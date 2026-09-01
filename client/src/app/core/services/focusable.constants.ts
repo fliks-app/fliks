@@ -22,6 +22,34 @@ export const TABBABLE_SELECTOR =
  * `disabled` precisely so the current value stays in the focus order), while
  * `autofocus` and `aria-current` are set by hand at a few call sites.
  */
+/**
+ * Whether focus should be handed back to whatever opened an overlay. Only a
+ * keyboard or a D-pad needs it: on touch it would mark a control the user is no
+ * longer on, and refocusing a `<select>` on iOS reopens the native picker we
+ * just replaced.
+ */
+export function wantsFocusRestore(): boolean {
+  if (typeof document === 'undefined') return false;
+  const b = document.body.classList;
+  return b.contains('keyboard-modality') || b.contains('tv');
+}
+
+/**
+ * Settle focus after an overlay closes. A keyboard or D-pad gets it back on the
+ * opener, so the next Enter reopens it. Touch gets it taken off: the overlay
+ * backdrop deliberately does not blur (that is what kept the ring from
+ * flickering), so without this the opener kept a focus mark for a control the
+ * user had already left. One rule for every overlay that closes.
+ */
+export function restoreOpenerFocus(opener: HTMLElement | null | undefined): void {
+  if (!opener?.isConnected) return;
+  if (wantsFocusRestore()) {
+    opener.focus({ preventScroll: true });
+    return;
+  }
+  if (document.activeElement === opener) opener.blur();
+}
+
 export function initialOverlayFocus(root: ParentNode | null | undefined): HTMLElement | null {
   if (!root) return null;
   for (const marker of ['[autofocus]', '[aria-current="true"]', '[aria-disabled="true"]']) {

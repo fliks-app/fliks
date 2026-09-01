@@ -97,6 +97,7 @@
       <label class="form-control w-full">
         <span class="label-text">{{ 'settings.media_servers.field_type' | translate }}</span>
         <select
+    appTvSelect
           class="select select-bordered select-sm w-full"
           [ngModel]="formType()"
           (ngModelChange)="onTypeChange($event)"

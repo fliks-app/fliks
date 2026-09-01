@@ -6,6 +6,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { NgClass } from '@angular/common';
+import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -21,7 +22,7 @@ import { episodeLabel } from '../../../shared/utils/episode-label';
 
 @Component({
   selector: 'app-subtitles-activity',
-  imports: [TranslateModule, LocaleDatePipe, LocalizeLanguagePipe, NgClass, RouterLink, FormsModule, PaginationComponent],
+  imports: [TvSelectDirective, TranslateModule, LocaleDatePipe, LocalizeLanguagePipe, NgClass, RouterLink, FormsModule, PaginationComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitles-activity.html',
 })

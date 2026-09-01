@@ -8,6 +8,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { RouterLink } from '@angular/router';
 import { LucideX } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -26,7 +27,7 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-users-settings',
-  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, RouterLink, TranslateModule],
+  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, RouterLink, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './users.html',
 })

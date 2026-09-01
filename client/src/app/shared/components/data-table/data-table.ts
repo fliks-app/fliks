@@ -11,6 +11,7 @@ import {
   untracked,
 } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
+import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -65,7 +66,7 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
  */
 @Component({
   selector: 'app-data-table',
-  imports: [
+  imports: [TvSelectDirective, 
     ModalFooterComponent,
     ModalHeaderComponent,
     TranslateModule,

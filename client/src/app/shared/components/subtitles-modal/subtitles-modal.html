@@ -244,6 +244,7 @@
       <label class="form-control w-full">
         <span class="label-text">{{ 'media_detail.sync_reference' | translate }}</span>
         <select
+    appTvSelect
           class="select select-bordered select-sm w-full"
           [ngModel]="syncReference()"
           (ngModelChange)="syncReference.set($event)"
@@ -414,6 +415,7 @@
       <label class="form-control flex-1">
         <span class="label-text">{{ 'media_detail.fps_from' | translate }}</span>
         <select
+    appTvSelect
           class="select select-bordered select-sm w-full"
           [ngModel]="fpsFrom()"
           (ngModelChange)="fpsFrom.set($event)"
@@ -428,6 +430,7 @@
       <label class="form-control flex-1">
         <span class="label-text">{{ 'media_detail.fps_to' | translate }}</span>
         <select
+    appTvSelect
           class="select select-bordered select-sm w-full"
           [ngModel]="fpsTo()"
           (ngModelChange)="fpsTo.set($event)"
@@ -492,6 +495,7 @@
     </app-modal-header>
     <div class="mt-2 space-y-4">
       <select
+    appTvSelect
         class="select select-bordered w-full"
         [ngModel]="ocrLang()"
         (ngModelChange)="ocrLang.set($event)"
@@ -504,6 +508,7 @@
         <label class="form-control w-full">
           <span class="label-text mb-1">{{ 'media_detail.translate_provider' | translate }}</span>
           <select
+    appTvSelect
             class="select select-bordered w-full"
             [ngModel]="selectedTranslationProviderId()"
             (ngModelChange)="selectedTranslationProviderId.set($event)"

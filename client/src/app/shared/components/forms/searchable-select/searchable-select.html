@@ -38,6 +38,7 @@
             type="button"
             class="w-full text-left px-3 py-1.5 text-sm hover:bg-base-200"
             [class.text-primary]="value() === null"
+            [attr.aria-current]="value() === null ? 'true' : null"
             (click)="pick(null)"
           >
             {{ emptyOptionLabel() }}
@@ -50,6 +51,7 @@
             type="button"
             class="w-full text-left px-3 py-1.5 text-sm hover:bg-base-200 truncate"
             [class.text-primary]="opt.value === value()"
+            [attr.aria-current]="opt.value === value() ? 'true' : null"
             (click)="pick(opt.value)"
             [title]="opt.label"
           >

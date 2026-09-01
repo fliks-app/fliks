@@ -15,7 +15,7 @@ import { BottomSheetComponent } from './bottom-sheet';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
-import { initialOverlayFocus } from '../../core/services/focusable.constants';
+import { initialOverlayFocus, restoreOpenerFocus } from '../../core/services/focusable.constants';
 
 /**
  * Reusable menu chrome that picks its presentation per-platform:
@@ -52,8 +52,14 @@ import { initialOverlayFocus } from '../../core/services/focusable.constants';
     <ng-template #content><ng-content></ng-content></ng-template>
 
     @if (open() && useDropdown()) {
-      <!-- Click-out backdrop (transparent) -->
-      <div class="fixed inset-0 z-[100]" (click)="close()"></div>
+      <!-- Click-out backdrop (transparent). Preventing the pointerdown default
+           keeps the click from blurring the opener first: focus would leave and
+           be restored a tick later, flickering its ring off and back on. -->
+      <div
+        class="fixed inset-0 z-[100]"
+        (pointerdown)="$event.preventDefault()"
+        (click)="close()"
+      ></div>
       <div
         data-tv-modal
         [attr.data-tv-submenu]="submenu() ? '' : null"
@@ -183,8 +189,7 @@ export class PopoverMenuComponent {
       // focus to the opener so keyboard / D-pad users don't lose their place
       // (a submenu returns to its parent entry, a menu to its trigger).
       const close = () => {
-        const opener = this.anchor();
-        if (opener?.isConnected) opener.focus({ preventScroll: true });
+        restoreOpenerFocus(this.anchor());
         this.close();
       };
       this.dismissStack.push(close);

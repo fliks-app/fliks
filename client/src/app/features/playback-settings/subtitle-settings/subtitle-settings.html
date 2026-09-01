@@ -3,7 +3,8 @@
   <div class="card-body gap-5">
     <label class="form-control w-full max-w-xs">
       <div class="label"><span class="label-text font-medium">{{ 'playback_settings.sub_preferred_lang' | translate }}</span></div>
-      <select class="select select-bordered w-full" [ngModel]="preferredSubtitleLanguage()" (ngModelChange)="preferredSubtitleLanguage.set($event)">
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="preferredSubtitleLanguage()" (ngModelChange)="preferredSubtitleLanguage.set($event)">
         @for (l of languageOptions; track l.value) { <option [value]="l.value">{{ l.labelKey ? (l.labelKey | translate) : l.label }}</option> }
       </select>
     </label>
@@ -12,7 +13,8 @@
 
     <label class="form-control w-full max-w-xs">
       <div class="label"><span class="label-text font-medium">{{ 'playback_settings.sub_mode' | translate }}</span></div>
-      <select class="select select-bordered w-full" [ngModel]="subtitleMode()" (ngModelChange)="subtitleMode.set($event)">
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="subtitleMode()" (ngModelChange)="subtitleMode.set($event)">
         @for (m of subtitleModeOptions; track m.value) { <option [value]="m.value">{{ m.labelKey | translate }}</option> }
       </select>
       <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.sub_mode_hint' | translate }}</span></div>
@@ -63,7 +65,8 @@
 
     <label class="form-control w-full max-w-xs">
       <div class="label"><span class="label-text font-medium">{{ 'playback_settings.sub_bottom_margin' | translate }}</span></div>
-      <select class="select select-bordered w-full" [ngModel]="subtitleBottomMargin()" (ngModelChange)="subtitleBottomMargin.set(+$event)">
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="subtitleBottomMargin()" (ngModelChange)="subtitleBottomMargin.set(+$event)">
         @for (v of bottomMarginOptions; track v) { <option [ngValue]="v">{{ v }}%</option> }
       </select>
       <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.sub_bottom_margin_hint' | translate }}</span></div>
@@ -71,7 +74,8 @@
 
     <label class="form-control w-full max-w-xs">
       <div class="label"><span class="label-text font-medium">{{ 'playback_settings.sub_top_margin' | translate }}</span></div>
-      <select class="select select-bordered w-full" [ngModel]="subtitleTopMargin()" (ngModelChange)="subtitleTopMargin.set(+$event)">
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="subtitleTopMargin()" (ngModelChange)="subtitleTopMargin.set(+$event)">
         @for (v of topMarginOptions; track v) { <option [ngValue]="v">{{ v }}%</option> }
       </select>
       <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.sub_top_margin_hint' | translate }}</span></div>

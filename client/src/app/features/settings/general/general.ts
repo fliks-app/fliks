@@ -6,6 +6,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../core/services/toast.service';
@@ -17,7 +18,7 @@ import {
 
 @Component({
   selector: 'app-general-settings',
-  imports: [FormsModule, TranslateModule, SetupChecklistComponent],
+  imports: [TvSelectDirective, FormsModule, TranslateModule, SetupChecklistComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './general.html',
 })

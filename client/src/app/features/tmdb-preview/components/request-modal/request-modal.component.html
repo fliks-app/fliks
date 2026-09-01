@@ -93,6 +93,7 @@
                 'settings.libraries.title' | translate
               }}</span>
               <select
+    appTvSelect
                 class="select select-bordered select-sm w-full"
                 [ngModel]="libraryId()"
                 (ngModelChange)="libraryId.set($event ? +$event : null)"
@@ -110,6 +111,7 @@
                 'discover.quality_profile' | translate
               }}</span>
               <select
+    appTvSelect
                 class="select select-bordered select-sm w-full"
                 [ngModel]="qualityProfileId()"
                 (ngModelChange)="qualityProfileId.set(+$event)"
@@ -126,6 +128,7 @@
                 'discover.language_profile' | translate
               }}</span>
               <select
+    appTvSelect
                 class="select select-bordered select-sm w-full"
                 [ngModel]="languageProfileId()"
                 (ngModelChange)="languageProfileId.set(+$event)"

@@ -10,6 +10,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { Subscription } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
@@ -25,7 +26,7 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 @Component({
   selector: 'app-persons',
-  imports: [
+  imports: [TvSelectDirective, 
     CachedSrcDirective,FormsModule, TranslateModule, RouterLink, ResolveUrlPipe, LucideSearch, LucideUsers],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './persons.html',

@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Router } from '@angular/router';
 import { MetadataService } from '../../../../core/services/api/metadata.service';
@@ -23,7 +24,7 @@ import { ModalFooterComponent } from '../../../../shared/components/modal-footer
 
 @Component({
   selector: 'app-import-modal',
-  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
+  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './import-modal.component.html',
 })

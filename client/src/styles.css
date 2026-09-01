@@ -18,8 +18,13 @@
 
 /* Thinner focus outline on form fields. Suppress daisyUI's border on focus —
    the focus ring (outline) is the only visual cue we want, the extra white
-   border doubled up with the ring looks noisy. */
-.select:focus, .input:focus, .textarea:focus {
+   border doubled up with the ring looks noisy.
+
+   A select uses `:focus-visible` rather than `:focus`: it has no caret, so a
+   tap has nothing left to show once the ring is suppressed, and dropping the
+   border too made a tapped field look borderless. Text fields keep `:focus` —
+   their caret is the indication and the ring is not the only cue. */
+.select:focus-visible, .input:focus, .textarea:focus {
   outline-width: 1px;
   outline-offset: 0px;
   border-color: transparent;
@@ -467,11 +472,24 @@ body.tv *:hover {
    class is set by app.ts on the first navigation keydown and cleared
    on the next pointer / touch interaction; TV always uses the ring
    so it short-circuits the suppression. `transform: none` covers the
-   scale-up rule on media cards a few selectors down. */
+   scale-up rule on media cards a few selectors down.
+
+   A select is not exempt: tapping one opens its picker, which is the
+   indication, and no platform leaves a ring on a field after a tap. Text
+   fields stay exempt because a caret alone reads as nothing on a wide row. */
 body:not(.keyboard-modality):not(.tv)
-  :focus-visible:not(input, textarea, select, [contenteditable]) {
+  :focus-visible:not(input, textarea, [contenteditable]) {
   outline: none !important;
   box-shadow: none !important;
+}
+
+/* daisyUI paints its own outline on a focused select. The suppression above is
+   written against :focus-visible, which some engines do not match on a tapped
+   select (WebKit notably), so there the outline stayed and read as a second ring
+   next to the untouched border. Reached on plain :focus so the modality, not the
+   engine's focus-visible verdict, decides. */
+body:not(.keyboard-modality):not(.tv) .select:focus {
+  outline: none;
 }
 
 /* iOS Safari auto-zooms the viewport when a focused input has
