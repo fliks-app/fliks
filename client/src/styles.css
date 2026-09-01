@@ -1181,3 +1181,44 @@ body.tablet [data-touch-only] {
   z-index: 0;
 }
 
+/* Closing the player: the only navigation that opts the root pair back in.
+   The old snapshot IS the player, so it shrinks and fades above the page it
+   returns to, mirroring the open animation in `player.ts`. */
+html.vt-player-close::view-transition-old(root),
+html.vt-player-close::view-transition-new(root) {
+  /* The UA cross-fades with `plus-lighter`, which adds the two snapshots
+     instead of letting the player occlude the page it shrinks over. */
+  mix-blend-mode: normal;
+}
+/* The new snapshot paints above the old inside the image pair, and its
+   `animation: none` above makes it opaque from the first frame, so without this
+   the closing player animates entirely behind the destination page. */
+html.vt-player-close::view-transition-new(root) {
+  z-index: 0;
+}
+html.vt-player-close::view-transition-old(root) {
+  z-index: 1;
+  animation: player-close 200ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+/* Above the named groups (z-index 1): a hero poster stamped by an earlier card
+   click has no old counterpart here, so it would fade in through the player. */
+html.vt-player-close::view-transition-group(root) {
+  z-index: 2;
+}
+@keyframes player-close {
+  to {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html.vt-player-close::view-transition-old(root) {
+    animation-name: player-close-fade;
+  }
+  @keyframes player-close-fade {
+    to {
+      opacity: 0;
+    }
+  }
+}
+

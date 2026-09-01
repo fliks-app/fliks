@@ -68,6 +68,8 @@ export function loadPersistedState(): Promise<unknown> {
 }
 
 const EPISODE_PATH = 'series/:id/episode/:episodeId';
+const WATCH_PATH = 'watch/:mediaFileId';
+const PLAYER_CLOSE_CLASS = 'vt-player-close';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -100,6 +102,15 @@ export const appConfig: ApplicationConfig = {
                 }
                 // A stamp outlives its navigation so the back morph can pair it.
                 clearStalePosterStamps(from, to);
+                // Leaving the player is the one navigation that re-enables the
+                // root pair: the closing player has to shrink over the page
+                // behind it, which only exists inside the transition.
+                if (leafRoutePath(from) === WATCH_PATH && leafRoutePath(to) !== WATCH_PATH) {
+                  const root = document.documentElement;
+                  root.classList.add(PLAYER_CLOSE_CLASS);
+                  const done = () => root.classList.remove(PLAYER_CLOSE_CLASS);
+                  void transition.finished.then(done, done);
+                }
                 markViewTransition(transition);
               },
             }),
