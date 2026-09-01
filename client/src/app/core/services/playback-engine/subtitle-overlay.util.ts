@@ -138,7 +138,9 @@ export class SubtitleOverlay {
       'text-align: center',
       'text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9)',
       'pointer-events: none',
-      'z-index: 1000',
+      // Below the controls row (z-40, raised to z-55 while the sprite preview is
+      // up) and above the video: at 1000 a cue covered the seek thumbnail.
+      'z-index: 30',
       'white-space: pre-wrap',
       'display: none',
     ].join(';');

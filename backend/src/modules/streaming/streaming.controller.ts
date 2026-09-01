@@ -1068,10 +1068,20 @@ export class StreamingController {
     if (live?.userId != null) {
       const stoppedTargetId = this.events.targetIdFor(live.sseConnectionId);
       if (stoppedTargetId) {
+        this.log.debug(
+          `stopLiveSession(${sessionId}): announcing the stop of ${stoppedTargetId}`,
+        );
         this.events.emitToUser(live.userId, {
           type: 'remote.stopped',
           targetId: stoppedTargetId,
         });
+      } else {
+        // Silent until now, and the one branch that leaves a controller showing
+        // playback that has ended.
+        this.log.debug(
+          `stopLiveSession(${sessionId}): no live target for connection ` +
+            `${live.sseConnectionId ?? 'null'}, no stop announced`,
+        );
       }
       this.events.emitToUser(live.userId, { type: 'remote.targets_changed' });
     } else {
