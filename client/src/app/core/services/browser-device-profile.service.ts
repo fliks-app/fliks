@@ -154,6 +154,12 @@ export interface DeviceProfile {
   supportsAbr?: boolean;
 }
 
+/** Containers AVPlay demuxes, from Samsung's published media specification
+ *  (identical across the 2019-2025 model years). Over-declaring is safe: Direct
+ *  Play also requires the video AND audio codec to match the same profile
+ *  entry, so an AVI carrying MPEG-4 ASP still falls through to a transcode. */
+const TIZEN_CONTAINERS = ['mp4', 'mkv', 'mov', 'ts', 'm2ts', 'avi', 'webm'];
+
 /** True when `localStorage['fliks.useTs']` is set to a truthy value.
  *  See `DeviceProfile.useTs` for the rationale. */
 function readUseTsOverride(): boolean {
@@ -386,9 +392,14 @@ export class BrowserDeviceProfileService {
       });
     }
 
-    // AVPlay demuxes Matroska natively, so the raw file Direct Plays. Declared
-    // rather than probed: Tizen exposes codec capabilities, never containers.
-    if (tvPlatform === 'tizen') containers.push('mkv');
+    // Tizen: take the containers Samsung publishes for the TV's own demuxer.
+    // The WebView probe above answers for a pipeline that never plays here.
+    // https://developer.samsung.com/smarttv/develop/specifications/media-specifications/2022-tv-video-specifications.html
+    if (tvPlatform === 'tizen') {
+      for (const c of TIZEN_CONTAINERS) {
+        if (!containers.includes(c)) containers.push(c);
+      }
+    }
 
     // --- Detect supported audio codecs ---
     // On native, the platform plugin (AudioCapabilities) is the source of
