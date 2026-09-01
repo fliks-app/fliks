@@ -51,6 +51,7 @@
           }
           @case ('select') {
             <select
+    appTvSelect
               class="select select-bordered select-sm"
               [attr.aria-label]="filter.labelKey | translate"
               (change)="onSelectChange(filter.key, $event)"

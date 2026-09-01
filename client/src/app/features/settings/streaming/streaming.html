@@ -9,7 +9,8 @@
          The help line below shows the trade-off of the selected mode. -->
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.auto_quality_mode' | translate }}</span></label>
-      <select class="select select-bordered w-full" [ngModel]="autoQualityMode()" (ngModelChange)="autoQualityMode.set($event)">
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="autoQualityMode()" (ngModelChange)="autoQualityMode.set($event)">
         <option value="directplay">{{ 'settings.streaming.auto_quality_mode_directplay' | translate }} ({{ 'settings.streaming.default' | translate }})</option>
         <option value="abr">{{ 'settings.streaming.auto_quality_mode_abr' | translate }}</option>
       </select>
@@ -23,7 +24,8 @@
          container, so this picks where that read happens. -->
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.subtitle_prewarm' | translate }}</span></label>
-      <select class="select select-bordered w-full" [ngModel]="subtitlePrewarm()" (ngModelChange)="subtitlePrewarm.set($event)">
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="subtitlePrewarm()" (ngModelChange)="subtitlePrewarm.set($event)">
         <option value="playback">{{ 'settings.streaming.subtitle_prewarm_playback' | translate }} ({{ 'settings.streaming.default' | translate }})</option>
         <option value="import">{{ 'settings.streaming.subtitle_prewarm_import' | translate }}</option>
         <option value="off">{{ 'settings.streaming.subtitle_prewarm_off' | translate }}</option>
@@ -37,7 +39,8 @@
     <!-- Segment duration -->
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.segment_duration' | translate }}</span></label>
-      <select class="select select-bordered w-full" [ngModel]="segmentDuration()" (ngModelChange)="segmentDuration.set($event)">
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="segmentDuration()" (ngModelChange)="segmentDuration.set($event)">
         <option value="2">2s</option>
         <option value="3">3s</option>
         <option value="4">4s</option>
@@ -57,7 +60,8 @@
     <!-- QSV / libx264 encoder preset -->
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.qsv_preset' | translate }}</span></label>
-      <select class="select select-bordered w-full" [ngModel]="qsvPreset()" (ngModelChange)="qsvPreset.set($event)">
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="qsvPreset()" (ngModelChange)="qsvPreset.set($event)">
         <option value="veryfast">veryfast</option>
         <option value="faster">faster ({{ 'settings.streaming.default' | translate }})</option>
         <option value="fast">fast</option>
@@ -74,7 +78,8 @@
     @if (tonemapAlgosAvailable().length > 1) {
       <div class="form-control">
         <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.tonemap_algo' | translate }}</span></label>
-        <select class="select select-bordered w-full" [ngModel]="tonemapAlgo()" (ngModelChange)="tonemapAlgo.set($event)">
+        <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="tonemapAlgo()" (ngModelChange)="tonemapAlgo.set($event)">
           @for (algo of tonemapAlgosAvailable(); track algo) {
             <option [value]="algo">{{ ('settings.streaming.tonemap_algo_' + algo) | translate }}@if (algo === 'auto') { ({{ 'settings.streaming.default' | translate }}) }</option>
           }
@@ -87,7 +92,8 @@
     @if (gpus().length > 1) {
       <div class="form-control">
         <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.gpu_device' | translate }}</span></label>
-        <select class="select select-bordered w-full" [ngModel]="gpuRenderNode()" (ngModelChange)="gpuRenderNode.set($event)">
+        <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="gpuRenderNode()" (ngModelChange)="gpuRenderNode.set($event)">
           <option value="auto">{{ 'settings.streaming.gpu_device_auto' | translate }}</option>
           @for (g of gpus(); track g.renderNode) {
             <option [value]="g.renderNode">{{ g.label }}</option>

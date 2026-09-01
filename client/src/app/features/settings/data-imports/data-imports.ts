@@ -8,6 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -76,7 +77,7 @@ type LibrarySelection = number | null;
 
 @Component({
   selector: 'app-data-imports-settings',
-  imports: [
+  imports: [TvSelectDirective, 
     ModalHeaderComponent,
     ModalFooterComponent,
     FormsModule,

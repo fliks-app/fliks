@@ -68,6 +68,7 @@
             <span class="label-text">{{ 'settings.general.metadata_language' | translate }}</span>
           </div>
           <select
+    appTvSelect
             class="select select-bordered w-full"
             [ngModel]="metadataLanguage()"
             (ngModelChange)="metadataLanguage.set($event)"
@@ -86,6 +87,7 @@
             <span class="label-text">{{ 'settings.general.metadata_region' | translate }}</span>
           </div>
           <select
+    appTvSelect
             class="select select-bordered w-full"
             [ngModel]="metadataRegion()"
             (ngModelChange)="metadataRegion.set($event)"

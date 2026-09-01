@@ -217,6 +217,7 @@
           <label class="form-control w-full">
             <span class="label-text">{{ 'import.mode_label' | translate }}</span>
             <select
+    appTvSelect
               class="select select-bordered select-sm w-full"
               [ngModel]="radarrMode()"
               (ngModelChange)="radarrMode.set($event)"
@@ -239,6 +240,7 @@
           <label class="form-control w-full">
             <span class="label-text">{{ 'settings.libraries.import_target' | translate }}</span>
             <select
+    appTvSelect
               class="select select-bordered select-sm w-full"
               [ngModel]="radarrLibrary()"
               (ngModelChange)="radarrLibrary.set($event)"
@@ -383,6 +385,7 @@
           <label class="form-control w-full">
             <span class="label-text">{{ 'import.mode_label' | translate }}</span>
             <select
+    appTvSelect
               class="select select-bordered select-sm w-full"
               [ngModel]="sonarrMode()"
               (ngModelChange)="sonarrMode.set($event)"
@@ -405,6 +408,7 @@
           <label class="form-control w-full">
             <span class="label-text">{{ 'settings.libraries.import_target' | translate }}</span>
             <select
+    appTvSelect
               class="select select-bordered select-sm w-full"
               [ngModel]="sonarrLibrary()"
               (ngModelChange)="sonarrLibrary.set($event)"
@@ -555,6 +559,7 @@
                   }}</code>
                   <span class="text-base-content/40 hidden sm:inline">→</span>
                   <select
+    appTvSelect
                     class="select select-bordered select-sm sm:flex-1"
                     [ngModel]="m.ignore ? IGNORE_VALUE : m.localLibraryId"
                     (ngModelChange)="setMapping('radarr', m.remotePath, $event)"
@@ -630,6 +635,7 @@
                   }}</code>
                   <span class="text-base-content/40 hidden sm:inline">→</span>
                   <select
+    appTvSelect
                     class="select select-bordered select-sm sm:flex-1"
                     [ngModel]="m.ignore ? IGNORE_VALUE : m.localLibraryId"
                     (ngModelChange)="setMapping('sonarr', m.remotePath, $event)"

@@ -6,6 +6,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   UsersApiService,
@@ -21,7 +22,7 @@ import { LucideIconComponent } from '../../../../shared/components/lucide-icon';
 
 @Component({
   selector: 'app-user-general',
-  imports: [FormsModule, TranslateModule, LucideIconComponent],
+  imports: [TvSelectDirective, FormsModule, TranslateModule, LucideIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './user-general.html',
 })

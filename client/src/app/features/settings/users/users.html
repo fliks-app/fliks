@@ -108,6 +108,7 @@
       <label class="form-control w-full">
         <span class="label-text">{{ 'settings.users.field_role' | translate }}</span>
         <select
+    appTvSelect
           class="select select-bordered select-sm w-full"
           [ngModel]="formRoleId()"
           (ngModelChange)="formRoleId.set($event)"

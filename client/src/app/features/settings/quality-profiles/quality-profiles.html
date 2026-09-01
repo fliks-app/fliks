@@ -97,6 +97,7 @@
       <label class="form-control w-full">
         <span class="label-text">{{ 'settings.quality_profiles.field_cutoff' | translate }}</span>
         <select
+    appTvSelect
           class="select select-bordered w-full"
           [ngModel]="formCutoff()"
           (ngModelChange)="formCutoff.set(+$event)"

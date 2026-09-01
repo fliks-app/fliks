@@ -9,6 +9,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { HttpClient } from '@angular/common/http';
 import { LucideX } from '@lucide/angular';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -44,7 +45,7 @@ interface CreateNotificationBody {
 
 @Component({
   selector: 'app-notifications-settings',
-  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
+  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './notifications.html',
 })

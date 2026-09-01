@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MetadataService, MetadataSeason } from '../../../../core/services/api/metadata.service';
 import { RequestsService } from '../../../../core/services/api/requests.service';
@@ -21,7 +22,7 @@ import { ModalFooterComponent } from '../../../../shared/components/modal-footer
 
 @Component({
   selector: 'app-request-modal',
-  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
+  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './request-modal.component.html',
 })

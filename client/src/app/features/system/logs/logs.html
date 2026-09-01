@@ -1,5 +1,6 @@
 <div class="flex justify-end gap-2 mb-3">
-  <select class="select select-bordered select-xs" [ngModel]="logLevel()" (ngModelChange)="logLevel.set($event); load()">
+  <select
+    appTvSelect class="select select-bordered select-xs" [ngModel]="logLevel()" (ngModelChange)="logLevel.set($event); load()">
     <option value="">{{ 'system.logs_all_levels' | translate }}</option>
     <option value="log">Info</option>
     <option value="warn">Warning</option>

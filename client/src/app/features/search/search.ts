@@ -13,6 +13,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
@@ -44,7 +45,7 @@ import { UserAvatarComponent } from '../../shared/components/user-avatar/user-av
 
 @Component({
   selector: 'app-search',
-  imports: [UserAvatarComponent, FormsModule, TranslateModule, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent],
+  imports: [TvSelectDirective, UserAvatarComponent, FormsModule, TranslateModule, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './search.html',
 })

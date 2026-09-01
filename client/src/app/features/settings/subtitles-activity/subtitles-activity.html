@@ -1,14 +1,16 @@
 <h1 class="sr-only lg:not-sr-only text-2xl font-bold mb-4">{{ 'activity.tab_subtitles' | translate }}</h1>
 
 <div class="flex gap-2 mb-4">
-  <select class="select select-bordered select-sm" [ngModel]="subFilterStatus()" (ngModelChange)="subFilterStatus.set($event); applySubFilters()">
+  <select
+    appTvSelect class="select select-bordered select-sm" [ngModel]="subFilterStatus()" (ngModelChange)="subFilterStatus.set($event); applySubFilters()">
     <option value="">{{ 'activity.all_statuses' | translate }}</option>
     <option value="downloaded">{{ 'activity.status_downloaded' | translate }}</option>
     <option value="upgraded">{{ 'activity.status_upgraded' | translate }}</option>
     <option value="synced">{{ 'activity.status_synced' | translate }}</option>
     <option value="failed">{{ 'activity.status_failed' | translate }}</option>
   </select>
-  <select class="select select-bordered select-sm" [ngModel]="subFilterLang()" (ngModelChange)="subFilterLang.set($event); applySubFilters()">
+  <select
+    appTvSelect class="select select-bordered select-sm" [ngModel]="subFilterLang()" (ngModelChange)="subFilterLang.set($event); applySubFilters()">
     <option value="">{{ 'activity.all_languages' | translate }}</option>
     @for (code of languageCodes; track code) {
       <option [value]="code">{{ code | localizeLanguage }}</option>

@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Subscription } from 'rxjs';
+import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -45,7 +46,7 @@ import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 
 @Component({
   selector: 'app-requests',
-  imports: [
+  imports: [TvSelectDirective, 
     FormsModule,
     LocaleDatePipe,
     TranslateModule,

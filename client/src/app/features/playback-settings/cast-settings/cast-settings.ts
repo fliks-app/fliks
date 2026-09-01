@@ -6,6 +6,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { CastSettingsService, CastSettings, DEFAULT_CAST_SUBTITLE_STYLE } from '../../../core/services/cast-settings.service';
 import { ToastService } from '../../../core/services/toast.service';
@@ -15,7 +16,7 @@ import { QUALITY_OPTIONS, AUDIO_CHANNEL_OPTIONS } from '../playback-options';
 
 @Component({
   selector: 'app-cast-settings',
-  imports: [FormsModule, TranslateModule, SubtitleAppearanceComponent, ToggleFieldComponent],
+  imports: [TvSelectDirective, FormsModule, TranslateModule, SubtitleAppearanceComponent, ToggleFieldComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './cast-settings.html',
 })

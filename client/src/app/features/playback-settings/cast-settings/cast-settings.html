@@ -11,7 +11,8 @@
 
     <label class="form-control w-full max-w-xs">
       <div class="label"><span class="label-text font-medium">{{ 'playback_settings.cast_max_quality' | translate }}</span></div>
-      <select class="select select-bordered w-full" [ngModel]="maxQuality()" (ngModelChange)="maxQuality.set($event)">
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="maxQuality()" (ngModelChange)="maxQuality.set($event)">
         @for (q of qualityOptions; track q.value) { <option [value]="q.value">{{ q.label }}</option> }
       </select>
       <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.cast_max_quality_hint' | translate }}</span></div>
@@ -21,7 +22,8 @@
 
     <label class="form-control w-full max-w-xs">
       <div class="label"><span class="label-text font-medium">{{ 'playback_settings.cast_audio' | translate }}</span></div>
-      <select class="select select-bordered w-full" [ngModel]="audioChannels()" (ngModelChange)="audioChannels.set(+$event)">
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="audioChannels()" (ngModelChange)="audioChannels.set(+$event)">
         @for (a of audioOptions; track a.value) { <option [ngValue]="a.value">{{ a.label }}</option> }
       </select>
       <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.cast_audio_hint' | translate }}</span></div>

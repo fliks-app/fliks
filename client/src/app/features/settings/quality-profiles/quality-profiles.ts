@@ -8,6 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { RouterLink } from '@angular/router';
 import { LucideChevronLeft } from '@lucide/angular';
@@ -20,7 +21,7 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-quality-profiles',
-  imports: [
+  imports: [TvSelectDirective, 
     ModalFooterComponent,
     ModalHeaderComponent,
     FormsModule,

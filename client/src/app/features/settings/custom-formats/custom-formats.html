@@ -170,6 +170,7 @@
         @for (spec of formSpecs(); track $index) {
           <div class="flex flex-wrap gap-2 p-3 rounded-lg bg-base-200/40 border border-base-300">
             <select
+    appTvSelect
               class="select select-bordered select-xs"
               [ngModel]="spec.type"
               (ngModelChange)="updateSpec($index, { type: $event })"
@@ -180,6 +181,7 @@
             </select>
             @if (spec.type === 'release_flag') {
               <select
+    appTvSelect
                 class="select select-bordered select-xs flex-1 min-w-32"
                 [ngModel]="spec.value"
                 (ngModelChange)="updateSpec($index, { value: $event })"

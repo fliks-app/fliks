@@ -257,6 +257,7 @@
           'settings.subtitle_providers.translation_engine' | translate
         }}</span>
         <select
+    appTvSelect
           class="select select-bordered select-sm w-full"
           [ngModel]="trFormEngine()"
           (ngModelChange)="onTranslationEngineChange($event)"
@@ -284,6 +285,7 @@
             'settings.subtitle_providers.translation_model' | translate
           }}</span>
           <select
+    appTvSelect
             class="select select-bordered select-sm w-full font-mono"
             [ngModel]="trFormModel()"
             (ngModelChange)="trFormModel.set($event)"

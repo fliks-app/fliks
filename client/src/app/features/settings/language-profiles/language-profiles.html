@@ -146,6 +146,7 @@
                   <label class="flex items-center gap-1 text-xs">
                     <span>{{ 'settings.language_profiles.hi_label' | translate }}</span>
                     <select
+    appTvSelect
                       class="select select-bordered select-xs"
                       [ngModel]="subHiMode(l.isoCode)"
                       (ngModelChange)="setSubHiMode(l.isoCode, $event)"

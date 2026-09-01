@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { NgTemplateOutlet } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -77,7 +78,7 @@ type PlaylistGroupedEntry =
 
 @Component({
   selector: 'app-playlist-detail',
-  imports: [
+  imports: [TvSelectDirective, 
     ModalFooterComponent,
     CachedSrcDirective,
     TranslateModule,

@@ -396,6 +396,7 @@
           <span class="label-text">{{ 'social.playlist_visibility' | translate }}</span>
         </label>
         <select
+    appTvSelect
           class="select select-bordered select-sm"
           [ngModel]="draftVisibility()"
           (ngModelChange)="draftVisibility.set($event)"
@@ -466,6 +467,7 @@
             }}</span>
           } @else {
             <select
+    appTvSelect
               class="select select-bordered select-xs w-36 shrink-0"
               [ngModel]="m.role"
               (ngModelChange)="changeMemberRole(m.userId, $event)"

@@ -8,6 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { firstValueFrom } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -106,7 +107,7 @@ const LABELS: ProviderListLabels = {
 
 @Component({
   selector: 'app-subtitle-providers-settings',
-  imports: [
+  imports: [TvSelectDirective, 
     ModalFooterComponent,
     ModalHeaderComponent,
     FormsModule,
