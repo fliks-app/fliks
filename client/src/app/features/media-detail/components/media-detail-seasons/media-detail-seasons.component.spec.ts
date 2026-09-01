@@ -136,6 +136,7 @@ const SEASON_ACTIONS_REGISTRY: Partial<Record<SlotId, UiContribution[]>> = {
 };
 
 describe('MediaDetailSeasonsComponent — media.season.actions is plugin-only', () => {
+
   it('VERDICT: with no plugin installed, no release-picker row renders in the season dropdown', async () => {
     const fixture = await createFixture();
     const labels = seasonDropdownLabels(fixture.nativeElement);
@@ -202,6 +203,20 @@ describe('MediaDetailSeasonsComponent — media.season.actions is plugin-only', 
       seasonGrabBestBusyIds: new Set([SEASON.id + 1]),
     });
     expect(seasonDropdownItems(other.nativeElement)[grabIdx].disabled).toBe(false);
+  });
+});
+
+describe('MediaDetailSeasonsComponent — unreleased greyscale', () => {
+  const future = '2999-01-01';
+  const ep = (id: number, episodeNumber: number, hasFile: boolean) =>
+    ({ id, episodeNumber, hasFile, airDate: future, monitored: true }) as Episode;
+
+  it('keeps colour on an unreleased episode whose file is already there', async () => {
+    // The air date is the source's view, and the video can land before it.
+    const fixture = await createFixture();
+
+    expect(fixture.componentInstance.episodeGrayscale(ep(9, 3, true))).toBe(false);
+    expect(fixture.componentInstance.episodeGrayscale(ep(10, 4, false))).toBe(true);
   });
 });
 

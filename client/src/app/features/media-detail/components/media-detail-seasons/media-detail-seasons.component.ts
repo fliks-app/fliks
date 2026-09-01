@@ -319,7 +319,13 @@ export class MediaDetailSeasonsComponent {
   }
 
   episodeGrayscale(ep: Episode): boolean {
-    return this.displaySettings.settings().grayUnreleased && episodeUnreleased(ep);
+    // The file settles it: an air date in the future is the source's view, and
+    // the video can land before it.
+    return (
+      this.displaySettings.settings().grayUnreleased &&
+      episodeUnreleased(ep) &&
+      !ep.hasFile
+    );
   }
 
   episodeRoute(ep: Episode): string[] {
