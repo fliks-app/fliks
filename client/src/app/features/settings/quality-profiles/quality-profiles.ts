@@ -52,6 +52,7 @@ export class QualityProfilesComponent implements OnInit {
   readonly formCutoff = signal(16);
   readonly formUpgrade = signal(true);
   readonly formResolutionUpgradeOnly = signal(false);
+  readonly formMinCustomFormatScore = signal(0);
   readonly allowedIds = signal<Set<number>>(new Set());
 
   ngOnInit() {
@@ -90,6 +91,7 @@ export class QualityProfilesComponent implements OnInit {
     this.formCutoff.set(16);
     this.formUpgrade.set(true);
     this.formResolutionUpgradeOnly.set(false);
+    this.formMinCustomFormatScore.set(0);
     this.allowedIds.set(new Set());
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -100,6 +102,7 @@ export class QualityProfilesComponent implements OnInit {
     this.formCutoff.set(p.cutoff);
     this.formUpgrade.set(p.upgradeAllowed);
     this.formResolutionUpgradeOnly.set(p.resolutionUpgradeOnly ?? false);
+    this.formMinCustomFormatScore.set(p.minCustomFormatScore ?? 0);
     const allowed = new Set(p.items.filter((i) => i.allowed).map((i) => i.quality.id));
     this.allowedIds.set(allowed);
     this.editorDialog()?.nativeElement.showModal();
@@ -128,6 +131,7 @@ export class QualityProfilesComponent implements OnInit {
       cutoff: this.formCutoff(),
       upgradeAllowed: this.formUpgrade(),
       resolutionUpgradeOnly: this.formResolutionUpgradeOnly(),
+      minCustomFormatScore: this.formMinCustomFormatScore(),
       items: defs.map((q, index) => ({
         qualityId: q.id,
         qualityName: q.name,

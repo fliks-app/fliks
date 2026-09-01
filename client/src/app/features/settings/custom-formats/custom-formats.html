@@ -50,7 +50,9 @@
                   {{ cf.score > 0 ? '+' : '' }}{{ cf.score }}
                 </span>
               </td>
-              <td class="text-sm text-base-content/60">{{ cf.specs.length }} spec(s)</td>
+              <td class="text-sm text-base-content/60">
+                {{ 'settings.custom_formats.spec_count' | translate: { count: cf.specs.length } }}
+              </td>
               <td class="text-end">
                 <button
                   type="button"
@@ -77,6 +79,17 @@
       [ngModel]="testTitle()"
       (ngModelChange)="testTitle.set($event)"
     />
+    <label class="label cursor-pointer gap-1.5">
+      <input
+        type="checkbox"
+        class="checkbox checkbox-sm"
+        [ngModel]="testFreeleech()"
+        (ngModelChange)="testFreeleech.set($event)"
+      />
+      <span class="label-text text-sm">{{
+        'settings.custom_formats.test_freeleech' | translate
+      }}</span>
+    </label>
     <button
       type="button"
       class="btn btn-sm btn-outline"
@@ -94,9 +107,9 @@
       <table class="table">
         <thead>
           <tr>
-            <th>Format</th>
-            <th>Match</th>
-            <th class="text-right">Score</th>
+            <th>{{ 'settings.custom_formats.col_name' | translate }}</th>
+            <th>{{ 'settings.custom_formats.col_match' | translate }}</th>
+            <th class="text-right">{{ 'settings.custom_formats.col_score' | translate }}</th>
           </tr>
         </thead>
         <tbody>
@@ -105,9 +118,9 @@
               <td>{{ r.formatName }}</td>
               <td>
                 @if (r.matched) {
-                  <span class="badge badge-success badge-sm">Oui</span>
+                  <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
                 } @else {
-                  <span class="badge badge-ghost badge-sm">Non</span>
+                  <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
                 }
               </td>
               <td
@@ -173,20 +186,22 @@
     appTvSelect
               class="select select-bordered select-xs"
               [ngModel]="spec.type"
-              (ngModelChange)="updateSpec($index, { type: $event })"
+              (ngModelChange)="changeSpecType($index, $event)"
             >
               @for (t of specTypes; track t) {
-                <option [value]="t">{{ t }}</option>
+                <option [value]="t">
+                  {{ 'settings.custom_formats.spec_type.' + t | translate }}
+                </option>
               }
             </select>
-            @if (spec.type === 'release_flag') {
+            @if (valueOptions(spec.type); as options) {
               <select
     appTvSelect
                 class="select select-bordered select-xs flex-1 min-w-32"
                 [ngModel]="spec.value"
                 (ngModelChange)="updateSpec($index, { value: $event })"
               >
-                @for (v of releaseFlagValues; track v) {
+                @for (v of options; track v) {
                   <option [value]="v">{{ v }}</option>
                 }
               </select>
@@ -194,9 +209,15 @@
               <input
                 type="text"
                 class="input input-bordered input-xs flex-1 min-w-32"
+                [class.input-error]="specInvalid(spec)"
                 [ngModel]="spec.value"
                 (ngModelChange)="updateSpec($index, { value: $event })"
-                placeholder="{{ spec.type === 'title_regex' ? '/regex/' : 'value' }}"
+                [placeholder]="
+                  (spec.type === 'title_regex'
+                    ? 'settings.custom_formats.regex_placeholder'
+                    : 'settings.custom_formats.value_placeholder'
+                  ) | translate
+                "
               />
             }
             <label class="label cursor-pointer gap-1.5 px-1">
@@ -236,6 +257,10 @@
             {{ 'settings.custom_formats.no_specs' | translate }}
           </p>
         }
+
+        <p class="text-sm text-base-content/60">
+          {{ 'settings.custom_formats.match_rule_hint' | translate }}
+        </p>
       </div>
     </div>
 
@@ -243,7 +268,15 @@
       <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
         {{ 'settings.custom_formats.cancel' | translate }}
       </button>
-      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+      @if (formError(); as error) {
+        <span class="text-sm text-error mr-auto">{{ error | translate }}</span>
+      }
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="save()"
+        [disabled]="saving() || !!formError()"
+      >
         @if (saving()) {
           <span class="loading loading-spinner loading-sm"></span>
         }

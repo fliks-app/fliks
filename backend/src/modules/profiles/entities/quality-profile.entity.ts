@@ -20,6 +20,12 @@ export class QualityProfile extends BaseEntity {
    *  (e.g. WEBDL-1080p → Bluray-1080p). */
   @Column({ default: false })
   resolutionUpgradeOnly: boolean;
+
+  /** Releases whose total custom-format score falls below this are rejected, not
+   *  merely ranked last — the only way a negative-score format can block a grab
+   *  instead of being taken when nothing better exists. */
+  @Column({ type: 'int', default: 0 })
+  minCustomFormatScore: number;
 }
 
 export interface QualityProfileItem {

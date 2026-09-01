@@ -8,6 +8,7 @@ export interface QualityProfile {
   cutoff: number;
   upgradeAllowed: boolean;
   resolutionUpgradeOnly: boolean;
+  minCustomFormatScore: number;
   items: {
     quality: { id: number; name: string; resolution: number; source: string };
     allowed: boolean;
@@ -21,6 +22,7 @@ export interface CreateQualityProfilePayload {
   cutoff: number;
   upgradeAllowed?: boolean;
   resolutionUpgradeOnly?: boolean;
+  minCustomFormatScore?: number;
   items: {
     qualityId: number;
     qualityName: string;

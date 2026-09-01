@@ -521,3 +521,31 @@ describe('computeRejections — the quality profile', () => {
     expect(codeFor(16, [])).toEqual(['QUALITY_NOT_ALLOWED']);
   });
 });
+
+describe('computeRejections — custom format floor', () => {
+  const base = {
+    qualityId: 1,
+    allowed: new Set([1]),
+    languageId: 1,
+    allowedLangs: new Set<number>(),
+    isBlocklisted: false,
+    sizeBytes: 0,
+    runtimeMinutes: 112,
+    sizeByQuality: new Map(),
+    seeders: 10,
+    sourceId: 0,
+    sourceMinSeeders: new Map(),
+  };
+  const codes = (customFormatScore: number, minCustomFormatScore?: number) =>
+    computeRejections({ ...base, customFormatScore, minCustomFormatScore }).map((r) => r.code);
+
+  it('rejects a release scoring below the profile floor', () => {
+    expect(codes(-50, 0)).toContain('CUSTOM_FORMAT_SCORE_TOO_LOW');
+    expect(codes(0, 0)).not.toContain('CUSTOM_FORMAT_SCORE_TOO_LOW');
+    expect(codes(10, 50)).toContain('CUSTOM_FORMAT_SCORE_TOO_LOW');
+  });
+
+  it('applies no floor when the profile declares none', () => {
+    expect(codes(-9999)).not.toContain('CUSTOM_FORMAT_SCORE_TOO_LOW');
+  });
+});

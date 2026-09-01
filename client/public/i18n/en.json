@@ -1112,7 +1112,8 @@
       "RESOLUTION_NOT_UPGRADED": "Not a resolution upgrade ({{actual}}p, needs above {{min}}p)",
       "SEQUEL_MISMATCH": "Sequel {{number}}, not the film wanted",
       "YEAR_MISMATCH": "Year {{actual}}, expected {{expected}}",
-      "COLLECTION_PACK": "Multi-film pack ({{word}})"
+      "COLLECTION_PACK": "Multi-film pack ({{word}})",
+      "CUSTOM_FORMAT_SCORE_TOO_LOW": "Custom format score too low ({{actual}} < {{min}})"
     },
     "like": "Like",
     "metadata_group": "Metadata",
@@ -1638,7 +1639,9 @@
       "group_with_above": "Group with the previous quality (same rank)",
       "size_error_min_gt_max": "The minimum must be lower than the maximum.",
       "size_error_pref_lt_min": "The preferred value must be higher than the minimum.",
-      "size_error_pref_gt_max": "The preferred value must be lower than the maximum."
+      "size_error_pref_gt_max": "The preferred value must be lower than the maximum.",
+      "field_min_cf_score": "Minimum custom format score",
+      "field_min_cf_score_hint": "Releases scoring below this are refused instead of merely ranked last. 0 refuses only a negative total."
     },
     "quality_definitions": {
       "title": "Quality definitions",
@@ -1706,7 +1709,7 @@
       "field_score": "Score",
       "specs": "Conditions",
       "add_spec": "Add a condition",
-      "no_specs": "No condition — the format will always match.",
+      "no_specs": "No condition yet. A format needs at least one.",
       "negate": "Negate",
       "required": "Required",
       "name_required": "The name is required.",
@@ -1715,7 +1718,27 @@
       "cancel": "Cancel",
       "test_title": "Test a release title",
       "test_placeholder": "e.g. Movie.Name.2024.1080p.BluRay.x264-GROUP",
-      "test_btn": "Test"
+      "test_btn": "Test",
+      "spec_count": "{{count}} condition(s)",
+      "col_match": "Match",
+      "spec_required": "Add at least one condition.",
+      "value_required": "Every condition needs a value.",
+      "regex_invalid": "A regular expression is invalid.",
+      "regex_placeholder": "regular expression",
+      "value_placeholder": "value",
+      "test_freeleech": "Treat as freeleech",
+      "match_rule_hint": "Conditions of the same type are alternatives; different types must all hold. A required condition must always hold.",
+      "spec_type": {
+        "title_regex": "Release name (regex)",
+        "source": "Source",
+        "resolution": "Resolution",
+        "language": "Language",
+        "release_flag": "Release flag",
+        "release_group": "Release group",
+        "edition": "Edition",
+        "video_codec": "Video codec",
+        "audio_codec": "Audio codec"
+      }
     },
     "naming": {
       "title": "File naming",

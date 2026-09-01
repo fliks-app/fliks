@@ -47,6 +47,10 @@ export class CreateQualityProfileDto {
   @IsOptional()
   resolutionUpgradeOnly?: boolean;
 
+  @IsNumber()
+  @IsOptional()
+  minCustomFormatScore?: number;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => QualityItemDto)

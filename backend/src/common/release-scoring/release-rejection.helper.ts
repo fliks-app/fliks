@@ -517,6 +517,11 @@ export function computeRejections(opts: {
   /** Release year of the media. A release stating another year names another work — the
    *  token-inclusion title check cannot tell `Nova Skyline 2 2015` from `Nova Skyline`. */
   expectedYear?: number | null;
+  /** Total custom-format score of this release, and the profile's floor for it. A
+   *  negative-score format only blocks a grab through this floor; without it the
+   *  score is a tiebreak and the release is still taken when nothing better exists. */
+  customFormatScore?: number;
+  minCustomFormatScore?: number;
 }): ReleaseRejection[] {
   const out: ReleaseRejection[] = [];
 
@@ -591,6 +596,19 @@ export function computeRejections(opts: {
 
   if (!opts.allowed.has(opts.qualityId)) {
     out.push({ code: 'QUALITY_NOT_ALLOWED' });
+  }
+
+  if (
+    opts.minCustomFormatScore != null &&
+    (opts.customFormatScore ?? 0) < opts.minCustomFormatScore
+  ) {
+    out.push({
+      code: 'CUSTOM_FORMAT_SCORE_TOO_LOW',
+      params: {
+        actual: opts.customFormatScore ?? 0,
+        min: opts.minCustomFormatScore,
+      },
+    });
   }
 
   // "Upgrade resolution only": the profile refuses a same-resolution tier hop, so a 1080p Bluray
@@ -682,8 +700,8 @@ export function computeRejections(opts: {
  *    episodes at the same resolution whatever the source, but never
  *    outranks a higher resolution.
  * 6. Quality rank (higher = better)
- * 7. Freeleech bonus
- * 8. Custom format score (higher = better)
+ * 7. Custom format score (higher = better)
+ * 8. Freeleech bonus
  * 9. Seeders (more = better, log scale to avoid over-weighting)
  * 10. Leechers (more = better, same scale) — breaks seeder ties toward the
  *    busier swarm.
@@ -743,12 +761,13 @@ export function sortReleasesByRelevance<
     // 6. Quality rank desc
     if (a.rank !== b.rank) return b.rank - a.rank;
 
-    // 7. Freeleech bonus
-    if (a.freeleech !== b.freeleech) return a.freeleech ? -1 : 1;
-
-    // 8. Custom format score desc
+    // 7. Custom format score desc — above freeleech, which a `release_flag`
+    //    condition can express and score itself.
     if (a.customFormatScore !== b.customFormatScore)
       return b.customFormatScore - a.customFormatScore;
+
+    // 8. Freeleech bonus
+    if (a.freeleech !== b.freeleech) return a.freeleech ? -1 : 1;
 
     // 9. Seeders desc (log scale)
     const aSeed = swarmScore(a.seeders);
@@ -834,6 +853,8 @@ export async function scoreAndSortReleases(
     minResolution?: number;
     /** Release year of the media — a release naming another year names another work. */
     expectedYear?: number | null;
+    /** From the quality profile: releases scoring below this are rejected outright. */
+    minCustomFormatScore?: number;
   },
   deps: ReleaseScorerDeps,
 ): Promise<ScoredRelease[]> {
@@ -869,6 +890,8 @@ export async function scoreAndSortReleases(
         expectedEpisode: opts.expectedEpisode,
         minResolution: opts.minResolution,
         expectedYear: opts.expectedYear,
+        customFormatScore: cfScore,
+        minCustomFormatScore: opts.minCustomFormatScore,
       });
       return {
         ...r,

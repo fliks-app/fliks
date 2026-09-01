@@ -1112,7 +1112,8 @@
       "RESOLUTION_NOT_UPGRADED": "Pas une montée de résolution ({{actual}}p, il faut plus de {{min}}p)",
       "SEQUEL_MISMATCH": "Suite {{number}}, pas le film voulu",
       "YEAR_MISMATCH": "Année {{actual}}, attendue {{expected}}",
-      "COLLECTION_PACK": "Pack multi-films ({{word}})"
+      "COLLECTION_PACK": "Pack multi-films ({{word}})",
+      "CUSTOM_FORMAT_SCORE_TOO_LOW": "Score de formats trop bas ({{actual}} < {{min}})"
     },
     "like": "J’aime",
     "metadata_group": "Métadonnées",
@@ -1638,7 +1639,9 @@
       "group_with_above": "Grouper avec la qualité précédente (même rang)",
       "size_error_min_gt_max": "Le minimum doit être inférieur au maximum.",
       "size_error_pref_lt_min": "Le recommandé doit être supérieur au minimum.",
-      "size_error_pref_gt_max": "Le recommandé doit être inférieur au maximum."
+      "size_error_pref_gt_max": "Le recommandé doit être inférieur au maximum.",
+      "field_min_cf_score": "Score minimum des formats personnalisés",
+      "field_min_cf_score_hint": "Les releases sous ce score sont refusées au lieu d'être seulement classées en dernier. 0 ne refuse qu'un total négatif."
     },
     "quality_definitions": {
       "title": "Définitions de qualité",
@@ -1706,7 +1709,7 @@
       "field_score": "Score",
       "specs": "Conditions",
       "add_spec": "Ajouter une condition",
-      "no_specs": "Aucune condition — le format correspondra toujours.",
+      "no_specs": "Aucune condition. Un format en exige au moins une.",
       "negate": "Nier",
       "required": "Requis",
       "name_required": "Le nom est obligatoire.",
@@ -1715,7 +1718,27 @@
       "cancel": "Annuler",
       "test_title": "Tester un titre de release",
       "test_placeholder": "Ex: Movie.Name.2024.1080p.BluRay.x264-GROUP",
-      "test_btn": "Tester"
+      "test_btn": "Tester",
+      "spec_count": "{{count}} condition(s)",
+      "col_match": "Correspond",
+      "spec_required": "Ajoutez au moins une condition.",
+      "value_required": "Chaque condition doit avoir une valeur.",
+      "regex_invalid": "Une expression régulière est invalide.",
+      "regex_placeholder": "expression régulière",
+      "value_placeholder": "valeur",
+      "test_freeleech": "Considérer comme freeleech",
+      "match_rule_hint": "Les conditions de même type sont des alternatives ; les types différents doivent tous être vérifiés. Une condition requise doit toujours être vérifiée.",
+      "spec_type": {
+        "title_regex": "Nom de la release (regex)",
+        "source": "Source",
+        "resolution": "Résolution",
+        "language": "Langue",
+        "release_flag": "Marqueur de release",
+        "release_group": "Groupe de release",
+        "edition": "Édition",
+        "video_codec": "Codec vidéo",
+        "audio_codec": "Codec audio"
+      }
     },
     "naming": {
       "title": "Nommage des fichiers",
