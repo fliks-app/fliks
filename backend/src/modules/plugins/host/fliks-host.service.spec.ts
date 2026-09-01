@@ -267,7 +267,11 @@ describe('FliksHostImpl', () => {
   // ===========================================================================
 
   describe('media.acquisitionContext', () => {
-    it('returns a serialisable target for a missing movie, with the Infinity ceiling made JSON-safe', async () => {
+    // `want` used to carry the upgrade window, which meant shipping `Infinity` as
+    // MAX_SAFE_INTEGER to stay JSON-safe. The window is a profile rule and now comes back as a
+    // rejection from `releases.score`, so nothing is left for a plugin to reapply — or to
+    // reapply against an absent field, which is what a removal inside one pluginApi would cause.
+    it('returns a serialisable target for a missing movie, carrying no rule to reapply', async () => {
       const h = makeHarness();
       const media = makeMedia();
       h.mediaRepo.findOne.mockResolvedValue(media);
@@ -280,8 +284,13 @@ describe('FliksHostImpl', () => {
 
       const result = await h.host['media.acquisitionContext']({ mediaId: 1 });
       expect(result?.want?.decision).toBe('missing');
-      expect(result?.want?.maxRankInclusive).toBe(Number.MAX_SAFE_INTEGER);
-      expect(Number.isFinite(result?.want?.maxRankInclusive)).toBe(true);
+      expect(Object.keys(result!.want!).sort()).toEqual([
+        'allowedLanguageIds',
+        'allowedQualityIds',
+        'decision',
+        'minResolution',
+        'resolutionUpgradeOnly',
+      ]);
       expectJsonSafe(result);
     });
 
@@ -309,7 +318,7 @@ describe('FliksHostImpl', () => {
       ).toBeNull();
     });
 
-    it('carries the ranked constraints for a "skip" decision, so a manual search can still score releases', async () => {
+    it('still answers with a want for a "skip" decision, so a manual search can score releases', async () => {
       const h = makeHarness();
       h.mediaRepo.findOne.mockResolvedValue(makeMedia());
       h.mediaFileRepo.find.mockResolvedValue([]);
@@ -320,11 +329,7 @@ describe('FliksHostImpl', () => {
         maxRankInclusive: 62,
       });
       const result = await h.host['media.acquisitionContext']({ mediaId: 1 });
-      expect(result?.want).toMatchObject({
-        decision: 'skip',
-        minRankExclusive: 62,
-        maxRankInclusive: 62,
-      });
+      expect(result?.want?.decision).toBe('skip');
       expectJsonSafe(result);
     });
 

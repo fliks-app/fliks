@@ -1236,12 +1236,6 @@ export class FliksHostImpl implements PluginHostApi {
       decision: decision.mode,
       allowedQualityIds: [...allowed],
       allowedLanguageIds: [...allowedLangs],
-      minRankExclusive: decision.minRankExclusive,
-      // `Infinity` (JSON-unsafe) means "no ceiling" — MAX_SAFE_INTEGER says the
-      // same thing to a plugin without breaking JSON across the wire.
-      maxRankInclusive: Number.isFinite(decision.maxRankInclusive)
-        ? decision.maxRankInclusive
-        : Number.MAX_SAFE_INTEGER,
       minResolution: resolutionUpgradeOnly
         ? maxResolutionFromQualityStrings(files)
         : 0,

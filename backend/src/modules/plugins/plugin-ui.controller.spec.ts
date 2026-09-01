@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { PluginUiController } from './plugin-ui.controller';
 import type { RegisteredPlugin } from './plugin-registry.service';
 import type { TrustOutcome } from './archive';
+import { PLUGIN_API_VERSION } from '../../common/plugin-contract';
 import type { DataPluginManifest, ProcessPluginManifest } from '../../common/plugin-contract';
 
 function dataPlugin(
@@ -14,7 +15,7 @@ function dataPlugin(
     kind: 'data',
     manifest: {
       id: pluginId,
-      pluginApi: 0,
+      pluginApi: PLUGIN_API_VERSION,
       name: pluginId,
       version: '1.0.0',
       fliks: '>=1.0.0',
@@ -67,7 +68,7 @@ function processPlugin(pluginId: string): RegisteredPlugin {
     kind: 'process',
     manifest: {
       id: pluginId,
-      pluginApi: 0,
+      pluginApi: PLUGIN_API_VERSION,
       name: pluginId,
       version: '1.0.0',
       fliks: '>=1.0.0',

@@ -26,6 +26,14 @@ describe('plugin API compatibility', () => {
     }
   });
 
+  it('VERDICT: hides a retired pluginApi, so a removal inside one revision is impossible', () => {
+    // 0 was retired when the upgrade window left `AcquisitionTarget.want`. A plugin built against
+    // it must be refused outright rather than handed a `want` missing a field it filters on.
+    expect(SUPPORTED_PLUGIN_API_VERSIONS).not.toContain(0);
+    const result = filterCatalog(catalogWith(0, '>=3.0.0 <4.0.0'), SUPPORTED_PLUGIN_API_VERSIONS, '3.8.0');
+    expect(result.plugins[0]!.installable).toHaveLength(0);
+  });
+
   it('hides a version whose pluginApi the set does not carry', () => {
     const unsupported = Math.max(...SUPPORTED_PLUGIN_API_VERSIONS) + 1;
     const result = filterCatalog(catalogWith(unsupported, '>=2.0.0 <3.0.0'), SUPPORTED_PLUGIN_API_VERSIONS, '2.0.1');
