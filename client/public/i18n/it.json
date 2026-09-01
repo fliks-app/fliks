@@ -1721,6 +1721,15 @@
         "edition": "Edizione",
         "video_codec": "Codec video",
         "audio_codec": "Codec audio"
+      },
+      "edition": {
+        "directors-cut": "Director's cut",
+        "extended": "Versione estesa",
+        "theatrical": "Versione cinematografica",
+        "uncut": "Senza tagli",
+        "remastered": "Rimasterizzata",
+        "criterion": "Criterion",
+        "imax": "IMAX"
       }
     },
     "naming": {

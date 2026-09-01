@@ -202,7 +202,13 @@
                 (ngModelChange)="updateSpec($index, { value: $event })"
               >
                 @for (v of options; track v) {
-                  <option [value]="v">{{ v }}</option>
+                  <option [value]="v">
+                    {{
+                      spec.type === 'edition'
+                        ? ('settings.custom_formats.edition.' + v | translate)
+                        : v
+                    }}
+                  </option>
                 }
               </select>
             } @else {
