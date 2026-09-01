@@ -13,7 +13,11 @@ import {
 } from '@angular/core';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
 import { TvService } from '../../core/services/tv.service';
-import { TABBABLE_SELECTOR, initialOverlayFocus } from '../../core/services/focusable.constants';
+import {
+  TABBABLE_SELECTOR,
+  initialOverlayFocus,
+  restoreOpenerFocus,
+} from '../../core/services/focusable.constants';
 
 @Component({
   selector: 'app-bottom-sheet',
@@ -295,9 +299,7 @@ export class BottomSheetComponent {
     if (this.focusTrapActive && typeof document !== 'undefined') {
       document.removeEventListener('focusin', this.onFocusIn);
       this.focusTrapActive = false;
-      if (this.prevFocused && document.contains(this.prevFocused)) {
-        this.prevFocused.focus({ preventScroll: true });
-      }
+      restoreOpenerFocus(this.prevFocused);
       this.prevFocused = null;
     }
   }

@@ -15,7 +15,7 @@ import { BottomSheetComponent } from './bottom-sheet';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
-import { initialOverlayFocus } from '../../core/services/focusable.constants';
+import { initialOverlayFocus, restoreOpenerFocus } from '../../core/services/focusable.constants';
 
 /**
  * Reusable menu chrome that picks its presentation per-platform:
@@ -189,8 +189,7 @@ export class PopoverMenuComponent {
       // focus to the opener so keyboard / D-pad users don't lose their place
       // (a submenu returns to its parent entry, a menu to its trigger).
       const close = () => {
-        const opener = this.anchor();
-        if (opener?.isConnected) opener.focus({ preventScroll: true });
+        restoreOpenerFocus(this.anchor());
         this.close();
       };
       this.dismissStack.push(close);

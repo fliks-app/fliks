@@ -483,6 +483,15 @@ body:not(.keyboard-modality):not(.tv)
   box-shadow: none !important;
 }
 
+/* daisyUI paints its own outline on a focused select. The suppression above is
+   written against :focus-visible, which some engines do not match on a tapped
+   select (WebKit notably), so there the outline stayed and read as a second ring
+   next to the untouched border. Reached on plain :focus so the modality, not the
+   engine's focus-visible verdict, decides. */
+body:not(.keyboard-modality):not(.tv) .select:focus {
+  outline: none;
+}
+
 /* iOS Safari auto-zooms the viewport when a focused input has
    `font-size` below 16 px — Apple's anti-eyestrain default, but it
    reads as "the page suddenly grows" when tapping the search bar.
