@@ -128,7 +128,7 @@
           <a [routerLink]="_link()" [state]="_navState()" [replaceUrl]="replaceUrl()" class="absolute inset-0 z-0" [attr.aria-label]="_title()" (pointerdown)="onAnchorPointerdown()" (keydown.enter)="onAnchorPointerdown()" (click)="$event.stopPropagation()"></a>
         }
         @if (_playable()) {
-          <button type="button" class="relative z-10 w-12 h-12 rounded-full bg-black/50 flex items-center justify-center text-white cursor-pointer" (click)="onPlayClick($event)">
+          <button type="button" class="relative z-10 w-12 h-12 rounded-full bg-black/50 hover:bg-neutral-500/50 transition-colors flex items-center justify-center text-white cursor-pointer" (click)="onPlayClick($event)">
             <svg lucidePlay class="h-6 w-6" [strokeWidth]="2"></svg>
           </button>
         }
@@ -146,7 +146,7 @@
     @if (showHoverOverlay() && cardActions().length) {
       <button
         type="button"
-        class="absolute top-2 right-2 z-10 btn btn-circle btn-sm border-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/65"
+        class="absolute top-2 right-2 z-10 btn btn-circle btn-sm border-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-neutral-500/50"
         (click)="openActions($event)"
         [attr.aria-label]="'media_card.actions' | translate"
       >
