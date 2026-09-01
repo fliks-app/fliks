@@ -5,7 +5,6 @@
   [class]="variant() === 'player' ? 'h-6' : 'h-5'"
   tabindex="0"
   role="slider"
-  [attr.data-tv-own-vertical]="ownsVertical() ? '' : null"
   [attr.aria-valuemin]="0"
   [attr.aria-valuemax]="duration() || 0"
   [attr.aria-valuenow]="currentTime()"

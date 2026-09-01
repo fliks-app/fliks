@@ -232,29 +232,22 @@ describe('SeekbarComponent chapters', () => {
     expect(seeks).toEqual([120]);
   });
 
-  it('binds Up/Down to chapter steps only while the OSD asked for it', () => {
+
+
+  it('leaves Up and Down to the page so they can open the full controls', () => {
     const seeks: number[] = [];
     bar.seek.subscribe((t) => seeks.push(t));
 
-    // Not raised: vertical stays free so focus can escape the slider.
-    expect(bar.ownsVertical()).toBe(false);
+    // The bar used to step chapters here and swallow the key; opening the
+    // controls is the more useful answer and needs the event to bubble.
+    const up = press('ArrowUp');
+    bar.onKeydown(up);
     bar.onKeydown(press('ArrowDown'));
+
     expect(seeks).toEqual([]);
-
-    fixture.componentRef.setInput('chapterSkip', true);
-    expect(bar.ownsVertical()).toBe(true);
-
-    // Stepped from the playhead at 100, not from the head of the file.
-    bar.onKeydown(press('ArrowDown'));
-    expect(seeks).toEqual([120]);
-    bar.onKeydown(press('ArrowUp'));
-    expect(seeks).toEqual([120, 0]);
-  });
-
-  it('keeps vertical free on a file with no chapters', () => {
-    fixture.componentRef.setInput('chapterSkip', true);
-    fixture.componentRef.setInput('chapters', []);
-    expect(bar.ownsVertical()).toBe(false);
+    // Not swallowed: the player's own handler is what opens the controls.
+    expect(up.preventDefault).not.toHaveBeenCalled();
+    expect(up.stopPropagation).not.toHaveBeenCalled();
   });
 
   it('measures the intro and outro bands against the duration', () => {

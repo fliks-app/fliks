@@ -37,16 +37,6 @@ export class SeekbarComponent {
    *  are scrubbing into, ahead of the skip cue that covers the same range. */
   readonly introMarker = input<{ startSeconds: number; endSeconds: number } | null>(null);
   readonly outroMarker = input<{ startSeconds: number; endSeconds: number } | null>(null);
-  /** Let Up/Down step chapters instead of escaping the bar vertically. Only
-   *  safe where there is nothing else to reach — the seek OSD raises it. */
-  readonly chapterSkip = input(false);
-
-  /** Vertical is only bound when it has chapters to move between; the escape
-   *  hatch out of the slider has to survive on a file without any. */
-  readonly ownsVertical = computed(
-    () => this.chapterSkip() && this.chapters().length > 0,
-  );
-
   /** Chapter start times as % of duration for seekbar tick rendering. */
   readonly chapterTicks = computed(() => {
     const dur = this.duration() || 0;
@@ -374,15 +364,6 @@ export class SeekbarComponent {
     switch (e.key) {
       case 'ArrowLeft':  direction = -1; break;
       case 'ArrowRight': direction = 1; break;
-      case 'ArrowUp':
-      case 'ArrowDown':
-        if (!this.ownsVertical()) return;
-        e.preventDefault();
-        e.stopPropagation();
-        this.cancelScrubTimer();
-        this.holdKeyPreview();
-        this.stepChapter(e.key === 'ArrowDown' ? 1 : -1);
-        return;
       case 'Home':
         e.preventDefault();
         e.stopPropagation();
@@ -468,20 +449,6 @@ export class SeekbarComponent {
   /** Jump to the next / previous chapter start. Measured from `displayTime`,
    *  not the preview: with no scrub in flight the preview reports the pointer
    *  (0 on a remote), which would step from the head of the file. */
-  private stepChapter(direction: 1 | -1) {
-    const from = this.displayTime();
-    const starts = this.chapters()
-      .map((c) => c.startSeconds)
-      .sort((a, b) => a - b);
-    // 1s of slack so stepping back off a boundary doesn't land on it again.
-    const next =
-      direction === 1
-        ? starts.find((t) => t > from + 1)
-        : [...starts].reverse().find((t) => t < from - 1);
-    if (next === undefined) return;
-    this.dragTime.set(next);
-    this.commitScrubTo(next);
-  }
 
   private snapToChapter(target: number): number {
     let best = target;
