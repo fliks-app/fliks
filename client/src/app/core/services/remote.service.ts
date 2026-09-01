@@ -102,7 +102,12 @@ export class RemoteService {
   // ── Controller ──
 
   readonly targets = signal<RemoteTarget[]>([]);
-  readonly selectedTargetId = signal<string | null>(this.readSelectedTarget());
+  readonly selectedTargetId = signal<string | null>(null);
+  /** Read back from storage but not yet seen in a listing. A device picked in an
+   *  earlier run may be long gone, and a selection that routes playback has to be
+   *  one we know is online, so it only becomes the selection once a listing
+   *  confirms it. */
+  private restoredTargetId: string | null = this.readSelectedTarget();
   readonly pendingAction = signal<RemoteAction | null>(null);
   /** The target is rebuilding its stream for the same title at the same place.
    *  Derived from the command in flight, so it opens and closes with the ack
@@ -336,6 +341,11 @@ export class RemoteService {
           params: self ? { self } : {},
         }),
       );
+      const restored = this.restoredTargetId;
+      if (restored !== null) {
+        this.restoredTargetId = null;
+        this.selectTarget(rows.some((r) => r.targetId === restored) ? restored : null);
+      }
       // A household row is the only one carrying an owner name, so that is the
       // exact discriminator. The selected target survives the filter: hiding it
       // would read as the device going offline.
