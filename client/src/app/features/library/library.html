@@ -501,8 +501,8 @@
               [title]="item.mediaTitle"
               [subtitle]="item.episodeLabel ?? undefined"
               [progressPercent]="item.progressPercent"
-              [link]="['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId]"
-              [subtitleLink]="item.episodeId ? ['/series', '' + item.mediaId, 'episode', '' + item.episodeId] : null"
+              [link]="contentLink(item.mediaType, item.mediaId, item.episodeId)"
+              [titleLink]="item.episodeId ? ['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId] : null"
             />
           }
         </app-horizontal-scroller>

@@ -13,7 +13,7 @@ import { IdentifyModalService } from '../../../core/services/identify-modal.serv
 import { TrackingModalService } from '../../../core/services/tracking-modal.service';
 import { CardActionsDirective } from '../../directives/card-actions.directive';
 import { SpoilerDirective } from '../../directives/spoiler.directive';
-import { stampPoster } from '../../utils/view-transition';
+import { clearPosterStamps, stampPoster } from '../../utils/view-transition';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../../core/services/recommend.service';
@@ -115,7 +115,9 @@ export class MediaCardComponent {
 
   // Navigation (override media-derived link)
   readonly link = input<string[] | null>(null);
-  readonly subtitleLink = input<string[] | null>(null);
+  /** Destination for the title line when it differs from the card's own: an
+   *  episode card titled with its series sends the title to the series page. */
+  readonly titleLink = input<string[] | null>(null);
   /** When true, navigation triggered by the card replaces the
    *  current history entry instead of pushing a new one. Useful for
    *  "cards within the same media context" (sibling seasons, sibling
@@ -211,6 +213,20 @@ export class MediaCardComponent {
    * replaces it with the full Media a moment later.
    */
   protected readonly _navState = computed(() => {
+    const episodeId = this.episodeIdFromLink();
+    // An episode page resolves the episode out of the season tree, so a Media
+    // stub buys it nothing. Hand it the still instead: enough for the poster
+    // morph to have a target while the media loads.
+    if (episodeId != null) {
+      return {
+        episode: {
+          id: episodeId,
+          stillUrl: this._img(),
+          title: this._title(),
+          label: this._subtitle() ?? null,
+        },
+      };
+    }
     const m = this.media();
     if (m) return { media: m };
     const id = this.resolveMediaId();
@@ -257,6 +273,15 @@ export class MediaCardComponent {
     this.cardActionsService.show();
   }
 
+  /** Episode id when [link] targets an episode page, null otherwise. */
+  private episodeIdFromLink(): number | null {
+    const link = this.link();
+    const at = link?.indexOf('episode') ?? -1;
+    if (at < 0) return null;
+    const id = Number(link![at + 1]);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  }
+
   /** Resolved id from [media] or the tail of [link]. */
   private resolveMediaId(): number | null {
     const m = this.media();
@@ -283,12 +308,22 @@ export class MediaCardComponent {
    * other stamped img: protects against the duplicate-name abort when the
    * same media appears in two cards (continue-watching + recently-added,
    * etc.).
+   *
+   * A card pointing at an episode pairs on the episode id: that page's hero
+   * is the still, not the series poster.
    */
   /** Pointerdown helper for the inline `[routerLink]` anchors: prepare
    *  the view transition AND mark the next navigation as a back-pop
    *  when `replaceUrl` is on, so NavbarService doesn't push the
    *  replaced URL onto its history stack. Pointerdown fires before
    *  click → before RouterLink kicks off `navigateByUrl`. */
+  /** The title's own destination has no poster to pair with, so a stamp left
+   *  by an earlier click would morph this card into the wrong image. */
+  protected onTitleAnchorPointerdown() {
+    clearPosterStamps();
+    if (this.replaceUrl()) this.navbar.markAsBackNavigation();
+  }
+
   protected onAnchorPointerdown() {
     this.flagPosterForTransition();
     if (this.replaceUrl()) this.navbar.markAsBackNavigation();
@@ -298,13 +333,10 @@ export class MediaCardComponent {
     // Pointless where the router runs no transition (Capacitor) or the engine has
     // none (Chromium <111, Tizen 5.5 WebKit, webOS 5) — and it costs a querySelectorAll per click.
     if (this.isNative || !('startViewTransition' in document)) return;
-    // Episode stills never pair: the episode page stamps the SERIES id on its
-    // still, so an episode name only ever animates in or out on its own.
-    if (this.link()?.includes('episode')) return;
     const id = this.resolveMediaId();
     const img = this.imgRef()?.nativeElement;
     if (id == null || !img) return;
-    stampPoster(img, id);
+    stampPoster(img, id, this.episodeIdFromLink());
   }
   protected readonly _playable = computed(() => {
     if (this.playable()) return true;

@@ -41,6 +41,11 @@ import { translateBrowserLoaderFactory } from './utils/translate-loader';
 import { PluginUiRegistryService } from './core/plugin-ui/plugin-ui-registry.service';
 import { PluginI18nService } from './core/plugin-ui/plugin-i18n.service';
 import { ImageCacheService } from './core/services/image-cache.service';
+import {
+  clearStalePosterStamps,
+  leafRoutePath,
+  markViewTransition,
+} from './shared/utils/view-transition';
 
 /** Read the persisted server URL, sessions and credentials before bootstrap:
  *  guards, interceptors and the first /auth/me all depend on them. Resolves
@@ -87,11 +92,15 @@ export const appConfig: ApplicationConfig = {
               // offset) on screen, so the jump to top only lands once it ends.
               onViewTransitionCreated: ({ transition, from, to }) => {
                 if (
-                  from.routeConfig?.path === EPISODE_PATH &&
-                  to.routeConfig?.path === EPISODE_PATH
+                  leafRoutePath(from) === EPISODE_PATH &&
+                  leafRoutePath(to) === EPISODE_PATH
                 ) {
                   transition.skipTransition();
+                  return;
                 }
+                // A stamp outlives its navigation so the back morph can pair it.
+                clearStalePosterStamps(from, to);
+                markViewTransition(transition);
               },
             }),
           ]),
