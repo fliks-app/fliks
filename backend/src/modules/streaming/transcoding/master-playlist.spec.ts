@@ -257,3 +257,58 @@ describe('generateMasterPlaylist — remux variant (copy path)', () => {
     expect(streamInfLines(m).length).toBeGreaterThan(1);
   });
 });
+
+describe('generateMasterPlaylist: HDR remux variant (copy path)', () => {
+  const hdrRemuxMaster = (
+    opts: Partial<Parameters<typeof generateMasterPlaylist>[0]> = {},
+  ): string =>
+    generateMasterPlaylist({
+      mediaFileId: 26,
+      sourceWidth: 3840,
+      sourceHeight: 2160,
+      tokenParam: '?token=t',
+      includeRemux: true,
+      sourceBitrate: 40_000_000,
+      sourceFrameRate: 23.976,
+      remuxCodecs: 'hvc1.2.4.L153.B0',
+      outputAudioCodec: 'eac3',
+      hdrPassThrough: { hdrFormat: 'HDR10', hdrVariant: HEVC_HDR10 },
+      canEmitHdrLadder: true,
+      ...opts,
+    });
+
+  it('publishes the copy variant alone, not the HDR transcode ladder', () => {
+    const m = hdrRemuxMaster();
+    const lines = streamInfLines(m);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('NAME="remux"');
+    expect(m).toContain('/api/stream/26/remux/index.m3u8?token=t');
+    expect(m).not.toMatch(/\/api\/stream\/26\/(eco-)?\d+p-hdr\/index\.m3u8/);
+  });
+
+  it('declares the probed source CODECS, never a rung-derived one', () => {
+    const lines = streamInfLines(hdrRemuxMaster());
+    expect(lines[0]).toContain('CODECS="hvc1.2.4.L153.B0,ec-3"');
+  });
+
+  it('carries VIDEO-RANGE and the source resolution', () => {
+    const line = streamInfLines(hdrRemuxMaster())[0];
+    expect(line).toContain('VIDEO-RANGE=PQ');
+    expect(line).toContain('RESOLUTION=3840x2160');
+  });
+
+  it('is published even when the host has no HDR encoder (copy needs none)', () => {
+    const m = hdrRemuxMaster({ canEmitHdrLadder: false });
+    const lines = streamInfLines(m);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('NAME="remux"');
+  });
+
+  it('falls back to the HDR ladder when the user pinned a rung', () => {
+    const m = hdrRemuxMaster({ onlyQuality: '1080p' });
+    const lines = streamInfLines(m);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('NAME="1080p-hdr"');
+    expect(m).not.toContain('/remux/index.m3u8');
+  });
+});

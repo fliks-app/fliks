@@ -1352,7 +1352,9 @@ export function buildRemuxArgs(
       args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
     }
   } else {
-    args.push('-c:v', 'copy');
+    // No explicit `-map` here, so ffmpeg's default stream selection
+    // picks video+audio itself; `-sn` stops it also grabbing a subtitle.
+    args.push('-c:v', 'copy', '-sn');
     if (copyAudio) {
       args.push('-c:a', 'copy');
     } else {
