@@ -269,7 +269,6 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'media_detail.like',
-      'downloads.download',
       'media_detail.add_to_list',
       'media_card.mark_watched',
       'media_detail.edit_subtitles',
@@ -307,7 +306,6 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'media_detail.like',
-      'downloads.download',
       'media_detail.add_to_list',
       'media_card.mark_watched',
       'media_detail.edit_subtitles',
@@ -331,7 +329,6 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'media_detail.like',
-      'downloads.download',
       'media_detail.add_to_list',
       'media_card.mark_watched',
       'media_detail.request_media',
@@ -359,7 +356,6 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
       'media_detail.like',
-      'downloads.download',
       'media_detail.add_to_list',
       'media_card.mark_watched',
       'media_detail.edit_subtitles',
@@ -454,12 +450,21 @@ describe('MediaInfoHeaderComponent — destructive-item styling and ephemeral gu
     const fixture = await createFixture(OWNER, {
       mediaType: 'movie',
       ...MOVIE,
+      selectedFileId: 7,
       episodeId: 999,
       episodeInstance: true,
     });
     const shown = labels(fixture);
     expect(shown.filter((l) => l === 'downloads.download').length).toBe(1);
     expect(shown.filter((l) => l === 'media_detail.edit_subtitles').length).toBe(1);
+  });
+
+  it('Download shows only once a file is on disk', async () => {
+    const without = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE });
+    expect(labels(without)).not.toContain('downloads.download');
+
+    const withFile = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE, selectedFileId: 7 });
+    expect(labels(withFile)).toContain('downloads.download');
   });
 
   it('the series-watched toggle swaps its label with the live watched state', async () => {

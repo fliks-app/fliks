@@ -39,7 +39,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     weight: 140,
     labelKey: 'downloads.download',
     icon: 'download',
-    when: ['!isTv', 'mediaType:movie'],
+    when: ['!isTv', 'hasFiles', 'mediaType:movie'],
     action: { kind: 'action', actionId: 'media.download' },
   },
   {
@@ -50,7 +50,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     weight: 140,
     labelKey: 'downloads.download',
     icon: 'download',
-    when: ['!isTv', 'isEpisode', 'surface:card'],
+    when: ['!isTv', 'hasFiles', 'isEpisode', 'surface:card'],
     action: { kind: 'action', actionId: 'media.download' },
   },
   // ── Rows a card owns ────────────────────────────────────────────────────
