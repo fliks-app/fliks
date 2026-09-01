@@ -185,3 +185,75 @@ describe('generateMasterPlaylist: trick-play rendition', () => {
     expect(hdr).toContain('#EXT-X-I-FRAME-STREAM-INF');
   });
 });
+
+describe('generateMasterPlaylist — remux variant (copy path)', () => {
+  const remuxMaster = (
+    opts: Partial<Parameters<typeof generateMasterPlaylist>[0]> = {},
+  ): string =>
+    generateMasterPlaylist({
+      mediaFileId: 26,
+      sourceWidth: 1920,
+      sourceHeight: 800,
+      tokenParam: '?token=t',
+      includeRemux: true,
+      sourceBitrate: 10_000_000,
+      sourceFrameRate: 23.976,
+      remuxCodecs: 'avc1.640029',
+      outputAudioCodec: 'eac3',
+      ...opts,
+    });
+
+  it('publishes the copy variant alone, so ABR has no rung to flip to', () => {
+    const m = remuxMaster();
+    const lines = streamInfLines(m);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('NAME="remux"');
+    expect(m).toContain('/api/stream/26/remux/index.m3u8?token=t');
+    // No transcode rung alongside it: that pairing is what made ExoPlayer
+    // ABR-downgrade and respawn ffmpeg.
+    expect(m).not.toMatch(/\/api\/stream\/26\/(eco-)?\d+p\/index\.m3u8/);
+  });
+
+  it('declares the probed source CODECS, never a rung-derived level', () => {
+    const lines = streamInfLines(remuxMaster());
+    // L4.1 (29) as probed. The rung arithmetic would say L4.0 (28) for
+    // 1920x800 — under-declaring is the Safari/Cast reject class.
+    expect(lines[0]).toContain('CODECS="avc1.640029,ec-3"');
+    expect(lines[0]).not.toContain('avc1.640028');
+  });
+
+  it('omits CODECS rather than guessing when the source mapping is unknown', () => {
+    const lines = streamInfLines(remuxMaster({ remuxCodecs: null }));
+    expect(lines[0]).not.toContain('CODECS=');
+  });
+
+  it('prefers the container total over summed per-stream bitrates', () => {
+    // MKV with no per-stream video bitrate: sourceBitrate collapses to the
+    // audio track (768 kbps) and would advertise a 1080p copy as 1 Mbps.
+    const line = streamInfLines(
+      remuxMaster({ sourceBitrate: 768_000, remuxBandwidthBps: 9_700_000 }),
+    )[0];
+    expect(line).toContain('AVERAGE-BANDWIDTH=9700000');
+  });
+
+  it('carries the source resolution and a peak BANDWIDTH above the average', () => {
+    const line = streamInfLines(remuxMaster())[0];
+    expect(line).toContain('RESOLUTION=1920x800');
+    expect(line).toContain('AVERAGE-BANDWIDTH=10000000');
+    expect(line).toContain('BANDWIDTH=15000000');
+  });
+
+  it('falls back to the ladder when the user pinned a rung', () => {
+    const m = remuxMaster({ onlyQuality: '720p' });
+    const lines = streamInfLines(m);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('NAME="720p"');
+    expect(m).not.toContain('/remux/index.m3u8');
+  });
+
+  it('keeps the ladder when the decision was not a copy', () => {
+    const m = remuxMaster({ includeRemux: false });
+    expect(m).not.toContain('/remux/index.m3u8');
+    expect(streamInfLines(m).length).toBeGreaterThan(1);
+  });
+});

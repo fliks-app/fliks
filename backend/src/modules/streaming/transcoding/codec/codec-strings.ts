@@ -182,3 +182,61 @@ export function audioRenditionChannels(
   if (outputAudioCodec.toLowerCase() === 'aac') return 2;
   return sourceChannels && sourceChannels > 0 ? sourceChannels : 2;
 }
+
+/** H.264 `profile_idc` per ffprobe profile name, as the `PP` byte of `avc1.PPCCLL`. */
+const H264_PROFILE_IDC: Record<string, string> = {
+  baseline: '42',
+  'constrained baseline': '42',
+  main: '4d',
+  extended: '58',
+  high: '64',
+  'high 10': '6e',
+  'high 4:2:2': '7a',
+  'high 4:4:4 predictive': 'f4',
+};
+
+/**
+ * RFC 6381 CODECS string for a stream served by COPY (remux / direct play),
+ * built from the bitstream's own profile and level as probed, never from the
+ * output geometry: the rung arithmetic in {@link h264CodecString} answers "what
+ * will the encoder emit", which is the wrong question for a copy. A 1920×800
+ * High L4.1 source resolves to L4.0 by macroblock rate, and that one-level
+ * under-declaration is what makes Safari loop on MEDIA_ERR_DECODE and Cast
+ * Shaka reject with 4032.
+ *
+ * Returns null when the mapping isn't certain (unknown profile, a level that
+ * isn't in the codec's own units, any other codec). An absent CODECS attribute
+ * is legal per RFC 8216 and makes the player probe the real bytes, which is
+ * always right — a wrong one hard-rejects.
+ */
+export function copySourceCodecString(video: {
+  codec?: string;
+  profile?: string;
+  level?: number;
+}): string | null {
+  const codec = video.codec?.toLowerCase();
+  const profile = video.profile?.toLowerCase();
+  const level = video.level;
+  if (!codec || !profile || !level || level <= 0) return null;
+
+  if (codec === 'h264' || codec === 'avc1') {
+    const idc = H264_PROFILE_IDC[profile];
+    // ffprobe reports H.264 level as level_idc (41 = 4.1), which is also the
+    // hex byte in the codec string.
+    if (!idc || level > 255) return null;
+    return `avc1.${idc}00${level.toString(16).padStart(2, '0')}`;
+  }
+
+  if (codec === 'hevc' || codec === 'h265') {
+    // ffprobe reports HEVC level pre-multiplied by 30 (120 = 4.0); a smaller
+    // value means the probe used another unit, so don't guess. Main tier (`L`)
+    // is assumed — the probe doesn't expose the tier flag, and High tier only
+    // widens the bitrate ceiling.
+    if (level < 30) return null;
+    if (profile === 'main') return `hvc1.1.6.L${level}.B0`;
+    if (profile === 'main 10') return `hvc1.2.4.L${level}.B0`;
+    return null;
+  }
+
+  return null;
+}

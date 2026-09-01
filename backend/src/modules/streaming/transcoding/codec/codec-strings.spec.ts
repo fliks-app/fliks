@@ -1,6 +1,8 @@
 import {
   audioCodecString,
   audioRenditionChannels,
+  copySourceCodecString,
+  h264CodecString,
   hevcMain10CodecString,
   hevcMainTierCapBps,
 } from './codec-strings';
@@ -89,5 +91,43 @@ describe('hevcMain10CodecString', () => {
     expect(hevcMain10CodecString(target(3840, 1632, 24))).toBe('hvc1.2.4.L150.B0');
     expect(hevcMain10CodecString(target(3840, 2160, 24))).toBe('hvc1.2.4.L150.B0');
     expect(hevcMain10CodecString(target(1920, 1080, 24))).toBe('hvc1.2.4.L120.B0');
+  });
+});
+
+describe('copySourceCodecString — copied streams describe the bitstream', () => {
+  it('uses the probed H.264 level, not the one the rung arithmetic would pick', () => {
+    // 1920x800 High L4.1: h264CodecString() resolves L4.0 (28) from macroblock
+    // rate, which under-declares this source and trips Safari / Cast.
+    expect(
+      copySourceCodecString({ codec: 'h264', profile: 'High', level: 41 }),
+    ).toBe('avc1.640029');
+    expect(h264CodecString({ width: 1920, height: 800, frameRate: 23.976 } as any))
+      .toBe('avc1.640028');
+  });
+
+  it('maps the H.264 profiles ffprobe reports', () => {
+    expect(copySourceCodecString({ codec: 'h264', profile: 'Main', level: 30 }))
+      .toBe('avc1.4d001e');
+    expect(
+      copySourceCodecString({ codec: 'h264', profile: 'Constrained Baseline', level: 31 }),
+    ).toBe('avc1.42001f');
+    expect(copySourceCodecString({ codec: 'h264', profile: 'High 10', level: 50 }))
+      .toBe('avc1.6e0032');
+  });
+
+  it('builds HEVC Main and Main 10 from the pre-multiplied level', () => {
+    expect(copySourceCodecString({ codec: 'hevc', profile: 'Main', level: 120 }))
+      .toBe('hvc1.1.6.L120.B0');
+    expect(copySourceCodecString({ codec: 'hevc', profile: 'Main 10', level: 153 }))
+      .toBe('hvc1.2.4.L153.B0');
+  });
+
+  it('returns null rather than guessing, so CODECS is omitted', () => {
+    // Unknown profile, a level in the wrong unit, another codec, missing data.
+    expect(copySourceCodecString({ codec: 'h264', profile: 'Weird', level: 41 })).toBeNull();
+    expect(copySourceCodecString({ codec: 'hevc', profile: 'Main', level: 4 })).toBeNull();
+    expect(copySourceCodecString({ codec: 'av1', profile: 'Main', level: 8 })).toBeNull();
+    expect(copySourceCodecString({ codec: 'h264', profile: 'High' })).toBeNull();
+    expect(copySourceCodecString({})).toBeNull();
   });
 });
