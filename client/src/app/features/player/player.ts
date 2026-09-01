@@ -394,6 +394,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly muted = this.state.muted;
   readonly buffering = this.state.buffering;
   readonly bufferedEnd = this.state.bufferedEnd;
+  /** Nothing has painted yet, so the spinner stands in for the video. A refused
+   *  autoplay is not that: the media is ready and paused, and the play button
+   *  under the spinner is the real state to show. */
+  readonly spinnerVisible = computed(
+    () =>
+      !this.autoplayBlocked() &&
+      (this.loading() ||
+        this.buffering() ||
+        (!this.videoStarted() && !this.error())),
+  );
   readonly playbackMode = this.state.playbackMode;
   readonly hwAccel = this.state.hwAccel;
   readonly activeQualityId = this.qualityManager.activeQualityId;
