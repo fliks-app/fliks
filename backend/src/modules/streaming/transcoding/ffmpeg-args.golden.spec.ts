@@ -1334,6 +1334,7 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "0",
        "-c:v",
        "copy",
+       "-sn",
        "-c:a",
        "copy",
        "-tag:v",
@@ -1399,6 +1400,7 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "0",
        "-c:v",
        "copy",
+       "-sn",
        "-c:a",
        "aac",
        "-b:a",
@@ -1426,6 +1428,20 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "/cache/out/index.m3u8",
      ]
     `);
+  });
+
+  it('remux: never lets ffmpeg default-select a subtitle stream into the output', () => {
+    const args = buildRemuxArgs(
+      {
+        inputPath: '/media/in.mkv',
+        outputDir: '/cache/out',
+        copyAudio: true,
+        trustedStreamInfo: true,
+        sourceVideoCodec: 'h264',
+      },
+      silentLog,
+    );
+    expect(args).toContain('-sn');
   });
 
   it('audio-only: resume applies a single input -ss', () => {

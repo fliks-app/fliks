@@ -28,6 +28,56 @@ import {
  *  Only a manifest formality: the variant is alone, so nothing selects on it. */
 const REMUX_FALLBACK_BANDWIDTH_BPS = 8_000_000;
 
+interface RemuxVariantOptions {
+  mediaFileId: number;
+  tokenParam: string;
+  sourceWidth: number;
+  sourceHeight: number;
+  frameRateAttr: string;
+  audioAttr: string;
+  subsAttr: string;
+  codecsTail: string;
+  /** VIDEO-RANGE attribute value; omitted (SDR) leaves the attribute off. */
+  range?: 'PQ' | 'HLG';
+  remuxCodecs?: string | null;
+  remuxBandwidthBps?: number;
+  sourceBitrate?: number;
+  sourceVideoBitrateBps?: number;
+}
+
+/** Push the copy variant (`/remux/`), alone, at source resolution. Shared by
+ *  the SDR and HDR branches, which differ only in the audio group and
+ *  VIDEO-RANGE. */
+function pushRemuxVariant(lines: string[], opts: RemuxVariantOptions): void {
+  const {
+    mediaFileId,
+    tokenParam,
+    sourceWidth,
+    sourceHeight,
+    frameRateAttr,
+    audioAttr,
+    subsAttr,
+    codecsTail,
+    range,
+    remuxCodecs,
+    remuxBandwidthBps,
+    sourceBitrate,
+    sourceVideoBitrateBps,
+  } = opts;
+  // BANDWIDTH is required and must be a peak, so keep the ladder's 1.5x
+  // convention over the source average; the fallback only fires when ffprobe
+  // reported no bitrate at all.
+  const avg =
+    Math.round(remuxBandwidthBps || sourceBitrate || sourceVideoBitrateBps || 0) ||
+    REMUX_FALLBACK_BANDWIDTH_BPS;
+  const codecsAttr = remuxCodecs ? `,CODECS="${remuxCodecs}${codecsTail}"` : '';
+  const rangeAttr = range ? `,VIDEO-RANGE=${range}` : '';
+  lines.push(
+    `#EXT-X-STREAM-INF:BANDWIDTH=${Math.round(avg * 1.5)},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${sourceWidth}x${sourceHeight}${rangeAttr}${frameRateAttr},NAME="remux"${codecsAttr}${audioAttr}${subsAttr}`,
+    `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
+  );
+}
+
 /** Format frame rate for the HLS `FRAME-RATE` attribute. Apple's spec
  *  says "decimal-floating-point describing the maximum frame rate …
  *  rounded to three decimal places". Whole numbers stay integer to
@@ -252,15 +302,9 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     );
   };
 
-  // HDR pass-through path — emitted when the source is HEVC HDR and
-  // the client claims HDR support. Outputs a full HEVC HDR ladder
-  // (one remux rung at source resolution + HEVC HDR transcode rungs
-  // below) so the user can switch resolution while keeping HDR
-  // signaling (BT.2020/PQ or HLG). The H.264 SDR ladder is omitted in
-  // this branch — mixing SDR and HDR rungs in one master playlist
-  // confuses AVPlayer's ABR and triggers display-mode flips. Clients
-  // that want SDR explicitly disable HDR client-side (which flips
-  // `clientSupportsHdr` to false and re-routes to the SDR ladder).
+  // HDR pass-through path: the source is HDR and the client claims support.
+  // Either the copy variant alone or an HDR ladder, never both, and never
+  // mixed with the SDR ladder below (that mix flips AVPlayer's display mode).
   if (hdrPassThrough) {
     const range = hdrPassThrough.hdrFormat === 'HLG' ? 'HLG' : 'PQ';
 
@@ -279,13 +323,31 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     const hdrAudioAttr = multiAudio ? ',AUDIO="audio"' : '';
     pushSubtitleMedia(lines);
 
+    // Copy path (`?remux=1`): publish the variant alone with VIDEO-RANGE.
+    // A copy needs no HDR encoder, so this skips `canEmitHdrLadder`.
+    if (includeRemux && !onlyQuality) {
+      pushRemuxVariant(lines, {
+        mediaFileId,
+        tokenParam,
+        sourceWidth,
+        sourceHeight,
+        frameRateAttr,
+        audioAttr: hdrAudioAttr,
+        subsAttr,
+        codecsTail,
+        range,
+        remuxCodecs,
+        remuxBandwidthBps,
+        sourceBitrate,
+        sourceVideoBitrateBps,
+      });
+      pushIFrameStream(lines);
+      return lines.join('\n');
+    }
+
     // HDR rungs are pure transcodes (HEVC Main10 or native AV1 HDR with forced
-    // keyframes), gated on `canEmitHdrLadder`. The former top "remux" pass-
-    // through was dropped: `-c:v copy` cuts on existing source IDRs (variable
-    // durations) which mis-aligns with the synthetic uniform VOD playlist, and
-    // ExoPlayer's buffer scheduler drifts behind audio. A transcode is visually
-    // transparent and gives perfectly uniform segments. Includes the source-
-    // resolution rung if there's an HDR profile at or below source height.
+    // keyframes), gated on `canEmitHdrLadder`. Includes the source-resolution
+    // rung if there's an HDR profile at or below source height.
     if (canEmitHdrLadder) {
       const hdrVariant = hdrPassThrough.hdrVariant;
       const baseHdrLadder = getHdrLadderForDevice(deviceType).filter((p) =>
@@ -356,17 +418,20 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
   // wants a lighter rung pins one, which arrives here as `onlyQuality` and
   // takes the ladder branch below.
   if (includeRemux && !onlyQuality) {
-    // BANDWIDTH is required and must be a peak, so keep the ladder's 1.5x
-    // convention over the source average; the fallback only fires when ffprobe
-    // reported no bitrate at all.
-    const avg =
-      Math.round(remuxBandwidthBps || sourceBitrate || sourceVideoBitrateBps || 0) ||
-      REMUX_FALLBACK_BANDWIDTH_BPS;
-    const codecsAttr = remuxCodecs ? `,CODECS="${remuxCodecs}${codecsTail}"` : '';
-    lines.push(
-      `#EXT-X-STREAM-INF:BANDWIDTH=${Math.round(avg * 1.5)},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${sourceWidth}x${sourceHeight}${frameRateAttr},NAME="remux"${codecsAttr}${audioAttr}${subsAttr}`,
-      `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
-    );
+    pushRemuxVariant(lines, {
+      mediaFileId,
+      tokenParam,
+      sourceWidth,
+      sourceHeight,
+      frameRateAttr,
+      audioAttr,
+      subsAttr,
+      codecsTail,
+      remuxCodecs,
+      remuxBandwidthBps,
+      sourceBitrate,
+      sourceVideoBitrateBps,
+    });
     pushIFrameStream(lines);
     return lines.join('\n');
   }
