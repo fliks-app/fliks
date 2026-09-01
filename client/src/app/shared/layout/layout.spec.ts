@@ -304,6 +304,7 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
     nativeState.value = false;
   });
 
+
   it('sidebar: admin with libraries', async () => {
     const fixture = await createFixture(ADMIN_WITH_LIBRARIES);
     expect(sidebarItems(fixture.nativeElement)).toEqual([

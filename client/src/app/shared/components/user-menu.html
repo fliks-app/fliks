@@ -36,7 +36,8 @@
     <svg lucideSettings class="h-5 w-5 shrink-0 opacity-80"></svg>
     <span class="flex-1">{{ 'nav.app_settings' | translate }}</span>
   </a>
-  @if (auth.canAccessSettings()) {
+  <!-- Its route already refuses a TV, so the entry only led to a dead end. -->
+  @if (auth.canAccessSettings() && !tv.isTv()) {
     <a routerLink="/admin" class="dropdown-item text-white">
       <svg lucideShield class="h-5 w-5 shrink-0 opacity-80"></svg>
       <span class="flex-1">{{ 'nav.administration' | translate }}</span>
