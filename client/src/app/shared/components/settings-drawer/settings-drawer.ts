@@ -59,9 +59,6 @@ export class SettingsDrawerComponent implements OnInit, OnDestroy {
     this.titleService.setTitle(page ? `${page} | ${layout}` : layout);
   });
 
-  private readonly drawerToggleEl =
-    viewChild<ElementRef<HTMLInputElement>>('drawerToggle');
-
   private lastScrollY = 0;
   private readonly onScroll = () => {
     const y = window.scrollY;
@@ -71,16 +68,6 @@ export class SettingsDrawerComponent implements OnInit, OnDestroy {
   };
 
   ngOnInit() {
-    // On TV the drawer behaves like mobile (checkbox-driven, no
-    // `lg:drawer-open`). Start "open" so the user lands on /admin with
-    // the sidebar visible — they navigate to a section, drawer slides
-    // out, hamburger brings it back.
-    if (this.tv.isTv()) {
-      queueMicrotask(() => {
-        const cb = this.drawerToggleEl()?.nativeElement;
-        if (cb) cb.checked = true;
-      });
-    }
     window.addEventListener('scroll', this.onScroll, { passive: true });
 
     this.routerSub = this.router.events
@@ -124,14 +111,4 @@ export class SettingsDrawerComponent implements OnInit, OnDestroy {
     this.location.back();
   }
 
-  /** Click inside the menu region (TV) — close the drawer if the click
-   *  hit a link so the main content takes over. No-op on desktop where
-   *  `lg:drawer-open` keeps the drawer permanent. */
-  onMenuClick(event: Event) {
-    if (!this.tv.isTv()) return;
-    const target = event.target as HTMLElement | null;
-    if (!target?.closest('a')) return;
-    const cb = this.drawerToggleEl()?.nativeElement;
-    if (cb) cb.checked = false;
-  }
 }
