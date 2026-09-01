@@ -15,7 +15,6 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
 import { MediaService, Media, SearchParams } from '../../core/services/api/media.service';
 import { StreamingApiService, RecommendationItem } from '../../core/services/api/streaming-api.service';
@@ -31,7 +30,7 @@ import { SocialApiService } from '../../core/services/api/social-api.service';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
-import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
+import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { MediaType } from '../../core/enums/media-type.enum';
 import { MediaCardComponent, CardBadge } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
@@ -53,13 +52,11 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly metadata = inject(MetadataService);
   private readonly router = inject(Router);
-  private readonly route = inject(ActivatedRoute);
   private readonly auth = inject(AuthService);
   /** Opted out of the social layer → the people tab is hidden. */
   protected readonly sharingDisabled = this.auth.sharingDisabled;
   private readonly requestsApi = inject(RequestsService);
   private readonly scrollMemory = inject(ScrollMemoryService);
-  private readonly reuseStrategy = inject(CachingReuseStrategy);
   private readonly injector = inject(Injector);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly social = inject(SocialApiService);
@@ -179,25 +176,15 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private filterDebounce: ReturnType<typeof setTimeout> | null = null;
   /** Movie/series bucket the discover genre list was last loaded for. */
   private lastGenreType = '';
-  private attachedSub?: Subscription;
-  private detachedSub?: Subscription;
+  /** Cached route, with nothing to refetch: results live in SearchStateService,
+   *  so only the scroll key has to change hands. */
+  private readonly routeFresh = keepRouteFresh({
+    scrollKey: SearchComponent.SCROLL_KEY,
+  });
 
   ngOnInit() {
     this.scrollMemory.activate(SearchComponent.SCROLL_KEY);
     this.scrollMemory.restore(SearchComponent.SCROLL_KEY, this.injector);
-
-    // Route is cached on navigate-away (data: { reuse: true }). Search results
-    // already live in SearchStateService so there's nothing to refetch — we
-    // only need to re-claim the scroll key and put scroll back where it was.
-    const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
-    this.attachedSub = this.reuseStrategy.attached$.subscribe((key) => {
-      if (key !== ownKey) return;
-      this.scrollMemory.activate(SearchComponent.SCROLL_KEY);
-      this.scrollMemory.restoreSticky(SearchComponent.SCROLL_KEY);
-    });
-    this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
-      if (key === ownKey) this.scrollMemory.deactivateIf(SearchComponent.SCROLL_KEY);
-    });
   }
 
   ngAfterViewInit() {
@@ -213,8 +200,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.searchTimer) clearTimeout(this.searchTimer);
     if (this.filterDebounce) clearTimeout(this.filterDebounce);
     this.scrollMemory.deactivate();
-    this.attachedSub?.unsubscribe();
-    this.detachedSub?.unsubscribe();
     this.removeOutsidePointerListener();
   }
 

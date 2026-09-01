@@ -209,7 +209,7 @@ export const routes: Routes = [
           import('./features/media-detail/media-detail').then(
             (m) => m.MediaDetailComponent,
           ),
-        data: { kind: 'movie' },
+        data: { kind: 'movie', reuse: true },
       },
       {
         path: 'series/:id',
@@ -217,7 +217,7 @@ export const routes: Routes = [
           import('./features/media-detail/media-detail').then(
             (m) => m.MediaDetailComponent,
           ),
-        data: { kind: 'series' },
+        data: { kind: 'series', reuse: true },
       },
       {
         path: 'series/:id/episode/:episodeId',
@@ -225,7 +225,7 @@ export const routes: Routes = [
           import('./features/media-detail/media-detail').then(
             (m) => m.MediaDetailComponent,
           ),
-        data: { kind: 'series' },
+        data: { kind: 'series', reuse: true },
       },
       {
         path: 'requests',

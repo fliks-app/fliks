@@ -37,8 +37,7 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
-import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
-import { AppResumeService } from '../../core/services/app-resume.service';
+import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideX, LucideFilm } from '@lucide/angular';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
@@ -117,17 +116,22 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
   private readonly translate = inject(TranslateService);
-  private readonly reuseStrategy = inject(CachingReuseStrategy);
-  private readonly appResume = inject(AppResumeService);
   protected readonly itemArtwork = itemArtwork;
   private paramSub?: Subscription;
-  private attachedSub?: Subscription;
-  private detachedSub?: Subscription;
+  /** Cached per library name: revalidate the grid on return, and re-claim the
+   *  scroll key, which is only known once the library itself has loaded. */
+  private readonly routeFresh = keepRouteFresh({
+    refresh: () => this.refreshCurrentView(),
+    scrollKey: () => {
+      const lib = this.library();
+      return lib ? `library-${lib.id}` : null;
+    },
+    onAttach: () => {
+      const lib = this.library();
+      if (lib) this.navbar.setPageTitle(lib.name);
+    },
+  });
   private queryParamSub?: Subscription;
-  private resumeSub?: Subscription;
-  /** True while this cached instance is detached (some other route is shown).
-   *  Gates the app-resume refresh so only the visible library refetches. */
-  private detached = false;
   /** Set while a state-driven `syncQueryParams` is being applied to the
    *  URL, so the `queryParamMap` subscription that fires right after
    *  can ignore the round-trip instead of re-applying our own write. */
@@ -399,44 +403,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.scrollMemory.restore(scrollKey, this.injector);
     });
 
-    // Each /libraries/:libraryName has its own cache slot (CachingReuseStrategy
-    // keys per param). On return, ngOnInit doesn't re-fire — refresh data,
-    // re-claim scroll/focus, and rebind the navbar title via attached$.
-    const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
-    this.attachedSub = this.reuseStrategy.attached$.subscribe((key) => {
-      if (key !== ownKey) return;
-      this.detached = false;
-      const lib = this.library();
-      if (!lib) return;
-      const scrollKey = `library-${lib.id}`;
-      this.scrollMemory.activate(scrollKey);
-      this.navbar.setPageTitle(lib.name);
-      void this.load(lib.id, true);
-      // Re-fire suggestions / genres when we're on that tab so the SWR
-      // cache has a chance to bring in fresh data on a back-navigation.
-      if (this.viewMode() === 'suggestions') {
-        void this.loadSuggestions();
-      } else if (this.viewMode() === 'genres') {
-        void this.loadGenres();
-      } else if (this.viewMode() === 'likes') {
-        void this.loadLikes();
-      }
-      this.scrollMemory.restoreSticky(scrollKey);
-    });
-    this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
-      if (key !== ownKey) return;
-      this.detached = true;
-      const lib = this.library();
-      if (lib) this.scrollMemory.deactivateIf(`library-${lib.id}`);
-    });
-    // Native app-resume: refresh the grid when the app returns to the
-    // foreground after a spell away and this library is the visible page.
-    this.resumeSub = this.appResume.resume$.subscribe(() => {
-      if (this.detached) return;
-      const lib = this.library();
-      if (lib) void this.load(lib.id, true);
-    });
-
     // Re-apply state on browser back/forward (same route, queryParams
     // change). Initial load + state-driven `syncQueryParams` writes are
     // skipped via the `skipQueryParamSync` flag so we don't recurse.
@@ -467,6 +433,17 @@ export class LibraryComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Bring the visible library up to date: the grid always, plus whichever tab
+   *  is on screen so its SWR cache gets a chance to bring in fresh data. */
+  private refreshCurrentView(): void {
+    const lib = this.library();
+    if (!lib) return;
+    void this.load(lib.id, true);
+    if (this.viewMode() === 'suggestions') void this.loadSuggestions();
+    else if (this.viewMode() === 'genres') void this.loadGenres();
+    else if (this.viewMode() === 'likes') void this.loadLikes();
+  }
+
   ngOnDestroy() {
     this.scrollMemory.deactivate();
     this.list.destroy();
@@ -475,10 +452,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (this.letterRaf !== null) cancelAnimationFrame(this.letterRaf);
     this.navbar.clearPageTitle();
     this.paramSub?.unsubscribe();
-    this.attachedSub?.unsubscribe();
-    this.detachedSub?.unsubscribe();
+
     this.queryParamSub?.unsubscribe();
-    this.resumeSub?.unsubscribe();
   }
 
   scrollToLetter(letter: string) {

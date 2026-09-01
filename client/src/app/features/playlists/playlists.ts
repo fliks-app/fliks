@@ -1,15 +1,13 @@
 import {
   Component,
   ChangeDetectionStrategy,
-  DestroyRef,
   ElementRef,
   OnInit,
   inject,
   signal,
   viewChild,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucidePlus } from '@lucide/angular';
@@ -17,7 +15,7 @@ import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { Playlist, PlaylistsApiService } from '../../core/services/api/playlists-api.service';
 import { ToastService } from '../../core/services/toast.service';
-import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
+import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { ModalFooterComponent } from '../../shared/components/modal-footer';
 
 @Component({
@@ -36,11 +34,8 @@ import { ModalFooterComponent } from '../../shared/components/modal-footer';
 export class PlaylistsComponent implements OnInit {
   private readonly api = inject(PlaylistsApiService);
   private readonly router = inject(Router);
-  private readonly route = inject(ActivatedRoute);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
-  private readonly reuseStrategy = inject(CachingReuseStrategy);
-  private readonly destroyRef = inject(DestroyRef);
 
   private readonly createDialog = viewChild<ElementRef<HTMLDialogElement>>('createDialog');
 
@@ -49,15 +44,14 @@ export class PlaylistsComponent implements OnInit {
   readonly creating = signal(false);
   readonly newName = signal('');
 
+  /** Cached route: revalidate on return so a playlist created or deleted
+   *  elsewhere shows up behind the DOM the cache paints instantly. */
+  private readonly routeFresh = keepRouteFresh({
+    refresh: () => void this.load(true),
+  });
+
   ngOnInit() {
     void this.load();
-    // This route is `reuse: true`, so ngOnInit does NOT re-run when the user
-    // navigates back to a cached instance — refresh on reattach so a playlist
-    // created/deleted elsewhere shows up (mirrors home/search/history).
-    const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
-    this.reuseStrategy.attached$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((key) => {
-      if (key === ownKey) void this.load(true);
-    });
   }
 
   private async load(force = false): Promise<void> {
