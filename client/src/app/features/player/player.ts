@@ -2580,6 +2580,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const { url, mimeType } = this.buildPlayUrl({ startTime });
       await this.engine.load(url, startTime, mimeType);
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
+      this.restorePlaybackRate();
 
       // Fresh subtitle + audio track lists for the new file, then auto-select.
       const subs = await this.trackManager.loadSubtitles(
@@ -3269,6 +3270,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.engine,
         this.playbackMode(),
       );
+      this.restorePlaybackRate();
       // Shaka/webOS and the desktop mpv engine drop sidecar text tracks on a fresh
       // load(), so a recovery reload silently loses the user's subtitle. Re-add +
       // re-select the active soft subtitle. The Capacitor native players restore
@@ -3707,6 +3709,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         { source, code, message: (e as any)?.message ?? String(e) },
       );
     }
+  }
+
+  /** A reload rebuilds the engine's pipeline at the default rate, so the UI
+   *  would keep advertising a speed nothing is playing. Re-apply, then read
+   *  back: an engine that refuses moves the control instead of lying. */
+  private restorePlaybackRate(): void {
+    if (!this.engine) return;
+    const wanted = this.playbackRate();
+    if (wanted !== 1) this.engine.playbackRate = wanted;
+    this.playbackRate.set(this.engine.playbackRate);
   }
 
   onSpeedChange(rate: number) {
@@ -4502,6 +4514,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.reloadReachedPlayback = true;
 
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
+      this.restorePlaybackRate();
       this.restorePlayState(wasPaused);
 
       // Restore active subtitle (non burn-in) after Shaka reload

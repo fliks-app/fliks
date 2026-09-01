@@ -397,11 +397,10 @@ export class PlayerControlsComponent {
   readonly panelOpenChange = output<boolean>();
 
   /** AVPlay only takes integer trick-play rates (it drives them from the HLS
-   *  I-frame rendition), so fractional steps raise INVALID_PARAMETER there. */
+   *  I-frame rendition, one on-demand encode per frame), so fractional steps
+   *  raise INVALID_PARAMETER and anything past 2x outruns the server. */
   readonly speedOptions = computed<number[]>(() =>
-    this.tv.isTizen()
-      ? [1, 2, 4, 8]
-      : [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
+    this.tv.isTizen() ? [1, 2] : [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
   );
 
   /** Settings dropdown panel navigation */

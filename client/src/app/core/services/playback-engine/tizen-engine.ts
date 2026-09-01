@@ -187,6 +187,9 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.resetFirstFrame();
     this._currentTime = 0;
     this._duration = 0;
+    // open() restarts AVPlay at 1x; keeping the old value here would make the
+    // getter report a speed nothing is playing.
+    this._playbackRate = 1;
 
     const safeUrl = resolveAvtestUrl(url);
 

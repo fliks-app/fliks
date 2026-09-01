@@ -1438,8 +1438,8 @@ export class StreamingController {
       crop,
     });
     try {
-      // One ffmpeg pass per frame, uncached: a 16x scan over a 4K source
-      // will feel it.
+      // One ffmpeg pass per frame, uncached (~380 ms on 1080p): this is why
+      // the client stops at 2x.
       const { stdout } = await execFileAsync('ffmpeg', args, {
         encoding: 'buffer',
         maxBuffer: 8 * 1024 * 1024,
