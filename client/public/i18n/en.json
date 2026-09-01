@@ -2376,7 +2376,9 @@
         "skip_compatibility": "Disable the compatibility check",
         "skip_compatibility_hint": "Installs and loads a plugin version even when it does not declare support for this Fliks version. The plugin API check still applies.",
         "allow_older_versions": "Allow installing older versions",
-        "allow_older_versions_hint": "Adds a version picker next to the catalogue's install and update buttons."
+        "allow_older_versions_hint": "Adds a version picker next to the catalogue's install and update buttons.",
+        "allow_unsigned": "Allow unsigned plugins",
+        "allow_unsigned_hint": "Lets a plugin whose code nobody signed be installed, for developing your own. Turning it back off does not remove a plugin already installed this way."
       }
     }
   },

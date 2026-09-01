@@ -2349,7 +2349,9 @@
         "skip_compatibility": "Kompatibilitätsprüfung deaktivieren",
         "skip_compatibility_hint": "Installiert und lädt eine Plugin-Version auch dann, wenn sie diese Fliks-Version nicht als unterstützt angibt. Die Prüfung der Plugin-API gilt weiterhin.",
         "allow_older_versions": "Installation älterer Versionen erlauben",
-        "allow_older_versions_hint": "Ergänzt die Installations- und Aktualisierungsknöpfe im Katalog um eine Versionsauswahl."
+        "allow_older_versions_hint": "Ergänzt die Installations- und Aktualisierungsknöpfe im Katalog um eine Versionsauswahl.",
+        "allow_unsigned": "Unsignierte Plugins zulassen",
+        "allow_unsigned_hint": "Erlaubt die Installation eines Plugins, dessen Code niemand signiert hat, für die Entwicklung eigener Plugins. Ein bereits so installiertes Plugin wird beim Ausschalten nicht entfernt."
       }
     }
   },

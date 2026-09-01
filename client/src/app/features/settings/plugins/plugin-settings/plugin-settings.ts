@@ -22,6 +22,8 @@ const AUTO_UPDATE_KEY = 'plugins.auto_update';
 const SKIP_COMPATIBILITY_KEY = 'plugins.skip_compatibility_check';
 /** Read by the catalogue alone: it decides whether a card offers other versions to pick. */
 const ALLOW_OLDER_VERSIONS_KEY = 'plugins.allow_older_versions';
+/** Mirrors the backend's `PLUGIN_ALLOW_UNSIGNED_SETTING`. */
+const ALLOW_UNSIGNED_KEY = 'plugins.allow_unsigned';
 
 @Component({
   selector: 'app-plugin-settings',
@@ -42,6 +44,7 @@ export class PluginSettingsComponent {
   /** Both off unless the stored value is the explicit 'true' — same reading as the backend. */
   readonly skipCompatibility = signal(false);
   readonly allowOlderVersions = signal(false);
+  readonly allowUnsigned = signal(false);
   readonly loading = signal(true);
   readonly saving = signal(false);
 
@@ -50,18 +53,21 @@ export class PluginSettingsComponent {
     this.dialogRef().nativeElement.showModal();
     this.loading.set(true);
     try {
-      const [auto, skip, older] = await Promise.all([
+      const [auto, skip, older, unsigned] = await Promise.all([
         this.settings.get(AUTO_UPDATE_KEY),
         this.settings.get(SKIP_COMPATIBILITY_KEY),
         this.settings.get(ALLOW_OLDER_VERSIONS_KEY),
+        this.settings.get(ALLOW_UNSIGNED_KEY),
       ]);
       this.autoUpdate.set(auto?.value !== 'false');
       this.skipCompatibility.set(skip?.value === 'true');
       this.allowOlderVersions.set(older?.value === 'true');
+      this.allowUnsigned.set(unsigned?.value === 'true');
     } catch {
       this.autoUpdate.set(true);
       this.skipCompatibility.set(false);
       this.allowOlderVersions.set(false);
+      this.allowUnsigned.set(false);
     } finally {
       this.loading.set(false);
     }
@@ -93,6 +99,10 @@ export class PluginSettingsComponent {
 
   async toggleAllowOlderVersions(next: boolean): Promise<void> {
     await this.persist(ALLOW_OLDER_VERSIONS_KEY, next, this.allowOlderVersions);
+  }
+
+  async toggleAllowUnsigned(next: boolean): Promise<void> {
+    await this.persist(ALLOW_UNSIGNED_KEY, next, this.allowUnsigned);
   }
 
   /** False when the write failed, so a caller does not act on a value the server refused. */

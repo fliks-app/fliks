@@ -2349,7 +2349,9 @@
         "skip_compatibility": "Desativar a verificação de compatibilidade",
         "skip_compatibility_hint": "Instala e carrega uma versão de plugin mesmo que não declare suporte para esta versão do Fliks. A verificação da API de plugins continua a aplicar-se.",
         "allow_older_versions": "Permitir instalar versões anteriores",
-        "allow_older_versions_hint": "Adiciona um seletor de versão junto aos botões de instalação e atualização do catálogo."
+        "allow_older_versions_hint": "Adiciona um seletor de versão junto aos botões de instalação e atualização do catálogo.",
+        "allow_unsigned": "Permitir plugins não assinados",
+        "allow_unsigned_hint": "Permite instalar um plugin cujo código ninguém assinou, para desenvolver o seu. Desativá-lo não remove um plugin já instalado dessa forma."
       }
     }
   },

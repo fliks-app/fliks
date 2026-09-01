@@ -30,14 +30,7 @@ npm run package          # bundle → dist/, then core's packaging tool → scaf
 ```
 
 Then install `scaffold.fkplugin` through **Settings → Plugins → Import**. Unsigned archives are
-refused unless the core process allowlists the id:
-
-```
-FLIKS_UNSIGNED_PLUGINS=example.scaffold
-```
-
-On Docker that is an `env_file` value, which is read when the container is *created* — a
-`docker compose restart` will not pick it up, `docker compose up -d --force-recreate backend` will.
+refused unless *Allow unsigned plugins* is on in **Settings → Plugins → Settings**.
 
 Reinstalling the same id replaces the running plugin; there is no need to uninstall first.
 

@@ -321,8 +321,9 @@ staged, and the consent sheet in between is the only place an unverified plugin 
 Signature outcomes are `official` (a catalogue release key), `unverified`, or `unsigned`. Only the
 catalogue key verifies: there is no registry of third-party signing keys, so an archive signed by
 anyone else is `unverified` and reaches an operator behind the consent sheet's acknowledgement. A
-`process` plugin must be signed unless its id is in `FLIKS_UNSIGNED_PLUGINS`, which exists for local
-development only.
+`process` plugin must be signed unless the admin setting `plugins.allow_unsigned` is on, which
+exists for local development only. The setting gates installs, not loads: switching it back off
+leaves an unsigned plugin already installed running, uninstall it instead.
 
 ### Packaging
 
@@ -334,7 +335,7 @@ would refuse later: a missing `plugin.js` for a `process` manifest, a `plugin.js
 `data` one, a `logo` field that doesn't match what's on disk or whose bytes are not the format its
 name claims, a bad id or version, an oversized entry, and any file an archive may not carry (rather
 than dropping it silently and leaving you to find out at runtime). The archive it writes is always unsigned; a `process` plugin built this way installs only
-when its id is in the installing core's `FLIKS_UNSIGNED_PLUGINS`. Signing an archive for real
+when the installing core has `plugins.allow_unsigned` on. Signing an archive for real
 distribution is a separate, later step this tool does not perform.
 
 ### Deadlines and ceilings
