@@ -17,6 +17,7 @@ import {
 import { AuthService } from '../../core/services/auth.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
+import { itemArtwork } from '../../shared/utils/media-artwork.util';
 
 /** The profile "recommendations" tab, own-profile only: content other members
  *  recommended to the viewer, and content the viewer recommended to others.
@@ -33,6 +34,7 @@ export class ProfileRecommendationsComponent {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly auth = inject(AuthService);
+  protected readonly itemArtwork = itemArtwork;
 
   readonly loading = signal(true);
   readonly received = signal<ReceivedRecommendation[]>([]);

@@ -84,7 +84,7 @@
             @for (item of continueWatching(); track item.mediaId + '-' + (item.episodeId ?? '')) {
               <app-media-card [aspect]="'landscape'"
                 [attr.data-home-focus]="'cw:' + item.mediaId + '-' + (item.episodeId ?? '')"
-                [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
+                [imageUrl]="itemArtwork(item)"
                 [title]="item.mediaTitle"
                 [subtitle]="item.episodeLabel ?? undefined"
                 [progressPercent]="item.progressPercent"
@@ -138,7 +138,7 @@
               <app-media-card
                 [aspect]="'landscape'"
                 [attr.data-home-focus]="'like:' + item.mediaId + '-' + (item.seasonId ?? '') + '-' + (item.episodeId ?? '')"
-                [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
+                [imageUrl]="itemArtwork(item)"
                 [title]="item.title"
                 [subtitle]="item.label ?? undefined"
                 [link]="likeLink(item)"

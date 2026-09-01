@@ -3,7 +3,7 @@ import { Router } from '@angular/router';
 import { CastService } from './cast.service';
 import { CastPlayerService } from './cast-player.service';
 import { MediaService } from './api/media.service';
-import { StreamingApiService } from './api/streaming-api.service';
+import { ContinueWatchingItem, StreamingApiService } from './api/streaming-api.service';
 import { PlaybackQueueService, QueueItem } from './playback-queue.service';
 import { RemoteService } from './remote.service';
 import { resolvePlayableFile } from '../../shared/utils/media-play.util';
@@ -41,6 +41,23 @@ export class PlayableMediaService {
 
   /** Play a media file: on a selected remote target, else Cast if connected,
    *  else navigate to the local player. */
+  /** Resume a continue-watching row where the viewer left off. */
+  resume(item: ContinueWatchingItem): Promise<void> {
+    return this.play(
+      {
+        fileId: item.mediaFileId,
+        mediaId: item.mediaId,
+        positionSeconds: item.positionSeconds,
+        episodeId: item.episodeId ?? undefined,
+        title: item.mediaTitle,
+        episodeTitle: item.episodeLabel ?? undefined,
+        fanartUrl: item.fanartUrl ?? item.posterUrl ?? null,
+        stillUrl: item.stillUrl ?? null,
+      },
+      false,
+    );
+  }
+
   async play(ctx: PlayContext, fromStart: boolean) {
     // A standalone play is never part of a queue — drop any playlist queue so
     // the player doesn't inherit stale "up next" context from a prior session.

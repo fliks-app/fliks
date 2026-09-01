@@ -54,9 +54,6 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
     if (el) {
       this.resizeObserver = new ResizeObserver(() => this.updateArrows());
       this.resizeObserver.observe(el);
-      // The rail's own box doesn't change as cards fill it, so a first pass
-      // that ran before layout would leave atEnd stuck and hide the arrow.
-      requestAnimationFrame(() => this.updateArrows());
     }
     // Routes flagged `reuse: true` detach this row's DOM on navigate-away and
     // reattach it on return without re-running ngAfterViewInit. The reattach

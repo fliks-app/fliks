@@ -44,6 +44,8 @@ import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, 
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { CardSkeletonComponent } from '../../shared/components/card-skeleton';
 import { NgTemplateOutlet } from '@angular/common';
+import { itemArtwork } from '../../shared/utils/media-artwork.util';
+import { PlayableMediaService } from '../../core/services/playable-media.service';
 import {
   CdkVirtualScrollViewport,
   CdkFixedSizeVirtualScroll,
@@ -103,6 +105,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
+  private readonly playableMedia = inject(PlayableMediaService);
   private readonly socialApi = inject(SocialApiService);
   private readonly likesApi = inject(LikesApiService);
   private readonly profilesService = inject(ProfilesService);
@@ -116,6 +119,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly reuseStrategy = inject(CachingReuseStrategy);
   private readonly appResume = inject(AppResumeService);
+  protected readonly itemArtwork = itemArtwork;
   private paramSub?: Subscription;
   private attachedSub?: Subscription;
   private detachedSub?: Subscription;
@@ -159,6 +163,18 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Content other members have recommended to the viewer. */
   readonly recommendedForYou = signal<ReceivedRecommendation[]>([]);
   readonly suggestionsLoading = signal(true);
+  /**
+   * A revalidation must not blank a panel that already has content: the tab is
+   * replaced by its skeleton, which drops whatever the viewer was looking at,
+   * including the card a back transition is morphing into.
+   */
+  private readonly hasSuggestions = computed(
+    () =>
+      this.suggestionsContinueRaw().length > 0 ||
+      this.suggestionsRecommendations().length > 0 ||
+      this.suggestionsFromFollowing().length > 0 ||
+      this.recommendedForYou().length > 0,
+  );
 
   // ── Genres view ─────────────────────────────────────────────────────
   /** Distinct genres in the library + sample posters for the mosaic. */
@@ -573,7 +589,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private async loadCollections(): Promise<void> {
     const lib = this.library();
     if (!lib) return;
-    this.collectionsLoading.set(true);
+    if (!this.collectionsList().length) this.collectionsLoading.set(true);
     try {
       const rows = await this.mediaService.getCollections(lib.id).catch(() => null);
       if (rows) this.collectionsList.set(rows);
@@ -595,11 +611,15 @@ export class LibraryComponent implements OnInit, OnDestroy {
     return [mediaType === 'series' ? '/series' : '/movies', String(mediaId)];
   }
 
+  async playContinueWatching(item: ContinueWatchingItem) {
+    await this.playableMedia.resume(item);
+  }
+
   /** Fetches the viewer's liked content scoped to the active library. */
   private async loadLikes(): Promise<void> {
     const lib = this.library();
     if (!lib) return;
-    this.likesLoading.set(true);
+    if (!this.likesList().length) this.likesLoading.set(true);
     try {
       const rows = await this.likesApi.mine(lib.id, { force: true }).catch(() => null);
       if (rows) this.likesList.set(rows);
@@ -613,7 +633,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private async loadGenres(): Promise<void> {
     const lib = this.library();
     if (!lib) return;
-    this.genresLoading.set(true);
+    if (!this.genresList().length) this.genresLoading.set(true);
     try {
       const rows = await this.mediaService.getGenres(lib.id).catch(() => null);
       if (rows) this.genresList.set(rows);
@@ -631,7 +651,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private async loadSuggestions(): Promise<void> {
     const lib = this.library();
     if (!lib) return;
-    this.suggestionsLoading.set(true);
+    if (!this.hasSuggestions()) this.suggestionsLoading.set(true);
     try {
       const [cw, recs, following, forYou] = await Promise.all([
         this.streamingApi.getContinueWatching(lib.id).catch(() => null),

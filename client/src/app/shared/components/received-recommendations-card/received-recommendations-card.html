@@ -14,7 +14,7 @@
               <li appTvRow class="flex items-center gap-4 py-3 first:pt-0 last:pb-0">
                 <a [routerLink]="mediaLink(item)" class="shrink-0 rounded-md">
                   <div class="w-24 aspect-video rounded-md bg-base-300 overflow-hidden">
-                    @if (item.stillUrl ?? item.fanartUrl ?? item.posterUrl; as img) {
+                    @if (itemArtwork(item); as img) {
                       <img [cachedSrc]="img | resolveUrl:'thumb'" [alt]="item.title" class="w-full h-full object-cover" loading="lazy" />
                     }
                   </div>

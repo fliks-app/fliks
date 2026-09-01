@@ -64,7 +64,7 @@
         @for (item of p.recentlyWatched; track item.id) {
           <app-media-card
             [aspect]="'landscape'"
-            [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
+            [imageUrl]="itemArtwork(item)"
             [title]="item.mediaTitle"
             [subtitle]="item.episodeLabel ?? undefined"
             [link]="mediaLink(item.mediaType, item.mediaId)"
@@ -79,7 +79,7 @@
         @for (item of p.likes; track item.mediaId + '-' + (item.seasonId ?? '') + '-' + (item.episodeId ?? '')) {
           <app-media-card
             [aspect]="'landscape'"
-            [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
+            [imageUrl]="itemArtwork(item)"
             [title]="item.title"
             [subtitle]="item.label ?? undefined"
             [link]="likeLink(item)"
