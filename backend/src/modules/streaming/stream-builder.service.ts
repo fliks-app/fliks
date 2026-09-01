@@ -230,7 +230,7 @@ export class StreamBuilderService {
     // we can see, from a single log line, why a 5.1 EAC-3 source ended up
     // being downmixed to AAC stereo.
     this.log.log(
-      `audioDecision[file=${resolved.mediaFile.id}] source={codec=${source.audioCodec}, channels=${source.audioChannels}, layout=${source.audioChannelLayout}, bitrate=${source.audioBitRate}} profile={audioCodecs=${JSON.stringify(profile.directPlayProfiles.map((p) => p.audioCodecs))}, maxAudioChannels=${profile.maxAudioChannels}}`,
+      `audioDecision[file=${resolved.mediaFile.id}] source={codec=${source.audioCodec}, channels=${source.audioChannels}, layout=${source.audioChannelLayout}, bitrate=${source.audioBitRate}} profile={containers=${JSON.stringify(profile.directPlayProfiles.map((p) => p.containers))}, audioCodecs=${JSON.stringify(profile.directPlayProfiles.map((p) => p.audioCodecs))}, maxAudioChannels=${profile.maxAudioChannels}}`,
     );
 
     // --- Step 1: Try DirectPlay ---
