@@ -170,6 +170,29 @@ class PausableTimeout {
       /* iOS WKWebView rotation fix: force GPU compositing so WebKit
          recalculates the fixed position after orientation change. */
       -webkit-transform: translateZ(0);
+      animation: player-open 260ms cubic-bezier(0.2, 0, 0, 1);
+    }
+    /* translateZ(0) is repeated in the keyframes so the iOS compositing hint
+       above survives the animation, which would otherwise replace transform. */
+    @keyframes player-open {
+      from {
+        opacity: 0;
+        transform: translateZ(0) scale(0.8);
+      }
+      to {
+        opacity: 1;
+        transform: translateZ(0) scale(1);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .player-container {
+        animation-name: player-open-fade;
+      }
+      @keyframes player-open-fade {
+        from {
+          opacity: 0;
+        }
+      }
     }
     /* When using native player, make WebView layers transparent so ExoPlayer/AVPlayer shows through */
     .player-container.native-player {
