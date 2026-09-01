@@ -123,6 +123,16 @@ export class DeviceProfileDto {
   supportsHlsSubtitles?: boolean;
 
   /**
+   * Client accelerates HLS through an `EXT-X-I-FRAME-STREAM-INF` rendition
+   * (Tizen AVPlay's `setSpeed`). Only clients that declare it get the tag: any
+   * player that reads one will fetch the frames behind it, and each frame costs
+   * its own ffmpeg pass.
+   */
+  @IsBoolean()
+  @IsOptional()
+  supportsIFrameTrickPlay?: boolean;
+
+  /**
    * Engine renders bitmap (PGS/VOBSUB) subtitles itself (ExoPlayer, mpv), so
    * they're shown natively rather than burned in. Client-side hint; the backend
    * accepts it for forward-compat (burn-in is client-initiated via

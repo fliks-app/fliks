@@ -59,6 +59,10 @@ import { SegmentPackagingService } from './services/segment-packaging.service';
 import { SessionRouter } from './services/session-router.service';
 import { SessionContextBuilder } from './services/session-context-builder.service';
 import { pickAudioLayout } from './transcoding/audio-layout';
+import {
+  buildIFrameSegmentArgs,
+  iframeResolution,
+} from './transcoding/iframe-trick-play';
 import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { resolveTonemapCurve } from './transcoding/ffmpeg-filter-graph';
 import { isOpenclTonemapEnabled } from './transcoding/codec/opencl-tonemap-probe';
@@ -259,6 +263,33 @@ export function buildVodPlaylist(
   }
   lines.push('#EXT-X-ENDLIST');
   return lines.join('\n');
+}
+
+/** I-frames-only playlist for AVPlay trick play: the variant's uniform grid
+ *  (one forced IDR per segment), each entry pointing at a single-keyframe
+ *  segment. See `iframe-trick-play.ts` for why the frames get their own URIs
+ *  instead of byte ranges into the variant's segments. */
+export function buildIFramePlaylist(
+  duration: number,
+  segmentUrl: (index: string) => string,
+  segDuration: number,
+): string {
+  return buildVodPlaylist(duration, segmentUrl, undefined, segDuration).replace(
+    '#EXT-X-INDEPENDENT-SEGMENTS',
+    '#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-I-FRAMES-ONLY',
+  );
+}
+
+/** Trick-play grid: the variant's real segment length, so entry N is the IDR
+ *  the encoder forces at N * that. */
+function iframeGrid(
+  streamInfo: { video?: { frameRate?: string }[] } | null | undefined,
+  segmentDuration: number,
+): number {
+  return realSegmentSeconds(
+    segmentDuration,
+    parseSourceFps(streamInfo?.video?.[0]?.frameRate),
+  );
 }
 
 /** VOD playlist with explicit per-segment durations. Used by the remux/copy
@@ -975,6 +1006,7 @@ export class StreamingController {
       deviceType,
       hdrLadder: useHdrLadder,
       supportsHlsSubtitles: !!deviceProfile.supportsHlsSubtitles,
+      supportsIFrameTrickPlay: !!deviceProfile.supportsIFrameTrickPlay,
       probesSegZero: deviceProfile.probesSegZero,
       supportsAbr: deviceProfile.supportsAbr,
       videoVariant,
@@ -1307,6 +1339,11 @@ export class StreamingController {
         (si?.audio ?? []).reduce((sum, a) => sum + (a?.bitRate ?? 0), 0),
       ),
       sourceVideoCodec: (v?.codec ?? '').toLowerCase() || undefined,
+      // Trick play rides the same IDR grid as the variant, so the frame the
+      // playlist promises at index N is the one the encoder puts there.
+      iFrameTrickPlaySegmentSeconds: (live?.supportsIFrameTrickPlay ?? false)
+        ? realSegmentSeconds(this.segDur(), sourceFrameRate)
+        : undefined,
     });
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -1327,6 +1364,94 @@ export class StreamingController {
       startAt,
       deviceType,
     );
+  }
+
+  // Trick-play routes, like the subtitle ones below, MUST be registered before
+  // :mediaFileId/:quality/*, or "iframe" parses as a quality.
+
+  /** I-frames-only playlist backing the master's `EXT-X-I-FRAME-STREAM-INF`. */
+  @Get(':mediaFileId/iframe/index.m3u8')
+  async iframePlaylist(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.sessionRouter.assertFresh(req);
+    const resolved = await this.streamingService.resolveFile(
+      mediaFileId,
+      req.user as User,
+    );
+    const durationHint = firstQueryString(req.query, 'duration');
+    const duration =
+      (durationHint ? parseFloat(durationHint) : 0) ||
+      (await this.resolveDuration(
+        mediaFileId,
+        resolved.absolutePath,
+        resolved.mediaFile.streamInfo,
+      ));
+    if (!duration) {
+      res.status(404).send('Duration unknown — rescan the file first');
+      return;
+    }
+    const tokenParam = buildTokenParam(req);
+    const playlist = buildIFramePlaylist(
+      duration,
+      (seg) => `/api/stream/${mediaFileId}/iframe/seg-${seg}.ts${tokenParam}`,
+      iframeGrid(resolved.mediaFile.streamInfo, this.segDur()),
+    );
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(playlist);
+  }
+
+  /** One trick-play keyframe, decoded from the source and muxed to MPEG-TS.
+   *  Independent of the transcode session: a scan must not seek the running
+   *  ffmpeg and respawn it at every frame. */
+  @Get(':mediaFileId/iframe/:segment')
+  async iframeSegment(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Param('segment') segment: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const match = /^seg-(\d+)\.ts$/.exec(segment);
+    if (!match) {
+      throw new BadRequestException(`Invalid trick-play segment: ${segment}`);
+    }
+    const resolved = await this.streamingService.resolveFile(
+      mediaFileId,
+      req.user as User,
+    );
+    const si = resolved.mediaFile.streamInfo;
+    const v = si?.video?.[0];
+    const crop = v?.crop;
+    const { width, height } = iframeResolution(
+      crop?.width ?? v?.width ?? 1920,
+      crop?.height ?? v?.height ?? 1080,
+    );
+    const args = buildIFrameSegmentArgs({
+      inputPath: resolved.absolutePath,
+      seekSeconds: parseInt(match[1], 10) * iframeGrid(si, this.segDur()),
+      width,
+      height,
+      crop,
+    });
+    try {
+      // One ffmpeg pass per frame, uncached: a 16x scan over a 4K source
+      // will feel it.
+      const { stdout } = await execFileAsync('ffmpeg', args, {
+        encoding: 'buffer',
+        maxBuffer: 8 * 1024 * 1024,
+        timeout: 20_000,
+      });
+      res.setHeader('Content-Type', 'video/mp2t');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.send(stdout);
+    } catch {
+      // A refused frame must stay retryable: AVPlay drops trick play on a 404.
+      sendTransientUnavailable(res);
+    }
   }
 
   // Subtitle VTT routes MUST be registered before :mediaFileId/:quality/* — otherwise

@@ -469,12 +469,13 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   get buffered(): number { return this._buffered; }
   get playbackRate(): number { return this._playbackRate; }
   set playbackRate(rate: number) {
-    // Valid from READY, PLAYING and PAUSED; out-of-range values raise
-    // PLAYER_ERROR_INVALID_PARAMETER. Either way this is a convenience control,
-    // not playback itself: a refusal must not escalate to a fatal `error`
-    // (that would cover healthy video with the error card). The getter keeps
-    // reporting the last rate that actually applied, so the caller can read it
-    // back instead of trusting the request.
+    // setSpeed takes a long (1/2/4/8/16, negatives for reverse) from
+    // READY/PLAYING/PAUSED; a refusal stays silent, and the getter keeps
+    // reporting the rate that really applied.
+    if (!Number.isInteger(rate)) {
+      console.warn('[tizen-engine] setSpeed', rate, 'dropped, not an integer');
+      return;
+    }
     const state = webapis.avplay.getState();
     if (state !== 'READY' && state !== 'PLAYING' && state !== 'PAUSED') {
       console.warn('[tizen-engine] setSpeed', rate, 'dropped, state=', state);

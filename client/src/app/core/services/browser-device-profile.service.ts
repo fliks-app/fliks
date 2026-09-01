@@ -129,6 +129,8 @@ export interface DeviceProfile {
    *  VTT. True for phone/desktop (iOS, Android, web/Shaka); false for TVs,
    *  whose AVPlay/webOS cue APIs are limited so they keep a DOM overlay. */
   supportsHlsSubtitles?: boolean;
+  /** Engine accelerates HLS from an `EXT-X-I-FRAME-STREAM-INF` rendition. */
+  supportsIFrameTrickPlay?: boolean;
 
   /** Engine renders bitmap (PGS/VOBSUB) subtitles itself (ExoPlayer, mpv), so
    *  they're shown natively rather than burned into the video. False engines
@@ -543,6 +545,7 @@ export class BrowserDeviceProfileService {
       // AVPlay/webOS cue APIs are limited, so those engines drive a DOM
       // overlay fed by sidecar VTT instead of the HLS renditions.
       supportsHlsSubtitles: traits.supportsHlsSubtitles,
+      supportsIFrameTrickPlay: traits.supportsIFrameTrickPlay,
       supportsImageSubtitles: traits.supportsImageSubtitles,
       // Only the web/Shaka path probes seg-0 on a load-then-seek; that is
       // exactly the `!isNative` engine branch (Capacitor mobile + every TV go
