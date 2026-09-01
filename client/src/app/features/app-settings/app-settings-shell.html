@@ -6,21 +6,21 @@
   <svg drawerIcon lucideSettings class="h-5 w-5"></svg>
 
   <ng-container drawerMenu>
-    <li><a routerLink="/app-settings/home" routerLinkActive="active"><svg lucideHouse class="h-4 w-4"></svg>{{ 'app_settings.nav.home' | translate }}</a></li>
-    <li><a routerLink="/app-settings/display" routerLinkActive="active"><svg lucideMonitor class="h-4 w-4"></svg>{{ 'app_settings.nav.display' | translate }}</a></li>
-    <li><a routerLink="/app-settings/player" routerLinkActive="active"><svg lucidePlay class="h-4 w-4"></svg>{{ 'app_settings.nav.player' | translate }}</a></li>
-    <li><a routerLink="/app-settings/subtitles" routerLinkActive="active"><svg lucideCaptions class="h-4 w-4"></svg>{{ 'app_settings.nav.subtitles' | translate }}</a></li>
+    <li><a routerLink="/app-settings/home" routerLinkActive="menu-active"><svg lucideHouse class="h-4 w-4"></svg>{{ 'app_settings.nav.home' | translate }}</a></li>
+    <li><a routerLink="/app-settings/display" routerLinkActive="menu-active"><svg lucideMonitor class="h-4 w-4"></svg>{{ 'app_settings.nav.display' | translate }}</a></li>
+    <li><a routerLink="/app-settings/player" routerLinkActive="menu-active"><svg lucidePlay class="h-4 w-4"></svg>{{ 'app_settings.nav.player' | translate }}</a></li>
+    <li><a routerLink="/app-settings/subtitles" routerLinkActive="menu-active"><svg lucideCaptions class="h-4 w-4"></svg>{{ 'app_settings.nav.subtitles' | translate }}</a></li>
     <!-- No Chromecast sender on a TV: it is a target, and the section would
          only offer settings for a session it cannot start. -->
     @if (!tv.isTv()) {
-      <li><a routerLink="/app-settings/cast" routerLinkActive="active"><svg lucideCast class="h-4 w-4"></svg>{{ 'app_settings.nav.cast' | translate }}</a></li>
+      <li><a routerLink="/app-settings/cast" routerLinkActive="menu-active"><svg lucideCast class="h-4 w-4"></svg>{{ 'app_settings.nav.cast' | translate }}</a></li>
     }
-    <li><a routerLink="/app-settings/remote" routerLinkActive="active"><svg lucideMonitorSmartphone class="h-4 w-4"></svg>{{ 'app_settings.nav.remote' | translate }}</a></li>
+    <li><a routerLink="/app-settings/remote" routerLinkActive="menu-active"><svg lucideMonitorSmartphone class="h-4 w-4"></svg>{{ 'app_settings.nav.remote' | translate }}</a></li>
     @if (!tv.isTv()) {
-      <li><a routerLink="/app-settings/storage" routerLinkActive="active"><svg lucideHardDrive class="h-4 w-4"></svg>{{ 'app_settings.nav.storage' | translate }}</a></li>
+      <li><a routerLink="/app-settings/storage" routerLinkActive="menu-active"><svg lucideHardDrive class="h-4 w-4"></svg>{{ 'app_settings.nav.storage' | translate }}</a></li>
     }
     @if (device.isDesktopNative()) {
-      <li><a routerLink="/app-settings/update" routerLinkActive="active"><svg lucideDownload class="h-4 w-4"></svg>{{ 'app_settings.nav.update' | translate }}</a></li>
+      <li><a routerLink="/app-settings/update" routerLinkActive="menu-active"><svg lucideDownload class="h-4 w-4"></svg>{{ 'app_settings.nav.update' | translate }}</a></li>
     }
   </ng-container>
 </app-settings-drawer>
