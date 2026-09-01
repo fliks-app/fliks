@@ -330,6 +330,7 @@ export const routes: Routes = [
       },
       {
         path: 'cast',
+        canActivate: [noTvGuard],
         loadComponent: () =>
           import('./features/playback-settings/cast-settings/cast-settings').then(
             (m) => m.CastSettingsPageComponent,
