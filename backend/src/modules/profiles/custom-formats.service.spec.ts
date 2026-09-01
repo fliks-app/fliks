@@ -10,11 +10,8 @@ function format(
 
 describe('CustomFormatsService matching', () => {
   const service = new CustomFormatsService({} as never);
-  const score = (
-    fmt: CustomFormat,
-    title: string,
-    meta?: { freeleech?: boolean; downloadVolumeFactor?: number },
-  ) => service.scoreReleaseWith([fmt], title, meta);
+  const score = (fmt: CustomFormat, title: string, flags?: string[]) =>
+    service.scoreReleaseWith([fmt], title, flags);
 
   const BLURAY_1080 = 'Some.Show.2024.1080p.BluRay.x264-GRP';
   const WEBRIP_1080 = 'Some.Show.2024.1080p.WEBRip.x264-GRP';
@@ -92,13 +89,15 @@ describe('CustomFormatsService matching', () => {
 
   it('reads release flags from the caller, not the title', () => {
     const fmt = format([{ type: 'release_flag', value: 'freeleech' }]);
-    expect(score(fmt, BLURAY_1080, { freeleech: true })).toBe(10);
-    expect(score(fmt, BLURAY_1080, { freeleech: false })).toBe(0);
-    expect(
-      score(format([{ type: 'release_flag', value: 'halfleech' }]), BLURAY_1080, {
-        downloadVolumeFactor: 0.5,
-      }),
-    ).toBe(10);
+    expect(score(fmt, BLURAY_1080, ['freeleech'])).toBe(10);
+    expect(score(fmt, BLURAY_1080, [])).toBe(0);
+    expect(score(format([{ type: 'release_flag', value: 'halfleech' }]), BLURAY_1080, ['halfleech'])).toBe(10);
+  });
+
+  it('matches a flag core has never heard of', () => {
+    const fmt = format([{ type: 'release_flag', value: 'internal' }]);
+    expect(score(fmt, BLURAY_1080, ['internal'])).toBe(10);
+    expect(score(fmt, BLURAY_1080, ['freeleech'])).toBe(0);
   });
 
   it('tests a regex against the untouched title', () => {

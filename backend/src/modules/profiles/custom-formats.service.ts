@@ -9,12 +9,6 @@ import {
   type ReleaseAttributes,
 } from '../../common/release-parsing';
 
-/** Torrent-level facts a release carries outside its name. */
-export interface ReleaseFlagMeta {
-  freeleech?: boolean;
-  downloadVolumeFactor?: number;
-}
-
 export interface CustomFormatMatch {
   formatId: number;
   formatName: string;
@@ -71,11 +65,11 @@ export class CustomFormatsService {
   /** Per-format verdict for one release title — the settings page's tester. */
   async testRelease(
     title: string,
-    meta?: ReleaseFlagMeta,
+    flags: readonly string[] = [],
   ): Promise<CustomFormatMatch[]> {
     const formats = await this.findAll();
     return formats.map((cf) => {
-      const matched = this.matchesFormat(title, cf, meta);
+      const matched = this.matchesFormat(title, cf, flags);
       return {
         formatId: cf.id,
         formatName: cf.name,
@@ -94,11 +88,11 @@ export class CustomFormatsService {
   scoreReleaseWith(
     formats: CustomFormat[],
     releaseTitle: string,
-    meta?: ReleaseFlagMeta,
+    flags: readonly string[] = [],
   ): number {
     let total = 0;
     for (const fmt of formats) {
-      if (this.matchesFormat(releaseTitle, fmt, meta)) total += fmt.score;
+      if (this.matchesFormat(releaseTitle, fmt, flags)) total += fmt.score;
     }
     return total;
   }
@@ -115,7 +109,7 @@ export class CustomFormatsService {
   private matchesFormat(
     title: string,
     fmt: CustomFormat,
-    meta?: ReleaseFlagMeta,
+    flags: readonly string[],
   ): boolean {
     const specs = fmt.specs ?? [];
     if (!specs.length) return false;
@@ -131,7 +125,7 @@ export class CustomFormatsService {
     for (const group of groups.values()) {
       let anyMatched = false;
       for (const spec of group) {
-        const raw = this.evalSpec(title, attrs, spec, meta);
+        const raw = this.evalSpec(title, attrs, spec, flags);
         const result = spec.negate ? !raw : raw;
         if (spec.required && !result) return false;
         if (result) anyMatched = true;
@@ -145,7 +139,7 @@ export class CustomFormatsService {
     title: string,
     attrs: ReleaseAttributes,
     spec: CustomFormatSpec,
-    meta?: ReleaseFlagMeta,
+    flags: readonly string[],
   ): boolean {
     const value = norm(spec.value);
     switch (spec.type) {
@@ -169,9 +163,9 @@ export class CustomFormatsService {
         );
       }
       case 'release_flag':
-        if (value === 'freeleech') return meta?.freeleech === true;
-        if (value === 'halfleech') return meta?.downloadVolumeFactor === 0.5;
-        return false;
+        // Whatever the source announced, matched by name — core does not need to know
+        // which markers exist for a condition to test one.
+        return flags.some((flag) => norm(flag) === value);
       case 'release_group':
         return norm(attrs.releaseGroup) === value;
       case 'edition':

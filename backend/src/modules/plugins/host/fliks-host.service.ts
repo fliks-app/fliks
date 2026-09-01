@@ -47,6 +47,7 @@ import {
   scoreAndSortReleases,
   indexTitleExpectations,
   matchesIndexedExpectation,
+  releaseFlags,
   releaseTitleTokens,
   type TitleExpectationIndex,
   type ReleaseCandidate,
@@ -528,6 +529,7 @@ export class FliksHostImpl implements PluginHostApi {
       seeders: number;
       leechers: number;
       publishDate: string;
+      flags?: string[];
       freeleech?: boolean;
       downloadVolumeFactor?: number;
       sourceRef: string;
@@ -544,9 +546,10 @@ export class FliksHostImpl implements PluginHostApi {
     const { expectedTitles } = resolveSearchTitles(media);
     // Both read once per call: the scorer runs its callback per candidate, and this
     // route is called once per indexer while a streamed search fills in.
-    const [sizeByQuality, customFormats] = await Promise.all([
+    const [sizeByQuality, customFormats, scoringWindow] = await Promise.all([
       this.qualityDefs.getSizeLimitsMap(),
       this.customFormats.findAll(),
+      this.scoringWindowFor(media, p.seasonNumber, p.episodeNumber),
     ]);
 
     type CandidateWithId = ReleaseCandidate & { id: string };
@@ -560,8 +563,7 @@ export class FliksHostImpl implements PluginHostApi {
       seeders: r.seeders,
       leechers: r.leechers,
       publishDate: r.publishDate,
-      freeleech: r.freeleech ?? false,
-      downloadVolumeFactor: r.downloadVolumeFactor ?? 1,
+      flags: releaseFlags(r),
     }));
     const sourceMinSeeders = new Map(
       p.releases.map((r, i) => [i, r.minSeeders ?? 0]),
@@ -593,16 +595,11 @@ export class FliksHostImpl implements PluginHostApi {
         // Recomputed here rather than sent by the caller: only core can map a quality to a
         // resolution, and the profile's "upgrade resolution only" toggle had no enforcement
         // anywhere after the acquisition split.
-        minResolution: await this.minResolutionFor(media, p.seasonNumber, p.episodeNumber),
-        // Undefined, not 0, without a profile: 0 is a real floor that refuses any
-        // negative total, and an unprofiled title has no floor to apply.
-        minCustomFormatScore: media.qualityProfile
-          ? media.qualityProfile.minCustomFormatScore ?? 0
-          : undefined,
+        ...scoringWindow,
       },
       {
-        scoreCustomFormats: (title, meta) =>
-          Promise.resolve(this.customFormats.scoreReleaseWith(customFormats, title, meta)),
+        scoreCustomFormats: (title, flags) =>
+          Promise.resolve(this.customFormats.scoreReleaseWith(customFormats, title, flags)),
         isBlocked: (_title, i) =>
           Promise.resolve(sourceBlocked.get(i) ?? false),
       },
@@ -630,16 +627,20 @@ export class FliksHostImpl implements PluginHostApi {
   }
 
   /**
-   * The on-disk resolution a release must beat, or 0 when the profile does not ask for it. Mirrors
-   * `buildWant`: the rule applies to an upgrade, never to something genuinely missing.
+   * Every bound the quality profile puts on a candidate, from one read of what is on disk.
+   * `scoreReleases` is the only place these rules are applied, so they are resolved together:
+   * each one that stayed in `want` for the plugin to reapply ended up enforced nowhere.
    */
-  private async minResolutionFor(
+  private async scoringWindowFor(
     media: Media,
     seasonNumber?: number,
     episodeNumber?: number,
-  ): Promise<number> {
-    if (!media.qualityProfile?.resolutionUpgradeOnly) return 0;
-
+  ): Promise<{
+    minResolution: number;
+    minCustomFormatScore?: number;
+    minRankExclusive?: number;
+    maxRankInclusive?: number;
+  }> {
     let season: Season | null = null;
     let episode: Episode | null = null;
     if (media.type === MediaType.SERIES && seasonNumber != null) {
@@ -654,8 +655,31 @@ export class FliksHostImpl implements PluginHostApi {
     }
     const files = await this.filesForClassification(media, season, episode);
     // Nothing on disk is a `missing` grab, which the toggle deliberately does not gate.
-    if (!files.length) return 0;
-    return maxResolutionFromQualityStrings(files);
+    const minResolution =
+      media.qualityProfile?.resolutionUpgradeOnly && files.length
+        ? maxResolutionFromQualityStrings(files)
+        : 0;
+    // Undefined, not 0: 0 is a real floor that refuses any negative total, and an
+    // unprofiled title has no floor to apply.
+    const minCustomFormatScore = media.qualityProfile
+      ? media.qualityProfile.minCustomFormatScore ?? 0
+      : undefined;
+
+    // A whole-series lookup has no single on-disk quality to move up from, same guard as
+    // `buildAcquisitionTarget`.
+    const isWholeSeriesLookup = media.type !== MediaType.MOVIE && season == null;
+    if (isWholeSeriesLookup) return { minResolution, minCustomFormatScore };
+
+    const decision = this.autoGrab.classifyForSearch(media, files);
+    if (decision.mode === 'unprofiled') {
+      return { minResolution, minCustomFormatScore };
+    }
+    return {
+      minResolution,
+      minCustomFormatScore,
+      minRankExclusive: decision.minRankExclusive,
+      maxRankInclusive: decision.maxRankInclusive,
+    };
   }
 
   /**

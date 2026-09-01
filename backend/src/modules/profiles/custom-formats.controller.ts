@@ -12,6 +12,7 @@ import {
 import { CustomFormatsService } from './custom-formats.service';
 import { CreateCustomFormatDto } from './dto/create-custom-format.dto';
 import { TestCustomFormatDto } from './dto/test-custom-format.dto';
+import { releaseFlags } from '../../common/release-scoring';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
@@ -31,10 +32,7 @@ export class CustomFormatsController {
   @Post('test')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   testRelease(@Body() dto: TestCustomFormatDto) {
-    return this.service.testRelease(dto.title, {
-      freeleech: dto.freeleech,
-      downloadVolumeFactor: dto.downloadVolumeFactor,
-    });
+    return this.service.testRelease(dto.title, releaseFlags(dto));
   }
 
   @Get()

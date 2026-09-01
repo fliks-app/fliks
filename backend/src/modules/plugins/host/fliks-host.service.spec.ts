@@ -15,6 +15,7 @@ import { getAppLanguageById } from '../../../common/constants/app-languages';
 import type { Media } from '../../media/entities/media.entity';
 import type { Season } from '../../media/entities/season.entity';
 import type { Episode } from '../../media/entities/episode.entity';
+import { AutoGrabPipelineService } from '../../media/auto-grab-pipeline.service';
 import { CustomFormatsService } from '../../profiles/custom-formats.service';
 import type { CustomFormat } from '../../profiles/entities/custom-format.entity';
 
@@ -163,7 +164,15 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
   const episodeRepo = fakeRepo();
   const mediaFileRepo = fakeRepo();
   const pluginRegistrationRepo = fakeRepo();
-  const autoGrab = { classifyForSearch: jest.fn() };
+  // A window that constrains nothing (every real quality ranks above 0), so a test that does not
+  // care about the upgrade window is not silently exempted from it either.
+  const autoGrab = {
+    classifyForSearch: jest.fn().mockReturnValue({
+      mode: 'missing',
+      minRankExclusive: 0,
+      maxRankInclusive: Number.POSITIVE_INFINITY,
+    }),
+  };
   const acquisitionCandidates = {
     listMovieTargets: jest.fn().mockResolvedValue([]),
     listEpisodeTargets: jest.fn().mockResolvedValue([]),
@@ -1053,6 +1062,99 @@ describe('FliksHostImpl', () => {
         h.mediaFileRepo.find.mockResolvedValue([{ quality: 'WEBDL-1080p' }]);
 
         expect(await score(h, 'A Movie 2020 1080p WEB-DL')).toEqual([]);
+      });
+    });
+
+    // The upgrade window was the third profile rule core computed and never applied: it rode in
+    // `want` for the plugin's picker to reapply, so this call answered "no rejections" for
+    // releases the scheduler then refused, and the search modal had no reason to show.
+    describe('upgrade window', () => {
+      const classifier = new AutoGrabPipelineService();
+
+      const setup = (
+        h: ReturnType<typeof makeHarness>,
+        qualityProfile: unknown,
+        files: { quality: string }[],
+      ) => {
+        h.mediaRepo.findOne.mockResolvedValue(makeMedia({ runtime: 120, qualityProfile }));
+        h.mediaFileRepo.find.mockResolvedValue(files);
+        // The real classifier, so the profile cutoff and the on-disk quality are what decide.
+        h.autoGrab.classifyForSearch.mockImplementation(
+          (m: Parameters<typeof classifier.classifyForSearch>[0], f: { quality?: string | null }[]) =>
+            classifier.classifyForSearch(m, f),
+        );
+        h.profiles.resolveAllowedForMedia.mockReturnValue({
+          allowed: new Set([15, 16, 17, 18, 19, 20, 21, 22, 23, 24]),
+          allowedLangs: new Set(),
+        });
+        h.qualityDefs.getSizeLimitsMap.mockResolvedValue(new Map());
+      };
+
+      const codes = async (h: ReturnType<typeof makeHarness>, title: string) => {
+        const [row] = await h.host['releases.score']({
+          mediaId: 1,
+          releases: [
+            {
+              id: 'r1',
+              title,
+              size: 4_000_000_000,
+              seeders: 10,
+              leechers: 2,
+              publishDate: new Date().toISOString(),
+              sourceRef: 'source-a',
+              blocked: false,
+            },
+          ],
+        });
+        return (row.rejections as { code: string }[]).map((r) => r.code);
+      };
+
+      // On disk: WEBDL-1080p (rank 62). Cutoff: Bluray-1080p (rank 68).
+      const upgradeProfile = {
+        id: 1,
+        cutoff: 18,
+        upgradeAllowed: true,
+        items: [],
+        resolutionUpgradeOnly: false,
+        minCustomFormatScore: 0,
+      };
+
+      it('VERDICT: refuses a release that is not above what is on disk', async () => {
+        const h = makeHarness();
+        setup(h, upgradeProfile, [{ quality: 'WEBDL-1080p' }]);
+
+        expect(await codes(h, 'A Movie 2020 1080p WEBRip x264-GRP')).toEqual(['RANK_NOT_AN_UPGRADE']);
+      });
+
+      it('VERDICT: refuses a release above the profile cutoff', async () => {
+        const h = makeHarness();
+        setup(h, upgradeProfile, [{ quality: 'WEBDL-1080p' }]);
+
+        expect(await codes(h, 'A Movie 2020 2160p BluRay REMUX HEVC-GRP')).toEqual([
+          'RANK_ABOVE_CUTOFF',
+        ]);
+      });
+
+      it('takes a release inside the window', async () => {
+        const h = makeHarness();
+        setup(h, upgradeProfile, [{ quality: 'WEBDL-1080p' }]);
+
+        expect(await codes(h, 'A Movie 2020 1080p BluRay x264-GRP')).toEqual([]);
+      });
+
+      it('caps nothing on a missing grab — no file, no floor and no ceiling', async () => {
+        const h = makeHarness();
+        setup(h, upgradeProfile, []);
+
+        expect(await codes(h, 'A Movie 2020 2160p BluRay REMUX HEVC-GRP')).toEqual([]);
+        expect(await codes(h, 'A Movie 2020 1080p WEBRip x264-GRP')).toEqual([]);
+      });
+
+      it('applies no window to a title with no quality profile', async () => {
+        const h = makeHarness();
+        setup(h, null, [{ quality: 'WEBDL-1080p' }]);
+
+        expect(await codes(h, 'A Movie 2020 1080p WEBRip x264-GRP')).toEqual([]);
       });
     });
 

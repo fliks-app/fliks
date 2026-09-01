@@ -1113,7 +1113,9 @@
       "SEQUEL_MISMATCH": "Sequel {{number}}, not the film wanted",
       "YEAR_MISMATCH": "Year {{actual}}, expected {{expected}}",
       "COLLECTION_PACK": "Multi-film pack ({{word}})",
-      "CUSTOM_FORMAT_SCORE_TOO_LOW": "Custom format score too low ({{actual}} < {{min}})"
+      "CUSTOM_FORMAT_SCORE_TOO_LOW": "Custom format score too low ({{actual}} < {{min}})",
+      "RANK_NOT_AN_UPGRADE": "Not an upgrade on the file on disk",
+      "RANK_ABOVE_CUTOFF": "Above the profile cutoff"
     },
     "like": "Like",
     "metadata_group": "Metadata",

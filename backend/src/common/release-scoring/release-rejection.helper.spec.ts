@@ -19,7 +19,7 @@ function row(over: Partial<Row> & { id: string }): Row & { id: string } {
     customFormatScore: 0,
     seeders: 10,
     leechers: 0,
-    freeleech: false,
+    flags: [],
     sizeDeviation: 0,
     ...over,
   };
@@ -40,13 +40,13 @@ describe('sortReleasesByRelevance', () => {
   it('puts the custom-format score above the freeleech bonus', () => {
     // Freeleech is expressible as a `release_flag` condition, so a configured score
     // has to outrank the hardcoded preference rather than be overridden by it.
-    const free = row({ id: 'freeleech', freeleech: true });
+    const free = row({ id: 'freeleech', flags: ['freeleech'] });
     const scored = row({ id: 'scored', customFormatScore: 100 });
     expect(order([free, scored])).toEqual(['scored', 'freeleech']);
   });
 
   it('still prefers freeleech at an equal custom-format score', () => {
-    const free = row({ id: 'freeleech', freeleech: true, customFormatScore: 100 });
+    const free = row({ id: 'freeleech', flags: ['freeleech'], customFormatScore: 100 });
     const paid = row({ id: 'paid', customFormatScore: 100 });
     expect(order([free, paid])).toEqual(['freeleech', 'paid']);
   });
@@ -561,5 +561,39 @@ describe('computeRejections — custom format floor', () => {
 
   it('applies no floor when the profile declares none', () => {
     expect(codes(-9999)).not.toContain('CUSTOM_FORMAT_SCORE_TOO_LOW');
+  });
+});
+
+describe('computeRejections — upgrade window', () => {
+  const base = {
+    qualityId: 1,
+    allowed: new Set([1]),
+    languageId: 1,
+    allowedLangs: new Set<number>(),
+    isBlocklisted: false,
+    sizeBytes: 0,
+    runtimeMinutes: 112,
+    sizeByQuality: new Map(),
+    seeders: 10,
+    sourceId: 0,
+    sourceMinSeeders: new Map(),
+  };
+  const codes = (rank: number, minRankExclusive?: number, maxRankInclusive?: number) =>
+    computeRejections({ ...base, rank, minRankExclusive, maxRankInclusive }).map((r) => r.code);
+
+  it('refuses a rank at or below what is on disk', () => {
+    expect(codes(62, 62, 100)).toContain('RANK_NOT_AN_UPGRADE');
+    expect(codes(61, 62, 100)).toContain('RANK_NOT_AN_UPGRADE');
+    expect(codes(63, 62, 100)).not.toContain('RANK_NOT_AN_UPGRADE');
+  });
+
+  it('refuses a rank above the cutoff', () => {
+    expect(codes(101, 0, 100)).toContain('RANK_ABOVE_CUTOFF');
+    expect(codes(100, 0, 100)).not.toContain('RANK_ABOVE_CUTOFF');
+    expect(codes(101, 0, Number.POSITIVE_INFINITY)).not.toContain('RANK_ABOVE_CUTOFF');
+  });
+
+  it('applies no window when the caller declares no bounds', () => {
+    expect(codes(1)).toEqual([]);
   });
 });
