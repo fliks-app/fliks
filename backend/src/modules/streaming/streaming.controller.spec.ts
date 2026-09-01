@@ -3,12 +3,31 @@ import {
   withTimestampMap,
   buildVodPlaylist,
   buildVariableVodPlaylist,
+  buildIFramePlaylist,
   resolvePreRoll,
 } from './streaming.controller';
 import { buildLiveSession, type LiveSession } from './live-session.service';
 import type { PreRollItem } from '../../common/plugin-contract';
 import type { User } from '../users/entities/user.entity';
 import { ForbiddenException } from '@nestjs/common';
+
+describe('buildIFramePlaylist', () => {
+  const url = (i: string): string => `iframe/seg-${i}.ts`;
+
+  it('declares I-frames-only and no init segment', () => {
+    const m = buildIFramePlaylist(12, url, 4);
+    expect(m).toContain('#EXT-X-I-FRAMES-ONLY');
+    expect(m).not.toContain('#EXT-X-MAP');
+  });
+
+  it('keeps one entry per grid keyframe', () => {
+    const m = buildIFramePlaylist(12, url, 4);
+    expect(m.split('\n').filter((l) => l.startsWith('#EXTINF'))).toHaveLength(
+      3,
+    );
+    expect(m).toContain('iframe/seg-0002.ts');
+  });
+});
 
 describe('buildVodPlaylist', () => {
   const url = (i: string): string => `seg-${i}.m4s`;

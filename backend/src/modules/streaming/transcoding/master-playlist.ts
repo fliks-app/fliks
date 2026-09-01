@@ -11,6 +11,11 @@ import type {
   TranscodeProfile,
 } from './types';
 import type { CodecVariant } from './codec/types';
+import {
+  IFRAME_CODEC,
+  iframeBandwidthBps,
+  iframeResolution,
+} from './iframe-trick-play';
 import { audioCodecString } from './codec/codec-strings';
 import {
   buildUniqueAudioNames,
@@ -145,6 +150,10 @@ export interface MasterPlaylistOptions {
    *  `onlyQuality` pin — see {@link applyQualityPin}. Missing/undefined
    *  defaults to `true` (existing full-ladder behaviour). */
   supportsAbr?: boolean;
+  /** Segment grid length, in seconds, of the trick-play rendition to advertise.
+   *  Unset omits it: only AVPlay needs the `EXT-X-I-FRAME-STREAM-INF` tag, and
+   *  every player that reads one will fetch the frames behind it. */
+  iFrameTrickPlaySegmentSeconds?: number;
 }
 
 /** Generate the HLS master playlist listing available qualities. */
@@ -171,6 +180,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     sourceVideoBitrateBps,
     sourceVideoCodec,
     supportsAbr = true,
+    iFrameTrickPlaySegmentSeconds,
   } = opts;
   // The "multi-audio" flag is really an "EXT-X-MEDIA layout" toggle —
   // the caller decided whether to split audio into renditions. Single-
@@ -215,6 +225,15 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
         `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="${names[i]}",LANGUAGE="${lang}",DEFAULT=NO,AUTOSELECT=NO,FORCED=${s.forced ? 'YES' : 'NO'},URI="/api/stream/${mediaFileId}/${path}/index.m3u8${tokenParam}"`,
       );
     });
+  };
+
+  const pushIFrameStream = (out: string[]): void => {
+    if (!iFrameTrickPlaySegmentSeconds) return;
+    const { width, height } = iframeResolution(sourceWidth, sourceHeight);
+    const bw = iframeBandwidthBps(iFrameTrickPlaySegmentSeconds);
+    out.push(
+      `#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=${bw},RESOLUTION=${width}x${height},CODECS="${IFRAME_CODEC}",URI="/api/stream/${mediaFileId}/iframe/index.m3u8${tokenParam}"`,
+    );
   };
 
   // HDR pass-through path — emitted when the source is HEVC HDR and
@@ -286,6 +305,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
         tokenParam,
       });
     }
+    pushIFrameStream(lines);
     return lines.join('\n');
   }
 
@@ -351,6 +371,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     mediaFileId,
     tokenParam,
   });
+  pushIFrameStream(lines);
   return lines.join('\n');
 }
 

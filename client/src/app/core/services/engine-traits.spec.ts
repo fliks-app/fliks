@@ -39,6 +39,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
   [EngineKind.TIZEN]: {
     useTsOnSingleAudio: true,
     supportsHlsSubtitles: false,
+    supportsIFrameTrickPlay: true,
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: false,

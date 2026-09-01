@@ -38,6 +38,9 @@ export interface EngineTraits {
   useTsOnSingleAudio?: boolean;
   /** Engine consumes HLS `SUBTITLES` renditions natively. */
   supportsHlsSubtitles?: boolean;
+  /** Engine accelerates HLS from an `EXT-X-I-FRAME-STREAM-INF` rendition
+   *  (Tizen AVPlay `setSpeed`). */
+  supportsIFrameTrickPlay?: boolean;
   /** Engine renders bitmap (PGS/VOBSUB) subtitle tracks itself, so they're
    *  shown natively instead of burned into the video server-side. */
   supportsImageSubtitles?: boolean;
@@ -113,6 +116,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
   [EngineKind.TIZEN]: {
     useTsOnSingleAudio: true,
     supportsHlsSubtitles: false,
+    supportsIFrameTrickPlay: true,
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: false,

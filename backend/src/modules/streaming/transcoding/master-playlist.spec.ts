@@ -146,3 +146,42 @@ describe('generateMasterPlaylist — audio bitrate in BANDWIDTH', () => {
     expect(maxAvgBandwidth(hi) - maxAvgBandwidth(lo)).toBe(540_000);
   });
 });
+
+describe('generateMasterPlaylist: trick-play rendition', () => {
+  const master = (iFrameTrickPlaySegmentSeconds?: number) =>
+    generateMasterPlaylist({
+      mediaFileId: 7,
+      sourceWidth: 3840,
+      sourceHeight: 2160,
+      tokenParam: '?token=t',
+      sourceFrameRate: 24,
+      iFrameTrickPlaySegmentSeconds,
+    });
+
+  it('stays out of the master unless the client asked for it', () => {
+    expect(master()).not.toContain('EXT-X-I-FRAME-STREAM-INF');
+  });
+
+  it('points at the I-frame playlist with the capped resolution', () => {
+    const line = master(4)
+      .split('\n')
+      .find((l) => l.startsWith('#EXT-X-I-FRAME-STREAM-INF'))!;
+    expect(line).toContain('RESOLUTION=1280x720');
+    expect(line).toContain('CODECS="avc1.4d401f"');
+    expect(line).toContain('URI="/api/stream/7/iframe/index.m3u8?token=t"');
+  });
+
+  it('rides the HDR ladder too, since AVPlay needs it whatever the variant', () => {
+    const hdr = generateMasterPlaylist({
+      mediaFileId: 7,
+      sourceWidth: 3840,
+      sourceHeight: 2160,
+      tokenParam: '',
+      sourceFrameRate: 24,
+      hdrPassThrough: { hdrFormat: 'HDR10', hdrVariant: HEVC_HDR10 },
+      canEmitHdrLadder: true,
+      iFrameTrickPlaySegmentSeconds: 4,
+    });
+    expect(hdr).toContain('#EXT-X-I-FRAME-STREAM-INF');
+  });
+});
