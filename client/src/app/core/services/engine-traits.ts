@@ -113,13 +113,15 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsDirectPlay: true,
     supportsAbr: true,
   },
+  // AVPlay `open()` takes any remote URI, not just a manifest, and demuxes
+  // MKV natively, so a compatible source Direct Plays without a remux.
   [EngineKind.TIZEN]: {
     useTsOnSingleAudio: true,
     supportsHlsSubtitles: false,
     supportsIFrameTrickPlay: true,
     supportsImageSubtitles: false,
     probesSegZero: false,
-    supportsDirectPlay: false,
+    supportsDirectPlay: true,
     supportsAbr: true,
   },
   [EngineKind.WEBOS]: {
