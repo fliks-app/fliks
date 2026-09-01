@@ -5,6 +5,7 @@ import { DeviceService } from './device.service';
 import { ServerConfigService } from './server-config.service';
 import { ENGINE_TRAITS, engineKindFor } from './engine-traits';
 import { SystemInfoService } from './system-info.service';
+import { applyTizenAudioCodecs, tizenSupportsHevc } from './tizen-capabilities';
 import { getDeviceName } from '../utils/device-info';
 import { environment } from '../../../environments/environment';
 
@@ -113,13 +114,9 @@ export interface DeviceProfile {
    *  for future firmware regressions. */
   useTs?: boolean;
 
-  /** Force MPEG-TS only when the source has at most one audio track.
-   *  Set by Tizen profiles: AVPlay HLS-fMP4 needs demuxed audio per
-   *  Samsung spec, but with a single audio rendition AVPlay never
-   *  engages the rendition probe and the variant stalls after the
-   *  video init (issue #148 bisection). MPEG-TS muxes A+V natively,
-   *  side-stepping the probe — at the cost of Dolby pass-through.
-   *  Multi-audio Tizen sources stay on fMP4 + var_stream_map. */
+  /** Force MPEG-TS only when the source has at most one audio track. Required
+   *  by Tizen: AVPlay fetches init.mp4 then seg-0 and stalls there on a
+   *  single-audio fMP4 variant, CMAF rewrite notwithstanding (issue #148). */
   useTsOnSingleAudio?: boolean;
 
   /** Client consumes HLS `SUBTITLES` renditions from the master playlist
@@ -146,9 +143,8 @@ export interface DeviceProfile {
   probesSegZero?: boolean;
 
   /** Client engine can play a raw progressive file (DirectPlay served as-is).
-   *  True for Shaka (web), ExoPlayer/AVPlayer (native) and webOS `<video>`.
-   *  False for Tizen AVPlay (HLS-only): the backend then never returns
-   *  DirectPlay and falls back to DirectStream (remux to HLS). Unset = true. */
+   *  True for every shipping engine; `false` makes the backend skip DirectPlay
+   *  and fall back to DirectStream (remux to HLS). Unset = true. */
   supportsDirectPlay?: boolean;
 
   /** Client can switch HLS variants at runtime (real ABR). `false` (e.g.
@@ -255,9 +251,8 @@ export class BrowserDeviceProfileService {
     const containers: string[] = [];
     if (this.testType(video, hasMSE, 'video/mp4')) containers.push('mp4', 'm4v', 'mov');
     if (this.testType(video, hasMSE, 'video/webm')) containers.push('webm');
-    // MKV: browsers can NOT play MKV containers directly. Do NOT add 'mkv' here.
-    // MKV files with supported codecs will be handled via DirectStream (remux to HLS)
-    // by the StreamBuilder, which checks video/audio codec support independently.
+    // MKV: no browser demuxes Matroska, so it stays out of the probed list. A
+    // supported codec inside MKV still remuxes to HLS via DirectStream.
 
     // --- Detect supported video codecs ---
     const videoCodecs: string[] = [];
@@ -380,7 +375,8 @@ export class BrowserDeviceProfileService {
       }
     } else if (
       (tvPlatform === 'tizen' || tvPlatform === 'webos') &&
-      !videoCodecs.includes('hevc')
+      !videoCodecs.includes('hevc') &&
+      (tvPlatform !== 'tizen' || tizenSupportsHevc() !== false)
     ) {
       videoCodecs.push('hevc', 'h265', 'hvc1', 'hev1');
       codecConditions.push({
@@ -389,6 +385,10 @@ export class BrowserDeviceProfileService {
         maxBitDepth: 10,
       });
     }
+
+    // AVPlay demuxes Matroska natively, so the raw file Direct Plays. Declared
+    // rather than probed: Tizen exposes codec capabilities, never containers.
+    if (tvPlatform === 'tizen') containers.push('mkv');
 
     // --- Detect supported audio codecs ---
     // On native, the platform plugin (AudioCapabilities) is the source of
@@ -418,6 +418,9 @@ export class BrowserDeviceProfileService {
       if (this.testCodec(video, hasMSE, 'audio/mp4', 'flac') ||
           this.testCodec(video, hasMSE, 'audio/flac', '')) audioCodecs.push('flac');
       if (this.testCodec(video, hasMSE, 'audio/mp4', 'alac')) audioCodecs.push('alac');
+      // AVPlay decodes the stream on Tizen, so its own capability API overrides
+      // the MSE probe for every codec that API enumerates.
+      if (tvPlatform === 'tizen') audioCodecs = applyTizenAudioCodecs(audioCodecs);
     }
 
     // --- Max audio channels ---
@@ -439,12 +442,12 @@ export class BrowserDeviceProfileService {
     if (this.nativeAudio) {
       maxAudioChannels = Math.max(maxAudioChannels, this.nativeAudio.maxChannels);
     }
-    // webOS: the WebView's AudioContext caps at 2ch, but the native <video>
-    // pipeline decodes Dolby and renders/passes it (TV speakers downmix, eARC
-    // passes through). Declaring 5.1 when AC3/EAC3 is supported lets the
-    // backend DirectStream multichannel Dolby instead of downmixing to stereo.
+    // TVs: the WebView's AudioContext caps at 2ch, but the playback pipeline
+    // (webOS <video>, Tizen AVPlay) decodes Dolby and renders/passes it (TV
+    // speakers downmix, eARC passes through). Declaring 5.1 when AC3/EAC3 is
+    // supported lets the backend copy multichannel Dolby instead of downmixing.
     if (
-      tvPlatform === 'webos' &&
+      (tvPlatform === 'webos' || tvPlatform === 'tizen') &&
       (audioCodecs.includes('eac3') || audioCodecs.includes('ac3'))
     ) {
       maxAudioChannels = Math.max(maxAudioChannels, 6);
@@ -532,12 +535,7 @@ export class BrowserDeviceProfileService {
       deviceName: getDeviceName(),
       appVersion: isWeb ? undefined : environment.version,
       useTs,
-      // Tizen opts into MPEG-TS on single-audio sources (AVPlay's HLS-fMP4
-      // rendition-probe stall, issue #148). Multi-audio sources stay on
-      // fMP4 + var_stream_map — that path works because the master exposes
-      // ≥2 audio renditions and AVPlay engages its probe. webOS, browser,
-      // Cast and native mobile consume muxed fMP4 across the board (webOS's
-      // native <video> has no such stall and fMP4 keeps Dolby pass-through).
+      // Tizen alone needs MPEG-TS on single-audio sources (issue #148).
       useTsOnSingleAudio: traits.useTsOnSingleAudio,
       // Players that decode the master SUBTITLES renditions natively (iOS
       // AVPlayer, Android ExoPlayer — phone and TV alike, web Shaka) render
@@ -552,10 +550,9 @@ export class BrowserDeviceProfileService {
       // through native players that seek straight to the resume segment). The
       // Cast receiver sets this true in its own profile.
       probesSegZero: traits.probesSegZero,
-      // Samsung Tizen AVPlay is HLS-only and cannot open a raw progressive
-      // file, so it must never receive a DirectPlay decision — the backend
-      // falls back to DirectStream (remux to HLS, codec-copy). Every other
-      // engine (Shaka, ExoPlayer/AVPlayer, webOS <video>) plays raw files.
+      // Every shipping engine opens a raw progressive file: Shaka, ExoPlayer/
+      // AVPlayer, webOS <video>, and Tizen AVPlay, whose `open()` takes any
+      // remote URI and demuxes MKV itself.
       supportsDirectPlay: traits.supportsDirectPlay,
       // `false` only for the desktop mpv engine (see engine-traits.ts): the
       // backend then collapses the master to a single variant instead of
