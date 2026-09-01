@@ -15,7 +15,6 @@ import { PluginDatabaseService } from './plugin-database.service';
 import { SettingsService } from '../settings/settings.service';
 import { PluginInstallException } from './plugin-install.exception';
 import { installedPluginDir, pluginDataDir, promoteDir } from './plugin-paths';
-import { unsignedProcessAllowlist } from '../../common/constants/plugin-flags';
 import {
   inspect,
   refuse,
@@ -34,6 +33,9 @@ import type { ConfirmImportDto } from './dto/confirm-import.dto';
 import type { SupervisorState } from './supervisor/plugin-supervisor';
 
 const ARCHIVE_FETCH_TIMEOUT_MS = 30_000;
+
+/** Admin opt-in to installing unsigned `process` plugins. Off unless the stored value is 'true'. */
+export const PLUGIN_ALLOW_UNSIGNED_SETTING = 'plugins.allow_unsigned';
 
 export interface PluginInspectReport {
   installable: boolean;
@@ -138,6 +140,11 @@ export class PluginInstallService {
     private readonly settings: SettingsService,
   ) {}
 
+  /** Read live, never cached: an admin flipping it expects the next install to obey it. */
+  private async allowUnsigned(): Promise<boolean> {
+    return (await this.settings.get(PLUGIN_ALLOW_UNSIGNED_SETTING)) === 'true';
+  }
+
   /** `inspect()` refuses every malformed archive by itself; a throw reaching here is a defect in
    *  core, so it is logged rather than reported as the author's malformed manifest and forgotten. */
   private async safeInspect(buffer: Buffer, options: InspectOptions): Promise<InspectResult> {
@@ -151,7 +158,7 @@ export class PluginInstallService {
 
   /** V1-V7 in memory, then stages the raw bytes. Nothing is activated. */
   async inspectUpload(buffer: Buffer): Promise<PluginInspectReport> {
-    const result = await this.safeInspect(buffer, { unsignedProcessAllowlist: unsignedProcessAllowlist() });
+    const result = await this.safeInspect(buffer, { allowUnsigned: await this.allowUnsigned() });
     if (!result.ok) return { installable: false, refusalCode: result.code, detail: result.detail };
 
     const { stagingId } = this.staging.stage(buffer);
@@ -174,7 +181,7 @@ export class PluginInstallService {
       );
     }
 
-    const result = await this.safeInspect(buffer, { unsignedProcessAllowlist: unsignedProcessAllowlist() });
+    const result = await this.safeInspect(buffer, { allowUnsigned: await this.allowUnsigned() });
     if (!result.ok) {
       throw new PluginInstallException(HttpStatus.UNPROCESSABLE_ENTITY, result.code, result.detail);
     }
@@ -217,7 +224,7 @@ export class PluginInstallService {
       );
     }
 
-    const result = await this.safeInspect(buffer, { unsignedProcessAllowlist: unsignedProcessAllowlist() });
+    const result = await this.safeInspect(buffer, { allowUnsigned: await this.allowUnsigned() });
     if (!result.ok) return { installable: false, refusalCode: result.code, detail: result.detail };
 
     const { stagingId } = this.staging.stage(buffer, 'catalog');
@@ -363,6 +370,10 @@ export class PluginInstallService {
   /** P2 (fsync + rename) -> P3 (upsert the row) -> P4a (register). A P4a refusal leaves the row `failed`, install stands. */
   private async promote(buffer: Buffer, result: InspectSuccess, origin: PluginPackageOrigin): Promise<PluginInstallResult> {
     const { manifest } = result;
+
+    if (result.signature === 'unsigned') {
+      this.logger.warn(`installing "${manifest.id}" ${manifest.version} unsigned: nothing vouches for its code`);
+    }
 
     const denial = await this.checkDenial(manifest.id, manifest.version, result.sha256, result.signedByKeyId ?? null);
     if (denial) {

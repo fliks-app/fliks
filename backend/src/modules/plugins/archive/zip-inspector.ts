@@ -42,8 +42,8 @@ function hasControlChar(name: string): boolean {
 export interface InspectOptions {
   /** Test-only override of the compiled-in official key set. Defaults to {@link OFFICIAL_KEYS}. */
   officialKeys?: ReadonlyMap<string, Buffer>;
-  /** `FLIKS_UNSIGNED_PLUGINS` ids — the only way a `process` plugin may ship unsigned. */
-  unsignedProcessAllowlist?: readonly string[];
+  /** The admin setting `plugins.allow_unsigned`: the only way a `process` plugin may ship unsigned. */
+  allowUnsigned?: boolean;
 }
 
 export interface InspectSuccess {
@@ -240,8 +240,8 @@ export async function inspect(buffer: Buffer, options: InspectOptions = {}): Pro
     return refuse('PLUGIN_TIER_VIOLATION', 'a process-tier archive must carry plugin.js');
   }
   if (manifest.kind === 'process') {
-    if (trust.trust === 'unsigned' && !(options.unsignedProcessAllowlist ?? []).includes(manifest.id)) {
-      return refuse('PLUGIN_UNSIGNED', 'process-tier plugins must be signed unless allowlisted');
+    if (trust.trust === 'unsigned' && !options.allowUnsigned) {
+      return refuse('PLUGIN_UNSIGNED', 'process-tier plugins must be signed unless unsigned plugins are allowed');
     }
     const codeNames = new Set(
       walked.map((w) => w.name).filter((n) => PROCESS_ONLY_ENTRY_NAMES.has(n) || n.startsWith('logo.')),

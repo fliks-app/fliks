@@ -3,7 +3,7 @@ import { PLUGIN_UID_MIN } from './supervisor/spawn-plan';
 import { createHash } from 'crypto';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { PluginInstallService, installedPluginDir } from './plugin-install.service';
+import { PluginInstallService, installedPluginDir, PLUGIN_ALLOW_UNSIGNED_SETTING } from './plugin-install.service';
 import { PluginInstallException } from './plugin-install.exception';
 import { PluginStagingService } from './plugin-staging.service';
 import { PluginRegistryService } from './plugin-registry.service';
@@ -70,6 +70,18 @@ function signedProcessArchive(overrides: Partial<ProcessPluginManifest> = {}): {
     { name: 'logo.png', content: logo },
   ]);
   return { buffer, manifest };
+}
+
+function unsignedProcessArchive(overrides: Partial<ProcessPluginManifest> = {}): Buffer {
+  const pluginJs = Buffer.from('module.exports = {};', 'utf8');
+  const logo = pngLogo();
+  const files = { 'plugin.js': sha256Hex(pluginJs), 'logo.png': sha256Hex(logo) };
+  const manifest = minimalProcessManifest(files, { fliks: COMPATIBLE_RANGE, ...overrides });
+  return buildZip([
+    { name: 'plugin.json', content: Buffer.from(JSON.stringify(manifest), 'utf8') },
+    { name: 'plugin.js', content: pluginJs },
+    { name: 'logo.png', content: logo },
+  ]);
 }
 
 function fakePluginDb() {
@@ -246,6 +258,20 @@ describe('PluginInstallService', () => {
         }),
       );
       expect(existsSync(stagedArchivePath(report.stagingId!))).toBe(true);
+    });
+
+    it('refuses an unsigned process archive while plugins.allow_unsigned is unset', async () => {
+      const report = await service.inspectUpload(unsignedProcessArchive({ id: 'fliks.unsignedoff' }));
+
+      expect(report).toEqual({ installable: false, refusalCode: 'PLUGIN_UNSIGNED', detail: expect.any(String) });
+    });
+
+    it('accepts the same unsigned process archive once plugins.allow_unsigned is true', async () => {
+      await settings.set(PLUGIN_ALLOW_UNSIGNED_SETTING, 'true');
+
+      const report = await service.inspectUpload(unsignedProcessArchive({ id: 'fliks.unsignedon' }));
+
+      expect(report).toEqual(expect.objectContaining({ installable: true, signature: 'unsigned' }));
     });
 
     it('refuses a malformed archive with its specific refusal code and stages nothing', async () => {

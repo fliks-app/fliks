@@ -353,7 +353,7 @@ describe('inspect() — guards', () => {
     await expectRefusal(buffer, 'PLUGIN_UNSIGNED');
   });
 
-  it('unsignedProcessAllowlist: an unsigned process archive is accepted when its id is on the list', async () => {
+  it('allowUnsigned: an unsigned process archive is accepted when the setting is on', async () => {
     const pluginJs = Buffer.from('module.exports = {};');
     const logo = pngLogo();
     const manifest = minimalProcessManifest(
@@ -366,11 +366,11 @@ describe('inspect() — guards', () => {
       { name: 'logo.png', content: logo },
     ]);
 
-    const result = await inspect(buffer, { unsignedProcessAllowlist: ['fliks.allowedunsigned'] });
+    const result = await inspect(buffer, { allowUnsigned: true });
     expect(result.ok).toBe(true);
   });
 
-  it('unsignedProcessAllowlist: an unsigned process archive is still refused when its id is not on the list', async () => {
+  it('allowUnsigned: an unsigned process archive is still refused when the setting is off', async () => {
     const pluginJs = Buffer.from('module.exports = {};');
     const logo = pngLogo();
     const manifest = minimalProcessManifest(
@@ -383,7 +383,7 @@ describe('inspect() — guards', () => {
       { name: 'logo.png', content: logo },
     ]);
 
-    const result = await inspect(buffer, { unsignedProcessAllowlist: ['fliks.allowedunsigned'] });
+    const result = await inspect(buffer, { allowUnsigned: false });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe('PLUGIN_UNSIGNED');
   });

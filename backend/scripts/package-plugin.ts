@@ -18,7 +18,7 @@ function main(): void {
   writeFileSync(outPath, archive);
 
   console.log(`wrote ${outPath} (${archive.length} bytes) for ${manifest.id}@${manifest.version}`);
-  console.log('unsigned — installable only where the core process allowlists this id in FLIKS_UNSIGNED_PLUGINS');
+  console.log('unsigned: installable only on a core whose "allow unsigned plugins" plugin setting is on');
 }
 
 try {

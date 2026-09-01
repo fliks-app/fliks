@@ -34,7 +34,7 @@ function pack(dir: string): Buffer {
 
 describe('package-plugin', () => {
   it('produces an archive the real inspector accepts, with the hashes it computed itself', async () => {
-    const result = await inspect(pack(pluginDir()), { unsignedProcessAllowlist: ['fliks.testprocessplugin'] });
+    const result = await inspect(pack(pluginDir()), { allowUnsigned: true });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
