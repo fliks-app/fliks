@@ -101,22 +101,10 @@ export class QualityManagerService {
         lowBandwidth: q.lowBandwidth,
       });
     }
-    // Visibility from the player settings:
-    //  - eco-by-default → only the eco rungs (when any exist);
-    //  - hide eco → drop the eco rungs;
-    //  - otherwise show everything.
-    const eco = all.filter((q) => q.lowBandwidth);
-    let visible = all;
-    if (prefs.ecoByDefault && eco.length) {
-      // Eco rungs, plus the inherently-low rungs below 720p (480p and down
-      // are already low-bitrate and have no eco variant) so the menu doesn't
-      // dead-end at 720p eco.
-      visible = all.filter(
-        (q) => q.lowBandwidth || (q.height > 0 && q.height < 720),
-      );
-    } else if (!prefs.showEcoQualities) {
-      visible = all.filter((q) => !q.lowBandwidth);
-    }
+    // Hide the eco rungs entirely when the player setting says so.
+    const visible = prefs.showEcoQualities
+      ? all
+      : all.filter((q) => !q.lowBandwidth);
     this.availableQualities.set(visible);
   }
 
@@ -130,17 +118,10 @@ export class QualityManagerService {
   }
 
   /** Default quality id for the current visible list: `auto` when present,
-   *  else the first (top) visible rung — so the eco-only list defaults to the
-   *  top eco rung. */
+   *  else the first (top) visible rung. */
   private defaultQualityId(): string {
     const opts = this.availableQualities();
     return opts.some((q) => q.id === 'auto') ? 'auto' : (opts[0]?.id ?? 'auto');
-  }
-
-  /** When eco is the forced default every visible rung is already eco, so the
-   *  "faible consommation" badge is redundant. */
-  get ecoBadgeHidden(): boolean {
-    return this.playerSettings.get().ecoByDefault;
   }
 
   /**

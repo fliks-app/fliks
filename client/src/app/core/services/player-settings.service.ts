@@ -12,10 +12,6 @@ export interface PlayerSettings {
   /** Show the low-consumption ("faible consommation") quality rungs in the
    *  player quality menu. */
   showEcoQualities: boolean;
-  /** Use low-consumption by default: only eco rungs are offered, an eco rung
-   *  is selected by default, and the "faible consommation" badge is dropped
-   *  (since every visible rung is eco). Overrides {@link showEcoQualities}. */
-  ecoByDefault: boolean;
   // Subtitles
   preferredSubtitleLanguage: string;
   subtitleMode: 'off' | 'intelligent' | 'always';
@@ -49,7 +45,6 @@ const DEFAULTS: PlayerSettings = {
   rememberAudioSelections: true,
   forceDisableHdr: false,
   showEcoQualities: true,
-  ecoByDefault: false,
   preferredSubtitleLanguage: '',
   subtitleMode: 'intelligent',
   rememberSubtitleSelections: true,
