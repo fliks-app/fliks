@@ -2139,6 +2139,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // the playback-error state surfaces via `state.error`.
       return;
     }
+    // AVPlay has no getSpeed(), so a rate it drops on its own is invisible:
+    // re-assert the user's pick after every seek rather than trust it held.
+    this.restorePlaybackRate();
     await this.pollSeekConverge(target, gen);
   }
 
@@ -2278,7 +2281,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   skipIntro(): void {
     const m = this.introMarker();
     if (!m || !this.engine) return;
-    this.engine.seek(m.endSeconds).catch(() => {});
+    this.engine
+      .seek(m.endSeconds)
+      .then(() => this.restorePlaybackRate())
+      .catch(() => {});
     this.state.currentTime.set(m.endSeconds);
     this.resetHideTimer();
   }
