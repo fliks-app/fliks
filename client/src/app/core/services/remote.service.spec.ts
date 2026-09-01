@@ -322,3 +322,55 @@ describe('RemoteService refreshTargets', () => {
     expect(service.targets()).toEqual([target]);
   });
 });
+
+/**
+ * A selection persisted by an earlier run routed playback the moment the app
+ * booted, so opening a title landed on the remote surface with "not reachable"
+ * while the topbar — which reads the live listing — showed no device at all.
+ */
+describe('RemoteService restored selection', () => {
+  const target: RemoteTarget = {
+    targetId: 'tv#1',
+    userAgent: null,
+    deviceName: null,
+    systemName: null,
+    formFactor: null,
+    tvPlatform: null,
+    nowPlaying: null,
+  };
+
+  function bootWith(stored: string) {
+    localStorage.setItem('fliks.remote.target', stored);
+    const { service } = setup();
+    service.selectedTargetId.set(null);
+    return service;
+  }
+
+  it('does not route playback before a listing confirms the stored target', () => {
+    const service = bootWith('tv#1');
+    expect(service.selectedTargetId()).toBeNull();
+  });
+
+  it('promotes the stored target once it is listed', async () => {
+    const service = bootWith('tv#1');
+    const httpMock = TestBed.inject(HttpTestingController);
+    const done = service.refreshTargets();
+    httpMock.expectOne((req) => req.url === '/api/remote/targets').flush([target]);
+    await done;
+
+    expect(service.selectedTargetId()).toBe('tv#1');
+    expect(service.targetOffline()).toBe(false);
+  });
+
+  it('forgets a stored target the listing does not have', async () => {
+    const service = bootWith('tv#gone');
+    const httpMock = TestBed.inject(HttpTestingController);
+    const done = service.refreshTargets();
+    httpMock.expectOne((req) => req.url === '/api/remote/targets').flush([target]);
+    await done;
+
+    expect(service.selectedTargetId()).toBeNull();
+    expect(service.targetOffline()).toBe(false);
+    expect(localStorage.getItem('fliks.remote.target')).toBeNull();
+  });
+});
