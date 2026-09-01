@@ -91,7 +91,7 @@
     "auto": "Auto",
     "auto_resolution": "Auto ({{res}})",
     "stats_direct_playback": "Direct Play",
-    "stats_stream_type_direct": "Direct Play (file served as-is)",
+    "stats_stream_type_direct": "Direct Play",
     "stats_stream_type_remux": "Remux (streams copied, HLS container)",
     "stats_stream_type_transcode": "Transcode (video re-encoded)",
     "stats_transcoding": "Transcoding ({{hw}})",

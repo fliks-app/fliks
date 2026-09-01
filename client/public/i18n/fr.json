@@ -91,7 +91,7 @@
     "auto": "Auto",
     "auto_resolution": "Auto ({{res}})",
     "stats_direct_playback": "Lecture directe",
-    "stats_stream_type_direct": "Lecture directe (fichier servi tel quel)",
+    "stats_stream_type_direct": "Lecture directe",
     "stats_stream_type_remux": "Remux (flux copiés, conteneur HLS)",
     "stats_stream_type_transcode": "Transcodage (flux vidéo réencodé)",
     "stats_transcoding": "Transcodage ({{hw}})",

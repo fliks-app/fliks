@@ -86,7 +86,7 @@
     "auto": "Auto",
     "auto_resolution": "Auto ({{res}})",
     "stats_direct_playback": "Direct Play",
-    "stats_stream_type_direct": "Direct Play (file servito così com'è)",
+    "stats_stream_type_direct": "Direct Play",
     "stats_stream_type_remux": "Remux (flussi copiati, contenitore HLS)",
     "stats_stream_type_transcode": "Transcodifica (video ricodificato)",
     "stats_transcoding": "Transcodifica ({{hw}})",
