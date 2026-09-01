@@ -62,6 +62,7 @@ const UNSAFE_TOKENS = [
   [/(?<!\\)@starting-style[\s{]/, '@starting-style'],
   [/\d(?:cqi|cqw|cqh|cqb)\b/, 'container-query length unit'],
   [/:where\(/, ':where()'],
+  [/\binfinity\b/, "`infinity` in calc — `rounded-full` should have folded to a finite length"],
 ];
 for (const f of stylesFiles) {
   const css = readFileSync(resolve(stage, f), 'utf8');
