@@ -34,7 +34,6 @@ export class PlayerSettingsPageComponent implements OnInit {
   readonly forceDisableHdr = signal(false);
   readonly showHdrToggle = signal(false);
   readonly showEcoQualities = signal(true);
-  readonly ecoByDefault = signal(false);
   readonly autoSkipIntro = signal(false);
   readonly autoPlayNext = signal(true);
 
@@ -46,7 +45,6 @@ export class PlayerSettingsPageComponent implements OnInit {
     this.forceDisableHdr.set(p.forceDisableHdr);
     this.showHdrToggle.set(this.deviceProfile.hardwareSupportsHdr);
     this.showEcoQualities.set(p.showEcoQualities);
-    this.ecoByDefault.set(p.ecoByDefault);
     this.autoSkipIntro.set(p.autoSkipIntro);
     this.autoPlayNext.set(p.autoPlayNext);
   }
@@ -65,7 +63,6 @@ export class PlayerSettingsPageComponent implements OnInit {
       rememberAudioSelections: this.rememberAudioSelections(),
       forceDisableHdr: this.forceDisableHdr(),
       showEcoQualities: this.showEcoQualities(),
-      ecoByDefault: this.ecoByDefault(),
       autoSkipIntro: this.autoSkipIntro(),
       autoPlayNext: this.autoPlayNext(),
     });

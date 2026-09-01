@@ -129,20 +129,12 @@ export class PlayerControlsComponent {
   private readonly tv = inject(TvService);
   /** True on Android TV — drives 10-foot UI choices in the template. */
   readonly isTv = this.device.isTv;
-  /** Hide the "faible consommation" badge when eco is the forced default —
-   *  every visible rung is eco then, so the tag is just noise. */
-  readonly showEcoBadge = computed(
-    () => !this.playerSettings.settings().ecoByDefault,
-  );
   /** Show a leaf next to the quality value when the active rung is a
-   *  low-consumption one — and the eco-by-default setting hasn't already made
-   *  the tag redundant (every rung eco then). */
-  readonly showEcoLeaf = computed(
+   *  low-consumption one. */
+  readonly activeQualityIsEco = computed(
     () =>
-      this.showEcoBadge() &&
-      (this.availableQualities().find((q) => q.id === this.activeQualityId())
-        ?.lowBandwidth ??
-        false),
+      this.availableQualities().find((q) => q.id === this.activeQualityId())
+        ?.lowBandwidth ?? false,
   );
 
   constructor() {

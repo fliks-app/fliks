@@ -77,7 +77,7 @@
               <span class="flex-1 text-left">
                 {{ q.label }}
                 @if (q.lowBandwidth) {
-                  <span class="text-white/50 ml-1 text-xs">({{ 'player.low_bandwidth' | translate }})</span>
+                  <span class="block text-white/50 text-xs">{{ 'player.low_bandwidth' | translate }}</span>
                 }
               </span>
               @if (activeQualityId() === q.id) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
