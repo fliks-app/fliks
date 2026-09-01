@@ -1,5 +1,6 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { mergeOrdered } from '../plugin-ui/merge-ordered';
+import { TvService } from './tv.service';
 
 /** Stable identity of a home zone. Built-ins are fixed; per-library
  *  "recently added" zones are keyed by their library id. */
@@ -73,8 +74,15 @@ const DEFAULTS: HomeSettings = {
  * "recently added" ranking mode), persisted to localStorage exactly like
  * `DisplaySettingsService` / `PlayerSettingsService`. No backend involvement.
  */
+/** Zones the 10-foot UI does not show. Recent requests is an admin surface
+ *  (approve, decline, profile names) the TV layout was never designed for. */
+const HIDDEN_ON_TV: ReadonlySet<HomeSectionKey> = new Set<HomeSectionKey>([
+  'requests-recent',
+]);
+
 @Injectable({ providedIn: 'root' })
 export class HomeSettingsService {
+  private readonly tv = inject(TvService);
   readonly settings = signal<HomeSettings>(this.load());
 
   private load(): HomeSettings {
@@ -136,6 +144,10 @@ export class HomeSettingsService {
     const libName = new Map(libraries.map((l) => [l.id, l.name]));
     const available = new Set<HomeSectionKey>(BUILTIN_ORDER);
     if (opts.requests) available.add('requests-recent');
+    // The one answer to "which zones exist here", form factor included: the
+    // home page renders what this returns and the settings page lists it, so a
+    // zone the 10-foot UI hides is not offered for reordering either.
+    if (this.tv.isTv()) for (const key of HIDDEN_ON_TV) available.delete(key);
     for (const lib of libraries) {
       available.add(`${LIBRARY_RECENT_PREFIX}${lib.id}` as HomeSectionKey);
     }
@@ -151,7 +163,7 @@ export class HomeSettingsService {
     // Permission-gated built-in: only offered when the user can use requests.
     // With no saved preference it defaults visible, slotted just above
     // "recently-added"; a saved order (handled above) wins.
-    if (opts.requests && !merged.some((p) => p.key === 'requests-recent')) {
+    if (available.has('requests-recent') && !merged.some((p) => p.key === 'requests-recent')) {
       const pref: HomeSectionPref = { key: 'requests-recent', visible: true };
       const at = merged.findIndex((p) => p.key === 'recently-added');
       merged = at >= 0 ? [...merged.slice(0, at), pref, ...merged.slice(at)] : [...merged, pref];
