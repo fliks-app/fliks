@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
-import { PLUGIN_API_VERSION, SUPPORTED_PLUGIN_API_VERSIONS } from '../../../common/plugin-contract';
+import { PLUGIN_API_VERSION } from '../../../common/plugin-contract';
 import {
   PLUGIN_UID_MIN,
   allocateChildUid,
@@ -98,9 +98,10 @@ describe('buildSpawnPlan', () => {
   });
 
   it('tells a plugin the revision its own manifest declares, not core\'s newest', () => {
-    const older = SUPPORTED_PLUGIN_API_VERSIONS.find((v) => v !== PLUGIN_API_VERSION);
-    expect(older).toBeDefined();
-    const plan = buildSpawnPlan({ ...baseInput, pluginApi: older as number });
+    // Any other revision, supported or not: the plan echoes what the manifest declared and
+    // leaves accepting it to the registry, so this must not depend on a window being open.
+    const older = PLUGIN_API_VERSION - 1;
+    const plan = buildSpawnPlan({ ...baseInput, pluginApi: older });
     expect(plan.env.FLIKS_API_VERSION).toBe(String(older));
     expect(plan.env.HOME).toBe(baseInput.dataDir);
     expect(plan.env.NODE_ENV).toBe('production');

@@ -123,6 +123,20 @@
           [hint]="'settings.quality_profiles.field_resolution_upgrade_only_hint' | translate"
         />
       }
+      <label class="form-control w-full">
+        <span class="label-text">{{
+          'settings.quality_profiles.field_min_cf_score' | translate
+        }}</span>
+        <input
+          type="number"
+          class="input input-bordered w-full"
+          [ngModel]="formMinCustomFormatScore()"
+          (ngModelChange)="formMinCustomFormatScore.set(+$event)"
+        />
+        <span class="text-sm text-base-content/60 mt-1">{{
+          'settings.quality_profiles.field_min_cf_score_hint' | translate
+        }}</span>
+      </label>
       <div>
         <p class="text-sm font-medium mb-2">
           {{ 'settings.quality_profiles.qualities_group' | translate }}

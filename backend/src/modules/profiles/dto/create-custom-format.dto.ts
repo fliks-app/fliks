@@ -6,22 +6,22 @@ import {
   IsOptional,
   ValidateNested,
   IsIn,
+  ArrayNotEmpty,
+  IsNotEmpty,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import {
+  CUSTOM_FORMAT_SPEC_TYPES,
+  type CustomFormatSpecType,
+} from '../entities/custom-format.entity';
 
-/**
- * Supported specification implementations:
- *   title_regex   — regex tested against the release title
- *   source        — matches source tag (bluray, web-dl, webrip, hdtv, dvd, cam)
- *   resolution    — matches resolution tag (2160p, 1080p, 720p, 480p, etc.)
- *   language      — matches detected language tag in release title
- */
-class SpecificationDto {
+class CustomFormatSpecDto {
+  @IsIn(CUSTOM_FORMAT_SPEC_TYPES as readonly string[])
+  type: CustomFormatSpecType;
+
   @IsString()
-  name: string;
-
-  @IsIn(['title_regex', 'source', 'resolution', 'language'])
-  implementation: string;
+  @IsNotEmpty()
+  value: string;
 
   @IsBoolean()
   @IsOptional()
@@ -30,22 +30,22 @@ class SpecificationDto {
   @IsBoolean()
   @IsOptional()
   required?: boolean;
-
-  @IsString()
-  value: string;
 }
 
 export class CreateCustomFormatDto {
   @IsString()
+  @IsNotEmpty()
   name: string;
 
   @IsNumber()
   @IsOptional()
   score?: number;
 
+  /** A format with no condition would match every release and apply its score
+   *  to all of them, so an empty list is refused rather than saved. */
   @IsArray()
+  @ArrayNotEmpty()
   @ValidateNested({ each: true })
-  @Type(() => SpecificationDto)
-  @IsOptional()
-  specifications?: SpecificationDto[];
+  @Type(() => CustomFormatSpecDto)
+  specs: CustomFormatSpecDto[];
 }

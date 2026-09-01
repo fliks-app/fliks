@@ -1104,7 +1104,10 @@
       "RESOLUTION_NOT_UPGRADED": "Keine Auflösungsverbesserung ({{actual}}p, mehr als {{min}}p nötig)",
       "SEQUEL_MISMATCH": "Fortsetzung {{number}}, nicht der gesuchte Film",
       "YEAR_MISMATCH": "Jahr {{actual}}, erwartet {{expected}}",
-      "COLLECTION_PACK": "Mehrfilm-Paket ({{word}})"
+      "COLLECTION_PACK": "Mehrfilm-Paket ({{word}})",
+      "CUSTOM_FORMAT_SCORE_TOO_LOW": "Formatpunktzahl zu niedrig ({{actual}} < {{min}})",
+      "RANK_NOT_AN_UPGRADE": "Keine Verbesserung der vorhandenen Datei",
+      "RANK_ABOVE_CUTOFF": "Über dem Profil-Grenzwert"
     },
     "like": "Gefällt mir",
     "metadata_group": "Metadaten",
@@ -1628,7 +1631,9 @@
       "group_with_above": "Mit der vorherigen Qualität gruppieren (gleicher Rang)",
       "size_error_min_gt_max": "Das Minimum muss kleiner als das Maximum sein.",
       "size_error_pref_lt_min": "Der empfohlene Wert muss größer als das Minimum sein.",
-      "size_error_pref_gt_max": "Der empfohlene Wert muss kleiner als das Maximum sein."
+      "size_error_pref_gt_max": "Der empfohlene Wert muss kleiner als das Maximum sein.",
+      "field_min_cf_score": "Mindestpunktzahl für benutzerdefinierte Formate",
+      "field_min_cf_score_hint": "Releases unter dieser Punktzahl werden abgelehnt, nicht nur zuletzt einsortiert. 0 lehnt nur eine negative Summe ab."
     },
     "quality_definitions": {
       "title": "Qualitätsdefinitionen",
@@ -1689,7 +1694,7 @@
       "field_score": "Score",
       "specs": "Bedingungen",
       "add_spec": "Bedingung hinzufügen",
-      "no_specs": "Keine Bedingung — das Format passt immer.",
+      "no_specs": "Noch keine Bedingung. Ein Format braucht mindestens eine.",
       "negate": "Verneinen",
       "required": "Erforderlich",
       "name_required": "Der Name ist erforderlich.",
@@ -1698,7 +1703,36 @@
       "cancel": "Abbrechen",
       "test_title": "Einen Release-Titel testen",
       "test_placeholder": "Z. B.: Movie.Name.2024.1080p.BluRay.x264-GROUP",
-      "test_btn": "Testen"
+      "test_btn": "Testen",
+      "spec_count": "{{count}} Bedingung(en)",
+      "col_match": "Treffer",
+      "spec_required": "Fügen Sie mindestens eine Bedingung hinzu.",
+      "value_required": "Jede Bedingung braucht einen Wert.",
+      "regex_invalid": "Ein regulärer Ausdruck ist ungültig.",
+      "regex_placeholder": "regulärer Ausdruck",
+      "value_placeholder": "Wert",
+      "test_freeleech": "Als Freeleech behandeln",
+      "match_rule_hint": "Bedingungen desselben Typs sind Alternativen; verschiedene Typen müssen alle zutreffen. Eine erforderliche Bedingung muss immer zutreffen.",
+      "spec_type": {
+        "title_regex": "Release-Name (Regex)",
+        "source": "Quelle",
+        "resolution": "Auflösung",
+        "language": "Sprache",
+        "release_flag": "Release-Merkmal",
+        "release_group": "Release-Gruppe",
+        "edition": "Edition",
+        "video_codec": "Video-Codec",
+        "audio_codec": "Audio-Codec"
+      },
+      "edition": {
+        "directors-cut": "Director's Cut",
+        "extended": "Langfassung",
+        "theatrical": "Kinofassung",
+        "uncut": "Unzensiert",
+        "remastered": "Remastered",
+        "criterion": "Criterion",
+        "imax": "IMAX"
+      }
     },
     "naming": {
       "title": "Dateibenennung",

@@ -1,11 +1,25 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  CustomFormat,
-  CustomFormatSpecification,
-} from './entities/custom-format.entity';
+import { CustomFormat, CustomFormatSpec } from './entities/custom-format.entity';
 import { CreateCustomFormatDto } from './dto/create-custom-format.dto';
+import {
+  parseReleaseAttributes,
+  parseReleaseLanguage,
+  type ReleaseAttributes,
+} from '../../common/release-parsing';
+
+export interface CustomFormatMatch {
+  formatId: number;
+  formatName: string;
+  matched: boolean;
+  score: number;
+}
+
+/** Collapses the spelling variants of one tag ("WEB-DL", "web.dl", "WEBDL"). */
+function norm(value: string | null | undefined): string {
+  return (value ?? '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+}
 
 @Injectable()
 export class CustomFormatsService {
@@ -15,10 +29,11 @@ export class CustomFormatsService {
   ) {}
 
   create(dto: CreateCustomFormatDto): Promise<CustomFormat> {
+    this.assertRegexesCompile(dto.specs);
     const row = this.repo.create({
       name: dto.name,
       score: dto.score ?? 0,
-      specifications: (dto.specifications ?? []) as CustomFormatSpecification[],
+      specs: dto.specs as CustomFormatSpec[],
     });
     return this.repo.save(row);
   }
@@ -35,10 +50,10 @@ export class CustomFormatsService {
 
   async update(id: number, dto: CreateCustomFormatDto): Promise<CustomFormat> {
     const cf = await this.findOne(id);
-    if (dto.name !== undefined) cf.name = dto.name;
-    if (dto.score !== undefined) cf.score = dto.score;
-    if (dto.specifications !== undefined)
-      cf.specifications = dto.specifications as CustomFormatSpecification[];
+    this.assertRegexesCompile(dto.specs);
+    cf.name = dto.name;
+    cf.score = dto.score ?? 0;
+    cf.specs = dto.specs as CustomFormatSpec[];
     return this.repo.save(cf);
   }
 
@@ -47,103 +62,135 @@ export class CustomFormatsService {
     await this.repo.remove(cf);
   }
 
-  /**
-   * Test a release title against all custom formats and return a breakdown.
-   */
+  /** Per-format verdict for one release title — the settings page's tester. */
   async testRelease(
     title: string,
-    meta?: { freeleech?: boolean; downloadVolumeFactor?: number },
-  ): Promise<
-    { formatId: number; formatName: string; matched: boolean; score: number }[]
-  > {
-    const formats = await this.repo.find();
-    return formats.map((cf) => ({
-      formatId: cf.id,
-      formatName: cf.name,
-      matched: this.matchesFormat(title, cf, meta),
-      score: this.matchesFormat(title, cf, meta) ? cf.score : 0,
-    }));
+    flags: readonly string[] = [],
+  ): Promise<CustomFormatMatch[]> {
+    const formats = await this.findAll();
+    return formats.map((cf) => {
+      const matched = this.matchesFormat(title, cf, flags);
+      return {
+        formatId: cf.id,
+        formatName: cf.name,
+        matched,
+        score: matched ? cf.score : 0,
+      };
+    });
   }
 
   /**
-   * Compute the total custom-format score for a release title.
-   * Used in the grab flow to rank releases beyond basic quality.
+   * Total custom-format score for a release title — the grab flow's ranking
+   * signal beyond basic quality. Takes the format list the caller already read:
+   * the release scorer runs this once per candidate, so re-reading the table per
+   * release is an N+1.
    */
-  async scoreRelease(
-    releaseTitle: string,
-    meta?: { freeleech?: boolean; downloadVolumeFactor?: number },
-  ): Promise<number> {
-    return this.scoreReleaseWith(await this.findAll(), releaseTitle, meta);
-  }
-
-  /** Same scoring against a format list the caller already read. The release scorer
-   *  runs this once per candidate, so re-reading the table per release is an N+1. */
   scoreReleaseWith(
     formats: CustomFormat[],
     releaseTitle: string,
-    meta?: { freeleech?: boolean; downloadVolumeFactor?: number },
+    flags: readonly string[] = [],
   ): number {
     let total = 0;
     for (const fmt of formats) {
-      if (this.matchesFormat(releaseTitle, fmt, meta)) {
-        total += fmt.score;
-      }
+      if (this.matchesFormat(releaseTitle, fmt, flags)) total += fmt.score;
     }
     return total;
   }
 
+  /**
+   * Conditions of the same type are alternatives (OR); different types must all
+   * hold (AND). So `resolution:1080p` + `resolution:2160p` accepts either, while
+   * adding `source:bluray` narrows both. A `required` condition must hold on its
+   * own, whatever the rest of its group does.
+   *
+   * A format with no condition matches nothing: it would otherwise score every
+   * release in the library.
+   */
   private matchesFormat(
     title: string,
     fmt: CustomFormat,
-    meta?: { freeleech?: boolean; downloadVolumeFactor?: number },
+    flags: readonly string[],
   ): boolean {
-    const titleLower = title.toLowerCase();
-    let allRequiredMet = true;
-    let anyNonRequiredMet = false;
-    let hasNonRequired = false;
+    const specs = fmt.specs ?? [];
+    if (!specs.length) return false;
 
-    for (const spec of fmt.specifications) {
-      const match = this.evalSpec(titleLower, spec, meta);
-      const result = spec.negate ? !match : match;
-
-      if (spec.required) {
-        if (!result) allRequiredMet = false;
-      } else {
-        hasNonRequired = true;
-        if (result) anyNonRequiredMet = true;
-      }
+    const attrs = parseReleaseAttributes(title);
+    const groups = new Map<string, CustomFormatSpec[]>();
+    for (const spec of specs) {
+      const group = groups.get(spec.type);
+      if (group) group.push(spec);
+      else groups.set(spec.type, [spec]);
     }
 
-    if (!allRequiredMet) return false;
-    if (hasNonRequired && !anyNonRequiredMet) return false;
+    for (const group of groups.values()) {
+      let anyMatched = false;
+      for (const spec of group) {
+        const raw = this.evalSpec(title, attrs, spec, flags);
+        const result = spec.negate ? !raw : raw;
+        if (spec.required && !result) return false;
+        if (result) anyMatched = true;
+      }
+      if (!anyMatched) return false;
+    }
     return true;
   }
 
   private evalSpec(
-    titleLower: string,
-    spec: CustomFormatSpecification,
-    meta?: { freeleech?: boolean; downloadVolumeFactor?: number },
+    title: string,
+    attrs: ReleaseAttributes,
+    spec: CustomFormatSpec,
+    flags: readonly string[],
   ): boolean {
-    const val = (spec.value || '').toLowerCase();
-    switch (spec.implementation) {
+    const value = norm(spec.value);
+    switch (spec.type) {
       case 'title_regex':
+        // Tested against the untouched title so a pattern can still assert case.
         try {
-          return new RegExp(spec.value, 'i').test(titleLower);
+          return new RegExp(spec.value, 'i').test(title);
         } catch {
           return false;
         }
       case 'source':
-        return titleLower.includes(val);
+        return norm(attrs.source) === value;
       case 'resolution':
-        return titleLower.includes(val);
-      case 'language':
-        return titleLower.includes(val);
+        return attrs.resolution > 0 && attrs.resolution === parseInt(value, 10);
+      case 'language': {
+        const lang = parseReleaseLanguage(title);
+        return (
+          norm(lang.isoCode) === value ||
+          norm(lang.name) === value ||
+          (lang.iso639_2 ?? []).some((code) => norm(code) === value)
+        );
+      }
       case 'release_flag':
-        if (val === 'freeleech') return meta?.freeleech === true;
-        if (val === 'halfleech') return meta?.downloadVolumeFactor === 0.5;
-        return false;
+        // Whatever the source announced, matched by name — core does not need to know
+        // which markers exist for a condition to test one.
+        return flags.some((flag) => norm(flag) === value);
+      case 'release_group':
+        return norm(attrs.releaseGroup) === value;
+      case 'edition':
+        return norm(attrs.edition) === value;
+      case 'video_codec':
+        return norm(attrs.videoCodec) === value;
+      case 'audio_codec':
+        return norm(attrs.audioCodec) === value;
       default:
         return false;
+    }
+  }
+
+  /** A pattern that doesn't compile would match nothing for ever, silently —
+   *  refuse it at the edit instead of at every search. */
+  private assertRegexesCompile(specs: readonly { type: string; value: string }[]) {
+    for (const spec of specs) {
+      if (spec.type !== 'title_regex') continue;
+      try {
+        new RegExp(spec.value, 'i');
+      } catch {
+        throw new BadRequestException(
+          `Invalid regular expression: ${spec.value}`,
+        );
+      }
     }
   }
 }

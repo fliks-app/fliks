@@ -1,10 +1,11 @@
+import { PLUGIN_API_VERSION } from '../../../common/plugin-contract';
 import type { DataPluginManifest, ProcessPluginManifest } from '../../../common/plugin-contract';
 
 /** Minimal, structurally-valid `data` manifest — spread `overrides` to break one field at a time. */
 export function minimalDataManifest(overrides: Partial<DataPluginManifest> = {}): DataPluginManifest {
   return {
     id: 'fliks.testplugin',
-    pluginApi: 0,
+    pluginApi: PLUGIN_API_VERSION,
     name: 'Test plugin',
     version: '1.0.0',
     fliks: '>=2.1.0 <3.0.0',
@@ -24,7 +25,7 @@ export function minimalProcessManifest(
 ): ProcessPluginManifest {
   return {
     id: 'fliks.testprocessplugin',
-    pluginApi: 0,
+    pluginApi: PLUGIN_API_VERSION,
     name: 'Test process plugin',
     version: '1.0.0',
     fliks: '>=2.1.0 <3.0.0',

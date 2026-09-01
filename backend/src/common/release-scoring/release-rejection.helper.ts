@@ -20,8 +20,26 @@ export interface ReleaseCandidate {
   seeders: number;
   leechers: number;
   publishDate: string | null; // ISO date string from <pubDate>, null if unavailable
-  freeleech: boolean;
-  downloadVolumeFactor: number; // 0=free, 0.5=half, 1=normal
+  /** Source-declared markers a name cannot carry — `freeleech`, `halfleech`, whatever a
+   *  tracker announces next. An open set on purpose: a custom-format condition and the
+   *  ordering rule both read it by name, so a new marker needs no change here. */
+  flags: readonly string[];
+}
+
+/**
+ * Fold a source's release markers into the open flag set the scorer reads. A torrent's
+ * `freeleech` / `downloadVolumeFactor` are one spelling of it, so a caller may send either
+ * form; anything unrecognised rides through under its own name.
+ */
+export function releaseFlags(source: {
+  flags?: readonly string[];
+  freeleech?: boolean;
+  downloadVolumeFactor?: number;
+}): string[] {
+  const out = new Set(source.flags ?? []);
+  if (source.freeleech || source.downloadVolumeFactor === 0) out.add('freeleech');
+  if (source.downloadVolumeFactor === 0.5) out.add('halfleech');
+  return [...out];
 }
 
 /**
@@ -517,6 +535,17 @@ export function computeRejections(opts: {
   /** Release year of the media. A release stating another year names another work — the
    *  token-inclusion title check cannot tell `Nova Skyline 2 2015` from `Nova Skyline`. */
   expectedYear?: number | null;
+  /** Total custom-format score of this release, and the profile's floor for it. A
+   *  negative-score format only blocks a grab through this floor; without it the
+   *  score is a tiebreak and the release is still taken when nothing better exists. */
+  customFormatScore?: number;
+  minCustomFormatScore?: number;
+  /** Quality rank of this release, and the window the profile leaves open: strictly
+   *  above what is on disk, up to the cutoff. Absent bounds mean no window applies
+   *  (a missing grab, or a title with no quality profile). */
+  rank?: number;
+  minRankExclusive?: number;
+  maxRankInclusive?: number;
 }): ReleaseRejection[] {
   const out: ReleaseRejection[] = [];
 
@@ -591,6 +620,37 @@ export function computeRejections(opts: {
 
   if (!opts.allowed.has(opts.qualityId)) {
     out.push({ code: 'QUALITY_NOT_ALLOWED' });
+  }
+
+  if (
+    opts.minCustomFormatScore != null &&
+    (opts.customFormatScore ?? 0) < opts.minCustomFormatScore
+  ) {
+    out.push({
+      code: 'CUSTOM_FORMAT_SCORE_TOO_LOW',
+      params: {
+        actual: opts.customFormatScore ?? 0,
+        min: opts.minCustomFormatScore,
+      },
+    });
+  }
+
+  // The window an upgrade may move within. Computed by core and, until now, applied only by the
+  // acquisition plugin's own picker — so `releases.score` answered "no rejections" for releases
+  // the scheduler then refused, and the manual search modal had nothing to show for it.
+  if (opts.rank != null) {
+    if (opts.minRankExclusive != null && opts.rank <= opts.minRankExclusive) {
+      out.push({
+        code: 'RANK_NOT_AN_UPGRADE',
+        params: { actual: opts.rank, min: opts.minRankExclusive },
+      });
+    }
+    if (opts.maxRankInclusive != null && opts.rank > opts.maxRankInclusive) {
+      out.push({
+        code: 'RANK_ABOVE_CUTOFF',
+        params: { actual: opts.rank, max: opts.maxRankInclusive },
+      });
+    }
   }
 
   // "Upgrade resolution only": the profile refuses a same-resolution tier hop, so a 1080p Bluray
@@ -682,8 +742,8 @@ export function computeRejections(opts: {
  *    episodes at the same resolution whatever the source, but never
  *    outranks a higher resolution.
  * 6. Quality rank (higher = better)
- * 7. Freeleech bonus
- * 8. Custom format score (higher = better)
+ * 7. Custom format score (higher = better)
+ * 8. Freeleech bonus
  * 9. Seeders (more = better, log scale to avoid over-weighting)
  * 10. Leechers (more = better, same scale) — breaks seeder ties toward the
  *    busier swarm.
@@ -704,7 +764,7 @@ export function sortReleasesByRelevance<
     customFormatScore: number;
     seeders: number;
     leechers: number;
-    freeleech: boolean;
+    flags: readonly string[];
     sizeDeviation?: number | null;
     isFullSeason?: boolean;
   },
@@ -743,12 +803,15 @@ export function sortReleasesByRelevance<
     // 6. Quality rank desc
     if (a.rank !== b.rank) return b.rank - a.rank;
 
-    // 7. Freeleech bonus
-    if (a.freeleech !== b.freeleech) return a.freeleech ? -1 : 1;
-
-    // 8. Custom format score desc
+    // 7. Custom format score desc — above freeleech, which a `release_flag`
+    //    condition can express and score itself.
     if (a.customFormatScore !== b.customFormatScore)
       return b.customFormatScore - a.customFormatScore;
+
+    // 8. Freeleech bonus
+    const aFree = a.flags.includes('freeleech');
+    const bFree = b.flags.includes('freeleech');
+    if (aFree !== bFree) return aFree ? -1 : 1;
 
     // 9. Seeders desc (log scale)
     const aSeed = swarmScore(a.seeders);
@@ -795,10 +858,7 @@ export interface ScoredRelease extends ReleaseCandidate {
 
 /** Async callbacks injected by the caller (avoids coupling to NestJS services). */
 export interface ReleaseScorerDeps {
-  scoreCustomFormats(
-    title: string,
-    meta: { freeleech?: boolean; downloadVolumeFactor?: number },
-  ): Promise<number>;
+  scoreCustomFormats(title: string, flags: readonly string[]): Promise<number>;
   /** `sourceId` rides along so a caller keyed by per-release index (rather
    *  than by title, which two releases may share) can disambiguate. */
   isBlocked(title: string, sourceId: number): Promise<boolean>;
@@ -834,6 +894,11 @@ export async function scoreAndSortReleases(
     minResolution?: number;
     /** Release year of the media — a release naming another year names another work. */
     expectedYear?: number | null;
+    /** From the quality profile: releases scoring below this are rejected outright. */
+    minCustomFormatScore?: number;
+    /** The upgrade window: strictly above what is on disk, up to the cutoff. */
+    minRankExclusive?: number;
+    maxRankInclusive?: number;
   },
   deps: ReleaseScorerDeps,
 ): Promise<ScoredRelease[]> {
@@ -845,10 +910,7 @@ export async function scoreAndSortReleases(
         opts.sourceUnknownLang.get(r.sourceId),
       );
       const [cfScore, isBlocklisted] = await Promise.all([
-        deps.scoreCustomFormats(r.title, {
-          freeleech: r.freeleech,
-          downloadVolumeFactor: r.downloadVolumeFactor,
-        }),
+        deps.scoreCustomFormats(r.title, r.flags),
         deps.isBlocked(r.title, r.sourceId),
       ]);
       const rejections = computeRejections({
@@ -869,6 +931,11 @@ export async function scoreAndSortReleases(
         expectedEpisode: opts.expectedEpisode,
         minResolution: opts.minResolution,
         expectedYear: opts.expectedYear,
+        customFormatScore: cfScore,
+        minCustomFormatScore: opts.minCustomFormatScore,
+        rank: parsed.quality.rank,
+        minRankExclusive: opts.minRankExclusive,
+        maxRankInclusive: opts.maxRankInclusive,
       });
       return {
         ...r,

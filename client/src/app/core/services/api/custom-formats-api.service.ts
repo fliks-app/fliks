@@ -2,8 +2,22 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
+export const CUSTOM_FORMAT_SPEC_TYPES = [
+  'title_regex',
+  'source',
+  'resolution',
+  'language',
+  'release_flag',
+  'release_group',
+  'edition',
+  'video_codec',
+  'audio_codec',
+] as const;
+
+export type CustomFormatSpecType = (typeof CUSTOM_FORMAT_SPEC_TYPES)[number];
+
 export interface CustomFormatSpec {
-  type: 'title_regex' | 'source' | 'resolution' | 'language' | 'release_flag';
+  type: CustomFormatSpecType;
   value: string;
   negate?: boolean;
   required?: boolean;
@@ -19,7 +33,14 @@ export interface CustomFormat {
 export interface CreateCustomFormatBody {
   name: string;
   score?: number;
-  specs?: CustomFormatSpec[];
+  specs: CustomFormatSpec[];
+}
+
+export interface CustomFormatMatch {
+  formatId: number;
+  formatName: string;
+  matched: boolean;
+  score: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -38,7 +59,7 @@ export class CustomFormatsApiService {
     return firstValueFrom(this.http.post<CustomFormat>('/api/custom-formats', body));
   }
 
-  update(id: number, body: Partial<CreateCustomFormatBody>) {
+  update(id: number, body: CreateCustomFormatBody) {
     return firstValueFrom(this.http.put<CustomFormat>(`/api/custom-formats/${id}`, body));
   }
 
@@ -46,7 +67,9 @@ export class CustomFormatsApiService {
     return firstValueFrom(this.http.delete<void>(`/api/custom-formats/${id}`));
   }
 
-  testTitle(title: string) {
-    return firstValueFrom(this.http.post<{ formatId: number; formatName: string; matched: boolean; score: number }[]>('/api/custom-formats/test', { title }));
+  testTitle(title: string, meta?: { freeleech?: boolean }) {
+    return firstValueFrom(
+      this.http.post<CustomFormatMatch[]>('/api/custom-formats/test', { title, ...meta }),
+    );
   }
 }

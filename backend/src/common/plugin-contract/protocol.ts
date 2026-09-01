@@ -38,8 +38,12 @@ export const PLUGIN_API_VERSION = 1;
  * Every value core still accepts from a manifest, newest last. Retiring one is what orphans the
  * plugins that declare it, so a bump adds an entry and a later release drops the oldest — the
  * window in between is when authors republish.
+ *
+ * `0` was retired when the upgrade window left `AcquisitionTarget.want`: within one value the
+ * shape is additive only, so a removal has to orphan the old value rather than quietly hand a
+ * plugin an absent field it filters releases on.
  */
-export const SUPPORTED_PLUGIN_API_VERSIONS: readonly number[] = [0, 1];
+export const SUPPORTED_PLUGIN_API_VERSIONS: readonly number[] = [1];
 
 /**
  * Environment core sets on every spawn (see `supervisor/spawn-plan.ts`) — the only way in
