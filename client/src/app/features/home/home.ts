@@ -1,7 +1,7 @@
 import { Component, ChangeDetectionStrategy, inject, signal, computed, effect, OnInit, OnDestroy, Injector, viewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { Subscription, filter } from 'rxjs';
-import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
+import { filter } from 'rxjs';
+import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media, CalendarEntry } from '../../core/services/api/media.service';
@@ -23,7 +23,6 @@ import { PlayableMediaService } from '../../core/services/playable-media.service
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { NavbarService } from '../../core/services/navbar.service';
-import { AppResumeService } from '../../core/services/app-resume.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { HomeSettingsService, HomeSectionType, ResolvedHomeSection } from '../../core/services/home-settings.service';
@@ -115,7 +114,6 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly navbar = inject(NavbarService);
   private readonly translate = inject(TranslateService);
-  private readonly appResume = inject(AppResumeService);
   private readonly backgroundService = inject(BackgroundService);
   private readonly displaySettings = inject(DisplaySettingsService);
   private readonly home = inject(HomeSettingsService);
@@ -123,16 +121,21 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly auth = inject(AuthService);
   private readonly injector = inject(Injector);
   private readonly route = inject(ActivatedRoute);
-  private readonly reuseStrategy = inject(CachingReuseStrategy);
   protected readonly itemArtwork = itemArtwork;
 
   private static readonly SCROLL_KEY = 'home';
-  private attachedSub?: Subscription;
-  private detachedSub?: Subscription;
-  private resumeSub?: Subscription;
-  /** True while this cached instance is detached (some other route is shown).
-   *  Gates the app-resume refresh so only the visible home refetches. */
-  private detached = false;
+  /** Cached route: the stale signals stay on screen while a cache-first pass
+   *  repaints and a forced pass brings in what changed elsewhere. */
+  private readonly routeFresh = keepRouteFresh({
+    refresh: () => {
+      void this.loadAllSections();
+      queueMicrotask(() => void this.loadAllSections({ force: true }));
+    },
+    // On resume the sections are already rendered, so a cache-first pass would
+    // repaint nothing.
+    refreshOnResume: () => void this.loadAllSections({ force: true }),
+    scrollKey: HomeComponent.SCROLL_KEY,
+  });
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
   private readonly detailModal = viewChild(DownloadDetailModalComponent);
 
@@ -411,50 +414,11 @@ export class HomeComponent implements OnInit, OnDestroy {
     // overwrites in place; no spinner, no flash.
     queueMicrotask(() => void this.loadAllSections({ force: true }));
     this.scrollMemory.restore(HomeComponent.SCROLL_KEY, this.injector);
-    // The route is detached/cached on navigate-away (see CachingReuseStrategy
-    // + `data: { reuse: true }` on the home route). On return, ngOnInit does
-    // NOT fire again — refresh data + scroll + focus through this hook
-    // instead. Stale signals stay visible during the background refetch (HTTP
-    // cache makes that near-instant when warm), so the user never sees a
-    // spinner on a back navigation.
-    const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
-    this.attachedSub = this.reuseStrategy.attached$.subscribe((key) => {
-      if (key !== ownKey) return;
-      this.detached = false;
-      this.scrollMemory.activate(HomeComponent.SCROLL_KEY);
-      // The cached signals stay visible; refresh cache-first for an instant
-      // repaint, then force a network round-trip so a return to home reflects
-      // additions / watched flips made elsewhere — same SWR contract as the
-      // initial ngOnInit load (a plain reuse-attach would otherwise sit on
-      // stale data until the cache TTL expired).
-      void this.loadAllSections();
-      queueMicrotask(() => void this.loadAllSections({ force: true }));
-      this.scrollMemory.restoreSticky(HomeComponent.SCROLL_KEY);
-    });
-    // ngOnDestroy doesn't fire when detaching, so the active scroll key would
-    // stay pointing at us — and a NavigationStart on the next page would then
-    // overwrite our saved scroll position. Deactivate iff still ours: if the
-    // next route already claimed scrollMemory in its own ngOnInit, we leave
-    // its key alone.
-    this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
-      if (key !== ownKey) return;
-      this.detached = true;
-      this.scrollMemory.deactivateIf(HomeComponent.SCROLL_KEY);
-    });
-    // Native app-resume: refresh home when it is the page on screen. Forced only
-    // — its signals are still rendered, so a cache-first pass would repaint nothing.
-    this.resumeSub = this.appResume.resume$.subscribe(() => {
-      if (this.detached) return;
-      void this.loadAllSections({ force: true });
-    });
   }
 
   ngOnDestroy() {
     this.scrollMemory.deactivate();
     this.playbackStopped.unsubscribe();
-    this.attachedSub?.unsubscribe();
-    this.detachedSub?.unsubscribe();
-    this.resumeSub?.unsubscribe();
     this.backgroundService.clear();
   }
 

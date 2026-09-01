@@ -93,6 +93,7 @@ import { SeasonLabelPipe } from '../../core/pipes/season-label.pipe';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { ImgFadeInDirective } from '../../shared/directives/img-fade-in.directive';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../shared/components/modal-footer';
@@ -265,6 +266,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly routeParams = toSignal(this.route.paramMap);
 
   private loadedId: number | null = null;
+
+  /** Cached route: coming back from the player repaints the page as it was, so
+   *  only what playback changed has to be re-read, plus a forced media refetch. */
+  private readonly routeFresh = keepRouteFresh({
+    refresh: () => this.refreshOnReturn(),
+    scrollKey: () => this.scrollKey(),
+  });
 
   /**
    * Angular reuses this component between two `movies/:id` URLs — the similar
@@ -1014,66 +1022,89 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       if (this.canRequestDeletion()) {
         void this.loadDeleteRequestState(m.tmdbId, m.type);
       }
-      // Resume/watched/progress hit uncacheable /api/playback/media/* — load
-      // them off the render path so a slow server never holds the spinner.
-      void (async () => {
-        const [resumeInfo, watchedIds, progress] = await Promise.all([
-          this.streamingApi.getMediaResumeInfo(m.id).catch(() => null),
-          m.type === 'series'
-            ? this.streamingApi.getWatchedEpisodeIds(m.id).catch(() => [] as number[])
-            : Promise.resolve([] as number[]),
-          m.type === 'series'
-            ? this.streamingApi.getEpisodeProgress(m.id).catch(() => ({}) as Record<number, number>)
-            : Promise.resolve({} as Record<number, number>),
-        ]);
-        this.resumeInfo.set(resumeInfo);
-        const watchedSet = new Set(watchedIds);
-        this.watchedEpisodeIds.set(watchedSet);
-        this.episodeProgress.set(progress);
-
-        // Pre-select the last-played file if available
-        if (resumeInfo?.mediaFileId) {
-          const files = m.files ?? [];
-          if (files.some((f) => f.id === resumeInfo.mediaFileId)) {
-            this.selectedFileId.set(resumeInfo.mediaFileId);
-          }
-        }
-
-        // Series: preselect the season the user is currently watching.
-        //   1. Latest in-progress episode (resumeInfo).
-        //   2. Season of the first unwatched-with-file episode — handles the
-        //      between-episodes case (last ep completed, next not started yet)
-        //      where resumeInfo is null.
-        let resumeHandled = false;
-        if (m.type === 'series' && m.seasons?.length) {
-          let targetSeasonId: number | null = null;
-          if (resumeInfo?.episodeId) {
-            targetSeasonId =
-              m.seasons.find((s) => s.episodes?.some((e) => e.id === resumeInfo.episodeId))?.id ??
-              null;
-          }
-          if (targetSeasonId == null) {
-            targetSeasonId =
-              m.seasons.find((s) => s.episodes?.some((e) => e.hasFile && !watchedSet.has(e.id)))
-                ?.id ?? null;
-          }
-          if (targetSeasonId != null) {
-            this.activeSeasonId.set(targetSeasonId);
-            this.persistActiveSeason(targetSeasonId);
-            resumeHandled = true;
-          }
-        }
-
-        if (m.type === 'series' && m.seasons?.length) {
-          if (!resumeHandled) this.syncActiveSeasonForSeriesFilter();
-        } else {
-          this.activeSeasonId.set(null);
-        }
-      })();
+      void this.loadPlaybackState(m);
     } catch {
       this.notFound.set(true);
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  /**
+   * Re-read what a playback session can have changed under this page, without
+   * touching the cast/crew/similar rails the cached DOM still holds.
+   */
+  private refreshOnReturn(): void {
+    const m = this.media();
+    if (!m) return;
+    void this.loadPlaybackState(m);
+    void this.mediaService
+      .getOne(m.id, { force: true })
+      .then((fresh) => {
+        if (fresh.id === m.id) this.media.set(fresh);
+      })
+      .catch(() => {
+        /* network failure — the cached page keeps showing */
+      });
+  }
+
+  /**
+   * Resume position, watched episodes and per-episode progress. These hit the
+   * uncacheable /api/playback/media/* routes, so they stay off the render path
+   * and are re-run on their own whenever the page comes back on screen.
+   */
+  private async loadPlaybackState(m: Media): Promise<void> {
+    const [resumeInfo, watchedIds, progress] = await Promise.all([
+      this.streamingApi.getMediaResumeInfo(m.id).catch(() => null),
+      m.type === 'series'
+        ? this.streamingApi.getWatchedEpisodeIds(m.id).catch(() => [] as number[])
+        : Promise.resolve([] as number[]),
+      m.type === 'series'
+        ? this.streamingApi.getEpisodeProgress(m.id).catch(() => ({}) as Record<number, number>)
+        : Promise.resolve({} as Record<number, number>),
+    ]);
+    this.resumeInfo.set(resumeInfo);
+    const watchedSet = new Set(watchedIds);
+    this.watchedEpisodeIds.set(watchedSet);
+    this.episodeProgress.set(progress);
+
+    // Pre-select the last-played file if available
+    if (resumeInfo?.mediaFileId) {
+      const files = m.files ?? [];
+      if (files.some((f) => f.id === resumeInfo.mediaFileId)) {
+        this.selectedFileId.set(resumeInfo.mediaFileId);
+      }
+    }
+
+    // Series: preselect the season the user is currently watching.
+    //   1. Latest in-progress episode (resumeInfo).
+    //   2. Season of the first unwatched-with-file episode — handles the
+    //      between-episodes case (last ep completed, next not started yet)
+    //      where resumeInfo is null.
+    let resumeHandled = false;
+    if (m.type === 'series' && m.seasons?.length) {
+      let targetSeasonId: number | null = null;
+      if (resumeInfo?.episodeId) {
+        targetSeasonId =
+          m.seasons.find((s) => s.episodes?.some((e) => e.id === resumeInfo.episodeId))?.id ??
+          null;
+      }
+      if (targetSeasonId == null) {
+        targetSeasonId =
+          m.seasons.find((s) => s.episodes?.some((e) => e.hasFile && !watchedSet.has(e.id)))
+            ?.id ?? null;
+      }
+      if (targetSeasonId != null) {
+        this.activeSeasonId.set(targetSeasonId);
+        this.persistActiveSeason(targetSeasonId);
+        resumeHandled = true;
+      }
+    }
+
+    if (m.type === 'series' && m.seasons?.length) {
+      if (!resumeHandled) this.syncActiveSeasonForSeriesFilter();
+    } else {
+      this.activeSeasonId.set(null);
     }
   }
 

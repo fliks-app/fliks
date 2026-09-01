@@ -1,14 +1,12 @@
 import { Component, ChangeDetectionStrategy, inject, signal, computed, Injector, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { PlaybackState, StreamingApiService, WatchHistoryItem } from '../../core/services/api/streaming-api.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
-import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
-import { AppResumeService } from '../../core/services/app-resume.service';
+import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { PaginationComponent } from '../../shared/components/pagination/pagination';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
@@ -26,17 +24,15 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly scrollMemory = inject(ScrollMemoryService);
-  private readonly reuseStrategy = inject(CachingReuseStrategy);
-  private readonly appResume = inject(AppResumeService);
   private readonly injector = inject(Injector);
   private readonly translate = inject(TranslateService);
   private static readonly SCROLL_KEY = 'history';
-  private attachedSub?: Subscription;
-  private detachedSub?: Subscription;
-  private resumeSub?: Subscription;
-  /** True while this cached instance is detached (some other route is shown).
-   *  Gates the app-resume refresh so only the visible history refetches. */
-  private detached = false;
+  /** Cached route: revalidate on return and on app-resume so items watched or
+   *  deleted elsewhere land, without the spinner coming back. */
+  private readonly routeFresh = keepRouteFresh({
+    refresh: () => void this.load(true),
+    scrollKey: WatchHistoryComponent.SCROLL_KEY,
+  });
 
   readonly loading = signal(true);
   readonly items = signal<WatchHistoryItem[]>([]);
@@ -51,35 +47,10 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
     await this.load();
     this.scrollMemory.restore(WatchHistoryComponent.SCROLL_KEY, this.injector);
 
-    // Route is cached on navigate-away (data: { reuse: true }). On return,
-    // ngOnInit doesn't fire — silently revalidate the current page so any
-    // changes elsewhere (newly watched items, deletions) reflect on the way
-    // back, without showing the spinner.
-    const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
-    this.attachedSub = this.reuseStrategy.attached$.subscribe((key) => {
-      if (key !== ownKey) return;
-      this.detached = false;
-      this.scrollMemory.activate(WatchHistoryComponent.SCROLL_KEY);
-      void this.load(true);
-      this.scrollMemory.restoreSticky(WatchHistoryComponent.SCROLL_KEY);
-    });
-    this.detachedSub = this.reuseStrategy.detached$.subscribe((key) => {
-      if (key !== ownKey) return;
-      this.detached = true;
-      this.scrollMemory.deactivateIf(WatchHistoryComponent.SCROLL_KEY);
-    });
-    // Native app-resume: silently revalidate the current page when the app
-    // returns to the foreground after a spell away and history is on screen.
-    this.resumeSub = this.appResume.resume$.subscribe(() => {
-      if (!this.detached) void this.load(true);
-    });
   }
 
   ngOnDestroy() {
     this.scrollMemory.deactivate();
-    this.attachedSub?.unsubscribe();
-    this.detachedSub?.unsubscribe();
-    this.resumeSub?.unsubscribe();
   }
 
   async load(silent = false) {
