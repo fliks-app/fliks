@@ -594,7 +594,11 @@ export class FliksHostImpl implements PluginHostApi {
         // resolution, and the profile's "upgrade resolution only" toggle had no enforcement
         // anywhere after the acquisition split.
         minResolution: await this.minResolutionFor(media, p.seasonNumber, p.episodeNumber),
-        minCustomFormatScore: media.qualityProfile?.minCustomFormatScore ?? 0,
+        // Undefined, not 0, without a profile: 0 is a real floor that refuses any
+        // negative total, and an unprofiled title has no floor to apply.
+        minCustomFormatScore: media.qualityProfile
+          ? media.qualityProfile.minCustomFormatScore ?? 0
+          : undefined,
       },
       {
         scoreCustomFormats: (title, meta) =>

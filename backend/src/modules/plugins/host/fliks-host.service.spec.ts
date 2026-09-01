@@ -15,6 +15,8 @@ import { getAppLanguageById } from '../../../common/constants/app-languages';
 import type { Media } from '../../media/entities/media.entity';
 import type { Season } from '../../media/entities/season.entity';
 import type { Episode } from '../../media/entities/episode.entity';
+import { CustomFormatsService } from '../../profiles/custom-formats.service';
+import type { CustomFormat } from '../../profiles/entities/custom-format.entity';
 
 /** Round-trips `value` through JSON and asserts nothing was lost or mutated —
  *  the property that matters once the transport becomes a socket (Phase 10.4).
@@ -1051,6 +1053,161 @@ describe('FliksHostImpl', () => {
         h.mediaFileRepo.find.mockResolvedValue([{ quality: 'WEBDL-1080p' }]);
 
         expect(await score(h, 'A Movie 2020 1080p WEB-DL')).toEqual([]);
+      });
+    });
+
+    // The plugin trusts this call for the whole verdict: it grabs the first row with an empty
+    // `rejections` array (`pickReleases` in fk-plugin-download) and never re-scores. So the
+    // profile floor and the matcher have to arrive here, not just in the settings page.
+    describe('custom-format floor', () => {
+      const matcher = new CustomFormatsService({} as never);
+
+      const format = (
+        id: number,
+        score: number,
+        specs: CustomFormat['specs'],
+      ): CustomFormat => ({ id, name: `f${id}`, score, specs }) as CustomFormat;
+
+      const setup = (
+        h: ReturnType<typeof makeHarness>,
+        formats: CustomFormat[],
+        minCustomFormatScore: number,
+      ) => {
+        h.mediaRepo.findOne.mockResolvedValue(
+          makeMedia({
+            runtime: 120,
+            qualityProfile: {
+              id: 1,
+              cutoff: 20,
+              upgradeAllowed: true,
+              items: [],
+              resolutionUpgradeOnly: false,
+              minCustomFormatScore,
+            },
+          }),
+        );
+        h.profiles.resolveAllowedForMedia.mockReturnValue({
+          allowed: new Set([16, 17, 18]),
+          allowedLangs: new Set(),
+        });
+        h.qualityDefs.getSizeLimitsMap.mockResolvedValue(new Map());
+        h.customFormats.findAll.mockResolvedValue(formats);
+        // The real matcher, so the format definition is exercised end to end.
+        h.customFormats.scoreReleaseWith.mockImplementation(
+          (f: CustomFormat[], title: string, meta: Parameters<typeof matcher.scoreReleaseWith>[2]) =>
+            matcher.scoreReleaseWith(f, title, meta),
+        );
+      };
+
+      const scoreOne = async (h: ReturnType<typeof makeHarness>, title: string) => {
+        const [row] = await h.host['releases.score']({
+          mediaId: 1,
+          releases: [
+            {
+              id: 'r1',
+              title,
+              size: 4_000_000_000,
+              seeders: 10,
+              leechers: 2,
+              publishDate: new Date().toISOString(),
+              sourceRef: 'source-a',
+              blocked: false,
+            },
+          ],
+        });
+        return row;
+      };
+
+      it('VERDICT: a negative total below the floor becomes a rejection, not just a low rank', async () => {
+        const h = makeHarness();
+        setup(h, [format(1, -100, [{ type: 'source', value: 'webrip' }])], 0);
+
+        const row = await scoreOne(h, 'A Movie 2020 1080p WEBRip x264-GRP');
+        expect(row.customFormatScore).toBe(-100);
+        expect((row.rejections as { code: string }[]).map((r) => r.code)).toEqual([
+          'CUSTOM_FORMAT_SCORE_TOO_LOW',
+        ]);
+      });
+
+      it('lets a release at or above the floor through', async () => {
+        const h = makeHarness();
+        setup(h, [format(1, 100, [{ type: 'source', value: 'webrip' }])], 0);
+
+        const row = await scoreOne(h, 'A Movie 2020 1080p WEBRip x264-GRP');
+        expect(row.customFormatScore).toBe(100);
+        expect(row.rejections).toEqual([]);
+      });
+
+      it('refuses a positive total that still misses a positive floor', async () => {
+        const h = makeHarness();
+        setup(h, [format(1, 10, [{ type: 'source', value: 'webrip' }])], 50);
+
+        const row = await scoreOne(h, 'A Movie 2020 1080p WEBRip x264-GRP');
+        expect((row.rejections as { code: string }[]).map((r) => r.code)).toEqual([
+          'CUSTOM_FORMAT_SCORE_TOO_LOW',
+        ]);
+      });
+
+      it('applies the matcher the settings page saves, conditions and all', async () => {
+        const h = makeHarness();
+        // Two types: the release must be both 1080p and BluRay to score.
+        setup(
+          h,
+          [
+            format(1, 100, [
+              { type: 'resolution', value: '1080p' },
+              { type: 'source', value: 'bluray' },
+            ]),
+          ],
+          0,
+        );
+
+        expect((await scoreOne(h, 'A Movie 2020 1080p BluRay x264-GRP')).customFormatScore).toBe(100);
+        expect((await scoreOne(h, 'A Movie 2020 1080p WEBRip x264-GRP')).customFormatScore).toBe(0);
+      });
+
+      it('applies no floor to a title with no quality profile', async () => {
+        const h = makeHarness();
+        setup(h, [format(1, -100, [{ type: 'source', value: 'webrip' }])], 0);
+        h.mediaRepo.findOne.mockResolvedValue(makeMedia({ runtime: 120, qualityProfile: null }));
+
+        const row = await scoreOne(h, 'A Movie 2020 1080p WEBRip x264-GRP');
+        expect((row.rejections as { code: string }[]).map((r) => r.code)).not.toContain(
+          'CUSTOM_FORMAT_SCORE_TOO_LOW',
+        );
+      });
+
+      it('ranks a scored release above a freeleech one — the plugin takes the first row', async () => {
+        const h = makeHarness();
+        setup(h, [format(1, 100, [{ type: 'source', value: 'bluray' }])], 0);
+
+        const rows = await h.host['releases.score']({
+          mediaId: 1,
+          releases: [
+            {
+              id: 'freeleech',
+              title: 'A Movie 2020 1080p WEBRip x264-GRP',
+              size: 4_000_000_000,
+              seeders: 10,
+              leechers: 2,
+              publishDate: new Date().toISOString(),
+              sourceRef: 'source-a',
+              freeleech: true,
+              blocked: false,
+            },
+            {
+              id: 'scored',
+              title: 'A Movie 2020 1080p BluRay x264-GRP',
+              size: 4_000_000_000,
+              seeders: 10,
+              leechers: 2,
+              publishDate: new Date().toISOString(),
+              sourceRef: 'source-a',
+              blocked: false,
+            },
+          ],
+        });
+        expect(rows.map((r) => r.id)).toEqual(['scored', 'freeleech']);
       });
     });
 

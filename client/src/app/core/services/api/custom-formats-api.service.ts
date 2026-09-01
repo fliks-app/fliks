@@ -59,7 +59,7 @@ export class CustomFormatsApiService {
     return firstValueFrom(this.http.post<CustomFormat>('/api/custom-formats', body));
   }
 
-  update(id: number, body: Partial<CreateCustomFormatBody>) {
+  update(id: number, body: CreateCustomFormatBody) {
     return firstValueFrom(this.http.put<CustomFormat>(`/api/custom-formats/${id}`, body));
   }
 

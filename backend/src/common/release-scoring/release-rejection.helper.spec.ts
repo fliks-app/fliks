@@ -37,6 +37,20 @@ describe('sortReleasesByRelevance', () => {
     expect(order([deadHd, liveSd])).toEqual(['live-720p', 'dead-1080p']);
   });
 
+  it('puts the custom-format score above the freeleech bonus', () => {
+    // Freeleech is expressible as a `release_flag` condition, so a configured score
+    // has to outrank the hardcoded preference rather than be overridden by it.
+    const free = row({ id: 'freeleech', freeleech: true });
+    const scored = row({ id: 'scored', customFormatScore: 100 });
+    expect(order([free, scored])).toEqual(['scored', 'freeleech']);
+  });
+
+  it('still prefers freeleech at an equal custom-format score', () => {
+    const free = row({ id: 'freeleech', freeleech: true, customFormatScore: 100 });
+    const paid = row({ id: 'paid', customFormatScore: 100 });
+    expect(order([free, paid])).toEqual(['freeleech', 'paid']);
+  });
+
   it('keeps quality first between two live releases', () => {
     const liveHdFewSeeds = row({ id: 'hd', rank: 200, seeders: 5 });
     const liveSdManySeeds = row({ id: 'sd', rank: 100, seeders: 500 });

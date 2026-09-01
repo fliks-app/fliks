@@ -56,10 +56,10 @@ export class CustomFormatsService {
 
   async update(id: number, dto: CreateCustomFormatDto): Promise<CustomFormat> {
     const cf = await this.findOne(id);
-    if (dto.specs !== undefined) this.assertRegexesCompile(dto.specs);
-    if (dto.name !== undefined) cf.name = dto.name;
-    if (dto.score !== undefined) cf.score = dto.score;
-    if (dto.specs !== undefined) cf.specs = dto.specs as CustomFormatSpec[];
+    this.assertRegexesCompile(dto.specs);
+    cf.name = dto.name;
+    cf.score = dto.score ?? 0;
+    cf.specs = dto.specs as CustomFormatSpec[];
     return this.repo.save(cf);
   }
 
@@ -86,18 +86,11 @@ export class CustomFormatsService {
   }
 
   /**
-   * Total custom-format score for a release title.
-   * Used in the grab flow to rank releases beyond basic quality.
+   * Total custom-format score for a release title — the grab flow's ranking
+   * signal beyond basic quality. Takes the format list the caller already read:
+   * the release scorer runs this once per candidate, so re-reading the table per
+   * release is an N+1.
    */
-  async scoreRelease(
-    releaseTitle: string,
-    meta?: ReleaseFlagMeta,
-  ): Promise<number> {
-    return this.scoreReleaseWith(await this.findAll(), releaseTitle, meta);
-  }
-
-  /** Same scoring against a format list the caller already read. The release scorer
-   *  runs this once per candidate, so re-reading the table per release is an N+1. */
   scoreReleaseWith(
     formats: CustomFormat[],
     releaseTitle: string,
