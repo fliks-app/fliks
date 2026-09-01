@@ -28,13 +28,17 @@ import { TABBABLE_SELECTOR, initialOverlayFocus } from '../../core/services/focu
     @if (visible()) {
       <!-- Backdrop — CSS @starting-style handles the fade-in declaratively
            (browser interpolates from opacity 0 on element creation), so the
-           component does not need a JS-side toggling pattern. -->
+           component does not need a JS-side toggling pattern.
+           Preventing the pointerdown default keeps the tap from blurring
+           whatever opened the sheet: focus used to leave and be restored a tick
+           later, which flickered the opener's ring off and back on. -->
       <div
         [class]="
           'bottom-sheet-backdrop fixed inset-0 z-[100] transition-opacity duration-150 ' +
           (showBackdrop() ? 'bg-black/60' : '')
         "
         [class.opacity-0]="dismissing()"
+        (pointerdown)="$event.preventDefault()"
         (click)="dismiss()"
       ></div>
       <!-- Sheet -->

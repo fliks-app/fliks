@@ -52,8 +52,14 @@ import { initialOverlayFocus } from '../../core/services/focusable.constants';
     <ng-template #content><ng-content></ng-content></ng-template>
 
     @if (open() && useDropdown()) {
-      <!-- Click-out backdrop (transparent) -->
-      <div class="fixed inset-0 z-[100]" (click)="close()"></div>
+      <!-- Click-out backdrop (transparent). Preventing the pointerdown default
+           keeps the click from blurring the opener first: focus would leave and
+           be restored a tick later, flickering its ring off and back on. -->
+      <div
+        class="fixed inset-0 z-[100]"
+        (pointerdown)="$event.preventDefault()"
+        (click)="close()"
+      ></div>
       <div
         data-tv-modal
         [attr.data-tv-submenu]="submenu() ? '' : null"
