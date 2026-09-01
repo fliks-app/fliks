@@ -727,3 +727,45 @@ describe('PlayerComponent remote control', () => {
     expect(h.streamingApi.updatePlaybackState).toHaveBeenCalled();
   });
 });
+
+describe('PlayerComponent loading spinner', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  /** Ready to play, nothing painted yet: the state a refused autoplay leaves. */
+  function ready() {
+    const h = createHarness();
+    h.state.loading.set(false);
+    h.state.buffering.set(false);
+    h.state.videoStarted.set(false);
+    h.state.error.set(null);
+    return h;
+  }
+
+  it('hides the spinner when the browser refused autoplay', () => {
+    const h = ready();
+    expect(h.component.spinnerVisible()).toBe(true);
+
+    h.component.autoplayBlocked.set(true);
+
+    // The media is ready and paused; the play button under the spinner is the
+    // real state, and a spinner over it reads as a stuck load.
+    expect(h.component.spinnerVisible()).toBe(false);
+  });
+
+  it('keeps the spinner for a genuine load or rebuffer', () => {
+    const h = ready();
+    h.component.autoplayBlocked.set(true);
+
+    h.state.loading.set(true);
+    expect(h.component.spinnerVisible()).toBe(false);
+
+    h.component.autoplayBlocked.set(false);
+    expect(h.component.spinnerVisible()).toBe(true);
+
+    h.state.loading.set(false);
+    h.state.buffering.set(true);
+    expect(h.component.spinnerVisible()).toBe(true);
+  });
+});
