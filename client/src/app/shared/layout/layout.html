@@ -234,7 +234,7 @@
             <ul class="menu p-2 gap-0.5">
               @for (lib of customLibraries(); track lib.id) {
                 <li>
-                  <a [routerLink]="libraryUrl(lib)" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
+                  <a [routerLink]="libraryUrl(lib)" routerLinkActive="menu-active" class="justify-between" (click)="resetNavHistory()">
                     <span class="flex items-center gap-2">
                       <app-lucide-icon [name]="libraryIcon(lib)" class="h-5 w-5" />
                       {{ lib.name }}
@@ -247,7 +247,7 @@
               }
               @for (item of sheetMainItems(); track item.id) {
                 <li>
-                  <a [routerLink]="item.route" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: item.exact }" class="justify-between" (click)="resetNavHistory()">
+                  <a [routerLink]="item.route" routerLinkActive="menu-active" [routerLinkActiveOptions]="{ exact: item.exact }" class="justify-between" (click)="resetNavHistory()">
                     <span class="flex items-center gap-2">
                       <app-nav-icon [name]="item.icon" class="h-5 w-5" />
                       {{ item.labelKey | translate }}
@@ -260,7 +260,7 @@
               }
               @for (item of sheetAcquisitionItems(); track item.id) {
                 <li>
-                  <a [routerLink]="item.route" routerLinkActive="active" class="justify-between" (click)="resetNavHistory()">
+                  <a [routerLink]="item.route" routerLinkActive="menu-active" class="justify-between" (click)="resetNavHistory()">
                     <span class="flex items-center gap-2">
                       <app-nav-icon [name]="item.icon" class="h-5 w-5" />
                       {{ item.labelKey | translate }}
@@ -330,7 +330,7 @@
       <ul class="menu p-4 flex-1 gap-0.5 min-w-64">
         @for (item of mainItemsBeforeLibraries(); track item.id) {
           <li>
-            <a [routerLink]="item.route" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: item.exact }" class="justify-between">
+            <a [routerLink]="item.route" routerLinkActive="menu-active" [routerLinkActiveOptions]="{ exact: item.exact }" class="justify-between">
               <span class="flex items-center gap-2">
                 <app-nav-icon [name]="item.icon" class="h-5 w-5" />
                 {{ item.labelKey | translate }}
@@ -345,7 +345,7 @@
         <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_library' | translate }}</li>
         @for (lib of displayLibraries(); track lib.id) {
           <li>
-            <a [routerLink]="libraryUrl(lib)" routerLinkActive="active" class="justify-between">
+            <a [routerLink]="libraryUrl(lib)" routerLinkActive="menu-active" class="justify-between">
               <span class="flex items-center gap-2">
                 <app-lucide-icon [name]="libraryIcon(lib)" class="h-5 w-5" />
                 {{ lib.name }}
@@ -358,7 +358,7 @@
         }
         @for (item of mainItemsAfterLibraries(); track item.id) {
           <li>
-            <a [routerLink]="item.route" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: item.exact }" class="justify-between">
+            <a [routerLink]="item.route" routerLinkActive="menu-active" [routerLinkActiveOptions]="{ exact: item.exact }" class="justify-between">
               <span class="flex items-center gap-2">
                 <app-nav-icon [name]="item.icon" class="h-5 w-5" />
                 {{ item.labelKey | translate }}
@@ -372,7 +372,7 @@
         <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_downloads' | translate }}</li>
         @for (item of acquisitionItems(); track item.id) {
           <li>
-            <a [routerLink]="item.route" routerLinkActive="active" class="justify-between">
+            <a [routerLink]="item.route" routerLinkActive="menu-active" class="justify-between">
               <span class="flex items-center gap-2">
                 <app-nav-icon [name]="item.icon" class="h-5 w-5" />
                 {{ item.labelKey | translate }}

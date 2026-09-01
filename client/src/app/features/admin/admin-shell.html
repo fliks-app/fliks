@@ -10,7 +10,7 @@
       <li class="menu-title text-xs uppercase tracking-wider" [class.mt-2]="i === 0" [class.mt-4]="i !== 0">{{ section.label | translate }}</li>
       @for (item of section.items; track item.id) {
         <li>
-          <a [routerLink]="item.route" routerLinkActive="active">
+          <a [routerLink]="item.route" routerLinkActive="menu-active">
             @if (item.icon) {
               <app-settings-icon [name]="item.icon" class="h-4 w-4" />
             }

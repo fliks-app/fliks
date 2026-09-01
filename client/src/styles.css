@@ -16,6 +16,13 @@
   --radius-box: 0.5rem;
 }
 
+/* Active menu item styled like the hover state. daisyUI's neutral default is
+   darker than base-100 in the dark theme, so it reads as a hole. */
+.menu {
+  --menu-active-bg: color-mix(in oklab, var(--color-base-content) 10%, transparent);
+  --menu-active-fg: var(--color-base-content);
+}
+
 /* Thinner focus outline on form fields. Suppress daisyUI's border on focus —
    the focus ring (outline) is the only visual cue we want, the extra white
    border doubled up with the ring looks noisy.
