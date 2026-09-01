@@ -337,6 +337,25 @@ describe('MediaCardComponent — card action handlers do what their row promises
     expect(navigateSpy).toHaveBeenCalledWith(['/movies', '7'], expect.anything());
   });
 
+  it('an episode card hands the still over, not a Media stub', async () => {
+    const h = await createFixture(FULL_MEMBER, {
+      link: ['/series', '5', 'episode', '42'],
+      imageUrl: '/still.jpg',
+    });
+    const navigateSpy = vi.spyOn(h.router, 'navigate').mockResolvedValue(true);
+    findAction(h, 'media_card.action_open').run();
+    // The episode page resolves its episode out of the season tree, so it can
+    // only use the still: it feeds the skeleton that carries the poster morph.
+    expect(navigateSpy).toHaveBeenCalledWith(
+      ['/series', '5', 'episode', '42'],
+      expect.objectContaining({
+        state: {
+          episode: { id: 42, stillUrl: '/still.jpg', title: expect.anything(), label: null },
+        },
+      }),
+    );
+  });
+
   it('Add to playlist opens the modal with the resolved target', async () => {
     const h = await createFixture(FULL_MEMBER, { link: ['/movies', '7'], playlistMediaId: 7 });
     findAction(h, 'media_detail.add_to_list').run();

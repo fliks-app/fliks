@@ -112,6 +112,14 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
  *  Empty for a movie, or a whole-series grab with no season scope. */
 type GrabScope = { seasonNumber?: number; episodeNumber?: number };
 
+/** What a card can hand an episode page before its media request lands. */
+interface HandedEpisode {
+  episodeId: number;
+  stillUrl: string;
+  title: string | null;
+  label: string | null;
+}
+
 /** How long a successful grab keeps the search phase while the download
  *  client's first tick makes its way over SSE. */
 const GRAB_HANDOFF_MS = 8000;
@@ -280,6 +288,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const m = this.media();
     const params = this.routeParams();
     if (!m || !params) return;
+    // Seeded stub: the episode is already in place and there is no season tree
+    // to resolve against, so resolving now would only report it missing.
+    if (m.type === 'series' && !m.seasons) return;
     const idParam = params.get('id');
     const paramId = idParam ? Number(idParam) : NaN;
     if (m.id !== paramId) return;
@@ -648,6 +659,14 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   readonly loading = signal(true);
   readonly notFound = signal(false);
+  /**
+   * What the card that opened this page knew about the episode. The page paints
+   * its real header from it while the media request is in flight, the same way
+   * a movie paints from the Media it is handed: the poster morph captures the
+   * new state one frame after the route swap, and a header that arrives later
+   * has no half of the pair to offer.
+   */
+  readonly episodeSeed = signal<HandedEpisode | null>(this.handedEpisode());
   readonly expectedKind = signal<MediaType>('movie');
 
   readonly releases = signal<MovieRelease[]>([]);
@@ -855,6 +874,42 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Paint the episode header from the card's handoff: a stub series carrying
+   * the focused episode, replaced wholesale when the real media lands. The
+   * stub has no `seasons`, which is what tells the focus effect to leave the
+   * seeded episode alone until then.
+   */
+  private seedFromHandedEpisode(mediaId: number): boolean {
+    const seed = this.handedEpisode();
+    this.episodeSeed.set(seed);
+    if (!seed) return false;
+    this.media.set({
+      id: mediaId,
+      type: 'series',
+      title: seed.title ?? '',
+    } as unknown as Media);
+    this.episodeMode.set(true);
+    this.focusedSeason.set(null);
+    this.focusedEpisode.set({
+      id: seed.episodeId,
+      stillUrl: seed.stillUrl,
+    } as unknown as Episode);
+    return true;
+  }
+
+  private handedEpisode(): HandedEpisode | null {
+    const handed = (history.state as { episode?: HandedEpisode & { id: number } })?.episode;
+    const param = Number(this.route.snapshot.paramMap.get('episodeId'));
+    if (!handed?.stillUrl || handed.id !== param) return null;
+    return {
+      episodeId: param,
+      stillUrl: handed.stillUrl,
+      title: handed.title ?? null,
+      label: handed.label ?? null,
+    };
+  }
+
   private async loadMedia(id: number) {
     const kind = this.route.snapshot.data['kind'] as MediaType;
     // Only a back navigation earns the memorized offset. Opening a title from
@@ -882,14 +937,15 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.selectedFileId.set(null);
     this.activeSeasonId.set(null);
 
-    // Card → detail handoff: when the user clicks a media card, we ship the
-    // already-loaded Media via router state so the detail page can render
-    // immediately with the same poster/title/year. The full fetch below still
-    // runs in the background to refresh fields the card doesn't carry
-    // (cast/crew/files/seasons). Spinner only stays for cold deep-links.
+    // Card → detail handoff: when the user clicks a media card, we ship what it
+    // already knows via router state so the detail page can render immediately
+    // instead of on a skeleton. The full fetch below still runs to bring the
+    // fields a card doesn't carry (cast/crew/files/seasons).
     const passed = (history.state as { media?: Media })?.media;
     if (passed && passed.id === id && passed.type === kind) {
       this.media.set(passed);
+      this.loading.set(false);
+    } else if (this.seedFromHandedEpisode(id)) {
       this.loading.set(false);
     } else if (this.media()?.id !== id) {
       this.media.set(null);
@@ -1010,32 +1066,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
         if (m.type === 'series' && m.seasons?.length) {
           if (!resumeHandled) this.syncActiveSeasonForSeriesFilter();
-          // Scroll to first unwatched episode in active season
-          const seasonId = this.activeSeasonId();
-          const activeSeason = m.seasons.find((s) => s.id === seasonId);
-          if (activeSeason?.episodes?.length) {
-            const firstUnwatched = activeSeason.episodes.find(
-              (e) => e.hasFile && !watchedSet.has(e.id),
-            );
-            if (firstUnwatched) {
-              requestAnimationFrame(() => {
-                const el = document.getElementById(`episode-${firstUnwatched.id}`);
-                if (!el) return;
-                const scroller = el.parentElement;
-                if (scroller && scroller.scrollWidth > scroller.clientWidth) {
-                  const elRect = el.getBoundingClientRect();
-                  const scrollerRect = scroller.getBoundingClientRect();
-                  const offset =
-                    elRect.left -
-                    scrollerRect.left +
-                    scroller.scrollLeft -
-                    scroller.clientWidth / 2 +
-                    el.offsetWidth / 2;
-                  scroller.scrollTo({ left: offset, behavior: 'smooth' });
-                }
-              });
-            }
-          }
         } else {
           this.activeSeasonId.set(null);
         }
@@ -1075,6 +1105,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       this.notFound.set(true);
       return;
     }
+    this.notFound.set(false);
     this.episodeMode.set(true);
     this.focusedSeason.set(foundSeason);
     this.focusedEpisode.set(foundEpisode);
@@ -1711,6 +1742,16 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     } finally {
       this.episodeBusy.set(null);
     }
+  }
+
+  /** Header releases button: reads the focus signals so the template needs no
+   *  season in scope, which it doesn't have until the media lands. */
+  loadFocusedEpisodeReleases(): void {
+    const m = this.media();
+    const s = this.focusedSeason();
+    const ep = this.focusedEpisode();
+    if (!m || !s || !ep) return;
+    void this.loadEpisodeReleases(m.id, s.id, ep.id);
   }
 
   async loadEpisodeReleases(mediaId: number, seasonId: number, episodeId: number) {

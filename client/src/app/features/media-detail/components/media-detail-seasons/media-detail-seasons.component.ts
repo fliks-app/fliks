@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   input,
   output,
@@ -27,6 +28,7 @@ import {
   LucideX,
 } from '@lucide/angular';
 import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
+import { centerRailOnCard } from '../../../../shared/utils/center-rail';
 import { MediaCardComponent } from '../../../../shared/components/media-card/media-card';
 import { DropdownMenuComponent } from '../../../../shared/components/dropdown-menu';
 import { DropdownOptionComponent } from '../../../../shared/components/dropdown-option/dropdown-option';
@@ -125,6 +127,21 @@ export class MediaDetailSeasonsComponent {
   readonly activeEpisodeId = input<number | null>(null);
   /** Season ids the viewer has liked — drives the season heart entry. */
   readonly likedSeasonIds = input<number[]>([]);
+
+  /**
+   * Card the rail should land on: the episode the page is showing, or the one
+   * the viewer would resume otherwise. Centred from here rather than from the
+   * page because the rail only exists once this component has rendered, and a
+   * caller firing a frame after its own fetch finds nothing to scroll.
+   */
+  private readonly centerTarget = computed(() => {
+    const active = this.activeEpisodeId();
+    if (active != null) return active;
+    const watched = this.watchedEpisodeIds();
+    return (
+      this.filteredEpisodes().find((e) => e.hasFile && !watched.has(e.id))?.id ?? null
+    );
+  });
 
   readonly selectSeason = output<number>();
   readonly episodesHasFileOnlyChange = output<boolean>();
@@ -326,6 +343,16 @@ export class MediaDetailSeasonsComponent {
       episodeUnreleased(ep) &&
       !ep.hasFile
     );
+  }
+
+  constructor() {
+    effect(() => {
+      const id = this.centerTarget();
+      if (id == null) return;
+      // Next frame: the cards this reads are rendered by the pass that ran
+      // this effect, and the rail needs its final width to be centred.
+      requestAnimationFrame(() => centerRailOnCard(`episode-${id}`));
+    });
   }
 
   episodeRoute(ep: Episode): string[] {

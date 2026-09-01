@@ -32,13 +32,12 @@
   } @else if (media(); as m) {
     <!-- ===== EPISODE MODE ===== -->
     @if (episodeMode() && focusedEpisode(); as ep) {
-      @let s = focusedSeason()!;
       <div class="flex flex-col">
         <app-media-info-header
           [title]="m.title"
           [mediaId]="m.id"
           [episodeId]="ep.id"
-          [episodeLabel]="episodeLabel()"
+          [episodeLabel]="episodeLabel() ?? episodeSeed()?.label ?? null"
           [rating]="null"
           [dateLabel]="episodeDateLabel()"
           [runtime]="episodeDisplayRuntime()"
@@ -68,7 +67,7 @@
           (openDownload)="openDownloadModal()"
           (refreshMetadata)="refreshMetadata()"
           (toggleMonitored)="toggleMonitored()"
-          (loadReleases)="loadEpisodeReleases(m.id, s.id, ep.id)"
+          (loadReleases)="loadFocusedEpisodeReleases()"
           (grabBest)="grabEpisodeBest(m.id, ep.id)"
           (identify)="openIdentifyModal()"
           (openAnalyze)="openAnalyzeModal()"
@@ -82,19 +81,21 @@
           (openTracking)="openTracking({ kind: 'episode', episodeId: ep.id })"
         />
 
-        @if (currentSeasonEpisodes().length > 1) {
-          <app-media-detail-seasons
-            [media]="m"
-            [selectedSeason]="s"
-            [activeSeasonId]="s.id"
-            [filteredEpisodes]="currentSeasonEpisodes()"
-            [activeEpisodeId]="ep.id"
-            [watchedEpisodeIds]="watchedEpisodeIds()"
-            [episodeProgress]="episodeProgress()"
-            [hideControls]="true"
-            [sectionTitle]="'media_detail.more_from_season' | translate: { season: s.seasonNumber }"
-            (toggleEpisodeWatched)="onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
-          />
+        @if (focusedSeason(); as s) {
+          @if (currentSeasonEpisodes().length > 1) {
+            <app-media-detail-seasons
+              [media]="m"
+              [selectedSeason]="s"
+              [activeSeasonId]="s.id"
+              [filteredEpisodes]="currentSeasonEpisodes()"
+              [activeEpisodeId]="ep.id"
+              [watchedEpisodeIds]="watchedEpisodeIds()"
+              [episodeProgress]="episodeProgress()"
+              [hideControls]="true"
+              [sectionTitle]="'media_detail.more_from_season' | translate: { season: s.seasonNumber }"
+              (toggleEpisodeWatched)="onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
+            />
+          }
         }
 
         @if (seasonsRow().length > 1) {

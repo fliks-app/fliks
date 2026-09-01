@@ -201,7 +201,7 @@
           class="w-full rounded-xl object-cover bg-base-300"
           [class.aspect-2/3]="posterMode() === 'poster'"
           [class.aspect-video]="posterMode() === 'still'"
-          [style.view-transition-name]="episodeId() ? null : 'media-poster-' + mediaId()"
+          [style.view-transition-name]="episodeId() ? 'media-poster-ep-' + episodeId() : 'media-poster-' + mediaId()"
         />
       } @else {
         <div
