@@ -56,7 +56,7 @@ export function clearStalePosterStamps(from: RouteNode, to: RouteNode): void {
   clearPosterStamps();
 }
 
-export const VIEW_TRANSITION_CLASS = 'view-transitioning';
+const VIEW_TRANSITION_CLASS = 'view-transitioning';
 
 /**
  * Flag the document for as long as the transition runs, so an entry animation

@@ -42,6 +42,7 @@ import { RequestCardComponent } from '../requests/request-card/request-card';
 import { RequestDeclineModalComponent } from '../requests/request-decline-modal/request-decline-modal.component';
 import { libraryColorVar } from '../../core/constants/library-appearance';
 import { StorageScopeService } from '../../core/services/storage-scope.service';
+import { itemArtwork } from '../../shared/utils/media-artwork.util';
 
 /**
  * # Home page
@@ -123,6 +124,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly injector = inject(Injector);
   private readonly route = inject(ActivatedRoute);
   private readonly reuseStrategy = inject(CachingReuseStrategy);
+  protected readonly itemArtwork = itemArtwork;
 
   private static readonly SCROLL_KEY = 'home';
   private attachedSub?: Subscription;
@@ -714,16 +716,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   async playContinueWatching(item: ContinueWatchingItem) {
-    await this.playableMedia.play({
-      fileId: item.mediaFileId,
-      mediaId: item.mediaId,
-      positionSeconds: item.positionSeconds,
-      episodeId: item.episodeId ?? undefined,
-      title: item.mediaTitle,
-      episodeTitle: item.episodeLabel ?? undefined,
-      fanartUrl: item.fanartUrl ?? item.posterUrl ?? null,
-      stillUrl: item.stillUrl ?? null,
-    }, false);
+    await this.playableMedia.resume(item);
   }
 
   /** "Mark as watched" can only fire on a movie with at least one file

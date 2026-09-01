@@ -481,7 +481,7 @@
           @for (item of recommendedForYou(); track item.id) {
             <app-media-card
               [aspect]="'landscape'"
-              [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
+              [imageUrl]="itemArtwork(item)"
               [title]="item.title"
               [subtitle]="item.label ?? ('recommend.received_by' | translate: { username: item.sender.username })"
               [link]="contentLink(item.mediaType, item.mediaId, item.episodeId)"
@@ -497,12 +497,17 @@
           @for (item of suggestionsContinue(); track item.mediaId + '-' + (item.episodeId ?? '')) {
             <app-media-card
               [aspect]="'landscape'"
-              [imageUrl]="item.fanartUrl ?? item.posterUrl"
+              [imageUrl]="itemArtwork(item)"
               [title]="item.mediaTitle"
               [subtitle]="item.episodeLabel ?? undefined"
               [progressPercent]="item.progressPercent"
               [link]="contentLink(item.mediaType, item.mediaId, item.episodeId)"
               [titleLink]="item.episodeId ? ['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId] : null"
+              [playlistMediaId]="item.mediaId"
+              [playlistEpisodeId]="item.episodeId"
+              [playable]="true"
+              [clickIntent]="'play'"
+              (clicked)="playContinueWatching(item)"
             />
           }
         </app-horizontal-scroller>
@@ -620,7 +625,7 @@
         @for (item of likesList(); track item.mediaId + '-' + (item.seasonId ?? '') + '-' + (item.episodeId ?? '')) {
           <app-media-card
             [aspect]="'landscape'"
-            [imageUrl]="item.stillUrl ?? item.fanartUrl ?? item.posterUrl"
+            [imageUrl]="itemArtwork(item)"
             [title]="item.title"
             [subtitle]="item.label ?? undefined"
             [link]="contentLink(item.mediaType, item.mediaId, item.episodeId)"

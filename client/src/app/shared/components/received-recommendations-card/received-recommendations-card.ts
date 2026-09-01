@@ -27,6 +27,7 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { LikesApiService } from '../../../core/services/api/likes-api.service';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
+import { itemArtwork } from '../../utils/media-artwork.util';
 
 /**
  * Home widget listing content other members have recommended to the viewer,
@@ -59,6 +60,7 @@ export class ReceivedRecommendationsCardComponent implements OnInit {
   private readonly addToPlaylistService = inject(AddToPlaylistService);
   private readonly likesApi = inject(LikesApiService);
   readonly tv = inject(TvService);
+  protected readonly itemArtwork = itemArtwork;
 
   readonly items = signal<ReceivedRecommendation[]>([]);
   readonly busyId = signal<number | null>(null);

@@ -15,6 +15,7 @@ import { MetadataService, TmdbGenre } from '../../core/services/api/metadata.ser
 import { SearchStateService } from '../../core/services/search-state.service';
 import { resolveTmdbGenreId } from '../../core/utils/tmdb-genres';
 import { ProfileContextService } from './profile-context.service';
+import { itemArtwork } from '../../shared/utils/media-artwork.util';
 
 /** The profile "overview" tab: tastes, playlists, recommendations, recently
  *  watched and likes, each behind its share toggle. Reads the profile aggregate
@@ -35,6 +36,7 @@ export class ProfileOverviewComponent {
   private readonly metadata = inject(MetadataService);
   private readonly searchState = inject(SearchStateService);
   protected readonly ctx = inject(ProfileContextService);
+  protected readonly itemArtwork = itemArtwork;
 
   readonly profile = this.ctx.profile;
 
