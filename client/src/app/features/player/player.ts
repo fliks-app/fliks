@@ -882,6 +882,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (src?.frameRate) profileParts.push(`${src.frameRate} fps`);
     const videoProfileLine = profileParts.join('  ') || '?';
 
+    // What the server really does with this file. `effectiveVideoCopy` already
+    // accounts for a pinned rung, so a remux whose rung was pinned reports the
+    // transcode it actually is.
+    const streamTypeKey =
+      pi?.playMethod === 'DirectPlay'
+        ? 'player.stats_stream_type_direct'
+        : effectiveVideoCopy
+          ? 'player.stats_stream_type_remux'
+          : 'player.stats_stream_type_transcode';
+
     // Playback mode for video
     let videoPlaybackMode: string;
     if (effectiveVideoCopy) {
@@ -1015,7 +1025,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       containerBitrate,
       outputFormat,
       outputFps,
-      directPlay: pi?.playMethod === 'DirectPlay',
+      streamTypeKey,
       videoLabel,
       videoStreamBitrate,
       videoProfileLine,

@@ -15,9 +15,8 @@
         <div class="font-bold text-white/90 mb-0.5 text-xs sm:text-sm">{{ 'player.stats_stream' | translate }}</div>
         <div class="text-white/80 pl-2 space-y-0.5">
           <div class="font-semibold">{{ s.container | uppercase }} ({{ s.containerBitrate }})</div>
-          @if (s.directPlay) {
-            <div class="text-white/60">&rarr; {{ 'player.stats_direct_playback' | translate }}</div>
-          } @else if (s.outputFormat) {
+          <div class="text-white/60">&rarr; {{ s.streamTypeKey | translate }}</div>
+          @if (s.outputFormat) {
             <div class="text-white/60">&rarr; {{ s.outputFormat | uppercase }}@if (s.outputFps) { ({{ s.outputFps }}) }</div>
           }
         </div>

@@ -6,6 +6,11 @@ import {
   buildIFramePlaylist,
   resolvePreRoll,
 } from './streaming.controller';
+import {
+  boundariesFromDurations,
+  computeSegmentDurations,
+  secondsToSegmentIndex,
+} from './transcoding/segment-boundaries';
 import { buildLiveSession, type LiveSession } from './live-session.service';
 import type { PreRollItem } from '../../common/plugin-contract';
 import type { User } from '../users/entities/user.entity';
@@ -323,5 +328,53 @@ describe('resolvePreRoll', () => {
     await expect(
       resolvePreRoll({ ask: () => Promise.resolve([]), resolveFile: () => Promise.resolve({}), user: USER }),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('remux playlist cannot drift out of A/V sync', () => {
+  // Real keyframe cuts measured on a 1920x800 H.264 Bluray source: ffmpeg's own
+  // HLS playlist for `-c:v copy -hls_time 6`, identical to the millisecond in
+  // MPEG-TS and fMP4. Durations here are what the segments really contain.
+  const KEYFRAMES = [0, 7.966, 15.974, 19.937, 25.317, 31.865, 38.997, 43.001];
+  const SEG_DUR = 6;
+
+  it('announces the real cut durations, and the seek grid agrees with them', () => {
+    const durations = computeSegmentDurations(KEYFRAMES, 43.001, SEG_DUR);
+    expect(durations.map((d) => Number(d.toFixed(3)))).toEqual([
+      7.966, 8.008, 3.963, 5.38, 6.548, 7.132, 4.004,
+    ]);
+
+    const boundaries = boundariesFromDurations(durations, KEYFRAMES[0]);
+    const playlist = buildVariableVodPlaylist(
+      durations,
+      (i) => `seg-${i}.m4s`,
+      'init.mp4',
+    );
+    const extinf = [...playlist.matchAll(/#EXTINF:([\d.]+),/g)].map((m) =>
+      Number(m[1]),
+    );
+
+    // Every segment's announced start must land exactly on the boundary the
+    // segment handler resolves a seek to. Divergence here IS the drift.
+    let announced = 0;
+    extinf.forEach((d, i) => {
+      expect(announced).toBeCloseTo(boundaries[i], 3);
+      announced += d;
+    });
+    expect(announced).toBeCloseTo(boundaries[boundaries.length - 1], 3);
+    expect(secondsToSegmentIndex(boundaries, 20)).toBe(3);
+  });
+
+  it('is what a uniform grid gets wrong — the regression being replaced', () => {
+    const durations = computeSegmentDurations(KEYFRAMES, 43.001, SEG_DUR);
+    const uniform = buildVodPlaylist(43.001, (i) => `seg-${i}.ts`, undefined, SEG_DUR);
+    const uniformExtinf = [...uniform.matchAll(/#EXTINF:([\d.]+),/g)].map((m) =>
+      Number(m[1]),
+    );
+    // Same media, but the announced third segment starts 1.9s before the bytes
+    // actually do — the player renders audio against a video PTS that moved.
+    const realStart = durations[0] + durations[1];
+    const uniformStart = uniformExtinf[0] + uniformExtinf[1];
+    expect(Math.abs(realStart - uniformStart)).toBeGreaterThan(1.9);
   });
 });

@@ -24,6 +24,10 @@ import {
   SDR_H264_VARIANT,
 } from './hls-variant-ladder';
 
+/** BANDWIDTH for the remux variant when the source carries no probed bitrate.
+ *  Only a manifest formality: the variant is alone, so nothing selects on it. */
+const REMUX_FALLBACK_BANDWIDTH_BPS = 8_000_000;
+
 /** Format frame rate for the HLS `FRAME-RATE` attribute. Apple's spec
  *  says "decimal-floating-point describing the maximum frame rate …
  *  rounded to three decimal places". Whole numbers stay integer to
@@ -150,6 +154,16 @@ export interface MasterPlaylistOptions {
    *  `onlyQuality` pin — see {@link applyQualityPin}. Missing/undefined
    *  defaults to `true` (existing full-ladder behaviour). */
   supportsAbr?: boolean;
+  /** RFC 6381 CODECS for the copied source, published with the remux variant
+   *  ({@link includeRemux}). `null`/absent omits the attribute so the player
+   *  probes the real bytes — never substitute a rung-derived string here, a
+   *  copy must not be described by the encoder's arithmetic. */
+  remuxCodecs?: string | null;
+  /** Container total bitrate for the remux variant's BANDWIDTH. Needed
+   *  separately from {@link sourceBitrate}, which sums per-stream bitrates and
+   *  collapses to the audio track alone on a source (MKV, typically) that
+   *  declares no per-stream video bitrate. */
+  remuxBandwidthBps?: number;
   /** Segment grid length, in seconds, of the trick-play rendition to advertise.
    *  Unset omits it: only AVPlay needs the `EXT-X-I-FRAME-STREAM-INF` tag, and
    *  every player that reads one will fetch the frames behind it. */
@@ -181,6 +195,8 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     sourceVideoCodec,
     supportsAbr = true,
     iFrameTrickPlaySegmentSeconds,
+    remuxCodecs,
+    remuxBandwidthBps,
   } = opts;
   // The "multi-audio" flag is really an "EXT-X-MEDIA layout" toggle —
   // the caller decided whether to split audio into renditions. Single-
@@ -333,12 +349,28 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
   const audioAttr = multiAudio ? ',AUDIO="audio"' : '';
   pushSubtitleMedia(lines);
 
-  // The HLS master never advertises the `/remux/` variant — it proved
-  // unreliable on ExoPlayer (Android), which would ABR-downgrade from the
-  // remux rung to the identical-resolution 1080p transcode mid-stream and
-  // trigger a pointless FFmpeg kill+restart. Transcode profiles cover the
-  // full resolution ladder; "remux"/"original" quality picks are mapped
-  // onto the top transcode profile.
+  // Copy path (`?remux=1`, set only by a DirectStream decision): publish the
+  // remux variant ALONE. Pairing it with the ladder is what made ExoPlayer
+  // ABR-downgrade to the identical-resolution 1080p transcode and kill+respawn
+  // ffmpeg; with a single variant there is no rung to switch to. A user who
+  // wants a lighter rung pins one, which arrives here as `onlyQuality` and
+  // takes the ladder branch below.
+  if (includeRemux && !onlyQuality) {
+    // BANDWIDTH is required and must be a peak, so keep the ladder's 1.5x
+    // convention over the source average; the fallback only fires when ffprobe
+    // reported no bitrate at all.
+    const avg =
+      Math.round(remuxBandwidthBps || sourceBitrate || sourceVideoBitrateBps || 0) ||
+      REMUX_FALLBACK_BANDWIDTH_BPS;
+    const codecsAttr = remuxCodecs ? `,CODECS="${remuxCodecs}${codecsTail}"` : '';
+    lines.push(
+      `#EXT-X-STREAM-INF:BANDWIDTH=${Math.round(avg * 1.5)},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${sourceWidth}x${sourceHeight}${frameRateAttr},NAME="remux"${codecsAttr}${audioAttr}${subsAttr}`,
+      `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
+    );
+    pushIFrameStream(lines);
+    return lines.join('\n');
+  }
+
   const ladder = getLadderForDevice(deviceType);
   let profiles = getAvailableProfiles(sourceWidth, sourceHeight, deviceType);
   if (!profiles.length) profiles.push(ladder[ladder.length - 1]); // at least 480p

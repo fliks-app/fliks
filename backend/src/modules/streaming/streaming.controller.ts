@@ -52,6 +52,7 @@ import {
   getRemuxSegmentGrid,
   secondsToSegmentIndex as boundarySecondsToIndex,
 } from './transcoding/segment-boundaries';
+import { copySourceCodecString } from './transcoding/codec/codec-strings';
 import { setSelectedRenderNode } from './transcoding/hw-device';
 import { LiveSessionRegistry } from './live-session.service';
 import * as path from 'path';
@@ -1331,6 +1332,13 @@ export class StreamingController {
       // Only the SDR ladder branch consumes this — the HDR branch
       // already drives its codec strings from `hdrPassThrough`.
       sdrVariant: sdrVariant && sdrVariant.hdr == null ? sdrVariant : undefined,
+      // Copied stream: describe the bitstream as probed, not as a rung would
+      // encode it (see copySourceCodecString).
+      remuxCodecs: includeRemux && v ? copySourceCodecString(v) : undefined,
+      // Same formula as playback-info's remuxMasterBandwidthBps: a copy streams
+      // the whole container, and per-stream bitrates are often absent.
+      remuxBandwidthBps:
+        si?.formatBitRate ?? (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0),
       sourceFrameRate,
       subtitleRenditions,
       sourceVideoBitrateBps: resolveSourceVideoBitrateBps(
@@ -2003,9 +2011,10 @@ export class StreamingController {
     // keyframes — the uniform grid would emit wrong EXTINF durations and drift
     // AVPlayer out of A/V sync. Emit the real keyframe-aligned durations; fall
     // back to the uniform grid when keyframes can't be probed (no regression).
-    // fMP4 only — the Tizen MPEG-TS fallback keeps the uniform path.
+    // Mux-flavour independent: `-c:v copy` cuts on the same source keyframes in
+    // MPEG-TS and fMP4 (verified identical to the millisecond).
     let remuxDurations: number[] | null = null;
-    if (quality === 'remux' && !useTs) {
+    if (quality === 'remux') {
       remuxDurations =
         (await getRemuxSegmentGrid(resolved.absolutePath, duration, this.segDur()))
           ?.durations ?? null;
