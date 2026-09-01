@@ -184,12 +184,31 @@ class PausableTimeout {
         transform: translateZ(0) scale(1);
       }
     }
+    /* Closing where view transitions are unavailable (native, TV): the player
+       shrinks over the shell, since the destination page is not painted yet. */
+    .player-container.closing {
+      animation: player-close 200ms cubic-bezier(0.4, 0, 1, 1) both;
+    }
+    @keyframes player-close {
+      to {
+        opacity: 0;
+        transform: translateZ(0) scale(0.8);
+      }
+    }
     @media (prefers-reduced-motion: reduce) {
       .player-container {
         animation-name: player-open-fade;
       }
       @keyframes player-open-fade {
         from {
+          opacity: 0;
+        }
+      }
+      .player-container.closing {
+        animation-name: player-close-fade;
+      }
+      @keyframes player-close-fade {
+        to {
           opacity: 0;
         }
       }
@@ -538,6 +557,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  friendly defaults. Sourced from ServerConfigService so the rule
    *  matches the rest of the app instead of probing Capacitor directly. */
   readonly isNative = this.serverConfig.isNative;
+  /** Player-close animation duration; must match the `player-close` keyframes. */
+  private static readonly closeAnimationMs = 200;
+  /** Set while the closing animation runs, on the platforms that play it here. */
+  readonly closing = signal(false);
 
   // Sync local playback with Cast connection state
   private wasCasting = false;
@@ -3845,15 +3868,31 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // send the user straight back into the player.
     this.navbar.markAsBackNavigation();
     const prev = this.navHistory.previousUrl;
-    if (prev && prev.split('?')[0] === target) {
-      history.back();
-      return;
-    }
-    if (target === '/') {
-      void this.router.navigate(['/'], { replaceUrl: true });
-      return;
-    }
-    void this.router.navigateByUrl(target, { replaceUrl: true });
+    void this.animateClose().then(() => {
+      if (prev && prev.split('?')[0] === target) {
+        history.back();
+        return;
+      }
+      if (target === '/') {
+        void this.router.navigate(['/'], { replaceUrl: true });
+        return;
+      }
+      void this.router.navigateByUrl(target, { replaceUrl: true });
+    });
+  }
+
+  /**
+   * Hold the navigation back for the closing animation, where it has to run on
+   * the player itself. A view transition does it instead on web, animating the
+   * player over the page it returns to, which is the better effect but needs
+   * both painted at once.
+   */
+  private async animateClose(): Promise<void> {
+    if (!this.isNative && !this.device.isTv()) return;
+    this.closing.set(true);
+    await new Promise((resolve) =>
+      setTimeout(resolve, PlayerComponent.closeAnimationMs),
+    );
   }
 
   /** Retry a cold-open failure (playback never started). */

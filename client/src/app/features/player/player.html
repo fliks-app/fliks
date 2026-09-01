@@ -3,6 +3,7 @@
   #playerContainer
   appDefaultFocus="[data-default-focus]"
   class="player-container"
+  [class.closing]="closing()"
   [class.hide-cursor]="!controlsVisible()"
   [class.native-player]="!!nativeEngine"
   [class.hidden]="castService.isConnected()"
