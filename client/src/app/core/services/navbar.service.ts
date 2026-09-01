@@ -27,10 +27,13 @@ export class NavbarService {
   /**
    * User preference: whether the sidebar should stay pinned at lg breakpoint
    * even on form-factors that default to a drawer (tablet). Persisted in
-   * localStorage. Desktop and TV are always pinned regardless of this flag;
-   * phones never have a sidebar.
+   * localStorage, and on by default: wherever the pin is offered there is room
+   * for the column, and the drawer made every navigation a two-step. Desktop is
+   * always pinned regardless of this flag; phones never have a sidebar.
    */
-  readonly sidebarPinned = signal(localStorage.getItem('fliks.sidebarPinned') === 'true');
+  readonly sidebarPinned = signal(
+    localStorage.getItem('fliks.sidebarPinned') !== 'false',
+  );
   /** Effective pin state for layout decisions — auto-disabled on narrow
    *  screens (e.g. tablet portrait < lg) where a pinned drawer would eat too
    *  much horizontal space and leave the user without the standard mobile
@@ -40,8 +43,18 @@ export class NavbarService {
     () => this.sidebarPinned() && this.isLargeScreen(),
   );
 
-  private readonly router = inject(Router);
+  /** Whether the layout shows the sidebar as a permanent column. Desktop always
+   *  does; a TV or a tablet does when the pin is in effect. Stated here rather
+   *  than in the template so the form-factor list lives in one place. */
+  readonly sidebarDocked = computed(
+    () =>
+      this.device.isDesktop() ||
+      ((this.device.isTv() || this.device.isTablet()) &&
+        this.effectiveSidebarPinned()),
+  );
+
   private readonly device = inject(DeviceService);
+  private readonly router = inject(Router);
   /** Stack of in-app URLs we've visited (most recent last, current excluded). */
   private readonly history: string[] = [];
   /** Set while goBack() is navigating, so the NavigationEnd it triggers is

@@ -141,6 +141,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
           mobileNavbarVisible: () => true,
           effectiveSidebarPinned: () => false,
           sidebarPinned: () => false,
+          sidebarDocked: () => false,
           toggleSidebarPinned: () => {},
           scrollAtTop: { set: () => {} },
           setPageTitle: () => {},

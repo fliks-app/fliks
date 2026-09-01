@@ -1,6 +1,6 @@
 <app-background />
 <div class="drawer min-h-screen"
-     [class.lg:drawer-open]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
+     [class.lg:drawer-open]="navbar.sidebarDocked()"
      [class.md:drawer-open]="device.isTablet() && navbar.effectiveSidebarPinned()">
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative">
