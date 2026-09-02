@@ -30,5 +30,12 @@
       [label]="'display_settings.gray_unreleased' | translate"
       [hint]="'display_settings.gray_unreleased_hint' | translate"
     />
+
+    <app-toggle-field
+      [value]="sortTracksByLanguage()"
+      (valueChange)="onSortTracksByLanguageChange($event)"
+      [label]="'display_settings.sort_tracks_by_language' | translate"
+      [hint]="'display_settings.sort_tracks_by_language_hint' | translate"
+    />
   </div>
 </div>

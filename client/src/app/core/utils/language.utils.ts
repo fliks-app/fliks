@@ -87,5 +87,53 @@ export function localizeLanguage(
   if (norm === 'und' || norm === 'xx') return norm;
   const key = `language.${norm}`;
   const t = translate.instant(key);
-  return typeof t === 'string' && t !== key ? t : norm;
+  if (typeof t === 'string' && t !== key) return t;
+  const locale = translate.currentLang || translate.defaultLang || 'en';
+  return nativeLanguageName(norm, locale) ?? norm;
+}
+
+const displayNames = new Map<string, Intl.DisplayNames | null>();
+
+/**
+ * The platform's own name for a language code we carry no translation for
+ * (`est`, `tam`, …), in the UI locale. Null when the runtime has no
+ * `Intl.DisplayNames` (Chromium < 81, i.e. the TV builds) or the code is
+ * unknown to it — the caller then shows the raw code.
+ */
+function nativeLanguageName(code: string, locale: string): string | null {
+  if (typeof Intl.DisplayNames !== 'function') return null;
+  if (!displayNames.has(locale)) {
+    try {
+      displayNames.set(locale, new Intl.DisplayNames([locale], { type: 'language' }));
+    } catch {
+      displayNames.set(locale, null);
+    }
+  }
+  let name: string | undefined;
+  try {
+    name = displayNames.get(locale)?.of(code);
+  } catch {
+    return null;
+  }
+  if (!name || name === code) return null;
+  // Our own names are capitalised; several locales render theirs lowercase.
+  return name.charAt(0).toLocaleUpperCase(locale) + name.slice(1);
+}
+
+/**
+ * Track lists ordered by their displayed language name. Entries whose code has
+ * no known name (`und`, `xx`, an untranslated code) go last, in source order;
+ * the sort is stable, so same-language renditions keep their source order too.
+ */
+export function sortByLanguageName<T extends { language?: string }>(
+  items: readonly T[],
+  translate: TranslateService,
+): T[] {
+  const name = (i: T) => localizeLanguage(i.language, translate);
+  const unnamed = (i: T) => (name(i) === normalizeLangCode(i.language) ? 1 : 0);
+  return [...items].sort(
+    (a, b) =>
+      unnamed(a) - unnamed(b) ||
+      (unnamed(a) ? 0 : name(a).localeCompare(name(b))),
+  );
 }

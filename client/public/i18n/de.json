@@ -218,6 +218,8 @@
     "home_background_hint": "Zeigt ein Poster im Vollbild hinter den Bereichen der Startseite an.",
     "gray_unreleased": "Unveröffentlichte Folgen ausgrauen",
     "gray_unreleased_hint": "Zeigt das Standbild in Schwarz-Weiß, bis die Folge ausgestrahlt wird.",
+    "sort_tracks_by_language": "Spuren nach Sprache sortieren",
+    "sort_tracks_by_language_hint": "Sortiert die Audio- und Untertitelauswahl alphabetisch nach Sprache; Spuren ohne erkannte Sprache bleiben am Ende.",
     "language": "App-Sprache",
     "language_auto": "System",
     "language_hint": "Sprache der Oberfläche. Standardmäßig die deines Browsers oder Systems."

@@ -5,6 +5,8 @@ import { SpriteMetadata } from '../utils/player.utils';
 export interface PlaybackOption {
   id: string;
   label: string;
+  /** Source language code, used to order the pickers. */
+  language?: string;
   /** Two-line row: language above, codec and channels below. Falls back to
    *  `label` on a source that cannot split it. */
   head?: string;

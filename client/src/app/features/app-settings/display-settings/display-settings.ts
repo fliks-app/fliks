@@ -18,6 +18,7 @@ export class DisplaySettingsPageComponent implements OnInit {
 
   readonly homeBackground = signal(true);
   readonly grayUnreleased = signal(true);
+  readonly sortTracksByLanguage = signal(false);
   readonly languageOptions = SUPPORTED_LOCALES;
   /** '' = follow the browser/OS language. */
   readonly language = signal('');
@@ -26,6 +27,7 @@ export class DisplaySettingsPageComponent implements OnInit {
     const s = this.displaySettings.get();
     this.homeBackground.set(s.homeBackground);
     this.grayUnreleased.set(s.grayUnreleased);
+    this.sortTracksByLanguage.set(s.sortTracksByLanguage);
     this.language.set(s.language);
   }
 
@@ -37,6 +39,11 @@ export class DisplaySettingsPageComponent implements OnInit {
   onGrayUnreleasedChange(value: boolean) {
     this.grayUnreleased.set(value);
     this.displaySettings.save({ grayUnreleased: value });
+  }
+
+  onSortTracksByLanguageChange(value: boolean) {
+    this.sortTracksByLanguage.set(value);
+    this.displaySettings.save({ sortTracksByLanguage: value });
   }
 
   onLanguageChange(value: string) {

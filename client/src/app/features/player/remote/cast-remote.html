@@ -38,7 +38,7 @@
             <span class="flex-1 text-left">Désactivé</span>
             @if (!activeSubId()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
           </button>
-          @for (sub of availableSubtitles(); track sub.id) {
+          @for (sub of sortedSubtitles(); track sub.id) {
             <button class="dropdown-item text-white" (click)="selectSubtitle(sub)">
               <svg lucideCaptions class="h-4 w-4 text-white/50 shrink-0"></svg>
               <span class="flex-1 text-left">{{ sub.label }}@if (sub.burnIn) { <span class="text-warning/70 text-[10px] ml-1">gravé</span> }</span>
@@ -55,7 +55,7 @@
             <svg lucideHeadphones class="h-4 w-4"></svg>
             Audio
           </button>
-          @for (track of availableAudioTracks(); track track.id) {
+          @for (track of sortedAudioTracks(); track track.id) {
             <button class="dropdown-item text-white" (click)="selectAudio(track)">
               <svg lucideHeadphones class="h-4 w-4 text-white/50 shrink-0"></svg>
               <span class="flex-1 text-left">{{ track.label }}</span>

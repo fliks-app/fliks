@@ -56,6 +56,7 @@ import {
   CardActionsService,
   type CardAction,
 } from '../../../core/services/card-actions.service';
+import { AppSettingsService } from '../../../core/services/app-settings.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-evaluator';
 import type { MediaType } from '../../../core/enums/media-type.enum';
@@ -143,6 +144,7 @@ export class MediaInfoHeaderComponent {
   private readonly router = inject(Router);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly trackManager = inject(TrackManagerService);
+  private readonly appSettings = inject(AppSettingsService);
   readonly navbar = inject(NavbarService);
   readonly tv = inject(TvService);
   private readonly device = inject(DeviceService);
@@ -408,7 +410,7 @@ export class MediaInfoHeaderComponent {
     const file = this.selectedFile();
     const audio = file?.streamInfo?.audio as any[] | undefined;
     if (!audio?.length) return [];
-    return audio.map((a: any, i: number) => {
+    const tracks = audio.map((a: any, i: number) => {
       const parts = formatAudioParts(a, this.translate, i + 1);
       return {
         index: i,
@@ -418,7 +420,12 @@ export class MediaInfoHeaderComponent {
         language: a.language ?? 'und',
       };
     });
+    return this.appSettings.sortTracks(tracks);
   });
+
+  readonly sortedSubtitles = computed(() =>
+    this.appSettings.sortTracks(this.subtitles()),
+  );
   readonly selectedAudio = computed(
     () => this.audioTracks().find((t) => t.index === this.selectedAudioIndex()) ?? null,
   );

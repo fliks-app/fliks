@@ -223,6 +223,8 @@
     "home_background_hint": "Affiche une affiche en plein écran derrière les sections de l'accueil.",
     "gray_unreleased": "Épisodes non sortis en noir et blanc",
     "gray_unreleased_hint": "Affiche l'image en noir et blanc tant que l'épisode n'est pas diffusé.",
+    "sort_tracks_by_language": "Trier les pistes par langue",
+    "sort_tracks_by_language_hint": "Classe les sélecteurs audio et sous-titres par ordre alphabétique de langue ; les pistes sans langue identifiée restent à la fin.",
     "language": "Langue de l'application",
     "language_auto": "Système",
     "language_hint": "Langue de l'interface. Par défaut, celle de votre navigateur ou de votre système."
