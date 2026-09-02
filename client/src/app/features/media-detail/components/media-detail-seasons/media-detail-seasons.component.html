@@ -243,6 +243,7 @@
                 class="sm:row-span-2"
                 widthClass="shrink-0 w-28 sm:w-48 lg:w-56"
                 [id]="'episode-row-' + ep.id"
+                [posterMorph]="false"
                 [imageUrl]="ep.stillUrl ?? null"
                 [title]="episodeTitle(ep)"
                 [subtitle]="episodeCardSubtitle((ep.airDate | localeDate), ep.runtime)"
@@ -304,6 +305,7 @@
         @for (ep of filteredEpisodes(); track ep.id) {
           <app-media-card [aspect]="'landscape'"
             [id]="'episode-' + ep.id"
+            [posterMorph]="false"
             [imageUrl]="ep.stillUrl ?? null"
             [title]="episodeTitle(ep)"
             [subtitle]="episodeCardSubtitle((ep.airDate | localeDate), ep.runtime)"

@@ -125,6 +125,7 @@
                   [subtitle]="other.episodes.length + ' ' + ('media_detail.episodes' | translate)"
                   [link]="seasonLink(m, other)"
                   [replaceUrl]="true"
+                  [posterMorph]="false"
                   [interactiveWatched]="true"
                   [status]="seasonFullyWatched(other) ? 'watched' : null"
                   [highlighted]="other.id === focusedSeason()?.id"

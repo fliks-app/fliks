@@ -252,6 +252,12 @@ export class MediaCardComponent {
    * time means only the clicked card carries the name during the snapshot.
    */
   private readonly imgRef = viewChild<ElementRef<HTMLImageElement>>('cardImg');
+  private readonly overlayRef = viewChild<ElementRef<HTMLElement>>('cardOverlay');
+
+  /** Off for a card whose destination is the page it already sits on: the
+   *  hero there ends up with the name this card stamped, and a duplicate name
+   *  aborts the whole transition ("Transition was skipped"). */
+  readonly posterMorph = input(true);
 
   /**
    * Desktop affordance — opens the same contextual panel that TV's menu key
@@ -336,10 +342,16 @@ export class MediaCardComponent {
     // Pointless where the engine has no View Transitions (Chromium <111, Tizen 5.5
     // WebKit, webOS 5), and it costs a querySelectorAll per click.
     if (!('startViewTransition' in document)) return;
+    if (!this.posterMorph()) {
+      // A stamp left by an earlier click would pair with this navigation's hero
+      // and morph the wrong image.
+      clearPosterStamps();
+      return;
+    }
     const id = this.resolveMediaId();
     const img = this.imgRef()?.nativeElement;
     if (id == null || !img) return;
-    stampPoster(img, id, this.episodeIdFromLink());
+    stampPoster(img, id, this.episodeIdFromLink(), this.overlayRef()?.nativeElement);
   }
   protected readonly _playable = computed(() => {
     if (this.playable()) return true;

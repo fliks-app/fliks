@@ -54,6 +54,11 @@
       </div>
     }
 
+    <!-- Badges, progress and hover affordances. Grouped so a single
+         view-transition-name lifts them above the poster that morphs onto
+         this card, which would otherwise hide them for the whole animation. -->
+    <div #cardOverlay data-card-overlay class="absolute inset-0 pointer-events-none">
+
     <!-- Rating badge (bottom-left, portrait only) -->
     @if (_rating() > 0 && aspect() === 'portrait') {
       <div class="absolute bottom-1.5 left-1.5 z-10 flex items-center gap-0.5 bg-black/60 rounded-md px-1.5 py-0.5">
@@ -105,7 +110,7 @@
     } @else if (interactiveWatched()) {
       <button
         type="button"
-        class="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center shadow transition-colors cursor-pointer"
+        class="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center shadow transition-colors cursor-pointer pointer-events-auto"
         [class.bg-success]="status() === 'watched'"
         [class.hover:bg-success/90]="status() === 'watched'"
         [class.bg-black/50]="status() !== 'watched'"
@@ -153,13 +158,14 @@
     @if (showHoverOverlay() && cardActions().length) {
       <button
         type="button"
-        class="absolute top-2 right-2 z-10 btn btn-circle btn-sm border-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-neutral-500/50"
+        class="absolute top-2 right-2 z-10 btn btn-circle btn-sm border-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-neutral-500/50 pointer-events-auto"
         (click)="openActions($event)"
         [attr.aria-label]="'media_card.actions' | translate"
       >
         <svg lucideEllipsisVertical class="h-4 w-4" [strokeWidth]="2"></svg>
       </button>
     }
+    </div>
   </figure>
 
   <!-- Title below -->

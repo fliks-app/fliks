@@ -6,11 +6,16 @@
  * timer, only replaced. That makes a stale stamp the hazard, and the router's
  * transition hook drops it once neither side of a navigation has a poster.
  */
-export function clearPosterStamps(except?: HTMLElement): void {
+/** The clicked card's badges and progress bar, captured as one layer. */
+export const CARD_OVERLAY_NAME = 'media-card-overlay';
+
+export function clearPosterStamps(): void {
   document
-    .querySelectorAll<HTMLElement>('img[style*="view-transition-name"]')
+    .querySelectorAll<HTMLElement>(
+      'img[style*="view-transition-name"], [data-card-overlay][style*="view-transition-name"]',
+    )
     .forEach((el) => {
-      if (el !== except) el.style.viewTransitionName = '';
+      el.style.viewTransitionName = '';
     });
 }
 
@@ -18,13 +23,17 @@ export function stampPoster(
   img: HTMLElement,
   mediaId: number,
   episodeId?: number | null,
+  overlay?: HTMLElement | null,
 ): void {
-  clearPosterStamps(img);
+  clearPosterStamps();
   // An episode page shows a still, not the series poster, so it pairs on its
   // own name: the series name would morph the card into the wrong image.
   img.style.viewTransitionName = episodeId
     ? `media-poster-ep-${episodeId}`
     : `media-poster-${mediaId}`;
+  // The morphing poster is painted above the page snapshot, so the card's own
+  // badges only reappear when the animation ends unless they are lifted too.
+  if (overlay) overlay.style.viewTransitionName = CARD_OVERLAY_NAME;
 }
 
 interface RouteNode {

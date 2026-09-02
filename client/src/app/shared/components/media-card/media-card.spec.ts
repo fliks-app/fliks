@@ -629,3 +629,30 @@ describe('media-card artwork placeholder', () => {
     expect(placeholder(h)).toBeTruthy();
   });
 });
+
+describe('media-card poster morph opt-out', () => {
+  it('clears a stale stamp instead of naming a card that returns to its own page', async () => {
+    // The guard is skipped where the engine has no View Transitions.
+    (document as unknown as { startViewTransition: unknown }).startViewTransition = () => ({
+      finished: Promise.resolve(),
+    });
+    const stale = document.createElement('img');
+    stale.style.viewTransitionName = 'media-poster-3';
+    document.body.appendChild(stale);
+
+    const h = await createFixture(FULL_MEMBER, {
+      media: makeMedia({ posterUrl: '/api/images/poster.jpg' }),
+      posterMorph: false,
+    });
+    (h.fixture.componentInstance as unknown as { flagPosterForTransition(): void })
+      .flagPosterForTransition();
+
+    // A name still on the card would pair with this page's own hero and abort
+    // the transition on a duplicate.
+    expect(h.fixture.nativeElement.querySelector('img').style.viewTransitionName).toBe('');
+    expect(stale.style.viewTransitionName).toBe('');
+
+    stale.remove();
+    delete (document as unknown as { startViewTransition?: unknown }).startViewTransition;
+  });
+});

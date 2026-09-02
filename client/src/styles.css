@@ -1191,6 +1191,25 @@ body.tablet [data-touch-only] {
   z-index: 0;
 }
 
+/* The card's own badges and progress bar ride above the poster that morphs
+   onto them (z-index 1): captured inside the root snapshot they stayed hidden
+   under it for the whole animation. Nothing pairs with them on the detail side,
+   so the arriving copy skips the entry fade and the leaving one is quick. */
+::view-transition-group(media-card-overlay) {
+  z-index: 2;
+}
+::view-transition-new(media-card-overlay) {
+  animation: none;
+}
+::view-transition-old(media-card-overlay) {
+  animation: card-overlay-out 120ms linear both;
+}
+@keyframes card-overlay-out {
+  to {
+    opacity: 0;
+  }
+}
+
 /* Closing the player: the only navigation that opts the root pair back in.
    The old snapshot IS the player, so it shrinks and fades above the page it
    returns to, mirroring the open animation in `player.ts`. */
