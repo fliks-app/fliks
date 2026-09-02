@@ -2346,7 +2346,7 @@
         "auto_update": "Plugins automatisch aktualisieren",
         "auto_update_hint": "Standardmäßig aktiviert. Installiert einmal täglich, nach dem Aktualisieren der Quellen, die neueste angebotene Version eines installierten Plugins. Unbeaufsichtigt wird nur ein Archiv installiert, das der Quellkatalog signiert hat; alles andere braucht weiterhin deine Bestätigung.",
         "saved": "Plugin-Einstellungen gespeichert",
-        "skip_compatibility": "Kompatibilitätsprüfung deaktivieren",
+        "skip_compatibility": "Erforderliche Fliks-Version ignorieren",
         "skip_compatibility_hint": "Installiert und lädt eine Plugin-Version auch dann, wenn sie diese Fliks-Version nicht als unterstützt angibt. Die Prüfung der Plugin-API gilt weiterhin.",
         "allow_older_versions": "Installation älterer Versionen erlauben",
         "allow_older_versions_hint": "Ergänzt die Installations- und Aktualisierungsknöpfe im Katalog um eine Versionsauswahl.",
