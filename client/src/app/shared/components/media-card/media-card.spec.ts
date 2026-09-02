@@ -567,6 +567,27 @@ describe('MediaCardComponent — card.actions merges with plugin contributions',
  * start; a poster URL that outlived its file never paints at all. Both must
  * show the film glyph rather than the WebView's broken-image icon.
  */
+/** The figure clips with `overflow-hidden`, and that clip loses the border width
+ *  when the card is highlighted, so the art has to follow. It cannot just sit at
+ *  the smaller value either: a view transition snapshots the img out of the
+ *  figure, and its own radius is the only one the poster morph has. */
+describe('media-card artwork radius', () => {
+  const img = (h: Harness): HTMLImageElement | null =>
+    h.fixture.nativeElement.querySelector('img');
+
+  it('VERDICT: matches the figure clip, so the poster morph keeps the resting radius', async () => {
+    const art = { posterUrl: '/api/images/poster.jpg' };
+    const resting = await createFixture(FULL_MEMBER, { media: makeMedia(art) });
+    expect(img(resting)!.classList.contains('rounded-lg')).toBe(true);
+    expect(img(resting)!.classList.contains('rounded-md')).toBe(false);
+
+    const active = await createFixture(FULL_MEMBER, { media: makeMedia(art), highlighted: true });
+    expect(active.fixture.nativeElement.querySelector('figure')!.classList).toContain('border-2');
+    expect(img(active)!.classList.contains('rounded-md')).toBe(true);
+    expect(img(active)!.classList.contains('rounded-lg')).toBe(false);
+  });
+});
+
 describe('media-card artwork placeholder', () => {
   const placeholder = (h: Harness) =>
     h.fixture.nativeElement.querySelector('svg.lucide-film');
