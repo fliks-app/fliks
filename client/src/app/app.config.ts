@@ -82,12 +82,17 @@ export const appConfig: ApplicationConfig = {
     provideRouter(
       routes,
       withInMemoryScrolling({ scrollPositionRestoration: 'top' }),
-      // Poster→hero morph. Gated by `viewTransitionsEnabled()`; on TV the root
-      // snapshot costs ~400 ms on a Tizen 9 panel, so only the player close earns one.
+      // Poster→hero morph. On TV the root snapshot costs ~400 ms on a Tizen 9
+      // panel, so only the player close earns one.
       ...(!viewTransitionsEnabled()
         ? []
         : [
             withViewTransitions({
+              // The launch navigation has no previous page to morph from, and its
+              // snapshot capture never completes under Capacitor's splash: `ready`
+              // rejects on Chromium's 4 s timeout, and the splash only hides once
+              // the navigation does.
+              skipInitialTransition: true,
               // Episode → episode: the cross-fade keeps the old page (and its scroll
               // offset) on screen, so the jump to top only lands once it ends.
               onViewTransitionCreated: ({ transition, from, to }) => {

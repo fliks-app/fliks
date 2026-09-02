@@ -1210,6 +1210,12 @@ html.vt-player-close::view-transition-old(root) {
 html.vt-player-close::view-transition-group(root) {
   z-index: 2;
 }
+/* Which also hid the destination's own poster until the transition ended, while
+   every unnamed image beside it painted at once. Nothing pairs with it on a
+   close, so keep it out of the capture and let it paint with the page. */
+html.vt-player-close app-media-info-header img {
+  view-transition-name: none !important;
+}
 @keyframes player-close {
   to {
     opacity: 0;

@@ -5,7 +5,6 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { Media } from '../../../core/services/api/media.service';
-import { Capacitor } from '@capacitor/core';
 import { computeMediaBarStatus, computeMediaBarPercent } from '../../utils/media-status.util';
 import { MediaService } from '../../../core/services/api/media.service';
 import { ToastService } from '../../../core/services/toast.service';
@@ -68,7 +67,6 @@ export class MediaCardComponent {
   private readonly navbar = inject(NavbarService);
   private readonly pluginUi = inject(PluginUiRegistryService);
   protected readonly device = inject(DeviceService);
-  protected readonly isNative = Capacitor.isNativePlatform();
   /** Hover overlay (play button) only makes sense on a real pointer device. */
   protected readonly showHoverOverlay = computed(() => this.device.input() === 'mouse');
   /**
@@ -335,9 +333,9 @@ export class MediaCardComponent {
   }
 
   protected flagPosterForTransition() {
-    // Pointless where the router runs no transition (Capacitor) or the engine has
-    // none (Chromium <111, Tizen 5.5 WebKit, webOS 5) — and it costs a querySelectorAll per click.
-    if (this.isNative || !('startViewTransition' in document)) return;
+    // Pointless where the engine has no View Transitions (Chromium <111, Tizen 5.5
+    // WebKit, webOS 5), and it costs a querySelectorAll per click.
+    if (!('startViewTransition' in document)) return;
     const id = this.resolveMediaId();
     const img = this.imgRef()?.nativeElement;
     if (id == null || !img) return;
