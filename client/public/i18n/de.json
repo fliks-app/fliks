@@ -2619,7 +2619,14 @@
     "bulk_enabled_done": "{{count}} Einträge aktiviert",
     "bulk_disabled_done": "{{count}} Einträge deaktiviert",
     "bulk_deleted_done": "{{count}} Einträge gelöscht",
-    "bulk_partial": "{{done}} erledigt, {{failed}} fehlgeschlagen"
+    "bulk_partial": "{{done}} erledigt, {{failed}} fehlgeschlagen",
+    "filter_placeholder": "Nach Name filtern",
+    "filter_no_match": "Kein Eintrag passt zu diesem Filter.",
+    "row_count": "{{shown}} von {{total}}",
+    "sort_label": "Sortieren nach",
+    "sort_priority": "Priorität",
+    "sort_name": "Name",
+    "sort_default": "Standardreihenfolge"
   },
   "data_table": {
     "load_error": "Liste konnte nicht geladen werden.",

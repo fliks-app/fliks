@@ -23,10 +23,39 @@
     </div>
   </div>
 
-  @if (bulkSelect() && selectedIds().size > 0) {
+  @if (bulkSelect() && !loading() && !listError() && rows().length > 0) {
     <div
       class="flex flex-wrap items-center gap-2 rounded-lg border border-base-200 bg-base-200/40 px-3 py-2"
     >
+      @if (selectedIds().size === 0) {
+        <label class="input input-sm input-bordered flex items-center gap-2 w-full sm:w-64">
+          <svg lucideSearch class="h-4 w-4 opacity-60"></svg>
+          <input
+            type="search"
+            class="grow"
+            [value]="filterText()"
+            [placeholder]="'provider_list.filter_placeholder' | translate"
+            [attr.aria-label]="'provider_list.filter_placeholder' | translate"
+            (input)="filterText.set($any($event.target).value)"
+          />
+        </label>
+        <span class="text-sm text-base-content/60">
+          {{ 'provider_list.row_count' | translate: { shown: visibleRows().length, total: rows().length } }}
+        </span>
+        <label class="flex items-center gap-2 text-sm ms-auto">
+          <span class="text-base-content/60">{{ 'provider_list.sort_label' | translate }}</span>
+          <select
+            class="select select-sm select-bordered"
+            [value]="sortBy()"
+            (change)="sortBy.set($any($event.target).value)"
+          >
+            <option value="default">
+              {{ (showPriority() ? 'provider_list.sort_priority' : 'provider_list.sort_default') | translate }}
+            </option>
+            <option value="name">{{ 'provider_list.sort_name' | translate }}</option>
+          </select>
+        </label>
+      } @else {
       <span class="text-sm font-medium">
         {{ 'provider_list.bulk_selected' | translate: { count: selectedIds().size } }}
       </span>
@@ -61,6 +90,7 @@
           {{ 'provider_list.bulk_clear' | translate }}
         </button>
       </div>
+      }
     </div>
   }
 
@@ -72,6 +102,8 @@
     <div role="alert" class="alert alert-error">{{ listError() }}</div>
   } @else if (rows().length === 0) {
     <p class="text-center py-12 text-base-content/50">{{ labels().emptyKey | translate }}</p>
+  } @else if (visibleRows().length === 0) {
+    <p class="text-center py-12 text-base-content/50">{{ 'provider_list.filter_no_match' | translate }}</p>
   } @else {
     <div class="overflow-x-auto rounded-lg border border-base-200">
       <table class="table table-zebra">
@@ -107,7 +139,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (row of orderedRows(); track row.id; let i = $index) {
+          @for (row of visibleRows(); track row.id) {
             <tr>
               @if (bulkSelect()) {
                 <td>
@@ -182,7 +214,7 @@
                     <button
                       type="button"
                       class="btn btn-ghost btn-xs btn-square"
-                      [disabled]="i === 0"
+                      [disabled]="isFirstInOrder(row)"
                       (click)="moveRow(row, -1)"
                       [attr.aria-label]="'provider_list.move_up' | translate"
                     >
@@ -191,7 +223,7 @@
                     <button
                       type="button"
                       class="btn btn-ghost btn-xs btn-square"
-                      [disabled]="i === orderedRows().length - 1"
+                      [disabled]="isLastInOrder(row)"
                       (click)="moveRow(row, 1)"
                       [attr.aria-label]="'provider_list.move_down' | translate"
                     >
@@ -337,10 +369,10 @@
       <p class="text-sm text-base-content/60">{{ 'provider_list.bulk_edit_hint' | translate }}</p>
 
       @if (showPriority()) {
-        <div class="flex items-start gap-3">
+        <div class="flex items-center gap-3">
           <input
             type="checkbox"
-            class="checkbox checkbox-sm mt-3"
+            class="checkbox checkbox-sm"
             [checked]="isBulkApplied('priority')"
             [attr.aria-label]="'provider_list.bulk_apply_field' | translate"
             (change)="toggleBulkApply('priority')"
@@ -358,10 +390,10 @@
       }
 
       @for (field of bulkFields(); track field.key) {
-        <div class="flex items-start gap-3">
+        <div class="flex items-center gap-3">
           <input
             type="checkbox"
-            class="checkbox checkbox-sm mt-3"
+            class="checkbox checkbox-sm"
             [checked]="isBulkApplied(field.key)"
             [attr.aria-label]="'provider_list.bulk_apply_field' | translate"
             (change)="toggleBulkApply(field.key)"

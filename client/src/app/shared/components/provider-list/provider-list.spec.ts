@@ -642,3 +642,92 @@ describe('ProviderListComponent: bulk selection', () => {
     expect((put.mock.calls[1]![1] as Record<string, unknown>)['priority']).toBe(50);
   });
 });
+
+describe('ProviderListComponent: filter, sort and the shared toolbar', () => {
+  const ROWS = [
+    { id: 1, name: 'Zeta tracker', implementation: 'demo', enabled: true, priority: 1, settings: {} },
+    { id: 2, name: 'alpha tracker', implementation: 'demo', enabled: true, priority: 2, settings: {} },
+    { id: 3, name: 'Mid tracker', implementation: 'demo', enabled: true, priority: 3, settings: {} },
+  ];
+
+  it('filters on the name, ignoring case, and leaves the real order alone', async () => {
+    const fixture = await createComponent({ get: () => of(ROWS) }, { bulkSelect: true });
+    const c = fixture.componentInstance;
+
+    c.filterText.set('ALPHA');
+    expect(c.visibleRows().map((r) => r.id)).toEqual([2]);
+
+    c.filterText.set('  tracker ');
+    expect(c.visibleRows().map((r) => r.id)).toEqual([1, 2, 3]);
+
+    c.filterText.set('nothing');
+    expect(c.visibleRows()).toHaveLength(0);
+  });
+
+  it('sorts by name on request, and by the server order otherwise', async () => {
+    const fixture = await createComponent({ get: () => of(ROWS) }, { bulkSelect: true });
+    const c = fixture.componentInstance;
+
+    expect(c.visibleRows().map((r) => r.id)).toEqual([1, 2, 3]);
+    c.sortBy.set('name');
+    expect(c.visibleRows().map((r) => r.name)).toEqual(['alpha tracker', 'Mid tracker', 'Zeta tracker']);
+  });
+
+  it('VERDICT: the header box covers the rows on screen and leaves a hidden selection untouched', async () => {
+    const fixture = await createComponent({ get: () => of(ROWS) }, { bulkSelect: true });
+    const c = fixture.componentInstance;
+
+    c.toggleSelected(1);
+    c.filterText.set('tracker!');
+    expect(c.visibleRows()).toHaveLength(0);
+    expect(c.allSelected()).toBe(false);
+
+    c.filterText.set('alpha');
+    c.toggleAllSelected();
+    // Row 1 is filtered out and stays selected: the bar states the real count, so nothing acts
+    // on more than it claims.
+    expect([...c.selectedIds()].sort()).toEqual([1, 2]);
+    expect(c.allSelected()).toBe(true);
+
+    c.toggleAllSelected();
+    expect([...c.selectedIds()]).toEqual([1]);
+  });
+
+  it('VERDICT: one bar, whose content swaps on selection, so the table never shifts', async () => {
+    const fixture = await createComponent({ get: () => of(ROWS) }, { bulkSelect: true });
+    const c = fixture.componentInstance;
+    const bars = () => fixture.nativeElement.querySelectorAll('.bg-base-200\\/40').length;
+    const searchBox = () => fixture.nativeElement.querySelector('input[type="search"]');
+
+    expect(bars()).toBe(1);
+    expect(searchBox()).not.toBeNull();
+
+    c.toggleSelected(1);
+    fixture.detectChanges();
+    // The bulk actions replace the filter bar rather than stacking above it.
+    expect(bars()).toBe(1);
+    expect(searchBox()).toBeNull();
+
+    c.clearSelection();
+    fixture.detectChanges();
+    expect(bars()).toBe(1);
+    expect(searchBox()).not.toBeNull();
+  });
+
+  it('no bar at all on a page that did not opt into selection', async () => {
+    const fixture = await createComponent({ get: () => of(ROWS) });
+    expect(fixture.nativeElement.querySelector('input[type="search"]')).toBeNull();
+  });
+
+  it('the reorder arrows follow the real priority order, not the filtered view', async () => {
+    const fixture = await createComponent({ get: () => of(ROWS) }, { bulkSelect: true, reorderable: true });
+    const c = fixture.componentInstance;
+    c.filterText.set('mid');
+
+    const mid = ROWS[2]!;
+    expect(c.visibleRows()).toHaveLength(1);
+    // Alone on screen, but last in priority order: only the down arrow is dead.
+    expect(c.isFirstInOrder(mid)).toBe(false);
+    expect(c.isLastInOrder(mid)).toBe(true);
+  });
+});
