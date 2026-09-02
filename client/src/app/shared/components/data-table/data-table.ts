@@ -9,8 +9,11 @@ import {
   input,
   signal,
   untracked,
+  viewChild,
+  ElementRef,
 } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
+import { LucideEllipsisVertical } from '@lucide/angular';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -36,6 +39,7 @@ import {
   TableSubValue,
 } from './data-table.types';
 import { ModalHeaderComponent } from '../modal-header';
+import { PopoverMenuComponent } from '../popover-menu';
 import { ModalFooterComponent } from '../modal-footer';
 
 /** Keystroke-to-request debounce for a `search` filter — see `onSearchInput`. */
@@ -67,6 +71,8 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
 @Component({
   selector: 'app-data-table',
   imports: [TvSelectDirective, 
+    PopoverMenuComponent,
+    LucideEllipsisVertical,
     ModalFooterComponent,
     ModalHeaderComponent,
     TranslateModule,
@@ -116,10 +122,16 @@ export class DataTableComponent implements OnInit {
   readonly busy = signal<string | null>(null);
   readonly listActionBusy = signal<string | null>(null);
 
-  /** The open detail dialog's title key and text, or null when it is closed. */
+  /** Both dialogs stay mounted and are driven by `showModal()`/`close()`: an `@if` around the
+   *  element unmounts it on close, and daisyUI animates the exit on the element that remains. */
+  private readonly rowDetailDialog = viewChild<ElementRef<HTMLDialogElement>>('rowDetailDialog');
+  private readonly detailDialog = viewChild<ElementRef<HTMLDialogElement>>('detailDialog');
+
+  /** The detail dialog's title key and text. Kept after a close so the box has something to
+   *  render while it animates out. */
   readonly detail = signal<{ titleKey: string; text: string } | null>(null);
 
-  /** The open `detail` row action's dialog: its title and the lines that had a value. */
+  /** The `detail` row action's dialog: its title and the lines that had a value. */
   readonly rowDetail = signal<{
     titleKey: string;
     lines: { labelKey: string; text: string; href?: string }[];
@@ -310,7 +322,7 @@ export class DataTableComponent implements OnInit {
   }
 
   closeRowDetail(): void {
-    this.rowDetail.set(null);
+    this.rowDetailDialog()?.nativeElement.close();
   }
 
   /** The 0–100 fill for a badged cell that declares `progressField`, or null to render the
@@ -344,10 +356,11 @@ export class DataTableComponent implements OnInit {
     const text = this.detailText(col, row);
     if (!text) return;
     this.detail.set({ titleKey: col.detailTitleKey ?? col.labelKey, text });
+    this.detailDialog()?.nativeElement.showModal();
   }
 
   closeDetail(): void {
-    this.detail.set(null);
+    this.detailDialog()?.nativeElement.close();
   }
 
   /** Sub-values render as their own badge or text, reusing the column rules one level down. */
@@ -417,11 +430,7 @@ export class DataTableComponent implements OnInit {
       } else if (action.kind === 'detail') {
         result.push({
           action,
-          run: () =>
-            this.rowDetail.set({
-              titleKey: action.titleKey ?? action.labelKey,
-              lines: this.detailLines(action.fields, row),
-            }),
+          run: () => this.openRowDetail(action.titleKey ?? action.labelKey, action.fields, row),
         });
       } else if (action.kind === 'route') {
         result.push({
@@ -435,6 +444,34 @@ export class DataTableComponent implements OnInit {
       }
     }
     return result;
+  }
+
+  /** Row whose action menu is open, by row id. */
+  readonly openMenuRow = signal<CellValue | null>(null);
+
+  toggleRowMenu(row: TableRow): void {
+    this.openMenuRow.update((open) => (open === row.id ? null : row.id));
+  }
+
+  /** The menu is a popover, not a dropdown, so it doesn't close itself on a pick. */
+  runFromMenu(run: () => void | Promise<void>): void {
+    this.openMenuRow.set(null);
+    void run();
+  }
+
+  /** `detail` is the one action that only reads, so it stays on the row; everything that acts
+   *  moves into the row menu, which keeps the Actions column from swallowing the table. */
+  inlineActions(row: TableRow): { action: RowAction; run: () => void | Promise<void> }[] {
+    return this.visibleActions(row).filter((i) => i.action.kind === 'detail');
+  }
+
+  menuActions(row: TableRow): { action: RowAction; run: () => void | Promise<void> }[] {
+    return this.visibleActions(row).filter((i) => i.action.kind !== 'detail');
+  }
+
+  private openRowDetail(titleKey: string, fields: readonly TableDetailField[], row: TableRow): void {
+    this.rowDetail.set({ titleKey, lines: this.detailLines(fields, row) });
+    this.rowDetailDialog()?.nativeElement.showModal();
   }
 
   private async runProxy(

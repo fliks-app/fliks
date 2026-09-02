@@ -12,6 +12,23 @@ import { ListAction, RowAction, TableColumn, TableFilter, TableRow } from './dat
 
 const COLUMNS: TableColumn[] = [{ key: 'name', labelKey: 'x.name' }];
 
+// jsdom has no scrollIntoView; the row menu focuses its first item through it.
+Element.prototype.scrollIntoView ??= () => {};
+
+// …nor the <dialog> methods the detail dialogs are driven by.
+beforeAll(() => {
+  if (!HTMLDialogElement.prototype.showModal) {
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      this.setAttribute('open', '');
+    };
+  }
+  if (!HTMLDialogElement.prototype.close) {
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.removeAttribute('open');
+    };
+  }
+});
+
 interface FakeHttp {
   get: (...args: unknown[]) => unknown;
   post?: (...args: unknown[]) => unknown;
@@ -116,18 +133,46 @@ describe('DataTableComponent — characterisation', () => {
     expect(handler).toHaveBeenCalled();
   });
 
-  it('VERDICT: a resolved `action`-kind row action renders a real button that invokes the handler on click', async () => {
+  it('VERDICT: a resolved `action`-kind row action renders a real button in the row menu that invokes the handler on click', async () => {
     const handler = vi.fn();
     const fixture = await createComponent({
       http: { get: () => of([{ id: 1, name: 'A' }]) },
       rowActions: [{ kind: 'action', labelKey: 'x.doit', actionId: 'core.known' }],
       resolveAction: (id) => (id === 'core.known' ? handler : undefined),
     });
-    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
-    const button = buttons.find((b) => b.textContent?.includes('x.doit'));
+    const kebab = fixture.nativeElement.querySelector('tbody td button') as HTMLButtonElement;
+    kebab.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    // The popover moves its content under <html>, so it is no longer inside the fixture.
+    const button = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('x.doit'),
+    ) as HTMLButtonElement | undefined;
     expect(button).toBeDefined();
     button!.click();
     expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('VERDICT: keeps a `detail` action on the row and moves the acting ones into the menu', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of([{ id: 1, name: 'A' }]) },
+      rowActions: [
+        { kind: 'detail', labelKey: 'x.info', fields: [] },
+        { kind: 'proxy', labelKey: 'x.stop', method: 'DELETE', path: '/api/x/:id' },
+      ],
+    });
+    const row = { id: 1, name: 'A' };
+    expect(fixture.componentInstance.inlineActions(row).map((i) => i.action.labelKey)).toEqual([
+      'x.info',
+    ]);
+    expect(fixture.componentInstance.menuActions(row).map((i) => i.action.labelKey)).toEqual([
+      'x.stop',
+    ]);
+    // The row shows the detail button plus the menu trigger (icon only), nothing else.
+    const cellButtons = Array.from(
+      fixture.nativeElement.querySelectorAll('tbody td button'),
+    ) as HTMLButtonElement[];
+    expect(cellButtons.map((b) => b.textContent?.trim())).toEqual(['x.info', '']);
   });
 
   it('formats a bytes/percent/date column instead of printing the raw value', async () => {
@@ -377,10 +422,16 @@ describe('DataTableComponent — declared filters', () => {
     expect(c.detail()).toEqual({ titleKey: 'x.detail_title', text: 'tracker refused: 403' });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('dialog pre').textContent).toContain('403');
+    const dialog = Array.from(
+      fixture.nativeElement.querySelectorAll('dialog') as NodeListOf<HTMLDialogElement>,
+    ).find((d) => d.querySelector('pre'))!;
+    expect(dialog.hasAttribute('open')).toBe(true);
 
     c.closeDetail();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('dialog')).toBeNull();
+    // The element stays mounted so daisyUI can animate the close; `open` is what shows it.
+    expect(dialog.hasAttribute('open')).toBe(false);
+    expect(dialog.isConnected).toBe(true);
   });
 
   it('renders declared sub-values under the cell, skipping the ones the row has no value for', async () => {

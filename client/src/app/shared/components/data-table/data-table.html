@@ -172,20 +172,49 @@
               }
               @if (rowActions().length) {
                 <td class="text-end">
-                  @for (item of visibleActions(row); track item.action.labelKey) {
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs"
-                      [class.text-error]="item.action.kind === 'proxy' && item.action.tone === 'danger'"
-                      (click)="item.run()"
-                      [disabled]="
-                        busy() ===
-                        row.id + ':' + (item.action.kind === 'proxy' ? item.action.path : '')
-                      "
-                    >
-                      {{ item.action.labelKey | translate }}
-                    </button>
-                  }
+                  <div class="inline-flex items-center gap-1 whitespace-nowrap">
+                    @for (item of inlineActions(row); track item.action.labelKey) {
+                      <!-- pt-1: optical centring of the label against the menu glyph beside it. -->
+                      <button type="button" class="btn btn-ghost btn-xs pt-1" (click)="item.run()">
+                        {{ item.action.labelKey | translate }}
+                      </button>
+                    }
+                    @if (menuActions(row); as menu) {
+                      @if (menu.length) {
+                        <button
+                          #menuTrigger
+                          type="button"
+                          class="btn btn-ghost btn-xs btn-circle"
+                          [attr.aria-label]="'common.actions' | translate"
+                          (click)="toggleRowMenu(row)"
+                        >
+                          <svg lucideEllipsisVertical class="h-4 w-4"></svg>
+                        </button>
+                        <app-popover-menu
+                          [open]="openMenuRow() === row.id"
+                          [anchor]="menuTrigger"
+                          (closed)="openMenuRow.set(null)"
+                        >
+                          @for (item of menu; track item.action.labelKey) {
+                            <button
+                              type="button"
+                              class="dropdown-item"
+                              [class.text-error]="
+                                item.action.kind === 'proxy' && item.action.tone === 'danger'
+                              "
+                              (click)="runFromMenu(item.run)"
+                              [disabled]="
+                                busy() ===
+                                row.id + ':' + (item.action.kind === 'proxy' ? item.action.path : '')
+                              "
+                            >
+                              {{ item.action.labelKey | translate }}
+                            </button>
+                          }
+                        </app-popover-menu>
+                      }
+                    }
+                  </div>
                 </td>
               }
             </tr>
@@ -204,8 +233,8 @@
   }
 </div>
 
-@if (rowDetail(); as open) {
-  <dialog class="modal modal-open">
+<dialog #rowDetailDialog class="modal">
+  @if (rowDetail(); as open) {
     <div class="modal-box max-w-lg">
       <app-modal-header [title]="open.titleKey | translate" (closed)="closeRowDetail()" />
       <dl class="flex flex-col gap-3 py-2">
@@ -228,16 +257,16 @@
         </button>
       </app-modal-footer>
     </div>
-    <form method="dialog" class="modal-backdrop">
-      <button type="button" (click)="closeRowDetail()" [attr.aria-label]="'common.close' | translate">
-        close
-      </button>
-    </form>
-  </dialog>
-}
+  }
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeRowDetail()" [attr.aria-label]="'common.close' | translate">
+      close
+    </button>
+  </form>
+</dialog>
 
-@if (detail(); as open) {
-  <dialog class="modal modal-open">
+<dialog #detailDialog class="modal">
+  @if (detail(); as open) {
     <div class="modal-box max-w-2xl">
       <app-modal-header [title]="open.titleKey | translate" (closed)="closeDetail()" />
       <pre
@@ -250,10 +279,10 @@
         </button>
       </app-modal-footer>
     </div>
-    <form method="dialog" class="modal-backdrop">
-      <button type="button" (click)="closeDetail()" [attr.aria-label]="'common.close' | translate">
-        close
-      </button>
-    </form>
-  </dialog>
-}
+  }
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeDetail()" [attr.aria-label]="'common.close' | translate">
+      close
+    </button>
+  </form>
+</dialog>
