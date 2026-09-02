@@ -2647,7 +2647,14 @@
     "bulk_enabled_done": "{{count}} entrées activées",
     "bulk_disabled_done": "{{count}} entrées désactivées",
     "bulk_deleted_done": "{{count}} entrées supprimées",
-    "bulk_partial": "{{done}} traitées, {{failed}} en échec"
+    "bulk_partial": "{{done}} traitées, {{failed}} en échec",
+    "filter_placeholder": "Filtrer par nom",
+    "filter_no_match": "Aucune entrée ne correspond à ce filtre.",
+    "row_count": "{{shown}} sur {{total}}",
+    "sort_label": "Trier par",
+    "sort_priority": "Priorité",
+    "sort_name": "Nom",
+    "sort_default": "Ordre par défaut"
   },
   "data_table": {
     "load_error": "Impossible de charger la liste.",

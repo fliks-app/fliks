@@ -2619,7 +2619,14 @@
     "bulk_enabled_done": "{{count}} voci attivate",
     "bulk_disabled_done": "{{count}} voci disattivate",
     "bulk_deleted_done": "{{count}} voci eliminate",
-    "bulk_partial": "{{done}} completate, {{failed}} non riuscite"
+    "bulk_partial": "{{done}} completate, {{failed}} non riuscite",
+    "filter_placeholder": "Filtra per nome",
+    "filter_no_match": "Nessuna voce corrisponde a questo filtro.",
+    "row_count": "{{shown}} su {{total}}",
+    "sort_label": "Ordina per",
+    "sort_priority": "Priorità",
+    "sort_name": "Nome",
+    "sort_default": "Ordine predefinito"
   },
   "data_table": {
     "load_error": "Impossibile caricare l'elenco.",

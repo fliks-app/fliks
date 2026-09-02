@@ -15,7 +15,7 @@ import { HttpClient, HttpContext } from '@angular/common/http';
 import { NgTemplateOutlet } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { LucideArrowUp, LucideArrowDown, LucideRotateCcw } from '@lucide/angular';
+import { LucideArrowUp, LucideArrowDown, LucideRotateCcw, LucideSearch } from '@lucide/angular';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SKIP_ERROR_TOAST } from '../../../core/interceptors/error.interceptor';
 import { ToastService } from '../../../core/services/toast.service';
@@ -75,6 +75,7 @@ export function resolveRowActionRoute(route: string, id: number | string): strin
     LucideArrowUp,
     LucideArrowDown,
     LucideRotateCcw,
+    LucideSearch,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './provider-list.html',
@@ -155,6 +156,11 @@ export class ProviderListComponent implements OnInit {
   readonly bulkValue = signal<SchemaFormValue>({});
   readonly bulkPriority = signal(0);
 
+  /** Free-text filter on the row name, and the display order chosen over the server's own.
+   *  Both live in the same bar the bulk actions take over, so selecting a row moves nothing. */
+  readonly filterText = signal('');
+  readonly sortBy = signal<'default' | 'name'>('default');
+
   readonly listActionBusy = signal<string | null>(null);
   readonly rowActionBusy = signal<string | null>(null);
 
@@ -173,14 +179,33 @@ export class ProviderListComponent implements OnInit {
     this.reorderable() ? [...this.rows()].sort((a, b) => a.priority - b.priority) : this.rows(),
   );
 
+  /**
+   * What the table renders: the display order, then the name filter, then the chosen sort.
+   *
+   * `moveRow` deliberately keeps reading `orderedRows`: the swap it performs is over the real
+   * priority order, and a filtered or renamed-sorted view would swap the wrong pair.
+   */
+  readonly visibleRows = computed(() => {
+    const needle = this.filterText().trim().toLowerCase();
+    const rows = needle
+      ? this.orderedRows().filter((r) => r.name.toLowerCase().includes(needle))
+      : this.orderedRows();
+    if (this.sortBy() !== 'name') return rows;
+    return [...rows].sort((a, b) => a.name.localeCompare(b.name));
+  });
+
   readonly selectedRows = computed(() => {
     const ids = this.selectedIds();
     return this.rows().filter((r) => ids.has(r.id));
   });
 
-  readonly allSelected = computed(
-    () => this.rows().length > 0 && this.selectedIds().size === this.rows().length,
-  );
+  /** Over the rows on screen, not the whole list: with a filter applied, ticking the header box
+   *  must mean "these", which is also what makes it usable as "select the eight matching X". */
+  readonly allSelected = computed(() => {
+    const rows = this.visibleRows();
+    const ids = this.selectedIds();
+    return rows.length > 0 && rows.every((r) => ids.has(r.id));
+  });
 
   /** The one implementation every selected row shares, or null when they differ: the bulk editor
    *  is built from an implementation's own fields, so a mixed selection has no form to render. */
@@ -407,6 +432,17 @@ export class ProviderListComponent implements OnInit {
     }
   }
 
+  /** Whether this row is at one end of the real priority order. Read from the row rather than
+   *  from the loop index, which now counts a filtered, possibly re-sorted view. */
+  isFirstInOrder(row: ProviderInstance): boolean {
+    return this.orderedRows()[0]?.id === row.id;
+  }
+
+  isLastInOrder(row: ProviderInstance): boolean {
+    const ordered = this.orderedRows();
+    return ordered[ordered.length - 1]?.id === row.id;
+  }
+
   /** Swaps this row's priority with its neighbour in display order and persists both. */
   async moveRow(row: ProviderInstance, direction: -1 | 1): Promise<void> {
     const ordered = this.orderedRows();
@@ -495,10 +531,19 @@ export class ProviderListComponent implements OnInit {
     });
   }
 
-  /** The header box: all or nothing, over every row rather than the page's visible order (there
-   *  is no paging here, so they are the same set). */
+  /** The header box: ticks or unticks the rows on screen, leaving any selection the filter hides
+   *  alone. The bulk bar always states the real count, so nothing acts on more than it claims. */
   toggleAllSelected(): void {
-    this.selectedIds.set(this.allSelected() ? new Set() : new Set(this.rows().map((r) => r.id)));
+    const visible = this.visibleRows().map((r) => r.id);
+    const all = this.allSelected();
+    this.selectedIds.update((ids) => {
+      const next = new Set(ids);
+      for (const id of visible) {
+        if (all) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
   }
 
   clearSelection(): void {
