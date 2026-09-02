@@ -23,17 +23,21 @@
     (keydown.space)="onCardClick(); $event.preventDefault()"
   >
     @if (_img() && !imgFailed()) {
-      <!-- rounded-md, not -lg: the figure's clip loses the border width when the
-           card is highlighted, and a wider radius here cuts the corners inside it. -->
+      <!-- Concentric with the figure's clip, which loses the border width when the
+           card is highlighted. Bound rather than fixed at the smaller value: a
+           view transition snapshots this img out of that clip, so its own radius
+           is the only one the poster morph has. -->
       <img
         #cardImg
         [cachedSrc]="_img()! | resolveUrl:'thumb'"
         [alt]="_title()"
-        class="w-full h-full object-cover select-none rounded-md"
+        class="w-full h-full object-cover select-none"
         style="-webkit-user-drag: none; user-drag: none;"
         draggable="false"
         [appSpoiler]="spoiler()"
         #spoilerImg="spoiler"
+        [class.rounded-lg]="!highlighted()"
+        [class.rounded-md]="highlighted()"
         [class.scale-110]="spoilerImg.masked()"
         [class.grayscale]="grayscale()"
         [class.opacity-0]="!imgLoaded()"
