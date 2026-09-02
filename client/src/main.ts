@@ -53,6 +53,14 @@ import { App } from './app/app';
   document.documentElement.classList.add('tv-host');
   document.body.classList.add('tv');
   if (platform) document.body.classList.add(`tv-${platform}`);
+
+  // The 10-foot UI is authored for 1280; the Android TV WebView lays out at
+  // device-width, which falls below Tailwind's `lg` breakpoint.
+  if (platform === 'androidtv') {
+    document
+      .querySelector('meta[name="viewport"]')
+      ?.setAttribute('content', 'width=1280, viewport-fit=cover');
+  }
 })();
 
 bootstrapApplication(App, appConfig)

@@ -62,7 +62,7 @@ import { DesktopEngine } from '../../core/services/playback-engine/desktop-engin
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { TrackManagerService, SubtitleOption } from '../../core/services/track-manager.service';
 import { QualityManagerService } from '../../core/services/quality-manager.service';
-import { DeviceService } from '../../core/services/device.service';
+import { DeviceService, viewTransitionsEnabled } from '../../core/services/device.service';
 
 interface ImmersivePlugin {
   enter(options?: { displayBehindNotch?: boolean }): Promise<void>;
@@ -3829,6 +3829,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // reopen the player on the way back.
     const queueSourceId = this.queue.sourceId();
     let target: string;
+    // Same handoff a media card uses: the detail page paints from the record the
+    // player already holds instead of mounting on a skeleton. Nothing is
+    // prefetched — `getOne` still runs there for cast, crew and files.
+    let handoff: { media: Media } | undefined;
     if (!this.mediaId) {
       target = '/';
     } else if (this.queue.source() === 'playlist' && queueSourceId != null) {
@@ -3845,6 +3849,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             ?.media?.type
         : undefined;
       const kind = (this.media?.type ?? offlineType) === 'series' ? 'series' : 'movies';
+      if (this.media) handoff = { media: this.media };
       if (this.episodeId && kind === 'series') {
         // A finished episode returns to the NEXT episode's detail page so the
         // user lands ready to continue; an episode left mid-watch returns to
@@ -3877,18 +3882,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         void this.router.navigate(['/'], { replaceUrl: true });
         return;
       }
-      void this.router.navigateByUrl(target, { replaceUrl: true });
+      void this.router.navigateByUrl(target, { replaceUrl: true, state: handoff });
     });
   }
 
   /**
    * Hold the navigation back for the closing animation, where it has to run on
-   * the player itself. A view transition does it instead on web, animating the
-   * player over the page it returns to, which is the better effect but needs
-   * both painted at once.
+   * the player itself — over the app background, since the destination is not
+   * mounted yet. Wherever a view transition is available it animates the player
+   * over the page it returns to instead, which needs both painted at once.
    */
   private async animateClose(): Promise<void> {
-    if (!this.isNative && !this.device.isTv()) return;
+    // A native surface renders outside the WebView, so the player owns no pixels
+    // here to shrink — animating them just fades the page to black.
+    if (document.documentElement.classList.contains('native-player-active')) return;
+    if (viewTransitionsEnabled()) return;
     this.closing.set(true);
     await new Promise((resolve) =>
       setTimeout(resolve, PlayerComponent.closeAnimationMs),

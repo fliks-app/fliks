@@ -107,6 +107,9 @@ export class MediaCardComponent {
   readonly title = input('');
   readonly subtitle = input<string | undefined>(undefined);
   readonly rating = input(0);
+  /** Series to hand an episode link, for a card that shows episode text and so
+   *  can't be given `[media]` without changing what it displays. */
+  readonly seedMedia = input<Media | null>(null);
 
   // Badges
   readonly topLeftBadge = input<string | undefined>(undefined);
@@ -214,10 +217,12 @@ export class MediaCardComponent {
    */
   protected readonly _navState = computed(() => {
     const episodeId = this.episodeIdFromLink();
-    // An episode page resolves the episode out of the season tree, so a Media
-    // stub buys it nothing. Hand it the still instead: enough for the poster
-    // morph to have a target while the media loads.
     if (episodeId != null) {
+      // With the series in hand the episode page resolves everything out of the
+      // season tree — rows included — so nothing blanks. The stub below is the
+      // fallback for a card that has no series: enough for the poster morph.
+      const series = this.media() ?? this.seedMedia();
+      if (series) return { media: series };
       return {
         episode: {
           id: episodeId,

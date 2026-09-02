@@ -351,7 +351,13 @@ export class MediaDetailSeasonsComponent {
       if (id == null) return;
       // Next frame: the cards this reads are rendered by the pass that ran
       // this effect, and the rail needs its final width to be centred.
-      requestAnimationFrame(() => centerRailOnCard(`episode-${id}`));
+      const season = this.selectedSeason()?.id;
+      requestAnimationFrame(() =>
+        centerRailOnCard(
+          `episode-${id}`,
+          season != null ? `season-${season}` : undefined,
+        ),
+      );
     });
   }
 

@@ -265,6 +265,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
    */
   private readonly routeParams = toSignal(this.route.paramMap);
 
+  /** An episode page heroes a landscape still, a title page a 2:3 poster, so the
+   *  skeleton has to know which before the data lands. Read off the URL —
+   *  `episodeMode` only settles once the season tree is in. */
+  protected readonly skeletonEpisode = computed(
+    () => !!this.routeParams()?.get('episodeId'),
+  );
+
   private loadedId: number | null = null;
 
   /** Cached route: coming back from the player repaints the page as it was, so
@@ -919,12 +926,16 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       id: mediaId,
       type: 'series',
       title: seed.title ?? '',
+      monitored: true,
     } as unknown as Media);
     this.episodeMode.set(true);
     this.focusedSeason.set(null);
+    // `monitored` is bound straight through to the header, and an undefined here
+    // reads as false — flashing an "unmonitored" badge on every seeded load.
     this.focusedEpisode.set({
       id: seed.episodeId,
       stillUrl: seed.stillUrl,
+      monitored: true,
     } as unknown as Episode);
     return true;
   }

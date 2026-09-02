@@ -192,7 +192,7 @@
       @if (posterUrl()) {
         <img
           appImgFadeIn
-          [cachedSrc]="posterUrl()! | resolveUrl:'medium'" [alt]="title()"
+          [cachedSrc]="posterUrl()! | resolveUrl:(posterMode() === 'still' ? 'thumb' : 'medium')" [alt]="title()"
           loading="eager" fetchpriority="high" decoding="async"
           [appSpoiler]="spoilerImage()"
           #posterSpoiler="spoiler"
