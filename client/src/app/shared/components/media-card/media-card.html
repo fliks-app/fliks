@@ -23,11 +23,13 @@
     (keydown.space)="onCardClick(); $event.preventDefault()"
   >
     @if (_img() && !imgFailed()) {
+      <!-- rounded-md, not -lg: the figure's clip loses the border width when the
+           card is highlighted, and a wider radius here cuts the corners inside it. -->
       <img
         #cardImg
         [cachedSrc]="_img()! | resolveUrl:'thumb'"
         [alt]="_title()"
-        class="w-full h-full object-cover select-none"
+        class="w-full h-full object-cover select-none rounded-md"
         style="-webkit-user-drag: none; user-drag: none;"
         draggable="false"
         [appSpoiler]="spoiler()"
