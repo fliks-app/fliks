@@ -9,6 +9,7 @@ import {
   input,
   output,
   signal,
+  untracked,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { BottomSheetComponent } from './bottom-sheet';
@@ -188,6 +189,8 @@ export class PopoverMenuComponent {
       // hardware back button (Capacitor / Tizen) close the popover. Return
       // focus to the opener so keyboard / D-pad users don't lose their place
       // (a submenu returns to its parent entry, a menu to its trigger).
+      const anchorOf = () => untracked(() => this.anchor());
+      const bump = () => this.viewportTick.update((v) => v + 1);
       const close = () => {
         restoreOpenerFocus(this.anchor());
         this.close();
@@ -195,18 +198,28 @@ export class PopoverMenuComponent {
       this.dismissStack.push(close);
       onCleanup(() => this.dismissStack.remove(close));
 
-      // Re-tick on scroll / resize so the `position()` computed
-      // re-reads `getBoundingClientRect` and the fixed-positioned box
-      // stays glued to its trigger. `capture: true` catches scrolls in
-      // any nested overflow container, not just window.
+      // Follow the anchor by frame rather than by event, for as long as the menu is open, so
+      // `position()` re-reads `getBoundingClientRect` whenever the trigger actually moved.
+      // Events cannot answer this on their own: a nested `overflow-y: auto` container (a
+      // `.modal-box` around a long form is the case that showed it), an ancestor transform, a
+      // programmatic scroll, a font or image that lands late and reflows the form, all move the
+      // trigger without every one of them firing a `scroll` or a `resize` the popover sees.
+      //
+      // The tick only bumps when the rect changed, so an idle menu costs one rect read per frame
+      // and schedules no change detection at all.
       if (typeof window === 'undefined' || !this.useDropdown()) return;
-      const tick = () => this.viewportTick.update((v) => v + 1);
-      window.addEventListener('scroll', tick, { capture: true, passive: true });
-      window.addEventListener('resize', tick);
-      onCleanup(() => {
-        window.removeEventListener('scroll', tick, { capture: true } as never);
-        window.removeEventListener('resize', tick);
+      let previous = '';
+      let frame = requestAnimationFrame(function follow(this: void) {
+        const a = anchorOf();
+        const r = a?.getBoundingClientRect();
+        const current = r ? `${r.top}|${r.left}|${r.width}|${r.height}` : '';
+        if (current !== previous) {
+          previous = current;
+          bump();
+        }
+        frame = requestAnimationFrame(follow);
       });
+      onCleanup(() => cancelAnimationFrame(frame));
     });
   }
 
