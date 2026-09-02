@@ -16,6 +16,7 @@ import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
+import { NavbarService } from '../../core/services/navbar.service';
 import { rowTopOffset, snapRowOnFocus } from '../../core/utils/focus-snap.util';
 
 @Component({
@@ -29,6 +30,7 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly tv = inject(TvService);
   private readonly reuse = inject(CachingReuseStrategy);
+  private readonly navbar = inject(NavbarService);
   private readonly destroyRef = inject(DestroyRef);
   readonly title = input('');
   readonly atStart = signal(true);
@@ -42,6 +44,9 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
 
   private readonly scrollerEl = viewChild<ElementRef<HTMLElement>>('scroller');
   private resizeObserver?: ResizeObserver;
+  /** Last offset the row was left at. A detached subtree loses its scroll, and
+   *  the instance outlives the detach, so the field is the whole store. */
+  private parkedScrollLeft = 0;
 
   @HostListener('focusin', ['$event'])
   protected onFocusIn(event: FocusEvent): void {
@@ -67,7 +72,15 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
         // stale proximity state, then recompute the scroll extents.
         this.showLeft.set(false);
         this.showRight.set(false);
-        requestAnimationFrame(() => this.updateArrows());
+        // Synchronously, before the frame that would dispatch the reset's own
+        // scroll event and overwrite the parked offset.
+        this.restoreScroll();
+        requestAnimationFrame(() => {
+          // Again once laid out: a rail whose extents weren't known yet clamped
+          // the first attempt.
+          this.restoreScroll();
+          this.updateArrows();
+        });
       });
   }
 
@@ -80,8 +93,23 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
     // attached$ is not route-scoped, so rails of pages still held by the reuse
     // cache get here too — reading their extents is a forced layout for nothing.
     if (!el || !el.isConnected) return;
+    this.parkedScrollLeft = el.scrollLeft;
     this.atStart.set(el.scrollLeft <= 0);
     this.atEnd.set(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
+  }
+
+  /** `scrollTo`, not the property: the rail carries `scroll-behavior: smooth`,
+   *  which would turn a restore into a visible glide.
+   *
+   *  Only on a return. Opening the page is a fresh screen, and the reattach
+   *  already left the rail at zero — the parked offset is then overwritten by
+   *  the `updateArrows()` that follows, so the next return restores what the
+   *  user actually left. */
+  private restoreScroll() {
+    const el = this.scrollerEl()?.nativeElement;
+    if (!el || !el.isConnected || !this.parkedScrollLeft) return;
+    if (!this.navbar.navigatedBack()) return;
+    el.scrollTo({ left: this.parkedScrollLeft, behavior: 'instant' });
   }
 
   scrollLeft() {

@@ -79,14 +79,14 @@ export class NavbarService {
     let lastUrl = '';
     this.router.events.subscribe((e) => {
       if (e instanceof NavigationStart) {
-        // A page returned to must look exactly as it was left, and the artwork
-        // reveal replays whenever a cached subtree is re-inserted. Not
-        // `isPoppingBack`: the top-level nav entries set that too, and opening
-        // a screen from the sidebar still earns its reveal.
-        document.documentElement.classList.toggle(
-          'nav-back',
-          e.navigationTrigger === 'popstate' || this.lastWasBack(),
-        );
+        // A page returned to must look exactly as it was left, where a page
+        // opened is a fresh screen. Not `isPoppingBack`: the top-level nav
+        // entries set that too, and opening a screen from the sidebar is not a
+        // return. The class drives the CSS side of that (the artwork reveal
+        // replays whenever a cached subtree is re-inserted).
+        const back = e.navigationTrigger === 'popstate' || this.lastWasBack();
+        this.navigatedBack.set(back);
+        document.documentElement.classList.toggle('nav-back', back);
       }
       // Browser back/forward: mirror the pop on our internal stack so the
       // next in-app back button doesn't re-push the URL we just left (which
@@ -177,6 +177,12 @@ export class NavbarService {
   /** Set when goBack() is currently navigating; consumed by the destination
    *  page's ngOnInit to decide between restoring focus vs. landing default. */
   readonly lastWasBack = signal(false);
+
+  /** Whether the navigation in flight is a return, held until the next one so
+   *  a page restored from the reuse cache can tell which it is. Wider than
+   *  {@link lastWasBack}: the browser and gesture back never go through
+   *  goBack(). */
+  readonly navigatedBack = signal(false);
 
   goBack(fallback?: readonly (string | number)[]): void {
     const prev = this.history.pop();
