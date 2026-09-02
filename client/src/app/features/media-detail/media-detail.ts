@@ -919,12 +919,16 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       id: mediaId,
       type: 'series',
       title: seed.title ?? '',
+      monitored: true,
     } as unknown as Media);
     this.episodeMode.set(true);
     this.focusedSeason.set(null);
+    // `monitored` is bound straight through to the header, and an undefined here
+    // reads as false — flashing an "unmonitored" badge on every seeded load.
     this.focusedEpisode.set({
       id: seed.episodeId,
       stillUrl: seed.stillUrl,
+      monitored: true,
     } as unknown as Episode);
     return true;
   }
