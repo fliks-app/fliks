@@ -121,6 +121,9 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
 
   shouldReuseRoute(future: ActivatedRouteSnapshot, current: ActivatedRouteSnapshot): boolean {
     if (future.routeConfig !== current.routeConfig) return false;
+    // A page that drives itself off the route params keeps its instance across
+    // them, so nothing under it is rebuilt when only a param moves.
+    if (future.routeConfig?.data?.['reuseOnParamChange']) return true;
     // For routes flagged `reuse: true` we need stricter behavior: two distinct
     // param values (e.g. /libraries/Movies vs /libraries/Series) must each
     // detach so their state lands in its own cache slot. Without this guard

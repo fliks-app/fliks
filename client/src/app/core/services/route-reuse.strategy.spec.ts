@@ -25,6 +25,28 @@ describe('CachingReuseStrategy', () => {
     return TestBed.inject(CachingReuseStrategy);
   }
 
+  it('VERDICT: reuseOnParamChange keeps the instance across params, plain reuse does not', () => {
+    const strategy = setup();
+    const episode: Route = {
+      path: 'series/:id/episode/:episodeId',
+      data: { reuse: true, reuseOnParamChange: true },
+    };
+    const library: Route = { path: 'libraries/:libraryName', data: { reuse: true } };
+
+    expect(
+      strategy.shouldReuseRoute(
+        snapshotFor(episode, { id: '1', episodeId: '8' }),
+        snapshotFor(episode, { id: '1', episodeId: '9' }),
+      ),
+    ).toBe(true);
+    expect(
+      strategy.shouldReuseRoute(
+        snapshotFor(library, { libraryName: 'Movies' }),
+        snapshotFor(library, { libraryName: 'Series' }),
+      ),
+    ).toBe(false);
+  });
+
   it('VERDICT: clear() destroys every cached handle, not just the map entries', () => {
     const strategy = setup();
     const route: Route = { path: 'libraries/:libraryName' };
