@@ -146,7 +146,7 @@ final class SubtitleOverlayView: UIView {
         // portrait and landscape (the short side is orientation-invariant),
         // rather than the full height (oversized in portrait) or the
         // letterboxed video band (undersized in portrait).
-        let pointSize = max(8, min(bounds.width, bounds.height) * 0.05 * style.fontScale)
+        let pointSize = max(8, min(bounds.width, bounds.height) * 0.035 * style.fontScale)
         let base = UIFont.systemFont(ofSize: pointSize, weight: .semibold)
         let out = NSMutableAttributedString()
         for (lineIdx, runs) in lines.enumerated() {

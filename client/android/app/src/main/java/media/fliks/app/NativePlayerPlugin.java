@@ -645,10 +645,7 @@ public class NativePlayerPlugin extends Plugin {
                     Color.BLACK,                     // edge color
                     null);                           // typeface (null = default)
 
-            // Bottom margin via padding
-            int screenH = getActivity().getWindow().getDecorView().getHeight();
-            int paddingBottom = (int) (screenH * bottomMargin / 100f);
-            subtitles.applyStyle(style, fontScale, paddingBottom);
+            subtitles.applyStyle(style, fontScale, bottomMargin / 100f);
 
             call.resolve();
         });

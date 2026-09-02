@@ -460,6 +460,7 @@
     "sub_color": "Couleur du texte",
     "sub_shadow": "Ombre portée",
     "sub_bg": "Couleur du fond",
+    "sub_size_xsmall": "Très petit",
     "sub_size_small": "Petit",
     "sub_size_normal": "Normal",
     "sub_size_large": "Grand",

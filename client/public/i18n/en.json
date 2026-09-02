@@ -460,6 +460,7 @@
     "sub_color": "Text color",
     "sub_shadow": "Drop shadow",
     "sub_bg": "Background color",
+    "sub_size_xsmall": "Very small",
     "sub_size_small": "Small",
     "sub_size_normal": "Normal",
     "sub_size_large": "Large",

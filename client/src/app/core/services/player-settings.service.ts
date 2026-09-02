@@ -1,5 +1,9 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { DeviceService } from './device.service';
+import {
+  DOM_SUBTITLE_HEIGHT_FRACTION,
+  NATIVE_SUBTITLE_SIZE_SCALE,
+} from '../utils/subtitle-presets';
 
 
 export interface PlayerSettings {
@@ -76,9 +80,14 @@ export function normalizeLang(code: string | undefined): string {
 
 // ── Subtitle appearance maps ──
 
-export const SUBTITLE_SIZE_MAP: Record<string, string> = {
-  small: '2.2vh', normal: '3vh', large: '3.5vh', xlarge: '4.5vh',
-};
+/** The DOM cue sizes are the native ladder in `vh`, so a preset keeps the same
+ *  proportions on every surface. */
+export const SUBTITLE_SIZE_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(NATIVE_SUBTITLE_SIZE_SCALE).map(([size, scale]) => [
+    size,
+    `${+(scale * DOM_SUBTITLE_HEIGHT_FRACTION * 100).toFixed(2)}vh`,
+  ]),
+);
 
 export const SUBTITLE_COLOR_MAP: Record<string, string> = {
   white: '#ffffff', yellow: '#ffff00', green: '#00ff00', cyan: '#00ffff',
@@ -106,7 +115,7 @@ export class PlayerSettingsService {
     // 10-foot UI: default to large subtitles on every TV form factor
     // (AndroidTV / Tizen / webOS — still overridable by the user).
     const defaults: PlayerSettings = this.device.isTv()
-      ? { ...DEFAULTS, subtitleSize: 'large' }
+      ? { ...DEFAULTS, subtitleSize: 'xlarge' }
       : { ...DEFAULTS };
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);

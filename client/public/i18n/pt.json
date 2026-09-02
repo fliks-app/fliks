@@ -455,6 +455,7 @@
     "sub_color": "Cor do texto",
     "sub_shadow": "Sombra",
     "sub_bg": "Cor do fundo",
+    "sub_size_xsmall": "Muito pequeno",
     "sub_size_small": "Pequeno",
     "sub_size_normal": "Normal",
     "sub_size_large": "Grande",

@@ -463,11 +463,13 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         return style
     }
 
+    /// Mirrors CAST_SUBTITLE_SIZE_SCALE (subtitle-presets.ts).
     private func mapSize(_ name: String) -> CGFloat {
         switch name {
-        case "small": return 0.7
-        case "large": return 1.1
-        case "xlarge": return 1.4
+        case "xsmall": return 0.7
+        case "small": return 0.775
+        case "large": return 0.975
+        case "xlarge": return 1.1
         default: return 0.85
         }
     }
