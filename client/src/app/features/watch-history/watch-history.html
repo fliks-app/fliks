@@ -47,15 +47,13 @@
               <div
                 class="pointer-events-none absolute inset-0 z-1 flex cursor-pointer items-center justify-center bg-black/35 opacity-0 transition-opacity duration-200 ease-out group-hover/thumb:pointer-events-auto group-hover/thumb:opacity-100"
               >
-                <span class="tooltip tooltip-top z-20" [attr.data-tip]="'history.resume' | translate">
-                  <button
-                    type="button"
-                    class="btn btn-circle btn-md z-10 min-h-0 h-11 w-11 border-0 bg-black/55 text-white transition-colors duration-200 ease-out hover:bg-black/70"
-                    (click)="play(item); $event.stopPropagation()"
-                  >
-                    <svg lucidePlay class="h-6 w-6" [strokeWidth]="2"></svg>
-                  </button>
-                </span>
+                <button
+                  type="button"
+                  class="btn btn-circle btn-md z-10 min-h-0 h-11 w-11 border-0 bg-black/50 text-white transition-colors hover:bg-neutral-500/50"
+                  (click)="play(item); $event.stopPropagation()"
+                >
+                  <svg lucidePlay class="h-6 w-6" [strokeWidth]="2"></svg>
+                </button>
               </div>
             }
 
@@ -67,9 +65,9 @@
               <p class="text-sm sm:text-lg font-semibold leading-tight line-clamp-2 group-hover:underline">{{ item.mediaTitle }}</p>
             </button>
             @if (item.episodeLabel) {
-              <p class="text-xs text-base-content/65 line-clamp-2">{{ item.episodeLabel }}</p>
+              <p class="text-xs sm:text-base text-base-content/65 line-clamp-2">{{ item.episodeLabel }}</p>
             }
-            <p class="text-[11px] text-base-content/45 leading-tight">{{ formatDate(item.lastPlayedAt) }}</p>
+            <p class="text-[11px] sm:text-sm text-base-content/45 leading-tight">{{ formatDate(item.lastPlayedAt) }}</p>
 
           </div>
 

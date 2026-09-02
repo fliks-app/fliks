@@ -379,7 +379,6 @@
     "title": "Historial",
     "empty": "No hay historial de reproducción.",
     "completed": "Terminado",
-    "resume": "Reanudar",
     "remove": "Eliminar del historial",
     "mark_watched": "Marcar como visto"
   },
