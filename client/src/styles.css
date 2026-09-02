@@ -407,24 +407,6 @@ body.tv {
      TV WebViews report. */
   --page-p: 4vw;
 }
-/* Horizontal overscan compensation — shrink the body 4% horizontally
-   so content stays inside the TV's displayable area. `scaleX` only
-   (not uniform `scale`): vertical scaling silently compounded into
-   every Y offset of descendants, so a sticky bar pinned at top:50vh
-   drifted up as the user scrolled (the body's transform scaled the
-   scroll-relative offset). Modern TVs overscan horizontally far more
-   than vertically; the vertical edge isn't worth the positioning
-   headaches. Excluded on Smart TVs (Tizen, webOS): their WebViews
-   already trim ~4% on each axis, so adding our own margin would
-   double-clip. Only AndroidTV needs the compensation. */
-body.tv:not(.tv-tizen):not(.tv-webos) {
-  transform: scaleX(0.96);
-  transform-origin: top center;
-}
-/* Player (immersive) needs the full screen — no overscan compensation */
-body.tv.immersive {
-  transform: none;
-}
 /* The 10-foot UI is sized for the 1280-wide logical viewport older TV
    WebViews report. webOS and Tizen 9 lay it out at 1920 instead, so every
    element renders at ⅔ the intended physical size and reads as tiny from
@@ -443,7 +425,7 @@ body.tv.immersive {
   }
 }
 /* Backfill html so the WebView doesn't show its default white during route
-   transitions, before bootstrap, or in the 4% bottom band the scale leaves.
+   transitions or before bootstrap.
    scroll-behavior smooth turns the abrupt focus-into-view jumps (D-pad
    navigation between rows of cards) into a fluid animated scroll. */
 html.tv-host {
