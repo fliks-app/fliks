@@ -2630,10 +2630,6 @@
     "test_unknown_result": "Test finished, but the result could not be translated.",
     "move_up": "Move up",
     "move_down": "Move down",
-    "bulk_selected": "{{count}} selected",
-    "bulk_select_all": "Select every row",
-    "bulk_select_row": "Select {{name}}",
-    "bulk_clear": "Clear",
     "bulk_edit": "Edit",
     "bulk_enable": "Activate",
     "bulk_disable": "Deactivate",
@@ -2643,11 +2639,9 @@
     "bulk_edit_title": "Edit {{count}} entries",
     "bulk_edit_hint": "Only the ticked fields are written. Everything else keeps the value each entry already has.",
     "bulk_apply_field": "Apply this field",
-    "bulk_edited_done": "{{count}} entries updated",
     "bulk_enabled_done": "{{count}} entries activated",
     "bulk_disabled_done": "{{count}} entries deactivated",
     "bulk_deleted_done": "{{count}} entries deleted",
-    "bulk_partial": "{{done}} done, {{failed}} failed",
     "filter_placeholder": "Filter by name",
     "filter_no_match": "No entry matches this filter.",
     "row_count": "{{shown}} of {{total}}",
@@ -2660,5 +2654,15 @@
     "load_error": "Unable to load the list.",
     "empty": "Nothing to show.",
     "refresh": "Refresh"
+  },
+  "bulk": {
+    "selected": "{{count}} selected",
+    "select_all": "Select every row",
+    "select_row": "Select {{name}}",
+    "clear": "Clear",
+    "partial": "{{done}} done, {{failed}} failed",
+    "done": "{{count}} entries processed",
+    "unavailable": "Doesn't apply to every selected row",
+    "rows": "{{count}} entries"
   }
 }

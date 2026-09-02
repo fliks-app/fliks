@@ -60,7 +60,7 @@
         </label>
       } @else {
       <span class="text-sm font-medium">
-        {{ 'provider_list.bulk_selected' | translate: { count: selectedIds().size } }}
+        {{ 'bulk.selected' | translate: { count: selectedIds().size } }}
       </span>
       <div class="flex flex-wrap gap-2 ms-auto">
         <button
@@ -90,7 +90,7 @@
           {{ 'provider_list.bulk_delete' | translate }}
         </button>
         <button type="button" class="btn btn-ghost btn-sm" [disabled]="bulkBusy()" (click)="clearSelection()">
-          {{ 'provider_list.bulk_clear' | translate }}
+          {{ 'bulk.clear' | translate }}
         </button>
       </div>
       }
@@ -119,7 +119,7 @@
                   class="checkbox checkbox-sm"
                   [checked]="allSelected()"
                   [indeterminate]="selectedIds().size > 0 && !allSelected()"
-                  [attr.aria-label]="'provider_list.bulk_select_all' | translate"
+                  [attr.aria-label]="'bulk.select_all' | translate"
                   (change)="toggleAllSelected()"
                 />
               </th>
@@ -150,7 +150,7 @@
                     type="checkbox"
                     class="checkbox checkbox-sm"
                     [checked]="isSelected(row.id)"
-                    [attr.aria-label]="'provider_list.bulk_select_row' | translate: { name: row.name }"
+                    [attr.aria-label]="'bulk.select_row' | translate: { name: row.name }"
                     (change)="toggleSelected(row.id)"
                   />
                 </td>

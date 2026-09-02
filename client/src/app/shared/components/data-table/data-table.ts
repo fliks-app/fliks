@@ -12,7 +12,7 @@ import {
   viewChild,
   ElementRef,
 } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { LucideEllipsisVertical } from '@lucide/angular';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { Router } from '@angular/router';
@@ -22,6 +22,8 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { formatBytes, formatSpeed } from '../../utils/download-format';
 import { safeExternalUrl } from '../../utils/safe-url';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { SKIP_ERROR_TOAST } from '../../../core/interceptors/error.interceptor';
+import { ToastService } from '../../../core/services/toast.service';
 import { SseService } from '../../../core/services/sse.service';
 import { PaginationComponent } from '../pagination/pagination';
 import { ProgressBadgeComponent } from '../progress-badge/progress-badge.component';
@@ -90,6 +92,7 @@ export class DataTableComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly localeDate = inject(LocaleDatePipe);
+  private readonly toast = inject(ToastService);
 
   /** Empty renders no heading — an embedded table (a row action's result) carries its own. */
   readonly titleKey = input('');
@@ -111,6 +114,9 @@ export class DataTableComponent implements OnInit {
   readonly pageSize = input(20);
   /** Declared `search`/`select` filters, rendered above the table. */
   readonly filters = input<readonly TableFilter[]>([]);
+  /** Adds a selection column and turns the declared `proxy` row actions into batch actions.
+   *  Opt-in: a table read one row at a time should not grow a column asking to be ticked. */
+  readonly bulkSelect = input(false);
   /** Poll the list this often while the page is on screen; 0 disables it. */
   readonly refreshMs = input(0);
   /** SSE event types that reload the list as they arrive. */
@@ -121,6 +127,12 @@ export class DataTableComponent implements OnInit {
   readonly listError = signal('');
   readonly busy = signal<string | null>(null);
   readonly listActionBusy = signal<string | null>(null);
+
+  /** Ids ticked in the selection column. Not pruned on reload (unlike provider-list): `refreshMs`
+   *  polling reloads this table every couple of seconds and must not wipe a selection under the
+   *  user's hands, so a stale id just falls out of `selectedRows` until its row reappears. */
+  readonly selectedIds = signal<ReadonlySet<TableRow['id']>>(new Set());
+  readonly bulkBusy = signal(false);
 
   /** Both dialogs stay mounted and are driven by `showModal()`/`close()`: an `@if` around the
    *  element unmounts it on close, and daisyUI animates the exit on the element that remains. */
@@ -261,12 +273,14 @@ export class DataTableComponent implements OnInit {
     // Disarms a still-pending debounce so an immediate caller (e.g. a select) can't double-fire it.
     if (this.searchDebounce) clearTimeout(this.searchDebounce);
     this.page.set(1);
+    this.clearSelection();
     await this.loadRows();
   }
 
   async goToPage(page: number): Promise<void> {
     if (page < 1 || page > this.totalPages()) return;
     this.page.set(page);
+    this.clearSelection();
     await this.loadRows();
   }
 
@@ -539,5 +553,143 @@ export class DataTableComponent implements OnInit {
     }
     await firstValueFrom(method === 'POST' ? this.http.post(url, {}) : this.http.delete(url));
     return true;
+  }
+
+  /** One confirmation for a whole batch rather than one per row, mirroring `runHttpAction`'s own
+   *  confirm+toggle contract. Kept separate (not shared code) so a single row's action keeps
+   *  firing its request in the same microtask as a declined-confirm-free click always has. */
+  private async confirmBatch(
+    confirmKey?: string,
+    toggle?: { labelKey: string; param: string; hintKey?: string },
+  ): Promise<{ ok: boolean; toggleSuffix: string }> {
+    if (!confirmKey) return { ok: true, toggleSuffix: '' };
+    if (toggle) {
+      const { ok, toggle: checked } = await this.confirmation.confirmWithToggle({
+        title: this.translate.instant('common.confirm'),
+        message: this.translate.instant(confirmKey),
+        variant: 'danger',
+        toggleLabel: this.translate.instant(toggle.labelKey),
+        ...(toggle.hintKey ? { toggleHint: this.translate.instant(toggle.hintKey) } : {}),
+      });
+      return { ok, toggleSuffix: ok ? `${toggle.param}=${checked}` : '' };
+    }
+    const ok = await this.confirmation.confirm({
+      title: this.translate.instant('common.confirm'),
+      message: this.translate.instant(confirmKey),
+      variant: 'danger',
+    });
+    return { ok, toggleSuffix: '' };
+  }
+
+  isSelected(id: TableRow['id']): boolean {
+    return this.selectedIds().has(id);
+  }
+
+  toggleSelected(id: TableRow['id']): void {
+    this.selectedIds.update((ids) => {
+      const next = new Set(ids);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
+  /** The header box: ticks or unticks the rows currently loaded, the one page of a paged list,
+   *  or the one filtered response of an unpaged one. */
+  toggleAllSelected(): void {
+    const loaded = this.rows().map((r) => r.id);
+    const all = this.allSelected();
+    this.selectedIds.update((ids) => {
+      const next = new Set(ids);
+      for (const id of loaded) {
+        if (all) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  }
+
+  clearSelection(): void {
+    this.selectedIds.set(new Set());
+  }
+
+  readonly allSelected = computed(() => {
+    const rows = this.rows();
+    const ids = this.selectedIds();
+    return rows.length > 0 && rows.every((r) => ids.has(r.id));
+  });
+
+  /** Selected ids narrowed to the rows actually on screen: a stale id from before a reload
+   *  simply drops out here rather than being acted on or miscounted. */
+  readonly selectedRows = computed(() => {
+    const ids = this.selectedIds();
+    return this.rows().filter((r) => ids.has(r.id));
+  });
+
+  /** No page declares a canonical "name" field on a `TableRow`; the first column is what the
+   *  row already reads as to the person ticking it. */
+  rowSelectLabel(row: TableRow): string {
+    const col = this.columns()[0];
+    return col ? this.cellLabel(col, row[col.key]) : String(row.id);
+  }
+
+  /** `proxy` actions only: `route`/`action`/`detail` have no batch meaning against a selection.
+   *  One not allowed by every selected row's `visibleWhen` still renders, disabled, rather than
+   *  disappearing: the button's absence would be read as "not offered" instead of "not now". */
+  readonly batchActions = computed(() => {
+    const rows = this.selectedRows();
+    return this.rowActions()
+      .filter((a): a is Extract<RowAction, { kind: 'proxy' }> => a.kind === 'proxy')
+      .map((action) => ({
+        action,
+        enabled: rows.length > 0 && rows.every((r) => this.rowAllows(action.visibleWhen, r)),
+      }));
+  });
+
+  /** Bulk writes report as one batch, so their failures must not each raise their own toast. */
+  private silent(): { context: HttpContext } {
+    return { context: new HttpContext().set(SKIP_ERROR_TOAST, true) };
+  }
+
+  /**
+   * Runs one request per selected row, sequentially, and reports once. Sequential on purpose: a
+   * burst of parallel writes against a plugin's own database buys nothing and turns one slow row
+   * into a spike the far end may rate-limit. The confirmation (and its toggle) is asked once for
+   * the whole batch, never once per row, and the loop never stops early: every row that can be
+   * written is written.
+   */
+  async runBatch(action: Extract<RowAction, { kind: 'proxy' }>): Promise<void> {
+    const rows = this.selectedRows();
+    if (rows.length === 0) return;
+    const { ok, toggleSuffix } = await this.confirmBatch(action.confirmKey, action.confirmToggle);
+    if (!ok) return;
+
+    this.bulkBusy.set(true);
+    let failed = 0;
+    try {
+      for (const row of rows) {
+        const path = this.rowPath(action.path, row);
+        const url = toggleSuffix ? `${path}${path.includes('?') ? '&' : '?'}${toggleSuffix}` : path;
+        try {
+          await firstValueFrom(
+            action.method === 'POST'
+              ? this.http.post(url, {}, this.silent())
+              : this.http.delete(url, this.silent()),
+          );
+        } catch {
+          failed++;
+        }
+      }
+      await this.loadRows();
+      if (failed === 0) {
+        this.toast.success(this.translate.instant('bulk.done', { count: rows.length }));
+        this.clearSelection();
+      } else {
+        this.toast.error(
+          this.translate.instant('bulk.partial', { done: rows.length - failed, failed }),
+        );
+      }
+    } finally {
+      this.bulkBusy.set(false);
+    }
   }
 }
