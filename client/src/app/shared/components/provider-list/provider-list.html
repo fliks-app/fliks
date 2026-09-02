@@ -23,6 +23,47 @@
     </div>
   </div>
 
+  @if (bulkSelect() && selectedIds().size > 0) {
+    <div
+      class="flex flex-wrap items-center gap-2 rounded-lg border border-base-200 bg-base-200/40 px-3 py-2"
+    >
+      <span class="text-sm font-medium">
+        {{ 'provider_list.bulk_selected' | translate: { count: selectedIds().size } }}
+      </span>
+      <div class="flex flex-wrap gap-2 ms-auto">
+        <button
+          type="button"
+          class="btn btn-outline btn-sm"
+          [disabled]="bulkBusy() || !bulkImplementation()"
+          [title]="bulkImplementation() ? '' : ('provider_list.bulk_mixed_implementations' | translate)"
+          (click)="openBulkEditor()"
+        >
+          {{ 'provider_list.bulk_edit' | translate }}
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" [disabled]="bulkBusy()" (click)="bulkSetEnabled(true)">
+          {{ 'provider_list.bulk_enable' | translate }}
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" [disabled]="bulkBusy()" (click)="bulkSetEnabled(false)">
+          {{ 'provider_list.bulk_disable' | translate }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-outline btn-error btn-sm"
+          [disabled]="bulkBusy()"
+          (click)="bulkDelete()"
+        >
+          @if (bulkBusy()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'provider_list.bulk_delete' | translate }}
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm" [disabled]="bulkBusy()" (click)="clearSelection()">
+          {{ 'provider_list.bulk_clear' | translate }}
+        </button>
+      </div>
+    </div>
+  }
+
   @if (loading()) {
     <div class="flex justify-center py-16">
       <span class="loading loading-spinner loading-lg"></span>
@@ -36,6 +77,18 @@
       <table class="table table-zebra">
         <thead>
           <tr>
+            @if (bulkSelect()) {
+              <th class="w-10">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-sm"
+                  [checked]="allSelected()"
+                  [indeterminate]="selectedIds().size > 0 && !allSelected()"
+                  [attr.aria-label]="'provider_list.bulk_select_all' | translate"
+                  (change)="toggleAllSelected()"
+                />
+              </th>
+            }
             <th>{{ labels().colNameKey | translate }}</th>
             @if (showImplementation()) {
               <th>{{ labels().colImplementationKey | translate }}</th>
@@ -56,6 +109,17 @@
         <tbody>
           @for (row of orderedRows(); track row.id; let i = $index) {
             <tr>
+              @if (bulkSelect()) {
+                <td>
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm"
+                    [checked]="isSelected(row.id)"
+                    [attr.aria-label]="'provider_list.bulk_select_row' | translate: { name: row.name }"
+                    (change)="toggleSelected(row.id)"
+                  />
+                </td>
+              }
               <td>
                 <button type="button" class="link link-hover font-medium" (click)="openEdit(row)">
                   {{ row.name }}
@@ -258,6 +322,79 @@
   </div>
   <form method="dialog" class="modal-backdrop">
     <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">
+      close
+    </button>
+  </form>
+</dialog>
+
+<dialog #bulkDialog class="modal">
+  <div class="modal-box max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+    <app-modal-header
+      flush
+      [title]="'provider_list.bulk_edit_title' | translate: { count: selectedIds().size }"
+    />
+    <div class="px-5 sm:px-6 py-4 flex flex-col gap-3 overflow-y-auto flex-1 min-h-0 bg-base-100">
+      <p class="text-sm text-base-content/60">{{ 'provider_list.bulk_edit_hint' | translate }}</p>
+
+      @if (showPriority()) {
+        <div class="flex items-start gap-3">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-sm mt-3"
+            [checked]="isBulkApplied('priority')"
+            [attr.aria-label]="'provider_list.bulk_apply_field' | translate"
+            (change)="toggleBulkApply('priority')"
+          />
+          <div class="flex-1">
+            <app-input-field
+              [type]="'number'"
+              [label]="labels().fieldPriorityKey | translate"
+              [value]="bulkPriority() + ''"
+              [disabled]="!isBulkApplied('priority')"
+              (valueChange)="bulkPriority.set(+$event)"
+            />
+          </div>
+        </div>
+      }
+
+      @for (field of bulkFields(); track field.key) {
+        <div class="flex items-start gap-3">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-sm mt-3"
+            [checked]="isBulkApplied(field.key)"
+            [attr.aria-label]="'provider_list.bulk_apply_field' | translate"
+            (change)="toggleBulkApply(field.key)"
+          />
+          <div class="flex-1">
+            <app-schema-form
+              [fields]="[field]"
+              [(value)]="bulkValue"
+              [disabled]="!isBulkApplied(field.key)"
+            />
+          </div>
+        </div>
+      }
+    </div>
+    <app-modal-footer flush>
+      <button type="button" class="btn btn-ghost" (click)="closeBulkEditor()" [disabled]="bulkBusy()">
+        {{ labels().cancelKey | translate }}
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        [disabled]="bulkBusy() || bulkNothingApplied()"
+        (click)="saveBulkEdit()"
+      >
+        @if (bulkBusy()) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
+        {{ labels().saveKey | translate }}
+      </button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeBulkEditor()" [attr.aria-label]="'common.close' | translate">
       close
     </button>
   </form>

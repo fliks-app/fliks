@@ -309,6 +309,10 @@ export interface ProvidersConfigPage extends ConfigPageBase {
     result?: { kind: 'table'; columns: TableColumn[]; emptyKey: string };
   }[];
   reorderable?: boolean;
+  /** Adds a selection column and the bulk actions that act on it (enable, disable, delete, and
+   *  one editor applied to every selected row). Opt-in per page: a list whose rows are edited one
+   *  at a time should not grow a column asking to be ticked. */
+  bulkSelect?: boolean;
   /** Priority is not a universal provider concept; hide the column when the
    *  resource has none. */
   showPriority?: boolean;

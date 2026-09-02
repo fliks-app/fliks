@@ -1,9 +1,13 @@
-import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
+import { HttpContextToken, HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from '../services/toast.service';
 import { translatedServerMessage } from '../utils/server-message';
+
+/** Set on a request whose failure the caller reports itself. For a batch: one summary beats N
+ *  toasts, none of which could say which row they came from. */
+export const SKIP_ERROR_TOAST = new HttpContextToken(() => false);
 
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
@@ -28,7 +32,13 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         req.method === 'GET' && req.url.includes('/api/metadata') && err.status === 500;
       // Health is polled while the server restarts, so a failed probe is expected.
       const healthProbe = req.url.includes('/api/system/health');
-      if (!showToast || softMetadataGet || healthProbe || req.url.includes('/i18n/')) {
+      if (
+        !showToast ||
+        softMetadataGet ||
+        healthProbe ||
+        req.context.get(SKIP_ERROR_TOAST) ||
+        req.url.includes('/i18n/')
+      ) {
         return throwError(() => err);
       }
       const message = extractMessage(err, translate);
