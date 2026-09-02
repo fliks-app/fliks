@@ -419,7 +419,9 @@
      when iterating on the layout. -->
 <ng-template #streamInfoBlock>
   @if (selectedFileId() && (mediaType() !== 'series' || episodeId())) {
-    <div appTvRow class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-5">
+    <!-- min-h reserves the tallest child (a `select-sm`): the subtitle dropdown
+         arrives after the video/audio labels, which are plain text. -->
+    <div appTvRow class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-5 min-h-8">
       <div class="flex items-center gap-2">
         <span class="text-base-content/50">{{ 'media_info.video' | translate }}</span>
         @if (multipleFiles()) {
