@@ -17,6 +17,39 @@ async function settle(fixture: ComponentFixture<unknown>) {
   fixture.detectChanges();
 }
 
+// jsdom implements neither of these, and the row menu uses both: `showModal` for the dialogs
+// around it, `scrollIntoView` when it focuses its first item.
+beforeAll(() => {
+  Element.prototype.scrollIntoView ??= () => {};
+  if (!HTMLDialogElement.prototype.showModal) {
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      this.setAttribute('open', '');
+    };
+  }
+  if (!HTMLDialogElement.prototype.close) {
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.removeAttribute('open');
+    };
+  }
+});
+
+/**
+ * Clicks a row action by label. Everything but `detail` lives in the row's own menu now, and the
+ * menu is a popover that moves its content under `<html>`, so the item is not inside the fixture.
+ */
+async function clickRowAction(fixture: ComponentFixture<unknown>, label: string): Promise<void> {
+  const kebab = fixture.nativeElement.querySelector('tbody td button[aria-label]') as HTMLButtonElement | null;
+  expect(kebab).not.toBeNull();
+  kebab!.click();
+  await settle(fixture);
+  const item = Array.from(document.querySelectorAll('[data-tv-modal] button')).find((b) =>
+    b.textContent?.includes(label),
+  ) as HTMLButtonElement | undefined;
+  expect(item, `no row-menu item labelled ${label}`).toBeDefined();
+  item!.click();
+  await settle(fixture);
+}
+
 function createComponent(
   params: { pluginId: string; view: string },
   registry: { hasPlugin: (id: string) => boolean; configPage: (id: string, view: string) => AnyConfigPage | undefined },
@@ -418,10 +451,7 @@ describe('PluginViewComponent', () => {
     ]);
     await settle(fixture);
 
-    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
-    const button = buttons.find((b) => b.textContent?.includes('x.open'));
-    expect(button).toBeDefined();
-    button!.click();
+    await clickRowAction(fixture, 'x.open');
     expect(navigateByUrl).toHaveBeenCalledWith('/series/42');
     http.verify();
   });
@@ -477,9 +507,7 @@ describe('PluginViewComponent', () => {
       { id: 1, name: 'A Film', mediaId: 9, mediaType: 'movie', episodeId: null },
     ]);
     await settle(fixture);
-    (Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[])
-      .find((b) => b.textContent?.includes('x.open'))!
-      .click();
+    await clickRowAction(fixture, 'x.open');
     expect(navigateByUrl).toHaveBeenCalledWith('/movies/9');
     http.verify();
   });
@@ -507,14 +535,12 @@ describe('PluginViewComponent', () => {
     http.expectOne({ url: '/api/plugins/fliks.a/queue', method: 'GET' }).flush([{ id: 1, name: 'Torrent A' }]);
     await settle(fixture);
 
-    // Checked first, before the row (and its buttons) is removed by the proxy delete below.
-    const routeButtons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
-    routeButtons.find((b) => b.textContent?.includes('x.details'))!.click();
-    // An in-app Angular route is never plugin-relative — it must reach the router verbatim.
+    // Checked first, before the row (and its menu) is removed by the proxy delete below.
+    await clickRowAction(fixture, 'x.details');
+    // An in-app Angular route is never plugin-relative: it must reach the router verbatim.
     expect(navigateByUrl).toHaveBeenCalledWith('/plugins/fliks.a/details');
 
-    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
-    buttons.find((b) => b.textContent?.includes('x.remove'))!.click();
+    await clickRowAction(fixture, 'x.remove');
     http.expectOne({ url: '/api/plugins/fliks.a/queue/1', method: 'DELETE' }).flush({});
     await settle(fixture);
     http.expectOne({ url: '/api/plugins/fliks.a/queue', method: 'GET' }).flush([]);

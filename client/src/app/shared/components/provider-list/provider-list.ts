@@ -11,16 +11,18 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { NgTemplateOutlet } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucideArrowUp, LucideArrowDown, LucideRotateCcw } from '@lucide/angular';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { SKIP_ERROR_TOAST } from '../../../core/interceptors/error.interceptor';
+import { ToastService } from '../../../core/services/toast.service';
 import { InputFieldComponent } from '../forms/input-field/input-field';
 import { ToggleFieldComponent } from '../forms/toggle-field/toggle-field';
 import { SelectFieldComponent } from '../forms/select-field/select-field';
-import { SECRETS_SET_KEY } from '@fliks/plugin-contract/ui';
+import { FieldDef, SECRETS_SET_KEY } from '@fliks/plugin-contract/ui';
 import { SchemaFormComponent, SchemaFormValue } from '../schema-form/schema-form';
 import {
   ProviderDraft,
@@ -81,8 +83,10 @@ export class ProviderListComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly toast = inject(ToastService);
   readonly togglingId = signal<number | null>(null);
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly bulkDialog = viewChild<ElementRef<HTMLDialogElement>>('bulkDialog');
   private readonly resultDialog = viewChild<ElementRef<HTMLDialogElement>>('resultDialog');
 
   /** Empty renders no heading — a plugin page carries its own page-level title. */
@@ -98,6 +102,9 @@ export class ProviderListComponent implements OnInit {
   readonly defaultEnabled = input(true);
   /** Sorts rows by priority and adds move-up/down swaps — priority is meaningless to reorder otherwise. */
   readonly reorderable = input(false);
+  /** Adds the selection column and the bulk actions acting on it. Off by default: a list edited
+   *  one row at a time should not grow a column asking to be ticked. */
+  readonly bulkSelect = input(false);
   /** Rendered once above the rows (`ProvidersConfigPage.actions[].scope: 'list'`), distinct from per-row actions. */
   readonly listActions = input<readonly ProviderListAction[]>([]);
   /** Rendered per row (`ProvidersConfigPage.actions[].scope: 'row'`) — every entry gets its own button. */
@@ -139,6 +146,15 @@ export class ProviderListComponent implements OnInit {
   readonly testLoading = signal(false);
   readonly testResult = signal<ProviderTestResult | null>(null);
 
+  /** Ids ticked in the selection column. Pruned on every reload: a row someone else deleted must
+   *  not stay selected and be acted on by the next bulk call. */
+  readonly selectedIds = signal<ReadonlySet<number>>(new Set());
+  readonly bulkBusy = signal(false);
+  /** Field keys the bulk editor will write. Everything unticked is left as each row has it. */
+  readonly bulkApply = signal<ReadonlySet<string>>(new Set());
+  readonly bulkValue = signal<SchemaFormValue>({});
+  readonly bulkPriority = signal(0);
+
   readonly listActionBusy = signal<string | null>(null);
   readonly rowActionBusy = signal<string | null>(null);
 
@@ -155,6 +171,33 @@ export class ProviderListComponent implements OnInit {
   /** Display order: priority ascending when `reorderable`, otherwise the server's own order. */
   readonly orderedRows = computed(() =>
     this.reorderable() ? [...this.rows()].sort((a, b) => a.priority - b.priority) : this.rows(),
+  );
+
+  readonly selectedRows = computed(() => {
+    const ids = this.selectedIds();
+    return this.rows().filter((r) => ids.has(r.id));
+  });
+
+  readonly allSelected = computed(
+    () => this.rows().length > 0 && this.selectedIds().size === this.rows().length,
+  );
+
+  /** The one implementation every selected row shares, or null when they differ: the bulk editor
+   *  is built from an implementation's own fields, so a mixed selection has no form to render. */
+  readonly bulkImplementation = computed(() => {
+    const rows = this.selectedRows();
+    if (rows.length === 0) return null;
+    const key = this.implementationKey();
+    const first = String(rows[0]![key] ?? '');
+    if (rows.some((r) => String(r[key] ?? '') !== first)) return null;
+    return this.implementations().find((i) => i.implementation === first) ?? null;
+  });
+
+  /** Fields the bulk editor offers: the implementation's own, plus priority when the page has one.
+   *  A secret is included on purpose (rotating one key across a dozen imported rows is the case
+   *  this exists for) and, like every other field, is written only when ticked. */
+  readonly bulkFields = computed<readonly FieldDef[]>(
+    () => this.bulkImplementation()?.fields.filter((f): f is FieldDef => !('kind' in f) || f.kind === 'field') ?? [],
   );
 
   readonly currentImplementation = computed(
@@ -177,7 +220,10 @@ export class ProviderListComponent implements OnInit {
     this.loading.set(true);
     this.listError.set('');
     try {
-      this.rows.set(await firstValueFrom(this.http.get<ProviderInstance[]>(this.listUrl())));
+      const rows = await firstValueFrom(this.http.get<ProviderInstance[]>(this.listUrl()));
+      this.rows.set(rows);
+      const live = new Set(rows.map((r) => r.id));
+      this.selectedIds.update((ids) => new Set([...ids].filter((id) => live.has(id))));
       this.changed.emit();
     } catch {
       this.listError.set(this.translate.instant(this.labels().loadErrorKey));
@@ -429,6 +475,166 @@ export class ProviderListComponent implements OnInit {
     } finally {
       this.togglingId.set(null);
     }
+  }
+
+  isSelected(id: number): boolean {
+    return this.selectedIds().has(id);
+  }
+
+  toggleSelected(id: number): void {
+    this.selectedIds.update((ids) => {
+      const next = new Set(ids);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
+  /** The header box: all or nothing, over every row rather than the page's visible order (there
+   *  is no paging here, so they are the same set). */
+  toggleAllSelected(): void {
+    this.selectedIds.set(this.allSelected() ? new Set() : new Set(this.rows().map((r) => r.id)));
+  }
+
+  clearSelection(): void {
+    this.selectedIds.set(new Set());
+  }
+
+  /**
+   * Runs one request per selected row, sequentially, and reports once. Sequential on purpose: a
+   * dozen parallel writes against a plugin's own database buy nothing and turn one slow row into
+   * a burst the far end may rate-limit. Each request suppresses the global error toast so the
+   * summary is the only thing the user reads, and the loop never stops early: the rows that can
+   * be written are written.
+   */
+  private async runOverSelection(
+    call: (row: ProviderInstance) => Promise<unknown>,
+    okKey: string,
+  ): Promise<void> {
+    const rows = this.selectedRows();
+    if (rows.length === 0) return;
+    this.bulkBusy.set(true);
+    let failed = 0;
+    try {
+      for (const row of rows) {
+        try {
+          await call(row);
+        } catch {
+          failed++;
+        }
+      }
+      await this.reload();
+      if (failed === 0) {
+        this.toast.success(this.translate.instant(okKey, { count: rows.length }));
+        this.clearSelection();
+      } else {
+        this.toast.error(
+          this.translate.instant('provider_list.bulk_partial', {
+            done: rows.length - failed,
+            failed,
+          }),
+        );
+      }
+    } finally {
+      this.bulkBusy.set(false);
+    }
+  }
+
+  /** Bulk writes report as a batch, so their failures must not each raise their own toast. */
+  private silent(): { context: HttpContext } {
+    return { context: new HttpContext().set(SKIP_ERROR_TOAST, true) };
+  }
+
+  /** Persists the whole row with `enabled` forced, the convention `toggleEnabled` already uses. */
+  async bulkSetEnabled(enabled: boolean): Promise<void> {
+    await this.runOverSelection(
+      (row) =>
+        firstValueFrom(this.http.put(`${this.listUrl()}/${row.id}`, { ...row, enabled }, this.silent())),
+      enabled ? 'provider_list.bulk_enabled_done' : 'provider_list.bulk_disabled_done',
+    );
+  }
+
+  async bulkDelete(): Promise<void> {
+    const count = this.selectedIds().size;
+    if (count === 0) return;
+    const ok = await this.confirmation.confirm({
+      title: this.translate.instant('common.confirm'),
+      message: this.translate.instant('provider_list.bulk_delete_confirm', { count }),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    await this.runOverSelection(
+      (row) => firstValueFrom(this.http.delete(`${this.listUrl()}/${row.id}`, this.silent())),
+      'provider_list.bulk_deleted_done',
+    );
+  }
+
+  openBulkEditor(): void {
+    const impl = this.bulkImplementation();
+    if (!impl) return;
+    this.bulkApply.set(new Set());
+    // Seeded from the first selected row so a ticked field starts on a real value rather than
+    // blank; nothing is written until its own box is ticked.
+    this.bulkValue.set(this.seedValue(this.selectedRows()[0] ?? null, impl));
+    this.bulkPriority.set(this.selectedRows()[0]?.priority ?? this.defaultPriority());
+    this.bulkDialog()?.nativeElement.showModal();
+  }
+
+  closeBulkEditor(): void {
+    this.bulkDialog()?.nativeElement.close();
+  }
+
+  isBulkApplied(key: string): boolean {
+    return this.bulkApply().has(key);
+  }
+
+  toggleBulkApply(key: string): void {
+    this.bulkApply.update((keys) => {
+      const next = new Set(keys);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  }
+
+  readonly bulkNothingApplied = computed(() => this.bulkApply().size === 0);
+
+  /**
+   * Applies only the ticked fields to every selected row. Each row is persisted whole, with its
+   * own settings spread under the changes: a field nobody ticked keeps whatever that row had,
+   * which is the difference between a bulk edit and twelve identical rows.
+   */
+  async saveBulkEdit(): Promise<void> {
+    const applied = this.bulkApply();
+    if (applied.size === 0) return;
+    const value = this.bulkValue();
+    const settings: Record<string, unknown> = {};
+    const topLevel: Record<string, unknown> = {};
+    for (const field of this.bulkFields()) {
+      if (!applied.has(field.key)) continue;
+      const v = value[field.key];
+      // A ticked secret left blank would erase nothing and mean nothing: skip it rather than
+      // write an empty credential over a dozen rows.
+      if (field.secret && (v === '' || v === undefined)) continue;
+      (field.topLevel ? topLevel : settings)[field.key] = v;
+    }
+    const priority = applied.has('priority') ? this.bulkPriority() : null;
+
+    this.closeBulkEditor();
+    await this.runOverSelection(
+      (row) =>
+        firstValueFrom(
+          this.http.put(
+            `${this.listUrl()}/${row.id}`,
+            {
+              ...row,
+              ...topLevel,
+              ...(priority === null ? {} : { priority }),
+              settings: { ...(row.settings ?? {}), ...settings },
+            },
+            this.silent(),
+          ),
+        ),
+      'provider_list.bulk_edited_done',
+    );
   }
 
   rowActionKey(row: ProviderInstance, action: ProviderRowAction): string {

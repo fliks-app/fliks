@@ -2,10 +2,13 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { ProviderListComponent, resolveRowActionRoute } from './provider-list';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { ToastService } from '../../../core/services/toast.service';
+import { SKIP_ERROR_TOAST } from '../../../core/interceptors/error.interceptor';
+import { HttpContext } from '@angular/common/http';
 import { ProviderImplementation, ProviderListAction, ProviderListLabels, ProviderRowAction } from './provider-list.types';
 
 beforeAll(() => {
@@ -83,6 +86,9 @@ async function createComponent(
     confirmation: { confirm: (...a: any[]) => Promise<boolean>; alert: (...a: any[]) => Promise<void> };
     labels: ProviderListLabels;
     cooldownAction: ProviderRowAction | null;
+    bulkSelect: boolean;
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    toast: { success: (...a: any[]) => void; error: (...a: any[]) => void };
   }> = {},
 ) {
   TestBed.configureTestingModule({
@@ -97,6 +103,7 @@ async function createComponent(
         provide: ConfirmationService,
         useValue: opts.confirmation ?? { confirm: () => Promise.resolve(true), alert: () => Promise.resolve() },
       },
+      { provide: ToastService, useValue: opts.toast ?? { success: () => {}, error: () => {} } },
     ],
   });
   const fixture = TestBed.createComponent(ProviderListComponent);
@@ -108,6 +115,7 @@ async function createComponent(
   if (opts.listActions) fixture.componentRef.setInput('listActions', opts.listActions);
   if (opts.rowActions) fixture.componentRef.setInput('rowActions', opts.rowActions);
   if (opts.cooldownAction !== undefined) fixture.componentRef.setInput('cooldownAction', opts.cooldownAction);
+  if (opts.bulkSelect) fixture.componentRef.setInput('bulkSelect', opts.bulkSelect);
   fixture.detectChanges();
   await fixture.whenStable();
   await new Promise((r) => setTimeout(r, 0));
@@ -466,5 +474,175 @@ describe('ProviderListComponent — row controls', () => {
       { implementations: [...IMPLS, { implementation: 'other', labelKey: 'x.impl_other', fields: [] }] },
     );
     expect(fixture.componentInstance.showImplementation()).toBe(true);
+  });
+});
+
+describe('ProviderListComponent: bulk selection', () => {
+  const THREE = [
+    { id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: { url: 'http://a', minSeeders: 1 } },
+    { id: 2, name: 'B', implementation: 'demo', enabled: true, priority: 2, settings: { url: 'http://b', minSeeders: 2 } },
+    { id: 3, name: 'C', implementation: 'other', enabled: false, priority: 3, settings: { url: 'http://c' } },
+  ];
+
+  const listOf = (rows: unknown[]) => ({ get: () => of(rows) });
+
+  it('selects, deselects and covers every row from the header box', async () => {
+    const fixture = await createComponent(listOf(THREE), { bulkSelect: true });
+    const c = fixture.componentInstance;
+
+    c.toggleSelected(1);
+    expect([...c.selectedIds()]).toEqual([1]);
+    c.toggleSelected(1);
+    expect(c.selectedIds().size).toBe(0);
+
+    c.toggleAllSelected();
+    expect(c.allSelected()).toBe(true);
+    c.toggleAllSelected();
+    expect(c.selectedIds().size).toBe(0);
+  });
+
+  it('VERDICT: drops a selected id the reload no longer returns, so no bulk call targets it', async () => {
+    let rows = [...THREE];
+    const fixture = await createComponent({ get: () => of(rows) }, { bulkSelect: true });
+    const c = fixture.componentInstance;
+    c.toggleAllSelected();
+    expect(c.selectedIds().size).toBe(3);
+
+    rows = rows.filter((r) => r.id !== 2);
+    await c.reload();
+
+    expect([...c.selectedIds()]).toEqual([1, 3]);
+  });
+
+  it('offers no bulk editor for a selection spanning two implementations', async () => {
+    const fixture = await createComponent(listOf(THREE), { bulkSelect: true });
+    const c = fixture.componentInstance;
+    c.toggleSelected(1);
+    expect(c.bulkImplementation()?.implementation).toBe('demo');
+    c.toggleSelected(3);
+    expect(c.bulkImplementation()).toBeNull();
+  });
+
+  it('VERDICT: bulk enable writes every selected row whole, silences the per-call toast, and reports once', async () => {
+    const put = vi.fn((_url: string, _body: unknown, _opts?: unknown) => of({}));
+    const toast = { success: vi.fn(), error: vi.fn() };
+    const fixture = await createComponent({ get: () => of(THREE), put }, { bulkSelect: true, toast });
+    const c = fixture.componentInstance;
+    c.toggleSelected(1);
+    c.toggleSelected(3);
+    await c.bulkSetEnabled(false);
+
+    expect(put).toHaveBeenCalledTimes(2);
+    expect(put.mock.calls[0]![0]).toBe('/api/x/1');
+    const body = put.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body['enabled']).toBe(false);
+    expect(body['name']).toBe('A');
+    expect(body['settings']).toEqual({ url: 'http://a', minSeeders: 1 });
+    const ctx = (put.mock.calls[0]![2] as { context: HttpContext }).context;
+    expect(ctx.get(SKIP_ERROR_TOAST)).toBe(true);
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(c.selectedIds().size).toBe(0);
+  });
+
+  it('VERDICT: one failing row does not stop the batch, and the selection survives a partial run', async () => {
+    // Row 2 rejects, the others resolve.
+    const failing = vi.fn((url: string) =>
+      url.endsWith('/2') ? throwError(() => new Error('nope')) : of({}),
+    );
+    const toast = { success: vi.fn(), error: vi.fn() };
+    const fixture = await createComponent({ get: () => of(THREE), delete: failing }, { bulkSelect: true, toast });
+    const c = fixture.componentInstance;
+    c.toggleAllSelected();
+    await c.bulkDelete();
+
+    expect(failing).toHaveBeenCalledTimes(3);
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(c.selectedIds().size).toBe(3);
+  });
+
+  it('asks once before deleting a batch, and does nothing when that is declined', async () => {
+    const failing = vi.fn(() => of({}));
+    const fixture = await createComponent(
+      { get: () => of(THREE), delete: failing },
+      { bulkSelect: true, confirmation: { confirm: () => Promise.resolve(false), alert: () => Promise.resolve() } },
+    );
+    const c = fixture.componentInstance;
+    c.toggleAllSelected();
+    await c.bulkDelete();
+    expect(failing).not.toHaveBeenCalled();
+  });
+
+  it('VERDICT: the bulk editor writes only the ticked fields, leaving every other value per row', async () => {
+    const put = vi.fn((_url: string, _body: unknown, _opts?: unknown) => of({}));
+    const fixture = await createComponent({ get: () => of(THREE), put }, { bulkSelect: true });
+    const c = fixture.componentInstance;
+    c.toggleSelected(1);
+    c.toggleSelected(2);
+    c.openBulkEditor();
+
+    // Two fields edited in the form, only one of them ticked.
+    c.bulkValue.update((v) => ({ ...v, url: 'http://shared', delay: 9 }));
+    c.toggleBulkApply('delay');
+    expect(c.bulkNothingApplied()).toBe(false);
+    await c.saveBulkEdit();
+
+    expect(put).toHaveBeenCalledTimes(2);
+    const first = put.mock.calls[0]![1] as Record<string, unknown>;
+    const second = put.mock.calls[1]![1] as Record<string, unknown>;
+    // `delay` is a topLevel field, so it lands at the root, not in settings.
+    expect(first['delay']).toBe(9);
+    expect(second['delay']).toBe(9);
+    expect(first['settings']).toEqual({ url: 'http://a', minSeeders: 1 });
+    expect(second['settings']).toEqual({ url: 'http://b', minSeeders: 2 });
+  });
+
+  it('VERDICT: a ticked but blank secret is skipped rather than blanking the stored one', async () => {
+    const put = vi.fn((_url: string, _body: unknown, _opts?: unknown) => of({}));
+    const fixture = await createComponent({ get: () => of(THREE), put }, { bulkSelect: true });
+    const c = fixture.componentInstance;
+    c.toggleSelected(1);
+    c.openBulkEditor();
+    c.toggleBulkApply('apiKey');
+    await c.saveBulkEdit();
+
+    const body = put.mock.calls[0]![1] as { settings: Record<string, unknown> };
+    expect('apiKey' in body.settings).toBe(false);
+  });
+
+  it('writes a ticked secret to every selected row', async () => {
+    const put = vi.fn((_url: string, _body: unknown, _opts?: unknown) => of({}));
+    const fixture = await createComponent({ get: () => of(THREE), put }, { bulkSelect: true });
+    const c = fixture.componentInstance;
+    c.toggleSelected(1);
+    c.toggleSelected(2);
+    c.openBulkEditor();
+    c.bulkValue.update((v) => ({ ...v, apiKey: 'ROTATED' }));
+    c.toggleBulkApply('apiKey');
+    await c.saveBulkEdit();
+
+    for (const call of put.mock.calls) {
+      expect((call[1] as { settings: Record<string, unknown> }).settings['apiKey']).toBe('ROTATED');
+    }
+  });
+
+  it('applies priority only when its own box is ticked', async () => {
+    const put = vi.fn((_url: string, _body: unknown, _opts?: unknown) => of({}));
+    const fixture = await createComponent({ get: () => of(THREE), put }, { bulkSelect: true });
+    const c = fixture.componentInstance;
+    c.toggleSelected(1);
+    c.toggleSelected(2);
+    c.openBulkEditor();
+    c.bulkPriority.set(50);
+    await c.saveBulkEdit();
+    expect(put).not.toHaveBeenCalled();
+
+    c.openBulkEditor();
+    c.bulkPriority.set(50);
+    c.toggleBulkApply('priority');
+    await c.saveBulkEdit();
+    expect((put.mock.calls[0]![1] as Record<string, unknown>)['priority']).toBe(50);
+    expect((put.mock.calls[1]![1] as Record<string, unknown>)['priority']).toBe(50);
   });
 });
