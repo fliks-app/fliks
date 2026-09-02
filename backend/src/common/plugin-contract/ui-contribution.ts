@@ -427,9 +427,7 @@ export interface TableConfigPage extends ConfigPageBase {
   )[];
   defaultSortKey?: string;
   /** `list` answers `{data,total,page,pageSize}` rather than a bare array — a
-   *  paged resource renders empty against an array-only reader. That response may also carry
-   *  `notice: {messageKey, tone: 'info'|'warning'|'error', detail?, count?}` beside `data`,
-   *  rendered as a list-wide alert; a bare-array `list` has nowhere to carry one. */
+   *  paged resource renders empty against an array-only reader. */
   paged?: boolean;
   pageSize?: number;
   /** Re-fetch this often while the page is on screen, for a list whose values move on
