@@ -598,33 +598,29 @@ describe('ProviderListComponent: bulk selection', () => {
     expect(second['settings']).toEqual({ url: 'http://b', minSeeders: 2 });
   });
 
-  it('VERDICT: a ticked but blank secret is skipped rather than blanking the stored one', async () => {
-    const put = vi.fn((_url: string, _body: unknown, _opts?: unknown) => of({}));
-    const fixture = await createComponent({ get: () => of(THREE), put }, { bulkSelect: true });
-    const c = fixture.componentInstance;
-    c.toggleSelected(1);
-    c.openBulkEditor();
-    c.toggleBulkApply('apiKey');
-    await c.saveBulkEdit();
-
-    const body = put.mock.calls[0]![1] as { settings: Record<string, unknown> };
-    expect('apiKey' in body.settings).toBe(false);
-  });
-
-  it('writes a ticked secret to every selected row', async () => {
-    const put = vi.fn((_url: string, _body: unknown, _opts?: unknown) => of({}));
-    const fixture = await createComponent({ get: () => of(THREE), put }, { bulkSelect: true });
+  it('VERDICT: offers no url and no credential, whatever the implementation declares', async () => {
+    const fixture = await createComponent({ get: () => of(THREE) }, { bulkSelect: true });
     const c = fixture.componentInstance;
     c.toggleSelected(1);
     c.toggleSelected(2);
+    // `url` identifies the row and `apiKey` belongs to it: the same value on every selected row
+    // is meaningless there, so neither is offered even though both are editable one row at a time.
+    expect(c.bulkFields().map((f) => f.key)).toEqual(['delay']);
+  });
+
+  it('never writes a field the editor does not offer, even if its key is ticked', async () => {
+    const put = vi.fn((_url: string, _body: unknown, _opts?: unknown) => of({}));
+    const fixture = await createComponent({ get: () => of(THREE), put }, { bulkSelect: true });
+    const c = fixture.componentInstance;
+    c.toggleSelected(1);
     c.openBulkEditor();
-    c.bulkValue.update((v) => ({ ...v, apiKey: 'ROTATED' }));
+    c.bulkValue.update((v) => ({ ...v, apiKey: 'ROTATED', url: 'http://shared' }));
     c.toggleBulkApply('apiKey');
+    c.toggleBulkApply('url');
     await c.saveBulkEdit();
 
-    for (const call of put.mock.calls) {
-      expect((call[1] as { settings: Record<string, unknown> }).settings['apiKey']).toBe('ROTATED');
-    }
+    const body = put.mock.calls[0]![1] as { settings: Record<string, unknown> };
+    expect(body.settings).toEqual({ url: 'http://a', minSeeders: 1 });
   });
 
   it('applies priority only when its own box is ticked', async () => {
