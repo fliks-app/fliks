@@ -45,7 +45,7 @@ const TMDB_SIZE_MAP: Record<string, Partial<Record<ImageSize, string>>> = {
   'request/poster': { thumb: 'w185', medium: 'w500', full: 'original' },
   'request/fanart': { thumb: 'w300', medium: 'w780', full: 'original' },
   person: { thumb: 'w45', full: 'original' },
-  episode: { thumb: 'w300', full: 'original' },
+  episode: { thumb: 'w300', medium: 'w780', full: 'original' },
   season: { thumb: 'w185', medium: 'w500', full: 'original' },
 };
 
