@@ -1,9 +1,12 @@
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { SchemaFormComponent } from './schema-form';
 import type { FieldDef, FormItem } from '@fliks/plugin-contract/ui';
+import { DeviceService } from '../../../core/services/device.service';
+import { TvService } from '../../../core/services/tv.service';
+import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
 
 function createComponent(
   fields: readonly FormItem[],
@@ -17,6 +20,11 @@ function createComponent(
         lang: 'en',
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
+      // Desktop with a mouse, so a `multiselect` field's popover opens as an anchored
+      // dropdown rather than a bottom sheet.
+      { provide: DeviceService, useValue: { isTouch: () => false, isDesktop: () => true } },
+      { provide: TvService, useValue: { isTv: () => false } },
+      { provide: DismissableStackService, useValue: { push: () => {}, remove: () => {} } },
     ],
   });
   const fixture = TestBed.createComponent(SchemaFormComponent);
@@ -31,6 +39,19 @@ function setInputAndDispatch(el: HTMLInputElement | HTMLSelectElement, value: st
   el.value = value;
   el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input'));
 }
+
+async function settle(fixture: ComponentFixture<unknown>) {
+  fixture.detectChanges();
+  await fixture.whenStable();
+  await new Promise((r) => setTimeout(r, 0));
+  fixture.detectChanges();
+}
+
+beforeAll(() => {
+  // The shared popover focuses and scrolls to the panel's first item on open; jsdom has no
+  // scrollIntoView.
+  Element.prototype.scrollIntoView ??= () => {};
+});
 
 describe('SchemaFormComponent — field type coverage', () => {
   it('renders text/toggle/select for known types and nothing for an unknown one, without breaking the rest', () => {
@@ -289,6 +310,50 @@ describe('SchemaFormComponent — declared validation constraints', () => {
     expect(fixture.componentInstance.invalid()).toBe(true);
   });
 
+});
+
+describe('SchemaFormComponent: multiselect', () => {
+  const field: FieldDef = {
+    key: 'useFor',
+    type: 'multiselect',
+    labelKey: 'x.use_for',
+    options: [
+      { value: 'search', labelKey: 'x.search' },
+      { value: 'grab', labelKey: 'x.grab' },
+      { value: 'rss', labelKey: 'x.rss' },
+    ],
+  };
+
+  it('renders its declared options and reads an absent value as []', async () => {
+    const fixture = createComponent([field], {});
+    const trigger = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    trigger.click();
+    await settle(fixture);
+
+    // The open panel is reparented under <html> by the shared popover, outside the fixture.
+    expect(document.querySelectorAll('input[type="checkbox"]').length).toBe(3);
+    expect(fixture.componentInstance.value()['useFor']).toBeUndefined();
+  });
+
+  it('ticking one option writes a string[]', async () => {
+    const fixture = createComponent([field], {});
+    const trigger = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    trigger.click();
+    await settle(fixture);
+
+    const box = document.querySelectorAll('input[type="checkbox"]')[0] as HTMLInputElement;
+    box.dispatchEvent(new Event('change'));
+
+    expect(fixture.componentInstance.value()['useFor']).toEqual(['search']);
+  });
+
+  it('propagates disabled down to the multi-select trigger', () => {
+    const fixture = createComponent([{ ...field }], {}, []);
+    fixture.componentRef.setInput('disabled', true);
+    fixture.detectChanges();
+    const trigger = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    expect(trigger.disabled).toBe(true);
+  });
 });
 
 it('VERDICT: reads a stringified boolean, so a stored "false" renders off', async () => {

@@ -66,6 +66,7 @@ import { initialOverlayFocus, restoreOpenerFocus } from '../../core/services/foc
         [attr.data-tv-submenu]="submenu() ? '' : null"
         (focusout)="onSubmenuFocusOut($event)"
         animate.leave="popover-pop-leaving"
+        style="--popover-surface: var(--color-base-200)"
         class="popover-pop-in fixed z-[101] bg-base-200 rounded-box shadow-xl overflow-y-auto p-2 [scroll-padding:0.5rem] [scroll-behavior:smooth]"
         [style.top.px]="position().top"
         [style.bottom.px]="position().bottom"
@@ -82,7 +83,13 @@ import { initialOverlayFocus, restoreOpenerFocus } from '../../core/services/foc
            projected content (and its bindings) is only instantiated while the
            sheet is on screen — safe to leave the outlet unguarded here. -->
       <app-bottom-sheet [open]="open()" (closed)="close()">
-        <div data-tv-modal [attr.data-tv-submenu]="submenu() ? '' : null" (focusout)="onSubmenuFocusOut($event)" class="px-2 pb-2">
+        <div
+          data-tv-modal
+          [attr.data-tv-submenu]="submenu() ? '' : null"
+          (focusout)="onSubmenuFocusOut($event)"
+          style="--popover-surface: var(--color-neutral)"
+          class="px-2 pb-2"
+        >
           <ng-container *ngTemplateOutlet="content"></ng-container>
         </div>
       </app-bottom-sheet>

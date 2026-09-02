@@ -2623,7 +2623,7 @@
     "filter_placeholder": "Nach Name filtern",
     "filter_no_match": "Kein Eintrag passt zu diesem Filter.",
     "row_count": "{{shown}} von {{total}}",
-    "sort_label": "Sortieren nach",
+    "sort_label": "Sortieren nach:",
     "sort_priority": "Priorität",
     "sort_name": "Name",
     "sort_default": "Standardreihenfolge"

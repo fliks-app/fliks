@@ -1,5 +1,5 @@
 import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { LucideShield } from '@lucide/angular';
 import { SettingsDrawerComponent } from '../../shared/components/settings-drawer/settings-drawer';
@@ -9,7 +9,7 @@ import { SettingsSectionsService } from './settings-sections.service';
 @Component({
   selector: 'app-admin-shell',
   imports: [
-    RouterLink, RouterLinkActive, TranslateModule,
+    RouterLink, TranslateModule,
     SettingsDrawerComponent, SettingsIconComponent,
     LucideShield,
   ],
@@ -17,5 +17,7 @@ import { SettingsSectionsService } from './settings-sections.service';
   templateUrl: './admin-shell.html',
 })
 export class AdminShellComponent {
-  readonly sections = inject(SettingsSectionsService).sections;
+  private readonly settings = inject(SettingsSectionsService);
+  readonly sections = this.settings.sections;
+  readonly activeItemId = this.settings.activeItemId;
 }

@@ -240,7 +240,11 @@ export class ProviderListComponent implements OnInit {
     const impl = this.currentImplementation();
     if (!impl) return false;
     const value = this.draftValue();
-    return impl.fields.some((f) => f.required && !f.secret && !String(value[f.key] ?? '').trim());
+    return impl.fields.some((f) => {
+      if (!f.required || f.secret) return false;
+      const v = value[f.key];
+      return Array.isArray(v) ? v.length === 0 : !String(v ?? '').trim();
+    });
   });
 
   ngOnInit(): void {
@@ -279,6 +283,12 @@ export class ProviderListComponent implements OnInit {
       }
       const source = f.topLevel ? row : (row?.settings as Record<string, unknown> | undefined);
       const raw = source ? source[f.key] : undefined;
+      if (f.type === 'multiselect') {
+        // A new row starts from the declared default; an existing one from what it stored.
+        const fallback = Array.isArray(f.default) ? [...f.default] : [];
+        value[f.key] = Array.isArray(raw) ? raw : fallback;
+        continue;
+      }
       value[f.key] = (raw ?? f.default ?? '') as string | number | boolean;
     }
     return value;

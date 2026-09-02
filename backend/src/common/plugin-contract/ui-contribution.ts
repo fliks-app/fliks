@@ -1,7 +1,7 @@
 /**
- * UI-facing contribution types carried by the manifest's `ui.*` block.
- * `client/src/app/core/plugin-ui/contribution.types.ts` mirrors this file
- * verbatim (types only); the CI drift gate diffs the two.
+ * UI-facing contribution types carried by the manifest's `ui.*` block. The client imports this
+ * very file through its `@fliks/plugin-contract/ui` path alias, so there is nothing to keep in
+ * sync: a change here reaches both sides or compiles on neither.
  */
 
 /** The six slots a contribution can render into. */
@@ -69,8 +69,16 @@ export interface UiContribution {
  */
 export const SECRETS_SET_KEY = 'secretsSet';
 
-/** The seven field kinds `<app-schema-form>` renders, over three form components. */
-export type FieldType = 'text' | 'email' | 'password' | 'url' | 'number' | 'toggle' | 'select';
+/** The eight field kinds `<app-schema-form>` renders, over four form components. */
+export type FieldType =
+  | 'text'
+  | 'email'
+  | 'password'
+  | 'url'
+  | 'number'
+  | 'toggle'
+  | 'select'
+  | 'multiselect';
 
 /**
  * One input of a plugin's settings form. `kind` is optional and defaults to `'field'` —
@@ -91,7 +99,10 @@ export interface FieldDef {
    * "unchanged", so removal needs a spelling of its own (the one JSON Merge Patch uses).
    */
   secret?: boolean;
-  default?: string | number | boolean;
+  /** A `string[]` only for `multiselect`, which is the set a new row starts from. */
+  default?: string | number | boolean | string[];
+  /** Required for `multiselect`. For that type the value is a `string[]` of the declared
+   *  `options[].value`. */
   options?: { value: string; labelKey: string }[];
   /** Written to a column on the row itself rather than into its `settings` bag.
    *  Without this a declared field silently stops persisting an entity column. */

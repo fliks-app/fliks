@@ -2651,7 +2651,7 @@
     "filter_placeholder": "Filter by name",
     "filter_no_match": "No entry matches this filter.",
     "row_count": "{{shown}} of {{total}}",
-    "sort_label": "Sort by",
+    "sort_label": "Sort by:",
     "sort_priority": "Priority",
     "sort_name": "Name",
     "sort_default": "Default order"

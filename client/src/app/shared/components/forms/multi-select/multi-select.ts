@@ -13,10 +13,14 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { PopoverMenuComponent } from '../../popover-menu';
 
-export interface MultiSelectOption {
-  value: number;
+export interface MultiSelectOption<T extends string | number = number> {
+  value: T;
   label: string;
 }
+
+/** Below this many options the whole list is on screen at once, and a filter is one more control
+ *  to skip past (plus a keyboard popping up on mobile). */
+const FILTER_FROM_OPTIONS = 8;
 
 /**
  * Multi-select with a built-in filter: the trigger shows the picked options
@@ -38,9 +42,9 @@ export interface MultiSelectOption {
   templateUrl: './multi-select.html',
   host: { class: 'block' },
 })
-export class MultiSelectComponent {
-  readonly options = input.required<readonly MultiSelectOption[]>();
-  readonly value = model<number[]>([]);
+export class MultiSelectComponent<T extends string | number = number> {
+  readonly options = input.required<readonly MultiSelectOption<T>[]>();
+  readonly value = model<T[]>([]);
   readonly placeholder = input<string>('');
   readonly disabled = input<boolean>(false);
   /** Chips shown on the trigger before collapsing the rest into "+N". */
@@ -78,7 +82,9 @@ export class MultiSelectComponent {
     });
   }
 
-  protected isPicked(value: number) {
+  protected readonly showFilter = computed(() => this.options().length > FILTER_FROM_OPTIONS);
+
+  protected isPicked(value: T) {
     return this.value().includes(value);
   }
 
@@ -89,14 +95,24 @@ export class MultiSelectComponent {
     this.open.update((v) => !v);
   }
 
-  protected toggleOption(value: number) {
+  protected toggleOption(value: T) {
     this.value.update((list) =>
       list.includes(value) ? list.filter((v) => v !== value) : [...list, value],
     );
   }
 
-  protected remove(value: number, event: Event) {
+  /** Keeps a chip removal from focusing the trigger, which would light its focus ring for a
+   *  click that never entered the field. */
+  protected onChipMouseDown(event: Event) {
+    event.preventDefault();
     event.stopPropagation();
+  }
+
+  /** The ✕ stays visible while disabled, dimmed and inert: `pointer-events` alone would still
+   *  let a synthetic click through, and a form that said no must not lose a value. */
+  protected remove(value: T, event: Event) {
+    event.stopPropagation();
+    if (this.disabled()) return;
     this.value.update((list) => list.filter((v) => v !== value));
   }
 }

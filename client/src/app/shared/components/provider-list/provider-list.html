@@ -30,7 +30,10 @@
       @if (selectedIds().size === 0) {
         <label class="input input-sm input-bordered flex items-center gap-2 w-full sm:w-64">
           <svg lucideSearch class="h-4 w-4 opacity-60"></svg>
+          <!-- The `.input` wrapper is what shows focus; the field's own ring would stack a
+               second and third circle inside it. -->
           <input
+            data-no-focus-ring
             type="search"
             class="grow"
             [value]="filterText()"
@@ -42,7 +45,7 @@
         <span class="text-sm text-base-content/60">
           {{ 'provider_list.row_count' | translate: { shown: visibleRows().length, total: rows().length } }}
         </span>
-        <label class="flex items-center gap-2 text-sm ms-auto">
+        <label class="flex items-center gap-2 text-sm ms-auto whitespace-nowrap">
           <span class="text-base-content/60">{{ 'provider_list.sort_label' | translate }}</span>
           <select
             class="select select-sm select-bordered"

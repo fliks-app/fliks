@@ -1,4 +1,7 @@
 import { Injectable, computed, inject } from '@angular/core';
+import { NavigationEnd, Router } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { filter, map } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { DeviceService } from '../../core/services/device.service';
 import { TvService } from '../../core/services/tv.service';
@@ -42,6 +45,16 @@ export class SettingsSectionsService {
   private readonly auth = inject(AuthService);
   private readonly tv = inject(TvService);
   private readonly device = inject(DeviceService);
+  private readonly router = inject(Router);
+
+  /** Path only: a query string or a fragment is never part of what a nav entry addresses. */
+  private readonly url = toSignal(
+    this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+      map((e) => e.urlAfterRedirects.split(/[?#]/)[0] ?? ''),
+    ),
+    { initialValue: this.router.url.split(/[?#]/)[0] ?? '' },
+  );
 
   readonly sections = computed<ResolvedSettingsSection[]>(() => {
     const ctx: WhenContext = {
@@ -69,6 +82,24 @@ export class SettingsSectionsService {
       }));
 
     return [...core, ...plugins].filter((s) => s.items.length > 0);
+  });
+
+  /**
+   * The entry the current URL belongs to: the longest route that prefixes it, so a deeper entry
+   * wins over the shallower one it happens to sit under. `/admin/settings/plugins/<id>/<view>`
+   * therefore lights that plugin's own entry and not the Plugins page, while a library detail
+   * still lights Libraries, which has no deeper entry to lose to.
+   */
+  readonly activeItemId = computed<string | null>(() => {
+    const url = this.url();
+    let best: ResolvedSettingsItem | null = null;
+    for (const section of this.sections()) {
+      for (const item of section.items) {
+        if (url !== item.route && !url.startsWith(`${item.route}/`)) continue;
+        if (!best || item.route.length > best.route.length) best = item;
+      }
+    }
+    return best?.id ?? null;
   });
 
   /** `when`-filters and resolves the action to a route; drops a contribution
