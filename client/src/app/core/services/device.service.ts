@@ -104,6 +104,21 @@ export function detectDevice(): DetectResult {
   return { input: 'mouse', formFactor: 'desktop', tvPlatform: null };
   }
 
+/**
+ * Whether router view transitions are registered, and so whether the player's
+ * closing animation is theirs to run rather than the player's own.
+ *
+ * Off on Capacitor: its WebView never completes a snapshot capture for a
+ * launch-created document, so every navigation waits Chrome's 4s timeout. TV is
+ * the exception — closing the player is the one navigation that needs the
+ * destination painted under the shrinking player, and it is the only one the
+ * transition is allowed to run for (see `app.config.ts`).
+ */
+export function viewTransitionsEnabled(): boolean {
+  if (typeof document === 'undefined' || !document.startViewTransition) return false;
+  return !Capacitor.isNativePlatform() || detectDevice().formFactor === 'tv';
+}
+
 interface DetectResult {
   input: InputMode;
   formFactor: FormFactor;

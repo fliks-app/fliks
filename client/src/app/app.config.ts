@@ -17,7 +17,7 @@ import localePt from '@angular/common/locales/pt';
 import { Capacitor } from '@capacitor/core';
 import { provideServiceWorker } from '@angular/service-worker';
 import { provideRouter, RouteReuseStrategy, withInMemoryScrolling, withViewTransitions } from '@angular/router';
-import { detectDevice } from './core/services/device.service';
+import { detectDevice, viewTransitionsEnabled } from './core/services/device.service';
 import { HttpBackend, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 
@@ -70,6 +70,8 @@ export function loadPersistedState(): Promise<unknown> {
 const EPISODE_PATH = 'series/:id/episode/:episodeId';
 const WATCH_PATH = 'watch/:mediaFileId';
 const PLAYER_CLOSE_CLASS = 'vt-player-close';
+const NATIVE_PLAYER_CLASS = 'native-player-active';
+const IS_TV = detectDevice().formFactor === 'tv';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -80,19 +82,34 @@ export const appConfig: ApplicationConfig = {
     provideRouter(
       routes,
       withInMemoryScrolling({ scrollPositionRestoration: 'top' }),
-      // Poster→hero morph. Off on Capacitor: its WebView never completes a snapshot
-      // capture for a launch-created document, so every navigation waits Chrome's 4s timeout.
-      // Off on TV for the same reason in miniature: measured on a Tizen 9 panel, the
-      // 1920x1080 snapshot holds the first paint back ~400 ms and buys nothing, since the
-      // root cross-fade is already suppressed (see `::view-transition-old(root)` in
-      // styles.css). `main.page-enter` animates the swap there instead.
-      ...(Capacitor.isNativePlatform() || detectDevice().formFactor === 'tv'
+      // Poster→hero morph. Gated by `viewTransitionsEnabled()`; on TV the root
+      // snapshot costs ~400 ms on a Tizen 9 panel, so only the player close earns one.
+      ...(!viewTransitionsEnabled()
         ? []
         : [
             withViewTransitions({
               // Episode → episode: the cross-fade keeps the old page (and its scroll
               // offset) on screen, so the jump to top only lands once it ends.
               onViewTransitionCreated: ({ transition, from, to }) => {
+                const closingPlayer =
+                  leafRoutePath(from) === WATCH_PATH && leafRoutePath(to) !== WATCH_PATH;
+                // A native surface renders outside the WebView, and the class that
+                // lets it through has made every layer transparent — the old
+                // snapshot is an empty rectangle, so animating it paints black over
+                // the destination.
+                if (
+                  closingPlayer &&
+                  document.documentElement.classList.contains(NATIVE_PLAYER_CLASS)
+                ) {
+                  transition.skipTransition();
+                  return;
+                }
+                // Skipping here is free: Angular calls this synchronously, before the
+                // rendering opportunity that captures the old state.
+                if (IS_TV && !closingPlayer) {
+                  transition.skipTransition();
+                  return;
+                }
                 if (
                   leafRoutePath(from) === EPISODE_PATH &&
                   leafRoutePath(to) === EPISODE_PATH
@@ -105,7 +122,7 @@ export const appConfig: ApplicationConfig = {
                 // Leaving the player is the one navigation that re-enables the
                 // root pair: the closing player has to shrink over the page
                 // behind it, which only exists inside the transition.
-                if (leafRoutePath(from) === WATCH_PATH && leafRoutePath(to) !== WATCH_PATH) {
+                if (closingPlayer) {
                   const root = document.documentElement;
                   root.classList.add(PLAYER_CLOSE_CLASS);
                   const done = () => root.classList.remove(PLAYER_CLOSE_CLASS);

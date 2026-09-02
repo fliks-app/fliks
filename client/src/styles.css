@@ -652,6 +652,11 @@ app-mosaic-card button:focus-visible .mosaic-art + div {
 body.tv main.page-enter {
   animation: page-enter 220ms ease-out;
 }
+/* Closing the player already animates the swap; fading the destination in from
+   `opacity: 0` underneath would show the app background through it. */
+html.vt-player-close body.tv main.page-enter {
+  animation: none;
+}
 
 /* CDK gives its content wrapper `contain: content`, whose paint containment
    clips anything drawn outside a row — which is exactly where the focus ring
