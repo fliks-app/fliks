@@ -27,7 +27,7 @@
         #cardImg
         [cachedSrc]="_img()! | resolveUrl:'thumb'"
         [alt]="_title()"
-        class="w-full h-full object-cover select-none rounded-lg transition-opacity duration-200"
+        class="w-full h-full object-cover select-none rounded-lg"
         style="-webkit-user-drag: none; user-drag: none;"
         draggable="false"
         [appSpoiler]="spoiler()"
@@ -35,6 +35,7 @@
         [class.scale-110]="spoilerImg.masked()"
         [class.grayscale]="grayscale()"
         [class.opacity-0]="!imgLoaded()"
+        [class.card-img-reveal]="imgLoaded()"
         loading="lazy"
         decoding="async"
         (load)="imgLoaded.set(true)"

@@ -776,11 +776,29 @@ body.tv .mosaic-art > * > img:nth-child(3) {
 body.tv .mosaic-art > * > img:nth-child(4) {
   border-bottom-right-radius: inherit;
 }
+/* An animation rather than a transition on the artwork reveal: a route restored
+   from the reuse cache re-inserts the subtree, which replays animations but
+   leaves an already-settled transition alone — the grid came back bare. */
+@keyframes card-img-reveal {
+  from {
+    opacity: 0;
+  }
+}
+.card-img-reveal {
+  animation: card-img-reveal 200ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-img-reveal {
+    animation: none;
+  }
+}
+
 /* One promotion source fewer, and the reveal stays (the art is still hidden
    until it has decoded — only the 200 ms tween goes). */
 body.tv app-media-card figure img,
 body.tv .mosaic-art img {
   transition: none !important;
+  animation: none !important;
 }
 
 /* Resting cards carry shadow-md (a blurred shadow) re-rasterised for every
