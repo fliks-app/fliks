@@ -9,6 +9,9 @@ export interface DisplaySettings {
   language: string;
   /** Desaturate the still of an episode that hasn't aired yet. */
   grayUnreleased: boolean;
+  /** Order the audio and subtitle pickers by language name instead of the
+   *  file's stream order. Unnamed tracks stay at the end. */
+  sortTracksByLanguage: boolean;
 }
 
 const STORAGE_KEY = 'display.settings';
@@ -18,6 +21,7 @@ const DEFAULTS: DisplaySettings = {
   onlyMyRequests: false,
   language: '',
   grayUnreleased: true,
+  sortTracksByLanguage: false,
 };
 
 @Injectable({ providedIn: 'root' })

@@ -468,7 +468,7 @@
               [selected]="!selectedSubtitleId()"
               (click)="onSubtitleChange(null)"
             />
-            @for (s of subtitles(); track s.id) {
+            @for (s of sortedSubtitles(); track s.id) {
               <app-dropdown-option
                 [head]="s.head || s.label"
                 [sub]="s.sub"

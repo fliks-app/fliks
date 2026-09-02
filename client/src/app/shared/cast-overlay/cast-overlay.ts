@@ -10,6 +10,7 @@ import { RemoteService } from '../../core/services/remote.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
 import { PlaybackOption } from '../../core/services/playback-target';
+import { AppSettingsService } from '../../core/services/app-settings.service';
 import { SeekbarComponent } from '../components/seekbar/seekbar';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
@@ -62,6 +63,7 @@ interface PickerRow {
 })
 export class CastOverlayComponent {
   private readonly remote = inject(RemoteService);
+  private readonly appSettings = inject(AppSettingsService);
   private readonly castTarget = inject(CastPlaybackTarget);
   private readonly remoteTarget = inject(RemotePlaybackTarget);
 
@@ -112,7 +114,7 @@ export class CastOverlayComponent {
         kind: 'audio',
         labelKey: 'player.audio',
         active: this.activeAudioLabel(),
-        options: t.availableAudioTracks(),
+        options: this.appSettings.sortTracks(t.availableAudioTracks()),
         activeId: t.activeAudioTrackId(),
         offRow: false,
       });
@@ -122,7 +124,7 @@ export class CastOverlayComponent {
         kind: 'subtitle',
         labelKey: 'player.subtitles',
         active: this.activeSubtitleLabel(),
-        options: t.availableSubtitles(),
+        options: this.appSettings.sortTracks(t.availableSubtitles()),
         activeId: t.activeSubtitleId(),
         offRow: true,
       });

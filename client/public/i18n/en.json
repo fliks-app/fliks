@@ -223,6 +223,8 @@
     "home_background_hint": "Shows a full-screen poster behind the home sections.",
     "gray_unreleased": "Grey out unreleased episodes",
     "gray_unreleased_hint": "Shows the still in black and white until the episode airs.",
+    "sort_tracks_by_language": "Sort tracks by language",
+    "sort_tracks_by_language_hint": "Orders the audio and subtitle pickers alphabetically by language; tracks with no known language stay at the end.",
     "language": "Application language",
     "language_auto": "System",
     "language_hint": "Interface language. Defaults to your browser or system language."

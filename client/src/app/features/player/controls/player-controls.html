@@ -573,7 +573,7 @@
       <span class="flex-1 text-left">{{ 'player.off' | translate }}</span>
       @if (!activeSubtitleId()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
     </button>
-    @for (sub of availableSubtitles(); track sub.id) {
+    @for (sub of sortedSubtitles(); track sub.id) {
       <button
         type="button"
         class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10"
@@ -624,7 +624,7 @@
   <div class="text-center text-white/60 text-xs font-medium mb-3">{{ 'player.audio_track' | translate }}</div>
   <!-- Only the options scroll; the title above stays visible. -->
   <div class="max-h-[40vh] overflow-y-auto scroll-ring-safe">
-  @for (track of availableAudioTracks(); track track.id) {
+  @for (track of sortedAudioTracks(); track track.id) {
     <button
       type="button"
       class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10"

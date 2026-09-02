@@ -258,6 +258,7 @@ export class RemotePlaybackTarget implements PlaybackTarget {
         subs.map((o) => ({
           id: o.id,
           label: o.label,
+          language: o.language,
           head: o.menuHead,
           sub: o.menuSub,
         })),

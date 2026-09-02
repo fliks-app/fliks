@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   effect,
   inject,
   input,
@@ -8,6 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { CastService } from '../../../core/services/cast.service';
+import { AppSettingsService } from '../../../core/services/app-settings.service';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import { TranslateModule } from '@ngx-translate/core';
 import {
@@ -69,6 +71,14 @@ export interface CastQualityOption {
 })
 export class CastRemoteComponent {
   readonly cast = inject(CastService);
+  private readonly appSettings = inject(AppSettingsService);
+
+  readonly sortedSubtitles = computed(() =>
+    this.appSettings.sortTracks(this.availableSubtitles()),
+  );
+  readonly sortedAudioTracks = computed(() =>
+    this.appSettings.sortTracks(this.availableAudioTracks()),
+  );
 
   readonly mediaTitle = input('');
   readonly episodeTitle = input('');

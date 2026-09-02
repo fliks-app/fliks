@@ -218,6 +218,8 @@
     "home_background_hint": "Mostra um poster em ecrã inteiro atrás das secções do início.",
     "gray_unreleased": "Episódios por estrear a preto e branco",
     "gray_unreleased_hint": "Mostra a imagem a preto e branco até o episódio ser emitido.",
+    "sort_tracks_by_language": "Ordenar as faixas por idioma",
+    "sort_tracks_by_language_hint": "Ordena os seletores de áudio e legendas por ordem alfabética de idioma; as faixas sem idioma identificado ficam no fim.",
     "language": "Idioma da aplicação",
     "language_auto": "Sistema",
     "language_hint": "Idioma da interface. Por predefinição, o do seu navegador ou sistema."

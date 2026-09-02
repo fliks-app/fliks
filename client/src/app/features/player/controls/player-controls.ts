@@ -32,6 +32,7 @@ import { QueueItem } from '../../../core/services/playback-queue.service';
 import { NgTemplateOutlet } from '@angular/common';
 import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
 import { TranslateModule } from '@ngx-translate/core';
+import { AppSettingsService } from '../../../core/services/app-settings.service';
 import { formatTime, SpriteMetadata } from '../../../core/utils/player.utils';
 import { initialOverlayFocus } from '../../../core/services/focusable.constants';
 import { SeekbarComponent } from '../../../shared/components/seekbar/seekbar';
@@ -127,6 +128,7 @@ export class PlayerControlsComponent {
   private readonly dismissStack = inject(DismissableStackService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly tv = inject(TvService);
+  private readonly appSettings = inject(AppSettingsService);
   /** True on Android TV — drives 10-foot UI choices in the template. */
   readonly isTv = this.device.isTv;
   /** Show a leaf next to the quality value when the active rung is a
@@ -296,11 +298,17 @@ export class PlayerControlsComponent {
   /** Desktop (Electron) — native engine but mouse-driven; keeps the fullscreen
    *  button which is otherwise hidden for native (mobile/TV) engines. */
   readonly isDesktop = input(false);
-  readonly availableSubtitles = input<{ id: string; label: string; menuHead?: string; menuSub?: string; burnIn?: boolean; isImage?: boolean }[]>([]);
+  readonly availableSubtitles = input<{ id: string; label: string; language?: string; menuHead?: string; menuSub?: string; burnIn?: boolean; isImage?: boolean }[]>([]);
   readonly availableQualities = input<{ id: string; label: string; lowBandwidth?: boolean }[]>([]);
   readonly activeSubtitleId = input<string | null>(null);
   readonly activeQualityId = input('auto');
-  readonly availableAudioTracks = input<{ id: string; label: string; menuHead?: string; menuSub?: string }[]>([]);
+  readonly availableAudioTracks = input<{ id: string; label: string; language?: string; menuHead?: string; menuSub?: string }[]>([]);
+  readonly sortedSubtitles = computed(() =>
+    this.appSettings.sortTracks(this.availableSubtitles()),
+  );
+  readonly sortedAudioTracks = computed(() =>
+    this.appSettings.sortTracks(this.availableAudioTracks()),
+  );
   readonly activeAudioTrackId = input<string | null>(null);
   readonly pipAvailable = input(true);
   readonly canLockOrientation = input(false);
