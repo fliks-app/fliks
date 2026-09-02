@@ -1,7 +1,7 @@
 /** Subtitle appearance presets, shared between NativeEngine and Cast.
  *
- *  Each table maps the same user-facing preset keys (`'small'` / `'normal'`
- *  / `'large'` / `'xlarge'`) to a platform-calibrated value:
+ *  Each table maps the same user-facing preset keys (`'xsmall'` / `'small'` /
+ *  `'normal'` / `'large'` / `'xlarge'`) to a platform-calibrated value:
  *
  *  - **Native** runs on ExoPlayer's `CaptionStyleCompat` and iOS
  *    `AVTextStyleRule`. Both define `1.0` as the platform's default
@@ -15,18 +15,32 @@
  *  The divergence is intentional. If a sender ever sees subtitles that
  *  look bigger on Cast than on the same device's local playback, the
  *  Cast scale is the lever to retune — not the Native one. */
+
+/** Text height at scale 1.0, as a fraction of the surface height, for the
+ *  engines that own their renderer. The ExoPlayer and AVPlayer overlays
+ *  hardcode the same value (SubtitleOverlay.java, SubtitleOverlayView.swift) —
+ *  retune the three together. */
+export const SUBTITLE_HEIGHT_FRACTION = 0.035;
+
+/** Same ladder for DOM cues, one notch lower: the browser path is mostly read
+ *  on a desktop monitor, further away than a held device. TVs sit on this path
+ *  too but default to the `large` preset. */
+export const DOM_SUBTITLE_HEIGHT_FRACTION = 0.03;
+
 export const NATIVE_SUBTITLE_SIZE_SCALE: Record<string, number> = {
-  small: 0.7,
+  xsmall: 0.7,
+  small: 0.85,
   normal: 1.0,
-  large: 1.3,
-  xlarge: 1.6,
+  large: 1.15,
+  xlarge: 1.3,
 };
 
 export const CAST_SUBTITLE_SIZE_SCALE: Record<string, number> = {
-  small: 0.7,
+  xsmall: 0.7,
+  small: 0.775,
   normal: 0.85,
-  large: 1.1,
-  xlarge: 1.4,
+  large: 0.975,
+  xlarge: 1.1,
 };
 
 /** Foreground colour in `#RRGGBB` (Android / iOS native renderers want

@@ -8,7 +8,7 @@ import { Injectable, signal } from '@angular/core';
  *  one shared UI between local and Cast and matches user expectations
  *  ("Normal / Grand", "Blanc / Jaune") rather than raw values. */
 export interface CastSubtitleStyle {
-  size: string;        // 'small' | 'normal' | 'large' | 'xlarge'
+  size: string;        // 'xsmall' | 'small' | 'normal' | 'large' | 'xlarge'
   color: string;       // 'white' | 'yellow' | 'green' | 'cyan'
   shadow: string;      // 'none' | 'drop' | 'outline' | 'raised'
   background: string;  // 'transparent' | 'semi' | 'black'

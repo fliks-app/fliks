@@ -28,6 +28,7 @@ export const SUBTITLE_MODE_OPTIONS = [
 ];
 
 export const SIZE_OPTIONS = [
+  { value: 'xsmall', labelKey: 'playback_settings.sub_size_xsmall' },
   { value: 'small', labelKey: 'playback_settings.sub_size_small' },
   { value: 'normal', labelKey: 'playback_settings.sub_size_normal' },
   { value: 'large', labelKey: 'playback_settings.sub_size_large' },

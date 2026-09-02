@@ -39,6 +39,7 @@ class SubtitleOverlay {
     private SubtitleView subtitleView;
     private ImageView imageView;
     private final SurfaceView surfaceView;
+    private float bottomMargin;
 
     SubtitleOverlay(Context ctx, ViewGroup webViewParent, FrameLayout wrapper, SurfaceView surfaceView) {
         this.surfaceView = surfaceView;
@@ -48,6 +49,8 @@ class SubtitleOverlay {
         webViewParent.addView(subtitleView, 1, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
+        subtitleView.addOnLayoutChangeListener(
+                (v, l, t, r, b, ol, ot, or_, ob) -> applyBottomMargin());
 
         // Added to `wrapper` (a FrameLayout we own) so the gravity-bearing
         // FrameLayout.LayoutParams cast stays valid regardless of the host
@@ -77,11 +80,24 @@ class SubtitleOverlay {
         renderImageCue(null);
     }
 
-    void applyStyle(CaptionStyleCompat style, float fontScale, int paddingBottom) {
+    /** Text height as a fraction of the view, matching the iOS overlay and the
+     *  browser's `vh` cues: a fixed sp size reads half as tall on a tablet. */
+    private static final float TEXT_SIZE_FRACTION = 0.035f;
+
+    /** The lift translates the whole view instead of padding it: padding shrinks
+     *  the canvas the fractional text size is measured against, so the cues used
+     *  to shrink whenever the controls raised them. */
+    void applyStyle(CaptionStyleCompat style, float fontScale, float bottomMarginFraction) {
         if (subtitleView == null) return;
         subtitleView.setStyle(style);
-        subtitleView.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 18f * fontScale);
-        subtitleView.setPadding(0, 0, 0, paddingBottom);
+        subtitleView.setFractionalTextSize(TEXT_SIZE_FRACTION * fontScale, true);
+        bottomMargin = bottomMarginFraction;
+        applyBottomMargin();
+    }
+
+    private void applyBottomMargin() {
+        if (subtitleView == null || subtitleView.getHeight() <= 0) return;
+        subtitleView.setTranslationY(-subtitleView.getHeight() * bottomMargin);
     }
 
     /** Dim text cues when the screen is at max brightness (HDR mode). */

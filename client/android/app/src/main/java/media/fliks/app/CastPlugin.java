@@ -468,11 +468,13 @@ public class CastPlugin extends Plugin {
         return style;
     }
 
+    /** Mirrors CAST_SUBTITLE_SIZE_SCALE (subtitle-presets.ts). */
     private static float mapSize(String name) {
         switch (name) {
-            case "small": return 0.7f;
-            case "large": return 1.1f;
-            case "xlarge": return 1.4f;
+            case "xsmall": return 0.7f;
+            case "small": return 0.775f;
+            case "large": return 0.975f;
+            case "xlarge": return 1.1f;
             default: return 0.85f;
         }
     }

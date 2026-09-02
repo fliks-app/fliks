@@ -4822,7 +4822,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         <style> that targets video::cue. */
   private applySubtitleStyle() {
     const s = this.playerSettings.get();
-    const fontSize = SUBTITLE_SIZE_MAP[s.subtitleSize] ?? '0.7em';
+    const fontSize = SUBTITLE_SIZE_MAP[s.subtitleSize] ?? SUBTITLE_SIZE_MAP['normal'];
     const color = SUBTITLE_COLOR_MAP[s.subtitleColor] ?? '#ffffff';
     const shadow = SUBTITLE_SHADOW_MAP[s.subtitleShadow] ?? 'none';
     const bg = SUBTITLE_BG_MAP[s.subtitleBackground] ?? 'transparent';
