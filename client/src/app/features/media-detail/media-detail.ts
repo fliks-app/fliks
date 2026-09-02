@@ -303,9 +303,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Angular reuses this component between two `movies/:id` URLs — the similar
-   * -movies rail links to one — so the load is driven by the route param
-   * instead of ngOnInit, which would only ever run for the first title.
+   * Driven by the route param rather than ngOnInit: switching episodes reuses
+   * this instance, and the series it already holds must not be refetched.
    */
   private readonly routeMediaEffect = effect(() => {
     const params = this.routeParams();
