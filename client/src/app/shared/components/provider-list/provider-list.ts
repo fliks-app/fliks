@@ -589,7 +589,7 @@ export class ProviderListComponent implements OnInit {
         this.clearSelection();
       } else {
         this.toast.error(
-          this.translate.instant('provider_list.bulk_partial', {
+          this.translate.instant('bulk.partial', {
             done: rows.length - failed,
             failed,
           }),
@@ -690,7 +690,7 @@ export class ProviderListComponent implements OnInit {
             this.silent(),
           ),
         ),
-      'provider_list.bulk_edited_done',
+      'bulk.done',
     );
   }
 

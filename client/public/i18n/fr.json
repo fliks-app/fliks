@@ -2630,10 +2630,6 @@
     "test_unknown_result": "Le test est terminé, mais le résultat n'a pas pu être traduit.",
     "move_up": "Monter",
     "move_down": "Descendre",
-    "bulk_selected": "{{count}} sélectionnés",
-    "bulk_select_all": "Tout sélectionner",
-    "bulk_select_row": "Sélectionner {{name}}",
-    "bulk_clear": "Annuler la sélection",
     "bulk_edit": "Modifier",
     "bulk_enable": "Activer",
     "bulk_disable": "Désactiver",
@@ -2643,11 +2639,9 @@
     "bulk_edit_title": "Modifier {{count}} entrées",
     "bulk_edit_hint": "Seuls les champs cochés sont écrits. Le reste conserve la valeur propre à chaque entrée.",
     "bulk_apply_field": "Appliquer ce champ",
-    "bulk_edited_done": "{{count}} entrées modifiées",
     "bulk_enabled_done": "{{count}} entrées activées",
     "bulk_disabled_done": "{{count}} entrées désactivées",
     "bulk_deleted_done": "{{count}} entrées supprimées",
-    "bulk_partial": "{{done}} traitées, {{failed}} en échec",
     "filter_placeholder": "Filtrer par nom",
     "filter_no_match": "Aucune entrée ne correspond à ce filtre.",
     "row_count": "{{shown}} sur {{total}}",
@@ -2660,5 +2654,15 @@
     "load_error": "Impossible de charger la liste.",
     "empty": "Rien à afficher.",
     "refresh": "Actualiser"
+  },
+  "bulk": {
+    "selected": "{{count}} sélectionnés",
+    "select_all": "Tout sélectionner",
+    "select_row": "Sélectionner {{name}}",
+    "clear": "Annuler la sélection",
+    "partial": "{{done}} traitées, {{failed}} en échec",
+    "done": "{{count}} entrées traitées",
+    "unavailable": "Ne s’applique pas à toutes les lignes sélectionnées",
+    "rows": "{{count}} entrées"
   }
 }

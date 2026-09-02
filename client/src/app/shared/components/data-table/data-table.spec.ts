@@ -3,11 +3,14 @@ import { TestBed } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { TranslateLoader, TranslateService, provideTranslateService } from '@ngx-translate/core';
-import { Subject, of } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { DataTableComponent } from './data-table';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SseService } from '../../../core/services/sse.service';
+import { ToastService } from '../../../core/services/toast.service';
+import { SKIP_ERROR_TOAST } from '../../../core/interceptors/error.interceptor';
+import { HttpContext } from '@angular/common/http';
 import { ListAction, RowAction, TableColumn, TableFilter, TableRow } from './data-table.types';
 
 const COLUMNS: TableColumn[] = [{ key: 'name', labelKey: 'x.name' }];
@@ -49,6 +52,9 @@ async function createComponent(opts: {
   refreshOn?: string[];
   sseEvent?: WritableSignal<{ type: string } | null>;
   confirmation?: unknown;
+  bulkSelect?: boolean;
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+  toast?: { success: (...a: any[]) => void; error: (...a: any[]) => void };
 }) {
   TestBed.configureTestingModule({
     providers: [
@@ -70,6 +76,7 @@ async function createComponent(opts: {
         provide: SseService,
         useValue: { lastEvent: opts.sseEvent ?? signal(null) } as unknown as SseService,
       },
+      { provide: ToastService, useValue: opts.toast ?? { success: () => {}, error: () => {} } },
     ],
   });
   const fixture = TestBed.createComponent(DataTableComponent);
@@ -85,6 +92,7 @@ async function createComponent(opts: {
   if (opts.pageSize) fixture.componentRef.setInput('pageSize', opts.pageSize);
   if (opts.refreshMs) fixture.componentRef.setInput('refreshMs', opts.refreshMs);
   if (opts.refreshOn) fixture.componentRef.setInput('refreshOn', opts.refreshOn);
+  if (opts.bulkSelect) fixture.componentRef.setInput('bulkSelect', opts.bulkSelect);
   fixture.detectChanges();
   await fixture.whenStable();
   await new Promise((r) => setTimeout(r, 0));
@@ -903,5 +911,223 @@ describe('DataTableComponent — a plugin message that is an i18n key', () => {
     const row = { id: 1, status: 'failed', statusMessage: '' };
     const fixture = await withTranslation(row);
     expect(fixture.componentInstance.detailText(COL, row)).toBe('');
+  });
+});
+
+describe('DataTableComponent: bulk selection', () => {
+  const ROWS = [
+    { id: 1, name: 'A', state: 'active' },
+    { id: 2, name: 'B', state: 'active' },
+    { id: 3, name: 'C', state: 'paused' },
+  ];
+
+  const REMOVE: RowAction = { kind: 'proxy', labelKey: 'x.rm', method: 'DELETE', path: '/api/x/:id' };
+
+  it('selects, deselects and covers every loaded row from the header box', async () => {
+    const fixture = await createComponent({ http: { get: () => of(ROWS) }, bulkSelect: true });
+    const c = fixture.componentInstance;
+
+    c.toggleSelected(1);
+    expect([...c.selectedIds()]).toEqual([1]);
+    expect(c.allSelected()).toBe(false);
+    c.toggleSelected(1);
+    expect(c.selectedIds().size).toBe(0);
+
+    c.toggleAllSelected();
+    expect(c.allSelected()).toBe(true);
+    expect(c.selectedRows()).toHaveLength(3);
+    c.toggleAllSelected();
+    expect(c.selectedIds().size).toBe(0);
+  });
+
+  it('VERDICT: the header box is indeterminate on a partial selection and checked once every row is ticked', async () => {
+    const fixture = await createComponent({ http: { get: () => of(ROWS) }, bulkSelect: true });
+    const c = fixture.componentInstance;
+    const header = () =>
+      fixture.nativeElement.querySelector('thead input[type="checkbox"]') as HTMLInputElement;
+
+    c.toggleSelected(1);
+    fixture.detectChanges();
+    expect(header().indeterminate).toBe(true);
+    expect(header().checked).toBe(false);
+
+    c.toggleAllSelected();
+    fixture.detectChanges();
+    expect(header().indeterminate).toBe(false);
+    expect(header().checked).toBe(true);
+  });
+
+  it('no selection column at all on a table that did not opt into it', async () => {
+    const fixture = await createComponent({ http: { get: () => of(ROWS) } });
+    expect(fixture.nativeElement.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
+  });
+
+  it('VERDICT: one bar, whose content swaps on selection, so the table never shifts down', async () => {
+    const SEARCH: TableFilter = { kind: 'search', key: 'q', placeholderKey: 'x.search' };
+    const fixture = await createComponent({
+      http: { get: () => of(ROWS) },
+      bulkSelect: true,
+      filters: [SEARCH],
+      rowActions: [REMOVE],
+    });
+    const c = fixture.componentInstance;
+    const bars = () => fixture.nativeElement.querySelectorAll('.bg-base-200\\/40').length;
+    const searchBox = () => fixture.nativeElement.querySelector('input[type="search"]');
+    const rmButton = () =>
+      Array.from(fixture.nativeElement.querySelectorAll('button')).find((b) =>
+        (b as HTMLButtonElement).textContent?.includes('x.rm'),
+      );
+
+    expect(bars()).toBe(1);
+    expect(searchBox()).not.toBeNull();
+    expect(rmButton()).toBeUndefined();
+
+    c.toggleSelected(1);
+    fixture.detectChanges();
+    // The batch bar replaces the filters row rather than stacking above it.
+    expect(bars()).toBe(1);
+    expect(searchBox()).toBeNull();
+    expect(rmButton()).toBeDefined();
+
+    c.clearSelection();
+    fixture.detectChanges();
+    expect(bars()).toBe(1);
+    expect(searchBox()).not.toBeNull();
+  });
+
+  it('VERDICT: holds the bar from the start even with no declared filter, so selecting shifts nothing', async () => {
+    const fixture = await createComponent({ http: { get: () => of(ROWS) }, bulkSelect: true });
+    const bars = () => fixture.nativeElement.querySelectorAll('.bg-base-200\\/40').length;
+    expect(bars()).toBe(1);
+
+    fixture.componentInstance.toggleSelected(1);
+    fixture.detectChanges();
+    expect(bars()).toBe(1);
+  });
+
+  it('VERDICT: a batch delete confirms once and issues one request per selected row, each skipping the error toast', async () => {
+    const del = vi.fn((_url: unknown, _opts?: unknown) => of({}));
+    const confirm = vi.fn(() => Promise.resolve(true));
+    const toast = { success: vi.fn(), error: vi.fn() };
+    const fixture = await createComponent({
+      http: { get: () => of(ROWS), delete: del },
+      bulkSelect: true,
+      toast,
+      rowActions: [{ ...REMOVE, confirmKey: 'x.confirm_rm' }],
+      confirmation: { confirm, confirmWithToggle: () => Promise.resolve({ ok: true, toggle: true }) },
+    });
+    const c = fixture.componentInstance;
+    c.toggleAllSelected();
+    await c.runBatch(c.batchActions()[0]!.action);
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(del).toHaveBeenCalledTimes(3);
+    expect(del.mock.calls.map((call) => call[0])).toEqual(['/api/x/1', '/api/x/2', '/api/x/3']);
+    const ctx = (del.mock.calls[0]![1] as { context: HttpContext }).context;
+    expect(ctx.get(SKIP_ERROR_TOAST)).toBe(true);
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(c.selectedIds().size).toBe(0);
+  });
+
+  it('VERDICT: a partial batch failure reports once and keeps the selection', async () => {
+    const failing = vi.fn((url: unknown) =>
+      String(url).endsWith('/2') ? throwError(() => new Error('nope')) : of({}),
+    );
+    const toast = { success: vi.fn(), error: vi.fn() };
+    const fixture = await createComponent({
+      http: { get: () => of(ROWS), delete: failing },
+      bulkSelect: true,
+      toast,
+      rowActions: [REMOVE],
+    });
+    const c = fixture.componentInstance;
+    c.toggleAllSelected();
+    await c.runBatch(c.batchActions()[0]!.action);
+
+    expect(failing).toHaveBeenCalledTimes(3);
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(c.selectedIds().size).toBe(3);
+  });
+
+  it('does nothing when the single batch confirmation is declined', async () => {
+    const del = vi.fn(() => of({}));
+    const fixture = await createComponent({
+      http: { get: () => of(ROWS), delete: del },
+      bulkSelect: true,
+      rowActions: [{ ...REMOVE, confirmKey: 'x.confirm_rm' }],
+      confirmation: {
+        confirm: () => Promise.resolve(false),
+        confirmWithToggle: () => Promise.resolve({ ok: true, toggle: true }),
+      },
+    });
+    const c = fixture.componentInstance;
+    c.toggleAllSelected();
+    await c.runBatch(c.batchActions()[0]!.action);
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('VERDICT: an action whose visibleWhen excludes one selected row renders disabled for the whole selection', async () => {
+    const PAUSE: RowAction = {
+      kind: 'proxy',
+      labelKey: 'x.pause',
+      method: 'POST',
+      path: '/api/x/:id/pause',
+      visibleWhen: { key: 'state', in: ['active'] },
+    };
+    const fixture = await createComponent({
+      http: { get: () => of(ROWS) },
+      bulkSelect: true,
+      rowActions: [PAUSE],
+    });
+    const c = fixture.componentInstance;
+
+    c.toggleSelected(1); // active: still allowed alone
+    expect(c.batchActions()[0]!.enabled).toBe(true);
+    c.toggleSelected(3); // paused: excluded by visibleWhen
+    expect(c.batchActions()[0]!.enabled).toBe(false);
+
+    fixture.detectChanges();
+    const button = Array.from(fixture.nativeElement.querySelectorAll('button')).find((b) =>
+      (b as HTMLButtonElement).textContent?.includes('x.pause'),
+    ) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.title).toBe('bulk.unavailable');
+  });
+
+  it('VERDICT: survives a silent reload, but is cleared by a page change and by a filter change', async () => {
+    const STATUS: TableFilter = {
+      kind: 'select',
+      key: 'status',
+      labelKey: 'x.status',
+      options: [{ value: '', labelKey: 'x.all' }, { value: 'failed', labelKey: 'x.failed' }],
+    };
+    const get = vi.fn(() => of({ data: ROWS, total: 40, page: 1, pageSize: 20 }));
+    const fixture = await createComponent({
+      http: { get },
+      bulkSelect: true,
+      paged: true,
+      filters: [STATUS],
+    });
+    const c = fixture.componentInstance;
+
+    c.toggleSelected(1);
+    expect(c.selectedIds().size).toBe(1);
+
+    // A refreshMs poll must not wipe a selection under the user's hands.
+    await c.loadRows({ silent: true });
+    expect(c.selectedIds().size).toBe(1);
+
+    await c.goToPage(2);
+    expect(c.selectedIds().size).toBe(0);
+
+    c.toggleSelected(2);
+    expect(c.selectedIds().size).toBe(1);
+    const select = fixture.nativeElement.querySelector('select') as HTMLSelectElement;
+    select.value = 'failed';
+    select.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(c.selectedIds().size).toBe(0);
   });
 });

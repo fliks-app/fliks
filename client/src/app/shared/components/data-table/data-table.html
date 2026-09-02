@@ -36,35 +36,70 @@
     </div>
   </div>
 
-  @if (filters().length) {
-    <div class="flex flex-wrap items-center gap-2">
-      @for (filter of filters(); track filter.key) {
-        @switch (filter.kind) {
-          @case ('search') {
-            <input
-              type="search"
-              class="input input-bordered input-sm w-full max-w-xs"
-              [placeholder]="filter.placeholderKey | translate"
-              [value]="filterValue(filter.key)"
-              (input)="onSearchInput(filter.key, $event)"
-            />
-          }
-          @case ('select') {
-            <select
-    appTvSelect
-              class="select select-bordered select-sm"
-              [attr.aria-label]="filter.labelKey | translate"
-              (change)="onSelectChange(filter.key, $event)"
+  <!-- One bar for both states: a selection swaps its content instead of adding a row, so the
+       table never shifts. It also stays put on a page that declares no filter at all. -->
+  @if (filters().length || (bulkSelect() && rows().length > 0)) {
+    <div
+      class="flex flex-wrap items-center gap-2 rounded-lg border border-base-200 bg-base-200/40 px-3 py-2"
+    >
+      @if (bulkSelect() && selectedRows().length > 0) {
+        <span class="text-sm font-medium">
+          {{ 'bulk.selected' | translate: { count: selectedRows().length } }}
+        </span>
+        <div class="flex flex-wrap gap-2 ms-auto">
+          @for (item of batchActions(); track item.action.labelKey) {
+            <button
+              type="button"
+              class="btn btn-outline btn-sm"
+              [class.btn-error]="item.action.tone === 'danger'"
+              [disabled]="bulkBusy() || !item.enabled"
+              [attr.title]="item.enabled ? null : ('bulk.unavailable' | translate)"
+              (click)="runBatch(item.action)"
             >
-              @for (option of filter.options; track option.value) {
-                <option
-                  [value]="option.value"
-                  [selected]="filterValue(filter.key) === option.value"
-                >
-                  {{ option.labelKey | translate }}
-                </option>
+              @if (bulkBusy()) {
+                <span class="loading loading-spinner loading-xs"></span>
               }
-            </select>
+              {{ item.action.labelKey | translate }}
+            </button>
+          }
+          <button type="button" class="btn btn-ghost btn-sm" [disabled]="bulkBusy()" (click)="clearSelection()">
+            {{ 'bulk.clear' | translate }}
+          </button>
+        </div>
+      } @else {
+        @if (!filters().length) {
+          <span class="text-sm text-base-content/60">
+            {{ 'bulk.rows' | translate: { count: paged() ? total() : rows().length } }}
+          </span>
+        }
+        @for (filter of filters(); track filter.key) {
+          @switch (filter.kind) {
+            @case ('search') {
+              <input
+                type="search"
+                class="input input-bordered input-sm w-full max-w-xs"
+                [placeholder]="filter.placeholderKey | translate"
+                [value]="filterValue(filter.key)"
+                (input)="onSearchInput(filter.key, $event)"
+              />
+            }
+            @case ('select') {
+              <select
+      appTvSelect
+                class="select select-bordered select-sm"
+                [attr.aria-label]="filter.labelKey | translate"
+                (change)="onSelectChange(filter.key, $event)"
+              >
+                @for (option of filter.options; track option.value) {
+                  <option
+                    [value]="option.value"
+                    [selected]="filterValue(filter.key) === option.value"
+                  >
+                    {{ option.labelKey | translate }}
+                  </option>
+                }
+              </select>
+            }
           }
         }
       }
@@ -84,6 +119,18 @@
       <table class="table table-zebra">
         <thead>
           <tr>
+            @if (bulkSelect()) {
+              <th class="w-10">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-sm"
+                  [checked]="allSelected()"
+                  [indeterminate]="selectedRows().length > 0 && !allSelected()"
+                  [attr.aria-label]="'bulk.select_all' | translate"
+                  (change)="toggleAllSelected()"
+                />
+              </th>
+            }
             @for (col of columns(); track col.key) {
               <th>{{ col.labelKey | translate }}</th>
             }
@@ -95,6 +142,17 @@
         <tbody>
           @for (row of rows(); track $index) {
             <tr>
+              @if (bulkSelect()) {
+                <td>
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm"
+                    [checked]="isSelected(row.id)"
+                    [attr.aria-label]="'bulk.select_row' | translate: { name: rowSelectLabel(row) }"
+                    (change)="toggleSelected(row.id)"
+                  />
+                </td>
+              }
               @for (col of columns(); track col.key) {
                 <td [class.whitespace-nowrap]="cellNowrap(col)">
                   @switch (col.format) {

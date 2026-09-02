@@ -2602,10 +2602,6 @@
     "test_unknown_result": "Il test è terminato, ma non è stato possibile tradurre il risultato.",
     "move_up": "Sposta su",
     "move_down": "Sposta giù",
-    "bulk_selected": "{{count}} selezionati",
-    "bulk_select_all": "Seleziona tutte le righe",
-    "bulk_select_row": "Seleziona {{name}}",
-    "bulk_clear": "Annulla la selezione",
     "bulk_edit": "Modifica",
     "bulk_enable": "Attiva",
     "bulk_disable": "Disattiva",
@@ -2615,11 +2611,9 @@
     "bulk_edit_title": "Modifica {{count}} voci",
     "bulk_edit_hint": "Vengono scritti solo i campi spuntati. Il resto conserva il valore di ogni voce.",
     "bulk_apply_field": "Applica questo campo",
-    "bulk_edited_done": "{{count}} voci aggiornate",
     "bulk_enabled_done": "{{count}} voci attivate",
     "bulk_disabled_done": "{{count}} voci disattivate",
     "bulk_deleted_done": "{{count}} voci eliminate",
-    "bulk_partial": "{{done}} completate, {{failed}} non riuscite",
     "filter_placeholder": "Filtra per nome",
     "filter_no_match": "Nessuna voce corrisponde a questo filtro.",
     "row_count": "{{shown}} su {{total}}",
@@ -2632,5 +2626,15 @@
     "load_error": "Impossibile caricare l'elenco.",
     "empty": "Niente da visualizzare.",
     "refresh": "Aggiorna"
+  },
+  "bulk": {
+    "selected": "{{count}} selezionati",
+    "select_all": "Seleziona tutte le righe",
+    "select_row": "Seleziona {{name}}",
+    "clear": "Annulla la selezione",
+    "partial": "{{done}} completate, {{failed}} non riuscite",
+    "done": "{{count}} voci elaborate",
+    "unavailable": "Non si applica a tutte le righe selezionate",
+    "rows": "{{count}} voci"
   }
 }

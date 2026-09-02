@@ -52,6 +52,7 @@
         [listUrl]="resourceUrl(view.list)"
         [columns]="view.columns"
         [filters]="view.filters ?? []"
+        [bulkSelect]="view.bulkSelect ?? false"
         [rowActions]="tableRowActions(view)"
         [listActions]="tableListActions(view)"
         [defaultSortKey]="view.defaultSortKey ?? null"

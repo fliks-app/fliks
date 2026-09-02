@@ -376,6 +376,9 @@ export interface TableConfigPage extends ConfigPageBase {
   list: string;
   columns: TableColumn[];
   filters?: TableFilter[];
+  /** Adds a selection column and turns the declared `proxy` row actions into batch actions,
+   *  one confirmation for the whole selection instead of one per row. */
+  bulkSelect?: boolean;
   /**
    * `when` gates on the viewer (the same closed predicate vocabulary `ui.contributions[]` uses —
    * a mutating action names the permission its route is declared under, so the button is absent

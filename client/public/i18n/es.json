@@ -2602,10 +2602,6 @@
     "test_unknown_result": "La prueba terminó, pero no se pudo traducir el resultado.",
     "move_up": "Subir",
     "move_down": "Bajar",
-    "bulk_selected": "{{count}} seleccionados",
-    "bulk_select_all": "Seleccionar todas las filas",
-    "bulk_select_row": "Seleccionar {{name}}",
-    "bulk_clear": "Quitar la selección",
     "bulk_edit": "Editar",
     "bulk_enable": "Activar",
     "bulk_disable": "Desactivar",
@@ -2615,11 +2611,9 @@
     "bulk_edit_title": "Editar {{count}} entradas",
     "bulk_edit_hint": "Solo se escriben los campos marcados. El resto conserva el valor de cada entrada.",
     "bulk_apply_field": "Aplicar este campo",
-    "bulk_edited_done": "{{count}} entradas actualizadas",
     "bulk_enabled_done": "{{count}} entradas activadas",
     "bulk_disabled_done": "{{count}} entradas desactivadas",
     "bulk_deleted_done": "{{count}} entradas eliminadas",
-    "bulk_partial": "{{done}} hechas, {{failed}} con error",
     "filter_placeholder": "Filtrar por nombre",
     "filter_no_match": "Ninguna entrada coincide con este filtro.",
     "row_count": "{{shown}} de {{total}}",
@@ -2632,5 +2626,15 @@
     "load_error": "No se pudo cargar la lista.",
     "empty": "Nada que mostrar.",
     "refresh": "Actualizar"
+  },
+  "bulk": {
+    "selected": "{{count}} seleccionados",
+    "select_all": "Seleccionar todas las filas",
+    "select_row": "Seleccionar {{name}}",
+    "clear": "Quitar la selección",
+    "partial": "{{done}} hechas, {{failed}} con error",
+    "done": "{{count}} entradas procesadas",
+    "unavailable": "No se aplica a todas las filas seleccionadas",
+    "rows": "{{count}} entradas"
   }
 }

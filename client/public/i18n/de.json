@@ -2602,10 +2602,6 @@
     "test_unknown_result": "Der Test ist abgeschlossen, aber das Ergebnis konnte nicht übersetzt werden.",
     "move_up": "Nach oben",
     "move_down": "Nach unten",
-    "bulk_selected": "{{count}} ausgewählt",
-    "bulk_select_all": "Alle Zeilen auswählen",
-    "bulk_select_row": "{{name}} auswählen",
-    "bulk_clear": "Auswahl aufheben",
     "bulk_edit": "Bearbeiten",
     "bulk_enable": "Aktivieren",
     "bulk_disable": "Deaktivieren",
@@ -2615,11 +2611,9 @@
     "bulk_edit_title": "{{count}} Einträge bearbeiten",
     "bulk_edit_hint": "Nur angehakte Felder werden geschrieben. Alles andere behält den Wert des jeweiligen Eintrags.",
     "bulk_apply_field": "Dieses Feld anwenden",
-    "bulk_edited_done": "{{count}} Einträge aktualisiert",
     "bulk_enabled_done": "{{count}} Einträge aktiviert",
     "bulk_disabled_done": "{{count}} Einträge deaktiviert",
     "bulk_deleted_done": "{{count}} Einträge gelöscht",
-    "bulk_partial": "{{done}} erledigt, {{failed}} fehlgeschlagen",
     "filter_placeholder": "Nach Name filtern",
     "filter_no_match": "Kein Eintrag passt zu diesem Filter.",
     "row_count": "{{shown}} von {{total}}",
@@ -2632,5 +2626,15 @@
     "load_error": "Liste konnte nicht geladen werden.",
     "empty": "Nichts anzuzeigen.",
     "refresh": "Aktualisieren"
+  },
+  "bulk": {
+    "selected": "{{count}} ausgewählt",
+    "select_all": "Alle Zeilen auswählen",
+    "select_row": "{{name}} auswählen",
+    "clear": "Auswahl aufheben",
+    "partial": "{{done}} erledigt, {{failed}} fehlgeschlagen",
+    "done": "{{count}} Einträge verarbeitet",
+    "unavailable": "Gilt nicht für alle ausgewählten Zeilen",
+    "rows": "{{count}} Einträge"
   }
 }
