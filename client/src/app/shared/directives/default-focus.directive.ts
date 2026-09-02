@@ -51,10 +51,11 @@ export class DefaultFocusDirective implements OnInit, OnDestroy {
   ngOnInit(): void {
     // Let spatial-nav land here when nothing is focused (cold-load + first key).
     this.svc.register(this.targetGetter);
-    const ownKey = this.reuseStrategy.keyFor(this.route.snapshot);
     this.subs.add(
       this.reuseStrategy.attached$
-        .pipe(filter((key) => key === ownKey))
+        // Resolved per event: a page reused across a param change is cached
+        // under the params it last showed, not the ones it started on.
+        .pipe(filter((key) => key === this.reuseStrategy.keyFor(this.route.snapshot)))
         .subscribe(() => this.svc.applyOnArrival(this.target())),
     );
     // Capture the focused item the instant a navigation starts (host still in

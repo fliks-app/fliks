@@ -51,14 +51,18 @@ export function keepRouteFresh(
   const destroyRef = inject(DestroyRef);
 
   const detached = signal(false);
-  const ownKey = reuse.keyFor(route.snapshot);
+  // Read per event, never latched: a page that keeps its instance across a
+  // param change (`reuseOnParamChange`) is filed under the params it last
+  // showed, so a key captured on the first snapshot stops matching and the
+  // page never learns it was detached.
+  const ownKey = () => reuse.keyFor(route.snapshot);
   const scrollKey = (): string | null =>
     typeof opts.scrollKey === 'function'
       ? opts.scrollKey()
       : (opts.scrollKey ?? null);
 
   reuse.attached$.pipe(takeUntilDestroyed(destroyRef)).subscribe((key) => {
-    if (key !== ownKey) return;
+    if (key !== ownKey()) return;
     detached.set(false);
     const sk = scrollKey();
     if (sk) scrollMemory.activate(sk);
@@ -68,7 +72,7 @@ export function keepRouteFresh(
   });
 
   reuse.detached$.pipe(takeUntilDestroyed(destroyRef)).subscribe((key) => {
-    if (key !== ownKey) return;
+    if (key !== ownKey()) return;
     detached.set(true);
     const sk = scrollKey();
     if (sk) scrollMemory.deactivateIf(sk);
