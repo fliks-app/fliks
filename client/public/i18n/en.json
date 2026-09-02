@@ -384,7 +384,6 @@
     "title": "History",
     "empty": "No playback history.",
     "completed": "Completed",
-    "resume": "Resume",
     "remove": "Remove from history",
     "mark_watched": "Mark as watched"
   },

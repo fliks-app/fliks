@@ -55,6 +55,24 @@ describe('keepRouteFresh', () => {
     expect(calls).toEqual(['activate:home', 'refresh', 'restore:home']);
   });
 
+  it('follows its own key across a param change', () => {
+    // media-detail keeps its instance when only the episode param moves, and is
+    // then cached under the episode it last showed. A latched key left the hero
+    // navbar (and its series logo) behind on the page navigated to.
+    const reuse = TestBed.inject(CachingReuseStrategy) as unknown as {
+      keyFor: () => string;
+    };
+    let key = OWN_KEY;
+    reuse.keyFor = () => key;
+    bind({ onDetach: () => calls.push('detach'), onAttach: () => calls.push('attach') });
+
+    key = 'route-7::id=1&episodeId=5';
+    detached$.next(key);
+    attached$.next(key);
+
+    expect(calls).toEqual(['detach', 'attach']);
+  });
+
   it('ignores another route reattaching', () => {
     bind({ refresh: () => calls.push('refresh'), scrollKey: 'home' });
 

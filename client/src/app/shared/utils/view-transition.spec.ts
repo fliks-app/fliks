@@ -34,6 +34,21 @@ describe('view-transition poster stamps', () => {
     expect(first.style.viewTransitionName).toBe('');
   });
 
+  it('lifts the clicked card\'s badges with its poster', () => {
+    const card = img();
+    const overlay = document.createElement('div');
+    overlay.setAttribute('data-card-overlay', '');
+    document.body.appendChild(overlay);
+
+    stampPoster(card, 7, null, overlay);
+    expect(overlay.style.viewTransitionName).toBe('media-card-overlay');
+
+    // A second card must not leave two overlays named: a duplicate aborts the
+    // whole transition.
+    stampPoster(img(), 9);
+    expect(overlay.style.viewTransitionName).toBe('');
+  });
+
   it('names an episode target on the episode id, not the series', () => {
     const card = img();
 
