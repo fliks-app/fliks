@@ -57,6 +57,34 @@ describe('NavbarService', () => {
     expect(navbar.canGoBack()).toBe(false);
   });
 
+  /** The artwork reveal replays whenever a cached subtree is re-inserted, so a
+   *  page returned to would re-announce art the user was already looking at. */
+  it('flags the document on a back navigation and clears it on a forward one', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          { path: '', component: PageStub },
+          { path: 'library', component: PageStub },
+        ]),
+      ],
+    });
+
+    const navbar = TestBed.inject(NavbarService);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/');
+    await router.navigateByUrl('/library');
+    expect(document.documentElement.classList.contains('nav-back')).toBe(false);
+
+    navbar.goBack();
+    // goBack() releases `lastWasBack` a macrotask after its navigation settles,
+    // so the forward hop below has to come after that, not inside the same tick.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(document.documentElement.classList.contains('nav-back')).toBe(true);
+
+    await router.navigateByUrl('/library');
+    expect(document.documentElement.classList.contains('nav-back')).toBe(false);
+  });
+
   it('records a back entry once a real in-app navigation happens', async () => {
     TestBed.configureTestingModule({
       providers: [

@@ -78,6 +78,16 @@ export class NavbarService {
     // the first hardware-back press on the entry screen a no-op redirect.
     let lastUrl = '';
     this.router.events.subscribe((e) => {
+      if (e instanceof NavigationStart) {
+        // A page returned to must look exactly as it was left, and the artwork
+        // reveal replays whenever a cached subtree is re-inserted. Not
+        // `isPoppingBack`: the top-level nav entries set that too, and opening
+        // a screen from the sidebar still earns its reveal.
+        document.documentElement.classList.toggle(
+          'nav-back',
+          e.navigationTrigger === 'popstate' || this.lastWasBack(),
+        );
+      }
       // Browser back/forward: mirror the pop on our internal stack so the
       // next in-app back button doesn't re-push the URL we just left (which
       // would let goBack() walk *forward* into the page the user came back
