@@ -193,11 +193,17 @@ export class ProviderListComponent implements OnInit {
     return this.implementations().find((i) => i.implementation === first) ?? null;
   });
 
-  /** Fields the bulk editor offers: the implementation's own, plus priority when the page has one.
-   *  A secret is included on purpose (rotating one key across a dozen imported rows is the case
-   *  this exists for) and, like every other field, is written only when ticked. */
+  /**
+   * Fields the bulk editor offers: the implementation's tuning knobs, plus priority when the page
+   * has one. What identifies one instance is left out, because the same value written to every
+   * selected row is meaningless or destructive there: a `url` is the row (twelve indexers pointed
+   * at one tracker), and a credential belongs to whatever that url is.
+   */
   readonly bulkFields = computed<readonly FieldDef[]>(
-    () => this.bulkImplementation()?.fields.filter((f): f is FieldDef => !('kind' in f) || f.kind === 'field') ?? [],
+    () =>
+      this.bulkImplementation()
+        ?.fields.filter((f): f is FieldDef => !('kind' in f) || f.kind === 'field')
+        .filter((f) => !f.secret && f.type !== 'url') ?? [],
   );
 
   readonly currentImplementation = computed(
@@ -610,11 +616,7 @@ export class ProviderListComponent implements OnInit {
     const topLevel: Record<string, unknown> = {};
     for (const field of this.bulkFields()) {
       if (!applied.has(field.key)) continue;
-      const v = value[field.key];
-      // A ticked secret left blank would erase nothing and mean nothing: skip it rather than
-      // write an empty credential over a dozen rows.
-      if (field.secret && (v === '' || v === undefined)) continue;
-      (field.topLevel ? topLevel : settings)[field.key] = v;
+      (field.topLevel ? topLevel : settings)[field.key] = value[field.key];
     }
     const priority = applied.has('priority') ? this.bulkPriority() : null;
 
