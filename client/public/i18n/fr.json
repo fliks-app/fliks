@@ -2651,7 +2651,7 @@
     "filter_placeholder": "Filtrer par nom",
     "filter_no_match": "Aucune entrée ne correspond à ce filtre.",
     "row_count": "{{shown}} sur {{total}}",
-    "sort_label": "Trier par",
+    "sort_label": "Trier par :",
     "sort_priority": "Priorité",
     "sort_name": "Nom",
     "sort_default": "Ordre par défaut"

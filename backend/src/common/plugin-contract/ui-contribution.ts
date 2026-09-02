@@ -99,9 +99,10 @@ export interface FieldDef {
    * "unchanged", so removal needs a spelling of its own (the one JSON Merge Patch uses).
    */
   secret?: boolean;
-  default?: string | number | boolean;
+  /** A `string[]` only for `multiselect`, which is the set a new row starts from. */
+  default?: string | number | boolean | string[];
   /** Required for `multiselect`. For that type the value is a `string[]` of the declared
-   *  `options[].value`; `default` is not honoured, an unset value reads as `[]`. */
+   *  `options[].value`. */
   options?: { value: string; labelKey: string }[];
   /** Written to a column on the row itself rather than into its `settings` bag.
    *  Without this a declared field silently stops persisting an entity column. */

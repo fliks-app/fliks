@@ -31,7 +31,7 @@
    tap has nothing left to show once the ring is suppressed, and dropping the
    border too made a tapped field look borderless. Text fields keep `:focus` —
    their caret is the indication and the ring is not the only cue. */
-.select:focus-visible, .input:focus, .textarea:focus {
+.select:focus-visible, .input:focus, .input:focus-within, .textarea:focus {
   outline-width: 1px;
   outline-offset: 0px;
   border-color: transparent;

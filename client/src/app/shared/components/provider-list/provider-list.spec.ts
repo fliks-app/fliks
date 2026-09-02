@@ -264,6 +264,42 @@ describe('ProviderListComponent — characterisation', () => {
     expect(c.draftValue()['useFor']).toEqual([]);
   });
 
+  it('VERDICT: a new row starts a multiselect on its declared default, an existing one on what it stored', async () => {
+    const impls: ProviderImplementation[] = [
+      {
+        implementation: 'demo',
+        labelKey: 'x.impl_demo',
+        fields: [
+          {
+            key: 'useFor',
+            type: 'multiselect',
+            labelKey: 'x.field_use_for',
+            default: ['rss', 'auto', 'manual'],
+            options: [
+              { value: 'rss', labelKey: 'x.rss' },
+              { value: 'auto', labelKey: 'x.auto' },
+              { value: 'manual', labelKey: 'x.manual' },
+            ],
+          },
+        ],
+      },
+    ];
+    const fixture = await createComponent(
+      {
+        get: () =>
+          of([{ id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: { useFor: ['rss'] } }]),
+      },
+      { implementations: impls },
+    );
+    const c = fixture.componentInstance;
+
+    c.openCreate();
+    expect(c.draftValue()['useFor']).toEqual(['rss', 'auto', 'manual']);
+
+    c.openEdit(c.rows()[0]);
+    expect(c.draftValue()['useFor']).toEqual(['rss']);
+  });
+
   it('blocks save while a required multiselect is empty, the way a blank required text field does', async () => {
     const post = vi.fn((_url: string, _body: unknown) => of({}));
     const impls: ProviderImplementation[] = [

@@ -284,7 +284,9 @@ export class ProviderListComponent implements OnInit {
       const source = f.topLevel ? row : (row?.settings as Record<string, unknown> | undefined);
       const raw = source ? source[f.key] : undefined;
       if (f.type === 'multiselect') {
-        value[f.key] = Array.isArray(raw) ? raw : [];
+        // A new row starts from the declared default; an existing one from what it stored.
+        const fallback = Array.isArray(f.default) ? [...f.default] : [];
+        value[f.key] = Array.isArray(raw) ? raw : fallback;
         continue;
       }
       value[f.key] = (raw ?? f.default ?? '') as string | number | boolean;

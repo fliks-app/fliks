@@ -11,10 +11,18 @@
     @for (opt of chips(); track opt.value) {
       <span class="badge badge-sm badge-primary gap-1 max-w-full">
         <span class="truncate">{{ opt.label }}</span>
+        <!-- `mousedown` is where the trigger would take focus and paint its ring: a chip
+             removal is not a visit to the field. -->
         <span
           role="button"
           tabindex="-1"
-          class="cursor-pointer opacity-70 hover:opacity-100"
+          class="hover:opacity-100"
+          [class.cursor-pointer]="!disabled()"
+          [class.opacity-70]="!disabled()"
+          [class.opacity-40]="disabled()"
+          [class.pointer-events-none]="disabled()"
+          [attr.aria-disabled]="disabled() ? 'true' : null"
+          (mousedown)="onChipMouseDown($event)"
           (click)="remove(opt.value, $event)"
           >✕</span
         >
@@ -33,17 +41,20 @@
   placement="bottom-start"
   (closed)="open.set(false)"
 >
-  <!-- Pinned: the popover owns the scroll, so the filter would scroll away. -->
-  <div class="sticky -top-2 z-10 bg-base-200 pt-2 pb-1">
-    <input
-      autofocus
-      type="text"
-      class="input input-bordered input-sm w-full"
-      [placeholder]="'common.search' | translate"
-      [ngModel]="query()"
-      (ngModelChange)="query.set($event)"
-    />
-  </div>
+  @if (showFilter()) {
+    <!-- Pinned: the popover owns the scroll, so the filter would scroll away. Its background is
+         the surface the popover reports, since a dropdown and a bottom sheet are not the same one. -->
+    <div class="sticky top-0 z-10 pt-2 pb-1" style="background-color: var(--popover-surface, var(--color-base-200))">
+      <input
+        autofocus
+        type="text"
+        class="input input-bordered input-sm w-full"
+        [placeholder]="'common.search' | translate"
+        [ngModel]="query()"
+        (ngModelChange)="query.set($event)"
+      />
+    </div>
+  }
   <ul>
     @for (opt of filtered(); track opt.value) {
       <li>
