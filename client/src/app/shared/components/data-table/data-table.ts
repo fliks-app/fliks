@@ -30,6 +30,8 @@ import { ProgressBadgeComponent } from '../progress-badge/progress-badge.compone
 import {
   BadgeTone,
   CellValue,
+  NoticeTone,
+  TableNotice,
   ListAction,
   PagedResult,
   RowAction,
@@ -63,6 +65,14 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
   warning: 'badge-warning',
   error: 'badge-error',
   ghost: 'badge-ghost',
+};
+
+/** The only classes a declared notice tone can resolve to; an unknown tone reads as `info`
+ *  rather than reaching the DOM, the same rule as `BADGE_CLASSES`. */
+const NOTICE_CLASSES: Readonly<Record<NoticeTone, string>> = {
+  info: 'alert-info',
+  warning: 'alert-warning',
+  error: 'alert-error',
 };
 
 /**
@@ -123,6 +133,9 @@ export class DataTableComponent implements OnInit {
   readonly refreshOn = input<readonly string[]>([]);
 
   readonly rows = signal<TableRow[]>([]);
+  /** What the list as a whole reports, from the paged response. Replaced on every load, so a
+   *  warning never outlives the state that raised it. */
+  readonly notice = signal<TableNotice | null>(null);
   readonly loading = signal(true);
   readonly listError = signal('');
   readonly busy = signal<string | null>(null);
@@ -234,6 +247,7 @@ export class DataTableComponent implements OnInit {
         if (seq !== this.loadSeq) return;
         this.rows.set(this.applyDefaultSort(Array.isArray(res?.data) ? res.data : []));
         this.total.set(res?.total ?? 0);
+        this.notice.set(res?.notice?.messageKey ? res.notice : null);
       } else {
         const data = await firstValueFrom(this.http.get<TableRow[]>(this.listUrl(), { params }));
         if (seq !== this.loadSeq) return;
@@ -282,6 +296,10 @@ export class DataTableComponent implements OnInit {
     this.page.set(page);
     this.clearSelection();
     await this.loadRows();
+  }
+
+  noticeClass(tone: NoticeTone): string {
+    return NOTICE_CLASSES[tone] ?? NOTICE_CLASSES.info;
   }
 
   /** `LocaleDatePipe` doesn't accept a boolean — no declared column is ever meant to be one. */

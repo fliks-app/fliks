@@ -1131,3 +1131,62 @@ describe('DataTableComponent: bulk selection', () => {
     expect(c.selectedIds().size).toBe(0);
   });
 });
+
+describe('DataTableComponent: the list-wide notice', () => {
+  const notice = { messageKey: 'x.hidden', tone: 'warning' as const, count: 2 };
+  const pagedWith = (extra: Record<string, unknown>) => ({
+    data: [{ id: 1, name: 'A' }],
+    total: 1,
+    page: 1,
+    pageSize: 20,
+    ...extra,
+  });
+
+  function alert(fixture: { nativeElement: HTMLElement }): HTMLElement | null {
+    return fixture.nativeElement.querySelector('[role="status"]');
+  }
+
+  it('VERDICT: renders what the response reports about the whole list, with its tone', async () => {
+    const fixture = await createComponent({ http: { get: () => of(pagedWith({ notice })) }, paged: true });
+    const el = alert(fixture);
+    expect(el).not.toBeNull();
+    expect(el!.className).toContain('alert-warning');
+    // The test loader resolves no strings, so the key itself is what lands in the DOM.
+    expect(el!.textContent).toContain('x.hidden');
+  });
+
+  it('renders none when the response carries none', async () => {
+    const fixture = await createComponent({ http: { get: () => of(pagedWith({})) }, paged: true });
+    expect(alert(fixture)).toBeNull();
+    expect(fixture.componentInstance.notice()).toBeNull();
+  });
+
+  it('VERDICT: a notice does not outlive the load that raised it', async () => {
+    let body: Record<string, unknown> = pagedWith({ notice });
+    const fixture = await createComponent({ http: { get: () => of(body) }, paged: true });
+    expect(alert(fixture)).not.toBeNull();
+
+    body = pagedWith({});
+    await fixture.componentInstance.loadRows();
+    fixture.detectChanges();
+    expect(alert(fixture)).toBeNull();
+  });
+
+  it('falls back to info on a tone it does not know, rather than putting it in the DOM', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of(pagedWith({ notice: { messageKey: 'x.hidden', tone: 'catastrophe' } })) },
+      paged: true,
+    });
+    expect(alert(fixture)!.className).toContain('alert-info');
+    expect(alert(fixture)!.className).not.toContain('catastrophe');
+  });
+
+  it('shows alongside an empty list, since it is the only thing that can explain it', async () => {
+    const fixture = await createComponent({
+      http: { get: () => of({ data: [], total: 0, page: 1, pageSize: 20, notice }) },
+      paged: true,
+    });
+    expect(alert(fixture)).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('data_table.empty');
+  });
+});
