@@ -272,7 +272,28 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly routeFresh = keepRouteFresh({
     refresh: () => this.refreshOnReturn(),
     scrollKey: () => this.scrollKey(),
+    onDetach: () => this.releaseChrome(),
+    onAttach: () => this.restoreChrome(),
   });
+
+  /** Backdrop pick held across a detach so the page comes back on the same
+   *  image instead of re-randomising from the pool. */
+  private parkedBackground: string | null = null;
+
+  /** The hero navbar and page backdrop are global state, so a cached page has
+   *  to hand them back on the way out and reclaim them on return. */
+  private releaseChrome(): void {
+    this.parkedBackground = this.backgroundService.url();
+    this.navbarService.leaveHeroPage();
+    this.backgroundService.clear();
+  }
+
+  private restoreChrome(): void {
+    this.backgroundService.setBackground(this.parkedBackground);
+    const m = this.media();
+    if (m) this.applyEpisodeFocus(m, this.route.snapshot.paramMap.get('episodeId'));
+    else this.navbarService.enterHeroPage('');
+  }
 
   /**
    * Angular reuses this component between two `movies/:id` URLs — the similar
@@ -845,9 +866,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    // Evicted from the route cache while another page is on screen: the chrome
+    // and scroll key already belong to that page, so leave them alone.
+    if (this.routeFresh()) return;
     this.scrollMemory.deactivate();
-    this.navbarService.leaveHeroPage();
-    this.backgroundService.clear();
+    this.releaseChrome();
   }
 
   ngOnInit() {
