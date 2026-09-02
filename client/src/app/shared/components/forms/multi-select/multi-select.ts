@@ -13,8 +13,8 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { PopoverMenuComponent } from '../../popover-menu';
 
-export interface MultiSelectOption {
-  value: number;
+export interface MultiSelectOption<T extends string | number = number> {
+  value: T;
   label: string;
 }
 
@@ -38,9 +38,9 @@ export interface MultiSelectOption {
   templateUrl: './multi-select.html',
   host: { class: 'block' },
 })
-export class MultiSelectComponent {
-  readonly options = input.required<readonly MultiSelectOption[]>();
-  readonly value = model<number[]>([]);
+export class MultiSelectComponent<T extends string | number = number> {
+  readonly options = input.required<readonly MultiSelectOption<T>[]>();
+  readonly value = model<T[]>([]);
   readonly placeholder = input<string>('');
   readonly disabled = input<boolean>(false);
   /** Chips shown on the trigger before collapsing the rest into "+N". */
@@ -78,7 +78,7 @@ export class MultiSelectComponent {
     });
   }
 
-  protected isPicked(value: number) {
+  protected isPicked(value: T) {
     return this.value().includes(value);
   }
 
@@ -89,13 +89,13 @@ export class MultiSelectComponent {
     this.open.update((v) => !v);
   }
 
-  protected toggleOption(value: number) {
+  protected toggleOption(value: T) {
     this.value.update((list) =>
       list.includes(value) ? list.filter((v) => v !== value) : [...list, value],
     );
   }
 
-  protected remove(value: number, event: Event) {
+  protected remove(value: T, event: Event) {
     event.stopPropagation();
     this.value.update((list) => list.filter((v) => v !== value));
   }

@@ -62,6 +62,23 @@
         }
       </div>
     }
+    @case ('multiselect') {
+      <div class="form-control w-full flex flex-col gap-1">
+        <div class="label"><span class="label-text font-medium">{{ field.labelKey | translate }}</span></div>
+        <app-multi-select
+          [options]="multiOptions(field)"
+          [disabled]="disabled()"
+          [value]="multiValue(field)"
+          (valueChange)="setMulti(field, $event)"
+        />
+        @if (field.hint) {
+          <div class="label"><span class="label-text-alt text-base-content/50">{{ field.hint | translate }}</span></div>
+        }
+        @for (err of fieldErrors(field); track err.key) {
+          <p class="text-error text-xs">{{ err.key | translate: err.params }}</p>
+        }
+      </div>
+    }
   }
 </ng-template>
 

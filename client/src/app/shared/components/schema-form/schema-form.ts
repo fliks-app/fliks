@@ -1,19 +1,20 @@
-import { ChangeDetectionStrategy, Component, computed, input, model } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, model } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { FieldDef, FormCaption, FormGroup, FormItem, FormStatus } from '@fliks/plugin-contract/ui';
 import { InputFieldComponent, InputFieldType } from '../forms/input-field/input-field';
 import { SelectFieldComponent } from '../forms/select-field/select-field';
 import { ToggleFieldComponent } from '../forms/toggle-field/toggle-field';
+import { MultiSelectComponent, MultiSelectOption } from '../forms/multi-select/multi-select';
 
 /** Keyed by `FieldDef.key`; a select/text/number value is always a string here, coerced on read.
  *  A `status` item's current value is keyed by its own `settingKey` in this same bag. */
-export type SchemaFormValue = Record<string, string | number | boolean | null>;
+export type SchemaFormValue = Record<string, string | number | boolean | null | string[]>;
 
 /** Shown in place of a stored credential the server never echoes back. */
 export const SECRET_MASK = '●●●●●●●●';
 
-type FieldKind = 'input' | 'toggle' | 'select';
+type FieldKind = 'input' | 'toggle' | 'select' | 'multiselect';
 type ItemKind = 'field' | 'caption' | 'group' | 'status';
 
 interface FieldError {
@@ -23,7 +24,7 @@ interface FieldError {
 
 
 /**
- * Renders a `FormItem[]` as DaisyUI controls, delegating to the three shared
+ * Renders a `FormItem[]` as DaisyUI controls, delegating to the shared
  * `forms/` components. An unmatched `field.type` renders nothing — it must
  * never blank out or break the rest of the form.
  *
@@ -40,11 +41,20 @@ interface FieldError {
  */
 @Component({
   selector: 'app-schema-form',
-  imports: [InputFieldComponent, SelectFieldComponent, ToggleFieldComponent, NgTemplateOutlet, TranslateModule],
+  imports: [
+    InputFieldComponent,
+    SelectFieldComponent,
+    ToggleFieldComponent,
+    MultiSelectComponent,
+    NgTemplateOutlet,
+    TranslateModule,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './schema-form.html',
 })
 export class SchemaFormComponent {
+  private readonly translate = inject(TranslateService);
+
   readonly fields = input.required<readonly FormItem[]>();
   readonly value = model.required<SchemaFormValue>();
   readonly disabled = input(false);
@@ -102,9 +112,28 @@ export class SchemaFormComponent {
         return 'toggle';
       case 'select':
         return 'select';
+      case 'multiselect':
+        return 'multiselect';
       default:
         return null;
     }
+  }
+
+  /** `field.options` translated into what `<app-multi-select>` renders. */
+  protected multiOptions(field: FieldDef): MultiSelectOption<string>[] {
+    return (field.options ?? []).map((o) => ({
+      value: o.value,
+      label: this.translate.instant(o.labelKey),
+    }));
+  }
+
+  protected multiValue(field: FieldDef): string[] {
+    const v = this.value()[field.key];
+    return Array.isArray(v) ? v : [];
+  }
+
+  protected setMulti(field: FieldDef, next: string[]): void {
+    this.value.set({ ...this.value(), [field.key]: next });
   }
 
   protected inputType(field: FieldDef): InputFieldType {
@@ -159,9 +188,11 @@ export class SchemaFormComponent {
     if (field.secret) return [];
     const errors: FieldError[] = [];
     const raw = this.value()[field.key];
-    const isEmpty = raw === undefined || raw === null || String(raw).trim() === '';
+    const isEmpty = Array.isArray(raw)
+      ? raw.length === 0
+      : raw === undefined || raw === null || String(raw).trim() === '';
     if (field.required && isEmpty) errors.push({ key: 'common.field_required' });
-    if (isEmpty) return errors;
+    if (isEmpty || Array.isArray(raw)) return errors;
 
     const str = String(raw);
     if (field.type === 'number') {

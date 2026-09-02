@@ -227,6 +227,75 @@ describe('ProviderListComponent — characterisation', () => {
     expect(del).toHaveBeenCalledWith('/api/x/7');
   });
 
+  it("seeds a multiselect field from the row's own array, and [] when absent or not an array", async () => {
+    const impls: ProviderImplementation[] = [
+      {
+        implementation: 'demo',
+        labelKey: 'x.impl_demo',
+        fields: [
+          {
+            key: 'useFor',
+            type: 'multiselect',
+            labelKey: 'x.field_use_for',
+            options: [
+              { value: 'search', labelKey: 'x.search' },
+              { value: 'grab', labelKey: 'x.grab' },
+            ],
+          },
+        ],
+      },
+    ];
+    const fixture = await createComponent(
+      {
+        get: () =>
+          of([
+            { id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: { useFor: ['search'] } },
+            { id: 2, name: 'B', implementation: 'demo', enabled: true, priority: 2, settings: {} },
+          ]),
+      },
+      { implementations: impls },
+    );
+    const c = fixture.componentInstance;
+
+    c.openEdit(c.rows()[0]);
+    expect(c.draftValue()['useFor']).toEqual(['search']);
+
+    c.openEdit(c.rows()[1]);
+    expect(c.draftValue()['useFor']).toEqual([]);
+  });
+
+  it('blocks save while a required multiselect is empty, the way a blank required text field does', async () => {
+    const post = vi.fn((_url: string, _body: unknown) => of({}));
+    const impls: ProviderImplementation[] = [
+      {
+        implementation: 'demo',
+        labelKey: 'x.impl_demo',
+        fields: [
+          {
+            key: 'useFor',
+            type: 'multiselect',
+            labelKey: 'x.field_use_for',
+            required: true,
+            options: [{ value: 'search', labelKey: 'x.search' }],
+          },
+        ],
+      },
+    ];
+    const fixture = await createComponent({ get: () => of([]), post }, { implementations: impls });
+    const c = fixture.componentInstance;
+
+    c.openCreate();
+    c.draftName.set('New');
+    expect(c.requiredFieldMissing()).toBe(true);
+    await c.save();
+    expect(post).not.toHaveBeenCalled();
+
+    c.draftValue.update((v) => ({ ...v, useFor: ['search'] }));
+    expect(c.requiredFieldMissing()).toBe(false);
+    await c.save();
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
   it('VERDICT: editing seeds a topLevel field from the row itself, not from settings', async () => {
     const fixture = await createComponent({
       get: () =>
