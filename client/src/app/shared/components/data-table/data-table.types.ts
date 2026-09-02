@@ -72,12 +72,26 @@ export interface TableRow {
   [key: string]: CellValue;
 }
 
+/** Tone of a `PagedResult.notice`; an unknown value renders as `info` in `data-table`. */
+export type NoticeTone = 'info' | 'warning' | 'error';
+
+/** A list-wide notice, say rows missing because a source did not answer: a fact no single row
+ *  can carry. `detail` and `count` are interpolation params for `messageKey`. */
+export interface TableNotice {
+  messageKey: string;
+  tone: NoticeTone;
+  detail?: string;
+  count?: number;
+}
+
 /** `list` answering `{data,total,page,pageSize}` instead of a bare array. */
 export interface PagedResult<T> {
   data: T[];
   total: number;
   page: number;
   pageSize: number;
+  /** Only a paged response can carry one: a bare-array `list` has nowhere to put it. */
+  notice?: TableNotice;
 }
 
 /**

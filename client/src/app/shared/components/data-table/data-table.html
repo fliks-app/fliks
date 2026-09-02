@@ -36,6 +36,12 @@
     </div>
   </div>
 
+  @if (notice(); as n) {
+    <div role="status" class="alert py-2 text-sm" [class]="noticeClass(n.tone)">
+      {{ n.messageKey | translate: { detail: n.detail, count: n.count } }}
+    </div>
+  }
+
   <!-- One bar for both states: a selection swaps its content instead of adding a row, so the
        table never shifts. It also stays put on a page that declares no filter at all. -->
   @if (filters().length || (bulkSelect() && rows().length > 0)) {
