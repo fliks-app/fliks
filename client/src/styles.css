@@ -792,6 +792,11 @@ body.tv .mosaic-art > * > img:nth-child(4) {
     animation: none;
   }
 }
+/* Held until the next navigation, so art that lands from the revalidation
+   behind a restored page stays as quiet as the art already on it. */
+html.nav-back .card-img-reveal {
+  animation: none;
+}
 
 /* One promotion source fewer, and the reveal stays (the art is still hidden
    until it has decoded — only the 200 ms tween goes). */
