@@ -158,9 +158,6 @@ public class NativePlayerPlugin extends Plugin {
             webView.setBackgroundColor(Color.TRANSPARENT);
             webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
-            // Keep screen on during playback
-            getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
             call.resolve();
         });
     }
@@ -193,8 +190,6 @@ public class NativePlayerPlugin extends Plugin {
                 surfaceView = null;
             }
             subtitleConfigs.clear();
-            // Allow screen to sleep again
-            getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             call.resolve();
         });
     }
@@ -203,6 +198,15 @@ public class NativePlayerPlugin extends Plugin {
     public void resize(PluginCall call) {
         // Wrapper is MATCH_PARENT — no resize needed. Kept for interface compatibility.
         call.resolve();
+    }
+
+    /** Screen stays awake while the session is advancing or stalled mid-play;
+     *  pause, end and idle release it. On the view so a detach frees it too. */
+    private void syncKeepScreenOn() {
+        if (surfaceView == null || player == null) return;
+        int state = player.getPlaybackState();
+        surfaceView.setKeepScreenOn(player.getPlayWhenReady()
+                && (state == Player.STATE_READY || state == Player.STATE_BUFFERING));
     }
 
     // ── Playback ──
@@ -328,12 +332,17 @@ public class NativePlayerPlugin extends Plugin {
             player.addListener(new Player.Listener() {
                 @Override
                 public void onPlaybackStateChanged(int state) {
+                    syncKeepScreenOn();
                     switch (state) {
                         case Player.STATE_BUFFERING: emitStateChanged("buffering"); break;
                         case Player.STATE_READY: emitStateChanged(player.getPlayWhenReady() ? "playing" : "paused"); break;
                         case Player.STATE_ENDED: emitStateChanged("ended"); break;
                         default: emitStateChanged("idle");
                     }
+                }
+
+                @Override public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+                    syncKeepScreenOn();
                 }
 
                 @Override public void onIsPlayingChanged(boolean isPlaying) {
