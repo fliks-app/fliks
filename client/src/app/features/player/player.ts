@@ -42,7 +42,7 @@ import { NavigationHistoryService } from '../../core/services/navigation-history
 import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService, QueueItem } from '../../core/services/playback-queue.service';
-import { resolvePlayableFile } from '../../shared/utils/media-play.util';
+import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/media-play.util';
 import { audioChannelsLabel, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
 import { classifyPlaybackError, formatErrorDiagnostics, userMessageKeyFor } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
@@ -2487,46 +2487,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private syncSeriesQueue(): void {
     if (this.queue.source() === 'playlist') return; // the playlist owns the queue
     const m = this.media;
-    if (!m || m.type !== 'series' || !this.episodeId || !m.seasons?.length) {
+    if (!m || !this.episodeId) {
       this.queue.clear();
       return;
     }
-    const flat: {
-      seasonNumber: number;
-      episodeNumber: number;
-      id: number;
-      title?: string | null;
-      stillUrl?: string | null;
-    }[] = [];
-    for (const s of m.seasons) {
-      if ((s.seasonNumber ?? 0) <= 0) continue; // skip specials
-      for (const ep of s.episodes ?? []) {
-        flat.push({
-          seasonNumber: s.seasonNumber,
-          episodeNumber: ep.episodeNumber ?? 0,
-          id: ep.id,
-          title: ep.title,
-          stillUrl: ep.stillUrl,
-        });
-      }
-    }
-    flat.sort(
-      (a, b) => a.seasonNumber - b.seasonNumber || a.episodeNumber - b.episodeNumber,
-    );
-    const items: QueueItem[] = [];
-    for (const e of flat) {
-      const file = (m.files ?? []).find((f) => f.episodeId === e.id);
-      if (!file) continue; // an episode with no available file isn't queue-able
-      items.push({
-        mediaId: m.id,
-        episodeId: e.id,
-        mediaFileId: file.id,
-        title: m.title,
-        episodeTitle: `S${e.seasonNumber}:E${e.episodeNumber}${e.title ? ` - ${e.title}` : ''}`,
-        fanartUrl: m.fanartUrl,
-        stillUrl: e.stillUrl ?? null,
-      });
-    }
+    const items = buildSeriesQueueItems(m);
     const idx = items.findIndex((it) => it.episodeId === this.episodeId);
     if (idx < 0 || items.length <= 1) {
       this.queue.clear();
@@ -4749,6 +4714,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       subtitleId?: string | null;
       qualities?: RemoteQualityRung[] | null;
       autoplayBlocked?: boolean;
+      hasNext?: boolean;
     } = {
       positionSeconds: pos,
       durationSeconds: dur || 0,
@@ -4780,6 +4746,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       payload.supportsVolume = this.engine?.supportsVolume ?? true;
       payload.subtitleId = this.activeSubtitleId();
       payload.autoplayBlocked = this.autoplayBlocked();
+      payload.hasNext = this.upNext() !== null;
     }
 
     // Offline queue persists position only — the heartbeat-related

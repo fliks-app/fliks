@@ -30,6 +30,7 @@ function frame(over: Partial<RemoteState> = {}): RemoteState {
     quality: '1080p',
     qualities: null,
     autoplayBlocked: false,
+    hasNext: false,
     audioTrackIndex: 0,
     subtitleTrackIndex: null,
     lastCmdId: null,

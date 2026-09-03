@@ -126,9 +126,11 @@
             </div>
           </div>
 
-          <!-- Playback buttons -->
-          <div class="flex items-center justify-center gap-6 lg:gap-4">
-            <button class="btn btn-ghost btn-circle lg:btn-sm" (click)="t.seek(t.currentTime() - 10)">
+          <!-- Playback buttons. Three columns rather than a centred flex row:
+               the next-episode button appears mid-playback, and a flex row
+               would have slid the play button off centre under a thumb. -->
+          <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-6 lg:gap-4">
+            <button class="btn btn-ghost btn-circle lg:btn-sm justify-self-end" (click)="t.seek(t.currentTime() - 10)">
               <svg lucideRotateCcw class="h-7 w-7 lg:h-5 lg:w-5"></svg>
             </button>
             <button class="btn btn-primary btn-circle btn-lg lg:btn-md" (click)="t.togglePlayPause()">
@@ -142,9 +144,20 @@
                 <svg lucidePause class="h-8 w-8 lg:h-6 lg:w-6"></svg>
               }
             </button>
-            <button class="btn btn-ghost btn-circle lg:btn-sm" (click)="t.seek(t.currentTime() + 10)">
-              <svg lucideRotateCw class="h-7 w-7 lg:h-5 lg:w-5"></svg>
-            </button>
+            <div class="flex items-center gap-4 lg:gap-3 justify-self-start">
+              <button class="btn btn-ghost btn-circle lg:btn-sm" (click)="t.seek(t.currentTime() + 10)">
+                <svg lucideRotateCw class="h-7 w-7 lg:h-5 lg:w-5"></svg>
+              </button>
+              @if (t.canPlayNext()) {
+                <!-- A rung below the transport: secondary to play and to the
+                     two seeks it sits beside. -->
+                <button class="btn btn-ghost btn-circle btn-sm lg:btn-xs"
+                        [attr.aria-label]="'player.play_next' | translate"
+                        (click)="t.playNext()">
+                  <svg lucideSkipForward class="h-5 w-5 lg:h-4 lg:w-4"></svg>
+                </button>
+              }
+            </div>
           </div>
 
           <!-- Volume. Hidden where the target's platform owns the level: its

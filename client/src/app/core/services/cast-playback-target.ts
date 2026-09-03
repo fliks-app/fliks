@@ -1,9 +1,12 @@
-import { Injectable, computed, inject } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CastService } from './cast.service';
 import { CastPlayerService, CastSubtitleOption } from './cast-player.service';
 import { parseAudioIndex } from '../utils/player.utils';
 import { TranslateService } from '@ngx-translate/core';
 import { PlaybackOption, PlaybackTarget } from './playback-target';
+import { MediaService } from './api/media.service';
+import { QueueItem } from './playback-queue.service';
+import { resolveNextEpisodeItem } from '../../shared/utils/media-play.util';
 
 /**
  * Pure pass-through to CastService + CastPlayerService: the Chromecast
@@ -14,6 +17,7 @@ export class CastPlaybackTarget implements PlaybackTarget {
   private readonly cast = inject(CastService);
   private readonly cp = inject(CastPlayerService);
   private readonly translate = inject(TranslateService);
+  private readonly mediaService = inject(MediaService);
 
   readonly buffering = this.cast.buffering;
   readonly currentTime = this.cast.currentTime;
@@ -102,6 +106,45 @@ export class CastPlaybackTarget implements PlaybackTarget {
 
   skip(): void {
     console.warn('[cast-playback-target] no skip cue on a Cast session');
+  }
+
+  /** Resolved ahead of the press: offering a next episode that turns out not to
+   *  exist would leave a button that does nothing on the last one. */
+  private readonly nextItem = signal<QueueItem | null>(null);
+  readonly canPlayNext = computed(() => this.nextItem() !== null);
+
+  private readonly nextItemEffect = effect(() => {
+    const mediaId = this.cp.mediaId();
+    const episodeId = this.cp.episodeId();
+    untracked(() => {
+      this.nextItem.set(null);
+      if (!mediaId || !episodeId) return;
+      void this.mediaService
+        .getOne(mediaId)
+        .then((m) => {
+          // The session may have moved on while the fetch was in flight.
+          if (this.cp.episodeId() !== episodeId) return;
+          this.nextItem.set(resolveNextEpisodeItem(m, episodeId));
+        })
+        .catch((err) => console.warn('[cast-playback-target] next episode lookup failed', err));
+    });
+  });
+
+  playNext(): void {
+    const next = this.nextItem();
+    if (!next?.mediaFileId) {
+      console.warn('[cast-playback-target] playNext with nothing queued');
+      return;
+    }
+    void this.cp.quickStart({
+      mediaFileId: next.mediaFileId,
+      mediaId: next.mediaId,
+      episodeId: next.episodeId,
+      title: next.title,
+      episodeTitle: next.episodeTitle,
+      fanartUrl: next.fanartUrl ?? null,
+      startTime: 0,
+    });
   }
 
   stopPlayback(): void {
