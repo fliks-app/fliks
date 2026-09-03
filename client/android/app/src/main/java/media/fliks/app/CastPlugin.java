@@ -69,6 +69,7 @@ public class CastPlugin extends Plugin {
     private WifiManager.WifiLock wifiLock;
     /** True between the user picking a device and the session starting/failing. */
     private volatile boolean sessionPending = false;
+    private boolean routeDiscoveryActive = false;
 
     /**
      * Cast session updates must stay on the main thread (same as Session / isConnected rules).
@@ -215,7 +216,7 @@ public class CastPlugin extends Plugin {
                 castContext = CastContext.getSharedInstance(getContext());
                 sessionManager = castContext.getSessionManager();
                 sessionManager.addSessionManagerListener(sessionListener, CastSession.class);
-                MediaRouter.getInstance(getContext()).addCallback(buildCastSelector(), routeCallback);
+                startRouteDiscovery();
 
                 // Check if already connected
                 castSession = sessionManager.getCurrentCastSession();
@@ -242,11 +243,44 @@ public class CastPlugin extends Plugin {
     }
 
     /** Shared by requestSession (native dialog) and getCastDevices/selectCastDevice (custom list). */
+    /** The SDK's own selector, so the category matches the receiver id in
+     *  CastOptions: a device is only discovered for the app it was asked for. */
     private MediaRouteSelector buildCastSelector() {
+        if (castContext != null) return castContext.getMergedSelector();
         return new MediaRouteSelector.Builder()
             .addControlCategory(CastMediaControlIntent.categoryForCast(
-                CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID))
+                getContext().getString(R.string.cast_receiver_app_id)))
             .build();
+    }
+
+    /** CALLBACK_FLAG_REQUEST_DISCOVERY is what makes the router discover at all:
+     *  registered without it, the callback fires but no provider ever scans, so
+     *  getRoutes() only ever holds the default route. */
+    private void startRouteDiscovery() {
+        if (routeDiscoveryActive) return;
+        MediaRouter.getInstance(getContext()).addCallback(
+            buildCastSelector(), routeCallback, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY);
+        routeDiscoveryActive = true;
+    }
+
+    private void stopRouteDiscovery() {
+        if (!routeDiscoveryActive) return;
+        MediaRouter.getInstance(getContext()).removeCallback(routeCallback);
+        routeDiscoveryActive = false;
+    }
+
+    /** Discovery costs battery and network, so it lives with the foreground and
+     *  not with the plugin: an existing session is unaffected by dropping it. */
+    @Override
+    protected void handleOnStart() {
+        super.handleOnStart();
+        if (castContext != null) runOnMainThread(this::startRouteDiscovery);
+    }
+
+    @Override
+    protected void handleOnStop() {
+        super.handleOnStop();
+        runOnMainThread(this::stopRouteDiscovery);
     }
 
     @PluginMethod()
@@ -301,6 +335,8 @@ public class CastPlugin extends Plugin {
                 if (modelName != null) device.put("modelName", modelName);
                 devices.put(device);
             }
+            Log.d(TAG, "getCastDevices: " + devices.length() + " cast route(s) of "
+                    + router.getRoutes().size() + " total, discovery=" + routeDiscoveryActive);
             call.resolve(new JSObject().put("devices", devices));
         });
     }
