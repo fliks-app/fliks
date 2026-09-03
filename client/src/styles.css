@@ -793,9 +793,12 @@ body.tv .mosaic-art > * > img:nth-child(4) {
   }
 }
 /* Held until the next navigation, so art that lands from the revalidation
-   behind a restored page stays as quiet as the art already on it. */
+   behind a restored page stays as quiet as the art already on it. Through the
+   duration, never `animation: none`: dropping the name and putting it back is
+   a new animation, so the next forward navigation replayed the reveal on every
+   card at once and its snapshot came out with grey boxes for artwork. */
 html.nav-back .card-img-reveal {
-  animation: none;
+  animation-duration: 0s;
 }
 
 /* One promotion source fewer, and the reveal stays (the art is still hidden
