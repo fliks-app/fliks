@@ -100,14 +100,12 @@ export class RemotePickerComponent {
           : null,
       });
     }
+    // Cast devices pinned above the remote targets, last-used first inside each
+    // group. The sort is stable, so rows that tie keep discovery order.
     const last = this.lastUsedId();
-    if (last) {
-      rows.sort((a, b) => {
-        if (a.kind === 'cast-web') return -1;
-        if (b.kind === 'cast-web') return 1;
-        return a.id === last ? -1 : b.id === last ? 1 : 0;
-      });
-    }
+    const group = (r: PickerRow) => (r.kind === 'remote' ? 1 : 0);
+    const recent = (r: PickerRow) => (r.id === last ? 0 : 1);
+    rows.sort((a, b) => group(a) - group(b) || recent(a) - recent(b));
     return rows;
   });
 
