@@ -728,6 +728,23 @@ describe('MediaInfoHeaderComponent — resume state across an episode switch', (
 
     expect(fixture.componentInstance.resumePositionSeconds()).toBe(1992);
   });
+
+  /** A cached detail page comes back from the player with the same inputs, so
+   *  the effect never re-fires and the bar kept the position from before. */
+  it('re-reads the resume position on demand with unchanged inputs', async () => {
+    const states = {
+      3: { positionSeconds: 1992, durationSeconds: 3660, completed: false, mediaFileId: 30 },
+    };
+    const fixture = await createFixture(OWNER, { ...SERIES_EPISODE, playbackStates: states });
+    expect(fixture.componentInstance.resumePositionSeconds()).toBe(1992);
+
+    states[3].positionSeconds = 2500;
+    fixture.componentInstance.reloadPlaybackState();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.resumePositionSeconds()).toBe(2500);
+  });
 });
 
 /**

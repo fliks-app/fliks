@@ -848,6 +848,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly profilesModal = viewChild(MediaDetailProfilesModalComponent);
   readonly libraryModal = viewChild(MediaDetailLibraryModalComponent);
   readonly subtitleSection = viewChild(SubtitlesModalComponent);
+  private readonly infoHeader = viewChild(MediaInfoHeaderComponent);
 
   openTracking(scope: TrackingScope): void {
     const id = this.media()?.id;
@@ -1071,6 +1072,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const m = this.media();
     if (!m) return;
     void this.loadPlaybackState(m);
+    this.infoHeader()?.reloadPlaybackState();
     void this.mediaService
       .getOne(m.id, { force: true })
       .then((fresh) => {
