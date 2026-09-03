@@ -145,9 +145,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             view.addSubview(overlay)
             self.subtitleOverlay = overlay
 
-            // Keep screen awake during playback
-            UIApplication.shared.isIdleTimerDisabled = true
-
             call.resolve()
         }
     }
@@ -782,6 +779,11 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         // already `.playing` emits too; a cold load reports `.paused` here,
         // harmlessly, just before play() starts it.
         timeControlObserver = player.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self] player, _ in
+            // Screen stays awake while advancing or stalled mid-play; a pause
+            // (user pause or end of item) lets it sleep. KVO can land off the
+            // main thread, so the UIKit flag has to be hopped over.
+            let awake = player.timeControlStatus != .paused
+            DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = awake }
             switch player.timeControlStatus {
             case .paused:
                 self?.emitStateChanged("paused")
