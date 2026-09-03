@@ -26,6 +26,7 @@ import { EventsService } from '../../scheduler/events.service';
 import { RequestLifecycleService } from '../../requests/request-lifecycle.service';
 import { MediaQueryService } from './media-query.service';
 import { MediaMetadataService } from './media-metadata.service';
+import { ThumbnailService } from '../../streaming/thumbnail.service';
 
 @Injectable()
 export class MediaMutationService {
@@ -49,6 +50,7 @@ export class MediaMutationService {
     @Inject(forwardRef(() => RequestLifecycleService))
     private readonly requestLifecycle: RequestLifecycleService,
     private readonly events: EventsService,
+    private readonly thumbnails: ThumbnailService,
   ) {}
 
   async update(id: number, dto: UpdateMediaDto): Promise<Media> {
@@ -215,8 +217,12 @@ export class MediaMutationService {
     const tmdbId = media.tmdbId;
     const mediaType = media.type;
     const diskPath = this.resolveSafeMediaDir(media);
+    // Sprites live outside the media folder, keyed by file id — the cascade
+    // that drops the file rows would strand them.
+    const fileIds = (media.files ?? []).map((f) => f.id);
     await this.requestLifecycle.onMediaRemoved(media);
     await this.mediaRepo.remove(media);
+    for (const fileId of fileIds) void this.thumbnails.deleteForFile(fileId);
     this.events.emitDomain({
       type: 'media.removed',
       mediaId: id,
@@ -345,6 +351,7 @@ export class MediaMutationService {
 
     const episodeId = file.episodeId;
     await this.mediaFileRepo.remove(file);
+    void this.thumbnails.deleteForFile(file.id);
     if (episodeId != null) {
       const remaining = await this.mediaFileRepo.count({
         where: { episode: { id: episodeId } },

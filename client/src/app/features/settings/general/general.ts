@@ -44,12 +44,9 @@ export class GeneralSettingsComponent implements OnInit {
 
   // Automation
   readonly autoDetectMarkersOnImport = signal('true');
+  readonly autoGenerateSpritesOnImport = signal('true');
   readonly companionFileExtensions = signal('');
   readonly savingAutomation = signal(false);
-
-  // Post-import
-  readonly postImportScript = signal('');
-  readonly savingPostImport = signal(false);
 
   async ngOnInit() {
     try {
@@ -59,7 +56,7 @@ export class GeneralSettingsComponent implements OnInit {
       this.metadataLanguage.set(map['metadata_language'] ?? 'en');
       this.metadataRegion.set(map['metadata_region'] ?? 'US');
       this.autoDetectMarkersOnImport.set(map['markers_auto_detect_on_import'] ?? 'true');
-      this.postImportScript.set(map['post_import_script'] ?? '');
+      this.autoGenerateSpritesOnImport.set(map['sprites_auto_generate_on_import'] ?? 'true');
       this.companionFileExtensions.set(
         map['companion_file_extensions'] ??
         '.nfo,.srt,.ass,.ssa,.sub,.idx,.vtt,.sup,.txt,.jpg,.jpeg,.png,.tbn,.nfo-orig',
@@ -98,17 +95,10 @@ export class GeneralSettingsComponent implements OnInit {
     try {
       await this.api.setBulk({
         markers_auto_detect_on_import: this.autoDetectMarkersOnImport(),
+        sprites_auto_generate_on_import: this.autoGenerateSpritesOnImport(),
         companion_file_extensions: this.companionFileExtensions(),
       });
       this.toast.success(this.translate.instant('settings.general.saved'));
     } catch { /* interceptor */ } finally { this.savingAutomation.set(false); }
-  }
-
-  async savePostImport() {
-    this.savingPostImport.set(true);
-    try {
-      await this.api.setBulk({ post_import_script: this.postImportScript() });
-      this.toast.success(this.translate.instant('settings.general.saved'));
-    } catch { /* interceptor */ } finally { this.savingPostImport.set(false); }
   }
 }

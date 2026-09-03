@@ -1587,16 +1587,14 @@
       "metadata_region_hint": "Region für Veröffentlichungsdaten und kommende Veröffentlichungen. Kann pro Bibliothek überschrieben werden.",
       "section_automation": "Automatisierung",
       "auto_detect_markers_on_import": "Intros / Vorspanne beim Import von Serien erkennen",
+      "auto_generate_sprites_on_import": "Vorschaubilder für die Zeitleiste beim Import erzeugen",
+      "auto_generate_sprites_on_import_hint": "Ein Dekodierdurchlauf pro Datei. Auf einem schwachen Server deaktivieren und die Aufgabe manuell starten.",
       "saved": "Einstellungen gespeichert.",
       "save_error": "Speichern nicht möglich.",
       "load_error": "Die Einstellungen konnten nicht geladen werden.",
       "no_default": "Keiner (manuelle Auswahl)",
       "companion_extensions": "Erweiterungen der Begleitdateien",
-      "companion_extensions_hint": "Mit der Videodatei kopierte Erweiterungen (durch Kommas getrennt).",
-      "section_post_import": "Post-Import",
-      "post_import_script": "Post-Import-Skript",
-      "post_import_script_hint": "/path/to/script.sh",
-      "post_import_script_vars": "Variablen: FLIKS_MEDIA_TITLE, FLIKS_MEDIA_ID, FLIKS_MEDIA_TYPE, FLIKS_QUALITY, FLIKS_FILE_COUNT, FLIKS_SOURCE_TITLE"
+      "companion_extensions_hint": "Mit der Videodatei kopierte Erweiterungen (durch Kommas getrennt)."
     },
     "quality_profiles": {
       "title": "Qualitätsprofile",

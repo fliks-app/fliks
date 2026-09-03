@@ -1597,16 +1597,14 @@
       "metadata_region_hint": "Region used for release dates and upcoming releases. Can be overridden per library.",
       "section_automation": "Automation",
       "auto_detect_markers_on_import": "Detect intros / credits when importing series",
+      "auto_generate_sprites_on_import": "Generate seek thumbnails when importing",
+      "auto_generate_sprites_on_import_hint": "One decoding pass per file. Turn it off on a low-power server and run the task manually.",
       "saved": "Settings saved.",
       "save_error": "Unable to save.",
       "load_error": "Unable to load the settings.",
       "no_default": "None (manual selection)",
       "companion_extensions": "Companion file extensions",
-      "companion_extensions_hint": "Extensions copied with the video file (comma-separated).",
-      "section_post_import": "Post-import",
-      "post_import_script": "Post-import script",
-      "post_import_script_hint": "/path/to/script.sh",
-      "post_import_script_vars": "Variables: FLIKS_MEDIA_TITLE, FLIKS_MEDIA_ID, FLIKS_MEDIA_TYPE, FLIKS_QUALITY, FLIKS_FILE_COUNT, FLIKS_SOURCE_TITLE"
+      "companion_extensions_hint": "Extensions copied with the video file (comma-separated)."
     },
     "quality_profiles": {
       "title": "Quality profiles",
