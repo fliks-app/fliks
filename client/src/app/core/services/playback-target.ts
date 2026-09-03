@@ -55,6 +55,11 @@ export interface PlaybackTarget {
   readonly skipCue: Signal<{ labelKey: string } | null>;
   /** Take the current skip offer. No-op when there is none. */
   skip(): void;
+  /** Something follows what is playing, so the surface can offer it whatever
+   *  the playhead is doing — unlike {@link skipCue}, which is outro-bound. */
+  readonly canPlayNext: Signal<boolean>;
+  /** Move to the next item. No-op when {@link canPlayNext} is false. */
+  playNext(): void;
   /** A load has been sent and the target has not reported back yet. Always
    *  false on Cast, whose sender mirrors the media locally from the start. */
   readonly isStarting: Signal<boolean>;

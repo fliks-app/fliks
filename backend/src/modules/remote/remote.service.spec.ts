@@ -270,6 +270,7 @@ function stateFrame(targetId: string): SseEvent {
     quality: null,
     qualities: null,
     autoplayBlocked: false,
+    hasNext: false,
     audioTrackIndex: null,
     subtitleTrackIndex: null,
     lastCmdId: null,

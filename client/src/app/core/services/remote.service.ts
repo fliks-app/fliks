@@ -28,6 +28,8 @@ export interface RemoteNowPlaying {
   /** The target's own ladder: the only id space it accepts for a quality change. */
   qualities: RemoteQualityRung[] | null;
   autoplayBlocked: boolean;
+  /** The target has an item queued after this one. */
+  hasNext: boolean;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;
 }
@@ -507,6 +509,7 @@ export class RemoteService {
       quality: s.quality,
       qualities: s.qualities,
       autoplayBlocked: s.autoplayBlocked,
+      hasNext: s.hasNext,
       audioTrackIndex: s.audioTrackIndex,
       subtitleTrackIndex: s.subtitleTrackIndex,
     });

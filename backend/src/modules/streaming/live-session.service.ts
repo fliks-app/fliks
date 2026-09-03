@@ -61,6 +61,8 @@ export interface LiveSession {
   attributedUserId: number | null;
   /** The target's browser refused to start playback without a user gesture. */
   autoplayBlocked: boolean;
+  /** The target has an item queued after this one, so a controller may offer it. */
+  hasNext: boolean;
   kind: SessionKind;
   deviceLabel: string | null;
   /** Real host OS name+version ("macOS 26") from the client DeviceProfile;
@@ -261,6 +263,7 @@ export function buildLiveSession(
       qualities: null,
       attributedUserId: input.attributedUserId ?? null,
       autoplayBlocked: false,
+      hasNext: false,
       kind: input.kind,
       deviceLabel: input.deviceLabel ?? null,
       systemName: input.systemName ?? null,
@@ -403,6 +406,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       quality?: string | null;
       qualities?: RemoteQualityRung[] | null;
       autoplayBlocked?: boolean;
+      hasNext?: boolean;
       episodeLabel?: string | null;
       supportsVolume?: boolean;
       subtitleId?: string | null;
@@ -423,6 +427,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
     if (payload.autoplayBlocked !== undefined) {
       session.autoplayBlocked = payload.autoplayBlocked;
     }
+    if (payload.hasNext !== undefined) session.hasNext = payload.hasNext;
     if (payload.subtitleId !== undefined) {
       session.subtitleId = payload.subtitleId;
     }

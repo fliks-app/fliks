@@ -303,6 +303,8 @@ export interface RemoteStatePayload {
   /** The target could not start on its own: a controller must say so rather than
    *  show a paused device whose play button is refused for the same reason. */
   autoplayBlocked: boolean;
+  /** The target has something queued after the current item. */
+  hasNext: boolean;
   audioTrackIndex: number | null;
   subtitleTrackIndex: number | null;
   /** Echo of the last command the target applied: the semantic ack. */

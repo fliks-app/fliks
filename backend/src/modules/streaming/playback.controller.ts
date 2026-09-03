@@ -210,6 +210,7 @@ export class PlaybackController {
       quality?: string | null;
       qualities?: RemoteQualityRung[] | null;
       autoplayBlocked?: boolean;
+      hasNext?: boolean;
       episodeLabel?: string | null;
       supportsVolume?: boolean;
       subtitleId?: string | null;
@@ -245,6 +246,7 @@ export class PlaybackController {
         quality: body.quality,
         qualities: body.qualities,
         autoplayBlocked: body.autoplayBlocked,
+        hasNext: body.hasNext,
         episodeLabel: body.episodeLabel,
         supportsVolume: body.supportsVolume,
         subtitleId: body.subtitleId,
@@ -287,6 +289,7 @@ export class PlaybackController {
             quality: updated.quality,
             qualities: updated.qualities,
             autoplayBlocked: updated.autoplayBlocked,
+            hasNext: updated.hasNext,
             audioTrackIndex: updated.audioTrackIndex,
             subtitleTrackIndex: updated.subtitleTrackIndex,
             lastCmdId: body.lastCmdId ?? null,

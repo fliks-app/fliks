@@ -23,6 +23,7 @@ import {
   LucidePlay,
   LucideRotateCcw,
   LucideRotateCw,
+  LucideSkipForward,
   LucideSquare,
   LucideVolume2,
   LucideVolumeX,
@@ -50,7 +51,7 @@ interface PickerRow {
   imports: [
     LucideCast,
     LucidePause, LucidePlay, LucideRotateCcw, LucideRotateCw,
-    LucideSquare, LucideVolume2, LucideVolumeX, LucideX,
+    LucideSkipForward, LucideSquare, LucideVolume2, LucideVolumeX, LucideX,
     SeekbarComponent,
     CachedSrcDirective,
     ResolveUrlPipe,

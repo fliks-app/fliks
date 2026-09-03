@@ -65,6 +65,8 @@ export interface RemoteState {
   subtitleId: string | null;
   quality: string | null;
   qualities: RemoteQualityRung[] | null;
+  /** The target has something queued after the current item. */
+  hasNext: boolean;
   /** The target's browser refused to start without a gesture on that device. */
   autoplayBlocked: boolean;
   audioTrackIndex: number | null;

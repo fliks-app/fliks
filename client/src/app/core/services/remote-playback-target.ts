@@ -219,6 +219,18 @@ export class RemotePlaybackTarget implements PlaybackTarget {
     console.warn('[remote-playback-target] skip with no cue active');
   }
 
+  /** The target's own answer: only it knows its queue. */
+  readonly canPlayNext = computed(() => this.remote.targetState()?.hasNext ?? false);
+
+  playNext(): void {
+    const targetId = this.remote.selectedTargetId();
+    if (!targetId) {
+      console.warn('[remote-playback-target] playNext with no selected target');
+      return;
+    }
+    void this.remote.send(targetId, { action: 'next' });
+  }
+
   stopPlayback(): void {
     const targetId = this.remote.selectedTargetId();
     if (!targetId) {
