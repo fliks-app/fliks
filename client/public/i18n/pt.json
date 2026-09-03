@@ -133,6 +133,7 @@
     "rescan_completed": "Análise concluída: {{title}} — {{added}} adicionado(s), {{removed}} removido(s), {{updated}} atualizado(s)",
     "rescan_subtitles_cleaned": "{{missing}} entrada(s) de legenda sem ficheiro removida(s), {{duplicates}} duplicado(s) fundido(s)",
     "rescan_failed": "Erro durante a análise: {{title}}",
+    "import_failed": "Falha na importação: {{title}}",
     "media_files_delete_failed": "Os ficheiros de «{{title}}» não puderam ser removidos do disco"
   },
   "permissions": {
@@ -949,7 +950,6 @@
     "indexer_cooldown": "Ignorado — este indexador está em pausa após um erro.",
     "releases_error": "Não foi possível carregar as releases.",
     "grab_ok": "Enviado para o cliente de transferência.",
-    "grab_success": "Transferência iniciada com sucesso.",
     "profiles_section": "Perfis",
     "language_profile_label": "Perfil de idioma",
     "profile_none": "Não definido",

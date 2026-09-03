@@ -133,6 +133,7 @@
     "rescan_completed": "Scan abgeschlossen: {{title}} — {{added}} hinzugefügt, {{removed}} entfernt, {{updated}} aktualisiert",
     "rescan_subtitles_cleaned": "{{missing}} Untertiteleintrag/-einträge ohne Datei entfernt, {{duplicates}} Duplikat(e) zusammengeführt",
     "rescan_failed": "Fehler beim Scan: {{title}}",
+    "import_failed": "Import fehlgeschlagen: {{title}}",
     "media_files_delete_failed": "Die Dateien von „{{title}}“ konnten nicht von der Festplatte gelöscht werden"
   },
   "permissions": {
@@ -949,7 +950,6 @@
     "indexer_cooldown": "Übersprungen — dieser Indexer pausiert nach einem Fehler.",
     "releases_error": "Die Releases konnten nicht geladen werden.",
     "grab_ok": "An den Download-Client gesendet.",
-    "grab_success": "Download erfolgreich gestartet.",
     "profiles_section": "Profile",
     "language_profile_label": "Sprachprofil",
     "profile_none": "Nicht festgelegt",

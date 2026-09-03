@@ -133,6 +133,7 @@
     "rescan_completed": "Scansione completata: {{title}} — {{added}} aggiunto/i, {{removed}} rimosso/i, {{updated}} aggiornato/i",
     "rescan_subtitles_cleaned": "{{missing}} voce/i sottotitolo senza file rimossa/e, {{duplicates}} duplicato/i unito/i",
     "rescan_failed": "Errore durante la scansione: {{title}}",
+    "import_failed": "Importazione non riuscita: {{title}}",
     "media_files_delete_failed": "I file di « {{title}} » non sono stati eliminati dal disco"
   },
   "permissions": {
@@ -949,7 +950,6 @@
     "indexer_cooldown": "Ignorato — questo indicizzatore è in pausa dopo un errore.",
     "releases_error": "Impossibile caricare le release.",
     "grab_ok": "Inviato al client di download.",
-    "grab_success": "Download avviato con successo.",
     "profiles_section": "Profili",
     "language_profile_label": "Profilo di lingua",
     "profile_none": "Non definito",

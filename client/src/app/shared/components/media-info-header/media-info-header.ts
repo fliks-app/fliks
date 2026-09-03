@@ -108,6 +108,9 @@ export interface MediaInfoHeaderBadge {
   labelParams: Record<string, unknown> | null;
   /** When true the badge renders as a button that emits openDownloadDetail. */
   clickable: boolean;
+  /** Spinner before the label, for a state with no percentage of its own —
+   *  a release still being searched for. */
+  busy: boolean;
 }
 
 interface AudioTrack {

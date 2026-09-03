@@ -138,6 +138,7 @@
     "rescan_completed": "Scan complete: {{title}} — {{added}} added, {{removed}} removed, {{updated}} updated",
     "rescan_subtitles_cleaned": "{{missing}} subtitle entry(ies) without file removed, {{duplicates}} duplicate(s) merged",
     "rescan_failed": "Error during scan: {{title}}",
+    "import_failed": "Import failed: {{title}}",
     "media_files_delete_failed": "The files of \"{{title}}\" could not be deleted from disk"
   },
   "permissions": {
@@ -954,7 +955,6 @@
     "indexer_cooldown": "Skipped — this indexer is cooling down after an error.",
     "releases_error": "Unable to load releases.",
     "grab_ok": "Sent to the download client.",
-    "grab_success": "Download started successfully.",
     "profiles_section": "Profiles",
     "language_profile_label": "Language profile",
     "profile_none": "Not set",

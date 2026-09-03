@@ -794,6 +794,13 @@ describe('DataTableComponent — progress inside a badge', () => {
     expect(fixture.componentInstance.cellProgress(COL, { id: 1, state: 'active', progress: null })).toBeNull();
   });
 
+  it('VERDICT: a full row shows no percentage — an importing queue row is not "100%"', async () => {
+    const fixture = await createComponent({ http: { get: () => of([]) } });
+    expect(
+      fixture.componentInstance.cellProgress(COL, { id: 1, state: 'importing', progress: 100 }),
+    ).toBeNull();
+  });
+
   it('a column declaring no progressField never fills', async () => {
     const fixture = await createComponent({ http: { get: () => of([]) } });
     expect(

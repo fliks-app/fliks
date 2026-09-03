@@ -340,11 +340,15 @@ export class DataTableComponent implements OnInit {
   }
 
   /** The 0–100 fill for a badged cell that declares `progressField`, or null to render the
-   *  badge flat. A row reporting no number yet (an unreachable client) is not 0%. */
+   *  badge flat. A row reporting no number yet (an unreachable client) is not 0%, and one
+   *  sitting at 100 has nothing left to report — what it is doing now is the state beside it,
+   *  an import or a seed, not a percentage of itself. */
   cellProgress(col: TableColumn, row: TableRow): number | null {
     if (!col.progressField) return null;
     const value = row[col.progressField];
-    return typeof value === 'number' ? Math.round(value) : null;
+    if (typeof value !== 'number') return null;
+    const percent = Math.round(value);
+    return percent >= 100 ? null : percent;
   }
 
   /**
