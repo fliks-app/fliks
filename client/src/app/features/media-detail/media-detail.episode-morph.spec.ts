@@ -62,7 +62,7 @@ function createFixture(media: Promise<unknown> = new Promise(() => {})) {
       { provide: AuthService, useValue: { hasPermission: () => false } },
       { provide: ProfilesService, useValue: {} },
       { provide: LibrariesApiService, useValue: {} },
-      { provide: NavbarService, useValue: { enterHeroPage: vi.fn(), leaveHeroPage: vi.fn() } },
+      { provide: NavbarService, useValue: { enterHeroPage: vi.fn(), leaveHeroPage: vi.fn(), navigatedBack: signal(false) } },
       { provide: BackgroundService, useValue: { clear: vi.fn(), setBackgrounds: vi.fn(), setBackground: vi.fn(), url: signal(null) } },
       { provide: ConfirmationService, useValue: {} },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
