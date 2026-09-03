@@ -345,6 +345,46 @@ describe('PlayerComponent pre-roll', () => {
     expect(h.streamingApi.stopSessions).not.toHaveBeenCalled();
   });
 
+  /** Closing before the seek to the resume point lands must not write the
+   *  engine's 0 over it. ExoPlayer renders its first frame before that seek, so
+   *  the guard reads the clock rather than `videoStarted`. */
+  it.each([false, true])(
+    'reports the resume point while the clock still reads 0 (videoStarted=%s)',
+    async (started) => {
+      const h = createHarness();
+      (h.component as unknown as { pendingStartTime: number }).pendingStartTime = 3600;
+      h.state.videoStarted.set(started);
+      h.engine.currentTime = 0;
+
+      await h.component.savePosition();
+
+      expect(h.streamingApi.updatePlaybackState).toHaveBeenCalledWith(
+        MEDIA_ID,
+        expect.objectContaining({ positionSeconds: 3600 }),
+      );
+    },
+  );
+
+  it('reports the engine once it moves, and never substitutes again', async () => {
+    const h = createHarness();
+    const c = h.component as unknown as { pendingStartTime: number };
+    c.pendingStartTime = 3600;
+    h.engine.currentTime = 12;
+
+    await h.component.savePosition();
+    expect(c.pendingStartTime).toBe(0);
+
+    // A later reading of 0 is the truth: the user seeked to the start.
+    h.engine.currentTime = 0;
+    h.component.lastSaveAt = 0;
+    await h.component.savePosition();
+
+    expect(h.streamingApi.updatePlaybackState).toHaveBeenLastCalledWith(
+      MEDIA_ID,
+      expect.objectContaining({ positionSeconds: 0 }),
+    );
+  });
+
   it('records no progress while a pre-roll item is playing', async () => {
     const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
     await h.component.maybeStartPreRoll(undefined, DEVICE_PROFILE);
