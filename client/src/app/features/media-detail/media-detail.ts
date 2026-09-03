@@ -220,6 +220,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         percent: null,
         badgeClass: 'badge-info',
         clickable,
+        busy: leaves.some((l) => l.leaf.state === 'searching'),
       };
     }
 
@@ -231,6 +232,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       percent: d.percent,
       badgeClass: d.badgeClass,
       clickable,
+      busy: d.busy,
     };
   }
 
@@ -355,7 +357,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.backgroundService.setBackgrounds(pool);
   });
 
-  /** React to SSE rescan + metadata-refresh events for this media */
+  /** React to SSE rescan / import / metadata-refresh events for this media */
   private readonly sseEffect = effect(() => {
     const event = this.sse.lastEvent();
     const m = this.media();
@@ -363,10 +365,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if ((event['mediaId'] as number) !== m.id) return;
     if (event === this.lastHandledSseEvent) return;
     this.lastHandledSseEvent = event;
-    if (event.type === 'rescan.completed') {
-      void this.reloadAfterRescan(m.id);
+    if (event.type === 'rescan.completed' || event.type === 'import.complete') {
+      void this.reloadMedia(m.id);
     } else if (event.type === 'metadata.refreshed') {
-      void this.reloadAfterRescan(m.id);
+      void this.reloadMedia(m.id);
       this.toast.success(this.translate.instant('media_detail.refresh_ok'));
     } else if (event.type === 'metadata.failed') {
       this.toast.error(
@@ -1320,7 +1322,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     busy.update((s) => new Set(s).add(id));
     try {
       await this.withGrabPhase(scope, grab);
-      this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       /* error toast surfaced by the global interceptor */
     } finally {
@@ -1549,7 +1550,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   onIdentified() {
     const m = this.media();
-    if (m) void this.reloadAfterRescan(m.id);
+    if (m) void this.reloadMedia(m.id);
   }
 
   openAnalyzeModal() {
@@ -1610,12 +1611,15 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   }
 
-  private async reloadAfterRescan(mediaId: number) {
+  /** Re-read the media after something changed it under the page. Forced: a
+   *  server-side event invalidates no cache entry, so a plain read replays the
+   *  body that is missing the very file the event announced. */
+  private async reloadMedia(mediaId: number) {
     try {
-      const updated = await this.mediaService.getOne(mediaId);
+      const updated = await this.mediaService.getOne(mediaId, { force: true });
       this.media.set(updated);
       if (updated.type === 'series') this.syncActiveSeasonForSeriesFilter();
-      // Re-resolve focused episode after rescan
+      // Re-resolve the focused episode against the refreshed tree.
       const ep = this.focusedEpisode();
       if (ep) {
         for (const s of updated.seasons ?? []) {
@@ -1864,7 +1868,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         this.releasePickerApi.grabEpisode(mediaId, episodeId, releaseGrabBody(r)),
       );
       this.epGrabState.update((s) => new Map(s).set(key, 'ok'));
-      this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       this.epGrabState.update((s) => new Map(s).set(key, 'error'));
     } finally {
@@ -1923,7 +1926,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         this.releasePickerApi.grabSeason(mediaId, season.id, releaseGrabBody(r)),
       );
       this.seasonReleaseGrabState.update((s) => new Map(s).set(key, 'ok'));
-      this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       this.seasonReleaseGrabState.update((s) => new Map(s).set(key, 'error'));
     } finally {
@@ -1936,10 +1938,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!m) return;
     try {
       await this.mediaService.deleteFile(m.id, fileId, deleteOnDisk);
-      this.media.update((media) =>
-        media ? { ...media, files: media.files?.filter((f) => f.id !== fileId) } : media,
-      );
-      this.syncActiveSeasonForSeriesFilter();
+      // Not a local splice: the server also flips the episode's `hasFile`, which
+      // the season tree renders from.
+      await this.reloadMedia(m.id);
     } catch {
       // ignore
     }
@@ -2044,7 +2045,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         this.releasePickerApi.grabMovie(m.id, releaseGrabBody(r)),
       );
       this.grabState.update((s) => new Map(s).set(key, 'ok'));
-      this.toast.success(this.translate.instant('media_detail.grab_success'));
     } catch {
       this.grabState.update((s) => new Map(s).set(key, 'error'));
     } finally {

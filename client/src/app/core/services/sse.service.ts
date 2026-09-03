@@ -353,8 +353,16 @@ export class SseService implements OnDestroy {
           event['seasonNumber'] as number | undefined,
           event['episodeNumber'] as number | undefined,
         );
+        // A file landed with no client mutation behind it, so the cached media
+        // body still says the episode has none.
+        void invalidatePrefix('/api/media');
         // Import always finishes unattended (completion is polled by
         // a scheduler) — no toast, just retire the live progress above.
+        break;
+      case 'import.failed':
+        this.toast.error(
+          this.translate.instant('sse.import_failed', { title: event['title'] ?? '' }),
+        );
         break;
       case 'stalled.removed':
         // Unattended cleanup of a stalled download — no toast.

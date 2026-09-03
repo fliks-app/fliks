@@ -983,7 +983,9 @@ export class FliksHostImpl implements PluginHostApi {
           quality: event.quality,
           sourceTitle: event.sourceTitle,
         });
-        const recipients = await this.sseAudience.recipientsForMedia(
+        // Same audience as `download.progress`: this event retires the badge
+        // that event put up, and repaints the page the file just landed on.
+        const recipients = await this.sseAudience.viewersForMedia(
           event.mediaId,
         );
         this.events.emitToUsers(recipients, {
