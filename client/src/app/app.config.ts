@@ -47,6 +47,7 @@ import {
   leavingPosterPage,
   leafRoutePath,
   markViewTransition,
+  stampChromeInsets,
 } from './shared/utils/view-transition';
 
 /** Read the persisted server URL, sessions and credentials before bootstrap:
@@ -144,6 +145,7 @@ export const appConfig: ApplicationConfig = {
                   (enteringPosterPage(from, to) && POSTER_IN_CLASS);
                 if (posterTrip) {
                   const root = document.documentElement;
+                  stampChromeInsets();
                   root.classList.add(posterTrip);
                   const done = () => root.classList.remove(posterTrip);
                   void transition.finished.then(done, done);

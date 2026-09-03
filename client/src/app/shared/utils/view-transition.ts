@@ -92,3 +92,16 @@ export function markViewTransition(transition: { finished: Promise<unknown> }): 
 export function viewTransitionRunning(): boolean {
   return document.documentElement.classList.contains(VIEW_TRANSITION_CLASS);
 }
+
+/**
+ * The chrome the morph must not paint over, as insets the clip in `styles.css`
+ * reads. Measured per trip: the sidebar is only docked at some widths, and the
+ * dock only exists on a native phone.
+ */
+export function stampChromeInsets(): void {
+  const side = document.querySelector('.app-chrome-side')?.getBoundingClientRect();
+  const dock = document.querySelector('.dock')?.getBoundingClientRect();
+  const style = document.documentElement.style;
+  style.setProperty('--vt-chrome-left', `${Math.max(0, side?.right ?? 0)}px`);
+  style.setProperty('--vt-chrome-bottom', `${dock ? Math.max(0, window.innerHeight - dock.top) : 0}px`);
+}

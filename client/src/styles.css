@@ -1228,6 +1228,20 @@ html.vt-poster-out::view-transition-new(.poster) {
   object-fit: cover;
 }
 
+/* A card scrolled out of its row still owns its real rect, so the box flies to
+   it over the sidebar or the native dock. Dropping the root snapshot leaves the
+   page itself painting under the pseudo-tree, so the box can be clipped to the
+   content area without the chrome going with it: the sidebar's translucent veil
+   then reads the live page behind it, not the poster passing under. */
+html.vt-poster-in,
+html.vt-poster-out {
+  view-transition-name: none;
+}
+html.vt-poster-in::view-transition,
+html.vt-poster-out::view-transition {
+  clip-path: inset(0 0 var(--vt-chrome-bottom, 0px) var(--vt-chrome-left, 0px));
+}
+
 /* Force the hero (poster) morph above root. The default pseudo-tree order
    should put named groups above root, but with `animation: none` on root
    the old/new pair stays fully opaque for the whole transition and on some
