@@ -6,6 +6,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { RemoteCommand, RemoteQualityRung, SseService } from './sse.service';
 import { ToastService } from './toast.service';
 import { CastSettingsService } from './cast-settings.service';
+import { CastService } from './cast.service';
 
 export type RemoteAction = RemoteCommand['action'];
 
@@ -92,6 +93,7 @@ export class RemoteService {
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
   private readonly castSettings = inject(CastSettingsService);
+  private readonly cast = inject(CastService);
   private readonly translate = inject(TranslateService);
 
   // ── Controllee ──
@@ -382,6 +384,10 @@ export class RemoteService {
   }
 
   selectTarget(targetId: string | null): void {
+    // One destination at a time: the control card reads whichever is active and
+    // prefers a remote target, so a Cast session left running behind one would
+    // keep playing with nothing on screen able to reach it.
+    if (targetId && this.cast.isConnected()) this.cast.disconnect();
     this.selectedTargetId.set(targetId);
     this.reportedState.set(null);
     this.targetOffline.set(false);

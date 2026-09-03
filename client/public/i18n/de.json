@@ -2416,6 +2416,7 @@
     "empty_state": "Keine Geräte im Netzwerk gefunden.",
     "searching": "Geräte werden gesucht…",
     "chromecast_row": "Chromecast…",
+    "disconnect_row": "Trennen",
     "owned_by": "Gerät von {{username}}",
     "error_cast_select_failed": "Verbindung zu diesem Chromecast fehlgeschlagen.",
     "error_command_failed": "Gerät nicht erreichbar.",

@@ -82,7 +82,7 @@ interface NativeCastPlugin {
   requestSession(): Promise<void>;
   /** Native-only device enumeration + selection backing the unified picker
    *  (`shared/remote-picker`): the web Cast SDK has no equivalent. */
-  getCastDevices(): Promise<{ devices: { id: string; name: string; modelName?: string }[] }>;
+  getCastDevices(): Promise<{ devices: CastDevice[] }>;
   selectCastDevice(opts: { id: string }): Promise<void>;
   loadMedia(opts: NativeCastLoadOpts): Promise<void>;
   play(): Promise<void>;
@@ -96,6 +96,15 @@ interface NativeCastPlugin {
    *  volume, not the phone's — the OS volume keys already do the latter. */
   setVolume(opts: { level: number }): Promise<void>;
   setMuted(opts: { muted: boolean }): Promise<void>;
+}
+
+/** One row of native discovery. `connected` marks the device this sender is
+ *  casting to, so the picker can offer to leave it. */
+export interface CastDevice {
+  id: string;
+  name: string;
+  modelName?: string;
+  connected?: boolean;
 }
 
 const NativeCast = registerPlugin<NativeCastPlugin>('NativeCast');
@@ -141,7 +150,7 @@ export class CastService implements OnDestroy {
   readonly castStreamBaseUrl = signal('');
   /** Cast devices visible to native discovery. Always empty on web: the
    *  Chrome Cast SDK exposes no enumeration API (see getCastDevices()). */
-  readonly castDevices = signal<{ id: string; name: string; modelName?: string }[]>([]);
+  readonly castDevices = signal<CastDevice[]>([]);
 
   // ── Seek coalescing (see CAST_SEEK_* above) ──
   private seekCoalesceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -203,6 +212,9 @@ export class CastService implements OnDestroy {
         this.isConnected.set(connected);
         if (connected) this.endConnecting();
         else this.buffering.set(false);
+        // `connected` rides the device listing, so the picker's rows are stale
+        // the moment a session starts or ends.
+        void this.getCastDevices();
       }) as EventListener);
 
       // Picker dismissed without selecting a device
@@ -428,7 +440,7 @@ export class CastService implements OnDestroy {
   /** List Cast devices visible to native discovery. Web has no enumeration
    *  API, so this always resolves empty: the picker shows a single row that
    *  falls back to `requestSession()` there instead. */
-  async getCastDevices(): Promise<{ id: string; name: string; modelName?: string }[]> {
+  async getCastDevices(): Promise<CastDevice[]> {
     if (!this.isNative) return [];
     try {
       const { devices } = await NativeCast.getCastDevices();
