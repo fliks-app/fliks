@@ -42,7 +42,9 @@
   @for (row of pickerRows(); track row.kind + row.id) {
     <button type="button" class="dropdown-item text-white" (click)="selectRow(row)">
       @if (row.icon === 'cast') {
-        <svg lucideCast class="h-5 w-5 shrink-0 text-info"></svg>
+        <!-- Accented only for the device actually being cast to: on every row it
+             read as a state the list does not have. -->
+        <svg lucideCast class="h-5 w-5 shrink-0" [class.text-info]="row.connected"></svg>
       } @else if (row.icon === 'tv') {
         <svg lucideTv class="h-5 w-5 shrink-0"></svg>
       } @else if (row.icon === 'tablet') {
