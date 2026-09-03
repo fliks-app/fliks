@@ -332,7 +332,11 @@ export class MediaInfoHeaderComponent {
    *  be tracked to drop the previous episode's resume state. */
   private lastPlaybackKey: string | null = null;
 
-  private readonly loadPlaybackEffect = effect(() => {
+  private readonly loadPlaybackEffect = effect(() => this.reloadPlaybackState());
+
+  /** Re-read the server's resume position. Cached pages come back with the same
+   *  inputs, so the effect alone never fires again after a playback session. */
+  reloadPlaybackState(): void {
     const mediaId = this.mediaId();
     // A series page has no episode context of its own, but it does know which
     // episode its resume button targets. Without this fallback it asked for the
@@ -385,7 +389,7 @@ export class MediaInfoHeaderComponent {
       }
       this.applyResume(queued, ps);
     });
-  });
+  }
 
   /** Show the server's position, unless one queued while the server was out of
    *  reach is still waiting to reach it — that one is newer by construction. */
